@@ -1,0 +1,651 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
+export type OrderStatus = 'Pending' | 'Confirmed' | 'Dispatched' | 'In Transit' | 'Delivered' | 'Cancelled';
+export type PaymentStatus = 'Pending' | 'Paid' | 'Refunded';
+export type CustomerBehavior = 'Good' | 'Neutral' | 'Risk';
+
+export interface Customer {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string;
+  behavior: CustomerBehavior;
+  flagged: boolean;
+  flagReason?: string;
+  history: { timestamp: string; action: string; note: string }[];
+}
+
+export interface OrderProduct {
+  id: string;
+  name: string;
+  brand: string;
+  price: number; // in raw currency BDT
+  image: string;
+  sellerId: string;
+  sellerName: string;
+}
+
+export interface Order {
+  id: string;
+  product: OrderProduct;
+  customer: Customer;
+  status: OrderStatus;
+  paymentStatus: PaymentStatus;
+  timestamp: string;
+  approveTime?: string;
+  dispatchTime?: string;
+  deliverTime?: string;
+  cancelTime?: string;
+  cancelReason?: string;
+  declineReason?: string;
+  deliveryPartner?: string;
+  trackingUrl?: string;
+  customerNotes?: string[];
+  sellerNotes?: string[];
+  earnings: {
+    totalRevenue: number;
+    commissionPercent: number; // default e.g. 10
+    futureAutomatedDeduction: number; // commission BDT
+    sellerNet: number; // totalRevenue - commission BDT
+  };
+  base_product_price?: number;
+  delivery_charge?: number;
+  total_payable?: number;
+  invoice_id?: string;
+  invoice_status?: 'Paid' | 'Unpaid' | 'Refunded';
+  confirmation_timestamp?: string;
+}
+
+export interface ThreadMessage {
+  id: string;
+  senderName: string;
+  senderRole: 'customer' | 'seller' | 'admin';
+  text: string;
+  timestamp: string;
+}
+
+export interface MessageThread {
+  id: string; 
+  orderId?: string;
+  customer: Customer;
+  product?: OrderProduct;
+  subject: string;
+  preview: string;
+  messages: ThreadMessage[];
+  status: 'UNREAD' | 'READ' | 'RESPONDED';
+  time: string;
+}
+
+interface OrdersContextType {
+  orders: Order[];
+  customers: Customer[];
+  messageThreads: MessageThread[];
+  approveOrder: (orderId: string, deliveryChargeNum?: number, note?: string) => void;
+  declineOrder: (orderId: string, reason: string) => void;
+  cancelOrder: (orderId: string, reason: string) => void;
+  dispatchOrder: (orderId: string, deliveryPartner: string, trackingUrl: string) => void;
+  addCustomerNotes: (orderId: string, note: string) => void;
+  updateOrderStatus: (orderId: string, status: OrderStatus) => void;
+  flagCustomer: (customerId: string, flagged: boolean, reason: string) => void;
+  sendChatMessage: (threadId: string, text: string, senderRole: 'customer' | 'seller' | 'admin', senderName: string) => void;
+  createOrderNow: (product: OrderProduct, customerMsg: string) => void;
+}
+
+const OrdersContext = createContext<OrdersContextType | undefined>(undefined);
+
+export const useOrders = () => {
+  const context = useContext(OrdersContext);
+  if (!context) throw new Error('useOrders must be used within an OrdersProvider');
+  return context;
+};
+
+// Raw initial mock data for orders
+const initialProducts: OrderProduct[] = [
+  { id: '101', name: 'Aarong Silk Panjabi', brand: 'Aarong', price: 4200, image: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=400&q=80', sellerId: 'seller_001', sellerName: 'Aarong Digital' },
+  { id: '102', name: 'Apex Mens Formal Leather', brand: 'Apex', price: 3500, image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80', sellerId: 'seller_001', sellerName: 'Apex Shoes' },
+  { id: '103', name: 'Samsung S25 Ultra', brand: 'Samsung BD', price: 139999, image: 'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400&q=80', sellerId: 'seller_002', sellerName: 'TechZone BD' },
+  { id: '104', name: 'Walton 2-Door Fridge', brand: 'Walton', price: 29990, image: 'https://images.unsplash.com/photo-1571175432247-fe0320b5da22?w=400&q=80', sellerId: 'seller_002', sellerName: 'ElectroBD' },
+];
+
+const initialCustomers: Customer[] = [
+  {
+    id: 'cust_001',
+    name: 'Farhan Bin Rafiq',
+    email: 'farhanbinrafiq@gmail.com',
+    avatar: 'FR',
+    behavior: 'Good',
+    flagged: false,
+    history: [
+      { timestamp: '2026-05-18T10:00:00Z', action: 'Order Placed', note: 'Aarong Silk Panjabi approved and received' }
+    ]
+  },
+  {
+    id: 'cust_002',
+    name: 'Mehedi Rahman',
+    email: 'mehedi@yahoo.com',
+    avatar: 'MR',
+    behavior: 'Neutral',
+    flagged: false,
+    history: []
+  },
+  {
+    id: 'cust_003',
+    name: 'Nadia Akter',
+    email: 'nadia@hotmail.com',
+    avatar: 'NA',
+    behavior: 'Risk',
+    flagged: true,
+    flagReason: 'High order cancellation rate and duplicate booking spam',
+    history: [
+      { timestamp: '2026-05-15T08:30:00Z', action: 'Flagged', note: 'Restricted for spamming checkout 4 times in 1 hour.' }
+    ]
+  },
+  {
+    id: 'cust_004',
+    name: 'Sifat Tanvir',
+    email: 'sifat@tech.com',
+    avatar: 'ST',
+    behavior: 'Good',
+    flagged: false,
+    history: []
+  },
+  {
+    id: 'cust_005',
+    name: 'Sultana R.',
+    email: 'sultana@outlook.com',
+    avatar: 'SR',
+    behavior: 'Risk',
+    flagged: false,
+    history: []
+  }
+];
+
+const createEarnings = (price: number) => {
+  const commPercent = 10;
+  const commission = Math.round(price * (commPercent / 100));
+  return {
+    totalRevenue: price,
+    commissionPercent: commPercent,
+    futureAutomatedDeduction: commission,
+    sellerNet: price - commission
+  };
+};
+
+const initialOrders: Order[] = [
+  {
+    id: 'CSS-9921',
+    product: initialProducts[0],
+    customer: initialCustomers[0],
+    status: 'In Transit',
+    paymentStatus: 'Paid',
+    timestamp: '2026-05-20T01:15:00Z',
+    approveTime: '2026-05-20T02:00:00Z',
+    dispatchTime: '2026-05-20T04:30:00Z',
+    deliveryPartner: 'Pathao Delivery',
+    trackingUrl: 'https://track.pathao.com/sheet/9921',
+    customerNotes: ['Please ring the bell three times.', 'Avoid delivery before 10 AM.'],
+    sellerNotes: ['Dispatched on urgent request.'],
+    earnings: createEarnings(4200),
+  },
+  {
+    id: 'CSS-9844',
+    product: initialProducts[1],
+    customer: initialCustomers[0],
+    status: 'Pending',
+    paymentStatus: 'Pending',
+    timestamp: '2026-05-20T08:45:00Z',
+    customerNotes: ['Please provide a sizes guide in case fits tight.'],
+    earnings: createEarnings(3500),
+  },
+  {
+    id: 'CSS-1224',
+    product: initialProducts[2],
+    customer: initialCustomers[1],
+    status: 'Pending',
+    paymentStatus: 'Pending',
+    timestamp: '2026-05-20T07:11:00Z',
+    earnings: createEarnings(139999),
+  },
+  {
+    id: 'CSS-7741',
+    product: initialProducts[3],
+    customer: initialCustomers[2],
+    status: 'Cancelled',
+    paymentStatus: 'Pending',
+    timestamp: '2026-05-19T14:20:00Z',
+    cancelTime: '2026-05-19T15:00:00Z',
+    cancelReason: 'Risk analysis flagged fraudulent buyer intent',
+    earnings: createEarnings(29990),
+  },
+  {
+    id: 'CSS-5561',
+    product: initialProducts[0],
+    customer: initialCustomers[3],
+    status: 'Delivered',
+    paymentStatus: 'Paid',
+    timestamp: '2026-05-17T11:00:00Z',
+    approveTime: '2026-05-17T11:45:00Z',
+    dispatchTime: '2026-05-17T15:00:00Z',
+    deliverTime: '2026-05-18T16:30:00Z',
+    deliveryPartner: 'Paperfly',
+    trackingUrl: 'https://paperfly.com.bd/track/5561',
+    earnings: createEarnings(4200),
+  }
+];
+
+export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [orders, setOrders] = useState<Order[]>(() => {
+    const saved = localStorage.getItem('choosify_orders');
+    return saved ? JSON.parse(saved) : initialOrders;
+  });
+
+  const [customers, setCustomers] = useState<Customer[]>(() => {
+    const saved = localStorage.getItem('choosify_customers');
+    return saved ? JSON.parse(saved) : initialCustomers;
+  });
+
+  const [messageThreads, setMessageThreads] = useState<MessageThread[]>(() => {
+    const saved = localStorage.getItem('choosify_threads');
+    if (saved) return JSON.parse(saved);
+
+    // Bootstrap threads from orders
+    return [
+      {
+        id: 'thread_CSS-9921',
+        orderId: 'CSS-9921',
+        customer: initialCustomers[0],
+        product: initialProducts[0],
+        subject: 'Order #CSS-9921 Aarong Silk Panjabi Spec Inquiry',
+        preview: 'Our delivery agent is assigned on Pathao Delivery.',
+        status: 'RESPONDED',
+        time: '52 min ago',
+        messages: [
+          { id: 'm1', senderName: 'Farhan Bin Rafiq', senderRole: 'customer', text: 'Assalamu alaikum. Can I get immediate delivery of Aarong Panjabi?', timestamp: '2026-05-20T01:15:00Z' },
+          { id: 'm2', senderName: 'Aarong Digital', senderRole: 'seller', text: 'Walaikum Assalam! Yes, our driver has been scheduled via Pathao.', timestamp: '2026-05-20T04:30:00Z' }
+        ]
+      },
+      {
+        id: 'thread_CSS-9844',
+        orderId: 'CSS-9844',
+        customer: initialCustomers[0],
+        product: initialProducts[1],
+        subject: 'Order #CSS-9844 Size Check Request',
+        preview: 'Hi, I purchased the Apex Men Leather. Please check the sizes before packing.',
+        status: 'UNREAD',
+        time: '14 min ago',
+        messages: [
+          { id: 'm3', senderName: 'Farhan Bin Rafiq', senderRole: 'customer', text: 'Hi, I purchased the Apex Men Leather. Please check the sizes before packing.', timestamp: '2026-05-20T08:45:00Z' }
+        ]
+      }
+    ];
+  });
+
+  // Track to local storage
+  useEffect(() => {
+    localStorage.setItem('choosify_orders', JSON.stringify(orders));
+  }, [orders]);
+
+  useEffect(() => {
+    localStorage.setItem('choosify_customers', JSON.stringify(customers));
+  }, [customers]);
+
+  useEffect(() => {
+    localStorage.setItem('choosify_threads', JSON.stringify(messageThreads));
+  }, [messageThreads]);
+
+  // Actions
+  const approveOrder = (orderId: string, deliveryChargeNum?: number, note?: string) => {
+    const timestampStr = new Date().toISOString();
+    const invoiceIdGenerated = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+    const resolvedDeliveryCharge = deliveryChargeNum !== undefined ? deliveryChargeNum : 120;
+
+    // Helper variables to populate messages
+    let basePriceMsg = 0;
+    let totalPayableMsg = 0;
+    let customerNameMsg = 'Customer';
+    let productNameMsg = 'Product';
+
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        const basePrice = o.product.price;
+        const totalPayableNum = basePrice + resolvedDeliveryCharge;
+        const sellerNotes = o.sellerNotes ? [...o.sellerNotes] : [];
+        if (note) sellerNotes.push(note);
+
+        // Capture details for communication logic
+        basePriceMsg = basePrice;
+        totalPayableMsg = totalPayableNum;
+        customerNameMsg = o.customer.name;
+        productNameMsg = o.product.name;
+
+        // Recalculate earnings with locked totals
+        const commPercent = o.earnings?.commissionPercent || 10;
+        const commission = Math.round(basePrice * (commPercent / 100)); // commission logic on base product price
+
+        return {
+          ...o,
+          status: 'Confirmed',
+          approveTime: timestampStr,
+          sellerNotes,
+          base_product_price: basePrice,
+          delivery_charge: resolvedDeliveryCharge,
+          total_payable: totalPayableNum,
+          invoice_id: invoiceIdGenerated,
+          invoice_status: o.paymentStatus === 'Paid' ? 'Paid' : 'Unpaid',
+          confirmation_timestamp: timestampStr,
+          earnings: {
+            totalRevenue: totalPayableNum,
+            commissionPercent: commPercent,
+            futureAutomatedDeduction: commission,
+            sellerNet: totalPayableNum - commission
+          }
+        };
+      }
+      return o;
+    }));
+
+    // Update or create message thread with automated Invoice generation copies
+    setMessageThreads(prev => prev.map(t => {
+      if (t.orderId === orderId) {
+        const productVal = t.product;
+        const basePrice = productVal ? productVal.price : basePriceMsg || 0;
+        const totalPayableNum = basePrice + resolvedDeliveryCharge;
+
+        return {
+          ...t,
+          status: 'RESPONDED',
+          messages: [
+            ...t.messages,
+            {
+              id: 'm_seller_' + Math.random().toString(),
+              senderName: productVal?.sellerName || 'Merchant Partner',
+              senderRole: 'seller',
+              text: `🟢 [ORDER CONFIRMED - SELLER NOTIFICATION]\nInvoice Attached: #${invoiceIdGenerated}\n\nInvoice Total Payable Summary:\n- Base Product Price: ৳${basePrice.toLocaleString()}\n- Added Delivery Charge BDT: ৳${resolvedDeliveryCharge.toLocaleString()}\n- Total Payable Amount: ৳${totalPayableNum.toLocaleString()}\n- Status: INVOICE GENERATED & PRICING LOCKED.\n\nNote: ${note || "System auto-validation."}`,
+              timestamp: new Date().toISOString(),
+            },
+            {
+              id: 'm_cust_' + Math.random().toString(),
+              senderName: 'Platform Support Admin',
+              senderRole: 'admin',
+              text: `📦 [ORDER CONFIRMED - CUSTOMER COPY]\nHello ${customerNameMsg || t.customer.name},\nYour purchase order for "${productNameMsg || productVal?.name}" has been confirmed with pricing details locked.\n\nPayment Invoice Breakdown:\n- Product Price: ৳${basePrice.toLocaleString()}\n- Delivery Charge: ৳${resolvedDeliveryCharge.toLocaleString()}\n- Total Payable Amount BDT: ৳${totalPayableNum.toLocaleString()}\n- Invoice Code: ${invoiceIdGenerated}\n\nEstimated Delivery Status: Handover scheduled with our courier. Thanks for shopping with Choosify!`,
+              timestamp: new Date().toISOString(),
+            }
+          ]
+        };
+      }
+      return t;
+    }));
+  };
+
+  const declineOrder = (orderId: string, reason: string) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          status: 'Cancelled',
+          cancelTime: new Date().toISOString(),
+          declineReason: reason,
+        };
+      }
+      return o;
+    }));
+
+    setMessageThreads(prev => prev.map(t => {
+      if (t.orderId === orderId) {
+        return {
+          ...t,
+          status: 'RESPONDED',
+          messages: [
+            ...t.messages,
+            {
+              id: Math.random().toString(),
+              senderName: t.product?.sellerName || 'Seller Store',
+              senderRole: 'seller',
+              text: `❌ This Order has been DECLINED. Reason: ${reason}`,
+              timestamp: new Date().toISOString(),
+            }
+          ]
+        };
+      }
+      return t;
+    }));
+  };
+
+  const cancelOrder = (orderId: string, reason: string) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          status: 'Cancelled',
+          cancelTime: new Date().toISOString(),
+          cancelReason: reason,
+        };
+      }
+      return o;
+    }));
+
+    setMessageThreads(prev => prev.map(t => {
+      if (t.orderId === orderId) {
+        return {
+          ...t,
+          status: 'RESPONDED',
+          messages: [
+            ...t.messages,
+            {
+              id: Math.random().toString(),
+              senderName: t.product?.sellerName || 'Seller Store',
+              senderRole: 'seller',
+              text: `🛑 Order #${orderId} was CANCELLED. Reason: ${reason}`,
+              timestamp: new Date().toISOString(),
+            }
+          ]
+        };
+      }
+      return t;
+    }));
+  };
+
+  const dispatchOrder = (orderId: string, deliveryPartner: string, trackingUrl: string) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          status: 'Dispatched',
+          dispatchTime: new Date().toISOString(),
+          deliveryPartner,
+          trackingUrl,
+        };
+      }
+      return o;
+    }));
+
+    setMessageThreads(prev => prev.map(t => {
+      if (t.orderId === orderId) {
+        return {
+          ...t,
+          status: 'RESPONDED',
+          messages: [
+            ...t.messages,
+            {
+              id: Math.random().toString(),
+              senderName: t.product?.sellerName || 'Seller Store',
+              senderRole: 'seller',
+              text: `🚚 Dispatched via ${deliveryPartner}! Track live here: ${trackingUrl}`,
+              timestamp: new Date().toISOString(),
+            }
+          ]
+        };
+      }
+      return t;
+    }));
+  };
+
+  const addCustomerNotes = (orderId: string, note: string) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          customerNotes: o.customerNotes ? [...o.customerNotes, note] : [note],
+        };
+      }
+      return o;
+    }));
+  };
+
+  const updateOrderStatus = (orderId: string, status: OrderStatus) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        const updateObj: Partial<Order> = { status };
+        if (status === 'Delivered') {
+          updateObj.deliverTime = new Date().toISOString();
+          updateObj.paymentStatus = 'Paid';
+        }
+        return {
+          ...o,
+          ...updateObj,
+        };
+      }
+      return o;
+    }));
+
+    setMessageThreads(prev => prev.map(t => {
+      if (t.orderId === orderId) {
+        return {
+          ...t,
+          messages: [
+            ...t.messages,
+            {
+              id: Math.random().toString(),
+              senderName: t.product?.sellerName || 'System',
+              senderRole: 'admin',
+              text: `📦 Order status transitioned to: ${status}`,
+              timestamp: new Date().toISOString(),
+            }
+          ]
+        };
+      }
+      return t;
+    }));
+  };
+
+  const flagCustomer = (customerId: string, flagged: boolean, reason: string) => {
+    setCustomers(prev => prev.map(c => {
+      if (c.id === customerId) {
+        const updatedHistory = [...c.history];
+        updatedHistory.push({
+          timestamp: new Date().toISOString(),
+          action: flagged ? 'Flagged Risk' : 'Cleared Risk',
+          note: reason,
+        });
+        return {
+          ...c,
+          flagged,
+          flagReason: flagged ? reason : undefined,
+          behavior: flagged ? 'Risk' : 'Neutral',
+          history: updatedHistory,
+        };
+      }
+      return c;
+    }));
+
+    // Update customers inside order models in-state too
+    setOrders(prev => prev.map(o => {
+      if (o.customer.id === customerId) {
+        return {
+          ...o,
+          customer: {
+            ...o.customer,
+            flagged,
+            flagReason: flagged ? reason : undefined,
+            behavior: flagged ? 'Risk' : 'Neutral'
+          }
+        };
+      }
+      return o;
+    }));
+  };
+
+  const sendChatMessage = (threadId: string, text: string, senderRole: 'customer' | 'seller' | 'admin', senderName: string) => {
+    setMessageThreads(prev => prev.map(t => {
+      if (t.id === threadId) {
+        return {
+          ...t,
+          status: senderRole === 'customer' ? 'UNREAD' : 'RESPONDED',
+          preview: text,
+          time: 'Just now',
+          messages: [
+            ...t.messages,
+            {
+              id: Math.random().toString(),
+              senderName,
+              senderRole,
+              text,
+              timestamp: new Date().toISOString(),
+            }
+          ]
+        };
+      }
+      return t;
+    }));
+  };
+
+  const createOrderNow = (product: OrderProduct, customerMsg: string) => {
+    const orderId = 'CSS-' + Math.floor(1000 + Math.random() * 9000);
+    const primaryCustomer = customers[0]; // Farhan Bin Rafiq (Default customer simulation)
+
+    const newOrder: Order = {
+      id: orderId,
+      product,
+      customer: primaryCustomer,
+      status: 'Pending',
+      paymentStatus: 'Pending',
+      timestamp: new Date().toISOString(),
+      customerNotes: [customerMsg],
+      earnings: createEarnings(product.price),
+    };
+
+    setOrders(prev => [newOrder, ...prev]);
+
+    // Create immediate inbox message link
+    const newThread: MessageThread = {
+      id: `thread_${orderId}`,
+      orderId,
+      customer: primaryCustomer,
+      product,
+      subject: `Order #${orderId} ${product.name} Auto-Inquiry`,
+      preview: customerMsg,
+      status: 'UNREAD',
+      time: 'Just now',
+      messages: [
+        {
+          id: 'chat_msg_1',
+          senderName: primaryCustomer.name,
+          senderRole: 'customer',
+          text: `🛒 (NEW ORDER REQUESTED) Hello, I want to order this product: ${product.name}. Msg: "${customerMsg}"`,
+          timestamp: new Date().toISOString(),
+        }
+      ]
+    };
+
+    setMessageThreads(prev => [newThread, ...prev]);
+  };
+
+  return (
+    <OrdersContext.Provider value={{
+      orders,
+      customers,
+      messageThreads,
+      approveOrder,
+      declineOrder,
+      cancelOrder,
+      dispatchOrder,
+      addCustomerNotes,
+      updateOrderStatus,
+      flagCustomer,
+      sendChatMessage,
+      createOrderNow
+    }}>
+      {children}
+    </OrdersContext.Provider>
+  );
+};

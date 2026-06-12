@@ -1,0 +1,265 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Standard user profile for Choosify",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["GUEST", "USER", "SELLER", "CREATOR", "MODERATOR", "CONTENT_ADMIN", "FINANCE_ADMIN", "SUPER_ADMIN"] },
+        "avatarUrl": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["ACTIVE", "BANNED"] }
+      },
+      "required": ["userId", "email", "role"]
+    },
+    "Seller": {
+      "title": "Seller",
+      "description": "Seller business profile",
+      "type": "object",
+      "properties": {
+        "sellerId": { "type": "string" },
+        "userId": { "type": "string" },
+        "businessName": { "type": "string" },
+        "category": { "type": "string" },
+        "verificationStatus": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "documents": { "type": "array" },
+        "totalProducts": { "type": "number" },
+        "totalRevenue": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["sellerId", "userId", "businessName"]
+    },
+    "Creator": {
+      "title": "Creator",
+      "description": "Recommendation expert profile",
+      "type": "object",
+      "properties": {
+        "creatorId": { "type": "string" },
+        "userId": { "type": "string" },
+        "bio": { "type": "string" },
+        "socialLinks": { "type": "array" },
+        "affiliateEarnings": { "type": "number" },
+        "totalViews": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Product listing",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "brandId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "images": { "type": "array" },
+        "status": { "type": "string", "enum": ["PENDING", "LIVE", "FLAGGED", "REMOVED"] },
+        "views": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Deal": {
+      "title": "Deal",
+      "description": "Promotional offer",
+      "type": "object",
+      "properties": {
+        "dealId": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "name": { "type": "string" },
+        "discountPercentage": { "type": "number" },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "status": { "type": "string", "enum": ["PENDING", "LIVE", "EXPIRED"] },
+        "clicks": { "type": "number" }
+      }
+    },
+    "Recommendation": {
+      "title": "Recommendation",
+      "description": "Creator recommendation article",
+      "type": "object",
+      "properties": {
+        "recommendationId": { "type": "string" },
+        "creatorId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "status": { "type": "string", "enum": ["PENDING", "PUBLISHED", "FLAGGED"] },
+        "views": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Review": {
+      "title": "Review",
+      "description": "User review of a product",
+      "type": "object",
+      "properties": {
+        "reviewId": { "type": "string" },
+        "productId": { "type": "string" },
+        "userId": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "status": { "type": "string", "enum": ["PUBLISHED", "FLAGGED", "DELETED"] },
+        "reports": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Message": {
+      "title": "Message",
+      "description": "Customer support or inquiry message",
+      "type": "object",
+      "properties": {
+        "messageId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "recipientId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderRole": { "type": "string", "enum": ["USER", "SELLER"] },
+        "subject": { "type": "string" },
+        "content": { "type": "string" },
+        "status": { "type": "string", "enum": ["UNREAD", "READ", "RESPONDED"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "replies": { "type": "array" }
+      },
+      "required": ["senderId", "content", "status"]
+    },
+    "CMSData": {
+      "title": "CMS Data",
+      "description": "Dynamic configuration for logos, navigation, and social links",
+      "type": "object",
+      "properties": {
+        "logos": {
+          "type": "object",
+          "properties": {
+            "header": { "type": "string" },
+            "footer": { "type": "string" }
+          }
+        },
+        "navigation": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "label": { "type": "string" },
+              "path": { "type": "string" },
+              "order": { "type": "number" }
+            }
+          }
+        },
+        "socialLinks": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "platform": { "type": "string", "enum": ["Facebook", "Instagram", "YouTube", "TikTok", "WhatsApp"] },
+              "url": { "type": "string" },
+              "isVisible": { "type": "boolean" }
+            }
+          }
+        }
+      }
+    },
+    "Promotion": {
+      "title": "Promotion",
+      "description": "Generic schema for sponsored ads and featured content",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["AD", "POST", "PRODUCT", "BRAND", "DEAL", "RECOMMENDATION"] },
+        "targetId": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "linkUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "INACTIVE", "SCHEDULED", "EXPIRED"] },
+        "startDate": { "type": "string", "format": "date-time" },
+        "endDate": { "type": "string", "format": "date-time" },
+        "placement": { "type": "string" },
+        "targeting": { "type": "array" },
+        "priority": { "type": "number" },
+        "analytics": {
+          "type": "object",
+          "properties": {
+            "impressions": { "type": "number" },
+            "clicks": { "type": "number" },
+            "ctr": { "type": "number" }
+          }
+        }
+      },
+      "required": ["type", "status"]
+    },
+    "PromotionRequest": {
+      "title": "PromotionRequest",
+      "description": "Seller or Creator sponsored promotion placement request",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "requesterId": { "type": "string" },
+        "requesterRole": { "type": "string", "enum": ["seller", "creator"] },
+        "requesterName": { "type": "string" },
+        "contentType": { "type": "string" },
+        "contentId": { "type": "string" },
+        "contentName": { "type": "string" },
+        "requestedPromotionType": { "type": "string" },
+        "featurePriority": { "type": "string" },
+        "duration": { "type": "number" },
+        "placementRequest": { "type": "string" },
+        "approvalStatus": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["requesterId", "contentId", "approvalStatus"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Combined User profile and private data"
+    },
+    "/sellers/{sellerId}": {
+      "schema": "Seller",
+      "description": "Seller profiles"
+    },
+    "/creators/{creatorId}": {
+      "schema": "Creator",
+      "description": "Creator profiles"
+    },
+    "/products/{productId}": {
+      "schema": "Product",
+      "description": "Product directory"
+    },
+    "/deals/{dealId}": {
+      "schema": "Deal",
+      "description": "Active promotional deals"
+    },
+    "/recommendations/{recommendationId}": {
+      "schema": "Recommendation",
+      "description": "Curated recommendation articles"
+    },
+    "/reviews/{reviewId}": {
+      "schema": "Review",
+      "description": "Product reviews"
+    },
+    "/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Support inquiries and responses"
+    },
+    "/settings/{settingId}": {
+      "schema": "CMSData",
+      "description": "Global application settings and CMS content"
+    },
+    "/promotions/{promotionId}": {
+      "schema": "Promotion",
+      "description": "Sponsored ads and featured content"
+    },
+    "/promotion_requests/{requestId}": {
+      "schema": "PromotionRequest",
+      "description": "Centralized sponsored requests from merchants/creators"
+    }
+  }
+}

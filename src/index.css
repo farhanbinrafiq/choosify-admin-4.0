@@ -1,0 +1,553 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+:root {
+  --color-app-bg: #F8FAFD;
+  --color-app-card: #FFFFFF;
+  --color-app-sidebar: #000435;
+  --color-app-accent: #EB4501;
+  --color-app-accent-light: #ff5d1a;
+  --color-app-success: #07DD05;
+  --color-app-text-primary: #000435;
+  --color-app-text-secondary: #5E6C84;
+  --color-app-border: #E2E8F0;
+  --color-app-gradient-start: #000435;
+  --color-app-gradient-end: #EB4501;
+}
+
+.dark {
+  --color-app-bg: #000435;
+  --color-app-card: #09104A; /* Slightly lighter navy variation for soft card surfaces */
+  --color-app-sidebar: #00021A; /* Deep navy sidebar, no pure black */
+  --color-app-text-primary: #F5F5F5; /* Soft white primary text, eye comfort */
+  --color-app-text-secondary: #8E9BAE; /* Muted light gray */
+  --color-app-border: rgba(245, 245, 245, 0.06); /* Soft, non-harsh borders */
+  --color-app-gradient-start: #000435;
+  --color-app-gradient-end: #09104A;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  /* Theme Colors Map to CSS Variables */
+  --color-app-bg: var(--color-app-bg);
+  --color-app-card: var(--color-app-card);
+  --color-app-sidebar: var(--color-app-sidebar);
+  --color-app-accent: var(--color-app-accent);
+  --color-app-accent-light: var(--color-app-accent-light);
+  --color-app-success: var(--color-app-success);
+  --color-app-text-primary: var(--color-app-text-primary);
+  --color-app-text-secondary: var(--color-app-text-secondary);
+  --color-app-border: var(--color-app-border);
+  --color-app-gradient-start: var(--color-app-gradient-start);
+  --color-app-gradient-end: var(--color-app-gradient-end);
+}
+
+@layer base {
+  body {
+    @apply bg-app-bg text-app-text-primary min-h-screen transition-colors duration-300;
+  }
+
+  /* Dark Mode Eye Comfort Optimization: Soft gradients and radial orange glow */
+  .dark body {
+    background: radial-gradient(circle at 70% 20%, rgba(235, 69, 1, 0.06), transparent 50%), linear-gradient(135deg, #000435 0%, #080C42 55%, #000435 100%) !important;
+    background-attachment: fixed !important;
+  }
+}
+
+/* --- Global Contrast & Light/Dark Mode Controls --- */
+
+/* 1. Prevent invisible text inside light theme due to hardcoded white utilities */
+html:not(.dark) .text-white,
+html:not(.dark) .text-slate-50,
+html:not(.dark) .text-slate-100,
+html:not(.dark) .text-slate-200,
+html:not(.dark) .text-slate-300,
+html:not(.dark) .text-gray-50,
+html:not(.dark) .text-gray-100,
+html:not(.dark) .text-gray-200,
+html:not(.dark) .text-white\/70,
+html:not(.dark) .text-white\/80,
+html:not(.dark) .text-white\/50,
+html:not(.dark) .text-white\/90 {
+  color: #000435; /* Dark navy primary text */
+}
+
+/* 2. Better contrast for secondary text / captions in light mode (no washed out terms) */
+html:not(.dark) .text-slate-400,
+html:not(.dark) .text-gray-400,
+html:not(.dark) .text-zinc-400,
+html:not(.dark) .text-app-text-secondary {
+  color: #5E6C84 !important; /* Readable Medium Gray */
+}
+
+/* 3. Inputs placeholder visibility in light mode */
+html:not(.dark) input::placeholder,
+html:not(.dark) textarea::placeholder {
+  color: #5E6C84 !important;
+  opacity: 0.75 !important;
+}
+
+/* 4. SOLID CONTRAST FOR THE LEFT NAVIGATION SIDEBAR (Unified high-contrast dark-background rules across BOTH modes) */
+aside, 
+[class*="bg-app-sidebar"] {
+  background-color: var(--color-app-sidebar) !important;
+  color: #FFFFFF !important;
+}
+
+/* Enforce bright, high-contrast text and link colors inside the sidebar regardless of parent theme */
+aside .text-white,
+[class*="bg-app-sidebar"] .text-white,
+aside .text-white/90,
+[class*="bg-app-sidebar"] .text-white/90,
+aside .text-white/80,
+[class*="bg-app-sidebar"] .text-white/80 {
+  color: #FFFFFF !important;
+}
+
+/* Specific slate scales to provide elegant hierarchy without turning dark navy in Light Mode */
+aside .text-slate-50,
+[class*="bg-app-sidebar"] .text-slate-50,
+aside .text-gray-50,
+[class*="bg-app-sidebar"] .text-gray-50 {
+  color: #F8FAFC !important;
+}
+
+aside .text-slate-100,
+[class*="bg-app-sidebar"] .text-slate-100,
+aside .text-gray-100,
+[class*="bg-app-sidebar"] .text-gray-100 {
+  color: #F1F5F9 !important;
+}
+
+aside .text-slate-200,
+[class*="bg-app-sidebar"] .text-slate-200,
+aside .text-gray-200,
+[class*="bg-app-sidebar"] .text-gray-200 {
+  color: #E2E8F0 !important;
+}
+
+aside .text-slate-300,
+[class*="bg-app-sidebar"] .text-slate-300,
+aside .text-gray-300,
+[class*="bg-app-sidebar"] .text-gray-300 {
+  color: #CBD5E1 !important;
+}
+
+aside .text-slate-400,
+[class*="bg-app-sidebar"] .text-slate-400,
+aside .text-gray-400,
+[class*="bg-app-sidebar"] .text-gray-400,
+aside .text-app-text-secondary,
+[class*="bg-app-sidebar"] .text-app-text-secondary {
+  color: #94A3B8 !important;
+}
+
+aside .text-slate-500,
+[class*="bg-app-sidebar"] .text-slate-500,
+aside .text-gray-500,
+[class*="bg-app-sidebar"] .text-gray-500 {
+  color: #64748B !important;
+}
+
+/* Enforce orange accent color for highlighted / active items and icons */
+aside .text-app-accent,
+[class*="bg-app-sidebar"] .text-app-accent,
+aside [class*="text-[#EB4501]"],
+[class*="bg-app-sidebar"] [class*="text-[#EB4501]"] {
+  color: #EB4501 !important;
+}
+
+/* 5. HOVER, ACTIVE AND SUBMENU STYLING */
+aside .hover\:text-white:hover,
+[class*="bg-app-sidebar"] .hover\:text-white:hover,
+aside .group:hover .group-hover\:text-white,
+[class*="bg-app-sidebar"] .group:hover .group-hover\:text-white {
+  color: #FFFFFF !important;
+}
+
+/* Ensure hovered item icons and text turn bright white */
+aside .group:hover .text-slate-400,
+[class*="bg-app-sidebar"] .group:hover .text-slate-400,
+aside .group:hover .text-slate-500,
+[class*="bg-app-sidebar"] .group:hover .text-slate-500,
+aside .group:hover .text-slate-200,
+[class*="bg-app-sidebar"] .group:hover .text-slate-200,
+aside .group:hover svg,
+[class*="bg-app-sidebar"] .group:hover svg {
+  color: #FFFFFF !important;
+}
+
+/* Specific Submenu styling inside left sidebar */
+aside .mt-1.pl-6,
+[class*="bg-app-sidebar"] .mt-1.pl-6 {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+aside .mt-1.pl-6 a,
+[class*="bg-app-sidebar"] .mt-1.pl-6 a {
+  color: #94A3B8 !important;
+}
+
+aside .mt-1.pl-6 a:hover,
+[class*="bg-app-sidebar"] .mt-1.pl-6 a:hover {
+  color: #FFFFFF !important;
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+
+/* Active submenu text */
+aside .mt-1.pl-6 a[class*="text-app-accent"],
+[class*="bg-app-sidebar"] .mt-1.pl-6 a[class*="text-app-accent"],
+aside .mt-1.pl-6 a.text-app-accent,
+[class*="bg-app-sidebar"] .mt-1.pl-6 a.text-app-accent {
+  color: #EB4501 !important;
+  font-weight: 700 !important;
+}
+
+/* Sidebar Footer User Details section */
+aside .p-4.border-t,
+[class*="bg-app-sidebar"] .p-4.border-t {
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+
+aside .p-4.border-t .text-slate-500,
+[class*="bg-app-sidebar"] .p-4.border-t .text-slate-500 {
+  color: #94A3B8 !important;
+}
+
+/* Force correct colors inside ANY dynamic dark panels, card feeds, or insight boxes in Light Mode */
+html:not(.dark) [class*="bg-[#0D1B2A]"] .text-white,
+html:not(.dark) [class*="bg-[#0D1B2A]"] .text-slate-50,
+html:not(.dark) [class*="bg-[#0D1B2A]"] .text-slate-100,
+html:not(.dark) [class*="bg-[#0D1B2A]"] .text-slate-200,
+html:not(.dark) [class*="bg-[#0D1B2A]"] .text-slate-300,
+html:not(.dark) [class*="bg-[#0D1B2A]"] .text-slate-400,
+html:not(.dark) [class*="bg-[#0D1B2A]"] .text-gray-50,
+html:not(.dark) [class*="bg-[#0D1B2A]"] .text-gray-100,
+html:not(.dark) [class*="bg-[#0D1B2A]"] .text-gray-200,
+html:not(.dark) [class*="bg-[#0D1B2A]"] .text-gray-300,
+html:not(.dark) [class*="bg-[#0B0F19]"] .text-white,
+html:not(.dark) [class*="bg-[#0B0F19]"] .text-slate-200,
+html:not(.dark) [class*="bg-[#0B0F19]"] .text-slate-300,
+html:not(.dark) [class*="bg-[#0B0F19]"] .text-gray-200,
+html:not(.dark) [class*="bg-[#000435]"] .text-white,
+html:not(.dark) [class*="bg-[#000435]"] .text-slate-100,
+html:not(.dark) [class*="bg-[#000435]"] .text-slate-200,
+html:not(.dark) [class*="bg-[#000435]"] .text-slate-300,
+html:not(.dark) [class*="bg-[#000435]"] .text-gray-100,
+html:not(.dark) [class*="bg-[#000435]"] .text-gray-200 {
+  color: #FFFFFF !important;
+}
+
+/* 6. Enforce white font color on solid colored buttons/badges (including on hover/focus) */
+html:not(.dark) .bg-app-accent,
+html:not(.dark) .bg-\[\#EB4501\],
+html:not(.dark) .bg-green-500,
+html:not(.dark) .bg-green-600,
+html:not(.dark) .bg-red-500,
+html:not(.dark) .bg-red-600,
+html:not(.dark) .bg-blue-500,
+html:not(.dark) .bg-blue-600,
+html:not(.dark) .bg-orange-500,
+html:not(.dark) .bg-purple-500,
+html:not(.dark) .bg-purple-600,
+html:not(.dark) .bg-indigo-600,
+html:not(.dark) .bg-[#0D1B2A],
+html:not(.dark) .bg-\[\#F4631E\] {
+  color: #FFFFFF !important;
+}
+
+html:not(.dark) .bg-app-accent *,
+html:not(.dark) .bg-\[\#EB4501\] *,
+html:not(.dark) .bg-green-500 *,
+html:not(.dark) .bg-green-600 *,
+html:not(.dark) .bg-red-500 *,
+html:not(.dark) .bg-red-600 *,
+html:not(.dark) .bg-blue-500 *,
+html:not(.dark) .bg-blue-600 *,
+html:not(.dark) .bg-orange-500 *,
+html:not(.dark) .bg-[#0D1B2A] *,
+html:not(.dark) .bg-\[\#F4631E\] * {
+  color: #FFFFFF !important;
+}
+
+/* 7. Ensure transparent, low-opacity white layouts do not blend into the white card theme in Light Mode */
+html:not(.dark) .bg-white\/5,
+html:not(.dark) .bg-white\/10,
+html:not(.dark) .bg-white\/15,
+html:not(.dark) .bg-white\/20,
+html:not(.dark) .bg-white\/\[0\.01\],
+html:not(.dark) .bg-white\/\[0\.02\],
+html:not(.dark) .bg-white\/\[0\.03\],
+html:not(.dark) .bg-white\/\[0\.04\],
+html:not(.dark) .bg-white\/\[0\.05\],
+html:not(.dark) .bg-white\/\[0\.08\],
+html:not(.dark) .bg-white\/\[0\.1\] {
+  background-color: rgba(0, 4, 53, 0.03) !important;
+}
+
+html:not(.dark) .hover\:bg-white\/5:hover,
+html:not(.dark) .hover\:bg-white\/10:hover,
+html:not(.dark) .hover\:bg-white\/20:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.01\]:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.02\]:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.03\]:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.05\]:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.08\]:hover,
+html:not(.dark) .hover\:bg-white\/\[0\.1\]:hover,
+html:not(.dark) .group-hover\:bg-white\/5,
+html:not(.dark) .group-hover\:bg-white\/10,
+html:not(.dark) .group-hover\:bg-white\/\[0\.01\],
+html:not(.dark) .group-hover\:bg-white\/\[0\.02\],
+html:not(.dark) .group-hover\:bg-white\/\[0\.03\],
+html:not(.dark) .group-hover\:bg-white\/\[0\.05\],
+html:not(.dark) .group-hover\:bg-white\/\[0\.08\] {
+  background-color: rgba(0, 4, 53, 0.06) !important;
+}
+
+/* Transform matching low-contrast border boundaries into solid, readable lines in Light Mode */
+html:not(.dark) .border-white\/5,
+html:not(.dark) .border-white\/10,
+html:not(.dark) .border-white\/15,
+html:not(.dark) .border-white\/20,
+html:not(.dark) .border-white\/\[0\.01\],
+html:not(.dark) .border-white\/\[0\.02\],
+html:not(.dark) .border-white\/\[0\.03\],
+html:not(.dark) .border-white\/\[0\.04\],
+html:not(.dark) .border-white\/\[0\.05\],
+html:not(.dark) .border-white\/\[0\.08\],
+html:not(.dark) .border-white\/\[0\.1\] {
+  border-color: rgba(0, 4, 53, 0.08) !important;
+}
+
+/* Redefine/restore original dark-matching white opacities inside deep aside/sidebar containers in Light Mode */
+html:not(.dark) aside .bg-white\/5,
+html:not(.dark) aside .bg-white\/10,
+html:not(.dark) aside .bg-white\/15,
+html:not(.dark) [class*="bg-app-sidebar"] .bg-white\/5,
+html:not(.dark) [class*="bg-app-sidebar"] .bg-white\/10,
+html:not(.dark) [class*="bg-app-sidebar"] .bg-white\/15,
+html:not(.dark) aside .bg-white\/\[0\.01\],
+html:not(.dark) aside .bg-white\/\[0\.02\],
+html:not(.dark) aside .bg-white\/\[0\.03\],
+html:not(.dark) aside .bg-white\/\[0\.05\],
+html:not(.dark) [class*="bg-app-sidebar"] .bg-white\/\[0\.01\],
+html:not(.dark) [class*="bg-app-sidebar"] .bg-white\/\[0\.02\],
+html:not(.dark) [class*="bg-app-sidebar"] .bg-white\/\[0\.03\],
+html:not(.dark) [class*="bg-app-sidebar"] .bg-white\/\[0\.05\],
+html:not(.dark) aside .hover\:bg-white\/5:hover,
+html:not(.dark) aside .hover\:bg-white\/10:hover,
+html:not(.dark) [class*="bg-app-sidebar"] .hover\:bg-white\/5:hover,
+html:not(.dark) [class*="bg-app-sidebar"] .hover\:bg-white\/10:hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+html:not(.dark) aside .border-white\/5,
+html:not(.dark) aside .border-white\/10,
+html:not(.dark) [class*="bg-app-sidebar"] .border-white\/5,
+html:not(.dark) [class*="bg-app-sidebar"] .border-white\/10,
+html:not(.dark) aside .border-white\/\[0\.01\],
+html:not(.dark) aside .border-white\/\[0\.02\],
+html:not(.dark) aside .border-white\/\[0\.03\],
+html:not(.dark) aside .border-white\/\[0\.05\],
+html:not(.dark) [class*="bg-app-sidebar"] .border-white\/\[0\.01\],
+html:not(.dark) [class*="bg-app-sidebar"] .border-white\/\[0\.02\],
+html:not(.dark) [class*="bg-app-sidebar"] .border-white\/\[0\.03\],
+html:not(.dark) [class*="bg-app-sidebar"] .border-white\/\[0\.05\] {
+  border-color: rgba(255, 255, 255, 0.05) !important;
+}
+
+/* Custom Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--color-app-border);
+  border-radius: 10px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: var(--color-app-text-secondary);
+}
+
+/* --- High-Density Pill, Tag, Badge, Status Label Contrast Support (Light Mode Only Patch) --- */
+
+/* 1. Dark solid background pills/badges/tags/statuses in Light Mode: Force text and intermediate children to be soft white for high readability */
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-green-"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-red-"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-blue-"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-orange-"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#EB4501]"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#F4631E]"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#000435]"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#0D1B2A]"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-app-accent"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#F4631E]"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-purple-"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-indigo-"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-slate-800"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-gray-800"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-zinc-800"] {
+  color: #F5F5F5 !important;
+}
+
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-green-"] *,
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-red-"] *,
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-blue-"] *,
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-orange-"] *,
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#EB4501]"] *,
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#F4631E]"] *,
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-app-accent"] *,
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#000435]"] *,
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#0D1B2A]"] * {
+  color: #F5F5F5 !important;
+}
+
+/* 2. Light background pills/badges/tags in Light Mode: Force text and descendant labels to be Dark Navy (#000435) */
+html:not(.dark) [class*="rounded-"][class*="bg-green-50"],
+html:not(.dark) [class*="rounded-"][class*="bg-green-100"],
+html:not(.dark) [class*="rounded-"][class*="bg-green-200"],
+html:not(.dark) [class*="rounded-"][class*="bg-green-500/10"],
+html:not(.dark) [class*="rounded-"][class*="bg-green-500/15"],
+html:not(.dark) [class*="rounded-"][class*="bg-green-500/20"],
+html:not(.dark) [class*="rounded-"][class*="bg-red-50"],
+html:not(.dark) [class*="rounded-"][class*="bg-red-100"],
+html:not(.dark) [class*="rounded-"][class*="bg-red-200"],
+html:not(.dark) [class*="rounded-"][class*="bg-red-500/10"],
+html:not(.dark) [class*="rounded-"][class*="bg-red-500/15"],
+html:not(.dark) [class*="rounded-"][class*="bg-red-500/20"],
+html:not(.dark) [class*="rounded-"][class*="bg-blue-50"],
+html:not(.dark) [class*="rounded-"][class*="bg-blue-100"],
+html:not(.dark) [class*="rounded-"][class*="bg-blue-200"],
+html:not(.dark) [class*="rounded-"][class*="bg-blue-500/10"],
+html:not(.dark) [class*="rounded-"][class*="bg-blue-500/15"],
+html:not(.dark) [class*="rounded-"][class*="bg-blue-500/20"],
+html:not(.dark) [class*="rounded-"][class*="bg-orange-50"],
+html:not(.dark) [class*="rounded-"][class*="bg-orange-100"],
+html:not(.dark) [class*="rounded-"][class*="bg-orange-200"],
+html:not(.dark) [class*="rounded-"][class*="bg-orange-500/10"],
+html:not(.dark) [class*="rounded-"][class*="bg-orange-500/15"],
+html:not(.dark) [class*="rounded-"][class*="bg-orange-500/20"],
+html:not(.dark) [class*="rounded-"][class*="bg-[#EB4501]/10"],
+html:not(.dark) [class*="rounded-"][class*="bg-[#EB4501]/15"],
+html:not(.dark) [class*="rounded-"][class*="bg-[#EB4501]/20"],
+html:not(.dark) [class*="rounded-"][class*="bg-app-accent/10"],
+html:not(.dark) [class*="rounded-"][class*="bg-app-accent/15"],
+html:not(.dark) [class*="rounded-"][class*="bg-[#F4631E]/10"],
+html:not(.dark) [class*="rounded-"][class*="bg-slate-50"],
+html:not(.dark) [class*="rounded-"][class*="bg-slate-100"],
+html:not(.dark) [class*="rounded-"][class*="bg-slate-200"],
+html:not(.dark) [class*="rounded-"][class*="bg-gray-50"],
+html:not(.dark) [class*="rounded-"][class*="bg-gray-100"],
+html:not(.dark) [class*="rounded-"][class*="bg-gray-200"],
+html:not(.dark) [class*="rounded-"][class*="bg-zinc-50"],
+html:not(.dark) [class*="rounded-"][class*="bg-zinc-100"],
+html:not(.dark) [class*="rounded-"][class*="bg-zinc-200"],
+html:not(.dark) [class*="rounded-"][class*="bg-white"] {
+  color: #000435 !important;
+}
+
+html:not(.dark) [class*="rounded-"][class*="bg-green-50"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-green-100"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-green-500/10"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-green-500/15"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-red-50"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-red-100"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-red-500/10"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-red-500/15"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-blue-50"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-blue-100"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-blue-500/10"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-blue-500/15"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-orange-50"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-orange-100"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-orange-500/10"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-[#EB4501]/10"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-app-accent/10"] * {
+  color: #000435 !important;
+}
+
+/* --- STANDARD ACTIVE/SELECTED STATE COLOR ALGORITHM SYSTEM --- */
+
+/* 1. Sidebar Menu Items Active State Override */
+.active-sidebar-item {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+html:not(.dark) .active-sidebar-item {
+  background: linear-gradient(to right, rgba(235, 69, 1, 0.15) 0%, rgba(255, 255, 255, 0.02) 100%) !important;
+  color: #FFFFFF !important;
+  border-left-color: #EB4501 !important;
+  box-shadow: none !important;
+}
+html:not(.dark) .active-sidebar-item * {
+  color: #FFFFFF !important;
+}
+html.dark .active-sidebar-item {
+  background: linear-gradient(to right, rgba(0, 4, 53, 0.45) 0%, rgba(9, 16, 74, 0.45) 100%) !important;
+  color: #F5F5F5 !important;
+  border-left-color: #EB4501 !important;
+  box-shadow: none !important;
+}
+html.dark .active-sidebar-item * {
+  color: #F5F5F5 !important;
+}
+
+/* 2. Platform Navigation Tabs Selected State */
+.active-tab-item {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+html:not(.dark) .active-tab-item {
+  background: rgba(0, 4, 53, 0.08) !important;
+  color: #000435 !important;
+  border-bottom: 2px solid #EB4501 !important;
+  border-left-color: transparent !important;
+  border-right-color: transparent !important;
+  border-top-color: transparent !important;
+}
+html:not(.dark) .active-tab-item * {
+  color: #000435 !important;
+}
+html.dark .active-tab-item {
+  background: linear-gradient(to bottom, rgba(0, 4, 53, 0.35) 0%, rgba(9, 16, 74, 0.35) 100%) !important;
+  color: #F5F5F5 !important;
+  border-bottom: 2px solid #EB4501 !important;
+  border-left-color: transparent !important;
+  border-right-color: transparent !important;
+  border-top-color: transparent !important;
+}
+html.dark .active-tab-item * {
+  color: #F5F5F5 !important;
+}
+
+/* 3. Selected Buttons / Filters / Pills / Tags Active State */
+.active-filter-item, .active-pill-item {
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+html:not(.dark) .active-filter-item,
+html:not(.dark) .active-pill-item {
+  background: rgba(0, 4, 53, 0.08) !important;
+  color: #000435 !important;
+  border: 1px solid #EB4501 !important;
+  box-shadow: none !important;
+}
+html:not(.dark) .active-filter-item *,
+html:not(.dark) .active-pill-item * {
+  color: #000435 !important;
+}
+html.dark .active-filter-item,
+html.dark .active-pill-item {
+  background: linear-gradient(to bottom, rgba(0, 4, 53, 0.3) 0%, rgba(9, 16, 74, 0.3) 100%) !important;
+  color: #F5F5F5 !important;
+  border: 1px solid #EB4501 !important;
+  box-shadow: none !important;
+}
+html.dark .active-filter-item *,
+html.dark .active-pill-item * {
+  color: #F5F5F5 !important;
+}
+
+

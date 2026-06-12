@@ -1,0 +1,300 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Phase 3: Primitive Definitions & Helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Bootstrapped Administrator Concept
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'farhanbinrafiq.me@gmail.com' && request.auth.token.email_verified == true) ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ["MODERATOR", "CONTENT_ADMIN", "FINANCE_ADMIN", "SUPER_ADMIN"])
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Type and Field validation helpers for each entity in the blueprint
+    
+    function isValidUser(data) {
+      return data.userId is string && data.userId.size() <= 128
+        && data.email is string && data.email.size() <= 256
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 128))
+        && data.role is string && data.role in ["GUEST", "USER", "SELLER", "CREATOR", "MODERATOR", "CONTENT_ADMIN", "FINANCE_ADMIN", "SUPER_ADMIN"]
+        && (!('avatarUrl' in data) || (data.avatarUrl is string && data.avatarUrl.size() <= 512))
+        && (!('createdAt' in data) || data.createdAt is string)
+        && (!('updatedAt' in data) || data.updatedAt is string)
+        && (!('status' in data) || (data.status is string && data.status in ["ACTIVE", "BANNED"]));
+    }
+
+    function isValidSeller(data) {
+      return data.sellerId is string && data.sellerId.size() <= 128
+        && data.userId is string && data.userId.size() <= 128
+        && data.businessName is string && data.businessName.size() <= 256
+        && (!('category' in data) || (data.category is string && data.category.size() <= 128))
+        && (!('verificationStatus' in data) || (data.verificationStatus is string && data.verificationStatus in ["PENDING", "APPROVED", "REJECTED"]))
+        && (!('documents' in data) || data.documents is list)
+        && (!('totalProducts' in data) || data.totalProducts is number)
+        && (!('totalRevenue' in data) || data.totalRevenue is number)
+        && (!('createdAt' in data) || data.createdAt is string);
+    }
+
+    function isValidCreator(data) {
+      return data.creatorId is string && data.creatorId.size() <= 128
+        && data.userId is string && data.userId.size() <= 128
+        && (!('bio' in data) || (data.bio is string && data.bio.size() <= 1000))
+        && (!('socialLinks' in data) || data.socialLinks is list)
+        && (!('affiliateEarnings' in data) || data.affiliateEarnings is number)
+        && (!('totalViews' in data) || data.totalViews is number)
+        && (!('createdAt' in data) || data.createdAt is string);
+    }
+
+    function isValidProduct(data) {
+      return data.productId is string && data.productId.size() <= 128
+        && data.sellerId is string && data.sellerId.size() <= 128
+        && (!('brandId' in data) || (data.brandId is string && data.brandId.size() <= 128))
+        && data.name is string && data.name.size() <= 256
+        && (!('description' in data) || (data.description is string && data.description.size() <= 5000))
+        && data.price is number && data.price >= 0
+        && (!('category' in data) || (data.category is string && data.category.size() <= 128))
+        && (!('images' in data) || data.images is list)
+        && (!('status' in data) || (data.status is string && data.status in ["PENDING", "LIVE", "FLAGGED", "REMOVED"]))
+        && (!('views' in data) || data.views is number)
+        && (!('createdAt' in data) || data.createdAt is string);
+    }
+
+    function isValidDeal(data) {
+      return data.dealId is string && data.dealId.size() <= 128
+        && data.sellerId is string && data.sellerId.size() <= 128
+        && data.name is string && data.name.size() <= 256
+        && data.discountPercentage is number && data.discountPercentage >= 0 && data.discountPercentage <= 100
+        && (!('expiryDate' in data) || data.expiryDate is string)
+        && (!('status' in data) || (data.status is string && data.status in ["PENDING", "LIVE", "EXPIRED"]))
+        && (!('clicks' in data) || data.clicks is number);
+    }
+
+    function isValidRecommendation(data) {
+      return data.recommendationId is string && data.recommendationId.size() <= 128
+        && data.creatorId is string && data.creatorId.size() <= 128
+        && data.title is string && data.title.size() <= 256
+        && data.content is string && data.content.size() <= 10000
+        && (!('status' in data) || (data.status is string && data.status in ["PENDING", "PUBLISHED", "FLAGGED"]))
+        && (!('views' in data) || data.views is number)
+        && (!('createdAt' in data) || data.createdAt is string);
+    }
+
+    function isValidReview(data) {
+      return data.reviewId is string && data.reviewId.size() <= 128
+        && data.productId is string && data.productId.size() <= 128
+        && data.userId is string && data.userId.size() <= 128
+        && data.rating is number && data.rating >= 1 && data.rating <= 5
+        && data.comment is string && data.comment.size() <= 2000
+        && (!('status' in data) || (data.status is string && data.status in ["PUBLISHED", "FLAGGED", "DELETED"]))
+        && (!('reports' in data) || data.reports is number)
+        && (!('createdAt' in data) || data.createdAt is string);
+    }
+
+    function isValidMessage(data) {
+      return data.messageId is string && data.messageId.size() <= 128
+        && data.senderId is string && data.senderId.size() <= 128
+        && (!('recipientId' in data) || (data.recipientId is string && data.recipientId.size() <= 128))
+        && (!('senderName' in data) || (data.senderName is string && data.senderName.size() <= 128))
+        && (!('senderRole' in data) || (data.senderRole is string && data.senderRole in ["USER", "SELLER"]))
+        && (!('subject' in data) || (data.subject is string && data.subject.size() <= 256))
+        && data.content is string && data.content.size() <= 5000
+        && data.status is string && data.status in ["UNREAD", "READ", "RESPONDED"]
+        && (!('createdAt' in data) || data.createdAt is string)
+        && (!('replies' in data) || data.replies is list);
+    }
+
+    function isValidCMSData(data) {
+      return (!('logos' in data) || (data.logos is map && data.logos.get('header', '') is string && data.logos.get('footer', '') is string))
+        && (!('navigation' in data) || data.navigation is list)
+        && (!('socialLinks' in data) || data.socialLinks is list);
+    }
+
+    function isValidPromotion(data) {
+      return data.type is string && data.type in ["AD", "POST", "PRODUCT", "BRAND", "DEAL", "RECOMMENDATION"]
+        && data.status is string && data.status in ["ACTIVE", "INACTIVE", "SCHEDULED", "EXPIRED"]
+        && (!('id' in data) || (data.id is string && data.id.size() <= 128))
+        && (!('targetId' in data) || (data.targetId is string && data.targetId.size() <= 128))
+        && (!('title' in data) || (data.title is string && data.title.size() <= 256))
+        && (!('subtitle' in data) || (data.subtitle is string && data.subtitle.size() <= 512))
+        && (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 512))
+        && (!('videoUrl' in data) || (data.videoUrl is string && data.videoUrl.size() <= 512))
+        && (!('linkUrl' in data) || (data.linkUrl is string && data.linkUrl.size() <= 512))
+        && (!('startDate' in data) || data.startDate is string)
+        && (!('endDate' in data) || data.endDate is string)
+        && (!('placement' in data) || (data.placement is string && data.placement.size() <= 128))
+        && (!('targeting' in data) || data.targeting is list)
+        && (!('priority' in data) || data.priority is number)
+        && (!('analytics' in data) || (data.analytics is map && data.analytics.get('clicks', 0) is number && data.analytics.get('impressions', 0) is number));
+    }
+
+    function isValidPromotionRequest(data) {
+      return data.requesterId is string && data.contentId is string
+        && data.approvalStatus is string && data.approvalStatus in ["PENDING", "APPROVED", "REJECTED"]
+        && (!('id' in data) || (data.id is string && data.id.size() <= 128))
+        && (!('requesterRole' in data) || (data.requesterRole is string && data.requesterRole in ["seller", "creator"]))
+        && (!('requesterName' in data) || (data.requesterName is string && data.requesterName.size() <= 128))
+        && (!('contentType' in data) || (data.contentType is string && data.contentType.size() <= 128))
+        && (!('contentName' in data) || (data.contentName is string && data.contentName.size() <= 256))
+        && (!('requestedPromotionType' in data) || (data.requestedPromotionType is string && data.requestedPromotionType.size() <= 128))
+        && (!('featurePriority' in data) || (data.featurePriority is string && data.featurePriority.size() <= 128))
+        && (!('duration' in data) || data.duration is number)
+        && (!('placementRequest' in data) || (data.placementRequest is string && data.placementRequest.size() <= 128))
+        && (!('createdAt' in data) || data.createdAt is string);
+    }
+
+    // --- Collections Match Gating ---
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == "USER";
+      allow update: if (
+        (isOwner(userId) && isValidUser(request.resource.data) && (
+          request.resource.data.role == resource.data.role &&
+          request.resource.data.status == resource.data.status &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName', 'avatarUrl', 'updatedAt'])
+        )) || isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /sellers/{sellerId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(sellerId) && isValidSeller(request.resource.data) && request.resource.data.userId == request.auth.uid && request.resource.data.verificationStatus == "PENDING";
+      allow update: if isAdmin() || (
+        isSignedIn() && isValidSeller(request.resource.data) &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.verificationStatus == resource.data.verificationStatus &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['businessName', 'category', 'documents'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /creators/{creatorId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(creatorId) && isValidCreator(request.resource.data) && request.resource.data.userId == request.auth.uid;
+      allow update: if isAdmin() || (
+        isSignedIn() && isValidCreator(request.resource.data) &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['bio', 'socialLinks'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /products/{productId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(productId) && isValidProduct(request.resource.data) && (
+        request.resource.data.status == "PENDING" || isAdmin()
+      );
+      allow update: if isAdmin() || (
+        isSignedIn() && isValidProduct(request.resource.data) &&
+        exists(/databases/$(database)/documents/sellers/$(request.resource.data.sellerId)) &&
+        get(/databases/$(database)/documents/sellers/$(request.resource.data.sellerId)).data.userId == request.auth.uid &&
+        request.resource.data.sellerId == resource.data.sellerId &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.views == resource.data.views &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'price', 'category', 'images', 'brandId'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /deals/{dealId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(dealId) && isValidDeal(request.resource.data) && (
+        request.resource.data.status == "PENDING" || isAdmin()
+      );
+      allow update: if isAdmin() || (
+        isSignedIn() && isValidDeal(request.resource.data) &&
+        exists(/databases/$(database)/documents/sellers/$(request.resource.data.sellerId)) &&
+        get(/databases/$(database)/documents/sellers/$(request.resource.data.sellerId)).data.userId == request.auth.uid &&
+        request.resource.data.sellerId == resource.data.sellerId &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'discountPercentage', 'expiryDate'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /recommendations/{recommendationId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(recommendationId) && isValidRecommendation(request.resource.data) && (
+        request.resource.data.status == "PENDING" || isAdmin()
+      );
+      allow update: if isAdmin() || (
+        isSignedIn() && isValidRecommendation(request.resource.data) &&
+        exists(/databases/$(database)/documents/creators/$(request.resource.data.creatorId)) &&
+        get(/databases/$(database)/documents/creators/$(request.resource.data.creatorId)).data.userId == request.auth.uid &&
+        request.resource.data.creatorId == resource.data.creatorId &&
+        request.resource.data.status == resource.data.status &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['title', 'content'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidId(reviewId) && isValidReview(request.resource.data) && request.resource.data.userId == request.auth.uid && request.resource.data.status == "PUBLISHED";
+      allow update: if isAdmin() || (
+        isSignedIn() && isValidReview(request.resource.data) &&
+        request.resource.data.userId == request.auth.uid &&
+        request.resource.data.userId == resource.data.userId &&
+        request.resource.data.status == "PUBLISHED" &&
+        resource.data.status == "PUBLISHED" &&
+        request.resource.data.productId == resource.data.productId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'comment'])
+      );
+      allow delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    match /messages/{messageId} {
+      allow get: if isSignedIn() && (request.auth.uid == resource.data.senderId || request.auth.uid == resource.data.recipientId || isAdmin());
+      allow list: if isSignedIn(); // Each query must filtrated with own credentials
+      allow create: if isSignedIn() && isValidId(messageId) && isValidMessage(request.resource.data) && request.resource.data.senderId == request.auth.uid;
+      allow update: if isSignedIn() && isValidMessage(request.resource.data) && (
+        isAdmin() || (
+          request.resource.data.senderId == resource.data.senderId && (
+            request.resource.data.senderId == request.auth.uid || 
+            request.resource.data.recipientId == request.auth.uid
+          )
+        )
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read, write: if true;
+    }
+
+    match /promotions/{promotionId} {
+      allow read, write: if true;
+    }
+
+    match /promotion_requests/{requestId} {
+      allow read, write: if true;
+    }
+  }
+}
