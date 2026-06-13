@@ -82,6 +82,19 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
       ]
     },
     { label: 'Content', type: 'label' },
+    { 
+      label: 'Content Studio', 
+      icon: Globe, 
+      path: '/dashboard/content-studio/products',
+      subItems: [
+        { label: 'Products Studio', path: '/dashboard/content-studio/products' },
+        { label: 'Add Visual Product', path: '/dashboard/content-studio/products/new' },
+        { label: 'Brands Studio', path: '/dashboard/content-studio/brands' },
+        { label: 'Add Visual Brand', path: '/dashboard/content-studio/brands/new' },
+        { label: 'Guides Studio', path: '/dashboard/content-studio/guides' },
+        { label: 'Add Visual Guide', path: '/dashboard/content-studio/guides/new' }
+      ]
+    },
     { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Finance', type: 'label' },
@@ -123,6 +136,11 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
       ]
     },
     { label: 'Notifications', icon: Bell, path: '/admin/notifications', badge: 3 },
+    { label: 'Trust & Safety Core', type: 'label' },
+    { label: 'Trust Center', icon: ShieldCheck, path: '/admin/trust-center' },
+    { label: 'Brand Compliance', icon: Award, path: '/admin/brand-verification' },
+    { label: 'Creator Economy', icon: Zap, path: '/admin/creator-hub' },
+    { label: 'Moderation Intel V2', icon: ShieldCheck, path: '/admin/moderation-v2' },
     { 
       label: 'Moderation Center', 
       icon: ShieldCheck, 
@@ -143,6 +161,19 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
   seller: [
     { label: 'Marketplace', type: 'label' },
     { label: 'Store Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { 
+      label: 'Content Studio', 
+      icon: Globe, 
+      path: '/dashboard/content-studio/products',
+      subItems: [
+        { label: 'Products Studio', path: '/dashboard/content-studio/products' },
+        { label: 'Add Visual Product', path: '/dashboard/content-studio/products/new' },
+        { label: 'Brands Studio', path: '/dashboard/content-studio/brands' },
+        { label: 'Add Visual Brand', path: '/dashboard/content-studio/brands/new' },
+        { label: 'Guides Studio', path: '/dashboard/content-studio/guides' },
+        { label: 'Add Visual Guide', path: '/dashboard/content-studio/guides/new' }
+      ]
+    },
     { label: 'My Products', icon: Package, path: '/admin/products' },
     { label: 'Add Product', icon: PlusCircle, path: '/admin/products/new' },
     { label: 'Orders', icon: ListOrdered, path: '/admin/orders', badge: 4 },
@@ -427,7 +458,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
-        <header className="h-[64px] px-8 flex items-center justify-between shrink-0 mb-2 border-b border-app-border bg-app-bg/50 backdrop-blur-sm sticky top-0 z-40">
+        <header className="h-[64px] px-8 flex items-center justify-between shrink-0 mb-2 border-b border-app-border bg-app-card sticky top-0 z-40">
           <div className="flex flex-col">
             <div className="text-[12px] text-app-text-secondary opacity-60">
               {currentRole.replace('_', ' ').toUpperCase()} / Dashboard / {location.pathname.split('/').pop()?.replace('-', ' ')}

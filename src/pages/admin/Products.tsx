@@ -30,6 +30,7 @@ const mockProducts = [
 
 export default function ProductsPage() {
   const location = useLocation();
+  const isContentStudio = location.pathname.includes("content-studio");
   const [isModalOpen, setIsModalOpen] = useState(location.state?.openAddModal || false);
   const [products, setProducts] = useState(mockProducts);
   const [toast, setToast] = useState<string | null>(null);
@@ -60,19 +61,32 @@ export default function ProductsPage() {
     <div className="space-y-8 pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-           <h1 className="text-xl font-bold text-white tracking-tight">Inventory Management</h1>
-           <p className="text-app-text-secondary text-[12px]">Manage platform catalog, pricing and seller listings</p>
+           <h1 className="text-xl font-bold text-white tracking-tight">
+             {isContentStudio ? 'Product Studio (Visual Product CMS)' : 'Inventory Management'}
+           </h1>
+           <p className="text-app-text-secondary text-[12px]">
+             {isContentStudio ? 'Live experience builder, storefront mockups, and dynamic catalog releases' : 'Manage platform catalog, pricing and seller listings'}
+           </p>
         </div>
         <div className="flex items-center gap-3">
            <button className="p-2.5 bg-white/5 border border-app-border rounded-xl text-app-text-secondary hover:text-white transition-all">
               <Filter className="w-4 h-4" />
            </button>
-           <button 
-             onClick={() => setIsModalOpen(true)}
-             className="flex items-center gap-2 bg-app-accent hover:bg-app-accent-light text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-app-accent/20 active:scale-95"
-           >
-              <Plus className="w-4 h-4" /> Add Product
-           </button>
+           {isContentStudio ? (
+             <Link 
+               to="/dashboard/content-studio/products/new"
+               className="flex items-center gap-2 bg-app-accent hover:bg-app-accent-light text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-app-accent/20 active:scale-95"
+             >
+                <Plus className="w-4 h-4" /> Add Visual Product
+             </Link>
+           ) : (
+             <button 
+               onClick={() => setIsModalOpen(true)}
+               className="flex items-center gap-2 bg-app-accent hover:bg-app-accent-light text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-app-accent/20 active:scale-95"
+             >
+                <Plus className="w-4 h-4" /> Add Product
+             </button>
+           )}
         </div>
       </div>
 
@@ -252,13 +266,13 @@ export default function ProductsPage() {
                   <td className="p-6 text-right">
                     <div className="flex justify-end gap-2">
                        <Link 
-                        to={`/admin/products/${p.id}/edit`}
+                        to={isContentStudio ? `/dashboard/content-studio/products/${p.id}/edit` : `/admin/products/${p.id}/edit`}
                         className="p-2.5 bg-white/5 border border-app-border rounded-xl text-app-text-secondary hover:text-white hover:border-app-accent/40 transition-all"
                        >
                          <Tag className="w-4 h-4" />
                        </Link>
                        <Link 
-                        to={`/admin/products/${p.id}`}
+                        to={isContentStudio ? `/dashboard/content-studio/products/${p.id}/edit` : `/admin/products/${p.id}`}
                         className="p-2.5 bg-app-accent/10 border border-app-accent/20 rounded-xl text-app-accent-light hover:bg-app-accent/20 transition-all"
                        >
                          <Eye className="w-4 h-4" />

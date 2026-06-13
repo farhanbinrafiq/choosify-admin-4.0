@@ -1,930 +1,1709 @@
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { 
-  ArrowLeft, 
-  Save, 
-  Plus, 
-  Trash2, 
-  Tag, 
-  Info, 
-  CheckCircle, 
-  XCircle, 
-  Settings,
-  Package,
-  Truck,
-  RotateCcw,
-  Sparkles,
-  Search,
-  ChevronRight,
-  Edit3,
-  ExternalLink,
-  Film,
-  Upload,
-  Image as ImageIcon,
-  BarChart3,
-  MessageSquare,
-  Clock,
-  LayoutGrid,
-  AlertCircle,
-  Lock
-} from 'lucide-react';
-import { motion } from 'motion/react';
-import { useAuth } from '../../contexts/AuthContext';
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
+import {
+  ArrowLeft, Pencil, Trash2, Plus, ArrowUp, ArrowDown, Lock, Star, Heart,
+  Compass, Eye, Play, Sparkles, MapPin, Globe, Check, Phone, Info,
+  ExternalLink, ChevronRight, ChevronLeft, Sliders, Settings, LayoutGrid
+} from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { useAuth } from "../../contexts/AuthContext";
+import { CreatorExperienceSection, CreatorContentItem } from "../../components/CreatorExperienceSection";
 
 interface Spec {
   key: string;
   value: string;
 }
 
+interface StoreListing {
+  id: string;
+  storeName: string;
+  price: number;
+  availability: "In Stock" | "Out of Stock" | "Pre-Order";
+  storeRating: number;
+  storeUrl: string;
+  storeLocation?: string;
+}
+
+interface PhysicalStore {
+  id: string;
+  storeName: string;
+  address: string;
+  badgeLabel: string; // Flagship, Authorized, Mall Outlet, Premium, Express Pickup
+  contactNumber: string;
+  city: string;
+}
+
+interface OverviewBlock {
+  id: string;
+  title: string;
+  bullets: string[];
+  enabled: boolean;
+}
+
 const mockProductDetails: Record<string, any> = {
-  '1': {
-    brandName: 'Samsung BD',
-    productName: 'Samsung S25 Ultra',
-    category: 'Mobile',
+  "1": {
+    brandName: "Samsung BD",
+    productName: "Samsung S25 Ultra",
+    category: "Mobile",
     actualPrice: 154999,
     discountedPrice: 149999,
     stockLimit: 50,
     soldCount: 12,
-    soldPercentage: 24,
     images: [
-      'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=800&q=80',
-      'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=800&q=80'
+      "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=800&q=80",
+      "https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=800&q=80",
+      "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=800&q=80"
     ],
-    sellerName: 'TechZone BD',
-    sellerInit: 'TZ',
-    tags: ['#PremiumQuality', '#SamsungS25', '#TechTrend']
-  },
-  '2': {
-    brandName: 'Vision',
-    productName: 'Vision Smart TV 55"',
-    category: 'Electronics',
-    actualPrice: 75000,
-    discountedPrice: 68500,
-    stockLimit: 30,
-    soldCount: 8,
-    soldPercentage: 26,
-    images: [
-      'https://images.unsplash.com/photo-1593305841991-05c297ba4575?w=800&q=80'
+    tags: ["premium quality", "samsung s25", "tech trend"],
+    about: "The ultimate power flagship device designed for elites. Snapdragon processor, high precision screen matrix and exclusive AI assistant suites.",
+    specs: [
+      { key: "Brand", value: "Samsung" },
+      { key: "Category", value: "Mobile" },
+      { key: "Material", value: "Premium Composite Armor Aluminum" },
+      { key: "Origin", value: "South Korea Assembly" },
+      { key: "Warranty", value: "1 Year Standard Replacement" },
+      { key: "Model", value: "SM-S9320L" }
     ],
-    sellerName: 'Meena Bazar',
-    sellerInit: 'MB',
-    tags: ['#SmartTV', '#BigScreen', '#HomeCinema']
-  },
-  '3': {
-    brandName: 'Aarong',
-    productName: 'Aarong Jamdani Saree',
-    category: 'Fashion',
-    actualPrice: 5000,
-    discountedPrice: 4200,
-    stockLimit: 120,
-    soldCount: 45,
-    soldPercentage: 37,
-    images: [
-      'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=800&q=80'
+    storeComparisonList: [
+      { id: "s1", storeName: "TechLand BD", price: 147500, availability: "In Stock", storeRating: 4.8, storeUrl: "https://techlandbd.com", storeLocation: "IDB Bhaban, Dhaka" },
+      { id: "s2", storeName: "Ryans Computers", price: 148900, availability: "In Stock", storeRating: 4.7, storeUrl: "https://ryanscomputers.com", storeLocation: "Banani, Dhaka" }
     ],
-    sellerName: 'Aarong Digital',
-    sellerInit: 'AD',
-    tags: ['#Heritage', '#Jamdani', '#Traditional']
-  },
-  '4': {
-    brandName: 'Walton',
-    productName: 'Walton 2-Door Fridge',
-    category: 'Home',
-    actualPrice: 35000,
-    discountedPrice: 29990,
-    stockLimit: 40,
-    soldCount: 15,
-    soldPercentage: 37,
-    images: [
-      'https://images.unsplash.com/photo-1571175432244-5f0258591f87?w=800&q=80'
+    overviewBlocks: [
+      { id: "ob1", title: "Quality & Materials", bullets: ["AUTHENTIC JEM STANDARD CERTIFICATION APPROVED", "TITANIUM LIQUID GLAZE METAL FRAME FINISH", "IP68 WATER & DUST SHIELD REINFORCED"], enabled: true },
+      { id: "ob2", title: "Sourcing Logistics Pros", bullets: ["7 DAYS IMMEDIATE SATISFACTION REFUND TERM", "SECURE CARD PLATFORM TRANSACTION SECURED", "OFFICIAL BRAND REGISTRATION CONFIRMED"], enabled: true }
     ],
-    sellerName: 'ElectroBD',
-    sellerInit: 'EB',
-    tags: ['#SmartCooling', '#WaltonBD', '#EcoFriendly']
+    bestForTags: ["premium lifestyle", "quality driven", "best in segment"]
   }
 };
 
 export default function ProductEdit() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { profile } = useAuth();
-  const [activeTab, setActiveTab] = useState('Overview & Content');
-  const [isEditMode, setIsEditMode] = useState(false);
-  const [backupProduct, setBackupProduct] = useState<any>(null);
+  const location = useLocation();
+
+  const isContentStudio = location.pathname.includes("content-studio");
+  const backPath = isContentStudio ? "/dashboard/content-studio/products" : "/admin/products";
+
+  const activeId = id || "1";
+  const draftKey = `choosify_draft_${activeId}`;
+  const publishKey = `choosify_published_${activeId}`;
+
+  // Basic Visual State Controllers
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const triggerToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
-  // Basic Info State
-  const [productInfo, setProductInfo] = useState({
-    brandName: 'Samsung BD',
-    productName: 'Samsung S25 Ultra',
-    category: 'Mobile',
-    actualPrice: 154999,
-    discountedPrice: 149999,
-    stockLimit: 50,
-    soldCount: 12,
-    soldPercentage: 24
-  });
+  // View state and Active Image index
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [isZooming, setIsZooming] = useState(false);
+  const [zoomPos, setZoomPos] = useState({ x: 0, y: 0 });
 
-  // Media State
-  const [images, setImages] = useState<string[]>([
-    'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=800&q=80',
-    'https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=800&q=80'
-  ]);
-  const [mediaLinks, setMediaLinks] = useState<string[]>([
-    'https://www.youtube.com/watch?v=dQw4w9WgXcQ'
-  ]);
+  // Selected Option States inside Media view
+  const [selectedColorOption, setSelectedColorOption] = useState("Titanium Gray");
+  const [selectedSizeOption, setSelectedSizeOption] = useState("Standard Fit");
 
-  // Content State
-  const [tags, setTags] = useState<string[]>(['#PremiumQuality', '#CorporateWear', '#FashionIcon']);
-  const [tagInput, setTagInput] = useState('');
-  const [about, setAbout] = useState('Crafted for those who value both style and functionality, this product defines a new standard in its category. With premium materials and meticulous attention to detail, it offers an unparalleled experience.');
-  const [pros, setPros] = useState<string[]>(['Superior build quality', 'Excellent battery life', 'Industry-leading display']);
-  const [cons, setCons] = useState<string[]>(['Premium pricing', 'Limited color options']);
-  
-  // Specs State
-  const [specs, setSpecs] = useState<Spec[]>([
-    { key: 'Audience', value: 'Professionals' },
-    { key: 'Style', value: 'Contemporary' },
-    { key: 'Trend', value: 'Minimalist' },
-    { key: 'Fitting', value: 'Regular' },
-    { key: 'Material', value: 'High-grade Aluminum' }
-  ]);
-  const [storeAvailability, setStoreAvailability] = useState('Available in Dhanmondi, Banani, and Gulshan flagship stores.');
-  const [returnPolicy, setReturnPolicy] = useState('7-day no-questions-asked return policy for manufacturing defects.');
-  const [deliveryInfo, setDeliveryInfo] = useState('Next-day delivery within Dhaka. 3-5 days for outside Dhaka.');
+  // Read-only parameters (Protected)
+  const [trustRating] = useState(4.8);
+  const [reviewCount] = useState(284);
+  const [lovesCount, setLovesCount] = useState(1243);
+  const [wishesCount, setWishesCount] = useState(854);
+  const [viewsCount] = useState(14230);
 
-  // Set content dynamically based on product id
+  // States Mapping each Card
+  const [brandName, setBrandName] = useState("");
+  const [productName, setProductName] = useState("");
+  const [category, setCategory] = useState("");
+  const [actualPrice, setActualPrice] = useState(0);
+  const [discountedPrice, setDiscountedPrice] = useState(0);
+  const [images, setImages] = useState<string[]>([]);
+  const [about, setAbout] = useState("");
+  const [specs, setSpecs] = useState<Spec[]>([]);
+  const [storeComparisonList, setStoreComparisonList] = useState<StoreListing[]>([]);
+  const [overviewBlocks, setOverviewBlocks] = useState<OverviewBlock[]>([]);
+  const [bestForTags, setBestForTags] = useState<string[]>([]);
+
+  // Action Toggles State Configuration
+  const [actionFindInStore, setActionFindInStore] = useState(true);
+  const [actionBuyOnline, setActionBuyOnline] = useState(true);
+  const [actionLove, setActionLove] = useState(true);
+  const [actionWish, setActionWish] = useState(true);
+  const [actionContactSeller, setActionContactSeller] = useState(true);
+  const [actionRequestQuote, setActionRequestQuote] = useState(false);
+  const [actionPreOrder, setActionPreOrder] = useState(false);
+
+  // Specifications
+  const [physicalStores, setPhysicalStores] = useState<PhysicalStore[]>([]);
+  const [creatorContent, setCreatorContent] = useState<CreatorContentItem[]>([]);
+
+  // UI Drawer State Manager
+  const [activeDrawer, setActiveDrawer] = useState<"hero" | "creator" | "stores" | "specs" | "physical-stores" | "overview" | "tags" | null>(null);
+
+  // Temporary Editing states for dynamic additions inside right side panel drawer
+  const [tempImagesInput, setTempImagesInput] = useState("");
+  const [tempColorsInput, setTempColorsInput] = useState("Titanium Gray, Cosmic Gold, Pearl White");
+
+  // Temporary state holders inside Drawer
+  const [tempSpecs, setTempSpecs] = useState<Spec[]>([]);
+  const [tempStores, setTempStores] = useState<StoreListing[]>([]);
+  const [tempPhysicalStores, setTempPhysicalStores] = useState<PhysicalStore[]>([]);
+  const [tempOverview, setTempOverview] = useState<OverviewBlock[]>([]);
+  const [tempTagsList, setTempTagsList] = useState<string[]>([]);
+  const [newTagVal, setNewTagVal] = useState("");
+
+  const [publishStatus, setPublishStatus] = useState<"draft" | "live">("draft");
+
+  // Load persistence schemas
   useEffect(() => {
-    const details = mockProductDetails[id || '1'] || mockProductDetails['1'];
-    setProductInfo({
-      brandName: details.brandName,
-      productName: details.productName,
-      category: details.category,
-      actualPrice: details.actualPrice,
-      discountedPrice: details.discountedPrice,
-      stockLimit: details.stockLimit,
-      soldCount: details.soldCount,
-      soldPercentage: details.soldPercentage
-    });
-    setImages(details.images);
-    setTags(details.tags);
-  }, [id]);
+    let dataSrc = mockProductDetails[activeId] || mockProductDetails["1"];
+    const savedDraft = localStorage.getItem(draftKey);
+    let data = dataSrc;
 
-  const currentDetails = mockProductDetails[id || '1'] || mockProductDetails['1'];
-  const sellerName = currentDetails.sellerName;
-  const sellerInit = currentDetails.sellerInit;
-
-  const isSuperAdmin = profile?.role === 'super_admin';
-  const isSeller = profile?.role === 'seller';
-  const isCreator = profile?.role === 'creator';
-  
-  // Checking if Aarong / Aarong Digital
-  const isOwnProduct = isSeller && (
-    (profile?.email?.includes('aarong') && (sellerName === 'Aarong Digital' || currentDetails.brandName === 'Aarong')) ||
-    (sellerName === 'Aarong Digital' || currentDetails.brandName === 'Aarong')
-  );
-
-  const canEdit = isSuperAdmin || isOwnProduct;
-
-  const handleStartEdit = () => {
-    // Save backup of current states to support cancelling
-    setBackupProduct({
-      productInfo,
-      images,
-      mediaLinks,
-      tags,
-      about,
-      pros,
-      cons,
-      specs,
-      storeAvailability,
-      returnPolicy,
-      deliveryInfo
-    });
-    setIsEditMode(true);
-  };
-
-  const handleCancelEdit = () => {
-    if (backupProduct) {
-      setProductInfo(backupProduct.productInfo);
-      setImages(backupProduct.images);
-      setMediaLinks(backupProduct.mediaLinks);
-      setTags(backupProduct.tags);
-      setAbout(backupProduct.about);
-      setPros(backupProduct.pros);
-      setCons(backupProduct.cons);
-      setSpecs(backupProduct.specs);
-      setStoreAvailability(backupProduct.storeAvailability);
-      setReturnPolicy(backupProduct.returnPolicy);
-      setDeliveryInfo(backupProduct.deliveryInfo);
+    if (savedDraft) {
+      try {
+        data = JSON.parse(savedDraft);
+        setPublishStatus("draft");
+      } catch (_) {}
+    } else {
+      const savedPublish = localStorage.getItem(publishKey);
+      if (savedPublish) {
+        try {
+          data = JSON.parse(savedPublish);
+          setPublishStatus("live");
+        } catch (_) {}
+      }
     }
-    setIsEditMode(false);
+
+    // Set layout parameters
+    setBrandName(data.brandName || dataSrc.brandName || "Luxury Brand");
+    setProductName(data.productName || dataSrc.productName || "Product Title");
+    setCategory(data.category || dataSrc.category || "Premium");
+    setActualPrice(data.actualPrice || dataSrc.actualPrice || 999);
+    setDiscountedPrice(data.discountedPrice !== undefined ? data.discountedPrice : dataSrc.discountedPrice || 899);
+    setImages(data.images && data.images.length > 0 ? data.images : dataSrc.images || []);
+    setAbout(data.about || dataSrc.about || "");
+    setSpecs(data.specs || dataSrc.specs || []);
+    setStoreComparisonList(data.storeComparisonList || dataSrc.storeComparisonList || []);
+    setOverviewBlocks(data.overviewBlocks || dataSrc.overviewBlocks || []);
+    setBestForTags(data.bestForTags || dataSrc.bestForTags || []);
+
+    // Layout configuration options
+    setActionFindInStore(data.actionFindInStore !== undefined ? data.actionFindInStore : true);
+    setActionBuyOnline(data.actionBuyOnline !== undefined ? data.actionBuyOnline : true);
+    setActionLove(data.actionLove !== undefined ? data.actionLove : true);
+    setActionWish(data.actionWish !== undefined ? data.actionWish : true);
+    setActionContactSeller(data.actionContactSeller !== undefined ? data.actionContactSeller : true);
+    setActionRequestQuote(data.actionRequestQuote !== undefined ? data.actionRequestQuote : false);
+    setActionPreOrder(data.actionPreOrder !== undefined ? data.actionPreOrder : false);
+
+    // Physical Outlets config
+    setPhysicalStores(data.physicalStores || [
+      { id: "ps1", storeName: "Choosify Dhanmondi Hub", address: "Sajid Center, Road 27, Dhanmondi", badgeLabel: "Flagship", contactNumber: "+8801700123111", city: "Dhaka" },
+      { id: "ps2", storeName: "Banani Premium Outlet", address: "House 48, Block E, Banani", badgeLabel: "Premium", contactNumber: "+8801811223344", city: "Dhaka" },
+      { id: "ps3", storeName: "JFP Experience Center", address: "Level 1, Jamuna Future Park", badgeLabel: "Authorized", contactNumber: "+8801912233445", city: "Dhaka" }
+    ]);
+
+    // Social reviews listing
+    setCreatorContent(data.creatorContent || [
+      {
+        id: "cr-1",
+        platform: "YOUTUBE",
+        videoUrl: "https://youtube.com/watch?v=S26U",
+        thumbnail: "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400",
+        title: "In-depth S25 Ultra 48-Hour Ultimate Performance Evaluation BD",
+        description: "Checking peak Snapdragon loading benchmarks, low-light cameras Zoom capabilities, and ergonomics footprint in local conditions.",
+        views: 45000,
+        likes: 3400,
+        duration: "14:20",
+        creatorHandle: "Android Toto Company BD",
+        creatorAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50",
+        location: "Dhanmondi, Dhaka",
+        isFeatured: true
+      },
+      {
+        id: "cr-2",
+        platform: "INSTAGRAM",
+        videoUrl: "https://instagram.com/reel/Washer",
+        thumbnail: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400",
+        title: "Is the Design aesthetic structure worth the premium pricing?",
+        description: "Short reels review benchmarking titanium frame durability under continuous sunlight, and visual responses.",
+        views: 24700,
+        likes: 1250,
+        duration: "1:00",
+        creatorHandle: "SamInBD Reels",
+        creatorAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50",
+        location: "Banani, Dhaka",
+        isFeatured: false
+      },
+      {
+        id: "cr-3",
+        platform: "TIKTOK",
+        videoUrl: "https://tiktok.com/setup",
+        thumbnail: "https://images.unsplash.com/photo-1593305841991-05c297ba4575?w=400",
+        title: "Samsung Premium S25 desk setup aesthetic & zoom tests",
+        description: "Quick unboxing showcase checking cinematic zoom lens features in a modern dark office setup environment.",
+        views: 18000,
+        likes: 920,
+        duration: "0:45",
+        creatorHandle: "TechInsiderBD",
+        creatorAvatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=50",
+        location: "Sylhet, BD",
+        isFeatured: false
+      }
+    ]);
+  }, [activeId]);
+
+  // Sync draft edits to local storage incrementally upon changes
+  const serializeState = () => {
+    const draftData = {
+      brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
+      storeComparisonList, overviewBlocks, bestForTags, physicalStores, creatorContent,
+      actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder
+    };
+    localStorage.setItem(draftKey, JSON.stringify(draftData));
   };
 
-  const handleUpdateInfo = (field: string, value: string | number) => {
-    setProductInfo(prev => ({ ...prev, [field]: value }));
+  useEffect(() => {
+    if (brandName) serializeState();
+  }, [
+    brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
+    storeComparisonList, overviewBlocks, bestForTags, physicalStores, creatorContent,
+    actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder
+  ]);
+
+  // Interactive Zoom Engine methods
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const { left, top, width, height } = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - left) / width) * 100;
+    const y = ((e.clientY - top) / height) * 100;
+    setZoomPos({ x, y });
   };
 
-  const handleAddTag = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (tagInput && tags.length < 6) {
-      setTags([...tags, tagInput.startsWith('#') ? tagInput : `#${tagInput}`]);
-      setTagInput('');
+  // Open Edit Drawer Panel config
+  const handleOpenDrawer = (section: typeof activeDrawer) => {
+    setActiveDrawer(section);
+    if (section === "specs") {
+      setTempSpecs([...specs]);
+    } else if (section === "stores") {
+      setTempStores([...storeComparisonList]);
+    } else if (section === "physical-stores") {
+      setTempPhysicalStores([...physicalStores]);
+    } else if (section === "overview") {
+      setTempOverview([...overviewBlocks]);
+    } else if (section === "tags") {
+      setTempTagsList([...bestForTags]);
     }
   };
 
-  const removeTag = (index: number) => {
-    setTags(tags.filter((_, i) => i !== index));
-  };
-
-  const addSpec = () => setSpecs([...specs, { key: '', value: '' }]);
-  const updateSpec = (index: number, field: 'key' | 'value', val: string) => {
-    const newSpecs = [...specs];
-    newSpecs[index][field] = val;
-    setSpecs(newSpecs);
-  };
-  const removeSpec = (index: number) => setSpecs(specs.filter((_, i) => i !== index));
-
-  const addPro = () => setPros([...pros, '']);
-  const updatePro = (index: number, val: string) => {
-    const newPros = [...pros];
-    newPros[index] = val;
-    setPros(newPros);
-  };
-
-  const addCon = () => setCons([...cons, '']);
-  const updateCon = (index: number, val: string) => {
-    const newCons = [...cons];
-    newCons[index] = val;
-    setCons(newCons);
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files) {
-      const newImages = Array.from(files).map((file: any) => URL.createObjectURL(file));
-      setImages(prev => [...prev, ...newImages]);
+  // Individual Independent Section Saving Workflows
+  const handleSaveSection = (section: string) => {
+    if (section === "hero") {
+      // Hero states save triggers automatically because fields bind directly to core states
+    } else if (section === "specs") {
+      setSpecs([...tempSpecs]);
+    } else if (section === "stores") {
+      setStoreComparisonList([...tempStores]);
+    } else if (section === "physical-stores") {
+      setPhysicalStores([...tempPhysicalStores]);
+    } else if (section === "overview") {
+      setOverviewBlocks([...tempOverview]);
+    } else if (section === "tags") {
+      setBestForTags([...tempTagsList]);
     }
+
+    serializeState();
+    triggerToast(`✓ Section parameters saved successfully!`);
+    setActiveDrawer(null);
   };
 
-  const removeImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
+  const handlePublishRelease = () => {
+    const liveData = {
+      brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
+      storeComparisonList, overviewBlocks, bestForTags, physicalStores, creatorContent,
+      actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder
+    };
+    localStorage.setItem(publishKey, JSON.stringify(liveData));
+    setPublishStatus("live");
+    triggerToast("🚀 Product specs successfully published to the live portal!");
   };
 
-  const handleAddMedia = () => setMediaLinks([...mediaLinks, '']);
-  const updateMedia = (index: number, val: string) => {
-    const newLinks = [...mediaLinks];
-    newLinks[index] = val;
-    setMediaLinks(newLinks);
-  };
-  const removeMedia = (index: number) => setMediaLinks(mediaLinks.filter((_, i) => i !== index));
-
-  const inputClass = (highlight = false) => `w-full bg-app-sidebar border rounded-xl px-4 py-3 text-sm outline-none transition-all ${
-    isEditMode 
-      ? `bg-app-sidebar/80 text-white cursor-text ${highlight ? 'border-[#EB4501] focus:border-[#EB4501]' : 'border-app-accent/40 focus:border-app-accent focus:ring-1 focus:ring-app-accent/20'}` 
-      : 'border-app-border bg-app-card/30 text-slate-400 cursor-not-allowed opacity-80'
-  }`;
-
-  const textareaClass = `w-full bg-app-sidebar border rounded-2xl p-6 text-sm leading-relaxed outline-none transition-all ${
-    isEditMode 
-      ? 'border-app-accent/40 focus:border-app-accent bg-app-sidebar/85 text-white cursor-text' 
-      : 'border-app-border bg-app-card/30 text-slate-400 cursor-not-allowed opacity-80'
-  }`;
+  // Helper calculation for discount
+  const savingsPercent = actualPrice > discountedPrice 
+    ? Math.round(((actualPrice - discountedPrice) / actualPrice) * 100) 
+    : 0;
 
   return (
-    <div className="space-y-8 pb-20">
-      {/* Dynamic Toast Message */}
-      {toastMessage && (
-        <div className="fixed top-8 right-8 z-[100] bg-[#EB4501] text-white text-xs font-bold px-5 py-3 rounded-xl shadow-2xl tracking-wide uppercase border border-white/10 animate-bounce">
-          {toastMessage}
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
-        <div className="flex items-center gap-4">
-          <button 
-            onClick={() => navigate('/admin/products')}
-            className="p-2.5 bg-app-card border border-app-border rounded-xl text-app-text-secondary hover:text-white transition-all shadow-lg"
+    <div id="product-workspace-root" className="bg-[#F5F5F5] min-h-screen pb-24 text-[#1A1A2E] font-sans relative">
+      
+      {/* Dynamic Toast Success Notification Bubble */}
+      <AnimatePresence>
+        {toastMessage && (
+          <motion.div
+            initial={{ opacity: 0, y: -25, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            className="fixed top-8 left-1/2 -translate-x-1/2 z-[500] bg-[#1A1A2E] border border-orange-500/20 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3.5 text-white"
           >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-extrabold text-white tracking-tight">{productInfo.productName}</h1>
-              <span className="px-3 py-1 rounded-lg bg-green-500/10 text-green-500 border border-green-500/20 text-[10px] font-bold uppercase tracking-widest">LIVE</span>
+            <span className="w-2.5 h-2.5 bg-[#4DBC15] rounded-full animate-ping shrink-0" />
+            <span className="text-xs font-black uppercase tracking-wider">{toastMessage}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Persistent Sticky Top Workspace Control Rail */}
+      <div className="bg-white border-b border-[#E5E7EB] sticky top-0 z-[100] px-6 py-4 shadow-sm">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5">
+            <Link
+              to={backPath}
+              id="back-list-btn"
+              className="p-2.5 bg-[#F5F5F5] hover:bg-slate-200 border border-[#E5E7EB] rounded-2xl text-slate-600 transition-all hover:scale-102"
+              title="Go back to products catalog"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </Link>
+            <div className="text-left">
+              <div className="flex items-center gap-2.5">
+                <span className="text-[10px] text-slate-400 font-mono font-black uppercase tracking-widest block">
+                  Product Studio Workspace v3
+                </span>
+                <span className={`text-[8px] px-2 py-0.5 rounded font-black uppercase tracking-wider ${
+                  publishStatus === "live" ? "bg-emerald-100 text-emerald-700 font-extrabold" : "bg-orange-100 text-orange-700 font-extrabold"
+                }`}>
+                  ● {publishStatus.toUpperCase()} Snap
+                </span>
+              </div>
+              <h1 className="text-sm font-black text-[#1A1A2E] tracking-tight uppercase">
+                {productName || "Product Detail Control Matrix"}
+              </h1>
             </div>
-            <p className="text-app-text-secondary text-sm mt-1 flex items-center gap-2">
-              <span className="opacity-50 font-bold uppercase tracking-widest text-[10px]">Product SKU:</span>
-              <span className="font-mono text-app-accent-light">CHO-942-{id?.slice(-4).toUpperCase() || 'PROD'}</span>
-            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => {
+                serializeState();
+                triggerToast("✓ Local draft cache updated!");
+              }}
+              id="draft-cache-btn"
+              className="px-5 py-2.5 bg-white border border-[#E5E7EB] hover:bg-[#FAFAFA] text-slate-700 font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all hover:scale-102 active:scale-98 cursor-pointer shadow-sm"
+            >
+              Save Draft snap
+            </button>
+            <button
+              type="button"
+              onClick={handlePublishRelease}
+              id="publish-profile-btn"
+              className="px-6 py-2.5 bg-orange-500 hover:bg-orange-600 active:scale-98 text-white font-extrabold text-[10px] uppercase tracking-widest rounded-xl transition-all hover:scale-102 cursor-pointer shadow-md shadow-orange-500/10"
+            >
+              Publish Profile
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button className="flex items-center gap-2 px-5 py-2.5 bg-white/5 border border-app-border text-white rounded-xl text-xs font-bold transition-all hover:bg-white/10">
-            <ExternalLink className="w-4 h-4" /> View Live
-          </button>
+      </div>
+
+      {/* Main Container Workspace Elements Stacked and ordered exactly to requested PDF specifications */}
+      <div id="workspace-layout-container" className="max-w-7xl mx-auto px-6 pt-8 space-y-6">
+
+        {/* SECTION 1: PRODUCT HERO / HEADER CARD (Desktop: 60% left, 40% right) */}
+        <div id="product-hero-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative group/card shadow-sm text-left">
           
-          {!isEditMode ? (
-            canEdit ? (
-              <button 
-                onClick={handleStartEdit}
-                className="flex items-center gap-2 px-6 py-2.5 bg-[#EB4501] hover:bg-[#EB4501]/85 text-white rounded-xl text-xs font-bold transition-all shadow-xl shadow-[#EB4501]/20 active:scale-95"
-              >
-                <Edit3 className="w-4 h-4" /> Edit Product
-              </button>
-            ) : (
-              <button 
-                disabled
-                title={isCreator ? "Only Super Admins and the listing Brand Seller can edit products." : "Sellers can only modify their own assigned brand products."}
-                className="flex items-center gap-2 px-6 py-2.5 bg-white/5 border border-white/5 text-slate-500 rounded-xl text-xs font-bold cursor-not-allowed"
-              >
-                <Lock className="w-4 h-4" /> Edit Restricted
-              </button>
-            )
-          ) : (
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={handleCancelEdit}
-                className="flex items-center gap-2 px-5 py-2.5 bg-white/10 border border-white/5 text-slate-300 rounded-xl text-xs font-bold transition-all hover:bg-white/20"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => {
-                  setIsEditMode(false);
-                  setToastMessage('✓ Catalog details updated successfully');
-                  setTimeout(() => setToastMessage(null), 3500);
-                }}
-                className="flex items-center gap-2 px-6 py-2.5 bg-app-accent hover:bg-app-accent-light text-white rounded-xl text-xs font-bold transition-all shadow-xl shadow-app-accent/20 active:scale-95"
-              >
-                <Save className="w-4 h-4" /> Save Changes
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Header Level Mode Indicator */}
-      {!isEditMode ? (
-        <div className="bg-white/[0.02] border border-white/5 p-4 rounded-2xl flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-slate-400" />
-            <span className="text-xs font-extrabold text-slate-300 uppercase tracking-widest">👁️ Viewing Product</span>
-          </div>
-          <p className="text-[10px] text-app-text-secondary font-medium">
-            {isCreator 
-              ? '✓ Content Creator linked view • Direct edit disabled' 
-              : isSeller && !isOwnProduct 
-                ? '⚠️ Managed by another brand • Editing is restricted' 
-                : canEdit 
-                  ? '✓ Authorized to Edit • Click "Edit Product" to unlock' 
-                  : 'Read-only mode'}
-          </p>
-        </div>
-      ) : (
-        <div className="bg-orange-500/10 border border-orange-500/20 p-4 rounded-2xl flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" />
-            <span className="text-xs font-extrabold text-orange-400 uppercase tracking-widest">📝 Editing Product</span>
-          </div>
-          <p className="text-[10px] text-orange-300 font-semibold uppercase tracking-wider">Highlighting editable fields • Intentional Mode</p>
-        </div>
-      )}
-
-      {/* Tabs */}
-      <div className="flex border-b border-app-border scrollbar-hide overflow-x-auto">
-        {[
-          { id: 'Overview & Content', icon: LayoutGrid },
-          { id: 'Specifications', icon: Package },
-          { id: 'Reviews', icon: MessageSquare },
-          { id: 'Analytics', icon: BarChart3 },
-        ].map((tab) => (
+          {/* Floating Pencil Edit Trigger Card corner */}
           <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-8 py-4 text-[11px] font-bold uppercase tracking-widest transition-all whitespace-nowrap flex items-center gap-2 ${
-              activeTab === tab.id 
-                ? 'active-tab-item text-app-accent-light border-b-2 border-app-accent bg-app-accent/5' 
-                : 'text-app-text-secondary hover:text-white'
-            }`}
+            type="button"
+            onClick={() => handleOpenDrawer("hero")}
+            id="edit-hero-btn"
+            className="absolute top-6 right-6 z-10 w-8 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500 flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-sm"
+            title="Configure Hero Details"
           >
-            <tab.icon className="w-4 h-4" />
-            {tab.id}
+            <Pencil className="w-3.5 h-3.5" />
           </button>
-        ))}
-      </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-        {/* Main Editing Area */}
-        <div className="xl:col-span-2 space-y-8">
-          {activeTab === 'Overview & Content' && (
-            <div className="space-y-8">
-              {/* Basic Information (Editable Inline) */}
-              <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="w-10 h-10 rounded-xl bg-app-accent/10 flex items-center justify-center text-app-accent">
-                    <Info className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-white tracking-tight">Basic Information</h3>
-                    <p className="text-[11px] text-app-text-secondary font-bold uppercase tracking-widest mt-1">Foundational product details</p>
-                  </div>
-                </div>
+          <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
+            
+            {/* LEFT COLUMN: Media Viewer (60% equivalent to 6 cols) */}
+            <div className="lg:col-span-6 space-y-5">
+              
+              {/* Active Image Window Frame with Zoom effect */}
+              <div 
+                className="relative aspect-[4/3] rounded-2xl overflow-hidden bg-white border border-[#E5E7EB] group select-none"
+                onMouseMove={handleMouseMove}
+                onMouseEnter={() => setIsZooming(true)}
+                onMouseLeave={() => setIsZooming(false)}
+              >
+                <img
+                  src={images[activeImageIndex] || "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1000&q=82"}
+                  className={`w-full h-full object-cover transition-transform duration-100 object-center ${
+                    isZooming ? "scale-200 cursor-zoom-in" : "scale-100"
+                  }`}
+                  style={isZooming ? { transformOrigin: `${zoomPos.x}% ${zoomPos.y}%` } : undefined}
+                  alt={productName || "Product visual catalogue detail"}
+                  referrerPolicy="no-referrer"
+                />
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest ml-1 opacity-50">Brand Name</label>
-                    <input 
-                      disabled={!isEditMode}
-                      value={productInfo.brandName}
-                      onChange={(e) => handleUpdateInfo('brandName', e.target.value)}
-                      className={inputClass()}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest ml-1 opacity-50">Product Name</label>
-                    <input 
-                      disabled={!isEditMode}
-                      value={productInfo.productName}
-                      onChange={(e) => handleUpdateInfo('productName', e.target.value)}
-                      className={inputClass(true)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest ml-1 opacity-50">Actual Price (BDT)</label>
-                    <input 
-                      disabled={!isEditMode}
-                      type="number"
-                      value={productInfo.actualPrice}
-                      onChange={(e) => handleUpdateInfo('actualPrice', Number(e.target.value))}
-                      className={inputClass()}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest ml-1 opacity-50">Discounted Price (BDT)</label>
-                    <input 
-                      disabled={!isEditMode}
-                      type="number"
-                      value={productInfo.discountedPrice}
-                      onChange={(e) => handleUpdateInfo('discountedPrice', Number(e.target.value))}
-                      className={inputClass(true)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest ml-1 opacity-50">Stock Limit</label>
-                    <input 
-                      disabled={!isEditMode}
-                      type="number"
-                      value={productInfo.stockLimit}
-                      onChange={(e) => handleUpdateInfo('stockLimit', Number(e.target.value))}
-                      className={inputClass()}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest ml-1 opacity-50">Sold Count</label>
-                    <input 
-                      disabled={!isEditMode}
-                      type="number"
-                      value={productInfo.soldCount}
-                      onChange={(e) => handleUpdateInfo('soldCount', Number(e.target.value))}
-                      className={inputClass()}
-                    />
-                  </div>
-                </div>
-              </section>
-
-              {/* Product Images Section */}
-              <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2 tracking-tight">
-                      <ImageIcon className="w-5 h-5 text-app-accent" />
-                      Product Images
-                    </h3>
-                    <p className="text-[11px] text-app-text-secondary font-bold uppercase tracking-widest mt-1">High-quality visual representation</p>
-                  </div>
-                  {isEditMode && (
-                    <label className="flex items-center gap-2 px-4 py-2 bg-app-accent/10 text-app-accent-light border border-app-accent/20 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-app-accent/20 transition-all cursor-pointer">
-                      <Plus className="w-4 h-4" /> Add Photos
-                      <input type="file" multiple className="hidden" onChange={handleImageUpload} />
-                    </label>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {images.map((img, i) => (
-                    <motion.div 
-                      key={i} 
-                      layout
-                      className="relative group aspect-square rounded-2xl overflow-hidden bg-app-sidebar border border-app-border"
+                {/* Left/Right Slides Triggers Navigation */}
+                {images.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setActiveImageIndex(prev => (prev === 0 ? images.length - 1 : prev - 1))}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/75 backdrop-blur-md border border-[#E5E7EB] flex items-center justify-center text-[#1A1A2E] hover:bg-white transition-opacity shrink-0"
                     >
-                      <img src={img} className="w-full h-full object-cover" />
-                      {isEditMode && (
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                          <button 
-                            onClick={() => removeImage(i)}
-                            className="p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
-                    </motion.div>
-                  ))}
-                  {images.length === 0 && (
-                    <div className="col-span-full py-12 flex flex-col items-center justify-center bg-white/[0.02] border border-dashed border-app-border rounded-[2rem]">
-                      <ImageIcon className="w-12 h-12 text-app-text-secondary opacity-10 mb-4" />
-                      <p className="text-xs text-app-text-secondary font-bold uppercase">No images uploaded</p>
-                    </div>
-                  )}
-                </div>
-              </section>
-
-              {/* Media & Embed Links */}
-              <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2 tracking-tight">
-                      <Film className="w-5 h-5 text-blue-500" />
-                      Social Media & Video Links
-                    </h3>
-                    <p className="text-[11px] text-app-text-secondary font-bold uppercase tracking-widest mt-1">Engage users with interactive content</p>
-                  </div>
-                  {isEditMode && (
-                    <button 
-                      onClick={handleAddMedia}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-blue-500/20 transition-all font-bold"
-                    >
-                      <Plus className="w-4 h-4" /> Add Link
+                      <ChevronLeft className="w-4 h-4" />
                     </button>
-                  )}
-                </div>
-
-                <div className="space-y-4">
-                  {mediaLinks.map((link, i) => (
-                    <div key={i} className="space-y-3">
-                      <div className="flex gap-3">
-                        <div className="flex-1 relative group">
-                          <Film className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-app-text-secondary opacity-40" />
-                          <input 
-                            disabled={!isEditMode}
-                            value={link}
-                            onChange={(e) => updateMedia(i, e.target.value)}
-                            placeholder="Paste YouTube, Instagram, or TikTok link"
-                            className={inputClass()}
-                          />
-                        </div>
-                        {isEditMode && (
-                          <button 
-                            onClick={() => removeMedia(i)}
-                            className="p-3 bg-red-500/10 text-red-500 rounded-xl hover:bg-red-500/20 transition-all font-bold"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                      
-                      {/* Live Preview Placeholder */}
-                      {link.trim() && (
-                        <div className="aspect-video w-full max-w-md bg-app-sidebar rounded-2xl border border-app-border overflow-hidden flex flex-col items-center justify-center p-4">
-                          <div className="p-3 bg-white/5 rounded-full mb-3">
-                            <ExternalLink className="w-6 h-6 text-app-text-secondary opacity-50" />
-                          </div>
-                          <p className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest text-center px-4">Preview for: {link.slice(0, 50)}...</p>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </section>
-
-              {/* Best For TagsSection */}
-              <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-                <div className="flex items-center justify-between mb-6">
-                  <div>
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2 tracking-tight">
-                      <Sparkles className="w-5 h-5 text-green-500" />
-                      Best For Tags
-                    </h3>
-                    <p className="text-[11px] text-app-text-secondary font-bold uppercase tracking-widest mt-1">Smart categorization for better discovery</p>
-                  </div>
-                  <span className="text-[10px] font-bold text-app-text-secondary opacity-40">{tags.length}/6 Used</span>
-                </div>
-
-                <div className="flex flex-wrap gap-3 mb-6">
-                  {tags.map((tag, i) => (
-                    <motion.div 
-                      key={tag}
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      className="flex items-center gap-2 px-4 py-2 bg-green-500/10 text-green-500 border border-green-500/20 rounded-xl text-[12px] font-bold tracking-tight shadow-lg shadow-green-500/5 group"
+                    <button
+                      type="button"
+                      onClick={() => setActiveImageIndex(prev => (prev === images.length - 1 ? 0 : prev + 1))}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/75 backdrop-blur-md border border-[#E5E7EB] flex items-center justify-center text-[#1A1A2E] hover:bg-white transition-opacity shrink-0"
                     >
-                      {tag}
-                      {isEditMode && (
-                        <button onClick={() => removeTag(i)} className="p-1 hover:bg-green-500/20 rounded-lg transition-colors font-bold text-[10px] uppercase">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      )}
-                    </motion.div>
-                  ))}
-                </div>
-
-                {isEditMode && tags.length < 6 && (
-                  <form onSubmit={handleAddTag} className="flex gap-2">
-                    <div className="relative flex-1 group">
-                      <Tag className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-app-text-secondary opacity-40 group-focus-within:opacity-100 transition-all font-bold" />
-                      <input 
-                        value={tagInput}
-                        onChange={(e) => setTagInput(e.target.value)}
-                        placeholder="Add discovery tag (e.g. #PerformanceKing)"
-                        className="w-full bg-app-sidebar border border-app-border rounded-xl pl-12 pr-4 py-3 text-sm text-white outline-none focus:border-app-accent/40 transition-all font-semibold font-medium"
-                      />
-                    </div>
-                    <button 
-                      type="submit"
-                      className="px-6 bg-[#EB4501] border border-white/5 text-white rounded-xl text-xs font-bold hover:bg-[#EB4501]/90 transition-all"
-                    >
-                      Add Tag
+                      <ChevronRight className="w-4 h-4" />
                     </button>
-                  </form>
+                  </>
                 )}
-              </section>
 
-              {/* About This Product */}
-              <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500">
-                    <Edit3 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-bold text-white tracking-tight">About This Product</h3>
-                    <p className="text-[11px] text-app-text-secondary font-bold uppercase tracking-widest">Storytelling for your product</p>
-                  </div>
-                </div>
-                <div className="relative group">
-                  <textarea 
-                    disabled={!isEditMode}
-                    value={about}
-                    onChange={(e) => setAbout(e.target.value)}
-                    rows={6}
-                    className={textareaClass}
-                  />
-                </div>
-              </section>
-
-              {/* Pros & Cons Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-                  <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2 tracking-tight">
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                      What We Like (Pros)
-                    </h3>
-                    {isEditMode && (
-                      <button onClick={addPro} className="p-2 bg-green-500/10 text-green-500 rounded-lg hover:bg-green-500/20"><Plus className="w-4 h-4"/></button>
-                    )}
-                  </div>
-                  <div className="space-y-4">
-                    {pros.map((pro, i) => (
-                      <div key={i} className="flex gap-2 group">
-                          <input 
-                            disabled={!isEditMode}
-                            value={pro}
-                            onChange={(e) => updatePro(i, e.target.value)}
-                            className={inputClass(true)}
-                          />
-                          {isEditMode && (
-                            <button onClick={() => setPros(pros.filter((_, idx) => idx !== i))} className="p-3 text-red-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4"/></button>
-                          )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-                  <div className="flex items-center justify-between mb-8">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2 tracking-tight">
-                      <XCircle className="w-5 h-5 text-red-500" />
-                      To Consider (Cons)
-                    </h3>
-                    {isEditMode && (
-                      <button onClick={addCon} className="p-2 bg-red-500/10 text-red-500 rounded-lg hover:bg-red-500/20"><Plus className="w-4 h-4"/></button>
-                    )}
-                  </div>
-                  <div className="space-y-4">
-                    {cons.map((con, i) => (
-                      <div key={i} className="flex gap-2 group">
-                          <input 
-                            disabled={!isEditMode}
-                            value={con}
-                            onChange={(e) => updateCon(i, e.target.value)}
-                            className={inputClass(true)}
-                          />
-                          {isEditMode && (
-                            <button onClick={() => setCons(cons.filter((_, idx) => idx !== i))} className="p-3 text-red-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4"/></button>
-                          )}
-                      </div>
-                    ))}
-                  </div>
-                </section>
+                {/* Submit Sample Status flag banner corner */}
+                <span className="absolute top-4 left-4 bg-[#FF5B00]/10 text-[#FF5B00] border border-[#FF5B00]/20 backdrop-blur-md text-[8px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center gap-1.5 shadow-sm">
+                  <span className="w-1.5 h-1.5 bg-[#FF5B00] rounded-full animate-ping" />
+                  <span>SUBMIT SAMPLE</span>
+                </span>
               </div>
-            </div>
-          )}
 
-          {activeTab === 'Specifications' && (
-            <div className="space-y-8">
-              <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h3 className="text-lg font-bold text-white tracking-tight">Technical Specifications</h3>
-                    <p className="text-[11px] text-app-text-secondary font-bold uppercase tracking-widest mt-1">Key attributes and hardware details</p>
-                  </div>
-                  {isEditMode && (
-                    <button 
-                      onClick={addSpec}
-                      className="flex items-center gap-2 px-4 py-2 bg-app-accent/10 text-app-accent-light border border-app-accent/20 rounded-xl text-[10px] font-bold uppercase tracking-widest hover:bg-app-accent/20 transition-all font-bold"
+              {/* Grid stripe selector of Images Thumbnails */}
+              {images.length > 0 && (
+                <div className="flex gap-2 pb-1.5 overflow-x-auto scrollbar-thin">
+                  {images.map((img, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setActiveImageIndex(idx)}
+                      className={`w-14 h-14 rounded-lg overflow-hidden border-2 shrink-0 transition-all ${
+                        activeImageIndex === idx 
+                          ? "border-orange-500 scale-102 ring-2 ring-orange-500/10" 
+                          : "border-slate-200 hover:border-slate-400"
+                      }`}
                     >
-                      <Plus className="w-4 h-4" /> Add Spec
+                      <img src={img} className="w-full h-full object-cover object-center" alt="" referrerPolicy="no-referrer" />
                     </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Option Selector Bubble Previews Match */}
+              <div className="p-4 bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl text-left space-y-3.5">
+                <span className="text-[9px] text-[#FF5B00] font-bold uppercase tracking-wider block font-mono">
+                  Active Variants Specifications PREVIEW
+                </span>
+                
+                <div className="flex flex-col sm:flex-row gap-4 sm:items-center justify-between text-xs">
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px] uppercase font-bold tracking-wide mb-1">Color Option</span>
+                    <div className="flex items-center gap-2">
+                      {["Titanium Gray", "Cosmic Gold", "Pearl White"].map(col => (
+                        <button
+                          key={col}
+                          type="button"
+                          onClick={() => setSelectedColorOption(col)}
+                          className={`px-3 py-1.5 rounded-lg border text-[10.5px] font-semibold transition-all ${
+                            selectedColorOption === col 
+                              ? "bg-white border-orange-500 text-orange-600 shadow-sm" 
+                              : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
+                          }`}
+                        >
+                          {col}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <span className="text-slate-400 block text-[9.5px] uppercase font-bold tracking-wide mb-1">Fits Dimension</span>
+                    <div className="flex items-center gap-1.5">
+                      {["Standard Fit", "Extra Protection Extended"].map(sz => (
+                        <button
+                          key={sz}
+                          type="button"
+                          onClick={() => setSelectedSizeOption(sz)}
+                          className={`px-3 py-1.5 rounded-lg border text-[10.5px] font-semibold transition-all ${
+                            selectedSizeOption === sz 
+                              ? "bg-white border-orange-500 text-orange-600 shadow-sm" 
+                              : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
+                          }`}
+                        >
+                          {sz}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* PUBLIC DISPLAY ACTION BUTTONS CONFIG */}
+                <div className="pt-2 border-t border-[#E5E7EB] space-y-2">
+                  <span className="text-[8px] text-slate-400 uppercase font-black tracking-widest block font-mono mb-1.5">Configure Active Action Buttons on PDP Banner</span>
+                  <div className="flex flex-wrap gap-2">
+                    {actionFindInStore && (
+                      <button type="button" className="px-3.5 py-1.5 bg-[#1A1A2E] text-white rounded-xl text-[10px] font-black uppercase tracking-wider">
+                        Find in Store
+                      </button>
+                    )}
+                    {actionBuyOnline && (
+                      <button type="button" className="px-3.5 py-1.5 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider">
+                        Buy Online
+                      </button>
+                    )}
+                    {actionLove && (
+                      <button type="button" className="p-1.5 bg-rose-50 border border-rose-100 text-rose-500 rounded-xl" title="Love Product">
+                        <Heart className="w-3.5 h-3.5 fill-rose-500" />
+                      </button>
+                    )}
+                    {actionWish && (
+                      <button type="button" className="px-3 py-1.5 bg-[#FAFAFA] border border-slate-200 text-slate-600 rounded-xl text-[10px] uppercase font-bold">
+                        Add to Wishlist
+                      </button>
+                    )}
+                    {actionContactSeller && (
+                      <button type="button" className="px-3.5 py-1.5 bg-[#FAFAFA] text-[#1A1A2E] border border-[#E5E7EB] rounded-xl text-[10px] font-black uppercase tracking-wider">
+                        Contact Seller
+                      </button>
+                    )}
+                    {actionPreOrder && (
+                      <button type="button" className="px-3.5 py-1.5 bg-amber-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider">
+                        Pre Order
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* RIGHT COLUMN: Specific Attributes Specifications & Stats (40% equivalent to 4 cols) */}
+            <div className="lg:col-span-4 flex flex-col justify-between space-y-6 lg:border-l lg:border-[#E5E7EB] lg:pl-6">
+              
+              <div className="space-y-4">
+                {/* Breadcrumb line & SUBMIT SAMPLE Pill badge */}
+                <div className="flex flex-wrap items-center gap-1.5 text-[9px] uppercase font-bold tracking-widest text-[#FF5B00]">
+                  <span>{brandName}</span>
+                  <span className="text-slate-300">/</span>
+                  <span className="text-slate-500">{category}</span>
+                </div>
+
+                {/* Verified stars rating indicator for PDP header */}
+                <div className="flex items-center gap-2 bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl p-2.5 w-fit">
+                  <div className="flex items-center gap-0.5" title="Trust Score Rating Stats">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star key={i} className={`w-3.5 h-3.5 ${i < 4 ? "text-yellow-400 fill-yellow-400" : "text-slate-200"}`} />
+                    ))}
+                  </div>
+                  <span className="text-xs font-black text-[#1A1A2E]">{trustRating}</span>
+                  <span className="text-[10px] text-slate-400">({reviewCount} reviews)</span>
+                  
+                  {/* Verified PDP icon indicator */}
+                  <span className="text-[8px] bg-[#50DC17]/10 text-[#2B9B00] border border-[#50DC17]/20 px-2 py-0.5 rounded font-black uppercase tracking-wider">
+                    VERIFIED MATCH
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <h2 className="text-xl lg:text-2xl font-black text-[#1A1A2E] tracking-tight uppercase leading-none">
+                    {productName}
+                  </h2>
+                </div>
+
+                {/* Price display with gorgeous Saved Discount pill */}
+                <div className="pt-2">
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-2xl font-black text-orange-500 font-mono">
+                      ৳ {discountedPrice.toLocaleString()}
+                    </span>
+                    {actualPrice > discountedPrice && (
+                      <span className="text-xs text-slate-400 line-through font-mono">
+                        ৳ {actualPrice.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                  {savingsPercent > 0 && (
+                    <span className="inline-block mt-1.5 text-[9px] bg-[#50DC17]/10 text-[#2B9B00] border border-[#50DC17]/20 px-2 py-0.5 rounded font-black uppercase tracking-wider">
+                      {savingsPercent}% SAVED ON THE LISTING
+                    </span>
                   )}
                 </div>
 
-                <div className="space-y-4">
-                  {specs.map((spec, i) => (
-                    <div key={i} className="flex gap-4 group">
-                        <div className="flex-1">
-                          <input 
-                            disabled={!isEditMode}
-                            value={spec.key}
-                            onChange={(e) => updateSpec(i, 'key', e.target.value)}
-                            placeholder="Specification key"
-                            className={inputClass(true)}
-                          />
-                        </div>
-                        <div className="flex-[2]">
-                          <input 
-                            disabled={!isEditMode}
-                            value={spec.value}
-                            onChange={(e) => updateSpec(i, 'value', e.target.value)}
-                            placeholder="Value"
-                            className={inputClass()}
-                          />
-                        </div>
-                        {isEditMode && (
-                          <button 
-                            onClick={() => removeSpec(i)}
-                            className="p-3 bg-red-500/10 text-red-500 border border-red-500/10 rounded-xl hover:bg-red-500/20 transition-all font-bold"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
+                {/* Sourcing / Inventory summary and Product Bio paragraph */}
+                <p className="text-[11.5px] text-slate-600 font-light leading-relaxed">
+                  {about || "No biography provided. Click Edit to fill out descriptive story biography summaries."}
+                </p>
+              </div>
+
+              {/* READ-ONLY STATS BLOCKS ROW PROTECTED WITH LOCK ICONS AND ACCESSIBILITY TOOLTIPS */}
+              <div className="bg-[#1A1A2E] text-white p-4.5 rounded-2xl space-y-3.5 border border-[#2D2D4E]">
+                <span className="text-[8px] text-orange-500 font-mono font-black uppercase tracking-widest block border-b border-[#2D2D4E]/50 pb-2 flex items-center gap-1.5">
+                  <Lock className="w-3 h-3 text-orange-500" />
+                  READ-ONLY ENGAGEMENT PARAMETERS (SYSTEM CONTROLLED)
+                </span>
+
+                <div className="grid grid-cols-3 gap-2 text-center select-none">
+                  {[
+                    { label: "LOVES COUNT", val: lovesCount, desc: "Shopper love marks" },
+                    { label: "WISHED", val: wishesCount, desc: "Saves to buyer wishlists" },
+                    { label: "SESSIONS", val: viewsCount, desc: "Page views metadata" }
+                  ].map((stat, i) => (
+                    <div 
+                      key={i} 
+                      className="bg-slate-900/40 border border-[#2D2D4E] p-2.5 rounded-xl group/stat relative cursor-help"
+                      title="Automatically calculated by Choosify backend statistics ledger."
+                    >
+                      <span className="text-xs font-black tracking-tight text-white font-mono block">
+                        {stat.val.toLocaleString()}
+                      </span>
+                      <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-widest block mt-1">
+                        {stat.label}
+                      </span>
+                      
+                      {/* Interactive Tooltip representation */}
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-32 hidden group-hover/stat:block bg-black text-white text-[8px] p-2 rounded-lg leading-tight text-center shadow-xl border border-[#2D2D4E] z-20">
+                        {stat.desc}. Automatically calculated by Choosify backend statistics engine.
+                      </span>
                     </div>
                   ))}
                 </div>
-              </section>
-
-              {/* Store & Policies merged into Specs tab as requested */}
-              <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-                  <div className="flex items-center gap-3 mb-8">
-                    <Search className="w-6 h-6 text-app-accent" />
-                    <h3 className="text-lg font-bold text-white tracking-tight">Store Availability</h3>
-                  </div>
-                  <textarea 
-                    disabled={!isEditMode}
-                    value={storeAvailability}
-                    onChange={(e) => setStoreAvailability(e.target.value)}
-                    rows={2}
-                    className={textareaClass}
-                  />
-              </section>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-                    <div className="flex items-center gap-3 mb-8">
-                      <RotateCcw className="w-6 h-6 text-app-accent" />
-                      <h3 className="text-lg font-bold text-white tracking-tight">Return & Refund</h3>
-                    </div>
-                    <textarea 
-                      disabled={!isEditMode}
-                      value={returnPolicy}
-                      onChange={(e) => setReturnPolicy(e.target.value)}
-                      rows={4}
-                      className={textareaClass}
-                    />
-                </section>
-
-                <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-                    <div className="flex items-center gap-3 mb-8">
-                      <Truck className="w-6 h-6 text-blue-500" />
-                      <h3 className="text-lg font-bold text-white tracking-tight">Delivery Info</h3>
-                    </div>
-                    <textarea 
-                      disabled={!isEditMode}
-                      value={deliveryInfo}
-                      onChange={(e) => setDeliveryInfo(e.target.value)}
-                      rows={4}
-                      className={textareaClass}
-                    />
-                </section>
               </div>
+
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* SECTION 2: CREATOR EXPERIENCES (55% left) + PRICE ACROSS STORES TABLE (45% right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          
+          {/* LEFT: Creator experiences using reusable component */}
+          <div className="lg:col-span-7">
+            <CreatorExperienceSection
+              contextType="product"
+              contextName={productName || "Product"}
+              creatorContent={creatorContent}
+              onEditClick={() => handleOpenDrawer("creator")}
+              onAddReviewClick={() => handleOpenDrawer("creator")}
+            />
+          </div>
+
+          {/* RIGHT: Price across stores Comparative panel */}
+          <div id="stores-comparison-card" className="lg:col-span-5 bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left flex flex-col justify-between">
+            
+            {/* Top Right Floating pencil trigger */}
+            <button
+              type="button"
+              onClick={() => handleOpenDrawer("stores")}
+              id="edit-stores-list-btn"
+              className="absolute top-6 right-6 w-8 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm"
+              title="Edit comparative stores"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+
+            <div>
+              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
+                Comparative Pricing Deals
+              </span>
+              <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] mb-4.5 flex items-center gap-2">
+                PRICE ACROSS STORES 
+                <span className="text-[9px] px-2 py-0.5 bg-green-100 text-[#2B9B00] border border-green-200/50 rounded-full font-bold uppercase">
+                  {storeComparisonList.length} DEALS ACTIVE
+                </span>
+              </h2>
+
+              {storeComparisonList.length > 0 ? (
+                <div className="border border-[#E5E7EB] rounded-2xl overflow-hidden bg-[#FAFAFA]/20">
+                  <table className="w-full text-left text-xs">
+                    <thead>
+                      <tr className="bg-[#FAFAFA] border-b border-[#E5E7EB] text-slate-400 font-extrabold uppercase text-[8.5px] tracking-widest font-mono">
+                        <th className="p-3">STORE LOCATION</th>
+                        <th className="p-3 text-right">PRICE</th>
+                        <th className="p-3 text-right">ACTION</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#E5E7EB]">
+                      {storeComparisonList.map((item, id) => (
+                        <tr key={item.id || id} className="hover:bg-slate-50 transition-colors">
+                          <td className="p-3">
+                            <span className="font-extrabold text-[#1A1A2E] block uppercase tracking-tight">{item.storeName}</span>
+                            <span className="text-[9.5px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5 uppercase">
+                              <MapPin className="w-3 h-3 text-slate-400" />
+                              {item.storeLocation || "Dhaka Outlet"}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right">
+                            <span className="text-[12.5px] font-black font-mono text-orange-500">৳{item.price.toLocaleString()}</span>
+                            <span className="text-[8px] text-emerald-600 font-extrabold uppercase block mt-0.5">● {item.availability}</span>
+                          </td>
+                          <td className="p-3 text-right">
+                            <a 
+                              href={item.storeUrl || "https://choosify.bd"}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1 bg-white border border-[#E5E7EB] hover:bg-zinc-50 rounded-lg text-[9px] font-black uppercase text-slate-800 tracking-wider shadow-sm select-none inline-block hover:scale-102"
+                            >
+                              BUY
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
+                  No competing checkout deals active for this product profile SKU.
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-[#E5E7EB]/60 mt-4.5">
+              <p className="text-[10px] text-slate-400 leading-normal font-light">
+                Prices and store lists synchronize in real-time. Action buttons like "Buy" or "View Deal" links are configured locally inside properties drawer.
+              </p>
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* SECTION 3: SPECIFICATIONS PARAMETERS (45% left) + PHYSICAL STORES CARDS (55% right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+          {/* LEFT: Specifications Parameter Grid Table */}
+          <div id="specs-card" className="lg:col-span-5 bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left flex flex-col justify-between">
+            
+            <button
+              type="button"
+              onClick={() => handleOpenDrawer("specs")}
+              id="edit-specs-btn"
+              className="absolute top-6 right-6 w-8 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm"
+              title="Edit specifications list"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+
+            <div>
+              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
+                Product Core Parameters
+              </span>
+              <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] mb-4.5 text-left">
+                SPECIFICATIONS
+              </h2>
+
+              {specs.length > 0 ? (
+                <div className="divide-y divide-[#E5E7EB]">
+                  {specs.map((item, idx) => (
+                    <div key={idx} className="flex justify-between py-2 text-xs">
+                      <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] font-mono shrink-0 w-28 text-left">{item.key}</span>
+                      <span className="text-[#1A1A2E] font-semibold text-right uppercase tracking-tight truncate max-w-[200px]">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
+                  No attributes defined in this spec index structure.
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-[#E5E7EB]/60 mt-4.5">
+              <span className="text-[9px] text-slate-400 font-mono italic">
+                Sellers are advised to input verified values matching original serial parameters.
+              </span>
+            </div>
+
+          </div>
+
+          {/* RIGHT: Physical Outlets store cards */}
+          <div id="physical-stores-card" className="lg:col-span-7 bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left flex flex-col justify-between">
+            
+            <button
+              type="button"
+              onClick={() => handleOpenDrawer("physical-stores")}
+              id="edit-physical-outlets-btn"
+              className="absolute top-6 right-6 w-8 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm"
+              title="Edit physical outlets list"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+
+            <div>
+              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
+                Retail Outlets Locations
+              </span>
+              <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] mb-4.5 text-left">
+                PHYSICAL STORES
+              </h2>
+
+              {physicalStores.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {physicalStores.map((store, idx) => (
+                    <div 
+                      key={store.id || idx} 
+                      className="bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow-none hover:border-slate-300 transition-colors"
+                    >
+                      <div className="space-y-1.5 text-left">
+                        <div className="flex items-start justify-between">
+                          <span className="text-[10px] bg-orange-500/10 text-orange-600 border border-orange-500/20 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider leading-none">
+                            {store.badgeLabel || "Premium Store"}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-bold uppercase font-mono">{store.city}</span>
+                        </div>
+                        <h4 className="text-xs font-black uppercase text-[#1A1A2E] tracking-wider leading-tight">
+                          {store.storeName}
+                        </h4>
+                        <p className="text-[11px] text-slate-500 font-light leading-snug">
+                          {store.address}
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-200/50 flex justify-between items-center text-[10px] text-slate-500 font-mono">
+                        <span className="flex items-center gap-1.5">
+                          <Phone className="w-3 h-3 text-slate-400" />
+                          {store.contactNumber}
+                        </span>
+                        <span className="text-[8.5px] bg-slate-200/50 text-slate-600 px-1.5 py-0.5 rounded font-extrabold uppercase">
+                          PICKUP AVAILABLE
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
+                  No verified brick-and-mortar outlet points indexed for showcase.
+                </div>
+              )}
+            </div>
+
+            <div className="pt-4 border-t border-[#E5E7EB]/60 mt-4.5">
+              <span className="text-[9px] text-slate-400 font-mono">
+                Store details integrate dynamically into geographic checkout lists and digital pickup options.
+              </span>
+            </div>
+
+          </div>
+
+        </div>
+
+        {/* SECTION 4: PRODUCT OVERVIEW (Full Width Bento Grid of Bullet Feature blocks) */}
+        <div id="product-overview-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left">
+          
+          <button
+            type="button"
+            onClick={() => handleOpenDrawer("overview")}
+            id="edit-overview-btn"
+            className="absolute top-6 right-6 w-8 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm"
+            title="Configure spotlight categories"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+
+          <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
+            Visual Sourcing Storyboards
+          </span>
+          <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] mb-6 text-left">
+            PRODUCT SPOTLIGHT OVERVIEW
+          </h2>
+
+          {overviewBlocks.filter(b => b.enabled).length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+              {overviewBlocks.filter(b => b.enabled).map((blk, idx) => (
+                <div 
+                  key={blk.id || idx} 
+                  className="bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl p-5 text-left border-l-4 border-l-orange-500 hover:shadow-sm transition-all"
+                >
+                  <h3 className="text-sm font-black text-[#1A1A2E] uppercase tracking-wider mb-4 border-b border-[#E5E7EB] pb-2 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-orange-500" />
+                    {blk.title}
+                  </h3>
+                  <ul className="space-y-2">
+                    {blk.bullets.map((bullet, i) => (
+                      <li key={i} className="text-xs text-slate-600 font-bold flex items-start gap-2 uppercase tracking-tight">
+                        <span className="text-emerald-500 mt-0.5 select-none shrink-0 font-bold">✓</span>
+                        <span>{bullet}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
+              No overview highlight blocks enabled.
             </div>
           )}
 
-          {activeTab === 'Reviews' && (
-            <section className="bg-app-card border border-app-border rounded-[2rem] p-12 shadow-2xl text-center">
-              <div className="w-20 h-20 bg-app-accent/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                <MessageSquare className="w-10 h-10 text-app-accent" />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">Customer Reviews</h3>
-              <p className="text-app-text-secondary max-w-sm mx-auto">Manage and respond to customer feedback directly from this panel.</p>
-              <div className="mt-8 pt-8 border-t border-app-border grid grid-cols-3 gap-4">
-                <div className="p-4 bg-app-sidebar rounded-2xl border border-app-border">
-                  <div className="text-2xl font-bold text-white">4.8</div>
-                  <div className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest mt-1">Avg Rating</div>
-                </div>
-                <div className="p-4 bg-app-sidebar rounded-2xl border border-app-border">
-                  <div className="text-2xl font-bold text-white">124</div>
-                  <div className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest mt-1">Total Reviews</div>
-                </div>
-                <div className="p-4 bg-app-sidebar rounded-2xl border border-app-border">
-                  <div className="text-2xl font-bold text-white">98%</div>
-                  <div className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest mt-1">Positive</div>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {activeTab === 'Analytics' && (
-            <section className="bg-app-card border border-app-border rounded-[2rem] p-12 shadow-2xl text-center">
-              <div className="w-20 h-20 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                <BarChart3 className="w-10 h-10 text-blue-500" />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">Performance Analytics</h3>
-              <p className="text-app-text-secondary max-w-sm mx-auto">Detailed insights into page views, conversions, and sales performance over time.</p>
-              <div className="mt-8 grid grid-cols-2 gap-4">
-                <div className="h-40 bg-app-sidebar rounded-2xl border border-app-border animate-pulse flex items-center justify-center text-app-text-secondary text-[10px] font-bold uppercase tracking-widest uppercase">Growth Chart Rendering...</div>
-                <div className="h-40 bg-app-sidebar rounded-2xl border border-app-border animate-pulse flex items-center justify-center text-app-text-secondary text-[10px] font-bold uppercase tracking-widest uppercase">Conversion Funnel Rendering...</div>
-              </div>
-            </section>
-          )}
         </div>
 
-        {/* Sidebar Info */}
-        <div className="space-y-8">
-          <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-             <h3 className="text-sm font-bold text-app-text-secondary uppercase tracking-[0.2em] mb-8">Quick Stats</h3>
-             <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                   <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-green-500" />
-                      <span className="text-[12px] font-bold text-app-text-secondary uppercase tracking-widest">Live Status</span>
-                   </div>
-                   <span className="text-[11px] font-bold text-white">Active (94 days)</span>
-                </div>
-                <div className="flex items-center justify-between">
-                   <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-app-accent" />
-                      <span className="text-[12px] font-bold text-app-text-secondary uppercase tracking-widest">Conversion</span>
-                   </div>
-                   <span className="text-[11px] font-bold text-white">4.2% (High)</span>
-                </div>
-                <div className="flex items-center justify-between">
-                   <div className="flex items-center gap-3">
-                      <div className="w-2 h-2 rounded-full bg-blue-500" />
-                      <span className="text-[12px] font-bold text-app-text-secondary uppercase tracking-widest">Views (7D)</span>
-                   </div>
-                   <span className="text-[11px] font-bold text-white">1,204 visitors</span>
-                </div>
-             </div>
-          </section>
+        {/* SECTION 5: BEST FOR TAGS CAPSULES (Full Width) */}
+        <div id="product-tags-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left">
+          
+          <button
+            type="button"
+            onClick={() => handleOpenDrawer("tags")}
+            id="edit-tags-btn"
+            className="absolute top-6 right-6 w-8 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm"
+            title="Edit tags listing"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
 
-          <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
-             <h3 className="text-sm font-bold text-app-text-secondary uppercase tracking-[0.2em] mb-8">Seller Info</h3>
-             <div className="flex items-center gap-4 mb-8">
-                <div className="w-12 h-12 rounded-xl bg-app-sidebar border border-app-border flex items-center justify-center text-app-accent text-lg font-bold">TZ</div>
-                <div>
-                   <div className="text-[14px] font-bold text-white">TechZone BD</div>
-                   <div className="text-[10px] text-app-text-secondary font-bold uppercase tracking-widest mt-1">Platinum Seller</div>
-                </div>
-             </div>
-             <button className="w-full py-3 bg-white/5 border border-app-border rounded-xl text-xs font-bold text-white hover:bg-white/10 transition-all flex items-center justify-center gap-2">
-                Contact Seller <ChevronRight className="w-4 h-4" />
-             </button>
-          </section>
+          <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
+            Search Taxonomy Identifiers
+          </span>
+          <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] mb-4.5 text-left">
+            BEST FOR TAGS CAPSULES
+          </h2>
 
-          <section className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl border-dashed">
-             <div className="text-center py-6">
-                <Settings className="w-8 h-8 text-app-text-secondary opacity-20 mx-auto mb-4" />
-                <h4 className="text-xs font-bold text-white uppercase tracking-widest mb-2">Delete Product</h4>
-                <p className="text-[10px] text-app-text-secondary mb-4 italic">Irreversible action - removes all associations</p>
-                <button className="text-xs font-bold text-red-500 hover:text-red-400 transition-colors uppercase tracking-widest underline decoration-red-500/20 underline-offset-4">
-                   Destroy Record
-                </button>
-             </div>
-          </section>
+          <div className="flex flex-wrap gap-2">
+            {bestForTags.length > 0 ? (
+              bestForTags.map((tag, idx) => (
+                <span 
+                  key={idx} 
+                  className="px-4 py-2.5 bg-orange-50 text-[#FF5B00] border border-orange-100 rounded-2xl text-[10.5px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-sm"
+                >
+                  <span>★</span>
+                  <span>{tag}</span>
+                </span>
+              ))
+            ) : (
+              <div className="py-6 w-full border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
+                No taxonomy tagging configured. Click Edit on the top right to begin adding custom search tags.
+              </div>
+            )}
+          </div>
+
+          <div className="pt-4 border-t border-[#E5E7EB]/50 mt-6 text-slate-400 text-[10px] font-mono leading-none">
+            Tag parameters automatically index listings across search modules and personalized category collections.
+          </div>
+
         </div>
+
       </div>
+
+      {/* RIGHT SLIDING PROPERTY DRAWER PANEL (Width: 480px) */}
+      <AnimatePresence>
+        {activeDrawer && (
+          <div className="fixed inset-0 z-[400] overflow-hidden">
+            {/* Backdrop Blur screen layer with click close trigger */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setActiveDrawer(null)}
+              className="absolute inset-0 bg-[#1A1A2E]/80 backdrop-blur-sm cursor-pointer" 
+            />
+
+            <div className="absolute inset-y-0 right-0 max-w-full flex">
+              <motion.div
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 220 }}
+                className="w-screen max-w-md bg-white text-[#1A1A2E] shadow-2xl flex flex-col justify-between text-left border-l border-[#E5E7EB]"
+              >
+                {/* Drawer Header */}
+                <div className="p-6 border-b border-[#E5E7EB] bg-[#FAFAFA]">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="text-[9px] text-orange-500 font-mono font-black uppercase tracking-wider block mb-1">
+                        Sellers Configuration drawer
+                      </span>
+                      <h3 className="text-sm font-black uppercase text-[#1A1A2E] tracking-wider">
+                        Configure Section parameters
+                      </h3>
+                    </div>
+                    <button 
+                      type="button" 
+                      onClick={() => setActiveDrawer(null)}
+                      className="text-slate-400 hover:text-slate-900 border-0 bg-transparent text-xs font-black font-mono tracking-widest cursor-pointer px-2.5 py-1.5 hover:bg-slate-100 rounded-xl"
+                    >
+                      X CLOSE
+                    </button>
+                  </div>
+                </div>
+
+                {/* Drawer Scroll Container */}
+                <div className="flex-1 overflow-y-auto no-scrollbar p-6 space-y-6">
+
+                  {/* FORM 1: HEROS MODULE ATTRS */}
+                  {activeDrawer === "hero" && (
+                    <div className="space-y-4">
+                      
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Product Catalog SKU Name</label>
+                        <input 
+                          value={productName}
+                          onChange={(e) => setProductName(e.target.value)}
+                          className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-bold uppercase font-mono"
+                          placeholder="SAMSUNG S25 ULTRA BD..."
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Brand Label</label>
+                          <input 
+                            value={brandName}
+                            onChange={(e) => setBrandName(e.target.value)}
+                            className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Breadcrumb Group</label>
+                          <input 
+                            value={category}
+                            onChange={(e) => setCategory(e.target.value)}
+                            className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Actual Price (৳)</label>
+                          <input 
+                            type="number"
+                            value={actualPrice}
+                            onChange={(e) => setActualPrice(Number(e.target.value))}
+                            className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-mono font-bold"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Sale price (৳)</label>
+                          <input 
+                            type="number"
+                            value={discountedPrice}
+                            onChange={(e) => setDiscountedPrice(Number(e.target.value))}
+                            className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-mono font-bold"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Product bio about</label>
+                        <textarea 
+                          rows={3}
+                          value={about}
+                          onChange={(e) => setAbout(e.target.value)}
+                          className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 resize-none font-medium leading-relaxed"
+                        />
+                      </div>
+
+                      {/* Photo List editing nodes inside Hero */}
+                      <div className="space-y-2.5 pt-3 border-t border-[#E5E7EB]">
+                        <span className="text-[10px] uppercase font-black text-slate-500 tracking-wider block">Modify Photos Grid</span>
+                        {images.map((img, i) => (
+                          <div key={i} className="flex gap-2">
+                            <input 
+                              value={img}
+                              onChange={(e) => {
+                                const copy = [...images];
+                                copy[i] = e.target.value;
+                                setImages(copy);
+                              }}
+                              className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs truncate text-[#1A1A2E] outline-none focus:border-orange-500 font-mono"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setImages(images.filter((_, idx) => idx !== i))}
+                              className="p-2.5 bg-red-100/40 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+
+                        <div className="flex gap-2">
+                          <input 
+                            value={tempImagesInput}
+                            onChange={(e) => setTempImagesInput(e.target.value)}
+                            placeholder="Add photo HTTPS url listings row..."
+                            className="flex-1 bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#1A1A2E] outline-none focus:border-orange-500"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (tempImagesInput.trim()) {
+                                setImages([...images, tempImagesInput.trim()]);
+                                setTempImagesInput("");
+                              }
+                            }}
+                            className="px-4 bg-orange-500 text-white rounded-xl text-xs font-black uppercase"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Action buttons toggles config */}
+                      <div className="space-y-2.5 pt-4 border-t border-[#E5E7EB] text-xs font-bold text-slate-600">
+                        <span className="text-[10px] uppercase font-black text-slate-500 tracking-wider block">Enabled Interactive Checkout Actions</span>
+                        {[
+                          { l: "Enable 'FIND IN STORE' Map search trigger", v: actionFindInStore, s: setActionFindInStore },
+                          { l: "Enable 'BUY ONLINE' direct portal", v: actionBuyOnline, s: setActionBuyOnline },
+                          { l: "Enable 'HEART LOVE' stats counter", v: actionLove, s: setActionLove },
+                          { l: "Enable 'WISHLIST' catalog bookmarking", v: actionWish, s: setActionWish },
+                          { l: "Enable 'DIGITAL CHAT WITH SELLER' assistant", v: actionContactSeller, s: setActionContactSeller },
+                          { l: "Enable 'REQUEST BULK QUOTE' document module", v: actionRequestQuote, s: setActionRequestQuote },
+                          { l: "Enable 'PRE ORDER' billing toggle", v: actionPreOrder, s: setActionPreOrder }
+                        ].map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center py-2 border-b border-[#E5E7EB]/40">
+                            <span>{item.l}</span>
+                            <input 
+                              type="checkbox" 
+                              checked={item.v}
+                              onChange={(e) => item.s(e.target.checked)}
+                              className="rounded border-[#E5E7EB] text-orange-500 focus:ring-orange-500"
+                            />
+                          </div>
+                        ))}
+                      </div>
+
+                    </div>
+                  )}
+
+                  {/* FORM 2: CREATOR CONTENT SOURCING PANEL */}
+                  {activeDrawer === "creator" && (
+                    <div className="space-y-4">
+                      
+                      <p className="text-[10.5px] italic text-slate-500 leading-normal mb-2">
+                        Configure digital creators highlights list. Reorder, add creator clips reviews, remove items, or mark specific item as top spotlight features card.
+                      </p>
+
+                      <div className="space-y-4 pr-1">
+                        {creatorContent.map((item) => (
+                          <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-3.5 rounded-2xl relative text-left text-xs space-y-2.5">
+                            <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                              <span className="font-extrabold text-orange-500 text-[10px] font-mono">@{item.creatorHandle}</span>
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = creatorContent.map(c => ({
+                                      ...c,
+                                      isFeatured: c.id === item.id
+                                    }));
+                                    setCreatorContent(updated);
+                                  }}
+                                  className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-widest leading-none ${
+                                    item.isFeatured ? "bg-orange-500 text-white" : "bg-white hover:bg-slate-200 text-slate-500 border border-slate-200"
+                                  }`}
+                                >
+                                  {item.isFeatured ? "Spotlight" : "Feature"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCreatorContent(creatorContent.filter(c => c.id !== item.id))}
+                                  className="text-red-500 hover:text-red-700 font-bold"
+                                  title="Delete Review"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-1">
+                              <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Review title</span>
+                              <input 
+                                value={item.title}
+                                onChange={(e) => {
+                                  const updated = creatorContent.map(c => c.id === item.id ? { ...c, title: e.target.value } : c);
+                                  setCreatorContent(updated);
+                                }}
+                                className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-[11px] text-[#1A1A2E] outline-none"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-[10px]">
+                              <div>
+                                <span className="text-[7.5px] uppercase font-black text-slate-400 font-mono tracking-widest">Platform</span>
+                                <select
+                                  value={item.platform}
+                                  onChange={(e) => {
+                                    const updated = creatorContent.map(c => c.id === item.id ? { ...c, platform: e.target.value } : c);
+                                    setCreatorContent(updated);
+                                  }}
+                                  className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 outline-none font-bold"
+                                >
+                                  <option value="YOUTUBE">YouTube</option>
+                                  <option value="INSTAGRAM">Instagram</option>
+                                  <option value="TIKTOK">TikTok</option>
+                                  <option value="FACEBOOK">Facebook</option>
+                                </select>
+                              </div>
+                              <div>
+                                <span className="text-[7.5px] uppercase font-black text-slate-400 font-mono tracking-widest">Duration</span>
+                                <input 
+                                  value={item.duration}
+                                  onChange={(e) => {
+                                    const updated = creatorContent.map(c => c.id === item.id ? { ...c, duration: e.target.value } : c);
+                                    setCreatorContent(updated);
+                                  }}
+                                  className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 outline-none"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Add Creator Clip trigger */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const fresh: CreatorContentItem = {
+                            id: `cc-${Date.now()}`,
+                            platform: "YOUTUBE",
+                            videoUrl: "https://youtube.com/watch?v=fresh",
+                            thumbnail: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400",
+                            title: "Brand New Unboxing Clip Review",
+                            description: "Review of the brand specs and details.",
+                            views: 1300,
+                            likes: 120,
+                            duration: "4:50",
+                            creatorHandle: "FreshTechMaker",
+                            creatorAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50",
+                            location: "Dhaka, BD",
+                            isFeatured: false
+                          };
+                          setCreatorContent([...creatorContent, fresh]);
+                        }}
+                        className="w-full py-3 border border-dashed border-[#E5E7EB] rounded-2xl text-[10px] text-orange-500 font-bold uppercase tracking-widest hover:bg-orange-50/10 hover:border-orange-500/50 transition-colors cursor-pointer"
+                      >
+                        + ADD CREATOR REVIEWS SLOT
+                      </button>
+
+                    </div>
+                  )}
+
+                  {/* FORM 3: PRICE ACROSS STORES */}
+                  {activeDrawer === "stores" && (
+                    <div className="space-y-4">
+                      <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Store comparative values</span>
+                      
+                      <div className="space-y-3.5">
+                        {tempStores.map((item, id) => (
+                          <div key={item.id || id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-3.5 rounded-2xl space-y-2 relative text-left text-xs">
+                            <button
+                              type="button"
+                              onClick={() => setTempStores(tempStores.filter((_, idx) => idx !== id))}
+                              className="absolute top-3.5 right-3.5 text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            <div className="space-y-1">
+                              <label className="text-[7.5px] uppercase font-bold text-slate-400">Store Name</label>
+                              <input 
+                                value={item.storeName}
+                                onChange={(e) => {
+                                  const copy = [...tempStores];
+                                  copy[id] = { ...copy[id], storeName: e.target.value };
+                                  setTempStores(copy);
+                                }}
+                                className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-[10px]">
+                              <div>
+                                <label className="text-[7.5px] uppercase font-bold text-slate-400">Price (৳)</label>
+                                <input 
+                                  type="number"
+                                  value={item.price}
+                                  onChange={(e) => {
+                                    const copy = [...tempStores];
+                                    copy[id] = { ...copy[id], price: Number(e.target.value) };
+                                    setTempStores(copy);
+                                  }}
+                                  className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 font-mono"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[7.5px] uppercase font-bold text-slate-400">Location Area</label>
+                                <input 
+                                  value={item.storeLocation || ""}
+                                  onChange={(e) => {
+                                    const copy = [...tempStores];
+                                    copy[id] = { ...copy[id], storeLocation: e.target.value };
+                                    setTempStores(copy);
+                                  }}
+                                  className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const fresh: StoreListing = {
+                            id: `sl-${Date.now()}`,
+                            storeName: "Star Tech BD",
+                            price: 148000,
+                            availability: "In Stock",
+                            storeRating: 4.8,
+                            storeUrl: "https://startech.com.bd",
+                            storeLocation: "Dhaka Mall"
+                          };
+                          setTempStores([...tempStores, fresh]);
+                        }}
+                        className="w-full py-2 bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl text-[10px] font-black uppercase text-slate-600 tracking-wider hover:bg-slate-100 transition-colors cursor-pointer"
+                      >
+                        + Add price comparisons Store
+                      </button>
+
+                    </div>
+                  )}
+
+                  {/* FORM 4: SPECIFICATIONS */}
+                  {activeDrawer === "specs" && (
+                    <div className="space-y-4">
+                      <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Parameters Specifications Attributes</span>
+                      
+                      <div className="space-y-2 text-left">
+                        {tempSpecs.map((item, idx) => (
+                          <div key={idx} className="flex gap-2 items-center bg-[#FAFAFA] p-2 rounded-xl border border-slate-150 relative">
+                            <div className="grid grid-cols-2 gap-2 flex-grow text-xs font-mono">
+                              <input 
+                                value={item.key}
+                                onChange={(e) => {
+                                  const copy = [...tempSpecs];
+                                  copy[idx].key = e.target.value;
+                                  setTempSpecs(copy);
+                                }}
+                                className="bg-transparent border-0 outline-none uppercase font-bold text-slate-500 py-1"
+                                placeholder="Attribute key"
+                              />
+                              <input 
+                                value={item.value}
+                                onChange={(e) => {
+                                  const copy = [...tempSpecs];
+                                  copy[idx].value = e.target.value;
+                                  setTempSpecs(copy);
+                                }}
+                                className="bg-transparent border-0 outline-none font-bold text-[#1A1A2E] py-1"
+                                placeholder="Value"
+                              />
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => setTempSpecs(tempSpecs.filter((_, i) => i !== idx))}
+                              className="text-slate-400 hover:text-red-500 p-1"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setTempSpecs([...tempSpecs, { key: "New Parameter", value: "New Value" }])}
+                        className="w-full py-2.5 bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl text-[9.5px] font-bold uppercase hover:bg-slate-100 tracking-widest text-slate-600 cursor-pointer"
+                      >
+                        + ADD NEW ROW
+                      </button>
+
+                    </div>
+                  )}
+
+                  {/* FORM 5: PHYSICAL OUTLETS STORES */}
+                  {activeDrawer === "physical-stores" && (
+                    <div className="space-y-4">
+                      <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Physical stores outlets</span>
+                      
+                      <div className="space-y-4 select-none">
+                        {tempPhysicalStores.map((item, idx) => (
+                          <div key={item.id || idx} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl relative text-left text-xs space-y-3">
+                            <button
+                              type="button"
+                              onClick={() => setTempPhysicalStores(tempPhysicalStores.filter((_, i) => i !== idx))}
+                              className="absolute top-4 right-4 text-red-500 hover:text-red-700"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+
+                            <div className="space-y-1">
+                              <label className="text-[7.5px] uppercase font-bold text-slate-400">Outlet Sourcing Point Name</label>
+                              <input 
+                                value={item.storeName}
+                                onChange={(e) => {
+                                  const copy = [...tempPhysicalStores];
+                                  copy[idx] = { ...copy[idx], storeName: e.target.value };
+                                  setTempPhysicalStores(copy);
+                                }}
+                                className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 focus:border-orange-500 outline-none uppercase font-bold"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-[7.5px] uppercase font-bold text-slate-400">Street Address</label>
+                              <input 
+                                value={item.address}
+                                onChange={(e) => {
+                                  const copy = [...tempPhysicalStores];
+                                  copy[idx] = { ...copy[idx], address: e.target.value };
+                                  setTempPhysicalStores(copy);
+                                }}
+                                className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 focus:border-orange-500 outline-none"
+                              />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2 text-[10px]">
+                              <div>
+                                <label className="text-[7.5px] uppercase font-bold text-slate-400">City</label>
+                                <input 
+                                  value={item.city}
+                                  onChange={(e) => {
+                                    const copy = [...tempPhysicalStores];
+                                    copy[idx] = { ...copy[idx], city: e.target.value };
+                                    setTempPhysicalStores(copy);
+                                  }}
+                                  className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 outline-none uppercase font-bold"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-[7.5px] uppercase font-bold text-slate-400">Outlet Badge Tag</label>
+                                <select
+                                  value={item.badgeLabel}
+                                  onChange={(e) => {
+                                    const copy = [...tempPhysicalStores];
+                                    copy[idx] = { ...copy[idx], badgeLabel: e.target.value };
+                                    setTempPhysicalStores(copy);
+                                  }}
+                                  className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 outline-none font-bold"
+                                >
+                                  <option value="Flagship">Flagship Outlet</option>
+                                  <option value="Premium">Premium Center</option>
+                                  <option value="Authorized">Authorized Store</option>
+                                  <option value="Express Pickup">Express Pickup Hub</option>
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const fresh: PhysicalStore = {
+                            id: `ps-${Date.now()}`,
+                            storeName: "Star Tech Multi-Outlet",
+                            address: "10th Floor, Mascot Plaza, Uttara",
+                            badgeLabel: "Authorized",
+                            contactNumber: "+8801711223355",
+                            city: "Dhaka"
+                          };
+                          setTempPhysicalStores([...tempPhysicalStores, fresh]);
+                        }}
+                        className="w-full py-3 bg-[#FAFAFA] border border-dashed border-[#E5E7EB] hover:bg-slate-100 rounded-2xl text-[10px] text-orange-500 font-extrabold uppercase tracking-wider cursor-pointer transition-colors"
+                      >
+                        + Add Retail Store Point
+                      </button>
+
+                    </div>
+                  )}
+
+                  {/* FORM 6: PRODUCT OVERVIEW */}
+                  {activeDrawer === "overview" && (
+                    <div className="space-y-4">
+                      <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Overview Category Spotlight grids</span>
+                      
+                      <div className="space-y-4">
+                        {tempOverview.map((blk, idx) => (
+                          <div key={blk.id || idx} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl space-y-3 relative text-left text-xs">
+                            <div className="flex justify-between items-center bg-white p-2 rounded-xl border border-slate-150">
+                              <span className="font-extrabold text-orange-600 uppercase tracking-tight">{blk.title}</span>
+                              <div className="flex items-center gap-1.5">
+                                <button 
+                                  type="button"
+                                  onClick={() => {
+                                    const copy = [...tempOverview];
+                                    copy[idx].enabled = !copy[idx].enabled;
+                                    setTempOverview(copy);
+                                  }}
+                                  className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                                    blk.enabled ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                                  }`}
+                                >
+                                  {blk.enabled ? "ON" : "OFF"}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTempOverview(tempOverview.filter((_, i) => i !== idx))}
+                                  className="text-red-500 hover:text-red-700 font-bold ml-1"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            {blk.enabled && (
+                              <div className="space-y-2 text-[10px]">
+                                <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Highlight Bullets List</span>
+                                {blk.bullets.map((bullet, bIdx) => (
+                                  <div key={bIdx} className="flex gap-1.5">
+                                    <input 
+                                      value={bullet}
+                                      onChange={(e) => {
+                                        const copy = [...tempOverview];
+                                        copy[idx].bullets[bIdx] = e.target.value;
+                                        setTempOverview(copy);
+                                      }}
+                                      className="flex-grow bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 uppercase font-bold"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const copy = [...tempOverview];
+                                        copy[idx].bullets = copy[idx].bullets.filter((_, bSub) => bSub !== bIdx);
+                                        setTempOverview(copy);
+                                      }}
+                                      className="text-red-500 hover:text-red-700 font-bold font-mono px-1"
+                                    >
+                                      x
+                                    </button>
+                                  </div>
+                                ))}
+
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const copy = [...tempOverview];
+                                    copy[idx].bullets.push("NEW BULLET POINTER VALUE");
+                                    setTempOverview(copy);
+                                  }}
+                                  className="text-orange-500 hover:underline text-[9.5px] font-black uppercase tracking-wider block pt-1 text-left"
+                                >
+                                  + ADD UNIQUE BULLET BLOCK
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const fresh: OverviewBlock = {
+                            id: `ob-${Date.now()}`,
+                            title: "New Spotlight Block",
+                            bullets: ["FIRST DEFAULT VALUE BENCHMARK PRO"],
+                            enabled: true
+                          };
+                          setTempOverview([...tempOverview, fresh]);
+                        }}
+                        className="w-full py-3 bg-[#FAFAFA] border border-dashed border-[#E5E7EB] hover:bg-slate-100 rounded-2xl text-[10px] text-orange-500 font-bold uppercase tracking-widest cursor-pointer transition-colors"
+                      >
+                        + Add Spotlight Story block
+                      </button>
+
+                    </div>
+                  )}
+
+                  {/* FORM 7: BEST FOR TAGS */}
+                  {activeDrawer === "tags" && (
+                    <div className="space-y-4">
+                      
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {tempTagsList.map((tag, idx) => (
+                          <span 
+                            key={idx} 
+                            className="px-3 py-1.5 bg-orange-100 text-orange-700 border border-orange-200/50 rounded-lg text-[10.5px] font-bold uppercase tracking-widest flex items-center gap-1.5"
+                          >
+                            <span>{tag}</span>
+                            <button
+                              type="button"
+                              onClick={() => setTempTagsList(tempTagsList.filter((_, i) => i !== idx))}
+                              className="text-red-500 group-hover:text-red-700 font-bold text-xs"
+                            >
+                              x
+                            </button>
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Add dynamic capsule search */}
+                      <div className="space-y-2 text-xs">
+                        <label className="text-[10px] uppercase font-black text-slate-400 block font-mono">Input dynamic capsule tag</label>
+                        <div className="flex gap-2">
+                          <input 
+                            value={newTagVal}
+                            onChange={(e) => setNewTagVal(e.target.value)}
+                            placeholder="e.g. durable leather casing, premium..."
+                            className="bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs flex-grow outline-none focus:border-orange-500 uppercase font-bold"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (newTagVal.trim() && !tempTagsList.includes(newTagVal.trim().toLowerCase())) {
+                                setTempTagsList([...tempTagsList, newTagVal.trim().toLowerCase()]);
+                                setNewTagVal("");
+                              }
+                            }}
+                            className="px-4 bg-orange-500 text-white rounded-xl font-bold uppercase text-[10.5px]"
+                          >
+                            Add tag
+                          </button>
+                        </div>
+
+                        {/* Autocomplete recommended list */}
+                        <div className="pt-2 border-t border-[#E5E7EB]">
+                          <span className="text-[8.5px] uppercase font-bold text-slate-400 block tracking-widest font-mono mb-2">Recommended preset tags</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {["eco-friendly packaging", "premium lifestyle", "modern classic apparel", "high benchmarks zoom"].map(preset => (
+                              <button
+                                key={preset}
+                                type="button"
+                                onClick={() => {
+                                  if (!tempTagsList.includes(preset)) {
+                                    setTempTagsList([...tempTagsList, preset]);
+                                  }
+                                }}
+                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded text-[9.5px] text-slate-600 uppercase font-semibold transition-colors"
+                              >
+                                + {preset}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                    </div>
+                  )}
+
+                </div>
+
+                {/* Drawer Sticky Save Changes footer matches "save independently, success toast, automatic close" */}
+                <div className="p-6 border-t border-[#E5E7EB] bg-[#FAFAFA]" id="drawer-save-box">
+                  <button
+                    type="button"
+                    onClick={() => handleSaveSection(activeDrawer || "")}
+                    id="save-changes-btn"
+                    className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 text-white font-extrabold text-[10px] uppercase tracking-widest rounded-xl transition-all hover:scale-101 active:scale-99 shadow-md shadow-orange-500/10 cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+
+              </motion.div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

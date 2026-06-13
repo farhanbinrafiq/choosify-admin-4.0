@@ -240,6 +240,133 @@ export default function BrandDetails() {
                  </div>
               </div>
            </section>
+
+            {/* PUBLIC TRUST PROFILE SYSTEM PREVIEW WIDGET (PHASE 8 REQUIRED) */}
+            <section className="bg-app-card border border-[#F4631E]/20 rounded-[2rem] p-8 shadow-2xl space-y-6 relative overflow-hidden bg-gradient-to-br from-app-card to-[#F4631E]/[0.02]">
+               <div className="absolute top-0 right-0 p-6 opacity-5">
+                 <ShieldCheck className="w-32 h-32 text-orange-500" />
+               </div>
+
+               <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 border-b border-white/[0.04] pb-4">
+                  <div>
+                     <span className="text-[10px] text-orange-400 font-extrabold uppercase tracking-widest font-mono">Choosify Consumer Trust Embed</span>
+                     <h3 className="text-lg font-bold text-white tracking-tight">Public Trust Profile v2</h3>
+                     <p className="text-[11px] text-app-text-secondary">Official customer-facing certification module and transparent score breakdowns.</p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                     <div className="text-center">
+                        <div className="text-3xl font-black text-emerald-400 font-mono">96<span className="text-xs text-slate-500">/100</span></div>
+                        <div className="text-[9px] text-[#8E9BAE] uppercase font-bold font-mono tracking-wider">Choosify Trust Score</div>
+                     </div>
+                  </div>
+               </div>
+
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs">
+                  
+                  {/* Left Column: Breakdown metrics */}
+                  <div className="space-y-4 font-sans">
+                     <h4 className="font-bold text-white uppercase tracking-wide text-[11px]">Certified Reputation Factors</h4>
+                     
+                     <div className="space-y-3 font-mono">
+                        <div className="space-y-1">
+                           <div className="flex justify-between text-[11px]">
+                              <span className="text-slate-400">🛡️ Product Authenticity Rating</span>
+                              <span className="text-emerald-400 font-bold">100% (Certified)</span>
+                           </div>
+                           <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
+                              <div className="bg-emerald-400 h-full w-full" />
+                           </div>
+                        </div>
+
+                        <div className="space-y-1">
+                           <div className="flex justify-between text-[11px]">
+                              <span className="text-slate-400">📦 Logistics Dispatch Compliance</span>
+                              <span className="text-blue-400 font-bold">98.4% (Fast Express)</span>
+                           </div>
+                           <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
+                              <div className="bg-blue-400 h-full w-[98.4%]" />
+                           </div>
+                        </div>
+
+                        <div className="space-y-1">
+                           <div className="flex justify-between text-[11px]">
+                              <span className="text-slate-400">💬 Complaints Resolved Ratio</span>
+                              <span className="text-purple-400 font-bold">100.0% (Cleared)</span>
+                           </div>
+                           <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
+                              <div className="bg-purple-400 h-full w-full" />
+                           </div>
+                        </div>
+
+                        <div className="space-y-1">
+                           <div className="flex justify-between text-[11px]">
+                              <span className="text-slate-400">📈 Partner Creator Score Lift</span>
+                              <span className="text-orange-400 font-bold">+24.5% CTR Growth</span>
+                           </div>
+                           <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
+                              <div className="bg-orange-400 h-full w-[78%]" />
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+
+                  {/* Right Column: Timeline & Embed */}
+                  <div className="space-y-4 font-sans">
+                     <h4 className="font-bold text-white uppercase tracking-wide text-[11px]">Transparency Timeline Logs</h4>
+                     
+                     <div className="border-l border-white/[0.04] pl-3.5 ml-1.5 space-y-3 font-mono text-[10.5px]">
+                        <div className="relative">
+                           <div className="absolute -left-[19.5px] top-1 w-2.5 h-2.5 bg-green-500 rounded-full border border-app-card" />
+                           <span className="text-slate-400 block text-[9px]">MAY 27, 2026</span>
+                           <span className="text-white font-bold">Corporate Trade License approved</span>
+                        </div>
+                        <div className="relative">
+                           <div className="absolute -left-[19.5px] top-1 w-2.5 h-2.5 bg-green-400 rounded-full border border-app-card" />
+                           <span className="text-slate-400 block text-[9px]">MAY 24, 2026</span>
+                           <span className="text-white font-bold">Registered NBR Tax-Certificate cleared</span>
+                        </div>
+                        <div className="relative">
+                           <div className="absolute -left-[19.5px] top-1 w-2.5 h-2.5 bg-purple-500 rounded-full border border-app-card" />
+                           <span className="text-slate-400 block text-[9px]">MAY 15, 2026</span>
+                           <span className="text-white font-bold">Onboarded as Platinum Tier Partner</span>
+                        </div>
+                     </div>
+                  </div>
+
+               </div>
+
+               {/* JSON API Embed inspecter */}
+               <div className="pt-4 border-t border-white/[0.03] flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                  <span className="text-[10.5px] text-[#8E9BAE] font-mono leading-tight">
+                     💡 Embed widget iframe using endpoint `<b>/api/v1/trust/embed/samsung_bd</b>`
+                  </span>
+                  
+                  <button 
+                     onClick={() => {
+                        alert(JSON.stringify({
+                           brand_id: "brand_samsung_bd",
+                           brand_name: "Samsung Bangladesh",
+                           certification_level: "Titanium Elite Verified",
+                           scores: {
+                              overall: 96,
+                              authenticity: 1.00,
+                              logistics_compliance: 0.984,
+                              complaint_resolution_rate: 1.00,
+                              creator_lift_factor: 1.245
+                           },
+                           documents_filed: ["trade_license", "vat_nbr_tax", "brand_ownership_notary"],
+                           last_vetted: "2026-06-13",
+                           audited_by_node: "Choosify Lead Auditor usr_admin_101"
+                        }, null, 2));
+                     }}
+                     className="px-3.5 py-1.5 bg-[#F4631E]/10 hover:bg-[#F4631E]/20 text-[#F4631E] font-extrabold uppercase rounded-[3px] border border-[#F4631E]/15 cursor-pointer text-[10px] font-mono text-center animate-pulse"
+                     id="api_inspector_btn"
+                  >
+                     Inspect REST Node payload
+                  </button>
+               </div>
+            </section>
         </div>
 
         {/* Right Column - Top Products & Quick Info */}

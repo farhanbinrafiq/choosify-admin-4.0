@@ -2,28 +2,86 @@
 @import "tailwindcss";
 
 :root {
-  --color-app-bg: #F8FAFD;
-  --color-app-card: #FFFFFF;
-  --color-app-sidebar: #000435;
-  --color-app-accent: #EB4501;
-  --color-app-accent-light: #ff5d1a;
-  --color-app-success: #07DD05;
-  --color-app-text-primary: #000435;
-  --color-app-text-secondary: #5E6C84;
-  --color-app-border: #E2E8F0;
-  --color-app-gradient-start: #000435;
-  --color-app-gradient-end: #EB4501;
+  /* GLOBAL COLOR TOKENS */
+  --color-page-bg:         #F5F5F5;   /* Page/body background — light grey */
+  --color-surface:         #FFFFFF;   /* All cards, panels, modals, sidebars */
+  --color-surface-dark:    #1A1A2E;   /* Dark navy — hero cards, verdict blocks, featured panels */
+  --color-border:          #E5E7EB;   /* All card borders, dividers, table lines */
+  --color-border-dark:     #2D2D4E;   /* Borders inside dark navy surfaces */
+
+  --color-accent-primary:  #F97316;   /* Orange — PRIMARY accent */
+  --color-accent-hover:    #EA6C0A;   /* Orange hover/pressed state */
+  --color-accent-light:    #FFF4ED;   /* Orange tint bg — badge backgrounds, tag fills */
+
+  --color-navy:            #1A1A2E;   /* Dark navy — secondary accent */
+  --color-navy-mid:        #2D2D4E;   /* Navy hover, nav active bg */
+  --color-navy-light:      #F0F1F8;   /* Navy tint — subtle highlights */
+
+  --color-text-primary:    #111827;   /* Headings, bold labels */
+  --color-text-secondary:  #6B7280;   /* Body text, descriptions, meta */
+  --color-text-muted:      #9CA3AF;   /* Placeholder, disabled, timestamps */
+  --color-text-inverse:    #FFFFFF;   /* Text on dark navy surfaces */
+  --color-text-orange:     #F97316;   /* Orange text — prices, stats, active values */
+
+  --color-success:         #22C55E;   /* Green — verified badges, in-stock, positive bars */
+  --color-success-light:   #F0FDF4;   /* Green tint bg */
+  --color-warning:         #F59E0B;   /* Amber — warnings, pending states */
+  --color-danger:          #EF4444;   /* Red — errors, out-of-stock, rejection */
+  --color-danger-light:    #FEF2F2;   /* Red tint bg */
+
+  /* Map older variables to the new unified, white-first system */
+  --color-app-bg: var(--color-page-bg);
+  --color-app-card: var(--color-surface);
+  --color-app-sidebar: var(--color-navy);
+  --color-app-accent: var(--color-accent-primary);
+  --color-app-accent-light: var(--color-accent-light);
+  --color-app-success: var(--color-success);
+  --color-app-text-primary: var(--color-text-primary);
+  --color-app-text-secondary: var(--color-text-secondary);
+  --color-app-border: var(--color-border);
+  --color-app-gradient-start: var(--color-navy);
+  --color-app-gradient-end: var(--color-accent-primary);
 }
 
 .dark {
-  --color-app-bg: #000435;
-  --color-app-card: #09104A; /* Slightly lighter navy variation for soft card surfaces */
-  --color-app-sidebar: #00021A; /* Deep navy sidebar, no pure black */
-  --color-app-text-primary: #F5F5F5; /* Soft white primary text, eye comfort */
-  --color-app-text-secondary: #8E9BAE; /* Muted light gray */
-  --color-app-border: rgba(245, 245, 245, 0.06); /* Soft, non-harsh borders */
-  --color-app-gradient-start: #000435;
-  --color-app-gradient-end: #09104A;
+  /* Unify Dark Mode to match our clean, high-contrast light theme */
+  --color-page-bg:         #F5F5F5;
+  --color-surface:         #FFFFFF;
+  --color-surface-dark:    #1A1A2E;
+  --color-border:          #E5E7EB;
+  --color-border-dark:     #2D2D4E;
+
+  --color-accent-primary:  #F97316;
+  --color-accent-hover:    #EA6C0A;
+  --color-accent-light:    #FFF4ED;
+
+  --color-navy:            #1A1A2E;
+  --color-navy-mid:        #2D2D4E;
+  --color-navy-light:      #F0F1F8;
+
+  --color-text-primary:    #111827;
+  --color-text-secondary:  #6B7280;
+  --color-text-muted:      #9CA3AF;
+  --color-text-inverse:    #FFFFFF;
+  --color-text-orange:     #F97316;
+
+  --color-success:         #22C55E;
+  --color-success-light:   #F0FDF4;
+  --color-warning:         #F59E0B;
+  --color-danger:          #EF4444;
+  --color-danger-light:    #FEF2F2;
+
+  --color-app-bg: var(--color-page-bg);
+  --color-app-card: var(--color-surface);
+  --color-app-sidebar: var(--color-navy);
+  --color-app-accent: var(--color-accent-primary);
+  --color-app-accent-light: var(--color-accent-light);
+  --color-app-success: var(--color-success);
+  --color-app-text-primary: var(--color-text-primary);
+  --color-app-text-secondary: var(--color-text-secondary);
+  --color-app-border: var(--color-border);
+  --color-app-gradient-start: var(--color-navy);
+  --color-app-gradient-end: var(--color-accent-primary);
 }
 
 @theme {
@@ -42,6 +100,24 @@
   --color-app-border: var(--color-app-border);
   --color-app-gradient-start: var(--color-app-gradient-start);
   --color-app-gradient-end: var(--color-app-gradient-end);
+
+  /* Map/Override standard Tailwind blue colors to eliminate blues and route them to navy/neutral shades */
+  --color-blue-50: var(--color-navy-light);
+  --color-blue-100: var(--color-navy-light);
+  --color-blue-200: var(--color-navy-light);
+  --color-blue-300: var(--color-navy-mid);
+  --color-blue-400: var(--color-navy-mid);
+  --color-blue-500: var(--color-navy);
+  --color-blue-600: var(--color-navy);
+  --color-blue-700: var(--color-navy);
+  --color-blue-800: var(--color-navy-mid);
+  --color-blue-900: var(--color-navy-mid);
+  --color-blue-950: var(--color-navy-mid);
+
+  /* Map cyan to orange highlights for active log role pages */
+  --color-cyan-50: var(--color-accent-light);
+  --color-cyan-500: var(--color-accent-primary);
+  --color-cyan-600: var(--color-accent-hover);
 }
 
 @layer base {
@@ -49,9 +125,9 @@
     @apply bg-app-bg text-app-text-primary min-h-screen transition-colors duration-300;
   }
 
-  /* Dark Mode Eye Comfort Optimization: Soft gradients and radial orange glow */
+  /* Unify Body across all themes */
   .dark body {
-    background: radial-gradient(circle at 70% 20%, rgba(235, 69, 1, 0.06), transparent 50%), linear-gradient(135deg, #000435 0%, #080C42 55%, #000435 100%) !important;
+    background: var(--color-page-bg) !important;
     background-attachment: fixed !important;
   }
 }
@@ -71,7 +147,7 @@ html:not(.dark) .text-white\/70,
 html:not(.dark) .text-white\/80,
 html:not(.dark) .text-white\/50,
 html:not(.dark) .text-white\/90 {
-  color: #000435; /* Dark navy primary text */
+  color: var(--color-text-primary); /* Charcoal primary text */
 }
 
 /* 2. Better contrast for secondary text / captions in light mode (no washed out terms) */
@@ -79,13 +155,13 @@ html:not(.dark) .text-slate-400,
 html:not(.dark) .text-gray-400,
 html:not(.dark) .text-zinc-400,
 html:not(.dark) .text-app-text-secondary {
-  color: #5E6C84 !important; /* Readable Medium Gray */
+  color: var(--color-text-secondary) !important; /* Readable Medium Gray */
 }
 
 /* 3. Inputs placeholder visibility in light mode */
 html:not(.dark) input::placeholder,
 html:not(.dark) textarea::placeholder {
-  color: #5E6C84 !important;
+  color: var(--color-text-muted) !important;
   opacity: 0.75 !important;
 }
 
@@ -154,9 +230,11 @@ aside .text-gray-500,
 /* Enforce orange accent color for highlighted / active items and icons */
 aside .text-app-accent,
 [class*="bg-app-sidebar"] .text-app-accent,
+aside [class*="text-[#F97316]"],
+[class*="bg-app-sidebar"] [class*="text-[#F97316]"],
 aside [class*="text-[#EB4501]"],
 [class*="bg-app-sidebar"] [class*="text-[#EB4501]"] {
-  color: #EB4501 !important;
+  color: var(--color-accent-primary) !important;
 }
 
 /* 5. HOVER, ACTIVE AND SUBMENU STYLING */
@@ -202,7 +280,7 @@ aside .mt-1.pl-6 a[class*="text-app-accent"],
 [class*="bg-app-sidebar"] .mt-1.pl-6 a[class*="text-app-accent"],
 aside .mt-1.pl-6 a.text-app-accent,
 [class*="bg-app-sidebar"] .mt-1.pl-6 a.text-app-accent {
-  color: #EB4501 !important;
+  color: var(--color-accent-primary) !important;
   font-weight: 700 !important;
 }
 
@@ -243,6 +321,7 @@ html:not(.dark) [class*="bg-[#000435]"] .text-gray-200 {
 
 /* 6. Enforce white font color on solid colored buttons/badges (including on hover/focus) */
 html:not(.dark) .bg-app-accent,
+html:not(.dark) .bg-\[\#F97316\],
 html:not(.dark) .bg-\[\#EB4501\],
 html:not(.dark) .bg-green-500,
 html:not(.dark) .bg-green-600,
@@ -255,11 +334,13 @@ html:not(.dark) .bg-purple-500,
 html:not(.dark) .bg-purple-600,
 html:not(.dark) .bg-indigo-600,
 html:not(.dark) .bg-[#0D1B2A],
+html:not(.dark) .bg-[#1A1A2E],
 html:not(.dark) .bg-\[\#F4631E\] {
   color: #FFFFFF !important;
 }
 
 html:not(.dark) .bg-app-accent *,
+html:not(.dark) .bg-\[\#F97316\] *,
 html:not(.dark) .bg-\[\#EB4501\] *,
 html:not(.dark) .bg-green-500 *,
 html:not(.dark) .bg-green-600 *,
@@ -269,6 +350,7 @@ html:not(.dark) .bg-blue-500 *,
 html:not(.dark) .bg-blue-600 *,
 html:not(.dark) .bg-orange-500 *,
 html:not(.dark) .bg-[#0D1B2A] *,
+html:not(.dark) .bg-[#1A1A2E] *,
 html:not(.dark) .bg-\[\#F4631E\] * {
   color: #FFFFFF !important;
 }
@@ -407,7 +489,7 @@ html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([c
   color: #F5F5F5 !important;
 }
 
-/* 2. Light background pills/badges/tags in Light Mode: Force text and descendant labels to be Dark Navy (#000435) */
+/* 2. Light background pills/badges/tags in Light Mode: Force text and descendant labels to be Charcoal/Primary (#111827) or Navy (#1A1A2E) */
 html:not(.dark) [class*="rounded-"][class*="bg-green-50"],
 html:not(.dark) [class*="rounded-"][class*="bg-green-100"],
 html:not(.dark) [class*="rounded-"][class*="bg-green-200"],
@@ -435,6 +517,7 @@ html:not(.dark) [class*="rounded-"][class*="bg-orange-500/20"],
 html:not(.dark) [class*="rounded-"][class*="bg-[#EB4501]/10"],
 html:not(.dark) [class*="rounded-"][class*="bg-[#EB4501]/15"],
 html:not(.dark) [class*="rounded-"][class*="bg-[#EB4501]/20"],
+html:not(.dark) [class*="rounded-"][class*="bg-[#F97316]/10"],
 html:not(.dark) [class*="rounded-"][class*="bg-app-accent/10"],
 html:not(.dark) [class*="rounded-"][class*="bg-app-accent/15"],
 html:not(.dark) [class*="rounded-"][class*="bg-[#F4631E]/10"],
@@ -448,7 +531,7 @@ html:not(.dark) [class*="rounded-"][class*="bg-zinc-50"],
 html:not(.dark) [class*="rounded-"][class*="bg-zinc-100"],
 html:not(.dark) [class*="rounded-"][class*="bg-zinc-200"],
 html:not(.dark) [class*="rounded-"][class*="bg-white"] {
-  color: #000435 !important;
+  color: var(--color-text-primary) !important;
 }
 
 html:not(.dark) [class*="rounded-"][class*="bg-green-50"] *,
@@ -468,7 +551,7 @@ html:not(.dark) [class*="rounded-"][class*="bg-orange-100"] *,
 html:not(.dark) [class*="rounded-"][class*="bg-orange-500/10"] *,
 html:not(.dark) [class*="rounded-"][class*="bg-[#EB4501]/10"] *,
 html:not(.dark) [class*="rounded-"][class*="bg-app-accent/10"] * {
-  color: #000435 !important;
+  color: var(--color-text-primary) !important;
 }
 
 /* --- STANDARD ACTIVE/SELECTED STATE COLOR ALGORITHM SYSTEM --- */
@@ -478,22 +561,22 @@ html:not(.dark) [class*="rounded-"][class*="bg-app-accent/10"] * {
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 html:not(.dark) .active-sidebar-item {
-  background: linear-gradient(to right, rgba(235, 69, 1, 0.15) 0%, rgba(255, 255, 255, 0.02) 100%) !important;
+  background: rgba(249, 115, 22, 0.15) !important;
   color: #FFFFFF !important;
-  border-left-color: #EB4501 !important;
+  border-left: 3.5px solid var(--color-accent-primary) !important;
   box-shadow: none !important;
 }
 html:not(.dark) .active-sidebar-item * {
   color: #FFFFFF !important;
 }
 html.dark .active-sidebar-item {
-  background: linear-gradient(to right, rgba(0, 4, 53, 0.45) 0%, rgba(9, 16, 74, 0.45) 100%) !important;
-  color: #F5F5F5 !important;
-  border-left-color: #EB4501 !important;
+  background: rgba(249, 115, 22, 0.15) !important;
+  color: #FFFFFF !important;
+  border-left: 3.5px solid var(--color-accent-primary) !important;
   box-shadow: none !important;
 }
 html.dark .active-sidebar-item * {
-  color: #F5F5F5 !important;
+  color: #FFFFFF !important;
 }
 
 /* 2. Platform Navigation Tabs Selected State */
@@ -501,26 +584,22 @@ html.dark .active-sidebar-item * {
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 html:not(.dark) .active-tab-item {
-  background: rgba(0, 4, 53, 0.08) !important;
-  color: #000435 !important;
-  border-bottom: 2px solid #EB4501 !important;
-  border-left-color: transparent !important;
-  border-right-color: transparent !important;
-  border-top-color: transparent !important;
+  background: var(--color-accent-primary) !important;
+  color: #FFFFFF !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
 }
 html:not(.dark) .active-tab-item * {
-  color: #000435 !important;
+  color: #FFFFFF !important;
 }
 html.dark .active-tab-item {
-  background: linear-gradient(to bottom, rgba(0, 4, 53, 0.35) 0%, rgba(9, 16, 74, 0.35) 100%) !important;
-  color: #F5F5F5 !important;
-  border-bottom: 2px solid #EB4501 !important;
-  border-left-color: transparent !important;
-  border-right-color: transparent !important;
-  border-top-color: transparent !important;
+  background: var(--color-accent-primary) !important;
+  color: #FFFFFF !important;
+  border-radius: 999px !important;
+  box-shadow: none !important;
 }
 html.dark .active-tab-item * {
-  color: #F5F5F5 !important;
+  color: #FFFFFF !important;
 }
 
 /* 3. Selected Buttons / Filters / Pills / Tags Active State */
@@ -529,25 +608,25 @@ html.dark .active-tab-item * {
 }
 html:not(.dark) .active-filter-item,
 html:not(.dark) .active-pill-item {
-  background: rgba(0, 4, 53, 0.08) !important;
-  color: #000435 !important;
-  border: 1px solid #EB4501 !important;
+  background: var(--color-accent-light) !important;
+  color: var(--color-accent-primary) !important;
+  border: 1px solid var(--color-accent-primary) !important;
   box-shadow: none !important;
 }
 html:not(.dark) .active-filter-item *,
 html:not(.dark) .active-pill-item * {
-  color: #000435 !important;
+  color: var(--color-accent-primary) !important;
 }
 html.dark .active-filter-item,
 html.dark .active-pill-item {
-  background: linear-gradient(to bottom, rgba(0, 4, 53, 0.3) 0%, rgba(9, 16, 74, 0.3) 100%) !important;
-  color: #F5F5F5 !important;
-  border: 1px solid #EB4501 !important;
+  background: var(--color-accent-light) !important;
+  color: var(--color-accent-primary) !important;
+  border: 1px solid var(--color-accent-primary) !important;
   box-shadow: none !important;
 }
 html.dark .active-filter-item *,
 html.dark .active-pill-item * {
-  color: #F5F5F5 !important;
+  color: var(--color-accent-primary) !important;
 }
 
 
