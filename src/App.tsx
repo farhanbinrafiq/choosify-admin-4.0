@@ -62,6 +62,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 import { ThemeProvider } from './contexts/ThemeContext';
 import { CMSProvider } from './contexts/CMSContext';
 import { AdsProvider } from './contexts/AdsContext';
+import { ContactInteractionProvider } from './contexts/ContactInteractionContext';
 
 export default function App() {
   return (
@@ -70,8 +71,9 @@ export default function App() {
       <ThemeProvider>
       <Router>
         <AuthProvider>
-          <OrdersProvider>
-            <TrustProvider>
+          <ContactInteractionProvider>
+            <OrdersProvider>
+              <TrustProvider>
               <Routes>
             <Route path="/login" element={<Suspense fallback={null}><LoginPage /></Suspense>} />
             <Route path="/products/:id" element={<Suspense fallback={null}><ProductDetailPage /></Suspense>} />
@@ -132,8 +134,9 @@ export default function App() {
             
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
-            </TrustProvider>
-          </OrdersProvider>
+              </TrustProvider>
+            </OrdersProvider>
+          </ContactInteractionProvider>
       </AuthProvider>
     </Router>
     </ThemeProvider>

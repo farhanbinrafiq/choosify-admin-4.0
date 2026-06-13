@@ -4,6 +4,7 @@ import {
   Laptop, Tablet as TabletIcon, Smartphone, RotateCw, ExternalLink, ShieldCheck, Heart, Star, MapPin, Mail, Phone, Clock, Play, Copy, AlertCircle, ShoppingBag, EyeOff, LayoutGrid, Check, CopyCheck
 } from "lucide-react";
 import { BrandCMSModel, CreatorVideoItem, BrandProductItem, BrandDealItem } from "./brandSeeds";
+import { useContact } from "../../contexts/ContactInteractionContext";
 
 interface RightPreviewPanelProps {
   model: BrandCMSModel;
@@ -24,6 +25,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
 }) => {
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [loved, setLoved] = useState(false);
+  const { triggerPhone } = useContact();
 
   // Copy code simulation tool
   const triggerCopyPromo = (id: string, code: string) => {
@@ -480,7 +482,11 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                         <Mail className="w-3.5 h-3.5 text-[#F97316] shrink-0" />
                         <span className="font-mono">{model.contactEmail}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div 
+                        onClick={() => triggerPhone({ id: model.brandName || 'brand', name: model.brandName || 'Brand Support', avatarUrl: model.logoUrl || '', phone: model.phone, role: 'Brand Support' })}
+                        className="flex items-center gap-2 cursor-pointer hover:text-[#F97316] transition-colors"
+                        title="Click to copy & call"
+                      >
                         <Phone className="w-3.5 h-3.5 text-[#F97316] shrink-0" />
                         <span>{model.phone}</span>
                       </div>

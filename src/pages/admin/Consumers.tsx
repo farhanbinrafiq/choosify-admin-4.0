@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useContact } from '../../contexts/ContactInteractionContext';
 import { 
   Search, 
   Filter, 
@@ -84,6 +85,7 @@ export default function ConsumersPage() {
         : 'Consumer';
 
   const [usersList, setUsersList] = useState<MockUser[]>(mockUsers);
+  const { triggerMessage } = useContact();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -439,7 +441,10 @@ export default function ConsumersPage() {
                                    <span>View Dashboard Card</span>
                                 </Link>
                                 <button 
-                                  onClick={() => showToast(`Direct messaging secure tunnel for ${u.name} established`)}
+                                  onClick={() => {
+                                    setActiveMenu(null);
+                                    triggerMessage({ id: u.id, name: u.name, avatarUrl: u.avatar, phone: u.phone || '+8801700000000', status: u.status, role: u.role });
+                                  }}
                                   className="w-full flex items-center gap-2 px-4 py-2 text-[11.5px] font-medium text-app-text-primary hover:bg-app-accent/10 hover:text-app-accent-light transition-colors text-left"
                                 >
                                    <MessageCircle className="w-3.5 h-3.5 text-app-accent" /> 

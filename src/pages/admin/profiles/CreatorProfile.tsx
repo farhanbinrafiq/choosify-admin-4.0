@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useContact } from '../../../contexts/ContactInteractionContext';
 import { 
   ArrowLeft,
   Mail,
@@ -73,6 +74,7 @@ interface CreatorProfileData {
 
 export default function CreatorProfile() {
   const { id } = useParams();
+  const { triggerPhone, triggerMessage } = useContact();
   const [activeTab, setActiveTab] = useState<'All' | 'Live' | 'Reviewing' | 'Draft'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
@@ -358,14 +360,14 @@ export default function CreatorProfile() {
                 {/* Styled action triggers */}
                 <div className="flex gap-1.5">
                   <button 
-                    onClick={() => showToast(`Dialed Phone Trigger: ${profile.phone}`, 'info')}
+                    onClick={() => triggerPhone({ id: profile.id, name: profile.name, avatarUrl: profile.avatarUrl, phone: profile.phone, status: profile.status, role: 'Creator' })}
                     className="p-2 rounded-[4px] border border-app-border text-app-accent hover:border-app-accent hover:bg-app-accent/5 transition-all bg-app-card cursor-pointer"
                     title="Call Creator"
                   >
                     <Phone className="w-3.5 h-3.5" />
                   </button>
                   <button 
-                    onClick={() => showToast(`Initiated Creator Collaboration Workspace`, 'info')}
+                    onClick={() => triggerMessage({ id: profile.id, name: profile.name, avatarUrl: profile.avatarUrl, phone: profile.phone, status: profile.status, role: 'Creator' })}
                     className="p-2 rounded-[4px] bg-app-accent text-white hover:bg-app-accent-light transition-all shadow-sm cursor-pointer"
                     title="Message Creator"
                   >
