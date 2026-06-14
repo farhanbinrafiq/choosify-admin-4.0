@@ -44,10 +44,20 @@ export default function OrdersPage() {
   const [inputText, setInputText] = useState('');
   const [inputTextSecondary, setInputTextSecondary] = useState('');
 
-  // Seller orders filter (only show orders for this seller if logged in as seller)
-  // Let's check: profile?.id is "seller_001" which corresponds to sellerId in products.
+  const { activeBrandId, allBrands } = useAuth();
+
+  // Seller orders filter (only show orders for the active brand if logged in as seller)
+  const activeBrand = allBrands.find(b => b.id === activeBrandId);
   const sellerId = profile?.role === 'seller' ? profile.id : 'seller_001'; 
-  const sellerOrders = orders.filter(o => o.product.sellerId === sellerId);
+  const sellerOrders = orders.filter(o => {
+    if (profile?.role === 'seller') {
+      if (!activeBrand) return false;
+      const brandNameLower = o.product.brand.toLowerCase();
+      const activeBrandNameLower = activeBrand.name.toLowerCase();
+      return brandNameLower === activeBrandNameLower || brandNameLower.includes(activeBrandNameLower) || activeBrandNameLower.includes(brandNameLower);
+    }
+    return o.product.sellerId === sellerId;
+  });
 
   // Search & Tab filtering
   const filteredOrders = sellerOrders.filter(o => {

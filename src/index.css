@@ -1,8 +1,38 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
+/* --- NEUE HAAS GROTESK DISPLAY PRO --- */
+@font-face {
+  font-family: 'Neue Haas Grotesk Display Pro';
+  src: url('https://db.onlinewebfonts.com/t/ec5cb2ff4ff39009dfbf76d49cb0a430.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Neue Haas Grotesk Display Pro';
+  src: url('https://db.onlinewebfonts.com/t/9d20b606f71d530f252656360c78f1bb.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Neue Haas Grotesk Display Pro';
+  src: url('https://db.onlinewebfonts.com/t/393bddd9ca160fd2c4e3a479ff735777.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* --- GLOBAL UNIFIED FONT SYSTEM INHERITANCE RESETS --- */
+* {
+  font-family: inherit;
+}
+
 :root {
-  /* GLOBAL COLOR TOKENS */
+  /* GLOBAL COLOR TOKENS - LIGHT MODE */
   --color-page-bg:         #F5F5F5;   /* Page/body background — light grey */
   --color-surface:         #FFFFFF;   /* All cards, panels, modals, sidebars */
   --color-surface-dark:    #1A1A2E;   /* Dark navy — hero cards, verdict blocks, featured panels */
@@ -44,32 +74,32 @@
 }
 
 .dark {
-  /* Unify Dark Mode to match our clean, high-contrast light theme */
-  --color-page-bg:         #F5F5F5;
-  --color-surface:         #FFFFFF;
-  --color-surface-dark:    #1A1A2E;
-  --color-border:          #E5E7EB;
-  --color-border-dark:     #2D2D4E;
+  /* GLOBAL COLOR TOKENS - ACCESSIBLE DARK MODE */
+  --color-page-bg:         #090D16;   /* Accessible Deep space dark background */
+  --color-surface:         #111A2E;   /* Accessible Premium dark navy cards/modals/panels */
+  --color-surface-dark:    #070A14;   /* Deeper background panels */
+  --color-border:          #1E293B;   /* Slate/dark-blue border */
+  --color-border-dark:     #2D3748;   /* Secure interior dark border */
 
   --color-accent-primary:  #F97316;
   --color-accent-hover:    #EA6C0A;
-  --color-accent-light:    #FFF4ED;
+  --color-accent-light:    #2C1A11;   /* Elegant dark orange tint background */
 
-  --color-navy:            #1A1A2E;
-  --color-navy-mid:        #2D2D4E;
-  --color-navy-light:      #F0F1F8;
+  --color-navy:            #0B1528;
+  --color-navy-mid:        #1E293B;
+  --color-navy-light:      #1E293B;
 
-  --color-text-primary:    #111827;
-  --color-text-secondary:  #6B7280;
-  --color-text-muted:      #9CA3AF;
-  --color-text-inverse:    #FFFFFF;
+  --color-text-primary:    #F9FAFB;   /* Primary Text - Dark Mode */
+  --color-text-secondary:  #9CA3AF;   /* Secondary Text - Dark Mode */
+  --color-text-muted:      #6B7280;   /* Muted Text - Dark Mode */
+  --color-text-inverse:    #111827;   /* Text on bright orange/white surfaces */
   --color-text-orange:     #F97316;
 
   --color-success:         #22C55E;
-  --color-success-light:   #F0FDF4;
+  --color-success-light:   #062E14;   /* Low-contrast dark green tint background */
   --color-warning:         #F59E0B;
   --color-danger:          #EF4444;
-  --color-danger-light:    #FEF2F2;
+  --color-danger-light:    #3B1414;   /* Low-contrast dark red tint background */
 
   --color-app-bg: var(--color-page-bg);
   --color-app-card: var(--color-surface);
@@ -85,7 +115,7 @@
 }
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Neue Haas Grotesk Display Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   /* Theme Colors Map to CSS Variables */
@@ -123,6 +153,12 @@
 @layer base {
   body {
     @apply bg-app-bg text-app-text-primary min-h-screen transition-colors duration-300;
+    font-family: var(--font-sans);
+  }
+
+  /* Restores mono font weights properly to keep dashboard elements readable */
+  .font-mono, .font-mono *, code, pre, kbd, samp {
+    font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
   }
 
   /* Unify Body across all themes */
@@ -135,18 +171,18 @@
 /* --- Global Contrast & Light/Dark Mode Controls --- */
 
 /* 1. Prevent invisible text inside light theme due to hardcoded white utilities */
-html:not(.dark) .text-white,
-html:not(.dark) .text-slate-50,
-html:not(.dark) .text-slate-100,
-html:not(.dark) .text-slate-200,
-html:not(.dark) .text-slate-300,
-html:not(.dark) .text-gray-50,
-html:not(.dark) .text-gray-100,
-html:not(.dark) .text-gray-200,
-html:not(.dark) .text-white\/70,
-html:not(.dark) .text-white\/80,
-html:not(.dark) .text-white\/50,
-html:not(.dark) .text-white\/90 {
+html:not(.dark) .text-white:not(button, button *, .btn, .btn *, .bg-app-accent, .bg-app-accent *, .bg-emerald-500 *, .bg-emerald-600 *, .bg-green-500 *, .bg-green-600 *, .bg-red-500 *, .bg-red-600 *, .bg-orange-500 *, .bg-slate-900 *, .bg-gray-900 *, .bg-zinc-900 *, .bg-slate-800 *, .active-sidebar-item *, .active-tab-item *, aside, aside *),
+html:not(.dark) .text-slate-50:not(button, button *, .btn, .btn *, .bg-app-accent, .bg-app-accent *, .bg-[#1A1A2E] *, aside *, .bg-slate-950 *),
+html:not(.dark) .text-slate-100:not(button, button *, .btn, .btn *, .bg-app-accent, .bg-app-accent *, .bg-[#1A1A2E] *, aside *, .bg-slate-950 *),
+html:not(.dark) .text-slate-200:not(button, button *, .btn, .btn *, .bg-app-accent, .bg-app-accent *, .bg-[#1A1A2E] *, aside *, .bg-slate-950 *),
+html:not(.dark) .text-slate-300:not(button, button *, .btn, .btn *, .bg-app-accent, .bg-app-accent *, .bg-[#1A1A2E] *, aside *, .bg-slate-950 *),
+html:not(.dark) .text-gray-50:not(button, button *, .btn, .btn *, .bg-app-accent, .bg-app-accent *, .bg-[#1A1A2E] *, aside *, .bg-slate-950 *),
+html:not(.dark) .text-gray-100:not(button, button *, .btn, .btn *, .bg-app-accent, .bg-app-accent *, .bg-[#1A1A2E] *, aside *, .bg-slate-950 *),
+html:not(.dark) .text-gray-200:not(button, button *, .btn, .btn *, .bg-app-accent, .bg-app-accent *, .bg-[#1A1A2E] *, aside *, .bg-slate-950 *),
+html:not(.dark) .text-white\/70:not(button, button *, .btn, .btn *, .bg-app-accent, .bg-app-accent *, .bg-[#1A1A2E] *, aside *, .bg-slate-950 *),
+html:not(.dark) .text-white\/80:not(button, button *, .btn, .btn *, .bg-app-accent, .bg-app-accent *, .bg-[#1A1A2E] *, aside *, .bg-slate-950 *),
+html:not(.dark) .text-white\/50:not(button, button *, .btn, .btn *, .bg-app-accent, .bg-app-accent *, .bg-[#1A1A2E] *, aside *, .bg-slate-950 *),
+html:not(.dark) .text-white\/90:not(button, button *, .btn, .btn *, .bg-app-accent, .bg-app-accent *, .bg-[#1A1A2E] *, aside *, .bg-slate-950 *) {
   color: var(--color-text-primary); /* Charcoal primary text */
 }
 
@@ -628,5 +664,53 @@ html.dark .active-filter-item *,
 html.dark .active-pill-item * {
   color: var(--color-accent-primary) !important;
 }
+
+/* --- 8. GLOBAL INTELLECTUAL AUTOMATED CONTRAST ADJUSTER FOR DARK MODE --- */
+.dark .text-slate-900:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-gray-900:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-zinc-900:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-black:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *) {
+  color: var(--color-text-primary) !important;
+}
+
+.dark .text-slate-800:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-gray-800:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-zinc-800:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *) {
+  color: var(--color-text-secondary) !important;
+}
+
+.dark .text-slate-700:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-gray-700:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-zinc-700:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-slate-600:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-gray-600:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-zinc-600:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *) {
+  color: var(--color-text-secondary) !important;
+}
+
+.dark .text-slate-500:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-gray-500:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-zinc-500:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-slate-400:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-gray-400:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *),
+.dark .text-zinc-400:not(button, button *, .btn, .btn *, .bg-white, .bg-white *, .bg-app-accent, .bg-app-accent *, [class*="bg-orange-500"] *, .active-sidebar-item *, .active-tab-item *) {
+  color: var(--color-text-muted) !important;
+}
+
+/* Ensure cards and panels properly respect dark mode */
+.dark .bg-white:not(button, .btn, .bg-app-accent),
+.dark [class*="bg-slate-50"]:not(button, .btn, .bg-app-accent),
+.dark [class*="bg-gray-50"]:not(button, .btn, .bg-app-accent),
+.dark [class*="bg-zinc-50"]:not(button, .btn, .bg-app-accent) {
+  background-color: var(--color-surface) !important;
+  color: var(--color-text-primary) !important;
+}
+
+.dark [class*="border-slate-"],
+.dark [class*="border-gray-"],
+.dark [class*="border-zinc-"] {
+  border-color: var(--color-border) !important;
+}
+
 
 

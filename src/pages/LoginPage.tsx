@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Bolt, LayoutDashboard, Building2, Award, Users, ChevronRight, Lock, Mail } from 'lucide-react';
+import { Bolt, LayoutDashboard, Building2, Award, Users, ChevronRight, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
 
@@ -19,6 +19,7 @@ export default function LoginPage() {
 
   const roles: { role: UserRole; label: string; icon: any; color: string; desc: string }[] = [
     { role: 'super_admin', label: 'Super Admin', icon: LayoutDashboard, color: 'from-purple-500 to-indigo-600', desc: 'Platform control & monitoring' },
+    { role: 'admin', label: 'Admin', icon: ShieldCheck, color: 'from-teal-500 to-emerald-600', desc: 'Platform operations' },
     { role: 'seller', label: 'Seller', icon: Building2, color: 'from-orange-500 to-red-600', desc: 'Manage products & orders' },
     { role: 'creator', label: 'Creator', icon: Award, color: 'from-blue-500 to-cyan-600', desc: 'Campaigns & engagement' },
   ];

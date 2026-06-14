@@ -20,20 +20,41 @@ import {
 import { Link, useLocation } from 'react-router-dom';
 import AddProductModal from '../../components/admin/AddProductModal';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAuth } from '../../contexts/AuthContext';
 
 const mockProducts = [
-  { id: '1', name: 'Samsung S25 Ultra', brand: 'Samsung BD', category: 'Mobile', seller: 'TechZone BD', price: '৳ 139,999', status: 'Pending', views: 842, icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' },
+  { id: '1', name: 'Samsung S25 Ultra', brand: 'Samsung Bangladesh', category: 'Mobile', seller: 'TechZone BD', price: '৳ 139,999', status: 'Pending', views: 842, icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' },
   { id: '2', name: 'Vision Smart TV 55"', brand: 'Vision', category: 'Electronics', seller: 'Meena Bazar', price: '৳ 68,500', status: 'Live', views: 12840, icon: Tv, color: 'text-indigo-500 bg-indigo-500/10' },
   { id: '3', name: 'Aarong Jamdani Saree', brand: 'Aarong', category: 'Fashion', seller: 'Aarong Digital', price: '৳ 4,200', status: 'Flagged', views: 3210, icon: Shirt, color: 'text-purple-500 bg-purple-500/10' },
   { id: '4', name: 'Walton 2-Door Fridge', brand: 'Walton', category: 'Home', seller: 'ElectroBD', price: '৳ 29,990', status: 'Live', views: 8912, icon: Box, color: 'text-green-500 bg-green-500/10' },
+  { id: 'apex-1', name: 'Apex Men Royal Loafer', brand: 'Apex', category: 'Footwear & Apparel', seller: 'Rahim Uddin', price: '৳ 4,500', status: 'Live', views: 2450, icon: Shirt, color: 'text-orange-500 bg-orange-500/10' },
+  { id: 'apex-2', name: 'Apex Leather Formal Dress Shoes', brand: 'Apex', category: 'Footwear & Apparel', seller: 'Rahim Uddin', price: '৳ 6,200', status: 'Live', views: 1820, icon: Shirt, color: 'text-orange-500 bg-orange-500/10' },
+  { id: 'urbanfit-1', name: 'Urban Fit Elite Compression Tee', brand: 'Urban Fit', category: 'Active Wear', seller: 'Rahim Uddin', price: '৳ 1,800', status: 'Live', views: 980, icon: Shirt, color: 'text-emerald-500 bg-emerald-500/10' },
+  { id: 'urbanfit-2', name: 'Urban Fit Comfort Joggers', brand: 'Urban Fit', category: 'Active Wear', seller: 'Rahim Uddin', price: '৳ 2,400', status: 'Live', views: 1205, icon: Shirt, color: 'text-emerald-500 bg-emerald-500/10' },
+  { id: 'techcore-1', name: 'TechCore Wireless Charging Pad', brand: 'TechCore', category: 'Consumer Tech', seller: 'Rahim Uddin', price: '৳ 1,200', status: 'Live', views: 3410, icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' },
+  { id: 'techcore-2', name: 'TechCore Bluetooth Smart Watch V2', brand: 'TechCore', category: 'Consumer Tech', seller: 'Rahim Uddin', price: '৳ 3,800', status: 'Live', views: 5690, icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' },
 ];
 
 export default function ProductsPage() {
+  const { profile, activeBrandId, allBrands, sellerBrands } = useAuth();
   const location = useLocation();
   const isContentStudio = location.pathname.includes("content-studio");
   const [isModalOpen, setIsModalOpen] = useState(location.state?.openAddModal || false);
   const [products, setProducts] = useState(mockProducts);
   const [toast, setToast] = useState<string | null>(null);
+
+  // Filter products based on user role and active seller brand context
+  const activeBrand = allBrands.find(b => b.id === activeBrandId);
+  const sellerRelations = sellerBrands.filter(r => r.seller_user_id === profile?.id);
+  const ownedBrandIds = sellerRelations.map(r => r.brand_id);
+
+  const displayedProducts = products.filter(p => {
+    if (profile?.role === 'seller') {
+      if (!activeBrand) return false;
+      return p.brand && p.brand.toLowerCase() === activeBrand.name.toLowerCase();
+    }
+    return true;
+  });
 
   const handleAddProduct = (data: any) => {
     const newProduct = {
@@ -229,7 +250,7 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {products.map((p) => {
+            {displayedProducts.map((p) => {
               const Icon = p.icon;
               return (
                 <tr key={p.id} className="group hover:bg-white/[0.02] transition-colors">

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -31,7 +31,12 @@ import {
   RefreshCw,
   Sun,
   Moon,
-  Megaphone
+  Megaphone,
+  UserCheck,
+  Lock,
+  FolderLock,
+  Activity,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
@@ -49,191 +54,108 @@ interface SidebarItem {
 
 const roleMenus: Record<UserRole, SidebarItem[]> = {
   super_admin: [
-    { label: 'Main', type: 'label' },
-    { label: 'Overview', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Orders Overview', icon: ListOrdered, path: '/admin/orders-overview' },
-    { 
-      label: 'Users', 
-      icon: Users, 
-      path: '/admin/consumers',
-      subItems: [
-        { label: 'Consumers (Buyers)', path: '/admin/consumers' },
-        { label: 'Creators', path: '/admin/creators' },
-        { label: 'Sellers', path: '/admin/sellers' },
-        { label: 'Admins', path: '/admin/admins' }
-      ]
-    },
-    { 
-      label: 'Retail Sellers', 
-      icon: Building2, 
-      path: '/admin/sellers',
-      subItems: [
-        { label: 'All Retail Sellers', path: '/admin/sellers' },
-        { label: 'Seller Requests', path: '/admin/sellers?tab=requests' },
-        { label: 'Active Sellers', path: '/admin/sellers?tab=active' },
-        { label: 'Seller Performance', path: '/admin/sellers?tab=performance' },
-        { label: 'Retail Products', path: '/admin/sellers?tab=products' },
-        { label: 'Retail Deals', path: '/admin/sellers?tab=deals' },
-        { label: 'Retail Orders', path: '/admin/sellers?tab=orders' },
-        { label: 'Flagged Sellers', path: '/admin/sellers?tab=flagged' },
-        { label: 'Seller Warnings', path: '/admin/sellers?tab=warnings' },
-        { label: 'Suspended Sellers', path: '/admin/sellers?tab=suspended' },
-        { label: 'Blacklisted Sellers', path: '/admin/sellers?tab=banned' }
-      ]
-    },
-    { label: 'Content', type: 'label' },
-    { 
-      label: 'Content Studio', 
-      icon: Globe, 
-      path: '/dashboard/content-studio/products',
-      subItems: [
-        { label: 'Products Studio', path: '/dashboard/content-studio/products' },
-        { label: 'Add Visual Product', path: '/dashboard/content-studio/products/new' },
-        { label: 'Brands Studio', path: '/dashboard/content-studio/brands' },
-        { label: 'Add Visual Brand', path: '/dashboard/content-studio/brands/new' },
-        { label: 'Guides Studio', path: '/dashboard/content-studio/guides' },
-        { label: 'Add Visual Guide', path: '/dashboard/content-studio/guides/new' }
-      ]
-    },
-    { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
+    { label: 'Admin Terminal', type: 'label' },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { label: 'Users', icon: Users, path: '/admin/consumers' },
+    { label: 'Brands', icon: Building2, path: '/admin/brands' },
+    { label: 'Products', icon: Package, path: '/admin/products' },
+    { label: 'Orders', icon: ListOrdered, path: '/admin/orders-overview' },
+    { label: 'Guides Studio', icon: FileText, path: '/dashboard/content-studio/guides' },
+    { label: 'Creators', icon: Award, path: '/admin/creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
-    { label: 'Finance', type: 'label' },
-    { label: 'Affiliate & Payouts', icon: LinkIcon, path: '/admin/payouts' },
-    { label: 'System Ad Operations', type: 'label' },
-    { 
-      label: 'Sponsored Promotions', 
-      icon: Megaphone, 
-      path: '/admin/promotions',
-      subItems: [
-        { label: 'Sponsored Brands', path: '/admin/promotions?tab=brands' },
-        { label: 'Featured Products', path: '/admin/promotions?tab=products' },
-        { label: 'Homepage Campaigns', path: '/admin/promotions?tab=homepage' },
-        { label: 'Promotion Requests', path: '/admin/promotions?tab=requests' },
-        { label: 'Campaign Approvals', path: '/admin/promotions?tab=approvals' },
-        { label: 'Active Campaigns', path: '/admin/promotions?tab=active' },
-        { label: 'Expired Campaigns', path: '/admin/promotions?tab=expired' },
-        { label: 'Sponsorship Revenue', path: '/admin/promotions?tab=revenue' }
-      ]
-    },
-    { label: 'CMS', icon: Globe, path: '/admin/cms' },
+    { label: 'Disputes', icon: AlertTriangle, path: '/admin/moderation?tab=disputes' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 12 },
-    { 
-      label: 'Analytics', 
-      icon: BarChart3, 
-      path: '/admin/analytics',
-      subItems: [
-        { label: 'Platform Overview', path: '/admin/analytics' },
-        { label: 'Retail Analytics', path: '/admin/analytics?tab=retail' },
-        { label: 'Wholesale Analytics', path: '/admin/analytics?tab=wholesale' },
-        { label: 'Buyer Analytics', path: '/admin/analytics?tab=buyer' },
-        { label: 'Seller Analytics', path: '/admin/analytics?tab=seller' },
-        { label: 'Product Analytics', path: '/admin/analytics?tab=product' },
-        { label: 'Revenue Analytics', path: '/admin/analytics?tab=revenue' },
-        { label: 'Ad Analytics', path: '/admin/analytics?tab=ad' },
-        { label: 'Search Trends', path: '/admin/analytics?tab=search' },
-        { label: 'Conversion Metrics', path: '/admin/analytics?tab=conversion' },
-        { label: 'Fraud Monitoring', path: '/admin/analytics?tab=fraud' }
-      ]
-    },
-    { label: 'Notifications', icon: Bell, path: '/admin/notifications', badge: 3 },
-    { label: 'Trust & Safety Core', type: 'label' },
     { label: 'Trust Center', icon: ShieldCheck, path: '/admin/trust-center' },
-    { label: 'Brand Compliance', icon: Award, path: '/admin/brand-verification' },
-    { label: 'Creator Economy', icon: Zap, path: '/admin/creator-hub' },
-    { label: 'Moderation Intel V2', icon: ShieldCheck, path: '/admin/moderation-v2' },
-    { 
-      label: 'Moderation Center', 
-      icon: ShieldCheck, 
-      path: '/admin/moderation',
-      badge: 127,
-      subItems: [
-        { label: 'Product Moderation', path: '/admin/moderation?tab=products' },
-        { label: 'Seller Moderation', path: '/admin/moderation?tab=verification' },
-        { label: 'Buyer Reports', path: '/admin/moderation?tab=reports' },
-        { label: 'Dispute Queue', path: '/admin/moderation?tab=disputes' },
-        { label: 'Escalation Queue', path: '/admin/moderation?tab=escalation' },
-        { label: 'Warning Center', path: '/admin/moderation?tab=warnings' },
-        { label: 'Blacklist Center', path: '/admin/moderation?tab=blacklist' }
-      ]
-    },
+    { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+    { label: 'Settings', icon: Settings, path: '/admin/settings' },
+    
+    { label: 'Super Admin Core', type: 'label' },
+    { label: 'Admin Management', icon: UserCheck, path: '/admin/admins' },
+    { label: 'Role Management', icon: Lock, path: '/admin/settings?tab=roles' },
+    { label: 'Permissions', icon: ShieldCheck, path: '/admin/settings?tab=permissions' },
+    { label: 'System Configuration', icon: Bolt, path: '/admin/cms' },
+    { label: 'Verification Center', icon: Award, path: '/admin/brand-verification' },
+    { label: 'Trust Engine', icon: Zap, path: '/admin/moderation-v2' },
+    { label: 'Subscription Plans', icon: Tag, path: '/admin/promotions?tab=plans' },
+    { label: 'Monetization Center', icon: Wallet, path: '/admin/payouts' },
+    { label: 'Audit Logs', icon: History, path: '/admin/moderation?tab=reports' },
+    { label: 'Security Center', icon: FolderLock, path: '/admin/settings?tab=security' },
+    { label: 'Feature Flags', icon: Activity, path: '/admin/settings?tab=features' },
+  ],
+  admin: [
+    { label: 'Admin Workspace', type: 'label' },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { label: 'Users', icon: Users, path: '/admin/consumers' },
+    { label: 'Brands', icon: Building2, path: '/admin/brands' },
+    { label: 'Products', icon: Package, path: '/admin/products' },
+    { label: 'Orders', icon: ListOrdered, path: '/admin/orders-overview' },
+    { label: 'Guides', icon: FileText, path: '/dashboard/content-studio/guides' },
+    { label: 'Creators', icon: Award, path: '/admin/creators' },
+    { label: 'Reviews', icon: Star, path: '/admin/reviews' },
+    { label: 'Disputes', icon: AlertTriangle, path: '/admin/moderation?tab=disputes' },
+    { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
+    { label: 'Trust Center', icon: ShieldCheck, path: '/admin/trust-center' },
+    { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
   ],
   seller: [
-    { label: 'Marketplace', type: 'label' },
-    { label: 'Store Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { 
-      label: 'Content Studio', 
-      icon: Globe, 
-      path: '/dashboard/content-studio/products',
-      subItems: [
-        { label: 'Products Studio', path: '/dashboard/content-studio/products' },
-        { label: 'Add Visual Product', path: '/dashboard/content-studio/products/new' },
-        { label: 'Brands Studio', path: '/dashboard/content-studio/brands' },
-        { label: 'Add Visual Brand', path: '/dashboard/content-studio/brands/new' },
-        { label: 'Guides Studio', path: '/dashboard/content-studio/guides' },
-        { label: 'Add Visual Guide', path: '/dashboard/content-studio/guides/new' }
-      ]
-    },
-    { label: 'My Products', icon: Package, path: '/admin/products' },
-    { label: 'Add Product', icon: PlusCircle, path: '/admin/products/new' },
+    { label: 'Seller Operations', type: 'label' },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Orders', icon: ListOrdered, path: '/admin/orders', badge: 4 },
-    { label: 'Customers', icon: Users, path: '/admin/customers' },
-    { label: 'Settings', type: 'label' },
-    { label: 'Earnings', icon: Wallet, path: '/admin/payouts' },
-    { label: 'Storefront', icon: Globe, path: '/admin/storefront' },
-    { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+    { label: 'Products', icon: Package, path: '/admin/products' },
+    { label: 'Brand Studio', icon: Globe, path: '/dashboard/content-studio/brands' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 2 },
+    { label: 'Reviews', icon: Star, path: '/admin/reviews' },
+    { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+    { label: 'Settings', icon: Settings, path: '/admin/settings' },
   ],
   creator: [
-    { label: 'Creative Hub', type: 'label' },
-    { label: 'Creator Home', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'My Content', icon: FileText, path: '/admin/content' },
-    { label: 'Collaborations', icon: ShieldCheck, path: '/admin/collabs', badge: 1 },
-    { label: 'Performance', type: 'label' },
-    { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
-    { label: 'Payouts', icon: Wallet, path: '/admin/payouts' },
+    { label: 'Creator Hub', type: 'label' },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { label: 'Creator Profile', icon: Users, path: '/admin/creators/creator_001' },
+    { label: 'Guides Studio', icon: FileText, path: '/dashboard/content-studio/guides' },
+    { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
+    { label: 'Collaborations', icon: ShieldCheck, path: '/admin/creator-hub', badge: 1 },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
+    { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+    { label: 'Settings', icon: Settings, path: '/admin/settings' },
   ],
   moderator: [
-    { label: 'Admin Moderation', type: 'label' },
-    { label: 'Overview', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Moderation Queue', icon: ShieldCheck, path: '/admin/moderation', badge: 127 },
-    { label: 'Retail Sellers', icon: Building2, path: '/admin/sellers' },
+    { label: 'Moderation Workspace', type: 'label' },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { label: 'Moderation Center', icon: ShieldCheck, path: '/admin/moderation' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
-    { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 12 },
+    { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
   ],
   finance_manager: [
-    { label: 'Corporate Finance', type: 'label' },
-    { label: 'Overview', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Orders Overview', icon: ListOrdered, path: '/admin/orders-overview' },
-    { label: 'Affiliate & Payouts', icon: Wallet, path: '/admin/payouts' },
+    { label: 'Finance Operations', type: 'label' },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { label: 'Payouts', icon: Wallet, path: '/admin/payouts' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
   ],
   support_agent: [
-    { label: 'Platform Support', type: 'label' },
-    { label: 'Overview', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Support Messages', icon: MessageCircle, path: '/admin/messages', badge: 12 },
-    { label: 'Notifications', icon: Bell, path: '/admin/notifications', badge: 3 },
-    { label: 'Reviews Feed', icon: Star, path: '/admin/reviews' },
+    { label: 'Support Operations', type: 'label' },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
+    { label: 'Reviews', icon: Star, path: '/admin/reviews' },
   ],
   marketing_manager: [
-    { label: 'Promotional Hub', type: 'label' },
-    { label: 'Overview', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Ads & Sponsors', icon: Megaphone, path: '/admin/ads-sponsors' },
-    { label: 'Deals & Coupons', icon: Tag, path: '/admin/sellers?tab=deals' },
+    { label: 'Marketing Workspace', type: 'label' },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { label: 'Promotions', icon: Megaphone, path: '/admin/promotions' },
     { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
-    { label: 'CMS Manager', icon: Globe, path: '/admin/cms' },
   ]
 };
 
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { profile, logout, switchRole } = useAuth();
+  const { profile, logout, switchRole, activeBrandId, setActiveBrandId, sellerBrands, allBrands, requestNewBrand } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const { cmsData } = useCMS();
   const location = useLocation();
   const navigate = useNavigate();
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
+  const [isBrandsExpanded, setIsBrandsExpanded] = useState(true);
 
   const toggleMenu = (label: string) => {
     setExpandedMenus(prev => ({
@@ -250,11 +172,57 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const currentRole = profile?.role || 'super_admin';
   const sidebarItems = roleMenus[currentRole as UserRole] || [];
 
+  const sellerRelations = sellerBrands.filter(r => r.seller_user_id === profile?.id);
+  const sellerBrandsList = allBrands.filter(b => sellerRelations.some(r => r.brand_id === b.id));
+
   const handleSwitchRole = (role: UserRole) => {
     switchRole(role);
     setShowRoleSwitcher(false);
     navigate('/admin/dashboard');
   };
+
+  useEffect(() => {
+    if (!profile) return;
+    
+    const path = location.pathname;
+    
+    // Check permission rules for Seller
+    if (profile.role === 'seller') {
+      const allowedSellers = [
+        '/admin/dashboard',
+        '/admin/orders',
+        '/admin/products',
+        '/dashboard/content-studio/brands',
+        '/admin/messages',
+        '/admin/reviews',
+        '/admin/analytics',
+        '/admin/settings',
+        '/admin/customers'
+      ];
+      
+      const isAllowed = allowedSellers.some(p => path === p || path.startsWith(p + '/'));
+      if (!isAllowed) {
+        navigate('/admin/dashboard', { replace: true });
+      }
+    } 
+    // Check permission rules for Creator
+    else if (profile.role === 'creator') {
+      const allowedCreators = [
+        '/admin/dashboard',
+        '/admin/creators/creator_001',
+        '/dashboard/content-studio/guides',
+        '/admin/recommendations',
+        '/admin/creator-hub',
+        '/admin/messages',
+        '/admin/analytics',
+        '/admin/settings'
+      ];
+      const isAllowed = allowedCreators.some(p => path === p || path.startsWith(p + '/'));
+      if (!isAllowed) {
+        navigate('/admin/dashboard', { replace: true });
+      }
+    }
+  }, [profile, location.pathname, navigate]);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-app-bg text-app-text-primary font-sans relative">
@@ -280,6 +248,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                 <div className="space-y-1">
                    {[
                      'super_admin', 
+                     'admin',
                      'moderator',
                      'finance_manager',
                      'support_agent',
@@ -327,6 +296,59 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             </>
           )}
         </div>
+
+        {/* Brand Switcher Context */}
+        {currentRole === 'seller' && (
+          <div className="px-4 mb-3">
+            <button 
+              onClick={() => setIsBrandsExpanded(!isBrandsExpanded)}
+              className="w-full text-left flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors duration-200"
+            >
+              <span>Brands</span>
+              <span className={`text-[9px] transition-transform duration-300 ${isBrandsExpanded ? 'rotate-180' : ''}`}>▼</span>
+            </button>
+            
+            <AnimatePresence>
+              {isBrandsExpanded && (
+                <motion.div 
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden mt-1.5"
+                >
+                  <div className="bg-[#1e1e30] border border-app-border rounded-xl p-2 space-y-1">
+                    {sellerBrandsList.map(b => (
+                      <button
+                        key={b.id}
+                        onClick={() => setActiveBrandId(b.id)}
+                        className={`w-full flex items-center justify-between text-left px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${
+                          activeBrandId === b.id 
+                            ? 'bg-app-accent text-white shadow-lg' 
+                            : 'text-slate-400 hover:text-white hover:bg-white/5'
+                        }`}
+                      >
+                        <span className="truncate">{b.name}</span>
+                        {activeBrandId === b.id && <span className="text-[9px]">●</span>}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => {
+                        const name = prompt("Enter new brand name to request:");
+                        if (name && name.trim()) {
+                          const category = prompt("Enter brand category:") || "Retail";
+                          requestNewBrand(name.trim(), category.trim());
+                        }
+                      }}
+                      className="w-full text-left px-2.5 py-1.5 text-app-accent hover:text-app-accent-light text-[10px] font-black transition-all border-t border-white/[0.04] mt-2 block"
+                    >
+                      * Request New Brand
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
 
         <nav className="flex-1 overflow-y-auto px-3 pt-2 pb-6 custom-scrollbar">
           {sidebarItems.map((item, idx) => {
