@@ -250,7 +250,7 @@ export default function AdminProfile() {
           <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-app-text-secondary">
             <Link to="/admin/consumers" className="hover:text-app-accent transition-colors">Dashboard</Link>
             <ChevronRight className="w-3.5 h-3.5 text-app-text-secondary/30" />
-            <Link to="/admin/consumers?tab=admins" className="hover:text-app-accent transition-colors">Users</Link>
+            <Link to="/admin/consumers?tab=admins" className="hover:text-app-accent transition-colors">Consumers</Link>
             <ChevronRight className="w-3.5 h-3.5 text-app-text-secondary/30" />
             <span className="text-app-accent-light">
               {profile.name} (Admin)
@@ -290,7 +290,11 @@ export default function AdminProfile() {
           <div className="bg-app-card border border-app-border rounded-[4px] overflow-hidden shadow-xl">
             
             {/* Top Banner gradient compatible with Choosify colors */}
-            <div className="h-24 bg-gradient-to-r from-red-610/30 via-app-card to-app-gradient-end opacity-90 relative" />
+            <div className="h-24 bg-gradient-to-r from-red-610/30 via-app-card to-app-gradient-end opacity-90 relative overflow-hidden flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center justify-center px-4">
+                <span className="text-xl sm:text-2xl md:text-xl lg:text-xl xl:text-2xl font-black text-white uppercase tracking-[0.25em] select-none text-center max-w-full truncate">ADMIN</span>
+              </div>
+            </div>
 
             {/* Profile Avatar & Details Box */}
             <div className="px-5 pb-5 relative">

@@ -173,9 +173,12 @@ export default function BrandDetails() {
 
                 <div className="space-y-4">
                    <div className="flex flex-col">
-                    <span className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest opacity-50">Ownership Info</span>
-                    <Link to="/admin/sellers/1" className="text-sm font-bold text-app-accent-light mt-1 flex items-center gap-2 group">
-                       <User className="w-4 h-4" /> Global Tech Distrib.
+                    <span className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest opacity-50">Brand Owner</span>
+                    <span className="text-sm font-bold text-white mt-1 flex items-center gap-2">
+                       <User className="w-4 h-4 text-app-accent" /> Meena Bazar Online
+                    </span>
+                    <Link to="/admin/sellers/4" className="text-xs font-bold text-app-accent-light mt-1.5 hover:underline flex items-center gap-1 group">
+                       <span>[Open Seller Profile]</span>
                        <ChevronRight className="w-3 h-3 group-hover:translate-x-1 transition-transform" />
                     </Link>
                   </div>
@@ -385,7 +388,7 @@ export default function BrandDetails() {
                  {mockBrandProducts.map((product) => (
                    <Link 
                      key={product.id} 
-                     to={`/admin/products/${product.id}`}
+                     to={`/dashboard/content-studio/products/${product.id}/edit`}
                      className="flex items-center gap-4 bg-app-sidebar/30 border border-app-border rounded-2xl p-3 group hover:border-app-accent/30 transition-all"
                    >
                      <div className="w-12 h-12 rounded-xl border border-app-border overflow-hidden shrink-0">

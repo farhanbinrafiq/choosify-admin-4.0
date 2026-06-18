@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Search, 
@@ -86,13 +86,42 @@ export default function MessagesPage() {
     declineOrder, 
     dispatchOrder, 
     cancelOrder,
-    updateOrderStatus
+    updateOrderStatus,
+    markThreadAsRead,
+    markAllThreadsAsRead
   } = useOrders();
+
+  const [supportMessages, setSupportMessages] = useState(() => {
+    const saved = localStorage.getItem('choosify_general_messages');
+    return saved ? JSON.parse(saved) : generalMockMessages;
+  });
 
   const [selectedId, setSelectedId] = useState<string>('thread_CSS-9844');
   const [replyText, setReplyText] = useState('');
   const [activeTab, setActiveTab] = useState<'inbox' | 'announcements'>('inbox');
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Save supportMessages to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem('choosify_general_messages', JSON.stringify(supportMessages));
+  }, [supportMessages]);
+
+  // Automatically mark the loaded/selected thread as READ
+  useEffect(() => {
+    if (!selectedId) return;
+    const isOrderRelated = messageThreads.some(t => t.id === selectedId);
+    if (isOrderRelated) {
+      const oThread = messageThreads.find(t => t.id === selectedId);
+      if (oThread && oThread.status === 'UNREAD') {
+        markThreadAsRead(selectedId);
+      }
+    } else {
+      const sThread = supportMessages.find(m => m.id === selectedId);
+      if (sThread && sThread.status === 'UNREAD') {
+        setSupportMessages(prev => prev.map(m => m.id === selectedId ? { ...m, status: 'READ' } : m));
+      }
+    }
+  }, [selectedId, messageThreads, supportMessages]);
 
   // Dispatch modal sub-states inside Inbox
   const [showDispatchForm, setShowDispatchForm] = useState(false);
@@ -112,7 +141,7 @@ export default function MessagesPage() {
     : messageThreads; // admins see all threads
 
   // Combine regular mock messages and Order Threads for Super Admin, or only order threads + general for Seller
-  const combinedThreads = [...filteredOrderThreads, ...generalMockMessages].filter(t => {
+  const combinedThreads = [...filteredOrderThreads, ...supportMessages].filter(t => {
     const textTerm = searchTerm.toLowerCase();
     const nameMatch = t.customer?.name?.toLowerCase().includes(textTerm) || ('sender' in t && String(t.sender).toLowerCase().includes(textTerm));
     const subjectMatch = 'subject' in t ? String(t.subject).toLowerCase().includes(textTerm) : false;
@@ -120,7 +149,7 @@ export default function MessagesPage() {
   });
 
   const selectedThread = filteredOrderThreads.find(t => t.id === selectedId);
-  const selectedGeneral = !selectedThread ? generalMockMessages.find(g => g.id === selectedId) : null;
+  const selectedGeneral = !selectedThread ? supportMessages.find(g => g.id === selectedId) : null;
 
   const currentChatMessages = selectedThread 
     ? selectedThread.messages 
@@ -203,9 +232,23 @@ export default function MessagesPage() {
         <div className="p-5 border-b border-app-border">
           <div className="flex justify-between items-center mb-4">
              <h3 className="text-sm font-black text-white uppercase tracking-widest">{activeTab === 'inbox' ? 'Unified Inbox' : 'Broadcasts'}</h3>
-             <span className="text-[10px] font-bold bg-app-accent text-white px-2.5 py-0.5 rounded-full">
-               {combinedThreads.length} Threads
-             </span>
+             <div className="flex items-center gap-2">
+               {activeTab === 'inbox' && (
+                 <button
+                   onClick={() => {
+                     markAllThreadsAsRead();
+                     setSupportMessages(prev => prev.map(m => ({ ...m, status: 'READ' })));
+                   }}
+                   className="text-[10px] text-app-accent hover:text-orange-400 uppercase tracking-widest font-extrabold cursor-pointer transition-all hover:underline"
+                   title="Mark all as read"
+                 >
+                   Mark All Read
+                 </button>
+               )}
+               <span className="text-[10px] font-bold bg-app-accent text-white px-2.5 py-0.5 rounded-full">
+                 {combinedThreads.length} Threads
+               </span>
+             </div>
           </div>
           <div className="relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-app-accent transition-colors" />

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useContact } from '../../../contexts/ContactInteractionContext';
 import { 
@@ -23,7 +23,8 @@ import {
   Sparkles,
   Link as LinkIcon,
   PlusCircle,
-  ThumbsUp
+  ThumbsUp,
+  FileText
 } from 'lucide-react';
 
 interface ContentItem {
@@ -78,10 +79,102 @@ export default function CreatorProfile() {
   const [activeTab, setActiveTab] = useState<'All' | 'Live' | 'Reviewing' | 'Draft'>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
+  
+  // Unified Role-Based Access controls
+  const [primaryTab, setPrimaryTab] = useState<'Submissions' | 'Guides'>('Submissions');
+  const [guides, setGuides] = useState<any[]>([]);
+  const [selectedGuide, setSelectedGuide] = useState<any | null>(null);
+  const [guideStatusFilter, setGuideStatusFilter] = useState<'All' | 'Live' | 'Draft' | 'Archived'>('All');
 
   const showToast = (message: string, type: 'success' | 'info' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
+  };
+
+  useEffect(() => {
+    const cached = localStorage.getItem("choosify_guides_studio_list");
+    if (cached) {
+      try {
+        setGuides(JSON.parse(cached));
+      } catch (_) {
+        setGuides([]);
+      }
+    } else {
+      const defaults = [
+        {
+          id: "g1",
+          guideTitle: "ULTIMATE FLAGSHIP SMARTPHONE ROUNDUP 2026",
+          slug: "ultimate-flagship-smartphone-2026",
+          category: "Mobile Phones",
+          status: "Live",
+          publishDate: "June 12, 2026",
+          readTime: "8 min read",
+          audienceType: "Power Users & Tech Enthusiasts",
+          authorName: "Rifat Hasan",
+          authorAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
+          verifiedContributor: true,
+          contributorBadgeLevel: "VERIFIED EXPERT",
+          winnerProduct: "Samsung Galaxy S24 Ultra",
+          bestBudgetPick: "Xiaomi Redmi Note 13 Pro+",
+          productsReviewed: 8,
+          lastUpdated: "June 12, 2026"
+        },
+        {
+          id: "g2",
+          guideTitle: "BEST NOISE CANCELLING HEADPHONES CHAMPIONSHIP",
+          slug: "noise-cancelling-headphones-championship",
+          category: "Audio Equipment",
+          status: "Draft",
+          publishDate: "June 15, 2026",
+          readTime: "6 min read",
+          audienceType: "Commuters & Audiophiles",
+          authorName: "Sumaiya Rahman",
+          authorAvatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&q=80",
+          verifiedContributor: true,
+          contributorBadgeLevel: "TOP CONTRIBUTOR",
+          winnerProduct: "Sony WH-1000XM5",
+          bestBudgetPick: "Anker Soundcore Space Q45",
+          productsReviewed: 6,
+          lastUpdated: "June 10, 2026"
+        },
+        {
+          id: "g3",
+          guideTitle: "BEST VALUE LAPTOPS FOR BANGLADESHI CODERS",
+          slug: "valuble-developer-laptops-bd",
+          category: "Laptops & Computing",
+          status: "Live",
+          publishDate: "June 08, 2026",
+          readTime: "11 min read",
+          audienceType: "CS Students & Freelance Developers",
+          authorName: "Tahmid Alvi",
+          authorAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80",
+          verifiedContributor: true,
+          contributorBadgeLevel: "SENIOR EDITOR",
+          winnerProduct: "ASUS Zenbook 14 OLED",
+          bestBudgetPick: "Lenovo IdeaPad Slim 3 Gen 8",
+          productsReviewed: 10,
+          lastUpdated: "June 08, 2026"
+        }
+      ];
+      setGuides(defaults);
+      localStorage.setItem("choosify_guides_studio_list", JSON.stringify(defaults));
+    }
+  }, []);
+
+  const handleSaveModeration = (guideId: string, updatedProps: any) => {
+    const updatedGuides = guides.map(g => {
+      if (g.id === guideId) {
+        return {
+          ...g,
+          ...updatedProps
+        };
+      }
+      return g;
+    });
+    setGuides(updatedGuides);
+    localStorage.setItem("choosify_guides_studio_list", JSON.stringify(updatedGuides));
+    setSelectedGuide(null);
+    showToast("Moderation overrides synced successfully with CMS core registry!", "success");
   };
 
   const profilesData: Record<string, CreatorProfileData> = {
@@ -259,6 +352,553 @@ export default function CreatorProfile() {
 
   const filteredGroups = getFilteredGroups();
 
+  const getCreatorGuidesFiltered = () => {
+    const list = guides.filter(g => g.authorName.toLowerCase() === profile.name.toLowerCase());
+    if (list.length > 0) return list;
+    // Fallback: assign this profile as author of g1 for demo/inspect context if none exists for this name
+    return guides.map((g, idx) => {
+      if (idx === 0) {
+        return {
+          ...g,
+          authorName: profile.name,
+          authorAvatar: profile.avatarUrl,
+        };
+      }
+      return null;
+    }).filter(Boolean);
+  };
+  
+  const creatorGuides = getCreatorGuidesFiltered();
+  
+  const filteredCreatorGuides = creatorGuides.filter(g => {
+    if (!g) return false;
+    let statusMatch = true;
+    if (guideStatusFilter !== 'All') statusMatch = g.status === guideStatusFilter;
+    
+    const s = searchQuery.toLowerCase();
+    const searchMatch = !searchQuery || 
+      g.guideTitle.toLowerCase().includes(s) || 
+      g.category.toLowerCase().includes(s) ||
+      g.winnerProduct.toLowerCase().includes(s);
+      
+    return statusMatch && searchMatch;
+  });
+
+  const renderSubmissions = () => {
+    return (
+      <div className="bg-app-card border border-app-border rounded-[4px] shadow-xl p-5 space-y-5">
+        
+        {/* Table Header and Tabs */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-3">
+          <span className="text-sm font-bold text-white uppercase tracking-wider">
+            Expert Content Recommendations
+          </span>
+
+          {/* Underlying Tab Switchers */}
+          <div className="flex flex-wrap items-center gap-1 font-sans">
+            {(['All', 'Live', 'Reviewing', 'Draft'] as const).map((tab) => {
+              let count = 0;
+              if (tab === 'All') {
+                count = profile.contentGroups.reduce((sum, g) => sum + g.items.length, 0);
+              } else {
+                count = profile.contentGroups.reduce((sum, g) => sum + g.items.filter(i => i.status === tab).length, 0);
+              }
+
+              const isActive = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`relative px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer ${
+                    isActive 
+                      ? 'text-app-accent bg-app-accent/5 rounded-[3px]' 
+                      : 'text-app-text-secondary hover:text-white'
+                  }`}
+                >
+                  <span className="mr-1">
+                    {tab === 'All' ? 'All Content' : tab}
+                  </span>
+                  <span className="opacity-60">({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Custom Table layout matching Choosify look */}
+        {filteredGroups.length > 0 ? (
+          <div className="space-y-4">
+            
+            {/* Headers */}
+            <div className="hidden md:grid grid-cols-12 gap-4 pb-2 text-[10px] text-app-text-secondary font-bold uppercase tracking-widest border-b border-white/10">
+              <div className="col-span-6">Content Detail</div>
+              <div className="col-span-2 text-right">Category</div>
+              <div className="col-span-2 pl-4">Engagement Views</div>
+              <div className="col-span-2 text-right">Verification Status</div>
+            </div>
+
+            {/* Date groups */}
+            <div className="space-y-6">
+              {filteredGroups.map((group, groupIndex) => (
+                <div key={groupIndex} className="space-y-3">
+                  
+                  {/* Date Indicator Line */}
+                  <div className="flex items-center justify-between border-b border-dashed border-white/10 pb-1.5 font-mono text-[10px]">
+                    <span className="text-app-text-secondary font-bold uppercase">
+                      {group.date}
+                    </span>
+                    <span className="text-white font-semibold">
+                      {group.campaignId}
+                    </span>
+                  </div>
+
+                  {/* Items loop */}
+                  <div className="space-y-2.5">
+                    {group.items.map((item) => (
+                      <div 
+                        key={item.id}
+                        className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-[3px] bg-white/5 hover:bg-white/10 transition-all border border-white/10"
+                      >
+                        {/* Content Details */}
+                        <div className="col-span-1 md:col-span-6 flex items-center gap-3">
+                          <img 
+                            src={item.thumbnail} 
+                            alt={item.title}
+                            className="w-12 h-12 rounded-[4px] object-cover bg-white/5 border border-white/10 shrink-0 shadow-sm" 
+                          />
+                          <div className="min-w-0">
+                            <h4 className="text-xs font-bold text-white truncate">{item.title}</h4>
+                            <p className="text-[10px] text-app-text-secondary font-medium truncate">
+                              Published / Submitted Ref {item.id}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Category Column */}
+                        <div className="col-span-1 md:col-span-2 md:text-right">
+                          <span className="text-[9px] md:hidden text-app-text-secondary uppercase font-bold block mb-0.5">Category</span>
+                          <span className="text-xs font-bold text-white">
+                            {item.category}
+                          </span>
+                        </div>
+
+                        {/* Engagement views Column */}
+                        <div className="col-span-1 md:col-span-2 md:pl-4">
+                          <span className="text-[9px] md:hidden text-app-text-secondary uppercase font-bold block mb-0.5">Reach</span>
+                          <span className="text-xs font-medium text-emerald-400 font-mono">
+                            {item.clicks}
+                          </span>
+                        </div>
+
+                        {/* Status badge */}
+                        <div className="col-span-1 md:col-span-2 md:text-right flex md:justify-end">
+                          <span className="text-[9px] md:hidden text-app-text-secondary uppercase font-bold block mr-2 mb-0.5">Status</span>
+                          {item.status === 'Reviewing' && (
+                            <span className="inline-block px-2.5 py-0.5 rounded-[2px] text-[8.5px] font-bold uppercase tracking-wider bg-app-accent/20 text-app-accent border border-app-accent/30 shrink-0 w-24 text-center">
+                              Reviewing
+                            </span>
+                          )}
+                          {item.status === 'Live' && (
+                            <span className="inline-block px-2.5 py-0.5 rounded-[2px] text-[8.5px] font-bold uppercase tracking-wider bg-green-500/10 text-green-400 border-green-500/20 shrink-0 w-24 text-center">
+                              Live
+                            </span>
+                          )}
+                          {item.status === 'Draft' && (
+                            <span className="inline-block px-2.5 py-0.5 rounded-[2px] text-[8.5px] font-bold uppercase tracking-wider bg-white/10 text-white border border-white/20 shrink-0 w-24 text-center">
+                              Draft
+                            </span>
+                          )}
+                        </div>
+
+                      </div>
+                    ))}
+                  </div>
+
+                </div>
+              ))}
+            </div>
+
+          </div>
+        ) : (
+          <div className="py-12 text-center space-y-2 bg-white/5 rounded-[4px] border border-dashed border-white/10">
+            <ShoppingBag className="w-8 h-8 text-app-text-secondary/20 mx-auto" />
+            <h4 className="text-xs font-bold text-white">No content submissions match filter</h4>
+            <p className="text-[11px] text-app-text-secondary opacity-60">Try selecting another filter status or refining query keywords</p>
+          </div>
+        )}
+
+      </div>
+    );
+  };
+
+  const renderGuides = () => {
+    return (
+      <div className="bg-app-card border border-app-border rounded-[4px] shadow-xl p-5 space-y-5 animate-in fade-in duration-200">
+        
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-3">
+          <div>
+            <span className="text-sm font-bold text-white uppercase tracking-wider block">
+              Guide Studio Portfolio
+            </span>
+            <span className="text-[10px] text-app-text-secondary opacity-60">Verified author portfolio matching unified CMS database</span>
+          </div>
+
+          {/* Guide Filter buttons */}
+          <div className="flex flex-wrap items-center gap-1 font-sans">
+            {(['All', 'Live', 'Draft', 'Archived'] as const).map((tab) => {
+              const cnt = creatorGuides.filter(g => tab === 'All' ? true : g.status === tab).length;
+              const isSel = guideStatusFilter === tab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => setGuideStatusFilter(tab)}
+                  className={`px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer ${
+                    isSel 
+                      ? 'text-app-accent bg-app-accent/5 rounded-[3px]' 
+                      : 'text-app-text-secondary hover:text-white'
+                  }`}
+                >
+                  {tab} <span className="opacity-50">({cnt})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Guides list rendering */}
+        {filteredCreatorGuides.length > 0 ? (
+          <div className="space-y-4">
+            <div className="hidden md:grid grid-cols-12 gap-4 pb-2 text-[10px] text-app-text-secondary font-bold uppercase tracking-widest border-b border-white/10">
+              <div className="col-span-5">Guide Title & Meta</div>
+              <div className="col-span-2 text-right">Category</div>
+              <div className="col-span-3 text-right">Highlights (Winner/Budget)</div>
+              <div className="col-span-2 text-right">Actions</div>
+            </div>
+
+            <div className="space-y-3 font-sans">
+              {filteredCreatorGuides.map((guide) => (
+                <div key={guide.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-[3px] bg-white/5 hover:bg-white/10 transition-all border border-white/10">
+                  
+                  {/* Title & info column */}
+                  <div className="col-span-1 md:col-span-5 space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-xs font-bold text-white truncate max-w-[280px]">{guide.guideTitle}</h4>
+                      {guide.status === 'Live' && (
+                        <span className="px-1.5 py-0.5 rounded-[2px] text-[7.5px] font-extrabold uppercase bg-green-500/10 text-green-400 border border-green-500/20">LIVE</span>
+                      )}
+                      {guide.status === 'Draft' && (
+                        <span className="px-1.5 py-0.5 rounded-[2px] text-[7.5px] font-extrabold uppercase bg-white/10 text-white border border-white/20">DRAFT</span>
+                      )}
+                      {guide.status === 'Archived' && (
+                        <span className="px-1.5 py-0.5 rounded-[2px] text-[7.5px] font-extrabold uppercase bg-neutral-500/15 text-neutral-400 border border-neutral-500/10">ARCHIVED</span>
+                      )}
+                      {guide.flaggedByModerator && (
+                        <span className="px-1.5 py-0.5 rounded-[2px] text-[7.5px] font-extrabold uppercase bg-red-400/20 text-red-400 border border-red-500/30">⚠️ FLAGGED</span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-app-text-secondary font-mono leading-relaxed">
+                      {guide.readTime} | Targeted: {guide.audienceType}
+                    </p>
+                  </div>
+
+                  {/* Category Column */}
+                  <div className="col-span-1 md:col-span-2 md:text-right">
+                    <span className="text-xs font-bold text-white block">{guide.category}</span>
+                    <span className="text-[10px] text-app-text-secondary font-mono block">Ref: {guide.id}</span>
+                  </div>
+
+                  {/* Winners / Budget highlights Column */}
+                  <div className="col-span-1 md:col-span-3 md:text-right space-y-0.5">
+                    <span className="text-[10px] text-emerald-400 font-bold block leading-none">🏆 Winner: {guide.winnerProduct || "N/A"}</span>
+                    <span className="text-[10px] text-indigo-400 block font-semibold leading-none">Budget: {guide.bestBudgetPick || "N/A"}</span>
+                  </div>
+
+                  {/* Actions button */}
+                  <div className="col-span-1 md:col-span-2 md:text-right">
+                    <button
+                      onClick={() => setSelectedGuide(guide)}
+                      className="px-3 py-1.5 bg-app-card border border-app-border rounded-[4px] text-[10px] font-bold text-app-accent-light hover:border-app-accent hover:text-white transition-all flex items-center justify-center gap-1 cursor-pointer w-full"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Inspect Guide</span>
+                    </button>
+                  </div>
+
+                </div>
+              ))}
+            </div>
+
+          </div>
+        ) : (
+          <div className="py-12 text-center space-y-2 bg-white/5 rounded-[4px] border border-dashed border-white/10">
+            <FileText className="w-8 h-8 text-app-text-secondary/20 mx-auto" />
+            <h4 className="text-xs font-bold text-white">No Guides Found</h4>
+            <p className="text-[11px] text-app-text-secondary opacity-60">This creator has no guides matching the criteria.</p>
+          </div>
+        )}
+
+      </div>
+    );
+  };
+
+  const renderInspectModal = () => {
+    if (!selectedGuide) return null;
+
+    return (
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="bg-app-card border border-app-border rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl transition-all font-sans">
+          
+          {/* Modal Header */}
+          <div className="p-5 border-b border-app-border flex items-start justify-between">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="text-[9.5px] uppercase tracking-widest font-bold font-mono text-app-accent px-2 py-0.5 bg-app-accent/5 border border-app-accent/20">
+                  AUDIT PANEL
+                </span>
+                <span className="text-[9.5px] uppercase tracking-widest font-bold font-mono text-white/50">
+                  ID: {selectedGuide.id}
+                </span>
+                {selectedGuide.flaggedByModerator && (
+                  <span className="text-[9.5px] uppercase tracking-widest font-bold font-mono bg-red-500/20 text-red-400 border border-red-500/30 px-2 py-0.5">
+                    ⚠️ VIOLATION REPORTED
+                  </span>
+                )}
+              </div>
+              <h3 className="text-base font-bold text-white leading-tight">
+                {selectedGuide.guideTitle}
+              </h3>
+            </div>
+            <button 
+              onClick={() => setSelectedGuide(null)}
+              className="p-1 px-2.5 rounded-[4px] hover:bg-white/5 border border-transparent hover:border-app-border text-app-text-secondary hover:text-white transition-all cursor-pointer font-bold text-sm"
+            >
+              ✕ Close
+            </button>
+          </div>
+
+          {/* Modal Content Grid */}
+          <div className="p-6 space-y-6 animate-in fade-in duration-200">
+            
+            {/* Content Performance Segment */}
+            <div className="bg-white/5 border border-white/10 rounded-lg p-5">
+              <h4 className="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-4 flex items-center gap-1.5 font-sans">
+                <Star className="w-4 h-4" />
+                <span>Real-Time Performance Stats</span>
+              </h4>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="bg-slate-950/30 border border-white/5 p-3.5 rounded-[4px]">
+                  <span className="text-[9px] text-app-text-secondary uppercase tracking-wider block">Audience CTR</span>
+                  <span className="text-base font-bold text-white block mt-0.5">14.8%</span>
+                  <span className="text-[8.5px] text-emerald-400 block font-mono">1.2% vs last mo</span>
+                </div>
+                <div className="bg-slate-950/30 border border-white/5 p-3.5 rounded-[4px]">
+                  <span className="text-[9px] text-app-text-secondary uppercase tracking-wider block">Avg Reading Time</span>
+                  <span className="text-base font-bold text-white block mt-0.5">3m 48s</span>
+                  <span className="text-[8.5px] text-app-text-secondary/50 block font-mono">Target: 4m max</span>
+                </div>
+                <div className="bg-slate-950/30 border border-white/5 p-3.5 rounded-[4px]">
+                  <span className="text-[9px] text-app-text-secondary uppercase tracking-wider block">Total Clickouts</span>
+                  <span className="text-base font-bold text-white block mt-0.5">1,245 clicks</span>
+                  <span className="text-[8.5px] text-emerald-400 block font-mono">92% Completion</span>
+                </div>
+                <div className="bg-slate-950/30 border border-white/5 p-3.5 rounded-[4px]">
+                  <span className="text-[9px] text-app-text-secondary uppercase tracking-wider block">Earnings Influenced</span>
+                  <span className="text-base font-bold text-emerald-400 block mt-0.5">৳38,200</span>
+                  <span className="text-[8.5px] text-emerald-400 block font-mono">8.4% Comm. split</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Grid section for meta details and core values */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              
+              {/* Information Checklist */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-widest text-white/80 border-b border-white/10 pb-2">
+                  CMS Registry Properties
+                </h4>
+                <div className="space-y-3 font-medium">
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span className="text-app-text-secondary">Category Segment:</span>
+                    <span className="text-white font-bold">{selectedGuide.category}</span>
+                  </div>
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span className="text-app-text-secondary">Target Audience:</span>
+                    <span className="text-white">{selectedGuide.audienceType}</span>
+                  </div>
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span className="text-app-text-secondary">Read Time Estimate:</span>
+                    <span className="text-white font-mono">{selectedGuide.readTime}</span>
+                  </div>
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span className="text-app-text-secondary">Winner Champion:</span>
+                    <span className="text-emerald-400 font-bold">{selectedGuide.winnerProduct || "N/A"}</span>
+                  </div>
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span className="text-app-text-secondary">Best budget alternate:</span>
+                    <span className="text-indigo-400 font-bold">{selectedGuide.bestBudgetPick || "N/A"}</span>
+                  </div>
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span className="text-app-text-secondary">Contributor Badge Level:</span>
+                    <span className="text-app-accent-light font-bold font-mono text-[10px]">{selectedGuide.contributorBadgeLevel || "VERIFIED EXPERT"}</span>
+                  </div>
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span className="text-app-text-secondary">Publisher:</span>
+                    <span className="text-white font-semibold">{selectedGuide.authorName}</span>
+                  </div>
+                  <div className="flex justify-between text-xs py-0.5">
+                    <span className="text-app-text-secondary">Last synchronized:</span>
+                    <span className="text-white font-mono">{selectedGuide.lastUpdated || "June 12, 2026"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Edit History & Audit trail */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-widest text-white/80 border-b border-white/10 pb-2">
+                  Audit Verification Trail
+                </h4>
+                <div className="space-y-3.5">
+                  <div className="flex gap-3 items-start">
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 mt-1.5" />
+                    <div>
+                      <span className="text-xs font-bold text-white block">Published Live State Verified</span>
+                      <span className="text-[10px] text-app-text-secondary font-mono block mt-0.5">14 June, 2026 | 02:44 pm by automated sync agent</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 items-start">
+                    <div className="w-1.5 h-1.5 rounded-full bg-blue-400 mt-1.5" />
+                    <div>
+                      <span className="text-xs font-bold text-white block">Winner Product Modified</span>
+                      <span className="text-[10px] text-app-text-secondary font-mono block mt-0.5 font-sans">12 June, 2026 | 10:15 am by {selectedGuide.authorName} (Author)</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-3 items-start">
+                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5" />
+                    <div>
+                      <span className="text-xs font-bold text-white block">Draft Created & Outline Saved</span>
+                      <span className="text-[10px] text-app-text-secondary font-mono block mt-0.5 font-sans">10 June, 2026 | 09:12 am by {selectedGuide.authorName} (Author)</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
+            {/* OVERRIDE MODERATION CONTROLS (Step 3/4 mandates) */}
+            <div className="border-t border-app-border pt-6 space-y-4">
+              <div>
+                <h4 className="text-xs font-bold uppercase tracking-widest text-app-accent-light block font-mono">
+                  MODERATOR CONTROL OVERRIDES
+                </h4>
+                <p className="text-[11px] text-app-text-secondary mb-4 opacity-75">
+                  Manage publication standing, set flags on content terms violations, or toggle creator expert credentials. Altered parameters sync back to main catalog immediately.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-sans">
+                
+                {/* Status Toggle Override */}
+                <div className="bg-slate-950/40 p-4 rounded-lg border border-app-border space-y-2">
+                  <label className="text-[10px] font-bold text-white uppercase tracking-wider block">Publications Standing</label>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(['Live', 'Draft', 'Archived'] as const).map(st => (
+                      <button
+                        key={st}
+                        onClick={() => {
+                          const updated = { ...selectedGuide, status: st };
+                          setSelectedGuide(updated);
+                        }}
+                        className={`px-1 py-1 rounded-[3px] text-[10px] font-bold cursor-pointer transition-colors border leading-[14px] ${
+                          selectedGuide.status === st 
+                            ? "bg-app-accent border-app-accent text-white" 
+                            : "bg-white/5 border-white/10 text-app-text-secondary hover:text-white"
+                        }`}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Flag Content Toggle */}
+                <div className="bg-slate-950/40 p-4 rounded-lg border border-app-border flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-white uppercase tracking-wider block">Content Flag & Quarantine</span>
+                    <span className="text-[9px] text-app-text-secondary block mt-1 leading-snug">Reported for inappropriate suggestions or terms violation</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const updated = { ...selectedGuide, flaggedByModerator: !selectedGuide.flaggedByModerator };
+                      setSelectedGuide(updated);
+                    }}
+                    className={`px-3 py-1.5 rounded-[4px] text-[10px] font-bold border transition-colors mt-2 cursor-pointer ${
+                      selectedGuide.flaggedByModerator
+                        ? "bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30"
+                        : "bg-white/5 border-white/10 text-app-text-secondary hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    {selectedGuide.flaggedByModerator ? '⚠️ Remove Flag' : '☠️ Flag for Moderation Review'}
+                  </button>
+                </div>
+
+                {/* Verified Contributor override */}
+                <div className="bg-slate-950/40 p-4 rounded-lg border border-app-border flex flex-col justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold text-white uppercase tracking-wider block">Expert Badge Verification</span>
+                    <span className="text-[9px] text-app-text-secondary block mt-1 leading-snug">Confirm reviewer authenticity for public display</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      const updated = { ...selectedGuide, verifiedContributor: !selectedGuide.verifiedContributor };
+                      setSelectedGuide(updated);
+                    }}
+                    className={`px-3 py-1.5 rounded-[4px] text-[10px] font-bold border transition-colors mt-2 cursor-pointer ${
+                      selectedGuide.verifiedContributor
+                        ? "bg-green-500/20 border-green-500/40 text-green-400 hover:bg-green-400/30"
+                        : "bg-white/5 border-white/10 text-app-text-secondary hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    {selectedGuide.verifiedContributor ? '✓ Revoke Verification Badge' : '★ Approve Contributor Badge'}
+                  </button>
+                </div>
+
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* Modal Actions Footer */}
+          <div className="p-5 border-t border-app-border bg-slate-950/20 flex items-center justify-between font-mono">
+            <span className="text-[10px] text-app-text-secondary opacity-60">
+              Double-check rules before committing alterations.
+            </span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setSelectedGuide(null)}
+                className="px-4 py-2 border border-app-border rounded-[4px] text-xs font-bold text-app-text-secondary hover:text-white hover:bg-white/5 cursor-pointer"
+              >
+                Cancel Override
+              </button>
+              <button
+                onClick={() => handleSaveModeration(selectedGuide.id, {
+                  status: selectedGuide.status,
+                  flaggedByModerator: selectedGuide.flaggedByModerator,
+                  verifiedContributor: selectedGuide.verifiedContributor
+                })}
+                className="px-4 py-2 bg-app-accent hover:bg-app-accent-light rounded-[4px] text-xs font-bold text-white cursor-pointer shadow-md"
+              >
+                Save Sync Overrides
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    );
+  };
+
   const getActivityIcon = (type: string) => {
     switch (type) {
       case 'chat':
@@ -306,7 +946,7 @@ export default function CreatorProfile() {
           <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-app-text-secondary">
             <Link to="/admin/consumers" className="hover:text-app-accent transition-colors">Dashboard</Link>
             <ChevronRight className="w-3.5 h-3.5 text-app-text-secondary/30" />
-            <Link to="/admin/consumers?tab=creators" className="hover:text-app-accent transition-colors">Users</Link>
+            <Link to="/admin/consumers?tab=creators" className="hover:text-app-accent transition-colors">Consumers</Link>
             <ChevronRight className="w-3.5 h-3.5 text-app-text-secondary/30" />
             <span className="text-app-accent-light">
               {profile.name} (Creator)
@@ -345,7 +985,11 @@ export default function CreatorProfile() {
           <div className="bg-app-card border border-app-border rounded-[4px] overflow-hidden shadow-xl">
             
             {/* Top Banner gradient compatible with Choosify colors */}
-            <div className="h-24 bg-gradient-to-r from-emerald-600/30 via-app-card to-app-gradient-end opacity-90 relative" />
+            <div className="h-24 bg-gradient-to-r from-emerald-600/30 via-app-card to-app-gradient-end opacity-90 relative overflow-hidden flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center justify-center px-4">
+                <span className="text-xl sm:text-2xl md:text-xl lg:text-xl xl:text-2xl font-black text-white uppercase tracking-[0.22em] select-none text-center max-w-full truncate">CREATOR</span>
+              </div>
+            </div>
 
             {/* Profile Avatar & Details Box */}
             <div className="px-5 pb-5 relative">
@@ -396,7 +1040,7 @@ export default function CreatorProfile() {
               </div>
 
               {/* Creator 360 Information Fields */}
-              <div className="mt-5 space-y-3.5 pt-4 border-t border-white/[0.04]">
+              <div className="mt-5 space-y-3.5 pt-4 border-t border-white/5">
                 
                 <div>
                   <label className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider block opacity-70">
@@ -407,7 +1051,7 @@ export default function CreatorProfile() {
                   </span>
                 </div>
 
-                <div className="pt-2 border-t border-white/[0.04]">
+                <div className="pt-2 border-t border-white/5">
                   <label className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider block opacity-70">
                     Geography Base
                   </label>
@@ -416,7 +1060,7 @@ export default function CreatorProfile() {
                   </span>
                 </div>
 
-                <div className="pt-2 border-t border-white/[0.04]">
+                <div className="pt-2 border-t border-white/5">
                   <label className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider block opacity-70">
                     Primary Phone
                   </label>
@@ -425,7 +1069,7 @@ export default function CreatorProfile() {
                   </span>
                 </div>
 
-                <div className="pt-2 border-t border-white/[0.04]">
+                <div className="pt-2 border-t border-white/5">
                   <label className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider block opacity-70">
                     Last active timestamp
                   </label>
@@ -442,14 +1086,14 @@ export default function CreatorProfile() {
 
           {/* Social Connectivity & Specialties */}
           <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-4">
-            <h3 className="text-[10px] font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2 flex items-center justify-between">
+            <h3 className="text-[10px] font-bold text-white uppercase tracking-wider border-b border-white/5 pb-2 flex items-center justify-between">
               <span>Primary Category Tags</span>
               <span className="text-[8px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded-[2px] border border-emerald-500/20">SPECIALTY</span>
             </h3>
 
             <div className="flex flex-wrap gap-1.5">
               {profile.specialties.map((spec) => (
-                <span key={spec} className="px-2 py-1 rounded-[2px] bg-white/[0.02] border border-white/[0.04] text-[10.5px] font-bold text-emerald-400">
+                <span key={spec} className="px-2 py-1 rounded-[2px] bg-white/5 border border-white/5 text-[10.5px] font-bold text-emerald-400">
                   ⚡ {spec}
                 </span>
               ))}
@@ -458,13 +1102,13 @@ export default function CreatorProfile() {
 
           {/* Recent Activities Timeline card */}
           <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-4">
-            <h3 className="text-[10px] font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2">
+            <h3 className="text-[10px] font-bold text-white uppercase tracking-wider border-b border-white/5 pb-2">
               Recent Content Trail
             </h3>
 
             <div className="space-y-3 pt-1">
               {profile.recentActivities.map((act, index) => (
-                <div key={index} className="flex gap-3 items-start p-1.5 hover:bg-white/[0.01] transition-all rounded-[3px]">
+                <div key={index} className="flex gap-3 items-start p-1.5 hover:bg-white/5 transition-all rounded-[3px]">
                   {getActivityIcon(act.iconType)}
                   <div className="min-w-0">
                     <h4 className="text-xs font-bold text-white">{act.title}</h4>
@@ -491,7 +1135,7 @@ export default function CreatorProfile() {
                 placeholder="Search submission titles or campaigns..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 pr-4 py-1.5 bg-white/[0.02] border border-app-border rounded-[4px] text-xs w-full focus:outline-none focus:border-app-accent/40 text-white placeholder-app-text-secondary/40 font-medium"
+                className="pl-9 pr-4 py-1.5 bg-white/5 border border-app-border rounded-[4px] text-xs w-full focus:outline-none focus:border-app-accent/40 text-white placeholder-app-text-secondary/40 font-medium"
               />
             </div>
 
@@ -575,153 +1219,37 @@ export default function CreatorProfile() {
 
           </div>
 
-          {/* ALL SUBMISSIONS TABLE PANEL */}
-          <div className="bg-app-card border border-app-border rounded-[4px] shadow-xl p-5 space-y-5">
-            
-            {/* Table Header and Tabs */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/[0.04] pb-3">
-              <span className="text-sm font-bold text-white uppercase tracking-wider">
-                Expert Content Recommendations
-              </span>
-
-              {/* Underlying Tab Switchers */}
-              <div className="flex flex-wrap items-center gap-1">
-                {(['All', 'Live', 'Reviewing', 'Draft'] as const).map((tab) => {
-                  let count = 0;
-                  if (tab === 'All') {
-                    count = profile.contentGroups.reduce((sum, g) => sum + g.items.length, 0);
-                  } else {
-                    count = profile.contentGroups.reduce((sum, g) => sum + g.items.filter(i => i.status === tab).length, 0);
-                  }
-
-                  const isActive = activeTab === tab;
-                  return (
-                    <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab)}
-                      className={`relative px-2.5 py-1 text-[11px] font-bold transition-all cursor-pointer ${
-                        isActive 
-                          ? 'text-app-accent bg-app-accent/5 rounded-[3px]' 
-                          : 'text-app-text-secondary hover:text-white'
-                      }`}
-                    >
-                      <span className="mr-1">
-                        {tab === 'All' ? 'All Content' : tab}
-                      </span>
-                      <span className="opacity-60">({count})</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Custom Table layout matching Choosify look */}
-            {filteredGroups.length > 0 ? (
-              <div className="space-y-4">
-                
-                {/* Headers */}
-                <div className="hidden md:grid grid-cols-12 gap-4 pb-2 text-[10px] text-app-text-secondary font-bold uppercase tracking-widest border-b border-white/[0.04]">
-                  <div className="col-span-6">Content Detail</div>
-                  <div className="col-span-2 text-right">Category</div>
-                  <div className="col-span-2 pl-4">Engagement Views</div>
-                  <div className="col-span-2 text-right">Verification Status</div>
-                </div>
-
-                {/* Date groups */}
-                <div className="space-y-6">
-                  {filteredGroups.map((group, groupIndex) => (
-                    <div key={groupIndex} className="space-y-3">
-                      
-                      {/* Date Indicator Line */}
-                      <div className="flex items-center justify-between border-b border-dashed border-white/[0.04] pb-1.5 font-mono text-[10px]">
-                        <span className="text-app-text-secondary font-bold uppercase">
-                          {group.date}
-                        </span>
-                        <span className="text-white font-semibold">
-                          {group.campaignId}
-                        </span>
-                      </div>
-
-                      {/* Items loop */}
-                      <div className="space-y-2.5">
-                        {group.items.map((item) => (
-                          <div 
-                            key={item.id}
-                            className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center p-3 rounded-[3px] bg-white/[0.01] hover:bg-white/[0.03] transition-all border border-white/[0.02]"
-                          >
-                            {/* Content Details */}
-                            <div className="col-span-1 md:col-span-6 flex items-center gap-3">
-                              <img 
-                                src={item.thumbnail} 
-                                alt={item.title}
-                                className="w-12 h-12 rounded-[4px] object-cover bg-white/5 border border-white/10 shrink-0 shadow-sm" 
-                              />
-                              <div className="min-w-0">
-                                <h4 className="text-xs font-bold text-white truncate">{item.title}</h4>
-                                <p className="text-[10px] text-app-text-secondary font-medium truncate">
-                                  Published / Submitted Ref {item.id}
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* Category Column */}
-                            <div className="col-span-1 md:col-span-2 md:text-right">
-                              <span className="text-[9px] md:hidden text-app-text-secondary uppercase font-bold block mb-0.5">Category</span>
-                              <span className="text-xs font-bold text-white">
-                                {item.category}
-                              </span>
-                            </div>
-
-                            {/* Engagement views Column */}
-                            <div className="col-span-1 md:col-span-2 md:pl-4">
-                              <span className="text-[9px] md:hidden text-app-text-secondary uppercase font-bold block mb-0.5">Reach</span>
-                              <span className="text-xs font-medium text-emerald-400 font-mono">
-                                {item.clicks}
-                              </span>
-                            </div>
-
-                            {/* Status badge */}
-                            <div className="col-span-1 md:col-span-2 md:text-right flex md:justify-end">
-                              <span className="text-[9px] md:hidden text-app-text-secondary uppercase font-bold block mr-2 mb-0.5">Status</span>
-                              {item.status === 'Reviewing' && (
-                                <span className="inline-block px-2.5 py-0.5 rounded-[2px] text-[8.5px] font-bold uppercase tracking-wider bg-app-accent/20 text-app-accent border border-app-accent/30 shrink-0 w-24 text-center">
-                                  Reviewing
-                                </span>
-                              )}
-                              {item.status === 'Live' && (
-                                <span className="inline-block px-2.5 py-0.5 rounded-[2px] text-[8.5px] font-bold uppercase tracking-wider bg-green-500/10 text-green-400 border-green-500/20 shrink-0 w-24 text-center">
-                                  Live
-                                </span>
-                              )}
-                              {item.status === 'Draft' && (
-                                <span className="inline-block px-2.5 py-0.5 rounded-[2px] text-[8.5px] font-bold uppercase tracking-wider bg-white/10 text-white border border-white/20 shrink-0 w-24 text-center">
-                                  Draft
-                                </span>
-                              )}
-                            </div>
-
-                          </div>
-                        ))}
-                      </div>
-
-                    </div>
-                  ))}
-                </div>
-
-              </div>
-            ) : (
-              <div className="py-12 text-center space-y-2 bg-white/[0.01] rounded-[4px] border border-dashed border-white/[0.04]">
-                <ShoppingBag className="w-8 h-8 text-app-text-secondary/20 mx-auto" />
-                <h4 className="text-xs font-bold text-white">No content submissions match filter</h4>
-                <p className="text-[11px] text-app-text-secondary opacity-60">Try selecting another filter status or refining query keywords</p>
-              </div>
-            )}
-
+          {/* Primary View Segmenter Tabs */}
+          <div className="flex border-b border-white/5 gap-4 mb-3">
+            <button
+              onClick={() => setPrimaryTab('Submissions')}
+              className={`pb-3 text-[11.5px] font-extrabold uppercase tracking-widest border-b-2 transition-all cursor-pointer ${
+                primaryTab === 'Submissions'
+                  ? 'border-app-accent text-white font-black'
+                  : 'border-transparent text-app-text-secondary hover:text-white'
+              }`}
+            >
+              Recommendations Feed ({profile.contentGroups.reduce((sum, g) => sum + g.items.length, 0)})
+            </button>
+            <button
+              onClick={() => setPrimaryTab('Guides')}
+              className={`pb-3 text-[11.5px] font-extrabold uppercase tracking-widest border-b-2 transition-all cursor-pointer ${
+                primaryTab === 'Guides'
+                  ? 'border-app-accent text-white font-black'
+                  : 'border-transparent text-app-text-secondary hover:text-white'
+              }`}
+            >
+              Guide Studio (Creator Content) ({creatorGuides.length})
+            </button>
           </div>
+
+          {primaryTab === 'Submissions' ? renderSubmissions() : renderGuides()}
 
         </div>
 
       </div>
+
+      {renderInspectModal()}
 
     </div>
   );

@@ -4,9 +4,11 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AdminLayout } from './components/AdminLayout';
 import { OrdersProvider } from './contexts/OrdersContext';
 import { TrustProvider } from './contexts/TrustContext';
+import { CashBookProvider } from './contexts/CashBookContext';
 
 // Lazy load pages
 const Home = lazy(() => import('./pages/Home'));
+const CashBookHub = lazy(() => import('./pages/admin/CashBookHub'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
 const DashboardRouter = lazy(() => import('./pages/dashboards/DashboardRouter'));
@@ -37,8 +39,9 @@ const CMSPage = lazy(() => import('./pages/admin/CMS'));
 const AdsSponsorsPage = lazy(() => import('./pages/admin/AdsSponsors'));
 const SponsoredPromotionsPage = lazy(() => import('./pages/admin/SponsoredPromotions'));
 const Orders = lazy(() => import('./pages/admin/Orders'));
-const OrdersOverview = lazy(() => import('./pages/admin/OrdersOverview'));
+import OrdersOverview from './pages/admin/OrdersOverview';
 const SellerCustomers = lazy(() => import('./pages/admin/SellerCustomers'));
+const InvoiceView = lazy(() => import('./pages/admin/InvoiceView').then(m => ({ default: m.InvoiceView })));
 
 // Trust & Safety Core Modules
 const TrustCenter = lazy(() => import('./pages/admin/TrustCenter'));
@@ -54,32 +57,33 @@ const GuideEditStudio = lazy(() => import('./pages/admin/GuideEditStudio'));
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile, loading } = useAuth();
-  if (loading) return <div className="min-h-screen bg-app-bg flex items-center justify-center text-white font-mono text-[10px] uppercase tracking-[4px] animate-pulse">Authenticating Choosify Session...</div>;
+  if (loading) return <div className="min-h-screen bg-app-bg flex items-center justify-center text-app-accent font-mono text-[10px] uppercase tracking-[4px] animate-pulse">Authenticating Choosify Session...</div>;
   if (!profile) return <Navigate to="/login" />;
   return <>{children}</>;
 };
 
-import { ThemeProvider } from './contexts/ThemeContext';
 import { CMSProvider } from './contexts/CMSContext';
 import { AdsProvider } from './contexts/AdsContext';
 import { ContactInteractionProvider } from './contexts/ContactInteractionContext';
+import { BrandProfilesProvider } from './contexts/BrandProfilesContext';
 
 export default function App() {
   return (
     <CMSProvider>
       <AdsProvider>
-      <ThemeProvider>
       <Router>
         <AuthProvider>
-          <ContactInteractionProvider>
-            <OrdersProvider>
+          <CashBookProvider>
+            <BrandProfilesProvider>
+          <OrdersProvider>
+            <ContactInteractionProvider>
               <TrustProvider>
               <Routes>
             <Route path="/login" element={<Suspense fallback={null}><LoginPage /></Suspense>} />
             <Route path="/products/:id" element={<Suspense fallback={null}><ProductDetailPage /></Suspense>} />
             <Route path="/" element={<Suspense fallback={null}><Home /></Suspense>} />
             
-            <Route path="/admin/*" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-white font-mono text-[10px] uppercase tracking-[4px] opacity-40">Loading Platform Interface...</div>}><Routes>
+            <Route path="/admin/*" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Platform Interface...</div>}><Routes>
               <Route path="dashboard" element={<DashboardRouter />} />
               <Route path="cms" element={<CMSPage />} />
               <Route path="ads-sponsors" element={<AdsSponsorsPage />} />
@@ -97,8 +101,8 @@ export default function App() {
               <Route path="products" element={<Products />} />
               <Route path="products/:id" element={<ProductEdit />} />
               <Route path="products/:id/edit" element={<ProductEdit />} />
-              <Route path="brands" element={<Brands />} />
-              <Route path="brands/:id" element={<BrandDetails />} />
+              <Route path="brands" element={<Navigate to="/admin/sellers" replace />} />
+              <Route path="brands/:id" element={<Navigate to="/admin/sellers" replace />} />
               <Route path="recommendations" element={<Recommendations />} />
               <Route path="recommendations/:id" element={<RecommendationPreview />} />
               <Route path="deals" element={<Deals />} />
@@ -111,6 +115,12 @@ export default function App() {
               <Route path="orders" element={<Orders />} />
               <Route path="orders-overview" element={<OrdersOverview />} />
               <Route path="customers" element={<SellerCustomers />} />
+              <Route path="invoice/:id" element={<InvoiceView />} />
+              <Route path="brand-profiles" element={<Sellers />} />
+              <Route path="ownership-claims" element={<Sellers />} />
+              <Route path="cashbook" element={<CashBookHub />} />
+              <Route path="cashbook/:bookId" element={<CashBookHub />} />
+              <Route path="cashbook/reports" element={<CashBookHub />} />
               
               {/* Trust & Safety Core Modular Paths */}
               <Route path="trust-center" element={<TrustCenter />} />
@@ -120,7 +130,7 @@ export default function App() {
             </Routes></Suspense></AdminLayout></ProtectedRoute>} />
             
             {/* Direct match for requested /dashboard/content-studio routes */}
-            <Route path="/dashboard/content-studio/*" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-white font-mono text-[10px] uppercase tracking-[4px] opacity-40">Loading Visual Content Studio...</div>}><Routes>
+            <Route path="/dashboard/content-studio/*" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Visual Content Studio...</div>}><Routes>
               <Route path="products" element={<Products />} />
               <Route path="products/new" element={<ProductEdit />} />
               <Route path="products/:id/edit" element={<ProductEdit />} />
@@ -135,11 +145,12 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
               </TrustProvider>
-            </OrdersProvider>
-          </ContactInteractionProvider>
+            </ContactInteractionProvider>
+          </OrdersProvider>
+          </BrandProfilesProvider>
+          </CashBookProvider>
       </AuthProvider>
     </Router>
-    </ThemeProvider>
     </AdsProvider>
     </CMSProvider>
   );

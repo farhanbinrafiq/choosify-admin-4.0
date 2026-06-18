@@ -85,6 +85,16 @@ export default function ProductEdit() {
   const backPath = isContentStudio ? "/dashboard/content-studio/products" : "/admin/products";
 
   const activeId = id || "1";
+  const { profile, sellerBrands = [], allBrands = [] } = useAuth();
+  const isNewProduct = !id || id === "new" || location.pathname.endsWith("/products/new");
+  
+  // Find assigned brands
+  const assignedBrands = allBrands.filter(b => 
+    sellerBrands.some(r => r.seller_user_id === profile?.id && r.brand_id === b.id)
+  );
+
+  const [brandSelectionDone, setBrandSelectionDone] = useState(false);
+
   const draftKey = `choosify_draft_${activeId}`;
   const publishKey = `choosify_published_${activeId}`;
 
@@ -176,17 +186,18 @@ export default function ProductEdit() {
     }
 
     // Set layout parameters
-    setBrandName(data.brandName || dataSrc.brandName || "Luxury Brand");
-    setProductName(data.productName || dataSrc.productName || "Product Title");
-    setCategory(data.category || dataSrc.category || "Premium");
-    setActualPrice(data.actualPrice || dataSrc.actualPrice || 999);
-    setDiscountedPrice(data.discountedPrice !== undefined ? data.discountedPrice : dataSrc.discountedPrice || 899);
-    setImages(data.images && data.images.length > 0 ? data.images : dataSrc.images || []);
-    setAbout(data.about || dataSrc.about || "");
-    setSpecs(data.specs || dataSrc.specs || []);
-    setStoreComparisonList(data.storeComparisonList || dataSrc.storeComparisonList || []);
-    setOverviewBlocks(data.overviewBlocks || dataSrc.overviewBlocks || []);
-    setBestForTags(data.bestForTags || dataSrc.bestForTags || []);
+    const initialBrandName = data.brandName || dataSrc.brandName || "Luxury Brand";
+    const initialCategory = data.category || dataSrc.category || "Premium";
+
+    setProductName(isNewProduct && !savedDraft && !localStorage.getItem(publishKey) ? "" : (data.productName || dataSrc.productName || "Product Title"));
+    setActualPrice(isNewProduct && !savedDraft && !localStorage.getItem(publishKey) ? 0 : (data.actualPrice || dataSrc.actualPrice || 999));
+    setDiscountedPrice(isNewProduct && !savedDraft && !localStorage.getItem(publishKey) ? 0 : (data.discountedPrice !== undefined ? data.discountedPrice : dataSrc.discountedPrice || 899));
+    setImages(isNewProduct && !savedDraft && !localStorage.getItem(publishKey) ? [] : (data.images && data.images.length > 0 ? data.images : dataSrc.images || []));
+    setAbout(isNewProduct && !savedDraft && !localStorage.getItem(publishKey) ? "" : (data.about || dataSrc.about || ""));
+    setSpecs(isNewProduct && !savedDraft && !localStorage.getItem(publishKey) ? [] : (data.specs || dataSrc.specs || []));
+    setStoreComparisonList(isNewProduct && !savedDraft && !localStorage.getItem(publishKey) ? [] : (data.storeComparisonList || dataSrc.storeComparisonList || []));
+    setOverviewBlocks(isNewProduct && !savedDraft && !localStorage.getItem(publishKey) ? [] : (data.overviewBlocks || dataSrc.overviewBlocks || []));
+    setBestForTags(isNewProduct && !savedDraft && !localStorage.getItem(publishKey) ? [] : (data.bestForTags || dataSrc.bestForTags || []));
 
     // Layout configuration options
     setActionFindInStore(data.actionFindInStore !== undefined ? data.actionFindInStore : true);
@@ -196,6 +207,41 @@ export default function ProductEdit() {
     setActionContactSeller(data.actionContactSeller !== undefined ? data.actionContactSeller : true);
     setActionRequestQuote(data.actionRequestQuote !== undefined ? data.actionRequestQuote : false);
     setActionPreOrder(data.actionPreOrder !== undefined ? data.actionPreOrder : false);
+
+    // Setup brand details according to selection rules
+    if (isNewProduct) {
+      if (profile?.role === 'seller') {
+        if (assignedBrands.length === 1) {
+          setBrandName(assignedBrands[0].name);
+          setCategory(assignedBrands[0].category);
+          setBrandSelectionDone(true);
+        } else if (assignedBrands.length > 1) {
+          // Need selection, don't set yet until user selects click
+          setBrandSelectionDone(false);
+        } else {
+          setBrandName(initialBrandName);
+          setCategory(initialCategory);
+          setBrandSelectionDone(true);
+        }
+      } else {
+        // Admin / Super Admin
+        if (allBrands.length > 1) {
+          setBrandSelectionDone(false);
+        } else if (allBrands.length === 1) {
+          setBrandName(allBrands[0].name);
+          setCategory(allBrands[0].category);
+          setBrandSelectionDone(true);
+        } else {
+          setBrandName(initialBrandName);
+          setCategory(initialCategory);
+          setBrandSelectionDone(true);
+        }
+      }
+    } else {
+      setBrandName(initialBrandName);
+      setCategory(initialCategory);
+      setBrandSelectionDone(true);
+    }
 
     // Physical Outlets config
     setPhysicalStores(data.physicalStores || [
@@ -252,7 +298,7 @@ export default function ProductEdit() {
         isFeatured: false
       }
     ]);
-  }, [activeId]);
+  }, [isNewProduct, profile, sellerBrands, allBrands, activeId, draftKey, publishKey]);
 
   // Sync draft edits to local storage incrementally upon changes
   const serializeState = () => {
@@ -326,6 +372,55 @@ export default function ProductEdit() {
     localStorage.setItem(publishKey, JSON.stringify(liveData));
     setPublishStatus("live");
     triggerToast("🚀 Product specs successfully published to the live portal!");
+  };
+
+  const renderBrandSelectScreen = () => {
+    const list = profile?.role === 'seller' ? assignedBrands : allBrands;
+    return (
+      <div className="max-w-4xl mx-auto px-6 py-12 animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div className="bg-white border border-[#E5E7EB] rounded-[2rem] p-10 shadow-2xl text-center space-y-8">
+          <div className="max-w-md mx-auto space-y-3">
+            <div className="w-16 h-16 rounded-3xl bg-orange-500/10 text-orange-500 flex items-center justify-center mx-auto mb-2 animate-pulse border border-orange-500/15">
+              <Compass className="w-8 h-8" />
+            </div>
+            <h2 className="text-2xl font-black text-[#1A1A2E] tracking-tight uppercase">Select Brand Context</h2>
+            <p className="text-slate-500 text-xs leading-relaxed">
+              Before creating a new product profile, you must select one of your registered brand identities active in the Choosify Bangladesh registry.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {list.map((b) => (
+              <button
+                key={b.id}
+                type="button"
+                onClick={() => {
+                  setBrandName(b.name);
+                  setCategory(b.category);
+                  setBrandSelectionDone(true);
+                  triggerToast(`✓ Preselected brand ${b.name} successfully!`);
+                }}
+                className="flex flex-col text-left p-6 bg-[#FAFAFA] border border-[#E5E7EB] hover:border-orange-500 rounded-2xl transition-all hover:shadow-lg hover:scale-[1.02] cursor-pointer group active:scale-98"
+              >
+                <span className="text-[10px] text-slate-400 font-mono font-black uppercase tracking-widest block mb-1">
+                  {b.category}
+                </span>
+                <span className="text-base font-black text-[#1A1A2E] group-hover:text-orange-500 transition-colors">
+                  {b.name}
+                </span>
+                <span className="text-[10px] text-orange-500 font-bold uppercase mt-4 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  Choose Brand <ChevronRight className="w-3 h-3" />
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="text-[10px] text-slate-400 uppercase tracking-wider font-bold pt-4 border-t border-slate-100">
+            Secure Partnership Oversight • ID: {profile?.id || "anonymous"}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   // Helper calculation for discount
@@ -406,8 +501,11 @@ export default function ProductEdit() {
 
       {/* Main Container Workspace Elements Stacked and ordered exactly to requested PDF specifications */}
       <div id="workspace-layout-container" className="max-w-7xl mx-auto px-6 pt-8 space-y-6">
-
-        {/* SECTION 1: PRODUCT HERO / HEADER CARD (Desktop: 60% left, 40% right) */}
+        {!brandSelectionDone ? (
+          renderBrandSelectScreen()
+        ) : (
+          <>
+            {/* SECTION 1: PRODUCT HERO / HEADER CARD (Desktop: 60% left, 40% right) */}
         <div id="product-hero-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative group/card shadow-sm text-left">
           
           {/* Floating Pencil Edit Trigger Card corner */}
@@ -984,7 +1082,8 @@ export default function ProductEdit() {
           </div>
 
         </div>
-
+          </>
+        )}
       </div>
 
       {/* RIGHT SLIDING PROPERTY DRAWER PANEL (Width: 480px) */}

@@ -89,6 +89,8 @@ interface OrdersContextType {
   flagCustomer: (customerId: string, flagged: boolean, reason: string) => void;
   sendChatMessage: (threadId: string, text: string, senderRole: 'customer' | 'seller' | 'admin', senderName: string) => void;
   createOrderNow: (product: OrderProduct, customerMsg: string) => void;
+  markAllThreadsAsRead: () => void;
+  markThreadAsRead: (threadId: string) => void;
 }
 
 const OrdersContext = createContext<OrdersContextType | undefined>(undefined);
@@ -630,6 +632,14 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setMessageThreads(prev => [newThread, ...prev]);
   };
 
+  const markAllThreadsAsRead = () => {
+    setMessageThreads(prev => prev.map(t => ({ ...t, status: 'READ' as const })));
+  };
+
+  const markThreadAsRead = (threadId: string) => {
+    setMessageThreads(prev => prev.map(t => t.id === threadId ? { ...t, status: 'READ' as const } : t));
+  };
+
   return (
     <OrdersContext.Provider value={{
       orders,
@@ -643,7 +653,9 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       updateOrderStatus,
       flagCustomer,
       sendChatMessage,
-      createOrderNow
+      createOrderNow,
+      markAllThreadsAsRead,
+      markThreadAsRead
     }}>
       {children}
     </OrdersContext.Provider>

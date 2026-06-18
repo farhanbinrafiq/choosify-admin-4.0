@@ -360,7 +360,11 @@ export default function ConsumerProfile() {
           <div className="bg-app-card border border-app-border rounded-[4px] overflow-hidden shadow-xl">
             
             {/* Top Banner gradient compatible with Choosify colors */}
-            <div className="h-24 bg-gradient-to-r from-app-gradient-start via-app-card to-app-gradient-end opacity-90 relative" />
+            <div className="h-24 bg-gradient-to-r from-app-gradient-start via-app-card to-app-gradient-end opacity-90 relative overflow-hidden flex items-center justify-center">
+              <div className="absolute inset-0 flex items-center justify-center px-4">
+                <span className="text-xl sm:text-2xl md:text-xl lg:text-xl xl:text-2xl font-black text-white uppercase tracking-[0.2em] select-none text-center max-w-full truncate">CONSUMER</span>
+              </div>
+            </div>
 
             {/* Profile Avatar & Details Box */}
             <div className="px-5 pb-5 relative">
@@ -440,10 +444,20 @@ export default function ConsumerProfile() {
 
                 <div className="pt-2 border-t border-white/[0.04]">
                   <label className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider block opacity-70">
+                    Registration Date
+                  </label>
+                  <span className="text-xs text-white font-semibold mt-0.5 block font-mono flex items-center gap-1.5">
+                    <Calendar className="w-3.0 h-3.0 text-slate-400" />
+                    <span>May 10, 2021 | 14:32 BRT</span>
+                  </span>
+                </div>
+
+                <div className="pt-2 border-t border-white/[0.04]">
+                  <label className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider block opacity-70">
                     Last Transaction active
                   </label>
                   <span className="text-xs text-app-accent-light font-bold mt-0.5 flex items-center gap-1.5 font-mono">
-                    <Clock className="w-3 h-3" />
+                    <Clock className="w-3" />
                     <span>{profile.lastActive}</span>
                   </span>
                 </div>
@@ -453,30 +467,181 @@ export default function ConsumerProfile() {
             </div>
           </div>
 
-          {/* Customer 360 Behavioral Breakdown */}
+          {/* SECTION: Reputation Core */}
           <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-4">
             <h3 className="text-[10px] font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2 flex items-center justify-between">
-              <span>Customer 360 Profile</span>
-              <span className="text-[8px] bg-indigo-500/10 text-indigo-400 px-1.5 py-0.5 rounded-[2px] border border-indigo-500/20">RBAC Verified</span>
+              <span>Reputation Intelligence</span>
+              <span className="text-[8px] bg-emerald-500/10 text-emerald-400 px-1.5 py-0.5 rounded-[2px] border border-emerald-500/20">Trust Validated</span>
             </h3>
 
             <div className="grid grid-cols-2 gap-3.5 pt-1">
               <div className="bg-white/[0.02] p-2.5 rounded-[3px] border border-white/[0.02]">
-                <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider">Wishlist Items</div>
-                <div className="text-sm font-bold text-white mt-0.5 font-mono">{profile.wishlistCount} items</div>
+                <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider">Behavior Level</div>
+                <div className="text-xs font-bold text-green-400 mt-1">Excellent (Compliant)</div>
               </div>
               <div className="bg-white/[0.02] p-2.5 rounded-[3px] border border-white/[0.02]">
-                <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider">Reviews Written</div>
-                <div className="text-sm font-bold text-white mt-0.5 font-mono">{profile.reviewsCount} reviews</div>
+                <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider">Consumer Score</div>
+                <div className="text-xs font-bold text-white mt-1 font-mono">98 / 100</div>
               </div>
               <div className="bg-white/[0.02] p-2.5 rounded-[3px] border border-white/[0.02]">
-                <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider">Support Incidents</div>
-                <div className="text-sm font-bold text-white mt-0.5 font-mono">{profile.supportTicketsCount} cases</div>
+                <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider">Incident Count</div>
+                <div className="text-xs font-bold text-white mt-1 font-mono">0 Incidents</div>
               </div>
               <div className="bg-white/[0.02] p-2.5 rounded-[3px] border border-white/[0.02]">
-                <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider">Retention Health</div>
-                <div className={`text-sm font-bold mt-0.5 font-mono ${profile.retentionScore > 80 ? 'text-green-400' : 'text-red-400'}`}>{profile.retentionScore}% Score</div>
+                <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider">Trust Rating</div>
+                <div className="text-xs font-bold text-app-accent-light mt-1 font-mono">A+ Tier Level</div>
               </div>
+            </div>
+          </div>
+
+          {/* SECTION: Activity Logs & IP Audit */}
+          <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-4">
+            <h3 className="text-[10px] font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2">
+              Activity & IP Audit Trail
+            </h3>
+            
+            <div className="space-y-3 text-xs pt-1">
+              <div className="flex justify-between border-b border-white/[0.02] pb-2">
+                <span className="text-app-text-secondary text-[11px]">Last Session Seen</span>
+                <span className="text-white font-mono font-semibold">Today, 2 hr ago</span>
+              </div>
+              <div className="flex justify-between border-b border-white/[0.02] pb-2">
+                <span className="text-app-text-secondary text-[11px]">Session Logs</span>
+                <span className="text-white font-semibold">3 active logins (iOS / Chrome)</span>
+              </div>
+              <div>
+                <span className="text-app-text-secondary text-[9px] font-bold uppercase tracking-wider block mb-1">IP Location History</span>
+                <div className="space-y-1 font-mono text-[10.5px] text-slate-300">
+                  <div className="flex justify-between">
+                    <span>103.114.34.12</span>
+                    <span className="text-[9px] text-slate-500">DHAKA, BD</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>162.210.192.4</span>
+                    <span className="text-[9px] text-slate-500">NEW MEXICO, US</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION: Reviews & Content Quality */}
+          <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-4">
+            <h3 className="text-[10px] font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2">
+              Reviews & Content Quality Center
+            </h3>
+
+            <div className="grid grid-cols-2 gap-3.5 pt-1">
+              <div className="bg-white/[0.02] p-2.5 rounded-[3px]">
+                <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider">Total Reviews</div>
+                <div className="text-xs font-bold text-white mt-1 font-mono">{profile.reviewsCount} Written</div>
+              </div>
+              <div className="bg-white/[0.02] p-2.5 rounded-[3px]">
+                <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider">Flagged Count</div>
+                <div className="text-xs font-bold text-green-400 mt-1 font-mono">0 Flags</div>
+              </div>
+              <div className="bg-white/[0.02] p-2.5 rounded-[3px]">
+                <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider">Audit Result</div>
+                <div className="text-xs font-bold text-white mt-1">Verified (Auth)</div>
+              </div>
+              <div className="bg-white/[0.02] p-2.5 rounded-[3px]">
+                <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider">Quality Score</div>
+                <div className="text-xs font-bold text-app-accent-light mt-1 font-mono">9.5 / 10</div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION: Support Tickets Center */}
+          <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-4">
+            <h3 className="text-[10px] font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2">
+              Support Incident Center
+            </h3>
+
+            <div className="space-y-3 text-xs pt-1">
+              <div className="flex justify-between border-b border-white/[0.02] pb-1.5">
+                <span className="text-app-text-secondary text-[11px]">Total Incident Tickets</span>
+                <span className="text-white font-mono font-semibold">{profile.supportTicketsCount} active case</span>
+              </div>
+              <div className="flex justify-between border-b border-white/[0.02] pb-1.5">
+                <span className="text-app-text-secondary text-[11px]">Resolution Time AVG</span>
+                <span className="text-white font-semibold">1.5 hours SLA</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-app-text-secondary text-[11px]">Escalated Incident Count</span>
+                <span className="text-green-400 font-semibold font-mono">0 escalated</span>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION: Behavioral & Purchase Analytics */}
+          <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-4">
+            <h3 className="text-[10px] font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2">
+              Behavioral & Purchasing Analytics
+            </h3>
+
+            <div className="space-y-3 text-xs pt-1">
+              <div className="flex justify-between border-b border-white/[0.02] pb-1.5">
+                <span className="text-app-text-secondary text-[11px]">Search matching CTR</span>
+                <span className="text-app-accent-light font-bold font-mono">64.5% conversion</span>
+              </div>
+              <div className="flex justify-between border-b border-white/[0.02] pb-1.5">
+                <span className="text-app-text-secondary text-[11px]">Cart abandonment rate</span>
+                <span className="text-white font-semibold font-mono">12.4% (Ultra low)</span>
+              </div>
+              <div>
+                <span className="text-app-text-secondary text-[9px] font-bold uppercase tracking-wider block mb-1">Category affinity metrics</span>
+                <div className="flex items-center gap-1.5 mt-1.5">
+                  <div className="h-2 bg-gradient-to-r from-indigo-500 via-[#F4631E] to-blue-500 rounded-full flex-1" />
+                  <span className="text-[9.5px] text-slate-300 font-mono">84% Fashion</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* SECTION: Admin Security & Console Actions */}
+          <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-4">
+            <h3 className="text-[10px] font-bold text-[#F4631E] uppercase tracking-wider border-b border-white/[0.04] pb-2 flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5" />
+              <span>Admin Security Action Center</span>
+            </h3>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <button 
+                onClick={() => triggerMessage({ id: profile.id, name: profile.name, avatarUrl: profile.avatarUrl, phone: profile.phone, status: profile.status, role: 'Consumer' })}
+                className="px-3 py-2 bg-white/[0.02] border border-app-border hover:bg-white/[0.05] text-white hover:text-white transition-all text-[11px] font-semibold text-center rounded-[3px]"
+              >
+                Send Message
+              </button>
+              <button 
+                onClick={() => triggerPhone({ id: profile.id, name: profile.name, avatarUrl: profile.avatarUrl, phone: profile.phone, status: profile.status, role: 'Consumer' })}
+                className="px-3 py-2 bg-white/[0.02] border border-app-border hover:bg-white/[0.05] text-white hover:text-white transition-all text-[11px] font-semibold text-center rounded-[3px]"
+              >
+                Dial Phone Call
+              </button>
+              <button 
+                onClick={() => showToast("Warning has been registered in audit files.", "info")}
+                className="px-3 py-2 bg-orange-500/10 text-orange-400 border border-orange-500/20 hover:bg-orange-500/20 transition-all text-[11px] font-semibold text-center rounded-[3px]"
+              >
+                Issue Warning
+              </button>
+              <button 
+                onClick={() => showToast("Temporary password reset link generated and sent.", "success")}
+                className="px-3 py-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-all text-[11px] font-semibold text-center rounded-[3px]"
+              >
+                Reset Password
+              </button>
+              <button 
+                onClick={() => showToast("Security Audit Lock applied successfully.", "info")}
+                className="px-3 py-2 bg-red-500/10 text-red-500 border border-red-500/20 hover:bg-red-500/20 transition-all text-[11px] font-semibold text-center rounded-[3px]"
+              >
+                Audit Lock
+              </button>
+              <button 
+                onClick={() => showToast(`User status set to ${profile.status === 'Active' ? 'Suspended' : 'Active'}`, "success")}
+                className="px-3 py-2 bg-red-600 hover:bg-red-500 text-white transition-all text-[11px] font-black text-center rounded-[3px]"
+              >
+                {profile.status === 'Active' ? 'Flag / Suspend' : 'Activate User'}
+              </button>
             </div>
           </div>
 

@@ -9,13 +9,20 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { BrandCMSModel, CreatorVideoItem, PromoCodeItem, initialBrandSeeds } from "./brandSeeds";
+import { useAuth } from "../../contexts/AuthContext";
 
 const COMPILATION_KEY = "choosify_brand_studio_list";
 
-export default function BrandEditStudio() {
+interface BrandEditStudioProps {
+  overrideId?: string;
+  isNested?: boolean;
+}
+
+export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudioProps = {}) {
   const { id } = useParams<{ id: string }>();
+  const { activeBrandId, allBrands } = useAuth();
   const navigate = useNavigate();
-  const activeId = id || "1";
+  const activeId = overrideId || id || activeBrandId || "1";
 
   // Brand Model state
   const [model, setModel] = useState<BrandCMSModel | null>(null);
@@ -113,6 +120,19 @@ export default function BrandEditStudio() {
       const seed = initialBrandSeeds[activeId];
       if (seed) {
         loaded = JSON.parse(JSON.stringify(seed));
+      } else {
+        const fallSeed = initialBrandSeeds["1"] || Object.values(initialBrandSeeds)[0];
+        if (fallSeed) {
+          loaded = JSON.parse(JSON.stringify(fallSeed));
+          if (loaded) {
+            loaded.id = activeId;
+            const matchedBrand = allBrands.find(b => b.id === activeId);
+            if (matchedBrand) {
+              loaded.brandName = matchedBrand.name;
+              loaded.category = matchedBrand.category;
+            }
+          }
+        }
       }
     }
     if (loaded) {
@@ -500,7 +520,7 @@ export default function BrandEditStudio() {
       <header className="h-16 shrink-0 bg-[#0B122C] border-b border-orange-500/30 px-6 flex items-center justify-between z-30 shadow-md">
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => hasUnsavedChanges ? setShowExitModal(true) : navigate("/admin/brands")}
+            onClick={() => hasUnsavedChanges ? setShowExitModal(true) : navigate(isNested ? "/dashboard/content-studio/brands" : "/admin/brands")}
             className="p-2 bg-slate-800 text-slate-205 hover:bg-slate-700 rounded-xl transition-colors flex items-center gap-1 text-slate-200"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -1715,7 +1735,7 @@ export default function BrandEditStudio() {
                 onClick={() => {
                   setHasUnsavedChanges(false);
                   setShowExitModal(false);
-                  navigate("/admin/brands");
+                  navigate(isNested ? "/dashboard/content-studio/brands" : "/admin/brands");
                 }}
                 className="w-full py-2 bg-red-50 text-red-650 hover:bg-red-100 text-red-600 rounded-xl font-bold text-xs"
               >
@@ -1725,7 +1745,7 @@ export default function BrandEditStudio() {
                 onClick={() => {
                   handleSaveDraft();
                   setShowExitModal(false);
-                  navigate("/admin/brands");
+                  navigate(isNested ? "/dashboard/content-studio/brands" : "/admin/brands");
                 }}
                 className="w-full py-2 bg-green-600 text-white hover:bg-green-700 rounded-xl font-bold text-xs"
               >

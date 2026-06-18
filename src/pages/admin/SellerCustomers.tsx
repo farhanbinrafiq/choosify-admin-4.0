@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useOrders, Order, Customer, MessageThread } from '../../contexts/OrdersContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
@@ -846,7 +847,7 @@ export default function SellerCustomers() {
                             <div className="min-w-0">
                               <h4 className="font-bold text-white text-xs truncate max-w-sm">{o.product.name}</h4>
                               <p className="text-[10px] text-app-text-secondary mt-0.5">
-                                Order ID: <span className="font-mono text-white">{o.id}</span> · Invoice No: <span className="font-mono text-[#8E9BAE]">{o.invoice_id || 'Generating'}</span>
+                                Order ID: <span className="font-mono text-white">{o.id}</span> · Invoice No: <Link to={`/admin/invoice/${o.id}`} className="font-mono text-app-accent hover:underline">{o.invoice_id || 'Generating'}</Link>
                               </p>
                               <span className="text-[9.5px] text-slate-500 block mt-0.5">{new Date(o.timestamp).toLocaleString()}</span>
                             </div>

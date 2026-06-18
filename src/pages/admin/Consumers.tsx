@@ -145,7 +145,7 @@ export default function ConsumersPage() {
           <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-app-text-secondary">
             <span>Platform Registry</span>
             <ChevronRight className="w-3.5 h-3.5 text-app-text-secondary/30" />
-            <span>Users</span>
+            <span>Consumers</span>
             <ChevronRight className="w-3.5 h-3.5 text-app-text-secondary/30" />
             <span className="text-app-accent-light">{currentViewRole}s Directory</span>
           </div>
@@ -274,19 +274,78 @@ export default function ConsumersPage() {
       )}
 
       {isConsumerView && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 animate-in fade-in duration-200">
-          {[
-            { label: 'Registered Consumers', val: '142,500', color: 'border-l-indigo-500', note: 'Enrolled platform buyers' },
-            { label: 'Purchased in 30d', val: '12,940', color: 'border-l-emerald-500', note: '90.8% organic conversion rate' },
-            { label: 'Average Basket Value', val: '৳ 3,250', color: 'border-l-blue-500', note: 'High value retention target' },
-            { label: 'Unverified Flagged Accounts', val: '5 accounts', color: 'border-l-red-500', note: 'Under observation' },
-          ].map(s => (
-            <div key={s.label} className={`bg-app-card p-4.5 rounded-[4px] border border-app-border border-l-[3px] shadow-lg ${s.color}`}>
-              <div className="text-[20px] font-bold text-white tracking-tight font-mono">{s.val}</div>
-              <div className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest mt-1 opacity-70">{s.label}</div>
-              <div className="text-[9.5px] text-app-text-secondary italic mt-1">{s.note}</div>
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {[
+              { label: 'Registered Consumers', val: '142,500', color: 'border-l-indigo-500', note: 'Enrolled platform buyers' },
+              { label: 'Purchased in 30d', val: '12,940', color: 'border-l-emerald-500', note: '90.8% organic conversion rate' },
+              { label: 'Average Basket Value', val: '৳ 3,250', color: 'border-l-blue-500', note: 'High value retention target' },
+              { label: 'Unverified Flagged Accounts', val: '5 accounts', color: 'border-l-red-500', note: 'Under observation' },
+            ].map(s => (
+              <div key={s.label} className={`bg-app-card p-4.5 rounded-[4px] border border-app-border border-l-[3px] shadow-lg ${s.color}`}>
+                <div className="text-[20px] font-bold text-white tracking-tight font-mono">{s.val}</div>
+                <div className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest mt-1 opacity-70">{s.label}</div>
+                <div className="text-[9.5px] text-app-text-secondary italic mt-1">{s.note}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* SECTION B: Consumer Behavioral Trends (Search, View, Save) */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-app-card border border-app-border rounded-xl p-5 shadow-xl space-y-3">
+              <h4 className="text-[10px] uppercase font-bold tracking-widest text-[#F4631E] block">Most Searched Products</h4>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-white font-medium">Jamdani Silk Traditional Saree</span>
+                  <span className="text-slate-400 font-mono text-[10.5px]">8.4k searches</span>
+                </div>
+                <div className="flex justify-between items-center text-xs opacity-80">
+                  <span className="text-white">Samsung S25 Ultra</span>
+                  <span className="text-slate-400 font-mono text-[10.5px]">6.1k searches</span>
+                </div>
+                <div className="flex justify-between items-center text-xs opacity-60">
+                  <span className="text-slate-200">Pure Mustard Oil 1L</span>
+                  <span className="text-slate-400 font-mono text-[10.5px]">2.1k searches</span>
+                </div>
+              </div>
             </div>
-          ))}
+
+            <div className="bg-app-card border border-app-border rounded-xl p-5 shadow-xl space-y-3">
+              <h4 className="text-[10px] uppercase font-bold tracking-widest text-emerald-400 block">Most Viewed Products</h4>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-white font-medium">Vision Smart TV 55"</span>
+                  <span className="text-slate-400 font-mono text-[10.5px]">12.8k views</span>
+                </div>
+                <div className="flex justify-between items-center text-xs opacity-80">
+                  <span className="text-white">Walton 2-Door Fridge</span>
+                  <span className="text-slate-400 font-mono text-[10.5px]">8.9k views</span>
+                </div>
+                <div className="flex justify-between items-center text-xs opacity-60">
+                  <span className="text-slate-200">Samsung S25 Ultra</span>
+                  <span className="text-slate-400 font-mono text-[10.5px]">8.4k views</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-app-card border border-app-border rounded-xl p-5 shadow-xl space-y-3">
+              <h4 className="text-[10px] uppercase font-bold tracking-widest text-blue-400 block">Most Saved / Wishlisted</h4>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-white font-medium">Walton 2-Door Fridge</span>
+                  <span className="text-slate-400 font-mono text-[10.5px]">1.2k saves</span>
+                </div>
+                <div className="flex justify-between items-center text-xs opacity-80">
+                  <span className="text-white">Jamdani Silk Traditional Saree</span>
+                  <span className="text-slate-400 font-mono text-[10.5px]">950 saves</span>
+                </div>
+                <div className="flex justify-between items-center text-xs opacity-60">
+                  <span className="text-slate-200">TechCore Bluetooth Smart Watch</span>
+                  <span className="text-slate-400 font-mono text-[10.5px]">810 saves</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

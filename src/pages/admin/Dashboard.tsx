@@ -98,8 +98,7 @@ export default function Dashboard() {
                <Plus className="w-4 h-4" /> New Report
             </button>
             <Link 
-              to="/admin/products"
-              state={{ openAddModal: true }}
+              to="/dashboard/content-studio/products/new"
               className="p-2.5 bg-app-accent hover:bg-app-accent-light text-white rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg shadow-app-accent/20 transition-all active:scale-95"
             >
                <Package className="w-4 h-4" /> Add Product

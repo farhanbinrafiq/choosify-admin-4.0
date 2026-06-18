@@ -29,8 +29,6 @@ import {
   Zap,
   ChevronRight,
   RefreshCw,
-  Sun,
-  Moon,
   Megaphone,
   UserCheck,
   Lock,
@@ -40,33 +38,35 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
 import { useCMS } from '../contexts/CMSContext';
+import { useOrders } from '../contexts/OrdersContext';
+import { useContact } from '../contexts/ContactInteractionContext';
 
 interface SidebarItem {
   label: string;
   type?: 'label';
   icon?: any;
   path?: string;
-  badge?: number;
-  subItems?: { label: string; path: string; badge?: number }[];
+  badge?: string | number;
+  subItems?: { label: string; path: string; badge?: string | number }[];
 }
 
 const roleMenus: Record<UserRole, SidebarItem[]> = {
   super_admin: [
     { label: 'Admin Terminal', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Users', icon: Users, path: '/admin/consumers' },
-    { label: 'Brands', icon: Building2, path: '/admin/brands' },
+    { label: 'Consumers', icon: Users, path: '/admin/consumers' },
+    { label: 'Brand Management Studio', icon: Globe, path: '/admin/sellers' },
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'Orders', icon: ListOrdered, path: '/admin/orders-overview' },
-    { label: 'Guides Studio', icon: FileText, path: '/dashboard/content-studio/guides' },
     { label: 'Creators', icon: Award, path: '/admin/creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/moderation?tab=disputes' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 12 },
     { label: 'Trust Center', icon: ShieldCheck, path: '/admin/trust-center' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+    { label: 'Finance', type: 'label' },
+    { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
     
     { label: 'Super Admin Core', type: 'label' },
@@ -85,28 +85,32 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
   admin: [
     { label: 'Admin Workspace', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Users', icon: Users, path: '/admin/consumers' },
-    { label: 'Brands', icon: Building2, path: '/admin/brands' },
+    { label: 'Consumers', icon: Users, path: '/admin/consumers' },
+    { label: 'Brand Management Studio', icon: Globe, path: '/admin/sellers' },
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'Orders', icon: ListOrdered, path: '/admin/orders-overview' },
-    { label: 'Guides', icon: FileText, path: '/dashboard/content-studio/guides' },
     { label: 'Creators', icon: Award, path: '/admin/creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/moderation?tab=disputes' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
     { label: 'Trust Center', icon: ShieldCheck, path: '/admin/trust-center' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+    { label: 'Finance', type: 'label' },
+    { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
   ],
   seller: [
     { label: 'Seller Operations', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Orders', icon: ListOrdered, path: '/admin/orders', badge: 4 },
+    { label: 'My Profile', icon: UserCheck, path: '/admin/sellers/seller_001?tab=overview' },
+    { label: 'Order Console', icon: ListOrdered, path: '/admin/orders', badge: 4 },
     { label: 'Products', icon: Package, path: '/admin/products' },
-    { label: 'Brand Studio', icon: Globe, path: '/dashboard/content-studio/brands' },
+    { label: 'My Brand Studio', icon: Globe, path: '/dashboard/content-studio/brands' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 2 },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+    { label: 'Finance', type: 'label' },
+    { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
   ],
   creator: [
@@ -118,6 +122,8 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Collaborations', icon: ShieldCheck, path: '/admin/creator-hub', badge: 1 },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+    { label: 'Finance', type: 'label' },
+    { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
   ],
   moderator: [
@@ -149,7 +155,6 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
 
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile, logout, switchRole, activeBrandId, setActiveBrandId, sellerBrands, allBrands, requestNewBrand } = useAuth();
-  const { theme, toggleTheme } = useTheme();
   const { cmsData } = useCMS();
   const location = useLocation();
   const navigate = useNavigate();
@@ -170,7 +175,32 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const currentRole = profile?.role || 'super_admin';
-  const sidebarItems = roleMenus[currentRole as UserRole] || [];
+  
+  const { messageThreads } = useOrders();
+  const { unreadProfileCount, triggerOpenInbox } = useContact();
+
+  const [supportMessages] = useState(() => {
+    try {
+      const saved = localStorage.getItem('choosify_general_messages');
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const unreadSupportCount = supportMessages.filter((m: any) => m.status === 'UNREAD').length;
+  const unreadOrdersCount = messageThreads.filter(m => m.status === 'UNREAD').length;
+  const unreadTotal = unreadSupportCount + unreadProfileCount + unreadOrdersCount;
+
+  const sidebarItems = (roleMenus[currentRole as UserRole] || []).map(item => {
+    if (item.label === 'Messages') {
+      return {
+        ...item,
+        badge: unreadTotal > 0 ? unreadTotal : undefined
+      };
+    }
+    return item;
+  });
 
   const sellerRelations = sellerBrands.filter(r => r.seller_user_id === profile?.id);
   const sellerBrandsList = allBrands.filter(b => sellerRelations.some(r => r.brand_id === b.id));
@@ -193,14 +223,18 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         '/admin/orders',
         '/admin/products',
         '/dashboard/content-studio/brands',
+        '/admin/brand-profiles',
+        '/admin/ownership-claims',
         '/admin/messages',
         '/admin/reviews',
         '/admin/analytics',
         '/admin/settings',
-        '/admin/customers'
+        '/admin/customers',
+        '/admin/invoice',
+        '/admin/cashbook'
       ];
       
-      const isAllowed = allowedSellers.some(p => path === p || path.startsWith(p + '/'));
+      const isAllowed = allowedSellers.some(p => path === p || path.startsWith(p + '/')) || (path.startsWith('/admin/sellers/') && path !== '/admin/sellers');
       if (!isAllowed) {
         navigate('/admin/dashboard', { replace: true });
       }
@@ -215,7 +249,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         '/admin/creator-hub',
         '/admin/messages',
         '/admin/analytics',
-        '/admin/settings'
+        '/admin/settings',
+        '/admin/cashbook'
       ];
       const isAllowed = allowedCreators.some(p => path === p || path.startsWith(p + '/'));
       if (!isAllowed) {
@@ -279,7 +314,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       </div>
 
       {/* Sidebar */}
-      <aside className="w-[240px] h-full bg-app-sidebar flex flex-col shrink-0 border-r border-app-border overflow-hidden">
+      <aside className="sidebar w-[240px] h-full bg-app-sidebar flex flex-col shrink-0 border-r border-app-border overflow-hidden">
         <div className="py-8 px-6 flex items-center gap-3">
           {cmsData.logos.header ? (
             <img src={cmsData.logos.header} alt="Choosify Logo" className="h-8 object-contain" />
@@ -297,64 +332,11 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           )}
         </div>
 
-        {/* Brand Switcher Context */}
-        {currentRole === 'seller' && (
-          <div className="px-4 mb-3">
-            <button 
-              onClick={() => setIsBrandsExpanded(!isBrandsExpanded)}
-              className="w-full text-left flex items-center justify-between text-[11px] font-black uppercase tracking-widest text-slate-500 hover:text-white transition-colors duration-200"
-            >
-              <span>Brands</span>
-              <span className={`text-[9px] transition-transform duration-300 ${isBrandsExpanded ? 'rotate-180' : ''}`}>▼</span>
-            </button>
-            
-            <AnimatePresence>
-              {isBrandsExpanded && (
-                <motion.div 
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden mt-1.5"
-                >
-                  <div className="bg-[#1e1e30] border border-app-border rounded-xl p-2 space-y-1">
-                    {sellerBrandsList.map(b => (
-                      <button
-                        key={b.id}
-                        onClick={() => setActiveBrandId(b.id)}
-                        className={`w-full flex items-center justify-between text-left px-2.5 py-1.5 rounded-lg text-xs font-black transition-all ${
-                          activeBrandId === b.id 
-                            ? 'bg-app-accent text-white shadow-lg' 
-                            : 'text-slate-400 hover:text-white hover:bg-white/5'
-                        }`}
-                      >
-                        <span className="truncate">{b.name}</span>
-                        {activeBrandId === b.id && <span className="text-[9px]">●</span>}
-                      </button>
-                    ))}
-                    <button
-                      onClick={() => {
-                        const name = prompt("Enter new brand name to request:");
-                        if (name && name.trim()) {
-                          const category = prompt("Enter brand category:") || "Retail";
-                          requestNewBrand(name.trim(), category.trim());
-                        }
-                      }}
-                      className="w-full text-left px-2.5 py-1.5 text-app-accent hover:text-app-accent-light text-[10px] font-black transition-all border-t border-white/[0.04] mt-2 block"
-                    >
-                      * Request New Brand
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        )}
-
         <nav className="flex-1 overflow-y-auto px-3 pt-2 pb-6 custom-scrollbar">
           {sidebarItems.map((item, idx) => {
             if (item.type === 'label') {
               return (
-                <div key={idx} className="text-[10px] font-bold text-slate-500 px-3 pt-6 pb-2 uppercase tracking-widest">
+                <div key={idx} className="text-[10px] font-bold text-[#CBD5E1] px-3 pt-6 pb-2 uppercase tracking-widest">
                   {item.label}
                 </div>
               );
@@ -362,10 +344,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             const Icon = item.icon!;
             const hasSub = item.subItems && item.subItems.length > 0;
             
+            const [itemPath, itemQuery] = item.path ? item.path.split('?') : ['', ''];
+            
             const isParentActive = item.path 
-              ? (item.path === '/admin/dashboard' 
+              ? (itemPath === '/admin/dashboard' 
                   ? location.pathname === '/admin/dashboard' 
-                  : location.pathname === item.path || location.pathname.startsWith(item.path + '/')) 
+                  : location.pathname === itemPath || location.pathname.startsWith(itemPath + '/')) 
               : false;
             
             const isChildActive = item.subItems?.some(sub => {
@@ -374,10 +358,23 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
               if (subQuery) {
                 const searchParam = subQuery.split('=')[1];
                 const cleanSearch = location.search.replace('?', '');
+                if (searchParam === 'overview' && cleanSearch === '') {
+                  return pathMatches;
+                }
                 return pathMatches && cleanSearch.includes(searchParam);
               }
               return pathMatches;
             }) || false;
+
+            const totalItemBadge = item.badge || item.subItems?.reduce((acc, sub) => {
+              const b = sub.badge;
+              if (typeof b === 'number') return acc + b;
+              if (typeof b === 'string') {
+                const num = parseInt(b, 10);
+                return acc + (isNaN(num) ? 0 : num);
+              }
+              return acc;
+            }, 0) || 0;
 
             const isActive = isParentActive || isChildActive;
             const isCurrentlyExpanded = expandedMenus[item.label] !== undefined 
@@ -391,39 +388,40 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                     onClick={() => toggleMenu(item.label)}
                     className={`w-full group flex items-center gap-3 px-3.5 py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 text-left cursor-pointer ${
                       isActive 
-                        ? 'bg-gradient-to-r from-app-accent/15 via-app-accent/5 to-transparent text-white border-app-accent' 
-                        : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
+                        ? 'bg-[#F97316] text-white border-white' 
+                        : 'border-transparent text-white hover:text-white hover:bg-white/10'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 shrink-0 transition-all duration-300 ${
-                      isActive 
-                        ? 'text-app-accent scale-110 drop-shadow-[0_0_8px_rgba(235,69,1,0.4)]' 
-                        : 'text-slate-400 group-hover:text-white'
-                    }`} />
-                    <span className={`transition-colors duration-300 flex-1 ${isActive ? 'text-white font-semibold' : 'text-slate-400 group-hover:text-white'}`}>
+                    <Icon className="w-4 h-4 shrink-0 transition-all duration-300 text-white" />
+                    <span className="transition-colors duration-300 flex-1 text-white font-semibold flex items-center gap-2">
                       {item.label}
+                      {totalItemBadge > 0 && (
+                        <span className={`text-[9.5px] px-1.5 py-0.2 rounded font-black ${
+                          isActive 
+                            ? 'bg-white text-[#F97316]' 
+                            : 'bg-[#F97316] text-white'
+                        }`}>
+                          {totalItemBadge}
+                        </span>
+                      )}
                     </span>
-                    <ChevronRight className={`w-3.5 h-3.5 text-slate-500 group-hover:text-white transition-transform ${isCurrentlyExpanded ? 'rotate-90 text-app-accent' : ''}`} />
+                    <ChevronRight className={`w-3.5 h-3.5 text-white transition-transform ${isCurrentlyExpanded ? 'rotate-90' : ''}`} />
                   </button>
                 ) : (
                   <NavLink
                     to={item.path!}
                     className={`group flex items-center gap-3 px-3.5 py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 ${
                       isActive 
-                        ? 'active-sidebar-item bg-gradient-to-r from-app-accent/15 via-app-accent/5 to-transparent text-white border-app-accent shadow-[0_4px_16px_rgba(235,69,1,0.08)]' 
-                        : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
+                        ? 'active-sidebar-item bg-[#F97316] text-white border-white shadow-[0_4px_16px_rgba(249,115,22,0.15)]' 
+                        : 'border-transparent text-white hover:text-white hover:bg-white/10'
                     }`}
                   >
-                    <Icon className={`w-4 h-4 shrink-0 transition-all duration-300 ${
-                      isActive 
-                        ? 'text-app-accent scale-110 drop-shadow-[0_0_8px_rgba(235,69,1,0.4)]' 
-                        : 'text-slate-400 group-hover:text-white group-hover:scale-105'
-                    }`} />
-                    <span className={`transition-colors duration-300 ${isActive ? 'text-white font-semibold' : 'text-slate-400 group-hover:text-white'}`}>
+                    <Icon className="w-4 h-4 shrink-0 transition-all duration-300 text-white" />
+                    <span className="transition-colors duration-300 text-white font-semibold">
                       {item.label}
                     </span>
                     {item.badge && (
-                      <span className="ml-auto bg-app-accent text-white text-[9px] px-1.5 py-0.5 rounded font-bold">
+                      <span className="ml-auto bg-white text-[#F97316] text-[9px] px-1.5 py-0.5 rounded font-bold">
                         {item.badge}
                       </span>
                     )}
@@ -434,8 +432,9 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                   <div className="mt-1 pl-6 space-y-1 bg-white/[0.01] border-l border-white/[0.04] ml-5 rounded-bl-sm">
                     {item.subItems.map((sub, sIdx) => {
                       const [subPath, subQuery] = sub.path.split('?');
+                      const subParam = subQuery ? subQuery.split('=')[1] : null;
                       const isSubActive = location.pathname === subPath && 
-                        (!subQuery || location.search.includes(subQuery.split('=')[1]));
+                        (!subQuery || location.search.includes(subParam!) || (subParam === 'overview' && !location.search));
                       
                       return (
                         <NavLink
@@ -443,14 +442,14 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                           to={sub.path}
                           className={`flex items-center gap-2 py-2 px-3 text-[11px] font-medium rounded-md transition-all ${
                             isSubActive 
-                              ? 'text-app-accent font-bold bg-white/[0.03]' 
-                              : 'text-slate-400 hover:text-white hover:bg-white/[0.02]'
+                              ? 'text-white font-bold bg-[#F97316]' 
+                              : 'text-[#E2E8F0] hover:text-white hover:bg-white/[0.02]'
                           }`}
                         >
-                          <ChevronRight className={`w-2.5 h-2.5 ${isSubActive ? 'text-app-accent rotate-90 scale-110' : 'text-slate-500 opacity-60'}`} />
+                          <ChevronRight className={`w-2.5 h-2.5 ${isSubActive ? 'text-white rotate-90 scale-110' : 'text-[#E2E8F0] opacity-60'}`} />
                           <span className="truncate">{sub.label}</span>
                           {sub.badge && (
-                            <span className="ml-auto bg-app-accent/20 text-app-accent text-[8px] px-1 py-0.2 rounded font-black">
+                            <span className="ml-auto bg-[#F97316] text-white text-[8px] px-1 py-0.2 rounded font-black">
                               {sub.badge}
                             </span>
                           )}
@@ -470,9 +469,9 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-white text-[11px] font-semibold truncate">{profile?.displayName || 'User'}</p>
-            <p className="text-slate-500 text-[9px] truncate">{profile?.email || 'user@example.com'}</p>
+            <p className="text-[#CBD5E1] text-[9px] truncate">{profile?.email || 'user@example.com'}</p>
           </div>
-          <button onClick={handleLogout} className="text-app-text-secondary hover:text-white transition-colors">
+          <button onClick={handleLogout} className="text-white hover:text-[#CBD5E1] transition-colors">
             <LogOut className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -487,17 +486,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             </div>
           </div>
           <div className="flex items-center gap-4">
-             <button
-               onClick={toggleTheme}
-               className="w-10 h-10 rounded-xl bg-app-card border border-app-border flex items-center justify-center hover:bg-app-accent group transition-all"
-               title={`Switch to ${theme === 'light' ? 'Night' : 'Light'} Mode`}
-             >
-               {theme === 'light' ? (
-                 <Moon className="w-5 h-5 text-app-text-secondary group-hover:text-white transition-colors" />
-               ) : (
-                 <Sun className="w-5 h-5 text-app-text-secondary group-hover:text-white transition-colors" />
-               )}
-             </button>
              <div className="flex items-center gap-3">
                <span className="bg-app-accent/10 text-app-accent px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
                  {currentRole.replace('_', ' ')}
@@ -507,6 +495,19 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                   <div className="text-[11px] text-app-text-secondary">{profile?.email}</div>
                </div>
              </div>
+             <button
+               onClick={() => triggerOpenInbox()}
+               className="w-8 h-8 rounded-full bg-app-card border border-app-border flex items-center justify-center hover:bg-slate-800 hover:border-slate-450 active:scale-95 cursor-pointer relative shrink-0 transition-all text-app-text-primary"
+               title="Open Messenger"
+             >
+               <MessageCircle className="w-4 h-4 text-app-text-secondary" />
+               {unreadTotal > 0 && (
+                 <span id="NotificationBadge" className="absolute -top-1 -right-1 bg-[#F97316] text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-app-bg NotificationBadge">
+                   {unreadTotal}
+                 </span>
+               )}
+             </button>
+
              <div className="w-8 h-8 rounded-full bg-app-card border border-app-border flex items-center justify-center">
                 <div className="relative">
                   <Bell className="w-4 h-4 text-app-text-secondary" />

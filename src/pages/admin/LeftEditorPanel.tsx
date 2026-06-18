@@ -1,5 +1,6 @@
 // LeftEditorPanel.tsx
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   FileText, ShieldCheck, ShoppingBag, Plus, Sparkles, SlidersHorizontal,
   PlusCircle, RefreshCcw, Trash, Copy, Edit2, Play, Circle, Video,
@@ -25,6 +26,7 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
   updateModelField,
   setHasUnsavedChanges
 }) => {
+  const navigate = useNavigate();
   // Local form inputs
   const [newTag, setNewTag] = useState("");
   const [productSearch, setProductSearch] = useState("");
@@ -612,7 +614,7 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
             <div className="flex items-center justify-between border-b border-gray-100 pb-2">
               <span className="font-extrabold text-[#111827]">Products List ({model.products?.length || 0})</span>
               <button
-                onClick={() => setIsAddingProduct(!isAddingProduct)}
+                onClick={() => navigate("/dashboard/content-studio/products/new")}
                 className="px-2.5 py-1.5 bg-[#EA6C0A] hover:bg-[#F97316] text-white rounded-lg text-xs font-bold flex items-center gap-1"
               >
                 <PlusCircle className="w-3.5 h-3.5" /> Add Product to Catalog

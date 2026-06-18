@@ -16,6 +16,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useAuth } from '../../contexts/AuthContext';
 
 const productSchema = z.object({
   brandName: z.string().min(1, 'Brand is required'),
@@ -40,11 +41,15 @@ interface AddProductModalProps {
 }
 
 export default function AddProductModal({ isOpen, onClose, onSuccess }: AddProductModalProps) {
+  const { profile, sellerBrands, allBrands } = useAuth();
   const [step, setStep] = useState(1);
   const [isAddingBrand, setIsAddingBrand] = useState(false);
   const [images, setImages] = useState<string[]>([]);
   const [mediaLinks, setMediaLinks] = useState<string[]>(['']);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const sellerRelations = sellerBrands.filter(r => r.seller_user_id === profile?.id);
+  const sellerBrandsList = allBrands.filter(b => sellerRelations.some(r => r.brand_id === b.id));
 
   const {
     register,
@@ -164,11 +169,15 @@ export default function AddProductModal({ isOpen, onClose, onSuccess }: AddProdu
                                 register('brandName').onChange(e);
                               }
                             }}
-                            className="w-full bg-app-sidebar border border-app-border rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-app-accent/40 transition-all"
+                            className="w-full bg-app-sidebar border border-app-border rounded-xl px-4 py-3 text-white text-sm outline-none focus:border-app-accent/40 transition-all cursor-pointer"
                           >
                             <option value="">Select Brand</option>
-                            {brands.map(b => <option key={b} value={b}>{b}</option>)}
-                            <option value="new">+ Add New Brand</option>
+                            {profile?.role === 'seller' ? (
+                              sellerBrandsList.map(b => <option key={b.name} value={b.name}>{b.name}</option>)
+                            ) : (
+                              brands.map(b => <option key={b} value={b}>{b}</option>)
+                            )}
+                            {profile?.role !== 'seller' && <option value="new">+ Add New Brand</option>}
                           </select>
                         </div>
                       ) : (

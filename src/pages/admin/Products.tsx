@@ -17,7 +17,7 @@ import {
   ExternalLink,
   Tag
 } from 'lucide-react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import AddProductModal from '../../components/admin/AddProductModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -38,20 +38,37 @@ const mockProducts = [
 export default function ProductsPage() {
   const { profile, activeBrandId, allBrands, sellerBrands } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const isContentStudio = location.pathname.includes("content-studio");
   const [isModalOpen, setIsModalOpen] = useState(location.state?.openAddModal || false);
   const [products, setProducts] = useState(mockProducts);
   const [toast, setToast] = useState<string | null>(null);
+  const [selectedBrandFilter, setSelectedBrandFilter] = useState<string | null>(activeBrandId);
+
+  React.useEffect(() => {
+    if (isModalOpen) {
+      setIsModalOpen(false);
+      navigate("/dashboard/content-studio/products/new");
+    }
+  }, [isModalOpen, navigate]);
+
+  React.useEffect(() => {
+    setSelectedBrandFilter(activeBrandId);
+  }, [activeBrandId]);
 
   // Filter products based on user role and active seller brand context
-  const activeBrand = allBrands.find(b => b.id === activeBrandId);
+  const targetBrand = allBrands.find(b => b.id === selectedBrandFilter);
   const sellerRelations = sellerBrands.filter(r => r.seller_user_id === profile?.id);
   const ownedBrandIds = sellerRelations.map(r => r.brand_id);
+  const ownedBrandNames = allBrands.filter(b => ownedBrandIds.includes(b.id)).map(b => b.name.toLowerCase());
 
   const displayedProducts = products.filter(p => {
     if (profile?.role === 'seller') {
-      if (!activeBrand) return false;
-      return p.brand && p.brand.toLowerCase() === activeBrand.name.toLowerCase();
+      if (targetBrand) {
+        const targetBrandNameLower = targetBrand.name.toLowerCase();
+        return p.brand && (p.brand.toLowerCase() === targetBrandNameLower || p.brand.toLowerCase().includes(targetBrandNameLower) || targetBrandNameLower.includes(p.brand.toLowerCase()));
+      }
+      return p.brand && ownedBrandNames.some(name => p.brand.toLowerCase() === name || p.brand.toLowerCase().includes(name) || name.includes(p.brand.toLowerCase()));
     }
     return true;
   });
@@ -102,7 +119,7 @@ export default function ProductsPage() {
              </Link>
            ) : (
              <button 
-               onClick={() => setIsModalOpen(true)}
+               onClick={() => navigate("/dashboard/content-studio/products/new")}
                className="flex items-center gap-2 bg-app-accent hover:bg-app-accent-light text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-app-accent/20 active:scale-95"
              >
                 <Plus className="w-4 h-4" /> Add Product
@@ -223,6 +240,18 @@ export default function ProductsPage() {
           />
         </div>
         <div className="flex gap-2">
+           {profile?.role === 'seller' && (
+             <select 
+               value={selectedBrandFilter || ''}
+               onChange={(e) => setSelectedBrandFilter(e.target.value || null)}
+               className="bg-app-sidebar border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-white font-medium outline-none focus:border-app-accent/40 cursor-pointer"
+             >
+               <option value="">All Brands</option>
+               {allBrands.filter(b => ownedBrandIds.includes(b.id)).map(b => (
+                 <option key={b.id} value={b.id}>{b.name}</option>
+               ))}
+             </select>
+           )}
            <select className="bg-app-sidebar border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-white font-medium outline-none focus:border-app-accent/40">
              <option>All Categories</option>
              <option>Mobile</option>
@@ -287,13 +316,13 @@ export default function ProductsPage() {
                   <td className="p-6 text-right">
                     <div className="flex justify-end gap-2">
                        <Link 
-                        to={isContentStudio ? `/dashboard/content-studio/products/${p.id}/edit` : `/admin/products/${p.id}/edit`}
+                        to={`/dashboard/content-studio/products/${p.id}/edit`}
                         className="p-2.5 bg-white/5 border border-app-border rounded-xl text-app-text-secondary hover:text-white hover:border-app-accent/40 transition-all"
                        >
                          <Tag className="w-4 h-4" />
                        </Link>
                        <Link 
-                        to={isContentStudio ? `/dashboard/content-studio/products/${p.id}/edit` : `/admin/products/${p.id}`}
+                        to={`/dashboard/content-studio/products/${p.id}/edit`}
                         className="p-2.5 bg-app-accent/10 border border-app-accent/20 rounded-xl text-app-accent-light hover:bg-app-accent/20 transition-all"
                        >
                          <Eye className="w-4 h-4" />
