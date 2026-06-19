@@ -214,6 +214,86 @@
         "createdAt": { "type": "string", "format": "date-time" }
       },
       "required": ["requesterId", "contentId", "approvalStatus"]
+    },
+    "OmniConversation": {
+      "title": "OmniConversation",
+      "description": "Omnichannel unified conversation thread",
+      "type": "object",
+      "properties": {
+        "conversationId": { "type": "string" },
+        "platform": { "type": "string", "enum": ["whatsapp", "messenger", "instagram", "platform"] },
+        "senderName": { "type": "string" },
+        "senderAvatar": { "type": "string" },
+        "lastMessage": { "type": "string" },
+        "assignedAgent": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "pending", "resolved"] },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["conversationId", "platform", "senderName", "status", "updatedAt"]
+    },
+    "OmniMessage": {
+      "title": "OmniMessage",
+      "description": "Unified omnichannel message object",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "platform": { "type": "string", "enum": ["whatsapp", "messenger", "instagram", "platform"] },
+        "platformMessageId": { "type": "string" },
+        "conversationId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderName": { "type": "string" },
+        "senderAvatar": { "type": "string" },
+        "content": {
+          "type": "object",
+          "properties": {
+            "type": { "type": "string", "enum": ["text", "image", "file"] },
+            "body": { "type": "string" },
+            "mediaUrl": { "type": "string" }
+          },
+          "required": ["type", "body"]
+        },
+        "direction": { "type": "string", "enum": ["inbound", "outbound"] },
+        "status": { "type": "string", "enum": ["sent", "delivered", "read"] },
+        "assignedAgent": { "type": "string" },
+        "conversationStatus": { "type": "string", "enum": ["open", "pending", "resolved"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "platform", "platformMessageId", "conversationId", "senderId", "senderName", "content", "direction", "status", "timestamp"]
+    },
+    "OmniAgent": {
+      "title": "OmniAgent",
+      "description": "Omnichannel Support Agent profile",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string" },
+        "assignedConversations": { "type": "array" },
+        "status": { "type": "string", "enum": ["active", "inactive"] }
+      },
+      "required": ["id", "name", "email", "role", "assignedConversations", "status"]
+    },
+    "OmniCustomer": {
+      "title": "OmniCustomer",
+      "description": "Omnichannel customer master registry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "avatar": { "type": "string" },
+        "platformIds": {
+          "type": "object",
+          "properties": {
+            "whatsapp": { "type": "string" },
+            "messenger": { "type": "string" },
+            "instagram": { "type": "string" }
+          }
+        }
+      },
+      "required": ["id", "name", "platformIds"]
     }
   },
   "firestore": {
@@ -260,6 +340,22 @@
     "/promotion_requests/{requestId}": {
       "schema": "PromotionRequest",
       "description": "Centralized sponsored requests from merchants/creators"
+    },
+    "/omni_conversations/{conversationId}": {
+      "schema": "OmniConversation",
+      "description": "Unified omnichannel conversation threads"
+    },
+    "/omni_messages/{messageId}": {
+      "schema": "OmniMessage",
+      "description": "Unified omnichannel messages"
+    },
+    "/omni_agents/{agentId}": {
+      "schema": "OmniAgent",
+      "description": "Support team agent profiles"
+    },
+    "/omni_customers/{customerId}": {
+      "schema": "OmniCustomer",
+      "description": "Unified customer master registry"
     }
   }
 }

@@ -102,7 +102,7 @@ export default function App() {
               <Route path="products/:id" element={<ProductEdit />} />
               <Route path="products/:id/edit" element={<ProductEdit />} />
               <Route path="brands" element={<Navigate to="/admin/sellers" replace />} />
-              <Route path="brands/:id" element={<Navigate to="/admin/sellers" replace />} />
+              <Route path="brands/:id" element={<BrandDetails />} />
               <Route path="recommendations" element={<Recommendations />} />
               <Route path="recommendations/:id" element={<RecommendationPreview />} />
               <Route path="deals" element={<Deals />} />

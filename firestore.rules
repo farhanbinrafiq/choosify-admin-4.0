@@ -296,5 +296,21 @@ service cloud.firestore {
     match /promotion_requests/{requestId} {
       allow read, write: if true;
     }
+
+    match /omni_conversations/{conversationId} {
+      allow read, write: if true;
+    }
+
+    match /omni_messages/{messageId} {
+      allow read, write: if true;
+    }
+
+    match /omni_agents/{agentId} {
+      allow read, write: if true;
+    }
+
+    match /omni_customers/{customerId} {
+      allow read, write: if true;
+    }
   }
 }

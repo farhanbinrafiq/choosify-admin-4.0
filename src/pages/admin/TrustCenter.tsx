@@ -311,7 +311,7 @@ export default function TrustCenter() {
               -0.4%
             </span>
           </div>
-          <p className="text-[10px] text-slate-500">Includes wholesale/merchant fulfillment metrics</p>
+          <p className="text-[10px] text-slate-500">Includes merchant fulfillment metrics</p>
           <ShoppingBag className="absolute right-4 top-4 w-7 h-7 text-slate-500/10 group-hover:text-app-accent/10 transition-colors" />
         </div>
 

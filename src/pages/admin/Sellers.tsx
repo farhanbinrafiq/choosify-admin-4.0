@@ -788,12 +788,12 @@ export default function SellersPage() {
                               )}
                             </div>
                             <div>
-                              <span 
-                                onClick={() => setSelectedBrandIdForIntelligence(brand.id)}
+                              <Link 
+                                to={`/admin/brands/${brand.id}`}
                                 className="text-white hover:text-orange-400 cursor-pointer transition-colors block font-black text-sm"
                               >
                                 {brand.name}
-                              </span>
+                              </Link>
                               <span className="text-[10px] text-slate-400 font-semibold block mt-1 uppercase tracking-wider">{brand.category}</span>
                             </div>
                           </div>
@@ -873,13 +873,13 @@ export default function SellersPage() {
                         <td className="p-5 text-right">
                           <div className="flex gap-1.5 justify-end items-center">
                             
-                            <button 
-                              onClick={() => setSelectedBrandIdForIntelligence(brand.id)}
-                              className="p-1 px-2.5 bg-[#F4631E]/10 border border-[#F4631E]/20 text-[#F4631E] hover:bg-[#F4631E] hover:text-white rounded-md text-[10.5px] font-black uppercase tracking-wider transition-all cursor-pointer"
-                              title="Open Core Brand Intelligence System"
+                            <Link 
+                              to={`/admin/brands/${brand.id}`}
+                              className="p-1 px-2.5 bg-[#F4631E]/10 border border-[#F4631E]/20 text-[#F4631E] hover:bg-[#F4631E] hover:text-white rounded-md text-[10.5px] font-black uppercase tracking-wider transition-all cursor-pointer inline-block text-center"
+                              title="Open Brand Management Studio"
                             >
-                              Intelligence
-                            </button>
+                              Studio
+                            </Link>
 
                             {brand.brandProfile && (
                               <button 
@@ -989,16 +989,18 @@ export default function SellersPage() {
                             <tr key={c.id} className="hover:bg-white/[0.01]">
                               <td className="py-4 font-mono text-[10px] text-slate-400">{c.id}</td>
                               <td className="py-4 font-black text-white">
-                                <span 
-                                  onClick={() => {
-                                    const matchedId = unifiedBrands.find(b => b.name.toLowerCase() === c.brandName.toLowerCase())?.id || c.brandId;
-                                    setSelectedBrandIdForIntelligence(matchedId);
-                                  }}
-                                  className="hover:text-orange-400 cursor-pointer transition-colors block"
-                                  title="Analyze target brand profile"
-                                >
-                                  {c.brandName}
-                                </span>
+                                {(() => {
+                                  const matchedId = unifiedBrands.find(b => b.name.toLowerCase() === c.brandName.toLowerCase())?.id || c.brandId;
+                                  return (
+                                    <Link 
+                                      to={`/admin/brands/${matchedId}`}
+                                      className="hover:text-orange-400 cursor-pointer transition-colors block text-sm"
+                                      title="Open Brand Management Studio"
+                                    >
+                                      {c.brandName}
+                                    </Link>
+                                  );
+                                })()}
                               </td>
                               <td className="py-4">
                                 <span className="font-bold text-slate-200">{c.applicantName}</span>
@@ -1654,29 +1656,7 @@ export default function SellersPage() {
         </div>
       )}
 
-      {/* BRAND CORPORATE INTELLIGENCE OVERLAY DRAWER */}
-      {selectedBrandIdForIntelligence && (() => {
-        const brand = unifiedBrands.find(b => b.id === selectedBrandIdForIntelligence);
-        if (!brand) return null;
-        return (
-          <BrandIntelligenceCenter
-            brandId={brand.id}
-            brandName={brand.name}
-            onClose={() => setSelectedBrandIdForIntelligence(null)}
-            profiles={profiles}
-            claims={claims}
-            logs={logs}
-            updateProfile={updateProfile}
-            reviewClaim={reviewClaim}
-            addLog={addLog}
-            outerProducts={products}
-            setOuterProducts={setProducts}
-            outerDeals={deals}
-            setOuterDeals={setDeals}
-            showToast={showToast}
-          />
-        );
-      })()}
+      {/* REMOVED DRAWERS */}
 
     </div>
   );

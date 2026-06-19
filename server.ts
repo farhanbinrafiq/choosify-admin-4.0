@@ -1,6 +1,9 @@
 import express from "express";
 import path from "path";
 import dotenv from "dotenv";
+import { createServer } from "http";
+import { Server as SocketIOServer } from "socket.io";
+import { messagingRouter, setSocketIO, seedOmnichannelData } from "./server/messagingHub";
 
 dotenv.config();
 
@@ -10,12 +13,10 @@ async function startServer() {
 
   app.use(express.json());
 
-  // API routes
-  app.get("/api/health", (req, res) => {
-    res.json({ status: "ok" });
-  });
+  // Mount Unified Omnichannel Messaging APIs and Webhooks
+  app.use("/api", messagingRouter);
 
-  // Mock roles for testing RBAC or fetch from Firebase Admin if setup (omitting admin setup for now to keep it simple unless needed)
+  // API stats route
   app.get("/api/admin/stats", async (req, res) => {
     // In production, this would use Firebase Admin to count docs
     res.json({
@@ -46,7 +47,21 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  // Pre-seed Firestore with beautiful messaging sandbox dataset
+  await seedOmnichannelData();
+
+  // Create HTTP Server & attach Socket.io
+  const httpServer = createServer(app);
+  const io = new SocketIOServer(httpServer, {
+    cors: {
+      origin: "*",
+      methods: ["GET", "POST", "PATCH", "DELETE"]
+    }
+  });
+
+  setSocketIO(io);
+
+  httpServer.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }

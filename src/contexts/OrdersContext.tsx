@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type OrderStatus = 'Pending' | 'Confirmed' | 'Dispatched' | 'In Transit' | 'Delivered' | 'Cancelled';
+export type OrderStatus = 'Pending' | 'Confirmed' | 'Dispatched' | 'In Transit' | 'Delivered' | 'Cancelled' | 'Rejected' | 'Returned' | 'Exchange' | 'Processing';
 export type PaymentStatus = 'Pending' | 'Paid' | 'Refunded';
 export type CustomerBehavior = 'Good' | 'Neutral' | 'Risk';
 
@@ -54,6 +54,10 @@ export interface Order {
   invoice_id?: string;
   invoice_status?: 'Paid' | 'Unpaid' | 'Refunded';
   confirmation_timestamp?: string;
+  isManual?: boolean;
+  platformSource?: 'WhatsApp' | 'Facebook' | 'Instagram' | 'Offline';
+  chatRefId?: string;
+  quantity?: number;
 }
 
 export interface ThreadMessage {
@@ -85,10 +89,23 @@ interface OrdersContextType {
   cancelOrder: (orderId: string, reason: string) => void;
   dispatchOrder: (orderId: string, deliveryPartner: string, trackingUrl: string) => void;
   addCustomerNotes: (orderId: string, note: string) => void;
+  addSellerNotes: (orderId: string, note: string) => void;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   flagCustomer: (customerId: string, flagged: boolean, reason: string) => void;
   sendChatMessage: (threadId: string, text: string, senderRole: 'customer' | 'seller' | 'admin', senderName: string) => void;
   createOrderNow: (product: OrderProduct, customerMsg: string) => void;
+  createManualOrder: (params: {
+    customerName: string;
+    customerEmail: string;
+    customerPhone: string;
+    customerAddress: string;
+    platformSource: 'WhatsApp' | 'Facebook' | 'Instagram' | 'Offline';
+    chatRefId?: string;
+    product: OrderProduct;
+    quantity: number;
+    priceOverride?: number;
+    notes?: string;
+  }) => void;
   markAllThreadsAsRead: () => void;
   markThreadAsRead: (threadId: string) => void;
 }
@@ -384,9 +401,16 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (o.id === orderId) {
         return {
           ...o,
-          status: 'Cancelled',
+          status: 'Rejected',
           cancelTime: new Date().toISOString(),
           declineReason: reason,
+          invoice_status: 'Refunded' as any,
+          earnings: {
+            totalRevenue: 0,
+            commissionPercent: o.earnings?.commissionPercent || 10,
+            futureAutomatedDeduction: 0,
+            sellerNet: 0
+          }
         };
       }
       return o;
@@ -400,10 +424,17 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           messages: [
             ...t.messages,
             {
-              id: Math.random().toString(),
-              senderName: t.product?.sellerName || 'Seller Store',
+              id: 'decline_seller_' + Math.random().toString(),
+              senderName: t.product?.sellerName || 'Merchant Partner',
               senderRole: 'seller',
-              text: `❌ This Order has been DECLINED. Reason: ${reason}`,
+              text: `❌ [ORDER REJECTED - AUTOMATED MESSAGE]\nYour order #${orderId} has been Rejected. Reason: "${reason}". Fulfillment stopped and ERP ledger updated.`,
+              timestamp: new Date().toISOString(),
+            },
+            {
+              id: 'decline_cust_' + Math.random().toString(),
+              senderName: 'Platform Support Admin',
+              senderRole: 'admin',
+              text: `Your order #${orderId} has been Rejected and is being processed. Reason for cancellation: ${reason}`,
               timestamp: new Date().toISOString(),
             }
           ]
@@ -632,6 +663,127 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setMessageThreads(prev => [newThread, ...prev]);
   };
 
+  const addSellerNotes = (orderId: string, note: string) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          sellerNotes: o.sellerNotes ? [...o.sellerNotes, note] : [note],
+        };
+      }
+      return o;
+    }));
+  };
+
+  const createManualOrder = (params: {
+    customerName: string;
+    customerEmail: string;
+    customerPhone: string;
+    customerAddress: string;
+    platformSource: 'WhatsApp' | 'Facebook' | 'Instagram' | 'Offline';
+    chatRefId?: string;
+    product: OrderProduct;
+    quantity: number;
+    priceOverride?: number;
+    notes?: string;
+  }) => {
+    const orderId = 'CSS-' + Math.floor(1000 + Math.random() * 9000);
+    const invoiceId = 'INV-' + Math.floor(100000 + Math.random() * 900000);
+    const timestampStr = new Date().toISOString();
+
+    const productPrice = params.priceOverride !== undefined ? params.priceOverride : params.product.price;
+    const finalProductPrice = productPrice * params.quantity;
+    const deliveryCharge = 120;
+    const totalPayable = finalProductPrice + deliveryCharge;
+
+    const newCustomer: Customer = {
+      id: 'cust_' + Math.floor(1000 + Math.random() * 9000),
+      name: params.customerName,
+      email: params.customerEmail,
+      avatar: params.customerName.substring(0, 2).toUpperCase(),
+      behavior: 'Good',
+      flagged: false,
+      history: [
+        {
+          timestamp: timestampStr,
+          action: 'Manual Order Created',
+          note: `Manual order created via ${params.platformSource}. Invoice attached.`
+        }
+      ]
+    };
+
+    // Attach phone and address for consistency
+    (newCustomer as any).phone = params.customerPhone;
+    (newCustomer as any).address = params.customerAddress;
+
+    const commPercent = 10;
+    const commission = Math.round(finalProductPrice * (commPercent / 100));
+
+    const newOrder: Order = {
+      id: orderId,
+      product: {
+        ...params.product,
+        price: productPrice
+      },
+      customer: newCustomer,
+      status: 'Pending',
+      paymentStatus: 'Pending',
+      timestamp: timestampStr,
+      customerNotes: params.notes ? [params.notes] : [],
+      sellerNotes: [`Manual order initialized via ${params.platformSource}. Ref: ${params.chatRefId || 'N/A'}`],
+      base_product_price: finalProductPrice,
+      delivery_charge: deliveryCharge,
+      total_payable: totalPayable,
+      invoice_id: invoiceId,
+      invoice_status: 'Unpaid',
+      earnings: {
+        totalRevenue: totalPayable,
+        commissionPercent: commPercent,
+        futureAutomatedDeduction: commission,
+        sellerNet: totalPayable - commission
+      },
+      isManual: true,
+      platformSource: params.platformSource,
+      chatRefId: params.chatRefId,
+      quantity: params.quantity
+    } as any;
+
+    setOrders(prev => [newOrder, ...prev]);
+
+    // Create immediate inbox message thread linked to this manually generated order
+    const newThread: MessageThread = {
+      id: `thread_${orderId}`,
+      orderId,
+      customer: newCustomer,
+      product: {
+        ...params.product,
+        price: productPrice
+      },
+      subject: `Order #${orderId} ${params.product.name} (Qty: ${params.quantity})`,
+      preview: `Order created via ${params.platformSource}. Invoice Attached: #${invoiceId}`,
+      status: 'RESPONDED',
+      time: 'Just now',
+      messages: [
+        {
+          id: 'chat_msg_1',
+          senderName: params.customerName,
+          senderRole: 'customer',
+          text: `👋 (Manual Sourced via ${params.platformSource}) Phone: ${params.customerPhone}, Address: ${params.customerAddress}. Notes: ${params.notes || 'None'}`,
+          timestamp: timestampStr,
+        },
+        {
+          id: 'chat_msg_2',
+          senderName: 'System ERP',
+          senderRole: 'admin',
+          text: `🟢 [MANUAL ORDER CREATED - ERP RECORD]\nInvoice Number: #${invoiceId}\n\nInvoice Total Payable Summary:\n- Item: ${params.product.name} (Qty: ${params.quantity})\n- Unit Price: ৳${productPrice.toLocaleString()}\n- Total Product Price: ৳${finalProductPrice.toLocaleString()}\n- Logistics Carriage: ৳120\n- Grand Total Amount: ৳${totalPayable.toLocaleString()}\n- Invoice URL Link: /invoice/${orderId}\n\nSync established with seller order console.`,
+          timestamp: timestampStr,
+        }
+      ]
+    };
+
+    setMessageThreads(prev => [newThread, ...prev]);
+  };
+
   const markAllThreadsAsRead = () => {
     setMessageThreads(prev => prev.map(t => ({ ...t, status: 'READ' as const })));
   };
@@ -650,10 +802,12 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       cancelOrder,
       dispatchOrder,
       addCustomerNotes,
+      addSellerNotes,
       updateOrderStatus,
       flagCustomer,
       sendChatMessage,
       createOrderNow,
+      createManualOrder,
       markAllThreadsAsRead,
       markThreadAsRead
     }}>

@@ -98,7 +98,14 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
   const navigate = useNavigate();
   const { orders } = useOrders();
   const { profile: loggedInProfile } = useAuth();
-  
+
+  useEffect(() => {
+    if (!loggedInProfile) {
+      localStorage.setItem('redirect_after_login', window.location.pathname);
+      navigate('/login');
+    }
+  }, [loggedInProfile, navigate]);
+
   // Resolve role dynamically if unspecified
   const activeRole = role || (loggedInProfile?.role === 'seller' ? 'seller' : 'admin');
 
@@ -108,13 +115,29 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
     o.invoice_id === id || 
     `INV-${o.id}` === id || 
     `INV-${o.invoice_id}` === id
-  ) || orders[0];
+  );
 
   const [notif, setNotif] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [id]);
+
+  if (!loggedInProfile) {
+    return (
+      <div className="p-8 text-center bg-slate-950 text-slate-400 min-h-screen flex flex-col items-center justify-center">
+        <ShieldCheck className="w-12 h-12 text-[#ef3c23] mb-4 animate-pulse" />
+        <h2 className="text-lg font-bold text-white mb-2 font-mono uppercase">Authorization Required</h2>
+        <p className="text-xs mb-6 max-w-sm">Please log in to your merchant credential profile to authorize viewing of this transaction invoice.</p>
+        <button 
+          onClick={() => navigate('/login')} 
+          className="px-4 py-2 bg-[#ef3c23] hover:bg-orange-600 text-white rounded text-xs font-bold uppercase tracking-wider"
+        >
+          Forward to Login
+        </button>
+      </div>
+    );
+  }
 
   if (!order) {
     return (

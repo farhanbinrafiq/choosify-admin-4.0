@@ -29,18 +29,19 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
-type ConsoleStatusFilter = 
+type OrderConsoleTab = 
   | 'All' 
-  | 'Incoming' 
-  | 'Active' 
   | 'Pending' 
   | 'Confirmed' 
   | 'Dispatched' 
   | 'In Transit' 
   | 'Delivered' 
   | 'Cancelled' 
+  | 'Rejected' 
+  | 'Returned' 
   | 'Exchange' 
-  | 'Returned';
+  | 'Processing' 
+  | 'Other';
 
 export default function OrdersPage() {
   const { profile } = useAuth();
@@ -54,15 +55,12 @@ export default function OrdersPage() {
     updateOrderStatus 
   } = useOrders();
 
-  // Primary Workspace Dual Tabs State
+  // Unified 12 Core Filter Tabs state 
+  const [activeTab, setActiveTab] = useState<OrderConsoleTab>('All');
   const [currentMainTab, setCurrentMainTab] = useState<'console' | 'history'>('console');
 
-  // Search parameters for Console vs History tabs respectively
+  // Search parameters for the unified board Workspace
   const [searchTerm, setSearchTerm] = useState('');
-  const [historySearchTerm, setHistorySearchTerm] = useState('');
-
-  // Tab 1 (Operational Console) sub-filters
-  const [consoleFilter, setConsoleFilter] = useState<ConsoleStatusFilter>('All');
 
   // Local state for toast notification alert
   const [toastMsg, setToastMsg] = useState<string | null>(null);
@@ -138,83 +136,106 @@ export default function OrdersPage() {
     );
   };
 
+  const invoiceDownloadTXT = (order: Order) => {
+    const textContent = `
+=============================================
+             CHOOSIFY INVOICE SLIP
+=============================================
+Order Reference ID : ${order.id}
+Invoice Serial ID  : ${order.invoice_id || "IV-" + order.id}
+Timestamp          : ${new Date(order.timestamp).toLocaleString()}
+Fulfillment Status : ${order.status}
+
+---------------------------------------------
+CUSTOMER RECIPIENT INFORMATION
+---------------------------------------------
+Name               : ${order.customer.name}
+Phone              : ${(order.customer as any).phone || "+880 1711-456789"}
+Address            : ${(order.customer as any).address || "House 14, Road 4, Sector 12, Uttara, Dhaka"}
+
+---------------------------------------------
+SOURCING COMMERCE DATA
+---------------------------------------------
+Product Name       : ${order.product.name}
+Brand / Host       : ${order.product.sellerName}
+Unit Pricing       : ৳ ${order.product.price.toLocaleString()}
+Quantity Ordered   : ${order.quantity || 1}
+Standard Carriage  : ৳ ${order.delivery_charge || 120}
+
+---------------------------------------------
+FINANCIAL OVERVIEW
+---------------------------------------------
+Commission BDT     : ৳ ${order.earnings?.futureAutomatedDeduction?.toLocaleString() || "420"}
+Sellers Net Payout : ৳ ${order.earnings?.sellerNet?.toLocaleString() || "3,780"}
+GRAND TOTAL BILLED : ৳ ${(((order.product.price * (order.quantity || 1)) + (order.delivery_charge || 120))).toLocaleString()} BDT
+
+=============================================
+    Thank you for choosing Choosify ERP!
+=============================================
+`;
+    const blob = new Blob([textContent], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Invoice_Slip_${order.id}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   // ----------------------------------------------------
-  // FILTERING FOR TAB 1: ORDER CONSOLE (Operational Workspace)
+  // UNIFIED 12 TABS FILTERING ENGINE
   // ----------------------------------------------------
-  const filteredConsoleOrders = sellerOrders.filter(o => {
-    // Apply search query first
+  const filteredOrders = sellerOrders.filter(o => {
+    // Apply cumulative workspace search query parameter
     if (!matchQuery(o, searchTerm)) return false;
 
-    // Apply active segment filter toggled
-    switch (consoleFilter) {
+    switch (activeTab) {
       case 'All':
+        // MERGED: all platform orders + approved/later manual orders
+        if (o.isManual && o.status === 'Pending') {
+          return false;
+        }
         return true;
-      case 'Incoming':
+
       case 'Pending':
-        return o.status === 'Pending';
-      case 'Active':
-        return ['Confirmed', 'Dispatched', 'In Transit'].includes(o.status);
+        // Platform orders in pending state only (manual pending live in Other Orders)
+        return !o.isManual && o.status === 'Pending';
+
       case 'Confirmed':
         return o.status === 'Confirmed';
+
       case 'Dispatched':
         return o.status === 'Dispatched';
+
       case 'In Transit':
         return o.status === 'In Transit';
+
       case 'Delivered':
         return o.status === 'Delivered';
+
       case 'Cancelled':
         return o.status === 'Cancelled';
-      case 'Exchange':
-        return false; // Standby/Placeholder for exchange workflow
+
+      case 'Rejected':
+        return o.status === 'Rejected';
+
       case 'Returned':
-        return false; // Standby/Placeholder for returns workflow
+        return o.status === 'Returned';
+
+      case 'Exchange':
+        return o.status === 'Exchange';
+
+      case 'Processing':
+        return o.status === 'Processing';
+
+      case 'Other':
+        // Other Orders Tab: shows ALL manual/sourced/external bookings
+        return !!o.isManual;
+
       default:
         return true;
     }
   });
-
-  // ----------------------------------------------------
-  // FILTERING FOR TAB 2: ORDER HISTORY (Archive)
-  // ----------------------------------------------------
-  const filteredHistoryOrders = sellerOrders.filter(o => {
-    // Only fetch historical terminal/archive statuses
-    const isHistorical = ['Delivered', 'Cancelled'].includes(o.status);
-    if (!isHistorical) return false;
-
-    // Apply search query
-    return matchQuery(o, historySearchTerm);
-  });
-
-  // Count helper for Tab 1 status filters
-  const getConsoleFilterCount = (filterVal: ConsoleStatusFilter) => {
-    return sellerOrders.filter(o => {
-      switch (filterVal) {
-        case 'All':
-          return true;
-        case 'Incoming':
-        case 'Pending':
-          return o.status === 'Pending';
-        case 'Active':
-          return ['Confirmed', 'Dispatched', 'In Transit'].includes(o.status);
-        case 'Confirmed':
-          return o.status === 'Confirmed';
-        case 'Dispatched':
-          return o.status === 'Dispatched';
-        case 'In Transit':
-          return o.status === 'In Transit';
-        case 'Delivered':
-          return o.status === 'Delivered';
-        case 'Cancelled':
-          return o.status === 'Cancelled';
-        case 'Exchange':
-          return false;
-        case 'Returned':
-          return false;
-        default:
-          return true;
-      }
-    }).length;
-  };
 
   const getStatusStyle = (status: OrderStatus) => {
     const styles: Record<OrderStatus, string> = {
@@ -224,6 +245,10 @@ export default function OrdersPage() {
       'In Transit': 'bg-purple-500/10 text-purple-500 border-purple-500/25',
       'Delivered': 'bg-emerald-500/10 text-emerald-500 border-emerald-500/25',
       'Cancelled': 'bg-rose-500/10 text-rose-500 border-rose-500/25',
+      'Rejected': 'bg-red-500/10 text-red-500 border-red-500/25',
+      'Returned': 'bg-neutral-500/10 text-neutral-400 border-neutral-500/25',
+      'Exchange': 'bg-pink-500/10 text-pink-500 border-pink-500/25',
+      'Processing': 'bg-cyan-500/10 text-cyan-500 border-cyan-500/25',
     };
     return styles[status] || 'bg-slate-500/10 text-slate-500 border-slate-500/25';
   };
@@ -484,28 +509,107 @@ Thank you for using Choosify Commerce Network.
         </div>
       </div>
 
-      {/* PRIMARY WORKSPACE MAIN RESTRUCTURE TABS */}
-      <div className="bg-app-card/60 p-1.5 border border-app-border/80 rounded-2xl flex max-w-md gap-1.5">
+      {/* REQUIRED TOP NAVIGATION TABS */}
+      <div className="bg-app-card border border-app-border rounded-[2rem] p-4.5 shadow-xl flex gap-3">
         <button
+          id="btn-nav-order-console"
           onClick={() => setCurrentMainTab('console')}
-          className={`flex-1 py-3 px-4 rounded-xl text-center text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+          className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3.5 text-xs font-black uppercase tracking-widest transition-all rounded-xl cursor-pointer ${
             currentMainTab === 'console'
-              ? 'bg-[#F4631E] text-white shadow-lg'
-              : 'text-slate-400 hover:text-white hover:bg-white/5'
+              ? 'bg-[#F4631E] text-white shadow-lg shadow-[#F4631E]/20'
+              : 'bg-app-bg border border-app-border text-slate-400 hover:text-white hover:bg-white/5'
           }`}
         >
-          📥 Order Console
+          <span>📥 Order Console</span>
         </button>
         <button
+          id="btn-nav-order-history"
           onClick={() => setCurrentMainTab('history')}
-          className={`flex-1 py-3 px-4 rounded-xl text-center text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+          className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3.5 text-xs font-black uppercase tracking-widest transition-all rounded-xl cursor-pointer ${
             currentMainTab === 'history'
-              ? 'bg-[#F4631E] text-white shadow-lg'
-              : 'text-slate-400 hover:text-white hover:bg-white/5'
+              ? 'bg-[#F4631E] text-white shadow-lg shadow-[#F4631E]/20'
+              : 'bg-app-bg border border-app-border text-slate-400 hover:text-white hover:bg-white/5'
           }`}
         >
-          📜 Order History
+          <span>📜 Order History</span>
         </button>
+      </div>
+
+      {/* 12 Core Filter Tabs Operational Workspace Nav */}
+      <div className="bg-app-card border border-app-border rounded-[2rem] p-6 shadow-xl space-y-5">
+        <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-transparent">
+          <div className="relative w-full md:w-96 group">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[#F4631E] transition-colors" />
+            <input 
+              type="text"
+              placeholder="Search by ID, Customer Name, SKU, product brand, invoice..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-10 pr-4 py-3 bg-app-bg border border-app-border rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-[#F4631E]/60 transition-all font-medium"
+            />
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')} 
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
+            <Filter className="w-3.5 h-3.5 text-[#F4631E]" /> 12 Operations Filter Ledger 
+          </div>
+        </div>
+
+        {/* Horizontal scrollbar custom scrollable container */}
+        <div className="flex overflow-x-auto pb-2 gap-2 custom-scrollbar border-b border-app-border/40">
+          {[
+            { id: 'All', label: 'All Orders' },
+            { id: 'Pending', label: 'Pending' },
+            { id: 'Confirmed', label: 'Confirmed' },
+            { id: 'Dispatched', label: 'Dispatched' },
+            { id: 'In Transit', label: 'In Transit' },
+            { id: 'Delivered', label: 'Delivered' },
+            { id: 'Cancelled', label: 'Cancelled' },
+            { id: 'Rejected', label: 'Rejected' },
+            { id: 'Returned', label: 'Returned' },
+            { id: 'Exchange', label: 'Exchange' },
+            { id: 'Processing', label: 'Processing' },
+            { id: 'Other', label: 'Other Orders' },
+          ].map((tab) => {
+            const isActive = activeTab === tab.id;
+            
+            // Count calculations based on our rules
+            let count = 0;
+            if (tab.id === 'All') {
+              count = sellerOrders.filter(o => !o.isManual || o.status !== 'Pending').length;
+            } else if (tab.id === 'Pending') {
+              count = sellerOrders.filter(o => !o.isManual && o.status === 'Pending').length;
+            } else if (tab.id === 'Other') {
+              count = sellerOrders.filter(o => !!o.isManual).length;
+            } else {
+              count = sellerOrders.filter(o => o.status === tab.id).length;
+            }
+
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as OrderConsoleTab)}
+                className={`px-4.5 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex items-center gap-2 shrink-0 cursor-pointer ${
+                  isActive 
+                    ? 'bg-[#F4631E] text-white shadow-lg shadow-[#F4631E]/20' 
+                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <span>{tab.label}</span>
+                <span className={`text-[8.5px] font-mono px-2 py-0.5 rounded-full ${isActive ? 'bg-white text-[#F4631E] font-black' : 'bg-white/5 text-slate-500 font-bold'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Brand Context Switching Tab Row */}
@@ -543,87 +647,18 @@ Thank you for using Choosify Commerce Network.
         </div>
       )}
 
-      {/* TAB 1 CONTENT PANEL: OPERATIONAL WORKSPACE */}
-      {currentMainTab === 'console' && (
-        <div className="space-y-8 animate-in fade-in duration-300">
-          
-          {/* Quick Filter Section */}
-          <div className="bg-app-card border border-app-border rounded-[2rem] p-6 shadow-xl space-y-6">
-            <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-transparent">
-              <div className="relative w-full md:w-96 group">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[#F4631E] transition-colors" />
-                <input 
-                  type="text"
-                  placeholder="ID, Invoice Number, Product Name, SKU, Customer..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-app-bg border border-app-border rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-[#F4631E]/60 transition-all font-medium"
-                />
-                {searchTerm && (
-                  <button 
-                    onClick={() => setSearchTerm('')} 
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                <Filter className="w-3.5 h-3.5 text-[#F4631E]" /> Console Filters
-              </div>
-            </div>
-
-            {/* Sub Status filters clickable */}
-            <div className="flex border-b border-app-border overflow-x-auto pb-1 gap-1.5 scrollbar-hide">
-              {[
-                { id: 'All', label: 'All Orders' },
-                { id: 'Incoming', label: 'Incoming Orders' },
-                { id: 'Active', label: 'Active Orders' },
-                { id: 'Pending', label: 'Pending Orders' },
-                { id: 'Confirmed', label: 'Confirmed Orders' },
-                { id: 'Dispatched', label: 'Dispatched Orders' },
-                { id: 'In Transit', label: 'In Transit' },
-                { id: 'Delivered', label: 'Delivered' },
-                { id: 'Cancelled', label: 'Cancelled' },
-                { id: 'Exchange', label: 'Exchange Requests' },
-                { id: 'Returned', label: 'Returned Orders' },
-              ].map((subTab) => {
-                const count = getConsoleFilterCount(subTab.id as ConsoleStatusFilter);
-                const isActive = consoleFilter === subTab.id;
-
-                return (
-                  <button
-                    key={subTab.id}
-                    onClick={() => setConsoleFilter(subTab.id as ConsoleStatusFilter)}
-                    className={`px-4.5 py-3 text-[11px] font-black uppercase tracking-widest transition-all rounded-t-xl whitespace-nowrap flex items-center gap-2 border-b-2 cursor-pointer ${
-                      isActive 
-                        ? 'border-[#F4631E] text-white bg-slate-900/50' 
-                        : 'border-transparent text-slate-400 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    <span>{subTab.label}</span>
-                    <span className={`text-[9px] font-mono px-2 py-0.5 rounded-full ${isActive ? 'bg-[#F4631E] text-white' : 'bg-white/5 text-slate-500'}`}>
-                      {count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+      {/* Dynamic 12 tab core filtered orders display list */}
+      <div className="space-y-6 animate-in fade-in duration-300">
+        {filteredOrders.length === 0 ? (
+          <div className="bg-app-card border border-app-border rounded-[2rem] p-16 text-center shadow-lg animate-fade-in">
+            <AlertCircle className="w-12 h-12 text-[#8E9BAE] mx-auto mb-4" />
+            <h3 className="text-md font-bold text-white mb-1 font-sans">No Orders Loaded</h3>
+            <p className="text-xs text-[#8E9BAE] max-w-sm mx-auto font-sans">
+              There are no orders matching the selected filter criteria tab or search query string.
+            </p>
           </div>
-
-          {/* Orders list container */}
-          <div className="space-y-6">
-            {filteredConsoleOrders.length === 0 ? (
-              <div className="bg-app-card border border-app-border rounded-[2rem] p-16 text-center shadow-lg">
-                <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                <h3 className="text-md font-bold text-white mb-1">No Operational Orders Loaded</h3>
-                <p className="text-xs text-[#8E9BAE] max-w-sm mx-auto">
-                  There are no orders matching the selected console filter criteria tab or query string.
-                </p>
-              </div>
-            ) : (
-              filteredConsoleOrders.map((order) => (
+        ) : (
+          filteredOrders.map((order) => (
                 <div 
                   key={order.id} 
                   className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl relative overflow-hidden hover:border-[#F4631E]/30 transition-all group"
@@ -663,84 +698,88 @@ Thank you for using Choosify Commerce Network.
 
                     {/* Operational Action Buttons */}
                     <div className="flex flex-wrap gap-2">
-                      {order.status === 'Pending' && (
+                      {currentMainTab === 'console' && (
                         <>
+                          {order.status === 'Pending' && (
+                            <>
+                              <button 
+                                onClick={() => {
+                                  approveOrder(order.id);
+                                  showInlineToast(`Order ${order.id} approved successfully! Invoice INV-${order.id} generated.`);
+                                }}
+                                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg shadow-emerald-500/10 transition-all active:scale-95 cursor-pointer"
+                              >
+                                <CheckCircle className="w-3.5 h-3.5" /> Approve Order
+                              </button>
+                              <button 
+                                onClick={() => openAction(order, 'decline')}
+                                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-rose-400 border border-rose-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                              >
+                                <XCircle className="w-3.5 h-3.5" /> Reject
+                              </button>
+                            </>
+                          )}
+
+                          {order.status === 'Confirmed' && (
+                            <>
+                              <button 
+                                onClick={() => openAction(order, 'dispatch')}
+                                className="flex items-gradient-to-r from-[#F4631E] to-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg shadow-[#F4631E]/20 transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 px-3.5 py-2.5"
+                              >
+                                <Truck className="w-3.5 h-3.5" /> Mark Dispatched
+                              </button>
+                              <button 
+                                onClick={() => openAction(order, 'cancel')}
+                                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-slate-400 border border-slate-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                              >
+                                Cancel Order
+                              </button>
+                            </>
+                          )}
+
+                          {order.status === 'Dispatched' && (
+                            <div className="flex gap-2">
+                              <button 
+                                onClick={() => {
+                                  updateOrderStatus(order.id, 'In Transit');
+                                  showInlineToast(`Order ${order.id} status transitioned to In Transit`);
+                                }}
+                                className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                              >
+                                Transit ➔
+                              </button>
+                            </div>
+                          )}
+
+                          {order.status === 'In Transit' && (
+                            <button 
+                              onClick={() => {
+                                updateOrderStatus(order.id, 'Delivered');
+                                showInlineToast(`Order ${order.id} marked as delivered successfully!`);
+                              }}
+                              className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" /> Mark Delivered
+                            </button>
+                          )}
+
                           <button 
-                            onClick={() => {
-                              approveOrder(order.id);
-                              showInlineToast(`Order ${order.id} approved successfully! Invoice INV-${order.id} generated.`);
-                            }}
-                            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg shadow-emerald-500/10 transition-all active:scale-95 cursor-pointer"
+                            onClick={() => openAction(order, 'note')}
+                            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-white border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                            title="Add note sent to client conversation layout"
                           >
-                            <CheckCircle className="w-3.5 h-3.5" /> Approve Order
+                            <MessageSquare className="w-3.5 h-3.5 text-[#F4631E]" /> Comms Note
                           </button>
+
                           <button 
-                            onClick={() => openAction(order, 'decline')}
-                            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-rose-400 border border-rose-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                            onClick={() => openAction(order, 'internal')}
+                            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                            title="Add secure, internal, private merchant-only comment log"
                           >
-                            <XCircle className="w-3.5 h-3.5" /> Reject
+                            <Notebook className="w-3.5 h-3.5" /> Internal Note
                           </button>
                         </>
                       )}
-
-                      {order.status === 'Confirmed' && (
-                        <>
-                          <button 
-                            onClick={() => openAction(order, 'dispatch')}
-                            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-[#F4631E] to-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg shadow-[#F4631E]/20 transition-all active:scale-95 cursor-pointer"
-                          >
-                            <Truck className="w-3.5 h-3.5" /> Mark Dispatched
-                          </button>
-                          <button 
-                            onClick={() => openAction(order, 'cancel')}
-                            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-slate-400 border border-slate-700 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
-                          >
-                            Cancel Order
-                          </button>
-                        </>
-                      )}
-
-                      {order.status === 'Dispatched' && (
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => {
-                              updateOrderStatus(order.id, 'In Transit');
-                              showInlineToast(`Order ${order.id} status transitioned to In Transit`);
-                            }}
-                            className="px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
-                          >
-                            Transit ➔
-                          </button>
-                        </div>
-                      )}
-
-                      {order.status === 'In Transit' && (
-                        <button 
-                          onClick={() => {
-                            updateOrderStatus(order.id, 'Delivered');
-                            showInlineToast(`Order ${order.id} marked as delivered successfully!`);
-                          }}
-                          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
-                        >
-                          <CheckCircle className="w-3.5 h-3.5" /> Mark Delivered
-                        </button>
-                      )}
-
-                      <button 
-                        onClick={() => openAction(order, 'note')}
-                        className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-white border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
-                        title="Add note sent to client conversation layout"
-                      >
-                        <MessageSquare className="w-3.5 h-3.5 text-[#F4631E]" /> Comms Note
-                      </button>
-
-                      <button 
-                        onClick={() => openAction(order, 'internal')}
-                        className="flex items-center gap-1.5 px-3.5 py-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
-                        title="Add secure, internal, private merchant-only comment log"
-                      >
-                        <Notebook className="w-3.5 h-3.5" /> Internal Note
-                      </button>
 
                       <Link 
                         to={`/admin/invoice/${order.id}`}
@@ -901,53 +940,226 @@ Thank you for using Choosify Commerce Network.
               ))
             )}
           </div>
-        </div>
-      )}
+
+      {false && (
+        <div className="space-y-6">
+          {false ? (
+            <div />
+          ) : (
+              ([] as any[]).map((order) => {
+                const customerPhone = (order.customer as any).phone || 'N/A';
+                const customerAddress = (order.customer as any).address || 'N/A';
+                const platformLabel = order.platformSource || 'WhatsApp Sourced';
+
+                return (
+                  <div 
+                    key={order.id} 
+                    className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl relative overflow-hidden hover:border-[#F4631E]/30 transition-all group"
+                  >
+                    <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-teal-500 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                    {/* Order card heading info */}
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-app-border/60">
+                      <div className="flex items-center gap-4">
+                        <div className="w-11 h-11 rounded-xl bg-slate-900 border border-app-border flex items-center justify-center font-bold text-white shadow-inner text-base">
+                          {platformLabel === 'WhatsApp' ? '💬' : platformLabel === 'Facebook' ? '📬' : platformLabel === 'Instagram' ? '📸' : '🔌'}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-sm font-black text-white">{order.id}</span>
+                            <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border bg-teal-500/10 text-teal-400 border-teal-500/20">
+                              {platformLabel} Sourced
+                            </span>
+                            <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${getStatusStyle(order.status)}`}>
+                              {order.status}
+                            </span>
+                            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${
+                              order.paymentStatus === 'Paid' 
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                            }`}>
+                              {order.paymentStatus}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-semibold mt-1 font-sans">
+                            Log Time: {new Date(order.timestamp).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Panel Header Buttons */}
+                      <div className="flex items-center gap-2">
+                        <Link 
+                          to={`/admin/invoice/${order.id}`}
+                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-xs font-black uppercase tracking-wider text-slate-300 border border-app-border rounded-xl transition-all flex items-center gap-2 cursor-pointer"
+                        >
+                          <Printer className="w-3.5 h-3.5" /> 
+                          <span>Print Invoice</span>
+                        </Link>
+                        <button 
+                          onClick={() => invoiceDownloadTXT(order)}
+                          className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-xs font-black uppercase tracking-wider text-slate-300 border border-app-border rounded-xl transition-all flex items-center gap-2 cursor-pointer"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Txt Slip</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Order Card Content Split */}
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 py-6 border-b border-app-border/40">
+                      
+                      {/* Customer Info Box */}
+                      <div className="space-y-3">
+                        <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 block">External Customer Profile</span>
+                        <div className="bg-app-bg border border-app-border rounded-xl p-4 space-y-2">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-full bg-indigo-500/10 text-indigo-400 text-xs font-black flex items-center justify-center">
+                              {order.customer.avatar}
+                            </div>
+                            <div>
+                              <div className="text-xs font-bold text-white font-sans">{order.customer.name}</div>
+                              <div className="text-[10px] text-slate-400 font-sans">{order.customer.email || 'no-email@sourced.com'}</div>
+                            </div>
+                          </div>
+                          <div className="pt-2 border-t border-app-border/40 text-[10px] space-y-1">
+                            <div className="text-[#8E9BAE] font-sans">📞 Phone: <span className="text-white font-mono font-medium">{customerPhone}</span></div>
+                            <div className="text-[#8E9BAE] font-sans">🏠 Address: <span className="text-white font-sans">{customerAddress}</span></div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Product details summary */}
+                      <div className="space-y-3">
+                        <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 block">Sourced Cart Items Selection</span>
+                        <div className="bg-app-bg border border-app-border rounded-xl p-4 flex gap-4">
+                          <div className="w-14 h-14 bg-slate-900 rounded-xl overflow-hidden border border-app-border shrink-0 flex items-center justify-center">
+                            <img 
+                              src={order.product.image} 
+                              alt={order.product.name} 
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          </div>
+                          <div className="space-y-0.5">
+                            <div className="text-xs font-bold text-white font-sans line-clamp-1">{order.product.name}</div>
+                            <div className="text-[9px] text-[#F4631E] font-black uppercase tracking-wider">{order.product.brand}</div>
+                            <div className="text-[10px] text-[#8E9BAE] font-sans">
+                              Qty Ordered: <span className="text-white font-bold">{order.quantity || 1}</span>
+                            </div>
+                            <div className="text-xs font-black text-white pt-1">
+                              Unit: ৳ {order.product.price.toLocaleString()} · Total: ৳ {(order.base_product_price || order.product.price).toLocaleString()}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Logistics Carrier Gateway Tracker */}
+                      <div className="space-y-3">
+                        <span className="text-[9px] font-extrabold uppercase tracking-widest text-slate-500 block">Fulfillment Logistics Carriage</span>
+                        {order.deliveryPartner ? (
+                          <div className="bg-app-bg border border-app-border rounded-xl p-4 space-y-2 font-sans">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase">Courier Carrier</span>
+                              <span className="text-[10px] font-mono font-black text-white">{order.deliveryPartner}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-bold text-slate-400 uppercase">Fulfillment Tracking ID</span>
+                              <a 
+                                href={order.trackingUrl} 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="text-[10px] font-extrabold text-[#F4631E] hover:underline flex items-center gap-1"
+                              >
+                                {order.trackingUrl?.split('/').pop() || 'Track Link'} <ChevronRight className="w-3 h-3" />
+                              </a>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-app-bg/50 border border-app-border border-dashed rounded-xl p-4 text-center">
+                            <Truck className="w-5 h-5 text-slate-600 mx-auto mb-1.5" />
+                            <p className="text-[9px] text-[#8E9BAE] leading-relaxed italic">
+                              No dispatch carrier assigned. Set tracking in the Platform Inbox ERP workspace to launch this flow.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Quick State Actions for Sourced Trades */}
+                    <div className="flex items-center justify-between pt-4.5 gap-4">
+                      {/* Financial breakdown */}
+                      <div className="text-[9px] font-mono text-slate-500 uppercase flex gap-4">
+                        <span>PRICE OVERRIDE: ৳ {order.product.price.toLocaleString()}</span>
+                        <span>SHIPPING FEE: ৳ {order.delivery_charge || 120}</span>
+                        <span className="text-emerald-400 font-bold">GRAND TOTAL PAYABLE: ৳ {order.total_payable?.toLocaleString()}</span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {currentMainTab === 'console' && (
+                          <>
+                            {order.status === 'Pending' && (
+                              <button
+                                onClick={() => {
+                                  approveOrder(order.id);
+                                  showInlineToast(`✓ Sourced order ${order.id} approved successfully!`);
+                                }}
+                                className="px-4.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[10px] uppercase tracking-widest rounded-xl transition-all shadow cursor-pointer"
+                              >
+                                Approve Order
+                              </button>
+                            )}
+                            {order.status === 'Confirmed' && (
+                              <button
+                                onClick={() => {
+                                  dispatchOrder(order.id, 'Pathao Courier Service', `https://track.pathao.com/manual-${order.id}`);
+                                  showInlineToast(`✓ Sourced order ${order.id} dispatched via Pathao Courier!`);
+                                }}
+                                className="px-4.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-[10px] uppercase tracking-widest rounded-xl transition-all shadow cursor-pointer"
+                              >
+                                Dispatch Sourced Link
+                              </button>
+                            )}
+                            {!['Delivered', 'Cancelled'].includes(order.status) && (
+                              <button
+                                onClick={() => {
+                                  cancelOrder(order.id, 'Marked Cancelled by merchant from manual console');
+                                  showInlineToast(`✓ Sourced Order ${order.id} Marked Cancelled.`);
+                                }}
+                                className="px-4 py-2 border border-rose-500/20 hover:border-rose-500 bg-rose-500/10 text-rose-400 font-extrabold text-[10px] uppercase tracking-widest rounded-xl transition-all cursor-pointer"
+                              >
+                                Cancel Trade
+                              </button>
+                            )}
+                            {order.status === 'Dispatched' && (
+                              <button
+                                onClick={() => {
+                                  updateOrderStatus(order.id, 'Delivered');
+                                  showInlineToast(`✓ Sourced order ${order.id} marked Completed!`);
+                                }}
+                                className="px-4.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[10px] uppercase tracking-widest rounded-xl transition-all shadow cursor-pointer"
+                              >
+                                Confirm Completed Delivery
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
 
       {/* TAB 2 CONTENT PANEL: ORDER HISTORY ARCHIVE */}
-      {currentMainTab === 'history' && (
-        <div className="space-y-8 animate-in fade-in duration-300">
-          
-          {/* History Search */}
-          <div className="bg-app-card border border-app-border rounded-[2rem] p-6 shadow-xl space-y-6">
-            <div className="flex flex-col md:flex-row gap-4 justify-between items-center">
-              <div className="relative w-full md:w-96 group">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[#F4631E] transition-colors" />
-                <input 
-                  type="text"
-                  placeholder="Query Order ID, Product, Customer Name, Phone, Address, Invoice..."
-                  value={historySearchTerm}
-                  onChange={(e) => setHistorySearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 bg-app-bg border border-app-border rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-[#F4631E]/60 transition-all font-medium"
-                />
-                {historySearchTerm && (
-                  <button 
-                    onClick={() => setHistorySearchTerm('')} 
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-
-              <div className="text-xs font-black text-[#F4631E] uppercase tracking-widest bg-[#F4631E]/10 border border-[#F4631E]/20 px-4 py-2 rounded-xl">
-                📜 HISTORIAL LEDGER REGISTRY
-              </div>
-            </div>
-          </div>
-
-          {/* Historical Items display */}
-          <div className="space-y-6">
-            {filteredHistoryOrders.length === 0 ? (
-              <div className="bg-app-card border border-app-border rounded-[2rem] p-16 text-center shadow-lg">
-                <AlertCircle className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                <h3 className="text-md font-bold text-white mb-1">No Historical Archive Found</h3>
-                <p className="text-xs text-[#8E9BAE] max-w-sm mx-auto">
-                  We couldn't find any historical records containing Delivered or Cancelled items matching that state search.
-                </p>
-              </div>
-            ) : (
-              filteredHistoryOrders.map((order) => {
+      {false && (
+        <div className="space-y-6">
+          {false ? (
+            <div />
+          ) : (
+            ([] as any[]).map((order) => {
                 const customerPhone = (order.customer as any).phone || '+880 1711-456789';
                 const customerAddress = (order.customer as any).address || 'House 14, Road 4, Sector 12, Uttara, Dhaka';
 
@@ -1057,8 +1269,7 @@ Thank you for using Choosify Commerce Network.
               })
             )}
           </div>
-        </div>
-      )}
+        )}
 
       {/* Action Dialog Modal Drawer Backdrop */}
       {actioningOrder && actionType && (

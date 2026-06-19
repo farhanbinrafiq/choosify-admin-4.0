@@ -41,11 +41,11 @@ export default function ModerationPage() {
   
   // Custom Dynamic Overrides State
   const [customPermissions, setCustomPermissions] = useState<Record<string, Record<string, boolean>>>({
-    super_admin: { view_dashboard_kpis: true, manage_sellers: true, moderate_products: true, manage_wholesale_b2b: true, resolve_disputes: true, approve_payouts: true, manage_campaigns: true, sys_full_access: true },
-    moderator: { view_dashboard_kpis: true, manage_sellers: true, moderate_products: true, manage_wholesale_b2b: true, resolve_disputes: false, approve_payouts: false, manage_campaigns: false, sys_full_access: false },
-    finance_manager: { view_dashboard_kpis: true, manage_sellers: false, moderate_products: false, manage_wholesale_b2b: false, resolve_disputes: false, approve_payouts: true, manage_campaigns: false, sys_full_access: false },
-    support_agent: { view_dashboard_kpis: true, manage_sellers: false, moderate_products: false, manage_wholesale_b2b: false, resolve_disputes: true, approve_payouts: false, manage_campaigns: false, sys_full_access: false },
-    marketing_manager: { view_dashboard_kpis: true, manage_sellers: false, moderate_products: false, manage_wholesale_b2b: false, resolve_disputes: false, approve_payouts: false, manage_campaigns: true, sys_full_access: false },
+    super_admin: { view_dashboard_kpis: true, manage_sellers: true, moderate_products: true, resolve_disputes: true, approve_payouts: true, manage_campaigns: true, sys_full_access: true },
+    moderator: { view_dashboard_kpis: true, manage_sellers: true, moderate_products: true, resolve_disputes: false, approve_payouts: false, manage_campaigns: false, sys_full_access: false },
+    finance_manager: { view_dashboard_kpis: true, manage_sellers: false, moderate_products: false, resolve_disputes: false, approve_payouts: true, manage_campaigns: false, sys_full_access: false },
+    support_agent: { view_dashboard_kpis: true, manage_sellers: false, moderate_products: false, resolve_disputes: true, approve_payouts: false, manage_campaigns: false, sys_full_access: false },
+    marketing_manager: { view_dashboard_kpis: true, manage_sellers: false, moderate_products: false, resolve_disputes: false, approve_payouts: false, manage_campaigns: true, sys_full_access: false },
   });
 
   const [activeRBACLogs, setActiveRBACLogs] = useState([
@@ -139,10 +139,10 @@ export default function ModerationPage() {
 
   // 2. Product Moderation Logic
   const [productModerationQueue, setProductModerationQueue] = useState([
-    { id: 'p_mod1', name: 'Xiaomi Redmi Note 14 Pro B2B', seller: 'ElectroBD Express', price: 24500, type: 'Wholesale B2B', moq: 10, status: 'Pending Review' },
+    { id: 'p_mod1', name: 'Xiaomi Redmi Note 14 Pro', seller: 'ElectroBD Express', price: 24500, type: 'Retail B2C', moq: 1, status: 'Pending Review' },
     { id: 'p_mod2', name: 'Apex Men Luxury Oxfords', seller: 'Apex Footwear', price: 4800, type: 'Retail B2C', moq: 1, status: 'Pending Review' },
     { id: 'p_mod3', name: 'Samsung S25 Ultra 5G Silicate', seller: 'TechZone BD', price: 112000, type: 'Retail B2C', moq: 1, status: 'Pending Review' },
-    { id: 'p_mod4', name: 'Premium Cotton Silk Sharee (Carton Stock)', seller: 'Anjans Fashion Accent', price: 145000, type: 'Wholesale B2B', moq: 15, status: 'Pending Review' }
+    { id: 'p_mod4', name: 'Premium Cotton Silk Sharee', seller: 'Anjans Fashion Accent', price: 14500, type: 'Retail B2C', moq: 1, status: 'Pending Review' }
   ]);
 
   const approveProduct = (id: string) => {
@@ -279,7 +279,6 @@ INSERT INTO permissions (permission_key, module, description) VALUES
 ('view_dashboard_kpis', 'analytics', 'Ability to view high-level revenue and user growth charts'),
 ('manage_sellers', 'moderation', 'Ability to approve, suspend or ban store vendor accounts'),
 ('moderate_products', 'moderation', 'Ability to flag, review, or verify product listings'),
-('manage_wholesale_b2b', 'wholesale', 'Ability to audit bulk trade listings and B2B quote thresholds'),
 ('resolve_disputes', 'support', 'Ability to arbitrary buyer complaints, issue warnings and trigger code refunds'),
 ('approve_payouts', 'finance', 'Ability to release seller payment balances and audit escrow ledgers'),
 ('manage_campaigns', 'marketing', 'Ability to approve sponsored slots, allocate keywords, and manage ads'),
@@ -516,68 +515,6 @@ CREATE TABLE sponsored_products (
     campaign_id VARCHAR(100), -- See advertisements mapping
     cost_per_click DECIMAL(8,4) NOT NULL,
     daily_budget_limit DECIMAL(10,2) NOT NULL
-);
-
-
--- ==========================================
--- SECTION 5: WHOLESALE B2B TRADING PIPELINE
--- ==========================================
-
--- 25. Wholesale Registered Stores Profile Link
-CREATE TABLE wholesale_sellers (
-    seller_id VARCHAR(100) PRIMARY KEY REFERENCES sellers(id) ON DELETE CASCADE,
-    moq_trade_discount_rate DECIMAL(5, 2) DEFAULT 0.00, -- standard wholesale discount percentage
-    b2b_credit_terms_offered BOOLEAN DEFAULT FALSE,
-    established_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- 26. Wholesale Products MOQ Configurations
-CREATE TABLE wholesale_products (
-    product_id VARCHAR(100) PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
-    wholesale_carton_capacity INT NOT NULL DEFAULT 50, -- units per carton
-    minimum_order_cartons INT NOT NULL DEFAULT 1,
-    weight_kg_per_carton DECIMAL(10, 2) DEFAULT 0.00
-);
-
--- 27. Wholesale MOQ Dynamic Tiered Discount Rules
-CREATE TABLE wholesale_moq_rules (
-    id SERIAL PRIMARY KEY,
-    product_id VARCHAR(100) REFERENCES products(id) ON DELETE CASCADE,
-    min_units INT NOT NULL,
-    discount_multiplier DECIMAL(5, 4) NOT NULL DEFAULT 1.0000 -- e.g. 0.9000 for 10% discount on massive volume
-);
-
--- 28. B2B Quotation (RFQ) Requests Desk
-CREATE TABLE quotation_requests (
-    id VARCHAR(100) PRIMARY KEY DEFAULT 'rfq_' || gen_random_uuid(),
-    buyer_id VARCHAR(100) REFERENCES users(id) ON DELETE CASCADE,
-    product_id VARCHAR(100) REFERENCES products(id) ON DELETE CASCADE,
-    requested_units INT NOT NULL,
-    target_price_per_unit DECIMAL(12,2),
-    shipping_destination TEXT NOT NULL,
-    notes TEXT,
-    rfq_status VARCHAR(50) DEFAULT 'open_active', -- 'open_active', 'responded', 'accepted', 'rejected', 'expired'
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- 29. B2B Quotation Seller Responses Registry
-CREATE TABLE quotation_responses (
-    id VARCHAR(100) PRIMARY KEY DEFAULT 'qrp_' || gen_random_uuid(),
-    rfq_id VARCHAR(100) REFERENCES quotation_requests(id) ON DELETE CASCADE,
-    seller_id VARCHAR(100) REFERENCES sellers(id) ON DELETE CASCADE,
-    offered_price_per_unit DECIMAL(12,2) NOT NULL,
-    estimated_production_days INT DEFAULT 7,
-    terms_conditions TEXT,
-    response_status VARCHAR(50) DEFAULT 'pending_buyer_review', -- 'pending_buyer_review', 'accepted', 'withdrawn'
-    replied_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- 30. Back-Office B2B Audit approvals
-CREATE TABLE b2b_approvals (
-    rfq_id VARCHAR(100) PRIMARY KEY REFERENCES quotation_requests(id) ON DELETE CASCADE,
-    decision VARCHAR(50) NOT NULL, -- 'approved_for_b2b_checkout', 'declined_policy_violation'
-    moderator_id VARCHAR(100) REFERENCES users(id),
-    checked_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 
@@ -1076,7 +1013,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
             <div className="flex justify-between items-center border-b border-white/[0.04] pb-3">
               <div>
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">📦 Platform Product Listing Moderation</h3>
-                <p className="text-[10px] text-app-text-secondary mt-1">Review retail (B2C) and wholesale (B2B) incoming listings for quality, compliance, and minimum order values.</p>
+                <p className="text-[10px] text-app-text-secondary mt-1">Review retail (B2C) incoming listings for quality, compliance, and minimum order values.</p>
               </div>
             </div>
 
@@ -1101,9 +1038,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
                         ৳ {p.price.toLocaleString()} <span className="text-[10px] text-slate-500 italic block">MoQ: {p.moq} unit{p.moq > 1 ? 's' : ''}</span>
                       </td>
                       <td className="py-3.5 px-4">
-                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold ${
-                          p.type === 'Wholesale B2B' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/10' : 'bg-blue-500/10 text-blue-400 border border-blue-500/10'
-                        }`}>
+                        <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/10">
                           {p.type}
                         </span>
                       </td>
@@ -1287,7 +1222,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/[0.04] pb-4">
               <div>
                 <dt className="text-sm font-bold text-white uppercase tracking-wider">🗄️ PostgreSQL Database Schemas & Relations Mapping</dt>
-                <dd className="text-[10px] text-app-text-secondary mt-1">Direct copyable, fully normalized, production-ready schema including audit logs, reputation tables, B2B wholesale limits and linked locked invoices.</dd>
+                <dd className="text-[10px] text-app-text-secondary mt-1">Direct copyable, fully normalized, production-ready schema including audit logs, reputation tables, security tables and linked locked invoices.</dd>
               </div>
               <div className="flex gap-2 shrink-0">
                 <button 
@@ -1400,11 +1335,11 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
                       onClick={() => {
                         // Reset permissions map for selected role
                         const defaultSets: Record<string, Record<string, boolean>> = {
-                          super_admin: { view_dashboard_kpis: true, manage_sellers: true, moderate_products: true, manage_wholesale_b2b: true, resolve_disputes: true, approve_payouts: true, manage_campaigns: true, sys_full_access: true },
-                          moderator: { view_dashboard_kpis: true, manage_sellers: true, moderate_products: true, manage_wholesale_b2b: true, resolve_disputes: false, approve_payouts: false, manage_campaigns: false, sys_full_access: false },
-                          finance_manager: { view_dashboard_kpis: true, manage_sellers: false, moderate_products: false, manage_wholesale_b2b: false, resolve_disputes: false, approve_payouts: true, manage_campaigns: false, sys_full_access: false },
-                          support_agent: { view_dashboard_kpis: true, manage_sellers: false, moderate_products: false, manage_wholesale_b2b: false, resolve_disputes: true, approve_payouts: false, manage_campaigns: false, sys_full_access: false },
-                          marketing_manager: { view_dashboard_kpis: true, manage_sellers: false, moderate_products: false, manage_wholesale_b2b: false, resolve_disputes: false, approve_payouts: false, manage_campaigns: true, sys_full_access: false },
+                          super_admin: { view_dashboard_kpis: true, manage_sellers: true, moderate_products: true, resolve_disputes: true, approve_payouts: true, manage_campaigns: true, sys_full_access: true },
+                          moderator: { view_dashboard_kpis: true, manage_sellers: true, moderate_products: true, resolve_disputes: false, approve_payouts: false, manage_campaigns: false, sys_full_access: false },
+                          finance_manager: { view_dashboard_kpis: true, manage_sellers: false, moderate_products: false, resolve_disputes: false, approve_payouts: true, manage_campaigns: false, sys_full_access: false },
+                          support_agent: { view_dashboard_kpis: true, manage_sellers: false, moderate_products: false, resolve_disputes: true, approve_payouts: false, manage_campaigns: false, sys_full_access: false },
+                          marketing_manager: { view_dashboard_kpis: true, manage_sellers: false, moderate_products: false, resolve_disputes: false, approve_payouts: false, manage_campaigns: true, sys_full_access: false },
                         };
                         setCustomPermissions({ ...customPermissions, [rbacSelectedRole]: { ...defaultSets[rbacSelectedRole] } });
                         triggerToast('Permissions reset to initial system seeds!');
@@ -1419,8 +1354,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
                     {[
                       { key: 'view_dashboard_kpis', title: 'view_dashboard_kpis', label: 'View Dashboard Analytics KPIs', details: 'Access telemetry, page views, growth area charts, and market shares' },
                       { key: 'manage_sellers', title: 'manage_sellers', label: 'Vet & Moderate Sellers Profiles', details: 'Approve incoming store applications, review legal NID, suspend or ban shops' },
-                      { key: 'moderate_products', title: 'moderate_products', label: 'Moderate B2C/B2B Products Lists', details: 'Review item details, pricing anomalies, and verified genuine badges validation' },
-                      { key: 'manage_wholesale_b2b', title: 'manage_wholesale_b2b', label: 'Manage Wholesale MOQ & RFQ Contracts', details: 'Audit minimum order requirements and B2B vendor quoting price metrics' },
+                      { key: 'moderate_products', title: 'moderate_products', label: 'Moderate B2C Products Lists', details: 'Review item details, pricing anomalies, and verified genuine badges validation' },
                       { key: 'resolve_disputes', title: 'resolve_disputes', label: 'Arbitrate Customer Disputes', details: 'Access escrow tickets, review parcel closeups evidence files and trigger warnings' },
                       { key: 'approve_payouts', title: 'approve_payouts', label: 'Authorize Balanced Escrow Payouts', details: 'Approve releases, refund accounts, adjust ledger fees and release bank transfers' },
                       { key: 'manage_campaigns', title: 'manage_campaigns', label: 'Configure Sponsor Slot Ads Bidding', details: 'Approve priority featured listings, homepage banners, and CPC CPC budgets' },
@@ -1502,7 +1436,6 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
                         <option value="view_dashboard_kpis">view_dashboard_kpis (KPI Auditing)</option>
                         <option value="manage_sellers">manage_sellers (Ban/Vet Merchant Shops)</option>
                         <option value="moderate_products">moderate_products (Vetting Listings)</option>
-                        <option value="manage_wholesale_b2b">manage_wholesale_b2b (MOQ/RFQ Auditing)</option>
                         <option value="resolve_disputes">resolve_disputes (Arbitrate dispute reports)</option>
                         <option value="approve_payouts">approve_payouts (Release financial escrow)</option>
                         <option value="manage_campaigns">manage_campaigns (Launch Ads CPC campaigns)</option>

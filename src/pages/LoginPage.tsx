@@ -14,7 +14,13 @@ export default function LoginPage() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     login(selectedRole);
-    navigate('/admin/dashboard');
+    const redirectPath = localStorage.getItem('redirect_after_login');
+    if (redirectPath) {
+      localStorage.removeItem('redirect_after_login');
+      navigate(redirectPath);
+    } else {
+      navigate('/admin/dashboard');
+    }
   };
 
   const roles: { role: UserRole; label: string; icon: any; color: string; desc: string }[] = [
