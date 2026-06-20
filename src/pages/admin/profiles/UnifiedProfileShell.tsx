@@ -65,6 +65,7 @@ import {
 import ProfileLayout from '../../../components/profile/ProfileLayout';
 import ContentTable from '../../../components/profile/ContentTable';
 import BrandEditStudio from '../BrandEditStudio';
+import GuideStudioCMS from '../../../components/profile/GuideStudioCMS';
 
 // Static / fallback profiles database
 const FALLBACK_CONSUMERS = [
@@ -1194,64 +1195,6 @@ export default function UnifiedProfileShell() {
         {/* TAB 1: ⚙️ Account Information */}
         {activeTab === 'account' && typeKey === 'consumer' && entityData && (
           <div className="space-y-6 text-left font-sans">
-            <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl">
-              <div className="border-b border-white/[0.04] pb-4 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Consumer Account Information</h3>
-                  <p className="text-[11px] text-app-text-secondary mt-1">Manage physical delivery pipelines, digital keys, and compliance protocols.</p>
-                </div>
-                <span className="px-2.5 py-1 text-[9px] font-mono font-bold tracking-widest uppercase border rounded-[2px] bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
-                  {entityData.status || 'Active'}
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-8">
-                {/* Visual Identity Profile Left */}
-                <div className="md:col-span-4 flex flex-col items-center justify-center p-6 border border-white/5 bg-slate-950/20 rounded-[4px] text-center">
-                  <div className="w-24 h-24 rounded-full bg-slate-800 border-2 border-white/10 flex items-center justify-center overflow-hidden mb-4 shadow-lg">
-                    {entityData.avatarUrl ? (
-                      <img referrerPolicy="no-referrer" src={entityData.avatarUrl} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-2xl font-black text-rose-400 font-mono">{(entityData as any).initials || 'CU'}</span>
-                    )}
-                  </div>
-                  <h4 className="text-base font-bold text-white tracking-tight">{entityData.name}</h4>
-                  <span className="text-xs text-indigo-400 font-semibold font-mono mt-0.5">@{entityData.name.toLowerCase().replace(/\s+/g, '')}</span>
-                  <span className="text-[10px] bg-indigo-500/10 text-indigo-400 font-mono px-2 py-0.5 rounded-[2px] font-bold uppercase mt-3">
-                    {(entityData as any).persona || 'Value-Driven Patron'}
-                  </span>
-                </div>
-
-                {/* Identity & Registry Form Fields right */}
-                <div className="md:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
-                  <div className="bg-white/[0.01] border border-white/5 p-3.5 rounded-[2px] space-y-1">
-                    <span className="text-[9px] text-app-text-secondary uppercase">Email Address</span>
-                    <span className="text-xs font-bold text-white block truncate">{entityData.email}</span>
-                  </div>
-                  <div className="bg-white/[0.01] border border-white/5 p-3.5 rounded-[2px] space-y-1">
-                    <span className="text-[9px] text-app-text-secondary uppercase">Phone Number</span>
-                    <span className="text-xs font-bold text-white block">{(entityData as any).phone || '+880 1711-223344'}</span>
-                  </div>
-                  <div className="bg-white/[0.01] border border-white/5 p-3.5 rounded-[2px] space-y-1">
-                    <span className="text-[9px] text-app-text-secondary uppercase">Date of Birth</span>
-                    <span className="text-xs font-bold text-white block">14 May, 1996</span>
-                  </div>
-                  <div className="bg-white/[0.01] border border-white/5 p-3.5 rounded-[2px] space-y-1">
-                    <span className="text-[9px] text-app-text-secondary uppercase">Primary Gender</span>
-                    <span className="text-xs font-bold text-white block">Male</span>
-                  </div>
-                  <div className="bg-white/[0.01] border border-white/5 p-3.5 rounded-[2px] space-y-1">
-                    <span className="text-[9px] text-app-text-secondary uppercase">Join Date</span>
-                    <span className="text-xs font-bold text-white block">12 January, 2024</span>
-                  </div>
-                  <div className="bg-white/[0.01] border border-white/5 p-3.5 rounded-[2px] space-y-1">
-                    <span className="text-[9px] text-app-text-secondary uppercase">Last Active Connection</span>
-                    <span className="text-xs font-bold text-white block">{(entityData as any).lastActive || 'Active Now'}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Billing & Shipping Addresses (Editable Mocks) */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
               <div className="border-b border-white/[0.04] pb-3">
@@ -2163,79 +2106,6 @@ export default function UnifiedProfileShell() {
           <div className="space-y-6 text-left">
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
               <div className="border-b border-white/[0.04] pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Merchant Identity & Organization Details</h3>
-                <p className="text-[11px] text-app-text-secondary mt-1">Primary business identification and account representation.</p>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold text-app-accent-light uppercase tracking-wider">Store Profile Claims</h4>
-                  <div className="grid grid-cols-2 gap-4 text-xs font-sans">
-                    <div className="p-3 bg-white/5 border border-white/5 rounded">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Corporate Store Name</span>
-                      <span className="text-white font-bold mt-1 block">{(entityData as any).storeName || (entityData as any).ownerStore || entityData.name}</span>
-                    </div>
-                    <div className="p-3 bg-white/5 border border-white/5 rounded">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Legal Entity Registry ID</span>
-                      <span className="text-white font-mono font-bold mt-1 block">{(entityData as any).id || (entityData as any).legalId}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Representative Credentials</h4>
-                  <div className="grid grid-cols-2 gap-4 text-xs font-sans">
-                    <div className="p-3 bg-white/5 border border-white/5 rounded">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Executive Contact</span>
-                      <span className="text-white font-bold mt-1 block">{entityData.name || "Rahim Uddin"}</span>
-                    </div>
-                    <div className="p-3 bg-white/5 border border-white/5 rounded">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Subscription SLA Tier</span>
-                      <span className="text-emerald-400 font-bold mt-1 block">Diamond Enterprise</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-white/[0.04] space-y-4">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Business Contact & Locations</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-sans">
-                  <div className="p-3.5 bg-white/5 border border-white/5 rounded flex items-start gap-2.5">
-                    <Mail className="w-4 h-4 text-app-accent mt-0.5 shrink-0" />
-                    <div>
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Registered Corporate Email</span>
-                      <span className="text-white font-bold mt-1 block">{(entityData as any).email || "merchant.support@aarong.com"}</span>
-                    </div>
-                  </div>
-                  <div className="p-3.5 bg-white/5 border border-white/5 rounded flex items-start gap-2.5">
-                    <Phone className="w-4 h-4 text-app-accent mt-0.5 shrink-0" />
-                    <div>
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Hotline Support SLA</span>
-                      <span className="text-white font-bold mt-1 block">{(entityData as any).phone || "01711-654321"}</span>
-                    </div>
-                  </div>
-                  <div className="p-3.5 bg-white/5 border border-white/5 rounded flex items-start gap-2.5">
-                    <MapPin className="w-4 h-4 text-app-accent mt-0.5 shrink-0" />
-                    <div className="overflow-hidden">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Merchant Office Address</span>
-                      <span className="text-white font-bold mt-1 block truncate">{(entityData as any).address || "Dhanmondi, Dhaka, Bangladesh"}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {entityData.description && (
-                <div className="p-4 bg-white/5 border border-white/5 rounded space-y-2">
-                  <span className="text-[10px] text-app-text-secondary uppercase block font-bold">Brand Manifesto Overview</span>
-                  <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                    "{entityData.description}"
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-3">
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider">Account Settings & Communication Preferences</h3>
                 <p className="text-[11px] text-app-text-secondary mt-1">Manage passwords, sound notifications, message alerts, and 2FA keys.</p>
               </div>
@@ -2938,116 +2808,6 @@ export default function UnifiedProfileShell() {
         {/* TAB 1: ⚙️ Account Information */}
         {activeTab === 'account' && typeKey === 'creator' && entityData && (
           <div className="space-y-6 text-left">
-            <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6 font-sans">
-              <div className="border-b border-white/[0.04] pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">⚙️ Creator Identity & Account Information</h3>
-                <p className="text-[11px] text-app-text-secondary mt-1">Display and manage creator's digital persona & security profiles.</p>
-              </div>
-
-              <div className="flex flex-col md:flex-row gap-6 items-start">
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-full border border-white/10 overflow-hidden shrink-0">
-                    <img src={entityData.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=256&h=256"} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white">{entityData.name}</h4>
-                    <span className="text-xs text-app-accent-light font-mono block mt-0.5">{entityData.handle}</span>
-                    <span className="inline-block px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] font-bold font-mono rounded mt-1.5">CREATOR STATUS: {entityData.status?.toUpperCase() || 'ACTIVE'}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-white/[0.04]">
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold text-app-accent-light uppercase tracking-wider">Profile Registry Claims</h4>
-                  <div className="grid grid-cols-2 gap-4 text-xs font-sans">
-                    <div className="p-3 bg-white/5 border border-white/5 rounded">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Legal Name</span>
-                      <span className="text-white font-bold mt-1 block">{entityData.name}</span>
-                    </div>
-                    <div className="p-3 bg-white/5 border border-white/5 rounded">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">User Name</span>
-                      <span className="text-white font-mono font-bold mt-1 block">{entityData.handle}</span>
-                    </div>
-                    <div className="p-3 bg-white/5 border border-white/5 rounded">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Category / Specialties</span>
-                      <span className="text-white font-bold mt-1 block truncate">{(entityData.specialties || []).join(', ') || 'Fashion & Beauty'}</span>
-                    </div>
-                    <div className="p-3 bg-white/5 border border-white/5 rounded">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Primary Language</span>
-                      <span className="text-white font-bold mt-1 block">English, Bangla</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Contact & Location Registry</h4>
-                  <div className="grid grid-cols-2 gap-4 text-xs font-sans">
-                    <div className="p-3 bg-white/5 border border-white/5 rounded">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Registered Email</span>
-                      <span className="text-white font-bold mt-1 block break-all">{entityData.email}</span>
-                    </div>
-                    <div className="p-3 bg-white/5 border border-white/5 rounded">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Phone Number</span>
-                      <span className="text-white font-mono font-bold mt-1 block">{entityData.phone}</span>
-                    </div>
-                    <div className="p-3 bg-white/5 border border-white/5 rounded">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Ecosystem Geography</span>
-                      <span className="text-white font-bold mt-1 block">Bangladesh</span>
-                    </div>
-                    <div className="p-3 bg-white/5 border border-white/5 rounded">
-                      <span className="text-[9px] text-app-text-secondary uppercase block">Base City Location</span>
-                      <span className="text-white font-bold mt-1 block">Dhaka</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-white/[0.04] space-y-3">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Creative Persona Manifesto & Social Portals</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 bg-white/5 border border-white/5 rounded space-y-2">
-                    <span className="text-[10px] text-app-text-secondary uppercase block font-bold">Biographical Pitch</span>
-                    <p className="text-xs text-slate-300 leading-relaxed font-sans">
-                      "{entityData.persona || 'Bespoke Reviewer and curator based in Dhaka.'}"
-                    </p>
-                  </div>
-                  <div className="p-4 bg-white/5 border border-white/5 rounded space-y-3 font-sans text-xs">
-                    <span className="text-[10px] text-app-text-secondary uppercase block font-bold">Social Handles & Website link</span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <a href="#instagram" className="flex items-center gap-1.5 text-app-accent-light hover:text-white transition-colors">
-                        <Share2 className="w-3.5 h-3.5 shrink-0" />
-                        <span>Instagram Portals</span>
-                      </a>
-                      <a href="#youtube" className="flex items-center gap-1.5 text-app-accent-light hover:text-white transition-colors">
-                        <Share2 className="w-3.5 h-3.5 shrink-0" />
-                        <span>YouTube Vlogs</span>
-                      </a>
-                      <a href="#website" className="flex items-center gap-1.5 text-indigo-400 hover:text-white transition-colors col-span-2">
-                        <Globe className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">https://choosify.com/{entityData.handle?.replace('@', '')}</span>
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-white/[0.04] grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
-                <div className="p-3 bg-white/5 border border-white/5 rounded">
-                  <span className="text-[9.5px] text-app-text-secondary uppercase block font-sans font-medium">Join Date Timestamp</span>
-                  <span className="text-white font-bold mt-1 block font-mono">14 February, 2024</span>
-                </div>
-                <div className="p-3 bg-white/5 border border-white/5 rounded">
-                  <span className="text-[9.5px] text-app-text-secondary uppercase block font-sans font-medium">Last Active Session</span>
-                  <span className="text-white font-bold mt-1 block font-mono">{entityData.lastActive || 'Active Now'}</span>
-                </div>
-                <div className="p-3 bg-white/5 border border-white/5 rounded">
-                  <span className="text-[9.5px] text-emerald-400 uppercase block font-sans font-black">Authentication Standing</span>
-                  <span className="text-emerald-400 font-bold mt-1 block font-mono">✓ PLATFORM VERIFIED TIER-1</span>
-                </div>
-              </div>
-            </div>
-
             {/* Notification Preferences & Password Security Section */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
               <div className="border-b border-white/[0.04] pb-3">
@@ -3292,50 +3052,16 @@ export default function UnifiedProfileShell() {
               </div>
             </div>
 
-            {/* Relocated Guide Studio (Exact previous functionality and styling preserved) */}
-            <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-5 font-sans text-left">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/5 pb-3">
-                <div className="space-y-1">
-                  <span className="text-xs font-bold uppercase tracking-widest text-[#F4631E]">CREATOR REVIEWS STUDIO CATALOG</span>
-                  <p className="text-[10px] text-app-text-secondary">Fully functional Workspace and catalog list audit.</p>
-                </div>
-              </div>
-
-              {creatorGuides.length > 0 ? (
-                <div className="divide-y divide-white/5">
-                  {creatorGuides.map((guide) => (
-                    <div key={guide.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 py-4.5 items-center hover:bg-white/[0.01]">
-                      <div className="col-span-1 md:col-span-4">
-                        <span className="text-[10px] uppercase font-bold text-app-text-secondary font-mono">Registry ID: {guide.id}</span>
-                        <h4 className="text-xs font-bold text-white mt-1 leading-snug">{guide.guideTitle}</h4>
-                        <span className="text-[9.5px] text-app-accent-light font-bold block leading-relaxed">{guide.audienceType}</span>
-                      </div>
-
-                      <div className="col-span-1 md:col-span-2 md:text-right">
-                        <span className="text-xs font-bold text-white block">{guide.category}</span>
-                      </div>
-
-                      <div className="col-span-1 md:col-span-4 md:text-right font-mono space-y-0.5">
-                        <span className="text-[10px] text-emerald-400 font-bold block">🥇 Winner: {guide.winnerProduct}</span>
-                        <span className="text-[10px] text-indigo-400 block">Budget: {guide.bestBudgetPick}</span>
-                      </div>
-
-                      <div className="col-span-1 md:col-span-2 text-right">
-                        <button
-                          onClick={() => setSelectedGuide(guide)}
-                          className="px-3 py-1.5 bg-app-card border border-app-border rounded-[4px] text-[10px] font-bold text-app-accent-light hover:border-app-accent hover:text-white transition-all flex items-center justify-center gap-1 cursor-pointer w-full font-sans"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Inspect Guide</span>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="py-12 text-center text-app-text-secondary">No guides matched.</div>
-              )}
-            </div>
+            {/* Guide Studio & Editorial CMS Embedded */}
+            <GuideStudioCMS 
+              mode="embedded" 
+              entity="creator" 
+              guides={creatorGuides} 
+              onChange={setCreatorGuides} 
+              authorName={entityData.name} 
+              authorAvatar={entityData.avatarUrl} 
+              authorVerified={entityData.verifiedContributor || true} 
+            />
           </div>
         )}
 
