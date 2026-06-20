@@ -31,7 +31,7 @@ import {
 } from 'recharts';
 import { useAds } from '../../contexts/AdsContext';
 import { useAuth } from '../../contexts/AuthContext';
-import SellerProfile from '../admin/profiles/SellerProfile';
+import UnifiedProfileShell from '../admin/profiles/UnifiedProfileShell';
 
 const salesData = [
   { name: 'Mon', sales: 4000, clicks: 120 },
@@ -339,7 +339,7 @@ export default function SellerDashboard() {
         </>
       ) : (
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-          <SellerProfile />
+          <UnifiedProfileShell />
         </div>
       )}
 

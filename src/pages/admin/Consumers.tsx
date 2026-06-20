@@ -122,10 +122,10 @@ export default function ConsumersPage() {
   });
 
   const getProfilePath = (role: string, id: string) => {
-    if (role === 'Seller') return `/admin/sellers/${id}`;
-    if (role === 'Creator') return `/admin/creators/${id}`;
-    if (role === 'Admin') return `/admin/admins/${id}`;
-    return `/admin/consumers/${id}`;
+    if (role === 'Seller') return `/upe/seller/${id}`;
+    if (role === 'Creator') return `/upe/creator/${id}`;
+    if (role === 'Admin') return `/upe/consumer/${id}`;
+    return `/upe/consumer/${id}`;
   };
 
   return (

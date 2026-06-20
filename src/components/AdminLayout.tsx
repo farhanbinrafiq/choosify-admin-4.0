@@ -58,7 +58,8 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Consumers', icon: Users, path: '/admin/consumers' },
     { label: 'Brand Management Studio', icon: Globe, path: '/admin/sellers' },
     { label: 'Products', icon: Package, path: '/admin/products' },
-    { label: 'Orders', icon: ListOrdered, path: '/admin/orders-overview' },
+    { label: 'Order Console', icon: ListOrdered, path: '/admin/orders' },
+    { label: 'Orders Overview', icon: BarChart3, path: '/admin/orders-overview' },
     { label: 'Creators', icon: Award, path: '/admin/creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/moderation?tab=disputes' },
@@ -88,7 +89,8 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Consumers', icon: Users, path: '/admin/consumers' },
     { label: 'Brand Management Studio', icon: Globe, path: '/admin/sellers' },
     { label: 'Products', icon: Package, path: '/admin/products' },
-    { label: 'Orders', icon: ListOrdered, path: '/admin/orders-overview' },
+    { label: 'Order Console', icon: ListOrdered, path: '/admin/orders' },
+    { label: 'Orders Overview', icon: BarChart3, path: '/admin/orders-overview' },
     { label: 'Creators', icon: Award, path: '/admin/creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/moderation?tab=disputes' },
@@ -116,7 +118,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
   creator: [
     { label: 'Creator Hub', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Creator Profile', icon: Users, path: '/admin/creators/creator_001' },
+    { label: 'Creator Profile', icon: Users, path: '/admin/creators/1' },
     { label: 'Guides Studio', icon: FileText, path: '/dashboard/content-studio/guides' },
     { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
     { label: 'Collaborations', icon: ShieldCheck, path: '/admin/creator-hub', badge: 1 },
@@ -243,7 +245,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     else if (profile.role === 'creator') {
       const allowedCreators = [
         '/admin/dashboard',
-        '/admin/creators/creator_001',
+        '/admin/creators/1',
+        '/creator/1',
         '/dashboard/content-studio/guides',
         '/admin/recommendations',
         '/admin/creator-hub',

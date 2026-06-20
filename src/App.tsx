@@ -15,10 +15,8 @@ const DashboardRouter = lazy(() => import('./pages/dashboards/DashboardRouter'))
 const Consumers = lazy(() => import('./pages/admin/Consumers'));
 
 // Profile & Detail Pages
-const ConsumerProfile = lazy(() => import('./pages/admin/profiles/ConsumerProfile'));
-const SellerProfile = lazy(() => import('./pages/admin/profiles/SellerProfile'));
-const CreatorProfile = lazy(() => import('./pages/admin/profiles/CreatorProfile'));
 const AdminProfile = lazy(() => import('./pages/admin/profiles/AdminProfile'));
+const UnifiedProfileShell = lazy(() => import('./pages/admin/profiles/UnifiedProfileShell'));
 const SellerDashboardPreview = lazy(() => import('./pages/admin/previews/SellerDashboardPreview'));
 const RecommendationPreview = lazy(() => import('./pages/admin/previews/RecommendationPreview'));
 const Sellers = lazy(() => import('./pages/admin/Sellers'));
@@ -81,28 +79,46 @@ export default function App() {
               <Routes>
             <Route path="/login" element={<Suspense fallback={null}><LoginPage /></Suspense>} />
             <Route path="/products/:id" element={<Suspense fallback={null}><ProductDetailPage /></Suspense>} />
+            <Route path="/upe/:entityType/:entityId" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Unified Profile...</div>}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
+            
+            {/* Unified root-level profile routes */}
+            <Route path="/consumer/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
+            <Route path="/seller/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
+            <Route path="/brand/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
+            <Route path="/order/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
+            <Route path="/creator/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
+            
             <Route path="/" element={<Suspense fallback={null}><Home /></Suspense>} />
             
             <Route path="/admin/*" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Platform Interface...</div>}><Routes>
+              <Route path="upe/:entityType/:entityId" element={<UnifiedProfileShell />} />
+              
+              {/* Nested admin aliases for unified profiles */}
+              <Route path="consumer/:id" element={<UnifiedProfileShell />} />
+              <Route path="seller/:id" element={<UnifiedProfileShell />} />
+              <Route path="brand/:id" element={<UnifiedProfileShell />} />
+              <Route path="order/:id" element={<UnifiedProfileShell />} />
+              <Route path="creator/:id" element={<UnifiedProfileShell />} />
+
               <Route path="dashboard" element={<DashboardRouter />} />
               <Route path="cms" element={<CMSPage />} />
               <Route path="ads-sponsors" element={<AdsSponsorsPage />} />
               <Route path="promotions" element={<SponsoredPromotionsPage />} />
               <Route path="consumers" element={<Consumers />} />
-              <Route path="consumers/:id" element={<ConsumerProfile />} />
+              <Route path="consumers/:id" element={<UnifiedProfileShell />} />
               <Route path="admins" element={<Consumers />} />
               <Route path="admins/:id" element={<AdminProfile />} />
               <Route path="sellers" element={<Sellers />} />
               <Route path="sellers/pending/:id" element={<SellerReview />} />
-              <Route path="sellers/:id" element={<SellerProfile />} />
+              <Route path="sellers/:id" element={<UnifiedProfileShell />} />
               <Route path="sellers/:id/dashboard" element={<SellerDashboardPreview />} />
               <Route path="creators" element={<Consumers />} />
-              <Route path="creators/:id" element={<CreatorProfile />} />
+              <Route path="creators/:id" element={<UnifiedProfileShell />} />
               <Route path="products" element={<Products />} />
               <Route path="products/:id" element={<ProductEdit />} />
               <Route path="products/:id/edit" element={<ProductEdit />} />
               <Route path="brands" element={<Navigate to="/admin/sellers" replace />} />
-              <Route path="brands/:id" element={<BrandDetails />} />
+              <Route path="brands/:id" element={<UnifiedProfileShell />} />
               <Route path="recommendations" element={<Recommendations />} />
               <Route path="recommendations/:id" element={<RecommendationPreview />} />
               <Route path="deals" element={<Deals />} />

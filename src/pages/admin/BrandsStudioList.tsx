@@ -440,10 +440,12 @@ export default function BrandsStudioList() {
                     {brand.initials}
                   </div>
                   <div className="space-y-1 text-left">
-                    <h3 className="font-bold text-sm text-white group-hover:text-app-accent transition-colors flex items-center gap-1.5 pr-12">
-                      {brand.brandName}
-                      <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                    </h3>
+                    <Link to={`/admin/brands/${brand.id}`} className="group/title block">
+                      <h3 className="font-bold text-sm text-white group-hover/title:text-app-accent transition-colors flex items-center gap-1.5 pr-12">
+                        {brand.brandName}
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      </h3>
+                    </Link>
                     <p className="text-[10px] text-slate-400">{brand.category}</p>
                     <p className="text-[9px] font-mono text-slate-500">Updated: {brand.lastUpdated}</p>
                   </div>
@@ -537,7 +539,9 @@ export default function BrandsStudioList() {
                       </div>
                       <div>
                         <div className="text-xs font-bold text-white flex items-center gap-1.5">
-                          {brand.brandName}
+                          <Link to={`/admin/brands/${brand.id}`} className="hover:text-app-accent hover:underline flex items-center gap-1">
+                            {brand.brandName}
+                          </Link>
                           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                         </div>
                         <div className="text-[10px] text-slate-400">{brand.category}</div>

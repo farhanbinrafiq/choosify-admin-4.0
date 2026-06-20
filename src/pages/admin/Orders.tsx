@@ -96,15 +96,95 @@ export default function OrdersPage() {
 
   const { activeBrandId, setActiveBrandId, allBrands, sellerBrands } = useAuth();
 
-  // Seller orders filter (only show orders for the active brand if logged in as seller)
+  // Admin-only advanced filters state
+  const [filterSeller, setFilterSeller] = useState('All');
+  const [filterBrand, setFilterBrand] = useState('All');
+  const [filterCategory, setFilterCategory] = useState('All');
+  const [filterCourier, setFilterCourier] = useState('All');
+  const [filterDistrict, setFilterDistrict] = useState('All');
+  const [filterDivision, setFilterDivision] = useState('All');
+  const [filterPaymentMethod, setFilterPaymentMethod] = useState('All');
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState('All');
+  const [filterRiskScore, setFilterRiskScore] = useState('All');
+  const [filterDisputeStatus, setFilterDisputeStatus] = useState('All');
+  const [filterOrderSource, setFilterOrderSource] = useState('All');
+  const [filterDateRange, setFilterDateRange] = useState('All');
+  const [filterVerificationStatus, setFilterVerificationStatus] = useState('All');
+  const [filterFulfillmentStatus, setFilterFulfillmentStatus] = useState('All');
+
+  // Multi-select bulk state
+  const [selectedOrders, setSelectedOrders] = useState<string[]>([]);
+  const [bulkAction, setBulkAction] = useState('');
+
+  // Selected order for full-page detail view
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+
+  // Admin-only metadata storage (overrides, disputes, custom courier, pricing, etc.)
+  const [adminMetadata, setAdminMetadata] = useState<Record<string, {
+    courierOverride?: string;
+    trackingUrlOverride?: string;
+    priceOverride?: number;
+    deliveryChargeOverride?: number;
+    isSuspended?: boolean;
+    disputeStatus?: 'Open' | 'Resolved' | 'No Dispute';
+    disputeReason?: string;
+    refundStatus?: 'Pending' | 'Success' | 'None';
+    refundAmount?: number;
+    parentOrderId?: string;
+    isReplacement?: boolean;
+    auditLogs?: { time: string; actor: string; log: string }[];
+  }>>(() => {
+    const saved = localStorage.getItem('admin_orders_metadata');
+    return saved ? JSON.parse(saved) : {};
+  });
+
+  const saveAdminMetadata = (orderId: string, data: any) => {
+    const updated = {
+      ...adminMetadata,
+      [orderId]: {
+        ...(adminMetadata[orderId] || {}),
+        ...data,
+        auditLogs: [
+          ...(adminMetadata[orderId]?.auditLogs || []),
+          ...(data.auditLogs || [])
+        ]
+      }
+    };
+    setAdminMetadata(updated);
+    localStorage.setItem('admin_orders_metadata', JSON.stringify(updated));
+  };
+
+  const isAdmin = ['super_admin', 'admin', 'moderator', 'support_agent', 'finance_manager', 'marketing_manager'].includes(profile?.role || '');
+
   const activeBrand = allBrands.find(b => b.id === activeBrandId);
   const sellerId = profile?.role === 'seller' ? profile.id : 'seller_001'; 
   const sellerRelations = sellerBrands.filter(r => r.seller_user_id === profile?.id);
   const ownedBrandIds = sellerRelations.map(r => r.brand_id);
   const ownedBrandNames = allBrands.filter(b => ownedBrandIds.includes(b.id)).map(b => b.name.toLowerCase());
 
-  // Comprehensive active orders list representing this seller's operational segment
-  const sellerOrders = orders.filter(o => {
+  const mergedOrders = orders.map(o => {
+    const meta = adminMetadata[o.id];
+    if (!meta) return o;
+    return {
+      ...o,
+      deliveryPartner: meta.courierOverride || o.deliveryPartner,
+      trackingUrl: meta.trackingUrlOverride || o.trackingUrl,
+      paymentStatus: meta.refundStatus === 'Success' ? 'Refunded' : o.paymentStatus,
+      total_payable: meta.priceOverride !== undefined ? (meta.priceOverride * (o.quantity || 1) + (meta.deliveryChargeOverride || o.delivery_charge || 120)) : o.total_payable,
+      base_product_price: meta.priceOverride !== undefined ? meta.priceOverride : (o.base_product_price || o.product.price),
+      delivery_charge: meta.deliveryChargeOverride !== undefined ? meta.deliveryChargeOverride : (o.delivery_charge || 120),
+      disputeStatus: meta.disputeStatus || 'No Dispute',
+      isSuspended: !!meta.isSuspended,
+      isReplacement: !!meta.isReplacement,
+      parentOrderId: meta.parentOrderId
+    } as any;
+  });
+
+  // Comprehensive active orders list representing this seller's or admin's operational segment
+  const sellerOrders = mergedOrders.filter(o => {
+    if (isAdmin) {
+      return true;
+    }
     if (profile?.role === 'seller') {
       const brandNameLower = o.product.brand.toLowerCase();
       // If a specific brand context is selected, strict filter by that brand context
@@ -124,15 +204,29 @@ export default function OrdersPage() {
     const q = term.toLowerCase();
     const phone = (o.customer as any).phone || '+880 1711-456789';
     const address = (o.customer as any).address || 'House 14, Road 4, Sector 12, Uttara, Dhaka';
+    const sellerName = o.product.sellerName || '';
+    const brandName = o.product.brand || '';
+    const trackingNum = o.trackingUrl || '';
+    const courier = o.deliveryPartner || '';
+    const invoiceId = o.invoice_id || '';
+    const transactionId = (o as any).transactionId || '';
+    const billingRef = (o as any).billingRef || '';
+
     return (
       o.id.toLowerCase().includes(q) ||
-      (o.invoice_id && o.invoice_id.toLowerCase().includes(q)) ||
-      (o.product.name && o.product.name.toLowerCase().includes(q)) ||
-      (o.product.id && o.product.id.toLowerCase().includes(q)) ||
-      (o.customer.name && o.customer.name.toLowerCase().includes(q)) ||
-      (o.customer.email && o.customer.email.toLowerCase().includes(q)) ||
+      invoiceId.toLowerCase().includes(q) ||
+      o.product.name.toLowerCase().includes(q) ||
+      o.product.id.toLowerCase().includes(q) ||
+      o.customer.name.toLowerCase().includes(q) ||
+      o.customer.email.toLowerCase().includes(q) ||
       phone.toLowerCase().includes(q) ||
-      address.toLowerCase().includes(q)
+      address.toLowerCase().includes(q) ||
+      sellerName.toLowerCase().includes(q) ||
+      brandName.toLowerCase().includes(q) ||
+      trackingNum.toLowerCase().includes(q) ||
+      courier.toLowerCase().includes(q) ||
+      transactionId.toLowerCase().includes(q) ||
+      billingRef.toLowerCase().includes(q)
     );
   };
 
@@ -189,52 +283,145 @@ GRAND TOTAL BILLED : ৳ ${(((order.product.price * (order.quantity || 1)) + (or
     // Apply cumulative workspace search query parameter
     if (!matchQuery(o, searchTerm)) return false;
 
+    // Apply Active Tab filter
+    let matchesTab = true;
     switch (activeTab) {
       case 'All':
         // MERGED: all platform orders + approved/later manual orders
         if (o.isManual && o.status === 'Pending') {
-          return false;
+          matchesTab = false;
+        } else {
+          matchesTab = true;
         }
-        return true;
+        break;
 
       case 'Pending':
-        // Platform orders in pending state only (manual pending live in Other Orders)
-        return !o.isManual && o.status === 'Pending';
+        matchesTab = !o.isManual && o.status === 'Pending';
+        break;
 
       case 'Confirmed':
-        return o.status === 'Confirmed';
+        matchesTab = o.status === 'Confirmed';
+        break;
 
       case 'Dispatched':
-        return o.status === 'Dispatched';
+        matchesTab = o.status === 'Dispatched';
+        break;
 
       case 'In Transit':
-        return o.status === 'In Transit';
+        matchesTab = o.status === 'In Transit';
+        break;
 
       case 'Delivered':
-        return o.status === 'Delivered';
+        matchesTab = o.status === 'Delivered';
+        break;
 
       case 'Cancelled':
-        return o.status === 'Cancelled';
+        matchesTab = o.status === 'Cancelled';
+        break;
 
       case 'Rejected':
-        return o.status === 'Rejected';
+        matchesTab = o.status === 'Rejected';
+        break;
 
       case 'Returned':
-        return o.status === 'Returned';
+        matchesTab = o.status === 'Returned';
+        break;
 
       case 'Exchange':
-        return o.status === 'Exchange';
+        matchesTab = o.status === 'Exchange';
+        break;
 
       case 'Processing':
-        return o.status === 'Processing';
+        matchesTab = o.status === 'Processing';
+        break;
 
       case 'Other':
-        // Other Orders Tab: shows ALL manual/sourced/external bookings
-        return !!o.isManual;
+        matchesTab = !!o.isManual;
+        break;
 
       default:
-        return true;
+        matchesTab = true;
     }
+    if (!matchesTab) return false;
+
+    // Apply Advanced Admin Filters if the current user is Admin (14 Criteria Checklist)
+    if (isAdmin) {
+      // 1. Seller Filter
+      if (filterSeller !== 'All' && o.product.sellerName !== filterSeller) return false;
+      
+      // 2. Brand Filter
+      if (filterBrand !== 'All' && o.product.brand !== filterBrand) return false;
+      
+      // 3. Category Filter
+      if (filterCategory !== 'All') {
+        const cat = filterCategory.toLowerCase();
+        const matchesCat = o.product.name.toLowerCase().includes(cat) || o.product.brand.toLowerCase().includes(cat);
+        if (!matchesCat) return false;
+      }
+      
+      // 4. Courier Filter
+      if (filterCourier !== 'All' && o.deliveryPartner !== filterCourier) return false;
+      
+      // 5. District Filter
+      if (filterDistrict !== 'All') {
+        const addressStr = ((o.customer as any).address || '').toLowerCase();
+        if (!addressStr.includes(filterDistrict.toLowerCase())) return false;
+      }
+
+      // 6. Division Filter
+      if (filterDivision !== 'All') {
+        const addressStr = ((o.customer as any).address || '').toLowerCase();
+        if (!addressStr.includes(filterDivision.toLowerCase())) return false;
+      }
+
+      // 7. Payment Method Filter (Online/COD)
+      if (filterPaymentMethod !== 'All') {
+        const isCOD = o.isManual || o.paymentStatus !== 'Paid';
+        if (filterPaymentMethod === 'COD' && !isCOD) return false;
+        if (filterPaymentMethod === 'Online' && isCOD) return false;
+      }
+
+      // 8. Payment Status Filter
+      if (filterPaymentStatus !== 'All' && o.paymentStatus !== filterPaymentStatus) return false;
+
+      // 9. Risk Score Filter
+      if (filterRiskScore !== 'All' && o.customer.behavior !== filterRiskScore) return false;
+
+      // 10. Dispute Status Filter
+      if (filterDisputeStatus !== 'All') {
+        const d_status = (o as any).disputeStatus || 'No Dispute';
+        if (filterDisputeStatus !== d_status) return false;
+      }
+
+      // 11. Order Source Filter
+      if (filterOrderSource !== 'All') {
+        const isManual = !!o.isManual;
+        if (filterOrderSource === 'Marketplace' && isManual) return false;
+        if (filterOrderSource === 'Sourced' && !isManual) return false;
+      }
+
+      // 12. Date Range Filter
+      if (filterDateRange !== 'All') {
+        const orderDate = new Date(o.timestamp);
+        const now = new Date();
+        const diffTime = Math.abs(now.getTime() - orderDate.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        if (filterDateRange === 'Today' && orderDate.toDateString() !== now.toDateString()) return false;
+        if (filterDateRange === 'Last 7 Days' && diffDays > 7) return false;
+      }
+
+      // 13. Verification Status Filter
+      if (filterVerificationStatus !== 'All') {
+        const isVerified = !o.customer.flagged;
+        if (filterVerificationStatus === 'Verified' && !isVerified) return false;
+        if (filterVerificationStatus === 'Flagged/Unverified' && isVerified) return false;
+      }
+
+      // 14. Fulfillment Status Filter
+      if (filterFulfillmentStatus !== 'All' && o.status !== filterFulfillmentStatus) return false;
+    }
+
+    return true;
   });
 
   const getStatusStyle = (status: OrderStatus) => {
@@ -468,13 +655,566 @@ Thank you for using Choosify Commerce Network.
     showInlineToast(`✓ Invoice file downloaded successfully for Order ${order.id}!`);
   };
 
+  if (selectedOrderId) {
+    const order = mergedOrders.find(o => o.id === selectedOrderId);
+    if (!order) {
+      setSelectedOrderId(null);
+    } else {
+      const meta = adminMetadata[order.id] || {};
+      const auditLogs = meta.auditLogs || [
+        { time: new Date(order.timestamp).toLocaleTimeString(), actor: 'System', log: 'Order placed by customer via automated portal.' }
+      ];
+
+      return (
+        <div className="space-y-8 pb-16 text-white text-sans animate-in fade-in duration-300 relative">
+          {/* Toast Alert Banner */}
+          {toastMsg && (
+            <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-emerald-500/30 text-emerald-400 px-6 py-4.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-bounce">
+              <CheckCircle className="w-5 h-5 text-emerald-500" />
+              <span className="text-xs font-black uppercase tracking-wider">{toastMsg}</span>
+            </div>
+          )}
+
+          {/* Back header */}
+          <div className="flex items-center justify-between bg-app-card border border-app-border rounded-[2rem] p-6 shadow-2xl">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setSelectedOrderId(null)}
+                className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-white transition-all cursor-pointer border border-app-border"
+              >
+                <ArrowLeft className="w-5 h-5" />
+              </button>
+              <div>
+                <div className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Back to Order Console</div>
+                <h1 className="text-lg font-black text-white flex items-center gap-2">
+                  <span>Order Details:</span>
+                  <span className="text-emerald-400 font-mono">{order.id}</span>
+                </h1>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border ${getStatusStyle(order.status)}`}>
+                {order.status}
+              </span>
+              <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border ${
+                order.paymentStatus === 'Paid' 
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                  : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+              }`}>
+                {order.paymentStatus}
+              </span>
+              {order.isSuspended && (
+                <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-full border bg-amber-500/10 text-amber-500 border-amber-500/25">
+                  ⚠️ SUSPENDED
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 2-column Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* Main Info Column (Left 2 cols) */}
+            <div className="lg:col-span-2 space-y-8">
+              
+              {/* Timeline Progress Bar */}
+              <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl relative">
+                <h3 className="text-xs font-black uppercase tracking-widest text-[#F4631E] mb-6">Operations Timeline</h3>
+                
+                <div className="relative">
+                  {/* Visual Line */}
+                  <div className="absolute top-1/2 left-4 right-4 h-0.5 bg-app-border/40 -translate-y-1/2 z-0 hidden md:block" />
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-6 gap-4 relative z-10">
+                    {[
+                      { state: 'Pending', label: '1. Placed', desc: 'Awaiting confirmation' },
+                      { state: 'Confirmed', label: '2. Confirmed', desc: 'Approved for packing' },
+                      { state: 'Processing', label: '3. In Process', desc: 'Being prepared' },
+                      { state: 'Dispatched', label: '4. Dispatched', desc: 'Left terminal' },
+                      { state: 'In Transit', label: '5. In Transit', desc: 'With courier agent' },
+                      { state: 'Delivered', label: '6. Delivered', desc: 'Handed to receiver' },
+                    ].map((step, idx) => {
+                      const statuses = ['Pending', 'Confirmed', 'Processing', 'Dispatched', 'In Transit', 'Delivered'];
+                      const currentIdx = statuses.indexOf(order.status);
+                      const stepIdx = statuses.indexOf(step.state);
+                      const isCompleted = stepIdx <= currentIdx && order.status !== 'Cancelled';
+                      const isCurrent = step.state === order.status;
+
+                      return (
+                        <div key={idx} className="flex flex-row md:flex-col items-center gap-3 text-center md:text-sans">
+                          <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-black text-xs shrink-0 transition-all ${
+                            isCurrent 
+                              ? 'bg-[#F4631E] text-white border-[#F4631E] animate-pulse scale-110 shadow-lg shadow-[#F4631E]/30'
+                              : isCompleted 
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                : 'bg-app-bg text-slate-500 border-app-border'
+                          }`}>
+                            {isCompleted ? '✓' : idx + 1}
+                          </div>
+                          <div className="text-left md:text-center mt-0 md:mt-2">
+                            <div className={`text-[11px] font-black uppercase tracking-wider ${isCurrent ? 'text-[#F4631E]' : 'text-white'}`}>
+                              {step.label}
+                            </div>
+                            <div className="text-[9px] text-[#8E9BAE] font-medium leading-tight">
+                              {step.desc}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* Product description & Invoice info */}
+              <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl space-y-6">
+                <div className="flex items-center justify-between border-b border-app-border/40 pb-4">
+                  <span className="text-xs font-black uppercase tracking-widest text-[#F4631E]">Retail Cart Items</span>
+                  <span className="font-mono text-xs text-[#8E9BAE]">Invoice Ref: {order.invoice_id || 'N/A'}</span>
+                </div>
+
+                <div className="flex gap-6 items-start">
+                  <div className="w-20 h-20 bg-slate-900 border border-app-border rounded-2xl overflow-hidden shrink-0">
+                    <img src={order.product.image} className="w-full h-full object-cover" alt={order.product.name} />
+                  </div>
+                  <div className="space-y-1.5 flex-1">
+                    <span className="text-[9px] font-black uppercase tracking-wider bg-white/5 border border-app-border px-2.5 py-1 rounded-full text-[#F4631E]">
+                      {order.product.brand}
+                    </span>
+                    <h4 className="text-md font-bold text-white font-sans">{order.product.name}</h4>
+                    <div className="text-xs text-[#8E9BAE] font-medium">SKU ID: <span className="font-mono text-white text-[11px] font-black">{order.product.id}</span></div>
+                    <div className="text-xs text-[#8E9BAE] font-medium">Quantity: <span className="text-white font-bold">{order.quantity || 1}</span></div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs font-bold text-slate-400 uppercase">Unit Price</div>
+                    <div className="text-lg font-black text-white">৳ {order.product.price.toLocaleString()}</div>
+                  </div>
+                </div>
+
+                {/* Financial ledger summary */}
+                <div className="bg-app-bg border border-app-border rounded-2xl p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Subtotal</span>
+                    <span className="text-sm font-black text-white">৳ {(order.product.price * (order.quantity || 1)).toLocaleString()}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Logistics Charge</span>
+                    <span className="text-sm font-black text-white">৳ {(order.delivery_charge || 120).toLocaleString()}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Commission ({order.earnings.commissionPercent}%)</span>
+                    <span className="text-sm font-black text-[#F4631E]">৳ {order.earnings.futureAutomatedDeduction.toLocaleString()}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Merchant Net Payout</span>
+                    <span className="text-sm font-black text-emerald-400">৳ {order.earnings.sellerNet.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                <div className="flex justify-between items-center bg-white/5 border border-app-border rounded-xl px-5 py-3.5">
+                  <span className="text-xs font-black uppercase tracking-wider text-slate-300">Total Billed Customer Amount:</span>
+                  <span className="text-md font-black text-white">৳ {((order.product.price * (order.quantity || 1)) + (order.delivery_charge || 120)).toLocaleString()} BDT</span>
+                </div>
+              </div>
+
+              {/* Secure Admin Overrides panel */}
+              {isAdmin && (
+                <div className="bg-[#1e1512] border border-[#F4631E]/20 rounded-[2rem] p-8 shadow-2xl space-y-6">
+                  <div className="flex items-center gap-2 border-b border-[#F4631E]/10 pb-4">
+                    <ShieldCheck className="w-5 h-5 text-[#F4631E]" />
+                    <h3 className="text-sm font-black uppercase tracking-wider text-white">Administrative Decisive Control Panel</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* Status Force Change dropdown */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Bypass Status Engine (Force Transition)</label>
+                      <select 
+                        value={order.status}
+                        onChange={(e) => {
+                          updateOrderStatus(order.id, e.target.value as OrderStatus);
+                          saveAdminMetadata(order.id, {
+                            auditLogs: [{ time: new Date().toLocaleTimeString(), actor: 'Admin Override', log: `Status overrode to: ${e.target.value}` }]
+                          });
+                          showInlineToast(`✓ Status overrode to ${e.target.value} successfully.`);
+                        }}
+                        className="w-full px-4 py-3 bg-slate-900 border border-app-border rounded-xl text-xs text-white outline-none focus:border-[#F4631E]"
+                      >
+                        {['Pending', 'Confirmed', 'Processing', 'Dispatched', 'In Transit', 'Delivered', 'Cancelled', 'Rejected', 'Returned', 'Exchange'].map((st) => (
+                          <option key={st} value={st}>{st}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Reassign courier */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Reassign Carrier Agency (Courier)</label>
+                      <input 
+                        type="text"
+                        placeholder="e.g. Pathao Express, RedX..."
+                        defaultValue={order.deliveryPartner || ''}
+                        onBlur={(e) => {
+                          if (e.target.value) {
+                            saveAdminMetadata(order.id, {
+                              courierOverride: e.target.value,
+                              trackingUrlOverride: 'https://pathao.com/track/' + order.id,
+                              auditLogs: [{ time: new Date().toLocaleTimeString(), actor: 'Admin Override', log: `Courier reassigned to: ${e.target.value}` }]
+                            });
+                            showInlineToast(`✓ Courier agency reassigned to ${e.target.value}.`);
+                          }
+                        }}
+                        className="w-full px-4 py-3 bg-slate-900 border border-app-border rounded-xl text-xs text-white outline-none focus:border-[#F4631E]"
+                      />
+                    </div>
+
+                    {/* Dynamic Override pricing values */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Override pricing or Unit Rate (BDT)</label>
+                      <input 
+                        type="number"
+                        placeholder="Enter raw price value"
+                        defaultValue={order.product.price}
+                        onBlur={(e) => {
+                          const val = parseFloat(e.target.value);
+                          if (!isNaN(val)) {
+                            saveAdminMetadata(order.id, {
+                              priceOverride: val,
+                              auditLogs: [{ time: new Date().toLocaleTimeString(), actor: 'Admin Override', log: `Unit rate overrode to ৳ ${val}` }]
+                            });
+                            showInlineToast(`✓ Invoice pricing overrode to ৳ ${val}.`);
+                          }
+                        }}
+                        className="w-full px-4 py-3 bg-slate-900 border border-app-border rounded-xl text-xs text-white outline-none focus:border-[#F4631E]"
+                      />
+                    </div>
+
+                    {/* Reassign brand */}
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Admin Force Re-attribution (Brand)</label>
+                      <select 
+                        defaultValue={order.product.brand}
+                        onChange={(e) => {
+                          saveAdminMetadata(order.id, {
+                            auditLogs: [{ time: new Date().toLocaleTimeString(), actor: 'Admin Override', log: `Brand mapping overrode to ${e.target.value}` }]
+                          });
+                          showInlineToast(`✓ Brand attribution re-mapped to ${e.target.value}.`);
+                        }}
+                        className="w-full px-4 py-3 bg-slate-900 border border-[#F4631E]/20 rounded-xl text-xs text-white outline-none focus:border-[#F4631E]"
+                      >
+                        {Array.from(new Set(orders.map(o => o.product.brand))).map((brand) => (
+                          <option key={brand} value={brand}>{brand}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3 pt-4 border-t border-[#F4631E]/10">
+                    {/* Suspend Order */}
+                    <button 
+                      onClick={() => {
+                        const updatedSuspended = !order.isSuspended;
+                        saveAdminMetadata(order.id, {
+                          isSuspended: updatedSuspended,
+                          auditLogs: [{ time: new Date().toLocaleTimeString(), actor: 'Admin Action', log: updatedSuspended ? 'Payout suspended and order locked.' : 'Payout suspension lifted.' }]
+                        });
+                        showInlineToast(updatedSuspended ? '⚠️ Order payouts suspended!' : '✓ Order suspension lifted.');
+                      }}
+                      className={`px-4 py-2.5 text-[10px] font-black uppercase tracking-wider rounded-xl border flex items-center gap-2 cursor-pointer transition-all ${
+                        order.isSuspended 
+                          ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30' 
+                          : 'bg-white/5 text-slate-300 border-slate-700 hover:bg-white/10'
+                      }`}
+                    >
+                      <ShieldAlert className="w-3.5 h-3.5" /> {order.isSuspended ? 'Unsuspend Pay' : 'Unsuspend Pay'}
+                    </button>
+
+                    {/* Refund Process */}
+                    <button 
+                      onClick={() => {
+                        saveAdminMetadata(order.id, {
+                          refundStatus: 'Success',
+                          refundAmount: order.product.price + 120,
+                          auditLogs: [{ time: new Date().toLocaleTimeString(), actor: 'Admin Financial', log: `Process marketplace refund of ৳ ${(order.product.price + 120).toLocaleString()}` }]
+                        });
+                        showInlineToast('✓ Customer refund successfully initiated and auto-settled!');
+                      }}
+                      disabled={order.paymentStatus === 'Refunded'}
+                      className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/40 rounded-xl flex items-center gap-2 cursor-pointer transition-all disabled:opacity-50"
+                    >
+                      <DollarSign className="w-3.5 h-3.5" /> Refund Settled BDT
+                    </button>
+
+                    {/* Generate Replacement */}
+                    <button 
+                      onClick={() => {
+                        const cloneId = `${order.id}-REP-${Math.floor(100 + Math.random() * 900)}`;
+                        saveAdminMetadata(order.id, {
+                          auditLogs: [{ time: new Date().toLocaleTimeString(), actor: 'Admin Action', log: `Generated administrative replacement order: ${cloneId}` }]
+                        });
+                        saveAdminMetadata(cloneId, {
+                          priceOverride: 0, 
+                          deliveryChargeOverride: 0,
+                          isReplacement: true,
+                          parentOrderId: order.id,
+                          auditLogs: [{ time: new Date().toLocaleTimeString(), actor: 'Admin System', log: `Replacement order seeded from parent: ${order.id}` }]
+                        });
+                        showInlineToast(`✓ Replacement Order Generated with ID: ${cloneId}`);
+                      }}
+                      className="px-4 py-2.5 text-[10px] font-black uppercase tracking-wider bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 rounded-xl flex items-center gap-2 cursor-pointer transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Generate Replacement
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Customer Profile & Dispute Center (Right 1 col) */}
+            <div className="space-y-8">
+              
+              {/* Customer Box */}
+              <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl space-y-6">
+                <span className="text-xs font-black uppercase tracking-widest text-[#F4631E] block border-b border-app-border/40 pb-4">Customer profile ledger</span>
+                
+                <div className="flex gap-4 items-center">
+                  <div className="w-12 h-12 rounded-full bg-[#F4631E]/20 border border-[#F4631E]/30 text-[#F4631E] font-black text-sm flex items-center justify-center shadow-inner">
+                    {order.customer.avatar}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-black text-white">
+                      {isAdmin ? (
+                        <Link 
+                          to={`/admin/consumers/${order.customer.id}`}
+                          className="hover:text-[#F4631E] hover:underline focus:outline-none focus:ring-1 focus:ring-[#F4631E] transition-colors"
+                        >
+                          {order.customer.name}
+                        </Link>
+                      ) : (
+                        order.customer.name
+                      )}
+                    </h4>
+                    <p className="text-xs text-[#8E9BAE]">{order.customer.email}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-3 border-t border-app-border/40 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500 font-bold">Phone Number:</span>
+                    <span className="text-white font-mono font-bold">{(order.customer as any).phone || "+880 1711-456789"}</span>
+                  </div>
+                  <div className="space-y-1">
+                    <span className="text-slate-500 font-bold">Fulfillment Address:</span>
+                    <div className="text-white font-serif italic text-[11px] leading-relaxed bg-app-bg px-3.5 py-2.5 rounded-xl border border-app-border/60">
+                      {(order.customer as any).address || "House 14, Road 4, Sector 12, Uttara, Dhaka"}
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center bg-[#F4631E]/5 p-3 rounded-xl border border-[#F4631E]/10">
+                    <span className="text-slate-400 font-bold">Behavior Verification:</span>
+                    <span className={`text-[10px] uppercase font-black px-2.5 py-0.5 rounded border ${
+                      order.customer.behavior === 'Good' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                    }`}>
+                      {order.customer.behavior} Grade
+                    </span>
+                  </div>
+
+                  {isAdmin && (
+                    <div className="pt-4 border-t border-app-border/40 space-y-2">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">Admin CRM Shortcuts</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <Link 
+                          to={`/admin/consumers/${order.customer.id}`}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/5 border border-app-border rounded-xl text-[10px] text-white font-medium hover:bg-white/10 transition-colors"
+                        >
+                          👤 Profile
+                        </Link>
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(order.customer.id);
+                            showInlineToast('✓ Customer ID copied to clipboard!');
+                          }}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/5 border border-app-border rounded-xl text-[10px] text-left text-white font-medium hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          📋 ID
+                        </button>
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText(order.customer.email);
+                            showInlineToast('✓ Customer Email copied to clipboard!');
+                          }}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/5 border border-app-border rounded-xl text-[10px] text-left text-white font-medium hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          ✉️ Email
+                        </button>
+                        <button 
+                          onClick={() => {
+                            navigator.clipboard.writeText((order.customer as any).phone || "+880 1711-456789");
+                            showInlineToast('✓ Customer Phone copied to clipboard!');
+                          }}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/5 border border-app-border rounded-xl text-[10px] text-left text-white font-medium hover:bg-white/10 transition-colors cursor-pointer"
+                        >
+                          📞 Phone
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Admin Dispute Center */}
+              {isAdmin && (
+                <div className="bg-[#1c1214] border border-rose-500/10 rounded-[2rem] p-8 shadow-2xl space-y-6">
+                  <div className="flex items-center gap-2 border-b border-rose-500/10 pb-4">
+                    <AlertCircle className="w-5 h-5 text-rose-500" />
+                    <h3 className="text-xs font-black uppercase tracking-widest text-white">Dispute Center Secure Panel</h3>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Claims Status:</span>
+                      <span className={`text-[10px] uppercase font-black px-2.5 py-0.5 rounded border ${
+                        order.disputeStatus === 'Open' 
+                          ? 'bg-rose-500/10 text-rose-400 border-rose-500/20 animate-pulse' 
+                          : 'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                      }`}>
+                        {order.disputeStatus || 'No Dispute'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-3">
+                      <button 
+                        onClick={() => {
+                          const dStatus = order.disputeStatus === 'Open' ? 'No Dispute' : 'Open';
+                          saveAdminMetadata(order.id, {
+                            disputeStatus: dStatus as any,
+                            auditLogs: [{ time: new Date().toLocaleTimeString(), actor: 'Admin Dispute', log: dStatus === 'Open' ? 'Dispute case logged for quality audit check' : 'Dispute resolved-closed.' }]
+                          });
+                          showInlineToast(dStatus === 'Open' ? '⚠️ Case filed under Quality Dispute.' : '✓ Dispute successfully resolved.');
+                        }}
+                        className="w-full py-2.5 text-[10px] font-black uppercase tracking-wider bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 rounded-xl cursor-pointer text-center block transition-all"
+                      >
+                        {order.disputeStatus === 'Open' ? 'Resolve/Close Dispute' : 'Open Active Dispute Case'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Audit Logs Trail */}
+              <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl space-y-6">
+                <span className="text-xs font-black uppercase tracking-widest text-[#F4631E] block border-b border-app-border/40 pb-4">Audit log activity trail</span>
+                
+                <div className="space-y-4 max-h-[220px] overflow-y-auto custom-scrollbar">
+                  {auditLogs.map((log: any, idx: number) => (
+                    <div key={idx} className="flex gap-3 text-[11px] items-start">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#F4631E] mt-1 shrink-0" />
+                      <div>
+                        <div className="text-slate-400 font-mono font-medium">{log.time} · {log.actor}</div>
+                        <div className="text-white mt-0.5 font-sans leading-relaxed">{log.log}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+  }
+
   return (
-    <div className="space-y-8 pb-12 text-white relative">
+    <div className="space-y-8 pb-12 text-white relative font-sans">
       {/* Toast Alert Banner */}
       {toastMsg && (
         <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-emerald-500/30 text-emerald-400 px-6 py-4.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-bounce">
           <CheckCircle className="w-5 h-5 text-emerald-500" />
           <span className="text-xs font-black uppercase tracking-wider">{toastMsg}</span>
+        </div>
+      )}
+
+      {/* Dynamic Floating Sticky Bulk Actions Control Tray */}
+      {isAdmin && selectedOrders.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-[#1e1e2e]/95 border border-[#F4631E]/40 px-6 py-4 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.7)] flex items-center gap-6 animate-in slide-in-from-bottom duration-300">
+          <div className="flex items-center gap-2">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#F4631E] animate-ping" />
+            <span className="text-[10px] font-black uppercase tracking-wider text-white">
+              Selected <span className="text-[#F4631E] font-black">{selectedOrders.length}</span> Batch Orders
+            </span>
+          </div>
+
+          <div className="h-4 w-px bg-app-border/60" />
+
+          <div className="flex items-center gap-2">
+            {/* 1. Bulk Approve */}
+            <button 
+              onClick={() => {
+                selectedOrders.forEach(id => approveOrder(id));
+                setSelectedOrders([]);
+                showInlineToast(`✓ Bulk approval finalized for ${selectedOrders.length} active orders!`);
+              }}
+              className="px-3.5 py-2 text-[10px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl font-black uppercase tracking-widest text-white cursor-pointer active:scale-95 transition-all"
+            >
+              Approve
+            </button>
+
+            {/* 2. Bulk Dispatch */}
+            <button 
+              onClick={() => {
+                selectedOrders.forEach(id => updateOrderStatus(id, 'Dispatched'));
+                setSelectedOrders([]);
+                showInlineToast(`✓ Bulk dispatched state initialized for ${selectedOrders.length} orders!`);
+              }}
+              className="px-3.5 py-2 text-[10px] bg-indigo-600/25 hover:bg-indigo-600/40 border border-indigo-500/30 text-indigo-300 rounded-xl font-black uppercase tracking-widest cursor-pointer active:scale-95 transition-all"
+            >
+              Dispatch
+            </button>
+
+            {/* 3. Bulk Transit */}
+            <button 
+              onClick={() => {
+                selectedOrders.forEach(id => updateOrderStatus(id, 'In Transit'));
+                setSelectedOrders([]);
+                showInlineToast(`✓ Bulk transit route logged for ${selectedOrders.length} orders!`);
+              }}
+              className="px-3.5 py-2 text-[10px] bg-purple-600/25 hover:bg-purple-600/40 border border-purple-500/30 text-purple-300 rounded-xl font-black uppercase tracking-widest cursor-pointer active:scale-95 transition-all"
+            >
+              In Transit
+            </button>
+
+            {/* 4. Bulk Deliver */}
+            <button 
+              onClick={() => {
+                selectedOrders.forEach(id => updateOrderStatus(id, 'Delivered'));
+                setSelectedOrders([]);
+                showInlineToast(`✓ Bulk shipment settlement finalized for ${selectedOrders.length} orders!`);
+              }}
+              className="px-3.5 py-2 text-[10px] bg-emerald-600/25 hover:bg-emerald-600/40 border border-emerald-500/30 text-emerald-300 rounded-xl font-black uppercase tracking-widest cursor-pointer active:scale-95 transition-all"
+            >
+              Deliver
+            </button>
+
+            {/* 5. Bulk Cancel */}
+            <button 
+              onClick={() => {
+                selectedOrders.forEach(id => cancelOrder(id));
+                setSelectedOrders([]);
+                showInlineToast(`✓ Bulk cancellation registered for ${selectedOrders.length} orders.`);
+              }}
+              className="px-3.5 py-2 text-[10px] bg-rose-600/25 hover:bg-rose-600/40 border border-rose-500/30 text-rose-300 rounded-xl font-black uppercase tracking-widest cursor-pointer active:scale-95 transition-all"
+            >
+              Cancel
+            </button>
+          </div>
+
+          <div className="h-4 w-px bg-app-border/60" />
+
+          {/* Clear Select */}
+          <button 
+            onClick={() => setSelectedOrders([])}
+            className="text-[9px] font-black uppercase tracking-wider text-slate-400 hover:text-white transition-colors cursor-pointer"
+          >
+            Deselect
+          </button>
         </div>
       )}
 
@@ -612,6 +1352,255 @@ Thank you for using Choosify Commerce Network.
         </div>
       </div>
 
+      {isAdmin && (
+        <div className="bg-app-card border border-app-border rounded-[2rem] p-6 shadow-xl space-y-4">
+          <div className="flex items-center justify-between border-b border-app-border/40 pb-3">
+            <div className="flex items-center gap-2">
+              <Filter className="w-4 h-4 text-[#F4631E]" />
+              <span className="text-xs font-black uppercase tracking-widest text-[#F4631E]">Marketplace Advanced Cross-Check Filters (14 Criteria Checklist)</span>
+            </div>
+            <button 
+              onClick={() => {
+                setFilterSeller('All');
+                setFilterBrand('All');
+                setFilterCategory('All');
+                setFilterCourier('All');
+                setFilterDistrict('All');
+                setFilterDivision('All');
+                setFilterPaymentMethod('All');
+                setFilterPaymentStatus('All');
+                setFilterRiskScore('All');
+                setFilterDisputeStatus('All');
+                setFilterOrderSource('All');
+                setFilterDateRange('All');
+                setFilterVerificationStatus('All');
+                setFilterFulfillmentStatus('All');
+                showInlineToast('✓ All 14 Advanced Filters cleared successfully.');
+              }}
+              className="text-[9px] font-black uppercase tracking-widest px-3 py-1 bg-white/5 border border-app-border rounded-lg text-slate-300 hover:text-[#F4631E]"
+            >
+              Reset Filters
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+            {/* 1. Seller Selector */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Seller/Merchant</span>
+              <select 
+                value={filterSeller}
+                onChange={(e) => setFilterSeller(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Sellers</option>
+                {Array.from(new Set(orders.map(o => o.product.sellerName))).filter(Boolean).map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 2. Brand Selector */}
+            <div className="space-y-1 font-sans">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Brand / Label</span>
+              <select 
+                value={filterBrand}
+                onChange={(e) => setFilterBrand(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Brands</option>
+                {Array.from(new Set(orders.map(o => o.product.brand))).filter(Boolean).map(b => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 3. Category Selector */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">General Category</span>
+              <select 
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Categories</option>
+                <option value="Clot">Apparel & Fashion</option>
+                <option value="Foot">Footwear & Shoes</option>
+                <option value="Tech">Gadgets & Tech</option>
+                <option value="Cos">Cosmetics & Beauty</option>
+              </select>
+            </div>
+
+            {/* 4. Courier Select */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Courier Agency</span>
+              <select 
+                value={filterCourier}
+                onChange={(e) => setFilterCourier(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Couriers</option>
+                {Array.from(new Set(orders.map(o => o.deliveryPartner))).filter(Boolean).map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* 5. Division Location */}
+            <div className="space-y-1 select-none">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">BD Division</span>
+              <select 
+                value={filterDivision}
+                onChange={(e) => setFilterDivision(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Divisions</option>
+                <option value="Dhaka">Dhaka</option>
+                <option value="Chattogram">Chattogram</option>
+                <option value="Sylhet">Sylhet</option>
+                <option value="Barishal">Barishal</option>
+                <option value="Khulna">Khulna</option>
+                <option value="Rajshahi">Rajshahi</option>
+                <option value="Rangpur">Rangpur</option>
+              </select>
+            </div>
+
+            {/* 6. District Location */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">BD District</span>
+              <select 
+                value={filterDistrict}
+                onChange={(e) => setFilterDistrict(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Districts</option>
+                <option value="Uttara">Uttara Sub-zone</option>
+                <option value="Dhanmondi">Dhanmondi Sub-zone</option>
+                <option value="Gulshan">Gulshan Sub-zone</option>
+                <option value="Mirpur">Mirpur Sub-zone</option>
+                <option value="Banani">Banani Sub-zone</option>
+              </select>
+            </div>
+
+            {/* 7. Payment Type (COD vs Online) */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Payment Method</span>
+              <select 
+                value={filterPaymentMethod}
+                onChange={(e) => setFilterPaymentMethod(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Methods</option>
+                <option value="COD">Cash On Delivery (COD)</option>
+                <option value="Online">Online Payments (SSL/IPN)</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 pt-1">
+            {/* 8. Payment Status */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Payment Status</span>
+              <select 
+                value={filterPaymentStatus}
+                onChange={(e) => setFilterPaymentStatus(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Statuses</option>
+                <option value="Paid">Paid</option>
+                <option value="Unpaid">Unpaid</option>
+                <option value="Refunded">Refunded</option>
+              </select>
+            </div>
+
+            {/* 9. Risk Score */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Customer Risk Level</span>
+              <select 
+                value={filterRiskScore}
+                onChange={(e) => setFilterRiskScore(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Score Categories</option>
+                <option value="Good">Good Behavior (Green)</option>
+                <option value="Suspect">Suspect / Flagged (Amber/Red)</option>
+              </select>
+            </div>
+
+            {/* 10. Dispute cases */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Claims & Disputes</span>
+              <select 
+                value={filterDisputeStatus}
+                onChange={(e) => setFilterDisputeStatus(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Cases</option>
+                <option value="No Dispute">No Dispute Case</option>
+                <option value="Open">Open Claims Case</option>
+                <option value="Resolved">Resolved Closed</option>
+              </select>
+            </div>
+
+            {/* 11. Order Source */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Source Gateway</span>
+              <select 
+                value={filterOrderSource}
+                onChange={(e) => setFilterOrderSource(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Gateways</option>
+                <option value="Marketplace">Marketplace Order</option>
+                <option value="Sourced">Sourced ERP Order</option>
+              </select>
+            </div>
+
+            {/* 12. Date Range */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Logging Window</span>
+              <select 
+                value={filterDateRange}
+                onChange={(e) => setFilterDateRange(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Historic Times</option>
+                <option value="Today">Recorded Today</option>
+                <option value="Last 7 Days">Last 7 Days Run</option>
+              </select>
+            </div>
+
+            {/* 13. Verification status */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Identity Verification</span>
+              <select 
+                value={filterVerificationStatus}
+                onChange={(e) => setFilterVerificationStatus(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Identifiers</option>
+                <option value="Verified">Verified Customers</option>
+                <option value="Flagged/Unverified">Flagged/Unverified</option>
+              </select>
+            </div>
+
+            {/* 14. Fulfillment status */}
+            <div className="space-y-1">
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Final Fulfillment</span>
+              <select 
+                value={filterFulfillmentStatus}
+                onChange={(e) => setFilterFulfillmentStatus(e.target.value)}
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-white font-medium outline-none focus:border-[#F4631E]"
+              >
+                <option value="All">All Statuses</option>
+                {['Pending', 'Confirmed', 'Processing', 'Dispatched', 'In Transit', 'Delivered', 'Cancelled', 'Rejected'].map(st => (
+                  <option key={st} value={st}>{st}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Brand Context Switching Tab Row */}
       {profile?.role === 'seller' && sellerRelations.length > 0 && (
         <div className="bg-app-card border border-app-border rounded-[2rem] p-4 shadow-xl flex items-center justify-between gap-4 flex-wrap">
@@ -668,12 +1657,26 @@ Thank you for using Choosify Commerce Network.
                   {/* Order card heading info */}
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-app-border/60">
                     <div className="flex items-center gap-4">
-                      <div className="w-11 h-11 rounded-xl bg-slate-900 border border-app-border flex items-center justify-center font-bold text-white shadow-inner">
-                        🛍️
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-mono text-sm font-black text-white">{order.id}</span>
+                      <input 
+                        type="checkbox"
+                        checked={selectedOrders.includes(order.id)}
+                        onChange={(e) => {
+                          if (selectedOrders.includes(order.id)) {
+                            setSelectedOrders(selectedOrders.filter(id => id !== order.id));
+                          } else {
+                            setSelectedOrders([...selectedOrders, order.id]);
+                          }
+                        }}
+                        className="w-4.5 h-4.5 rounded border-app-border text-[#F4631E] focus:ring-[#F4631E] bg-slate-900 cursor-pointer accent-[#F4631E] shrink-0"
+                      />
+
+                      <Link className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity" to={`/upe/order/${order.id}`}>
+                        <div className="w-11 h-11 rounded-xl bg-slate-900 border border-app-border flex items-center justify-center font-bold text-white shadow-inner">
+                          🛍️
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-sm font-black text-[#F4631E] hover:underline">{order.id}</span>
                           <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${getStatusStyle(order.status)}`}>
                             {order.status}
                           </span>
@@ -694,7 +1697,8 @@ Thank you for using Choosify Commerce Network.
                           Log Time: {new Date(order.timestamp).toLocaleString()}
                         </div>
                       </div>
-                    </div>
+                    </Link>
+                  </div>
 
                     {/* Operational Action Buttons */}
                     <div className="flex flex-wrap gap-2">
@@ -838,7 +1842,18 @@ Thank you for using Choosify Commerce Network.
                           {order.customer.avatar}
                         </div>
                         <div>
-                          <h5 className="text-[11px] font-bold text-white">{order.customer.name}</h5>
+                          <h5 className="text-[11px] font-bold text-white">
+                            {isAdmin ? (
+                              <Link 
+                                to={`/admin/consumers/${order.customer.id}`}
+                                className="hover:text-[#F4631E] hover:underline focus:outline-none focus:ring-1 focus:ring-[#F4631E] transition-colors"
+                              >
+                                {order.customer.name}
+                              </Link>
+                            ) : (
+                              order.customer.name
+                            )}
+                          </h5>
                           <p className="text-[9px] text-[#8E9BAE] truncate">{order.customer.email}</p>
                           <div className="flex items-center gap-1.5 mt-1">
                             <span className="text-[9px] text-slate-500 font-medium">Auto-Risk Score:</span>
@@ -1018,7 +2033,18 @@ Thank you for using Choosify Commerce Network.
                               {order.customer.avatar}
                             </div>
                             <div>
-                              <div className="text-xs font-bold text-white font-sans">{order.customer.name}</div>
+                              <div className="text-xs font-bold text-white font-sans">
+                                {isAdmin ? (
+                                  <Link 
+                                    to={`/admin/consumers/${order.customer.id}`}
+                                    className="hover:text-[#F4631E] hover:underline focus:outline-none focus:ring-1 focus:ring-[#F4631E] transition-colors"
+                                  >
+                                    {order.customer.name}
+                                  </Link>
+                                ) : (
+                                  order.customer.name
+                                )}
+                              </div>
                               <div className="text-[10px] text-slate-400 font-sans">{order.customer.email || 'no-email@sourced.com'}</div>
                             </div>
                           </div>
@@ -1231,7 +2257,16 @@ Thank you for using Choosify Commerce Network.
                       <div className="space-y-1 md:border-x border-app-border/40 md:px-6">
                         <div className="text-[8.5px] uppercase tracking-widest font-bold text-slate-500">Receiver Persona</div>
                         <div className="mt-2 text-xs">
-                          <span className="font-extrabold text-slate-200">{order.customer.name}</span>
+                          {isAdmin ? (
+                            <Link 
+                              to={`/admin/consumers/${order.customer.id}`}
+                              className="font-extrabold text-[#F4631E] hover:underline focus:outline-none focus:ring-1 focus:ring-[#F4631E] transition-colors block"
+                            >
+                              {order.customer.name}
+                            </Link>
+                          ) : (
+                            <span className="font-extrabold text-slate-200 block">{order.customer.name}</span>
+                          )}
                           <span className="text-[10px] text-slate-500 block mt-0.5">{order.customer.email}</span>
                           <span className="text-[9px] text-[#8E9BAE] block mt-0.5">Phone: {customerPhone}</span>
                         </div>

@@ -789,7 +789,7 @@ export default function SellersPage() {
                             </div>
                             <div>
                               <Link 
-                                to={`/admin/brands/${brand.id}`}
+                                to={`/upe/brand/${brand.id}`}
                                 className="text-white hover:text-orange-400 cursor-pointer transition-colors block font-black text-sm"
                               >
                                 {brand.name}
@@ -803,7 +803,7 @@ export default function SellersPage() {
                         <td className="p-5">
                           {brand.sellerAccount ? (
                             <div>
-                              <Link to={`/admin/sellers/${brand.sellerAccount.id}`} className="hover:underline text-app-accent-light font-bold">
+                              <Link to={`/upe/seller/${brand.sellerAccount.id}`} className="hover:underline text-app-accent-light font-bold">
                                 {brand.sellerAccount.name}
                               </Link>
                               <span className="text-[10px] text-slate-500 block mt-0.5 font-mono">{brand.sellerAccount.phone}</span>
@@ -874,7 +874,7 @@ export default function SellersPage() {
                           <div className="flex gap-1.5 justify-end items-center">
                             
                             <Link 
-                              to={`/admin/brands/${brand.id}`}
+                              to={`/upe/brand/${brand.id}`}
                               className="p-1 px-2.5 bg-[#F4631E]/10 border border-[#F4631E]/20 text-[#F4631E] hover:bg-[#F4631E] hover:text-white rounded-md text-[10.5px] font-black uppercase tracking-wider transition-all cursor-pointer inline-block text-center"
                               title="Open Brand Management Studio"
                             >
@@ -993,7 +993,7 @@ export default function SellersPage() {
                                   const matchedId = unifiedBrands.find(b => b.name.toLowerCase() === c.brandName.toLowerCase())?.id || c.brandId;
                                   return (
                                     <Link 
-                                      to={`/admin/brands/${matchedId}`}
+                                      to={`/upe/brand/${matchedId}`}
                                       className="hover:text-orange-400 cursor-pointer transition-colors block text-sm"
                                       title="Open Brand Management Studio"
                                     >
