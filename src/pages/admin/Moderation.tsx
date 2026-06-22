@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   Shield, 
   AlertTriangle, 
@@ -27,11 +28,345 @@ import {
 } from 'lucide-react';
 
 // Tabs list
-type ModTab = 'verification' | 'products' | 'disputes' | 'reputation' | 'schema' | 'rbac';
+type ModTab = 'verification' | 'products' | 'disputes' | 'reputation' | 'schema' | 'rbac' | 'user_reports' | 'reports';
+
+export interface UserReport {
+  id: string;
+  type: 'seller' | 'product' | 'brand';
+  targetId: string;
+  targetName: string;
+  reason: 'Spam or Misbehavior' | 'Counterfeit / Fake Products' | 'Incorrect Specifications or Photos' | 'Pricing Manipulation / Fraud' | 'Prohibited or Illegal Material' | 'Poor Business Practice / Abuse' | 'Other';
+  description: string;
+  evidence?: string;
+  submittedAt: string;
+  reporterId: string;
+  status: 'Pending' | 'Under Review' | 'Dismissed' | 'Actioned';
+}
+
+export interface AuditLogEntry {
+  id: string;
+  timestamp: string;
+  actionType: 'Brand Approved' | 'Brand Rejected' | 'Order Updated' | 'Review Deleted' | 'User Banned' | 'Claim Approved' | 'Settings Changed';
+  entity: string;
+  performedBy: string;
+  role: 'super_admin' | 'admin' | 'moderator';
+  ipAddress: string;
+  description: string;
+  beforeValue?: string;
+  afterValue?: string;
+}
+
+const initialAuditLogs: AuditLogEntry[] = [
+  {
+    id: 'aud-001',
+    timestamp: '2026-06-21T08:30:00Z',
+    actionType: 'Brand Approved',
+    entity: 'Aarong Jamdani Wear',
+    performedBy: 'Afsana Mimi',
+    role: 'moderator',
+    ipAddress: '103.220.30.45',
+    description: 'Approved trade registration and brand certificate validity for Aarong Jamdani Wear brand merchant onboarding.',
+    beforeValue: 'Status: Pending',
+    afterValue: 'Status: Approved'
+  },
+  {
+    id: 'aud-002',
+    timestamp: '2026-06-21T09:15:32Z',
+    actionType: 'Brand Rejected',
+    entity: 'Gucci Clones BD',
+    performedBy: 'Abdur Rahman',
+    role: 'super_admin',
+    ipAddress: '192.168.1.1',
+    description: 'Blocked Gucci Clones BD brand submission due to copyright infringements and suspected counterfeit distribution.',
+    beforeValue: 'Status: Under Review',
+    afterValue: 'Status: Permanently Rejected'
+  },
+  {
+    id: 'aud-003',
+    timestamp: '2026-06-21T10:45:10Z',
+    actionType: 'Order Updated',
+    entity: 'Order #ORD-9921',
+    performedBy: 'Kazi Farhan',
+    role: 'moderator',
+    ipAddress: '103.220.30.12',
+    description: 'Dispatched manually back-office release notification override for pending order due to courier system syncing delay.',
+    beforeValue: 'Status: Confirmed',
+    afterValue: 'Status: Dispatched'
+  },
+  {
+    id: 'aud-004',
+    timestamp: '2026-06-21T11:20:05Z',
+    actionType: 'Review Deleted',
+    entity: 'Review #rev-1029',
+    performedBy: 'Afsana Mimi',
+    role: 'moderator',
+    ipAddress: '103.220.30.45',
+    description: 'Permanently deleted spam review report containing external malicious shortlinks promoting unauthorized affiliate codes.',
+    beforeValue: 'Review comment: "Get 50% discount at bit.ly/xyz"',
+    afterValue: 'Review Status: Deleted'
+  },
+  {
+    id: 'aud-005',
+    timestamp: '2026-06-21T12:05:40Z',
+    actionType: 'User Banned',
+    entity: 'User #usr-4412 (Sajjad Hossain)',
+    performedBy: 'Abdur Rahman',
+    role: 'super_admin',
+    ipAddress: '192.168.1.1',
+    description: 'Placed manual freeze and lifetime login ban on buyer account for multiple repetitive cash-on-delivery delivery refusals exceeding 45% ratio.',
+    beforeValue: 'IsActive: True',
+    afterValue: 'IsActive: False (Banned)'
+  },
+  {
+    id: 'aud-006',
+    timestamp: '2026-06-21T13:40:12Z',
+    actionType: 'Claim Approved',
+    entity: 'Dispute #disp-894',
+    performedBy: 'Kazi Farhan',
+    role: 'moderator',
+    ipAddress: '103.220.30.15',
+    description: 'Approved refund claim dispute escrow release after unboxing video evidence verified counterfeit components received by buyer.',
+    beforeValue: 'Escrow Status: Locked',
+    afterValue: 'Escrow Status: Refund Transferred'
+  },
+  {
+    id: 'aud-007',
+    timestamp: '2026-06-21T14:55:00Z',
+    actionType: 'Settings Changed',
+    entity: 'Global Platform Commission Rate',
+    performedBy: 'Abdur Rahman',
+    role: 'super_admin',
+    ipAddress: '192.168.1.1',
+    description: 'Updated baseline affiliate catalog commission overrides across electronic and apparel category indices.',
+    beforeValue: 'Base_com: 2.50%',
+    afterValue: 'Base_com: 3.00%'
+  },
+  {
+    id: 'aud-008',
+    timestamp: '2026-06-21T15:10:22Z',
+    actionType: 'Brand Approved',
+    entity: 'Vision Electronics BD',
+    performedBy: 'Afsana Mimi',
+    role: 'moderator',
+    ipAddress: '103.220.30.45',
+    description: 'Authenticated legal tax and commercial business registry copies for Vision Electronics brand storefront deployment.',
+    beforeValue: 'Status: Pending Review',
+    afterValue: 'Status: Published'
+  },
+  {
+    id: 'aud-009',
+    timestamp: '2026-06-21T16:05:33Z',
+    actionType: 'Order Updated',
+    entity: 'Order #ORD-7711',
+    performedBy: 'Sajid Islam',
+    role: 'admin',
+    ipAddress: '103.220.30.10',
+    description: 'Updated shipping delivery charges and cash-on-delivery insurance fees for bulky multi-cart packaging delivery.',
+    beforeValue: 'Delivery charge: ৳ 120',
+    afterValue: 'Delivery charge: ৳ 450'
+  },
+  {
+    id: 'aud-010',
+    timestamp: '2026-06-21T17:35:15Z',
+    actionType: 'Review Deleted',
+    entity: 'Review #rev-2092',
+    performedBy: 'Afsana Mimi',
+    role: 'moderator',
+    ipAddress: '103.220.30.45',
+    description: 'Deleted abusive product review containing explicit threat expressions and slang directed towards seller store managers.',
+    beforeValue: 'Review comment: "This shop owner is a scammer and direct threat..."',
+    afterValue: 'Review Status: Deleted'
+  },
+  {
+    id: 'aud-011',
+    timestamp: '2026-06-21T18:22:45Z',
+    actionType: 'User Banned',
+    entity: 'Seller #sel-9201',
+    performedBy: 'Abdur Rahman',
+    role: 'super_admin',
+    ipAddress: '192.168.1.1',
+    description: 'Locked shop profile and banned seller after fraudulent credit card verification attempts and suspicious product pricing manipulation.',
+    beforeValue: 'Status: Active',
+    afterValue: 'Status: Banned (Payout Hold)'
+  },
+  {
+    id: 'aud-012',
+    timestamp: '2026-06-21T19:01:10Z',
+    actionType: 'Settings Changed',
+    entity: 'System Security Session Threshold',
+    performedBy: 'Abdur Rahman',
+    role: 'super_admin',
+    ipAddress: '192.168.1.1',
+    description: 'Increased back-office administrators inactive timeout limitations to comply with local financial operations policies.',
+    beforeValue: 'SessionTime: 1200s',
+    afterValue: 'SessionTime: 1800s'
+  }
+];
 
 export default function ModerationPage() {
-  const [activeTab, setActiveTab] = useState<ModTab>('verification');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<ModTab>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tabParam = params.get('tab');
+    if (tabParam === 'reports') return 'reports';
+    if (tabParam === 'verification') return 'verification';
+    if (tabParam === 'products') return 'products';
+    if (tabParam === 'disputes') return 'disputes';
+    if (tabParam === 'reputation') return 'reputation';
+    if (tabParam === 'schema') return 'schema';
+    if (tabParam === 'rbac') return 'rbac';
+    if (tabParam === 'user_reports') return 'user_reports';
+    return 'verification';
+  });
+
+  React.useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const tabParam = params.get('tab');
+    if (tabParam) {
+      if (tabParam === 'reports') setActiveTab('reports');
+      else if (tabParam === 'verification') setActiveTab('verification');
+      else if (tabParam === 'products') setActiveTab('products');
+      else if (tabParam === 'disputes') setActiveTab('disputes');
+      else if (tabParam === 'reputation') setActiveTab('reputation');
+      else if (tabParam === 'schema') setActiveTab('schema');
+      else if (tabParam === 'rbac') setActiveTab('rbac');
+      else if (tabParam === 'user_reports') setActiveTab('user_reports');
+    }
+  }, [location.search]);
+
+  // Audit Log State Engines
+  const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(initialAuditLogs);
+  const [auditActionFilter, setAuditActionFilter] = useState<string>('All');
+  const [auditRoleFilter, setAuditRoleFilter] = useState<string>('All');
+  const [expandedLogs, setExpandedLogs] = useState<Set<string>>(new Set());
+
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // User Reports states seeded with 8 realistic entries
+  const [reports, setReports] = useState<UserReport[]>([
+    {
+      id: 'rep-001',
+      type: 'product',
+      targetId: 'prd-7721',
+      targetName: 'Original Air Jordan 1 Retro Low',
+      reason: 'Counterfeit / Fake Products',
+      description: 'The seller is claiming these are genuine Nike AJ1 manufactured in Vietnam, but they are clearly high-grade replicas with uneven stitching and wrong logos.',
+      evidence: 'https://imgur.com/example-evidence1',
+      submittedAt: '2026-06-20T10:15:00.000Z',
+      reporterId: 'usr-1082',
+      status: 'Pending'
+    },
+    {
+      id: 'rep-002',
+      type: 'seller',
+      targetId: 'sel-9921',
+      targetName: 'Dhaka Gadget Shop',
+      reason: 'Pricing Manipulation / Fraud',
+      description: 'During the flash deal hour, they inflated the original price of the charger from 1,200 BDT to 3,500 BDT to show a fake 75% discount tag.',
+      submittedAt: '2026-06-21T02:11:00.000Z',
+      reporterId: 'usr-5932',
+      status: 'Pending'
+    },
+    {
+      id: 'rep-003',
+      type: 'brand',
+      targetId: 'brd-5511',
+      targetName: 'RFL Plastics Limited Cloned',
+      reason: 'Spam or Misbehavior',
+      description: 'Spam account posing as official RFL brand rep in Bangladesh, posting unauthorized discount links.',
+      evidence: 'https://rfl.com/not-real-spam-proof',
+      submittedAt: '2026-06-19T21:40:00.000Z',
+      reporterId: 'usr-8871',
+      status: 'Pending'
+    },
+    {
+      id: 'rep-004',
+      type: 'product',
+      targetId: 'prd-4491',
+      targetName: 'Organic Pure Mustard Oil 5L',
+      reason: 'Incorrect Specifications or Photos',
+      description: 'Label says 5 liters but multiple buyers received 3-liter jerrycans. Misleading listing parameters.',
+      evidence: 'https://drive.google.com/example-oil-labels',
+      submittedAt: '2026-06-18T14:22:00.000Z',
+      reporterId: 'usr-2294',
+      status: 'Under Review'
+    },
+    {
+      id: 'rep-005',
+      type: 'seller',
+      targetId: 'sel-5542',
+      targetName: 'Trustworthy Gadget Zone',
+      reason: 'Poor Business Practice / Abuse',
+      description: 'Abusive behavior in private Chat. Rejects returns of damaged goods and threatens to block buyers.',
+      submittedAt: '2026-06-17T11:05:00.000Z',
+      reporterId: 'usr-9912',
+      status: 'Dismissed'
+    },
+    {
+      id: 'rep-006',
+      type: 'product',
+      targetId: 'prd-1102',
+      targetName: 'Unlicensed Vape Pen Kit',
+      reason: 'Prohibited or Illegal Material',
+      description: 'Direct sale of restricted electronic nicotine devices to underage buyers without ID checks, violating local laws.',
+      submittedAt: '2026-06-16T18:50:00.000Z',
+      reporterId: 'usr-7721',
+      status: 'Actioned'
+    },
+    {
+      id: 'rep-007',
+      type: 'product',
+      targetId: 'prd-9011',
+      targetName: 'Razer DeathAdder Essential',
+      reason: 'Counterfeit / Fake Products',
+      description: 'The device has a generic sensor that does not pair with Razer Synapse software. Obvious clone hardware.',
+      evidence: 'https://razer.com/fake-check',
+      submittedAt: '2026-06-21T01:05:00.000Z',
+      reporterId: 'usr-3041',
+      status: 'Pending'
+    },
+    {
+      id: 'rep-008',
+      type: 'seller',
+      targetId: 'sel-1002',
+      targetName: 'Quick BD Mart',
+      reason: 'Other',
+      description: 'Refusing to ship orders for more than 15 days without responding to delivery queries.',
+      submittedAt: '2026-06-15T09:30:00.000Z',
+      reporterId: 'usr-4411',
+      status: 'Under Review'
+    }
+  ]);
+
+  const [reportTypeFilter, setReportTypeFilter] = useState<'All' | 'product' | 'seller' | 'brand'>('All');
+  const [reportReasonFilter, setReportReasonFilter] = useState<string>('All');
+  const [reportSearchQuery, setReportSearchQuery] = useState('');
+
+  const reasonFilters = [
+    'All',
+    'Spam or Misbehavior',
+    'Counterfeit / Fake Products',
+    'Incorrect Specifications or Photos',
+    'Pricing Manipulation / Fraud',
+    'Prohibited or Illegal Material',
+    'Poor Business Practice / Abuse',
+    'Other'
+  ];
+
+  const handleInvestigateReport = (id: string) => {
+    setReports(prev => prev.map(r => r.id === id ? { ...r, status: 'Under Review' } : r));
+    triggerToast(`🔍 Report #${id} marked as Under Investigation / Review.`);
+  };
+
+  const handleDismissReport = (id: string) => {
+    setReports(prev => prev.map(r => r.id === id ? { ...r, status: 'Dismissed' } : r));
+    triggerToast(`🗑️ Report #${id} dismissed.`);
+  };
+
+  const handleActionReport = (id: string) => {
+    setReports(prev => prev.map(r => r.id === id ? { ...r, status: 'Actioned' } : r));
+    triggerToast(`✓ Reported target has been neutralized / actioned successfully!`);
+  };
 
   // RBAC Simulator and Control Room states
   const [rbacSelectedRole, setRbacSelectedRole] = useState<'super_admin' | 'moderator' | 'finance_manager' | 'support_agent' | 'marketing_manager'>('super_admin');
@@ -830,6 +1165,18 @@ CREATE INDEX idx_analytics_event_cat ON analytics_events(event_category);
 CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
 `;
 
+  const totalReportsCount = reports.length;
+  const openReportsCount = reports.filter(r => r.status === 'Pending').length;
+  const underReviewCount = reports.filter(r => r.status === 'Under Review').length;
+  const actionedCount = reports.filter(r => r.status === 'Actioned').length;
+
+  const filteredReports = reports.filter(r => {
+    const matchesSearch = r.targetName.toLowerCase().includes(reportSearchQuery.toLowerCase());
+    const matchesType = reportTypeFilter === 'All' || r.type === reportTypeFilter;
+    const matchesReason = reportReasonFilter === 'All' || r.reason === reportReasonFilter;
+    return matchesSearch && matchesType && matchesReason;
+  });
+
   const copyToClipboard = () => {
     navigator.clipboard.writeText(postgresSchemaSql);
     triggerToast('✓ PostgreSQL-Ready Database Schema copied to clipboard!');
@@ -868,6 +1215,8 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
           { id: 'reputation', label: '📊 Reputation Engines', color: 'border-l-purple-400' },
           { id: 'schema', label: '🗄️ PostgreSQL Database Schemas', color: 'border-l-slate-400' },
           { id: 'rbac', label: '🛡️ Role Permissions (RBAC)', color: 'border-l-red-400' },
+          { id: 'user_reports', label: `🚩 User Reports (${reports.filter(r => r.status === 'Pending').length})`, color: 'border-l-pink-500' },
+          { id: 'reports', label: '📋 Security Audit Logs', color: 'border-l-teal-500' },
         ].map((tab) => (
           <button
             key={tab.id}
@@ -1587,6 +1936,415 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
 
               </div>
 
+            </div>
+          </div>
+        )}
+
+        {/* ===================== TAB: USER REPORTS ===================== */}
+        {activeTab === 'user_reports' && (
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-white/[0.04] pb-4 gap-4">
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">🚩 User Flag & Report Inbox Panel</h3>
+                <p className="text-[10px] text-app-text-secondary mt-1">Review, flag-verify, and take platform-wide actions on reported products, counterfeit listings, and abusive merchant stores.</p>
+              </div>
+            </div>
+
+            {/* Stat mini-cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {[
+                { label: 'Total Reports', val: totalReportsCount, badge: 'All Submissions', color: 'border-l-blue-500 text-blue-400' },
+                { label: 'Open Reports', val: openReportsCount, badge: 'Awaiting action', color: 'border-l-amber-500 text-amber-400' },
+                { label: 'Under Review', val: underReviewCount, badge: 'Investigating', color: 'border-l-indigo-500 text-indigo-400' },
+                { label: 'Actioned/Resolved', val: actionedCount, badge: 'Closed', color: 'border-l-emerald-500 text-emerald-400' },
+              ].map(s => (
+                <div key={s.label} className="bg-app-bg border border-app-border p-4 rounded-xl border-l-[3px] shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="text-[10px] text-app-text-secondary font-bold uppercase tracking-wider mb-1">{s.label}</div>
+                    <div className="text-xl font-bold text-white leading-none mb-2">{s.val}</div>
+                  </div>
+                  <div className="flex items-center justify-between border-t border-white/[0.04] pt-2 text-[10px]">
+                    <span className="text-app-text-secondary">System ledger</span>
+                    <span className={`font-bold uppercase tracking-tight ${s.color.split(' ')[1]}`}>{s.badge}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Filter and Search Row */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-app-bg border border-app-border p-4 rounded-xl font-sans">
+              {/* Search bar */}
+              <div className="relative flex items-center bg-app-card border border-app-border/60 rounded-lg px-3 py-1.5 focus-within:border-app-accent transition-colors gap-2">
+                <Search className="w-3.5 h-3.5 text-app-text-secondary" />
+                <input 
+                  type="text"
+                  value={reportSearchQuery}
+                  onChange={(e) => setReportSearchQuery(e.target.value)}
+                  placeholder="Search by target name..."
+                  className="w-full bg-transparent outline-none text-[12px] text-white placeholder-slate-500 font-sans"
+                />
+              </div>
+
+              {/* Type filter */}
+              <div className="flex items-center bg-app-card border border-app-border/60 rounded-lg px-3 py-1.5 gap-2">
+                <span className="text-[10px] text-app-text-secondary uppercase font-bold shrink-0">Type:</span>
+                <select 
+                  value={reportTypeFilter}
+                  onChange={(e) => setReportTypeFilter(e.target.value as any)}
+                  className="w-full bg-transparent outline-none text-[12px] text-white border-none cursor-pointer font-sans"
+                >
+                  <option value="All" className="bg-app-card text-white">All Types</option>
+                  <option value="product" className="bg-app-card text-white">Product Only</option>
+                  <option value="seller" className="bg-app-card text-white">Seller Only</option>
+                  <option value="brand" className="bg-app-card text-white">Brand Only</option>
+                </select>
+              </div>
+
+              {/* Reason filter */}
+              <div className="flex items-center bg-app-card border border-app-border/60 rounded-lg px-3 py-1.5 gap-2">
+                <span className="text-[10px] text-app-text-secondary uppercase font-bold shrink-0">Reason:</span>
+                <select 
+                  value={reportReasonFilter}
+                  onChange={(e) => setReportReasonFilter(e.target.value)}
+                  className="w-full bg-transparent outline-none text-[12px] text-white border-none cursor-pointer max-w-full font-sans"
+                >
+                  {reasonFilters.map(rf => (
+                    <option key={rf} value={rf} className="bg-app-card text-white font-sans">
+                      {rf === 'All' ? 'All Reasons' : rf}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Reports List */}
+            <div className="space-y-4">
+              {filteredReports.map((r) => {
+                const isHighPriority = r.reason.includes('Counterfeit') || r.reason.includes('Fraud');
+                
+                // Color mapping for Report target types
+                const typeColors = {
+                  product: 'bg-sky-500/10 text-sky-450 border border-sky-500/15',
+                  seller: 'bg-amber-500/10 text-amber-500/80 border border-amber-500/15',
+                  brand: 'bg-purple-500/10 text-purple-455 border border-purple-500/15'
+                }[r.type];
+
+                // Reason categories safety coding colors
+                let reasonBadgeColor = 'bg-slate-500/10 text-slate-400 border border-slate-500/15';
+                if (r.reason.includes('Counterfeit') || r.reason.includes('Fraud')) {
+                  reasonBadgeColor = 'bg-rose-500/10 text-rose-400 border border-rose-500/15';
+                } else if (r.reason.includes('Spam')) {
+                  reasonBadgeColor = 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/15';
+                }
+
+                // Status tag colors
+                const statusColors = {
+                  'Pending': 'text-yellow-400 bg-yellow-500/5 border border-yellow-500/10',
+                  'Under Review': 'text-amber-500 bg-amber-500/5 border border-amber-500/10',
+                  'Dismissed': 'text-slate-400 bg-slate-500/5 border border-slate-500/10',
+                  'Actioned': 'text-emerald-400 bg-emerald-500/5 border border-emerald-500/10'
+                }[r.status];
+
+                return (
+                  <div 
+                    key={r.id} 
+                    className={`p-5 bg-app-bg border border-app-border rounded-xl space-y-4 transition-all ${
+                      isHighPriority ? 'border-l-[4px] border-l-red-500 shadow-lg shadow-red-950/5' : ''
+                    }`}
+                  >
+                    {/* Header: Type, Priority and Status */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/[0.03] pb-2.5">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`text-[9px] uppercase tracking-wider font-extrabold px-2.5 py-0.5 rounded ${typeColors}`}>
+                          {r.type}
+                        </span>
+                        <span className={`text-[9px] px-2.5 py-0.5 rounded font-bold uppercase tracking-wider ${reasonBadgeColor}`}>
+                          {r.reason}
+                        </span>
+                        {isHighPriority && (
+                          <span className="text-[8px] bg-red-600/15 text-red-400 border border-red-500/25 px-2 py-0.5 rounded uppercase font-black tracking-widest animate-pulse">
+                            🚨 High Priority
+                          </span>
+                        )}
+                      </div>
+                      <span className={`text-[9px] font-mono font-extrabold uppercase px-2.5 py-1 rounded-full ${statusColors}`}>
+                        {r.status}
+                      </span>
+                    </div>
+
+                    {/* Target Details */}
+                    <div>
+                      <div className="text-[10px] text-app-text-secondary uppercase tracking-widest block font-bold mb-0.5">Target entity</div>
+                      <h4 className="text-[13px] font-bold text-white flex items-center gap-2 flex-wrap">
+                        {r.targetName}
+                        <span className="text-[10px] font-mono text-slate-500 font-bold bg-[#1e2330] px-2 py-0.5 border border-slate-700/40 rounded">
+                          ID: {r.targetId}
+                        </span>
+                      </h4>
+                    </div>
+
+                    {/* Description & Evidence */}
+                    <div className="bg-app-card p-4 rounded-xl border border-app-border/45 space-y-3">
+                      <div className="space-y-1">
+                        <span className="text-red-400 font-extrabold uppercase block text-[9px] tracking-wider">Report Complaint details & Context</span>
+                        <p className="text-[12px] text-slate-300 font-medium leading-relaxed font-sans">{r.description}</p>
+                      </div>
+
+                      {r.evidence && (
+                        <div className="border-t border-white/[0.04] pt-2.5">
+                          <a 
+                            href={r.evidence} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-[11px] text-app-accent hover:text-orange-400 hover:underline transition font-bold"
+                          >
+                            <FileText className="w-3.5 h-3.5" /> View Submitted Evidence Link
+                          </a>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Metadata & Actions */}
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pt-1 font-sans">
+                      <div className="flex flex-wrap items-center text-[10px] text-slate-500 gap-x-4 gap-y-2 font-medium">
+                        <div>
+                          Reported By: <span className="font-bold text-slate-300 font-mono">User #{r.reporterId.slice(-4)}</span>
+                        </div>
+                        <div className="hidden sm:block">•</div>
+                        <div>
+                          Submitted: <span className="font-bold text-slate-300">
+                            {new Date(r.submittedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} at {new Date(r.submittedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Action buttons */}
+                      <div className="flex flex-wrap gap-2">
+                        {r.status === 'Pending' && (
+                          <button
+                            onClick={() => handleInvestigateReport(r.id)}
+                            className="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 active:scale-95 transition-all cursor-pointer"
+                          >
+                            Investigate
+                          </button>
+                        )}
+                        
+                        {(r.status === 'Pending' || r.status === 'Under Review') && (
+                          <>
+                            <button
+                              onClick={() => handleDismissReport(r.id)}
+                              className="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-slate-500/10 hover:bg-slate-500/20 text-slate-400 border border-slate-500/20 active:scale-95 transition-all cursor-pointer"
+                            >
+                              Dismiss Flag
+                            </button>
+                            <button
+                              onClick={() => handleActionReport(r.id)}
+                              className="px-3.5 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-450 border border-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                            >
+                              Act on Report
+                            </button>
+                          </>
+                        )}
+
+                        {(r.status === 'Dismissed' || r.status === 'Actioned') && (
+                          <span className="text-[10px] text-slate-550 italic py-1 font-bold">
+                            ✓ Investigation Closed
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                  </div>
+                );
+              })}
+
+              {filteredReports.length === 0 && (
+                <div className="p-8 text-center bg-app-bg border border-app-border rounded-xl text-app-text-secondary italic">
+                  No flags detected or matching your specific search filter criteria.
+                </div>
+              )}
+            </div>
+
+          </div>
+        )}
+
+        {/* ===================== TAB: SECURITY AUDIT LOGS ===================== */}
+        {activeTab === 'reports' && (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/[0.04] pb-4 gap-4">
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                  📋 Security Audit Trail Logs
+                </h3>
+                <p className="text-[10px] text-app-text-secondary mt-1">
+                  Comprehensive tamper-proof back-office administrative operations and session history ledger tracking.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const filtered = auditLogs.filter(log => {
+                    const matchesAction = auditActionFilter === 'All' || log.actionType === auditActionFilter;
+                    const matchesRole = auditRoleFilter === 'All' || log.role === auditRoleFilter;
+                    return matchesAction && matchesRole;
+                  });
+                  const csvContent = "data:text/csv;charset=utf-8," 
+                    + ["ID,Timestamp,Action Type,Entity,Performed By,Role,IP Address,Description,Before Value,After Value"].join(",") + "\n"
+                    + filtered.map(log => {
+                        return `"${log.id}","${log.timestamp}","${log.actionType}","${log.entity}","${log.performedBy}","${log.role}","${log.ipAddress}","${log.description.replace(/"/g, '""')}","${(log.beforeValue || "").replace(/"/g, '""')}","${(log.afterValue || "").replace(/"/g, '""')}"`;
+                      }).join("\n");
+                  const encodedUri = encodeURI(csvContent);
+                  const link = document.createElement("a");
+                  link.setAttribute("href", encodedUri);
+                  link.setAttribute("download", `security_audit_log_export_${new Date().toISOString().slice(0,10)}.csv`);
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                  
+                  // Trigger simple browser notification or state toast if present
+                  setToastMessage(`✓ Exported ${filtered.length} audit logs to CSV`);
+                  setTimeout(() => setToastMessage(null), 3000);
+                }}
+                className="bg-app-accent hover:bg-[#E44B00] text-white font-extrabold text-[11px] px-4.5 py-2.5 rounded-xl uppercase tracking-wider flex items-center gap-1.5 shadow-md active:scale-95 transition-all outline-none cursor-pointer text-center font-sans self-start sm:self-center"
+              >
+                <Download className="w-4 h-4" /> Export Audit Log (CSV)
+              </button>
+            </div>
+
+            {/* Audit Logs Filter row */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-app-bg border border-app-border p-4 rounded-xl font-sans">
+              {/* Action Type filter */}
+              <div className="flex items-center bg-app-card border border-app-border/60 rounded-lg px-3 py-1.5 gap-2">
+                <span className="text-[10px] text-app-text-secondary uppercase font-bold shrink-0">Action Type:</span>
+                <select 
+                  value={auditActionFilter}
+                  onChange={(e) => setAuditActionFilter(e.target.value)}
+                  className="w-full bg-transparent outline-none text-[12px] text-white border-none cursor-pointer font-sans"
+                >
+                  <option value="All" className="bg-app-card text-white">All Action Types</option>
+                  <option value="Brand Approved" className="bg-app-card text-white">Brand Approved</option>
+                  <option value="Brand Rejected" className="bg-app-card text-white">Brand Rejected</option>
+                  <option value="Order Updated" className="bg-app-card text-white">Order Updated</option>
+                  <option value="Review Deleted" className="bg-app-card text-white">Review Deleted</option>
+                  <option value="User Banned" className="bg-app-card text-white">User Banned</option>
+                  <option value="Claim Approved" className="bg-app-card text-white">Claim Approved</option>
+                  <option value="Settings Changed" className="bg-app-card text-white">Settings Changed</option>
+                </select>
+              </div>
+
+              {/* Role Filter */}
+              <div className="flex items-center bg-app-card border border-app-border/60 rounded-lg px-3 py-1.5 gap-2">
+                <span className="text-[10px] text-app-text-secondary uppercase font-bold shrink-0">Role:</span>
+                <select 
+                  value={auditRoleFilter}
+                  onChange={(e) => setAuditRoleFilter(e.target.value)}
+                  className="w-full bg-transparent outline-none text-[12px] text-white border-none cursor-pointer font-sans"
+                >
+                  <option value="All" className="bg-app-card text-white">All Roles</option>
+                  <option value="super_admin" className="bg-app-card text-white">super_admin</option>
+                  <option value="admin" className="bg-app-card text-white">admin</option>
+                  <option value="moderator" className="bg-app-card text-white">moderator</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Audit Logs Table Ledger */}
+            <div className="bg-app-card rounded-2xl border border-app-border overflow-hidden shadow-xl">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-app-border/50 text-[10px] text-app-text-secondary uppercase tracking-widest font-black bg-white/[0.01]">
+                      <th className="py-4 px-4">Timestamp</th>
+                      <th className="py-4 px-4">Action</th>
+                      <th className="py-4 px-4">Entity</th>
+                      <th className="py-4 px-4">Performed By</th>
+                      <th className="py-4 px-4">Role</th>
+                      <th className="py-4 px-4">IP Address</th>
+                      <th className="py-4 px-4 text-right">Details</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-app-border/40 text-[12px]">
+                    {auditLogs
+                      .filter(log => {
+                        const matchesAction = auditActionFilter === 'All' || log.actionType === auditActionFilter;
+                        const matchesRole = auditRoleFilter === 'All' || log.role === auditRoleFilter;
+                        return matchesAction && matchesRole;
+                      })
+                      .map((log) => {
+                        const isExpanded = expandedLogs.has(log.id);
+                        return (
+                          <React.Fragment key={log.id}>
+                            <tr className="hover:bg-white/[0.01] transition-colors border-b border-app-border/20">
+                              <td className="py-3.5 px-4 font-mono text-[11px] text-slate-400">
+                                {new Date(log.timestamp).toLocaleString()}
+                              </td>
+                              <td className="py-3.5 px-4 font-bold text-white">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  log.actionType === 'User Banned' || log.actionType === 'Brand Rejected' ? 'bg-rose-500/10 text-rose-455 border border-rose-500/10' :
+                                  log.actionType === 'Brand Approved' || log.actionType === 'Claim Approved' ? 'bg-emerald-500/10 text-emerald-450 border border-emerald-500/10' :
+                                  'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10'
+                                }`}>
+                                  {log.actionType}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 font-semibold text-white">{log.entity}</td>
+                              <td className="py-3.5 px-4 text-app-text-secondary">{log.performedBy}</td>
+                              <td className="py-3.5 px-4">
+                                <span className="font-mono text-[10px] bg-white/5 px-2 py-0.5 rounded text-app-text-secondary font-bold">
+                                  {log.role}
+                                </span>
+                              </td>
+                              <td className="py-3.5 px-4 font-mono text-slate-400 text-[11px]">
+                                {log.ipAddress.slice(0, 6)}***
+                              </td>
+                              <td className="py-3.5 px-4 text-right">
+                                <button
+                                  onClick={() => {
+                                    const newExpanded = new Set(expandedLogs);
+                                    if (isExpanded) {
+                                      newExpanded.delete(log.id);
+                                    } else {
+                                      newExpanded.add(log.id);
+                                    }
+                                    setExpandedLogs(newExpanded);
+                                  }}
+                                  className="text-[10px] font-bold text-app-accent hover:text-orange-400 hover:underline px-2.5 py-1 bg-white/5 hover:bg-white/10 rounded uppercase tracking-wider cursor-pointer transition-colors outline-none"
+                                >
+                                  {isExpanded ? 'Hide Details' : 'View Details'}
+                                </button>
+                              </td>
+                            </tr>
+                            {isExpanded && (
+                              <tr className="bg-white/[0.01]">
+                                <td colSpan={7} className="p-4 px-6 border-b border-app-border/40">
+                                  <div className="space-y-3 font-sans">
+                                    <div>
+                                      <span className="text-[10px] font-black uppercase tracking-wider text-[#F4631E] block">Full Description Trail</span>
+                                      <p className="text-[12px] text-slate-200 mt-0.5 leading-relaxed font-semibold">{log.description}</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4 border-t border-white/[0.03] pt-2.5">
+                                      {log.beforeValue && (
+                                        <div className="p-3 bg-red-500/5 rounded-lg border border-red-500/10 font-mono text-[11px]">
+                                          <span className="text-[9px] font-black uppercase text-red-100 block tracking-widest mb-1 font-sans">Before Value State</span>
+                                          <span className="text-slate-300 font-bold">{log.beforeValue}</span>
+                                        </div>
+                                      )}
+                                      {log.afterValue && (
+                                        <div className="p-3 bg-emerald-500/5 rounded-lg border border-emerald-500/10 font-mono text-[11px]">
+                                          <span className="text-[9px] font-black uppercase text-emerald-100 block tracking-widest mb-1 font-sans">After Value State</span>
+                                          <span className="text-slate-300 font-bold">{log.afterValue}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}

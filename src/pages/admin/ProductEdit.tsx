@@ -505,7 +505,7 @@ export default function ProductEdit() {
           renderBrandSelectScreen()
         ) : (
           <>
-            {/* SECTION 1: PRODUCT HERO / HEADER CARD (Desktop: 60% left, 40% right) */}
+            {/* 1. LARGE PRODUCT MEDIA GALLERY (Hero) */}
         <div id="product-hero-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative group/card shadow-sm text-left">
           
           {/* Floating Pencil Edit Trigger Card corner */}
@@ -735,9 +735,9 @@ export default function ProductEdit() {
               </div>
 
               {/* READ-ONLY STATS BLOCKS ROW PROTECTED WITH LOCK ICONS AND ACCESSIBILITY TOOLTIPS */}
-              <div className="bg-[#1A1A2E] text-white p-4.5 rounded-2xl space-y-3.5 border border-[#2D2D4E]">
-                <span className="text-[8px] text-orange-500 font-mono font-black uppercase tracking-widest block border-b border-[#2D2D4E]/50 pb-2 flex items-center gap-1.5">
-                  <Lock className="w-3 h-3 text-orange-500" />
+              <div className="bg-white text-[#1A1A2E] p-4.5 rounded-2xl space-y-3.5 border border-[#E5E7EB]">
+                <span className="text-[8px] text-[#EF3C23] font-mono font-black uppercase tracking-widest block border-b border-slate-100 pb-2 flex items-center gap-1.5">
+                  <Lock className="w-3 h-3 text-[#EF3C23]" />
                   READ-ONLY ENGAGEMENT PARAMETERS (SYSTEM CONTROLLED)
                 </span>
 
@@ -749,18 +749,18 @@ export default function ProductEdit() {
                   ].map((stat, i) => (
                     <div 
                       key={i} 
-                      className="bg-slate-900/40 border border-[#2D2D4E] p-2.5 rounded-xl group/stat relative cursor-help"
+                      className="bg-[#f8f9fb] border border-slate-200 p-2.5 rounded-xl group/stat relative cursor-help"
                       title="Automatically calculated by Choosify backend statistics ledger."
                     >
-                      <span className="text-xs font-black tracking-tight text-white font-mono block">
+                      <span className="text-xs font-black tracking-tight text-[#1A1A2E] font-mono block">
                         {stat.val.toLocaleString()}
                       </span>
-                      <span className="text-[7.5px] text-slate-400 font-bold uppercase tracking-widest block mt-1">
+                      <span className="text-[7.5px] text-slate-500 font-bold uppercase tracking-widest block mt-1">
                         {stat.label}
                       </span>
                       
                       {/* Interactive Tooltip representation */}
-                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-32 hidden group-hover/stat:block bg-black text-white text-[8px] p-2 rounded-lg leading-tight text-center shadow-xl border border-[#2D2D4E] z-20">
+                      <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 w-32 hidden group-hover/stat:block bg-white border border-slate-200 text-slate-700 text-[8px] p-2 rounded-lg leading-tight text-center shadow-xl z-20">
                         {stat.desc}. Automatically calculated by Choosify backend statistics engine.
                       </span>
                     </div>
@@ -1464,7 +1464,6 @@ export default function ProductEdit() {
                     </div>
                   )}
 
-                  {/* FORM 4: SPECIFICATIONS */}
                   {activeDrawer === "specs" && (
                     <div className="space-y-4">
                       <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Parameters Specifications Attributes</span>

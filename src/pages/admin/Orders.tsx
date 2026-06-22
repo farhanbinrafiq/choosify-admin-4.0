@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useOrders, Order, OrderStatus } from '../../contexts/OrdersContext';
 import { 
   ListOrdered, 
@@ -44,6 +44,7 @@ type OrderConsoleTab =
   | 'Other';
 
 export default function OrdersPage() {
+  const navigate = useNavigate();
   const { profile } = useAuth();
   const { 
     orders, 
@@ -52,7 +53,10 @@ export default function OrdersPage() {
     cancelOrder, 
     dispatchOrder, 
     addCustomerNotes,
-    updateOrderStatus 
+    updateOrderStatus,
+    updateOrderTrackingStatus,
+    addAdminNote,
+    updateCodCollected
   } = useOrders();
 
   // Unified 12 Core Filter Tabs state 
@@ -118,6 +122,7 @@ export default function OrdersPage() {
 
   // Selected order for full-page detail view
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [codFilterOnly, setCodFilterOnly] = useState(false);
 
   // Admin-only metadata storage (overrides, disputes, custom courier, pricing, etc.)
   const [adminMetadata, setAdminMetadata] = useState<Record<string, {
@@ -280,6 +285,12 @@ GRAND TOTAL BILLED : ৳ ${(((order.product.price * (order.quantity || 1)) + (or
   // UNIFIED 12 TABS FILTERING ENGINE
   // ----------------------------------------------------
   const filteredOrders = sellerOrders.filter(o => {
+    // Apply COD Only filter
+    if (codFilterOnly) {
+      const isCOD = o.isManual || o.paymentStatus !== 'Paid';
+      if (!isCOD) return false;
+    }
+
     // Apply cumulative workspace search query parameter
     if (!matchQuery(o, searchTerm)) return false;
 
@@ -811,11 +822,126 @@ Thank you for using Choosify Commerce Network.
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center bg-white/5 border border-app-border rounded-xl px-5 py-3.5">
-                  <span className="text-xs font-black uppercase tracking-wider text-slate-300">Total Billed Customer Amount:</span>
-                  <span className="text-md font-black text-white">৳ {((order.product.price * (order.quantity || 1)) + (order.delivery_charge || 120)).toLocaleString()} BDT</span>
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center bg-white/5 border border-app-border rounded-xl px-5 py-3.5 gap-4">
+                  <div className="flex items-center gap-4 flex-1 justify-between sm:justify-start">
+                    <span className="text-xs font-black uppercase tracking-wider text-slate-300">Total Billed Customer Amount:</span>
+                    <span className="text-md font-black text-white">৳ {((order.product.price * (order.quantity || 1)) + (order.delivery_charge || 120)).toLocaleString()} BDT</span>
+                  </div>
+                  <button 
+                    onClick={() => navigate(`/admin/invoice/${order.id}`, { state: { order } })}
+                    className="flex items-center gap-1.5 px-3.5 py-2 text-white bg-white/5 hover:bg-white/10 border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shrink-0"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-[#F4631E]" /> Invoice
+                  </button>
                 </div>
               </div>
+
+              {/* Secure Admin Fulfillment Control Panel */}
+              {isAdmin && (
+                <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl space-y-6">
+                  <div className="flex items-center gap-2 border-b border-app-border/40 pb-4">
+                    <Truck className="w-5 h-5 text-[#F4631E]" />
+                    <h3 className="text-sm font-black uppercase tracking-wider text-white">Full-Stack ERP Logistics &amp; Fulfillment Control</h3>
+                  </div>
+
+                  <div className="space-y-4">
+                    <span className="text-xs font-black uppercase tracking-widest text-[#F4631E] block">Sellers Sub-Orders Dispatch &amp; Tracking</span>
+                    {(order.subOrders || [
+                      {
+                        sellerId: order.product.sellerId,
+                        sellerName: order.product.sellerName,
+                        trackingStatus: 'pending'
+                      }
+                    ]).map((so) => (
+                      <SubOrderTrackerRow 
+                        key={so.sellerId} 
+                        subOrder={so as any} 
+                        orderId={order.id} 
+                        updateOrderTrackingStatus={updateOrderTrackingStatus}
+                        showInlineToast={showInlineToast}
+                      />
+                    ))}
+                  </div>
+
+                  {/* COD Collected Toggle */}
+                  {(() => {
+                    const isCOD = order.isManual || order.paymentStatus !== 'Paid';
+                    const isDelivered = order.status === 'Delivered';
+                    if (isCOD && isDelivered) {
+                      return (
+                        <div className="bg-white/5 border border-app-border rounded-xl p-5 flex items-center justify-between">
+                          <div>
+                            <h4 className="text-xs font-bold text-white uppercase tracking-wider">COD Collected Status</h4>
+                            <p className="text-[10px] text-slate-400 mt-1 font-medium">Has CASH payment been fully collected by courier agent?</p>
+                          </div>
+                          <div className="flex items-center gap-2.5">
+                            <input 
+                              type="checkbox" 
+                              id={`cod-collect-checkbox-${order.id}`}
+                              checked={order.codCollected || false}
+                              onChange={(e) => {
+                                updateCodCollected(order.id, e.target.checked);
+                                addCustomerNotes(order.id, `🔒 Admin confirmed COD collection: ${e.target.checked ? 'Collected' : 'Pending'}`);
+                                showInlineToast(`✓ COD Collected set to: ${e.target.checked ? 'True' : 'False'}`);
+                              }}
+                              className="w-5 h-5 rounded border-app-border text-[#F4631E] focus:ring-[#F4631E] bg-slate-900 cursor-pointer accent-[#F4631E]"
+                            />
+                            <label htmlFor={`cod-collect-checkbox-${order.id}`} className="text-xs font-bold text-white uppercase tracking-wider cursor-pointer">
+                              Confirm COD Collected
+                            </label>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  {/* Admin Notes Section */}
+                  <div className="space-y-3 pt-4 border-t border-app-border/40">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Add Internal Admin Note</label>
+                    <form onSubmit={(e) => {
+                      e.preventDefault();
+                      const form = e.currentTarget;
+                      const formData = new FormData(form);
+                      const note = formData.get('adminNoteText')?.toString().trim();
+                      if (note) {
+                        addAdminNote(order.id, note);
+                        form.reset();
+                        showInlineToast(`✓ Private admin ledger note appended successfully.`);
+                      }
+                    }} className="space-y-2">
+                      <textarea 
+                        name="adminNoteText"
+                        rows={3}
+                        placeholder="Type private admin notes..."
+                        className="w-full p-4 bg-slate-900 border border-app-border rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-[#F4631E] min-h-[80px]"
+                      />
+                      <div className="flex justify-end">
+                        <button 
+                          type="submit"
+                          className="px-4 py-2 bg-[#F4631E]/20 hover:bg-[#F4631E]/30 text-[#F4631E] border border-[#F4631E]/30 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer active:scale-95 transition-all"
+                        >
+                          Save Note
+                        </button>
+                      </div>
+                    </form>
+
+                    {/* Render existing adminNotes */}
+                    {order.adminNotes && order.adminNotes.length > 0 && (
+                      <div className="space-y-2 mt-4">
+                        <span className="text-[9px] font-bold text-[#F4631E] uppercase tracking-wider block">Admin Notes History:</span>
+                        <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
+                          {order.adminNotes.map((an, idx) => (
+                            <div key={idx} className="bg-slate-900 border border-app-border rounded-xl p-3 text-[11px] text-slate-300 font-medium font-mono">
+                              {an}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Secure Admin Overrides panel */}
               {isAdmin && (
@@ -1233,20 +1359,41 @@ Thank you for using Choosify Commerce Network.
         </div>
 
         {/* Dynamic status stats indicators */}
-        <div className="flex flex-wrap gap-3 relative z-10">
-          <div className="bg-app-bg/60 border border-app-border rounded-2xl px-5 py-3 flex flex-col justify-center min-w-[110px]">
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Pending</span>
-            <span className="text-lg font-black text-amber-500">{sellerOrders.filter(o => o.status === 'Pending').length}</span>
-          </div>
-          <div className="bg-app-bg/60 border border-app-border rounded-2xl px-5 py-3 flex flex-col justify-center min-w-[110px]">
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Active Run</span>
-            <span className="text-lg font-black text-[#F4631E]">{sellerOrders.filter(o => ['Confirmed', 'Dispatched', 'In Transit'].includes(o.status)).length}</span>
-          </div>
-          <div className="bg-app-bg/60 border border-app-border rounded-2xl px-5 py-3 flex flex-col justify-center min-w-[110px]">
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Fulfilled</span>
-            <span className="text-lg font-black text-emerald-500">{sellerOrders.filter(o => o.status === 'Delivered').length}</span>
-          </div>
-        </div>
+        {(() => {
+          const pendingDispatchCount = sellerOrders.filter(o => 
+            o.subOrders?.some(so => so.trackingStatus === 'pending')
+          ).length;
+
+          const codUnconfirmedCount = sellerOrders.filter(o => {
+            const isCOD = o.isManual || o.paymentStatus !== 'Paid';
+            return isCOD && o.status === 'Delivered' && !o.codCollected;
+          }).length;
+
+          return (
+            <div className="flex flex-wrap gap-3 relative z-10">
+              <div className="bg-app-bg/60 border border-app-border rounded-2xl px-5 py-3 flex flex-col justify-center min-w-[110px]">
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Pending</span>
+                <span className="text-lg font-black text-amber-500">{sellerOrders.filter(o => o.status === 'Pending').length}</span>
+              </div>
+              <div className="bg-app-bg/60 border border-app-border rounded-2xl px-5 py-3 flex flex-col justify-center min-w-[110px]">
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Active Run</span>
+                <span className="text-lg font-black text-[#F4631E]">{sellerOrders.filter(o => ['Confirmed', 'Dispatched', 'In Transit'].includes(o.status)).length}</span>
+              </div>
+              <div className="bg-app-bg/60 border border-app-border rounded-2xl px-5 py-3 flex flex-col justify-center min-w-[110px]">
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Fulfilled</span>
+                <span className="text-lg font-black text-emerald-500">{sellerOrders.filter(o => o.status === 'Delivered').length}</span>
+              </div>
+              <div className="bg-app-bg/60 border border-app-border rounded-2xl px-5 py-3 flex flex-col justify-center min-w-[110px]">
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Pending Dispatch</span>
+                <span className="text-lg font-black text-blue-400">{pendingDispatchCount}</span>
+              </div>
+              <div className="bg-app-bg/60 border border-app-border rounded-2xl px-5 py-3 flex flex-col justify-center min-w-[110px]">
+                <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">COD Unconfirmed</span>
+                <span className="text-lg font-black text-rose-400">{codUnconfirmedCount}</span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* REQUIRED TOP NAVIGATION TABS */}
@@ -1278,23 +1425,37 @@ Thank you for using Choosify Commerce Network.
       {/* 12 Core Filter Tabs Operational Workspace Nav */}
       <div className="bg-app-card border border-app-border rounded-[2rem] p-6 shadow-xl space-y-5">
         <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-transparent">
-          <div className="relative w-full md:w-96 group">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[#F4631E] transition-colors" />
-            <input 
-              type="text"
-              placeholder="Search by ID, Customer Name, SKU, product brand, invoice..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 bg-app-bg border border-app-border rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-[#F4631E]/60 transition-all font-medium"
-            />
-            {searchTerm && (
-              <button 
-                onClick={() => setSearchTerm('')} 
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+          <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto items-stretch md:items-center">
+            <div className="relative w-full md:w-96 group">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[#F4631E] transition-colors" />
+              <input 
+                type="text"
+                placeholder="Search by ID, Customer Name, SKU, product brand, invoice..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-3 bg-app-bg border border-app-border rounded-xl text-xs text-white placeholder-slate-500 outline-none focus:border-[#F4631E]/60 transition-all font-medium"
+              />
+              {searchTerm && (
+                <button 
+                  onClick={() => setSearchTerm('')} 
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <button
+              id="btn-cod-filter"
+              onClick={() => setCodFilterOnly(!codFilterOnly)}
+              className={`px-4 py-3 text-xs font-black uppercase tracking-widest rounded-xl border cursor-pointer transition-all ${
+                codFilterOnly 
+                  ? 'bg-[#F4631E] border-[#F4631E] text-white shadow-lg shadow-[#F4631E]/20' 
+                  : 'bg-app-bg border-app-border text-slate-400 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              💵 COD Only
+            </button>
           </div>
 
           <div className="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase tracking-widest">
@@ -1670,7 +1831,16 @@ Thank you for using Choosify Commerce Network.
                         className="w-4.5 h-4.5 rounded border-app-border text-[#F4631E] focus:ring-[#F4631E] bg-slate-900 cursor-pointer accent-[#F4631E] shrink-0"
                       />
 
-                      <Link className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity" to={`/upe/order/${order.id}`}>
+                      <Link 
+                        className="flex items-center gap-4 cursor-pointer hover:opacity-80 transition-opacity" 
+                        to={`/upe/order/${order.id}`}
+                        onClick={(e) => {
+                          if (isAdmin) {
+                            e.preventDefault();
+                            setSelectedOrderId(order.id);
+                          }
+                        }}
+                      >
                         <div className="w-11 h-11 rounded-xl bg-slate-900 border border-app-border flex items-center justify-center font-bold text-white shadow-inner">
                           🛍️
                         </div>
@@ -1687,6 +1857,20 @@ Thank you for using Choosify Commerce Network.
                           }`}>
                             {order.paymentStatus}
                           </span>
+                          {order.subOrders?.map((so, idx) => (
+                            <span 
+                              key={idx} 
+                              className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border ${
+                                so.trackingStatus === 'dispatched' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                                so.trackingStatus === 'transit' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                so.trackingStatus === 'delivered' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                so.trackingStatus === 'cancelled' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
+                                'bg-slate-500/10 text-slate-400 border-slate-500/20'
+                              }`}
+                            >
+                              Trk ({so.sellerName}): {so.trackingStatus}
+                            </span>
+                          ))}
                           {order.invoice_id && (
                             <span className="font-mono text-[9px] text-[#8E9BAE] bg-white/5 border border-app-border px-2 py-0.5 rounded">
                               INV: {order.invoice_id}
@@ -1697,6 +1881,19 @@ Thank you for using Choosify Commerce Network.
                           Log Time: {new Date(order.timestamp).toLocaleString()}
                         </div>
                       </div>
+                    </Link>
+
+                    <Link 
+                      to={`/admin/invoice/${order.id}`}
+                      state={{ order }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
+                      className="flex items-center gap-1 p-1 px-2.5 bg-slate-900 hover:bg-[#F4631E]/20 text-[#8E9BAE] hover:text-[#F4631E] border border-app-border rounded-lg text-[9px] font-bold transition-colors cursor-pointer shrink-0"
+                      title="Quick Invoice Action"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-[#F4631E]" />
+                      <span>Invoice</span>
                     </Link>
                   </div>
 
@@ -1783,6 +1980,15 @@ Thank you for using Choosify Commerce Network.
                             <Notebook className="w-3.5 h-3.5" /> Internal Note
                           </button>
                         </>
+                      )}
+
+                      {isAdmin && (
+                        <button 
+                          onClick={() => setSelectedOrderId(order.id)}
+                          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-[#F4631E]/20 to-orange-500/20 text-[#F4631E] border border-[#F4631E]/25 hover:border-[#F4631E]/45 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                        >
+                          Fulfillment
+                        </button>
                       )}
 
                       <Link 
@@ -2425,6 +2631,67 @@ Thank you for using Choosify Commerce Network.
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function SubOrderTrackerRow({ subOrder, orderId, updateOrderTrackingStatus, showInlineToast }: {
+  subOrder: {
+    sellerId: string;
+    sellerName: string;
+    trackingStatus: string;
+  };
+  orderId: string;
+  updateOrderTrackingStatus: any;
+  showInlineToast: any;
+  key?: any;
+}) {
+  const [selectedStatus, setSelectedStatus] = useState(subOrder.trackingStatus);
+
+  const getStyle = (status: string) => {
+    switch (status) {
+      case 'dispatched': return 'bg-blue-500/10 text-blue-400 border-blue-500/25';
+      case 'transit': return 'bg-amber-500/10 text-amber-400 border-amber-500/25';
+      case 'delivered': return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25';
+      case 'cancelled': return 'bg-rose-500/10 text-rose-400 border-rose-500/25';
+      case 'pending':
+      default:
+        return 'bg-slate-500/10 text-slate-400 border-slate-500/25';
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-between gap-4 bg-app-bg border border-app-border rounded-xl p-4 flex-wrap">
+      <div className="space-y-1">
+        <span className="text-[10px] font-bold text-slate-400 uppercase">Seller: {subOrder.sellerName}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-white font-mono">{subOrder.sellerId}</span>
+          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded border ${getStyle(subOrder.trackingStatus)}`}>
+            {subOrder.trackingStatus}
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <select 
+          value={selectedStatus}
+          onChange={(e) => setSelectedStatus(e.target.value as any)}
+          className="px-3 py-1.5 bg-slate-900 border border-app-border rounded-xl text-xs text-white outline-none focus:border-[#F4631E]"
+        >
+          {['pending', 'dispatched', 'transit', 'delivered', 'cancelled'].map((val) => (
+            <option key={val} value={val}>{val}</option>
+          ))}
+        </select>
+        <button 
+          onClick={() => {
+            updateOrderTrackingStatus(orderId, subOrder.sellerId, selectedStatus);
+            showInlineToast(`✓ Updated ${subOrder.sellerName} tracking to: ${selectedStatus}`);
+          }}
+          className="px-3.5 py-1.5 bg-[#F4631E] text-white rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-orange-600 transition-all active:scale-95"
+        >
+          Update
+        </button>
+      </div>
     </div>
   );
 }

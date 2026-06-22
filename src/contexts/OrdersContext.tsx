@@ -58,6 +58,13 @@ export interface Order {
   platformSource?: 'WhatsApp' | 'Facebook' | 'Instagram' | 'Offline';
   chatRefId?: string;
   quantity?: number;
+  subOrders?: {
+    sellerId: string;
+    sellerName: string;
+    trackingStatus: 'pending' | 'dispatched' | 'transit' | 'delivered' | 'cancelled';
+  }[];
+  adminNotes?: string[];
+  codCollected?: boolean;
 }
 
 export interface ThreadMessage {
@@ -108,6 +115,9 @@ interface OrdersContextType {
   }) => void;
   markAllThreadsAsRead: () => void;
   markThreadAsRead: (threadId: string) => void;
+  updateOrderTrackingStatus: (orderId: string, sellerId: string, newStatus: 'pending' | 'dispatched' | 'transit' | 'delivered' | 'cancelled') => void;
+  addAdminNote: (orderId: string, note: string) => void;
+  updateCodCollected: (orderId: string, collected: boolean) => void;
 }
 
 const OrdersContext = createContext<OrdersContextType | undefined>(undefined);
@@ -255,7 +265,19 @@ const initialOrders: Order[] = [
 export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [orders, setOrders] = useState<Order[]>(() => {
     const saved = localStorage.getItem('choosify_orders');
-    return saved ? JSON.parse(saved) : initialOrders;
+    const parsed = saved ? JSON.parse(saved) : initialOrders;
+    return parsed.map((o: any) => ({
+      ...o,
+      subOrders: o.subOrders || [
+        {
+          sellerId: o.product.sellerId,
+          sellerName: o.product.sellerName,
+          trackingStatus: o.trackingStatus || 'pending'
+        }
+      ],
+      adminNotes: o.adminNotes || [],
+      codCollected: o.codCollected !== undefined ? o.codCollected : false
+    }));
   });
 
   const [customers, setCustomers] = useState<Customer[]>(() => {
@@ -792,6 +814,49 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setMessageThreads(prev => prev.map(t => t.id === threadId ? { ...t, status: 'READ' as const } : t));
   };
 
+  const updateOrderTrackingStatus = (
+    orderId: string, 
+    sellerId: string, 
+    newStatus: 'pending' | 'dispatched' | 'transit' | 'delivered' | 'cancelled'
+  ) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        const subOrders = o.subOrders ? [...o.subOrders] : [];
+        const updatedSubOrders = subOrders.map(so => {
+          if (so.sellerId === sellerId) {
+            return { ...so, trackingStatus: newStatus };
+          }
+          return so;
+        });
+        return { ...o, subOrders: updatedSubOrders };
+      }
+      return o;
+    }));
+  };
+
+  const addAdminNote = (orderId: string, note: string) => {
+    const timestampStr = new Date().toISOString();
+    const formattedNote = `[${timestampStr}] ${note}`;
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return {
+          ...o,
+          adminNotes: o.adminNotes ? [...o.adminNotes, formattedNote] : [formattedNote]
+        };
+      }
+      return o;
+    }));
+  };
+
+  const updateCodCollected = (orderId: string, collected: boolean) => {
+    setOrders(prev => prev.map(o => {
+      if (o.id === orderId) {
+        return { ...o, codCollected: collected };
+      }
+      return o;
+    }));
+  };
+
   return (
     <OrdersContext.Provider value={{
       orders,
@@ -809,7 +874,10 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       createOrderNow,
       createManualOrder,
       markAllThreadsAsRead,
-      markThreadAsRead
+      markThreadAsRead,
+      updateOrderTrackingStatus,
+      addAdminNote,
+      updateCodCollected
     }}>
       {children}
     </OrdersContext.Provider>

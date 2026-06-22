@@ -64,6 +64,7 @@ interface AdsContextType {
     organicData: { rating?: number; clicks?: number; reviewsCount?: number; savesCount?: number },
     promo?: Promotion
   ) => number;
+  syncToWebCampaigns: () => void;
 }
 
 const AdsContext = createContext<AdsContextType | undefined>(undefined);
@@ -375,6 +376,32 @@ export const AdsProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return parseFloat(finalScore.toFixed(2));
   };
 
+  const syncToWebCampaigns = () => {
+    const activePromos = promotions.filter(p => p.status?.toUpperCase() === 'ACTIVE');
+    const webCampaigns = activePromos.map(promo => ({
+      id: promo.id,
+      title: promo.title,
+      subtitle: promo.subtitle || '',
+      ctaText: 'Shop Now',
+      ctaLink: promo.linkUrl || promo.imageUrl || '',
+      bgColor: '#1A1A2E',
+      textColor: '#FFFFFF',
+      image: promo.imageUrl || '',
+      active: true,
+      startDate: promo.startDate,
+      endDate: promo.endDate,
+      priority: promo.priority || 0
+    }));
+    localStorage.setItem('choosify_campaigns', JSON.stringify(webCampaigns));
+    localStorage.setItem('choosify_campaigns_sync_time', new Date().toISOString());
+  };
+
+  useEffect(() => {
+    if (promotions && promotions.length > 0) {
+      syncToWebCampaigns();
+    }
+  }, [promotions]);
+
   return (
     <AdsContext.Provider value={{ 
       promotions, 
@@ -389,7 +416,8 @@ export const AdsProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       approvePromotionRequest,
       rejectPromotionRequest,
       deletePromotionRequest,
-      calculateAdScore
+      calculateAdScore,
+      syncToWebCampaigns
     }}>
       {children}
     </AdsContext.Provider>

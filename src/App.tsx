@@ -1,5 +1,5 @@
 import React, { Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AdminLayout } from './components/AdminLayout';
 import { OrdersProvider } from './contexts/OrdersContext';
@@ -25,9 +25,11 @@ const Brands = lazy(() => import('./pages/admin/Brands'));
 const Recommendations = lazy(() => import('./pages/admin/Recommendations'));
 const Deals = lazy(() => import('./pages/admin/Deals'));
 const Reviews = lazy(() => import('./pages/admin/Reviews'));
+const CommunitySubmissions = lazy(() => import('./pages/admin/CommunitySubmissions'));
 const Payouts = lazy(() => import('./pages/admin/Payouts'));
 const Analytics = lazy(() => import('./pages/admin/Analytics'));
-const Notifications = lazy(() => import('./pages/admin/Notifications'));
+const NotificationsPage = lazy(() => import('./pages/admin/Notifications'));
+const SettingsPage = lazy(() => import('./pages/admin/Settings'));
 const Moderation = lazy(() => import('./pages/admin/Moderation'));
 const Messages = lazy(() => import('./pages/admin/Messages'));
 const ProductEdit = lazy(() => import('./pages/admin/ProductEdit'));
@@ -52,6 +54,19 @@ const BrandEditStudio = lazy(() => import('./pages/admin/BrandEditStudio'));
 
 const GuidesStudioList = lazy(() => import('./pages/admin/GuidesStudioList'));
 const GuideEditStudio = lazy(() => import('./pages/admin/GuideEditStudio'));
+
+const ViewModeWrapper: React.FC<{ mode: 'consumers' | 'creators' | 'admins' }> = ({ mode }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  React.useEffect(() => {
+    if (searchParams.get('viewMode') !== mode) {
+      const newParams = new URLSearchParams(searchParams);
+      newParams.set('viewMode', mode);
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [mode, searchParams, setSearchParams]);
+
+  return <Consumers />;
+};
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile, loading } = useAuth();
@@ -106,13 +121,13 @@ export default function App() {
               <Route path="promotions" element={<SponsoredPromotionsPage />} />
               <Route path="consumers" element={<Consumers />} />
               <Route path="consumers/:id" element={<UnifiedProfileShell />} />
-              <Route path="admins" element={<Consumers />} />
+              <Route path="admins" element={<ViewModeWrapper mode="admins" />} />
               <Route path="admins/:id" element={<AdminProfile />} />
               <Route path="sellers" element={<Sellers />} />
               <Route path="sellers/pending/:id" element={<SellerReview />} />
               <Route path="sellers/:id" element={<UnifiedProfileShell />} />
               <Route path="sellers/:id/dashboard" element={<SellerDashboardPreview />} />
-              <Route path="creators" element={<Consumers />} />
+              <Route path="creators" element={<ViewModeWrapper mode="creators" />} />
               <Route path="creators/:id" element={<UnifiedProfileShell />} />
               <Route path="products" element={<Products />} />
               <Route path="products/:id" element={<ProductEdit />} />
@@ -123,10 +138,12 @@ export default function App() {
               <Route path="recommendations/:id" element={<RecommendationPreview />} />
               <Route path="deals" element={<Deals />} />
               <Route path="reviews" element={<Reviews />} />
+              <Route path="community-submissions" element={<CommunitySubmissions />} />
               <Route path="payouts" element={<Payouts />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="messages" element={<Messages />} />
-              <Route path="notifications" element={<Notifications />} />
+              <Route path="notifications" element={<NotificationsPage />} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="moderation" element={<Moderation />} />
               <Route path="orders" element={<Orders />} />
               <Route path="orders-overview" element={<OrdersOverview />} />

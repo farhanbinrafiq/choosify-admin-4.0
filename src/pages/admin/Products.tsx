@@ -42,8 +42,42 @@ export default function ProductsPage() {
   const isContentStudio = location.pathname.includes("content-studio");
   const [isModalOpen, setIsModalOpen] = useState(location.state?.openAddModal || false);
   const [products, setProducts] = useState(mockProducts);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
   const [selectedBrandFilter, setSelectedBrandFilter] = useState<string | null>(activeBrandId);
+
+  const handleBulkApprove = () => {
+    setProducts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, status: 'Live' } : p));
+    showToast(`Approved ${selectedIds.size} products to Live`);
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkReject = () => {
+    setProducts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, status: 'Rejected' } : p));
+    showToast(`Rejected ${selectedIds.size} products`);
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDelete = () => {
+    setProducts(prev => prev.filter(p => !selectedIds.has(p.id)));
+    showToast(`Deleted ${selectedIds.size} products from catalog`);
+    setSelectedIds(new Set());
+  };
+
+  const handleExportCSV = () => {
+    const selectedProducts = products.filter(p => selectedIds.has(p.id));
+    const csvContent = "data:text/csv;charset=utf-8," 
+      + ["ID,Product Name,Brand,Category,Price,Status,Views"].join(",") + "\n"
+      + selectedProducts.map(p => `"${p.id}","${p.name.replace(/"/g, '""')}","${p.brand.replace(/"/g, '""')}","${p.category}","${p.price}","${p.status}","${p.views}"`).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `products_bulk_export_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast(`Exported ${selectedIds.size} products to CSV`);
+  };
 
   React.useEffect(() => {
     if (isModalOpen) {
@@ -267,10 +301,68 @@ export default function ProductsPage() {
         </div>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="bg-[#1A1A2E] text-white px-4 py-3 rounded-xl flex items-center justify-between gap-3 mb-3 text-[12px] font-bold border border-white/10 shadow-lg animate-fade-in">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="bg-app-accent/20 text-app-accent-light px-2.5 py-1 rounded-lg font-mono">
+              {selectedIds.size} items selected
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleBulkApprove}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors uppercase font-extrabold cursor-pointer"
+              >
+                Approve All
+              </button>
+              <button
+                onClick={handleBulkReject}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors uppercase font-extrabold cursor-pointer"
+              >
+                Reject All
+              </button>
+              <button
+                onClick={handleBulkDelete}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors uppercase font-extrabold cursor-pointer"
+              >
+                Delete All
+              </button>
+              <button
+                onClick={handleExportCSV}
+                className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 rounded-lg transition-colors uppercase font-extrabold cursor-pointer font-sans"
+              >
+                Export Selected (CSV)
+              </button>
+            </div>
+          </div>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-slate-400 hover:text-white px-3 py-1 cursor-pointer transition-colors uppercase text-[10px]"
+          >
+            ✕ Clear selection
+          </button>
+        </div>
+      )}
+
       <div className="bg-app-card rounded-[2rem] border border-app-border overflow-hidden shadow-2xl">
         <table className="w-full text-left">
           <thead className="bg-white/[0.02] border-b border-app-border">
             <tr>
+              <th className="p-6 w-12 text-center">
+                <input 
+                  type="checkbox" 
+                  className="rounded border-white/10 bg-white/5 text-app-accent focus:ring-app-accent cursor-pointer"
+                  checked={displayedProducts.length > 0 && displayedProducts.every(p => selectedIds.has(p.id))}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedIds(new Set([...selectedIds, ...displayedProducts.map(p => p.id)]));
+                    } else {
+                      const newSelected = new Set(selectedIds);
+                      displayedProducts.forEach(p => newSelected.delete(p.id));
+                      setSelectedIds(newSelected);
+                    }
+                  }}
+                />
+              </th>
               <th className="p-6 text-[10px] font-bold text-app-text-secondary uppercase tracking-[0.2em]">Product Details</th>
               <th className="p-6 text-[10px] font-bold text-app-text-secondary uppercase tracking-[0.2em]">Category</th>
               <th className="p-6 text-[10px] font-bold text-app-text-secondary uppercase tracking-[0.2em]">Affiliate Price</th>
@@ -283,6 +375,22 @@ export default function ProductsPage() {
               const Icon = p.icon;
               return (
                 <tr key={p.id} className="group hover:bg-white/[0.02] transition-colors">
+                  <td className="p-6 w-12 text-center">
+                    <input 
+                      type="checkbox" 
+                      className="rounded border-white/10 bg-white/5 text-app-accent focus:ring-app-accent cursor-pointer"
+                      checked={selectedIds.has(p.id)}
+                      onChange={(e) => {
+                        const newSelected = new Set(selectedIds);
+                        if (e.target.checked) {
+                          newSelected.add(p.id);
+                        } else {
+                          newSelected.delete(p.id);
+                        }
+                        setSelectedIds(newSelected);
+                      }}
+                    />
+                  </td>
                   <td className="p-6">
                     <div className="flex items-center gap-4">
                       <div className={`w-12 h-12 rounded-xl flex items-center justify-center border border-white/5 shadow-inner ${p.color}`}>

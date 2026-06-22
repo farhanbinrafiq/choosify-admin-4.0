@@ -257,28 +257,6 @@ export default function BrandsStudioList() {
           >
             <Edit3 className="w-4 h-4" /> Visual Builder
           </button>
-          
-          <button
-            onClick={() => setActiveSubTab("operational")}
-            className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shrink-0 ${
-              activeSubTab === "operational"
-                ? "bg-app-accent text-white shadow-lg shadow-app-accent/20"
-                : "text-slate-400 hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <TrendingUp className="w-4 h-4" /> Operational Intelligence
-          </button>
-          
-          <button
-            onClick={() => setActiveSubTab("verification")}
-            className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shrink-0 ${
-              activeSubTab === "verification"
-                ? "bg-app-accent text-white shadow-lg shadow-app-accent/20"
-                : "text-slate-400 hover:text-white hover:bg-white/5"
-            }`}
-          >
-            <ShieldCheck className="w-4 h-4" /> Verification & Compliance
-          </button>
         </div>
       )}
 
@@ -606,7 +584,7 @@ export default function BrandsStudioList() {
       )}
 
       {/* OPERATIONAL INTELLIGENCE SECTION */}
-      {activeSubTab === "operational" && (
+      {false && (
         <div className="space-y-6">
           {/* Header Block with Active Profile name */}
           <div className="bg-[#05050C] border border-[#202030] rounded-3xl p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-6 text-left">
@@ -826,7 +804,7 @@ export default function BrandsStudioList() {
       )}
 
       {/* VERIFICATION & COMPLIANCE SECTION */}
-      {activeSubTab === "verification" && (() => {
+      {false && (() => {
         const matchedRequest = verificationRequests.find((r: any) => r.brand_id === activeBrandId) || 
                                verificationRequests.find((r: any) => ownedBrandIds.includes(r.brand_id)) || 
                                verificationRequests[0];

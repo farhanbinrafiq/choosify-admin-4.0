@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useContact } from '../../contexts/ContactInteractionContext';
 import { 
   Search, 
@@ -67,22 +67,20 @@ const RoleBadge = ({ role }: { role: string }) => {
 export default function ConsumersPage() {
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const viewMode = searchParams.get('viewMode') || 'consumers';
 
   // Route Context Identification
-  const isCreatorView = location.pathname.includes('creators');
-  const isAdminView = location.pathname.includes('admins');
-  const isSellerView = location.pathname.includes('sellers');
-  const isConsumerView = location.pathname.includes('consumers') || (!isCreatorView && !isAdminView && !isSellerView);
+  const isCreatorView = viewMode === 'creators';
+  const isAdminView = viewMode === 'admins';
+  const isConsumerView = viewMode === 'consumers' || (!isCreatorView && !isAdminView);
 
   // Active user type selection matches table listing path
   const currentViewRole = isCreatorView 
     ? 'Creator' 
     : isAdminView 
       ? 'Admin' 
-      : isSellerView 
-        ? 'Seller' 
-        : 'Consumer';
+      : 'Consumer';
 
   const [usersList, setUsersList] = useState<MockUser[]>(mockUsers);
   const { triggerMessage } = useContact();
@@ -150,8 +148,8 @@ export default function ConsumersPage() {
             <span className="text-app-accent-light">{currentViewRole}s Directory</span>
           </div>
 
-          <h1 className="text-xl font-bold text-white tracking-tight">
-            {isCreatorView && 'Creator Influence Ecosystem'}
+           <h1 className="text-xl font-bold text-white tracking-tight">
+            {isCreatorView && 'Creator Management'}
             {isAdminView && 'Security & Administration'}
             {isConsumerView && 'Consumer Management Hub'}
           </h1>
@@ -180,6 +178,12 @@ export default function ConsumersPage() {
           >
              <Filter className="w-3.5 h-3.5 text-app-accent" />
              <span>Refine List</span>
+          </button>
+          <button 
+            onClick={() => showToast(`Initiated onboard wrapper for ${currentViewRole}`)}
+            className="flex items-center gap-1.5 bg-app-accent border border-transparent text-white px-3.5 py-1.5 rounded-[4px] text-xs font-bold transition-all shadow-md hover:bg-orange-600 cursor-pointer shrink-0"
+          >
+             <span>{isCreatorView ? 'Onboard Creator' : isAdminView ? 'Invite Admin' : 'Invite Consumer'}</span>
           </button>
         </div>
       </div>
@@ -409,11 +413,24 @@ export default function ConsumersPage() {
             <thead>
               <tr className="bg-white/5 border-b border-app-border">
                 <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Account Identification</th>
-                <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Role Type</th>
-                <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Behavior Intent Segment</th>
-                <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Security Trust Score</th>
+                {!isCreatorView ? (
+                  <>
+                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Role Type</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Behavior Intent Segment</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Security Trust Score</th>
+                  </>
+                ) : (
+                  <>
+                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Follower Range</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Content Count</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Verification Status</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Commission Tier</th>
+                  </>
+                )}
                 <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Status Badge</th>
-                <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Last Access Active</th>
+                {!isCreatorView && (
+                  <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Last Access Active</th>
+                )}
                 <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest text-right">Administrative</th>
               </tr>
             </thead>
@@ -440,29 +457,54 @@ export default function ConsumersPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <RoleBadge role={u.role} />
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-bold text-[11px] text-indigo-300 bg-indigo-500/5 px-2 py-1 rounded-[2px] border border-indigo-500/10">
-                        🎯 {u.behaviorSegment || 'General User Profile'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 font-mono shrink-0">
-                        <span className={`font-black text-[11px] ${
-                          u.trustScore >= 90 ? 'text-green-400' : u.trustScore >= 75 ? 'text-yellow-400' : 'text-red-400'
-                        }`}>
-                          {u.trustScore || 85}%
-                        </span>
-                        <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden hidden sm:block">
-                          <div 
-                            className={`h-full ${u.trustScore >= 90 ? 'bg-green-500' : u.trustScore >= 75 ? 'bg-yellow-500' : 'bg-red-500'}`} 
-                            style={{ width: `${u.trustScore || 85}%` }} 
-                          />
-                        </div>
-                      </div>
-                    </td>
+                    {!isCreatorView ? (
+                      <>
+                        <td className="px-6 py-4">
+                          <RoleBadge role={u.role} />
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className="font-bold text-[11px] text-indigo-300 bg-indigo-500/5 px-2 py-1 rounded-[2px] border border-indigo-500/10">
+                            🎯 {u.behaviorSegment || 'General User Profile'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2 font-mono shrink-0">
+                            <span className={`font-black text-[11px] ${
+                              u.trustScore >= 90 ? 'text-green-400' : u.trustScore >= 75 ? 'text-yellow-400' : 'text-red-400'
+                            }`}>
+                              {u.trustScore || 85}%
+                            </span>
+                            <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden hidden sm:block">
+                              <div 
+                                className={`h-full ${u.trustScore >= 90 ? 'bg-green-500' : u.trustScore >= 75 ? 'bg-yellow-500' : 'bg-red-500'}`} 
+                                style={{ width: `${u.trustScore || 85}%` }} 
+                              />
+                            </div>
+                          </div>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-6 py-4">
+                          <span className="font-mono text-xs text-white">
+                            {u.id === '1' ? '120k' : u.id === '6' ? '85k' : '42k'} Followers
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs text-slate-300">
+                          {u.id === '1' ? '142' : u.id === '6' ? '98' : '64'} posts
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-2 py-0.5 rounded-[2px] text-[10px] font-bold ${
+                            u.id === '1' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : u.id === '6' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10' : 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
+                          }`}>
+                            {u.id === '1' ? 'Elite Partner' : u.id === '6' ? 'Pro Creator' : 'Approved'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 font-mono text-xs text-emerald-400 font-bold">
+                          {u.id === '1' ? '12%' : u.id === '6' ? '10%' : '8%'} tier
+                        </td>
+                      </>
+                    )}
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 shrink-0">
                          <div className={`w-1.5 h-1.5 rounded-full ${u.status === 'Active' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-red-500'}`} />
@@ -471,10 +513,12 @@ export default function ConsumersPage() {
                          </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-app-text-secondary/60 shrink-0 font-mono text-[11px]">
-                      {u.active} 
-                      <span className="text-[9.5px] text-slate-500 block font-sans">joined {u.joined}</span>
-                    </td>
+                    {!isCreatorView && (
+                      <td className="px-6 py-4 text-app-text-secondary/60 shrink-0 font-mono text-[11px]">
+                        {u.active} 
+                        <span className="text-[9.5px] text-slate-500 block font-sans">joined {u.joined}</span>
+                      </td>
+                    )}
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end relative">
                          <button 

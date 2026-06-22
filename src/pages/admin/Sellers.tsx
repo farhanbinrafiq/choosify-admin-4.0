@@ -129,6 +129,29 @@ export default function SellersPage() {
   const [claimNotesInput, setClaimNotesInput] = useState('');
   const [claimActionType, setClaimActionType] = useState<'Approved' | 'Rejected' | 'Under Investigation' | null>(null);
 
+  // New States and Helpers for the Claims review flow (Task 2 & 3)
+  const [claimsFilter, setClaimsFilter] = useState<'all' | 'pending' | 'under_review' | 'requires_more_info' | 'approved' | 'rejected'>('all');
+  const [expandedClaims, setExpandedClaims] = useState<Record<string, boolean>>({});
+  const [docStatus, setDocStatus] = useState<Record<string, Record<string, 'approved' | 'rejected' | 'reupload' | null>>>({});
+  const [claimActionTypeMap, setClaimActionTypeMap] = useState<Record<string, 'reject' | 'info' | null>>({});
+  const [claimReasonMap, setClaimReasonMap] = useState<Record<string, string>>({});
+  const [claimNotesMap, setClaimNotesMap] = useState<Record<string, string>>({});
+
+  const handleDocAction = (claimId: string, docType: string, actionType: 'approved' | 'rejected' | 'reupload') => {
+    setDocStatus(prev => {
+      const claimDocs = prev[claimId] || {};
+      return {
+        ...prev,
+        [claimId]: {
+          ...claimDocs,
+          [docType]: actionType
+        }
+      };
+    });
+    const statusText = actionType === 'approved' ? 'Approved' : actionType === 'rejected' ? 'Rejected' : 'Re-upload requested for';
+    showToast(`✓ ${statusText} ${docType} document for claim ${claimId}`);
+  };
+
   // Brand profile form states
   const initialProfileForm = {
     name: '',
@@ -947,141 +970,459 @@ export default function SellersPage() {
         )}
 
         {/* EXPANDED TAB: OWNERSHIP CLAIMS CONSOLE */}
-        {activeTab === 'claims' && (
-          <div className="space-y-6">
-            <div className="bg-[#F4631E]/5 border border-[#F4631E]/15 rounded-2xl p-6 text-white space-y-3">
-              <span className="text-[10px] bg-[#F4631E]/10 border border-[#F4631E]/25 text-[#F4631E] px-2.5 py-1 rounded font-black tracking-widest uppercase block w-fit font-mono">
-                Claims Moderation Desk
-              </span>
-              <h3 className="text-md font-bold text-white tracking-tight">Enterprise Claim Verification Engine</h3>
-              <p className="text-xs text-app-text-secondary leading-relaxed">
-                Review submitted Trade certs, verify corporate DNS TXT tokens, look up corporate email matches, and approve profile claim control loops securely. Approved requests automatically link the seller account to the brand.
-              </p>
-            </div>
+        {activeTab === 'claims' && (() => {
+          // Inner calculations
+          const total = claims.length;
+          const pending = claims.filter(c => c.status === 'pending').length;
+          const underReview = claims.filter(c => c.status === 'under_review').length;
+          const currentYearMonthPrefix = "2026-06";
+          const approvedThisMonth = claims.filter(c => {
+            const isApproved = c.status === 'approved';
+            const dateStr = c.submittedAt || c.submissionDate;
+            return isApproved && dateStr && dateStr.startsWith(currentYearMonthPrefix);
+          }).length;
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
-              {/* Claims Table Column */}
-              <div className="lg:col-span-2 space-y-4">
-                <div className="bg-app-card border border-app-border rounded-xl p-5">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2.5 mb-4">Ownership Request Pipeline</span>
-                  
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs text-white">
-                      <thead>
-                        <tr className="border-b border-app-border/65 text-slate-500 font-bold">
-                          <th className="pb-3.5">Claim ID</th>
-                          <th className="pb-3.5">Brand Target</th>
-                          <th className="pb-3.5">Applicant / Store Representative</th>
-                          <th className="pb-3.5">Business Email</th>
-                          <th className="pb-3.5">Submission Date</th>
-                          <th className="pb-3.5">Status Status</th>
-                          <th className="pb-3.5 text-right">Moderation Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/[0.02]">
-                        {claims.length === 0 ? (
-                          <tr>
-                            <td colSpan={7} className="p-8 text-center text-slate-500">No active ownership claims to show.</td>
-                          </tr>
-                        ) : (
-                          claims.map(c => (
-                            <tr key={c.id} className="hover:bg-white/[0.01]">
-                              <td className="py-4 font-mono text-[10px] text-slate-400">{c.id}</td>
-                              <td className="py-4 font-black text-white">
-                                {(() => {
-                                  const matchedId = unifiedBrands.find(b => b.name.toLowerCase() === c.brandName.toLowerCase())?.id || c.brandId;
-                                  return (
-                                    <Link 
-                                      to={`/upe/brand/${matchedId}`}
-                                      className="hover:text-orange-400 cursor-pointer transition-colors block text-sm"
-                                      title="Open Brand Management Studio"
-                                    >
-                                      {c.brandName}
-                                    </Link>
-                                  );
-                                })()}
-                              </td>
-                              <td className="py-4">
-                                <span className="font-bold text-slate-200">{c.applicantName}</span>
-                                <span className="text-[10px] text-slate-500 block mt-0.5">Seller ID: {c.sellerAccountId}</span>
-                              </td>
-                              <td className="py-4 font-mono text-slate-300">{c.businessEmail}</td>
-                              <td className="py-4 font-mono text-[10px] text-slate-400">
-                                {new Date(c.submissionDate).toLocaleDateString()}
-                              </td>
-                              <td className="py-4">
-                                <span className={`px-2 py-0.5 rounded text-[8.5px] font-extrabold uppercase ${
-                                  c.verificationStatus === 'Approved' ? 'bg-green-500/10 text-emerald-400 border border-green-500/20' :
-                                  c.verificationStatus === 'Pending Review' ? 'bg-yellow-500/10 text-yellow-500 border border-yellow-500/20 animate-pulse' :
-                                  c.verificationStatus === 'Rejected' ? 'bg-red-500/10 text-red-500 border border-red-500/20' :
-                                  'bg-purple-500/10 text-purple-400'
+          const filteredClaims = claims.filter(c => {
+            if (claimsFilter !== 'all' && c.status !== claimsFilter) {
+              return false;
+            }
+            return true;
+          });
+
+          return (
+            <div className="space-y-6">
+              {/* Claims Moderation Desk Info Banner */}
+              <div className="bg-[#F4631E]/5 border border-[#F4631E]/15 rounded-2xl p-6 text-white space-y-3">
+                <span className="text-[10px] bg-[#F4631E]/10 border border-[#F4631E]/25 text-[#F4631E] px-2.5 py-1 rounded font-black tracking-widest uppercase block w-fit font-mono">
+                  Claims Moderation Desk
+                </span>
+                <h3 className="text-md font-bold text-white tracking-tight">Enterprise Claim Verification Engine</h3>
+                <p className="text-xs text-app-text-secondary leading-relaxed">
+                  Review submitted Trade certs, verify corporate DNS TXT tokens, look up corporate email matches, and approve profile claim control loops securely. Approved requests automatically link the seller account to the brand.
+                </p>
+              </div>
+
+              {/* Claims Stat Row */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-app-card border border-app-border rounded-xl p-4.5">
+                  <div className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Total Claims</div>
+                  <div className="text-xl font-black text-white mt-1 font-mono">{total}</div>
+                </div>
+                <div className="bg-app-card border border-[#F4631E]/25 rounded-xl p-4.5">
+                  <div className="text-amber-400 text-[10px] font-bold uppercase tracking-wider">Pending</div>
+                  <div className="text-xl font-black text-amber-400 mt-1 font-mono">{pending}</div>
+                </div>
+                <div className="bg-app-card border border-app-border rounded-xl p-4.5">
+                  <div className="text-blue-400 text-[10px] font-bold uppercase tracking-wider">Under Review</div>
+                  <div className="text-xl font-black text-blue-400 mt-1 font-mono">{underReview}</div>
+                </div>
+                <div className="bg-app-card border border-app-border rounded-xl p-4.5">
+                  <div className="text-emerald-400 text-[10px] font-bold uppercase tracking-wider">Approved This Month</div>
+                  <div className="text-xl font-black text-emerald-400 mt-1 font-mono">{approvedThisMonth}</div>
+                </div>
+              </div>
+
+              {/* Status Filter Tabs */}
+              <div className="flex border-b border-app-border gap-2 pb-2 overflow-x-auto scrollbar-hide">
+                {[
+                  { value: 'all', label: 'All claims' },
+                  { value: 'pending', label: 'Pending' },
+                  { value: 'under_review', label: 'Under Review' },
+                  { value: 'requires_more_info', label: 'Requires Logo/Docs (More Info)' },
+                  { value: 'approved', label: 'Approved' },
+                  { value: 'rejected', label: 'Rejected' },
+                ].map(filterOpt => {
+                  const count = filterOpt.value === 'all' 
+                    ? claims.length 
+                    : claims.filter(c => c.status === filterOpt.value).length;
+
+                  const isActive = claimsFilter === filterOpt.value;
+
+                  return (
+                    <button
+                      key={filterOpt.value}
+                      onClick={() => setClaimsFilter(filterOpt.value as any)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 border cursor-pointer ${
+                        isActive 
+                          ? 'bg-[#F4631E]/10 border-[#F4631E]/30 text-[#F4631E]' 
+                          : 'bg-app-card border-app-border text-slate-400 hover:text-white hover:bg-white/5 border-transparent'
+                      }`}
+                    >
+                      <span>{filterOpt.label}</span>
+                      <span className={`px-1.5 py-0.2 text-[9.5px] rounded-full font-bold ${
+                        isActive ? 'bg-[#F4631E]/25 text-[#F4631E]' : 'bg-white/5 text-slate-400'
+                      }`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Main Workspace Layout */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                {/* Claims Left Card List Column */}
+                <div className="lg:col-span-2 space-y-4">
+                  {filteredClaims.length === 0 ? (
+                    <div className="bg-app-card border border-app-border rounded-2xl p-12 text-center text-slate-500">
+                      <Sliders className="w-10 h-10 text-slate-600 mx-auto mb-3 animate-pulse" />
+                      <p className="text-xs">No brand ownership claims found matching the criteria.</p>
+                    </div>
+                  ) : (
+                    filteredClaims.map(c => {
+                      const matchedBrand = profiles.find(p => p.id === c.brandId || p.name.toLowerCase() === c.brandName.toLowerCase());
+                      const brandLogo = matchedBrand?.logo || 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=100&q=80';
+                      const claimantNameVal = c.claimantName || c.applicantName;
+                      const claimantPhoneVal = c.claimantPhone || '01711-554488';
+                      const roleBadge = c.role === 'owner' ? 'Owner' : 'Authorized Rep';
+                      const licenseStr = c.tradeLicenseNo || c.tradeLicense || '';
+                      const maskedLicense = licenseStr.length > 4 ? licenseStr.slice(0, 4) + '***' : 'Not Provided';
+                      const businessEmailVal = c.businessEmail || 'Not Provided';
+                      const submittedAtVal = c.submittedAt || c.submissionDate;
+                      const formattedDate = new Date(submittedAtVal).toLocaleDateString([], { month: 'short', day: '2-digit', year: 'numeric' });
+
+                      // Documents Submissions indicators
+                      const hasTrade = !!(c.tradeLicenseNo || c.tradeLicense);
+                      const hasNid = !!c.nidNumber;
+                      const hasBank = !!c.bankName;
+
+                      // Status Styling configs
+                      const statusColors: Record<string, { bg: string, text: string, border: string, dot: string }> = {
+                        pending: { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20', dot: 'bg-yellow-400' },
+                        under_review: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', dot: 'bg-blue-400' },
+                        requires_more_info: { bg: 'bg-purple-500/10', text: 'text-purple-400', border: 'border-purple-500/20', dot: 'bg-purple-400' },
+                        approved: { bg: 'bg-green-500/10', text: 'text-emerald-400', border: 'border-green-500/20', dot: 'bg-emerald-400' },
+                        rejected: { bg: 'bg-red-500/10', text: 'text-red-500', border: 'border-red-500/20', dot: 'bg-red-500' }
+                      };
+
+                      const style = statusColors[c.status] || { bg: 'bg-slate-500/10', text: 'text-slate-400', border: 'border-slate-500/20', dot: 'bg-slate-400' };
+                      const activeDocs = docStatus[c.id] || {};
+
+                      return (
+                        <div key={c.id} className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4 hover:border-slate-700 transition-all shadow-sm">
+                          
+                          {/* Top Row Header */}
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-white/[0.04]">
+                            <div className="flex items-center gap-3">
+                              <div className="w-11 h-11 rounded-xl overflow-hidden border border-white/10 shrink-0 bg-slate-800 flex items-center justify-center">
+                                <img src={brandLogo} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
+                              </div>
+                              <div>
+                                <h4 className="font-bold text-white text-md flex items-center gap-2">
+                                  {c.brandName}
+                                  <span className={`inline-flex items-center gap-1.5 px-2.2 py-0.5 rounded text-[8.5px] font-extrabold uppercase tracking-wider ${style.bg} ${style.text} ${style.border}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${style.dot} ${c.status === 'pending' ? 'animate-pulse' : ''}`} />
+                                    {c.status.replace('_', ' ')}
+                                  </span>
+                                </h4>
+                                <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+                                  Claim ID: {c.id}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            <div className="flex items-center gap-1.5 text-slate-400 text-[10.5px] font-mono">
+                              <Calendar className="w-3.5 h-3.5 text-[#F4631E]" />
+                              <span>{formattedDate}</span>
+                            </div>
+                          </div>
+
+                          {/* Quick Facts Grid */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                            <div className="space-y-1.5 p-3.5 bg-white/[0.01] rounded-xl border border-white/[0.03]">
+                              <span className="text-slate-500 text-[9.5px] font-black uppercase tracking-wider block">Claimant / Representative</span>
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="font-bold text-white">{claimantNameVal}</span>
+                                <span className={`text-[8.5px] font-extrabold px-1.5 py-0.2 rounded-md ${
+                                  c.role === 'owner' ? 'bg-[#1A1A2E] text-orange-400 border border-orange-500/25' : 'bg-slate-800 text-slate-400'
                                 }`}>
-                                  {c.verificationStatus}
+                                  {roleBadge}
                                 </span>
-                              </td>
-                              <td className="py-4 text-right">
-                                <div className="flex gap-1.5 justify-end">
-                                  {c.verificationStatus === 'Pending Review' && (
-                                    <>
-                                      <button
-                                        onClick={() => handleReviewClaimTrigger(c.id, 'Approved')}
-                                        className="px-2 py-1 bg-green-500 text-white font-black text-[9.5px] uppercase rounded hover:scale-102 cursor-pointer"
-                                      >
-                                        Approve
-                                      </button>
-                                      <button
-                                        onClick={() => handleReviewClaimTrigger(c.id, 'Rejected')}
-                                        className="px-2 py-1 bg-red-500 text-white font-black text-[9.5px] uppercase rounded hover:scale-102 cursor-pointer"
-                                      >
-                                        Reject
-                                      </button>
-                                    </>
-                                  )}
-                                  <button
-                                    onClick={() => handleReviewClaimTrigger(c.id, 'Under Investigation')}
-                                    className="px-2 py-1 bg-white/5 border border-white/10 text-slate-300 text-[9.5px] uppercase rounded hover:bg-white/10 transition-colors"
+                              </div>
+                              <p className="text-slate-400 font-mono mt-1 text-[11px]">{claimantPhoneVal}</p>
+                            </div>
+
+                            <div className="space-y-1.5 p-3.5 bg-white/[0.01] rounded-xl border border-white/[0.03]">
+                              <span className="text-slate-500 text-[9.5px] font-black uppercase tracking-wider block">Factual Ledger Details</span>
+                              <div className="flex justify-between text-slate-400 mt-1">
+                                <span>Trade License No:</span>
+                                <span className="font-mono text-white text-[11.5px]">{maskedLicense}</span>
+                              </div>
+                              <div className="flex justify-between text-slate-400">
+                                <span>Official Business Email:</span>
+                                <span className="font-mono text-white truncate max-w-[150px]" title={businessEmailVal}>{businessEmailVal}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Document indicators badges */}
+                          <div className="flex flex-wrap items-center gap-2 pt-1">
+                            <span className="text-[9.5px] text-slate-500 font-black uppercase tracking-wider">Document Checklist:</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold border ${
+                                hasTrade 
+                                  ? 'bg-green-500/10 text-emerald-400 border-green-500/15' 
+                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/15'
+                              }`}>
+                                {hasTrade ? '✓' : '✗'} Trade License
+                              </span>
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold border ${
+                                hasNid 
+                                  ? 'bg-green-500/10 text-emerald-400 border-green-500/15' 
+                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/15'
+                              }`}>
+                                {hasNid ? '✓' : '✗'} NID Verification
+                              </span>
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold border ${
+                                hasBank 
+                                  ? 'bg-green-500/10 text-emerald-400 border-green-500/15' 
+                                  : 'bg-rose-500/10 text-rose-400 border-rose-500/15'
+                              }`}>
+                                {hasBank ? '✓' : '✗'} Bank Account Details
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Bottom Action Triggers */}
+                          <div className="flex flex-col gap-3 pt-3 border-t border-white/[0.04]">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              
+                              <button
+                                onClick={() => setExpandedClaims(p => ({ ...p, [c.id]: !p[c.id] }))}
+                                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <FileText className="w-3.5 h-3.5 text-[#F4631E]" />
+                                <span>{expandedClaims[c.id] ? 'Hide Documents' : 'Review Documents'}</span>
+                              </button>
+
+                              <div className="flex items-center gap-1.5">
+                                {c.status === 'pending' || c.status === 'under_review' || c.status === 'requires_more_info' ? (
+                                  <>
+                                    <button
+                                      onClick={() => {
+                                        reviewClaim(c.id, 'approved', 'Lead Operations Administrator', 'Administrative Approval');
+                                        showToast(`Brand ownership transferred to ${claimantNameVal}`);
+                                      }}
+                                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-lg shadow uppercase cursor-pointer"
+                                    >
+                                      Approve Claim
+                                    </button>
+
+                                    <button
+                                      onClick={() => setClaimActionTypeMap(p => ({ ...p, [c.id]: p[c.id] === 'reject' ? null : 'reject' }))}
+                                      className={`px-3 py-1.5 text-white font-extrabold text-[11px] rounded-lg uppercase cursor-pointer ${
+                                        claimActionTypeMap[c.id] === 'reject' ? 'bg-red-950 text-red-400 border border-red-900/35' : 'bg-red-600 hover:bg-red-700 bg-red-600 hover:bg-red-700'
+                                      }`}
+                                    >
+                                      Reject
+                                    </button>
+
+                                    <button
+                                      onClick={() => setClaimActionTypeMap(p => ({ ...p, [c.id]: p[c.id] === 'info' ? null : 'info' }))}
+                                      className={`px-3 py-1.5 font-extrabold text-[11px] rounded-lg transition-all cursor-pointer ${
+                                        claimActionTypeMap[c.id] === 'info' ? 'bg-purple-950 text-purple-400 border border-purple-900/35' : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'
+                                      }`}
+                                    >
+                                      Request Info
+                                    </button>
+                                  </>
+                                ) : (
+                                  <span className="text-[11px] text-slate-500 font-mono italic">Resolved and locked.</span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Inline Note inputs inside selected actions */}
+                            {claimActionTypeMap[c.id] === 'reject' && (
+                              <div className="p-3.5 bg-red-950/20 border border-red-900/35 rounded-xl space-y-2.5">
+                                <span className="text-xs font-black text-red-400 block">Required Refusal Explanation *</span>
+                                <input
+                                  type="text"
+                                  value={claimReasonMap[c.id] || ''}
+                                  onChange={(e) => setClaimReasonMap(p => ({ ...p, [c.id]: e.target.value }))}
+                                  placeholder="Provide exact refusal reasons..."
+                                  className="w-full bg-slate-900 border border-red-800/45 rounded-lg px-3 py-2.2 text-xs text-white focus:outline-none focus:border-red-500"
+                                />
+                                <div className="flex justify-end gap-2 text-[10.5px]">
+                                  <button 
+                                    onClick={() => setClaimActionTypeMap(p => ({ ...p, [c.id]: null }))}
+                                    className="px-2.5 py-1 text-slate-400 hover:text-white"
                                   >
-                                    More Info
+                                    Cancel
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      const r = claimReasonMap[c.id] || '';
+                                      if (!r.trim()) {
+                                        showToast('⚠️ Refusal reason must be supplied.');
+                                        return;
+                                      }
+                                      reviewClaim(c.id, 'rejected', 'Lead Operations Administrator', r);
+                                      showToast(`Rejected ownership request for brand ${c.brandName}`);
+                                      setClaimActionTypeMap(p => ({ ...p, [c.id]: null }));
+                                    }}
+                                    className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white font-bold rounded-md"
+                                  >
+                                    Confirm Rejection
                                   </button>
                                 </div>
-                              </td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
+                              </div>
+                            )}
 
-              {/* Side Audit Log list Column */}
-              <div className="lg:col-span-1 space-y-4">
-                <div className="bg-app-card border border-app-border rounded-xl p-5 space-y-4">
-                  <div className="border-b border-app-border pb-2.5">
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">🛡️ Studio Audit Security Trail</span>
-                    <span className="text-[9.5px] text-slate-400 block mt-0.5">Immutable record tracker for compliance operations</span>
-                  </div>
+                            {claimActionTypeMap[c.id] === 'info' && (
+                              <div className="p-3.5 bg-purple-950/20 border border-purple-900/35 rounded-xl space-y-2.5">
+                                <span className="text-xs font-black text-purple-400 block">Specify Re-upload or Info Requested *</span>
+                                <input
+                                  type="text"
+                                  value={claimNotesMap[c.id] || ''}
+                                  onChange={(e) => setClaimNotesMap(p => ({ ...p, [c.id]: e.target.value }))}
+                                  placeholder="e.g. Please provide clear non-glossy scan of Trade license"
+                                  className="w-full bg-slate-900 border border-purple-800/45 rounded-lg px-3 py-2.2 text-xs text-white focus:outline-none focus:border-purple-500"
+                                />
+                                <div className="flex justify-end gap-2 text-[10.5px]">
+                                  <button 
+                                    onClick={() => setClaimActionTypeMap(p => ({ ...p, [c.id]: null }))}
+                                    className="px-2.5 py-1 text-slate-400 hover:text-white"
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button 
+                                    onClick={() => {
+                                      const notes = claimNotesMap[c.id] || '';
+                                      if (!notes.trim()) {
+                                        showToast('⚠️ Please specify what information is requested.');
+                                        return;
+                                      }
+                                      reviewClaim(c.id, 'requires_more_info', 'Lead Operations Administrator', notes);
+                                      showToast(`Information request sent to applicant.`);
+                                      setClaimActionTypeMap(p => ({ ...p, [c.id]: null }));
+                                    }}
+                                    className="px-3 py-1 bg-purple-650 hover:bg-purple-700 text-white font-bold rounded-md"
+                                  >
+                                    Submit Request
+                                  </button>
+                                </div>
+                              </div>
+                            )}
 
-                  <div className="space-y-3 max-h-[350px] overflow-y-auto custom-scrollbar pr-1">
-                    {logs.map(lg => (
-                      <div key={lg.id} className="p-3 bg-app-bg/55 border border-white/[0.03] rounded-lg text-xs space-y-1">
-                        <div className="flex justify-between items-center">
-                          <span className="font-bold text-[#F4631E] truncate max-w-[120px]">{lg.brandName}</span>
-                          <span className="text-[9px] text-slate-500 font-mono">{new Date(lg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                            {/* Interactive Document Checklist Section */}
+                            {expandedClaims[c.id] && (
+                              <div className="bg-slate-950/40 rounded-xl p-4 border border-white/[0.02] space-y-3.5">
+                                <h5 className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">Detailed Interactive Certificate Review</h5>
+                                <div className="space-y-2.5">
+                                  
+                                  {/* Doc 1: Trade registry */}
+                                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-3 bg-white/[0.01] rounded-lg border border-white/[0.02]">
+                                    <div>
+                                      <span className="text-[9.5px] text-slate-500 font-black uppercase">1. Government Trade Registry Certificate</span>
+                                      <p className="text-white font-mono text-[11px] mt-0.5">License: {licenseStr || 'Unspecified'}</p>
+                                      <p className="text-[10px] text-slate-500 mt-0.5">Attachment name: {c.businessRegistrationDocs || 'trade_license_corp.pdf'}</p>
+                                    </div>
+                                    <div className="flex gap-1.5 shrink-0">
+                                      {['approved', 'rejected', 'reupload'].map((actType) => (
+                                        <button
+                                          key={actType}
+                                          onClick={() => handleDocAction(c.id, 'trade', actType as any)}
+                                          className={`px-2 py-1.2 rounded text-[9.5px] font-black uppercase transition-all cursor-pointer ${
+                                            activeDocs['trade'] === actType
+                                              ? actType === 'approved' ? 'bg-[#1a1a2e] text-[#F97316] border border-[#F97316]/50' : actType === 'rejected' ? 'bg-red-650 text-white' : 'bg-amber-600 text-white'
+                                              : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                                          }`}
+                                        >
+                                          {actType === 'approved' ? 'Approve ✓' : actType === 'rejected' ? 'Reject ✗' : 'Re-upload'}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Doc 2: National ID registry */}
+                                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-3 bg-white/[0.01] rounded-lg border border-white/[0.02]">
+                                    <div>
+                                      <span className="text-[9.5px] text-slate-500 font-black uppercase">2. Claimant National ID & Selfie Verification</span>
+                                      <p className="text-white font-mono text-[11px] mt-0.5">NID: {c.nidNumber || '199026123456789 (Verified format)'}</p>
+                                      <p className="text-[10px] text-slate-500 mt-0.5">Attachments: Front side, back side, selfie card holder</p>
+                                    </div>
+                                    <div className="flex gap-1.5 shrink-0">
+                                      {['approved', 'rejected', 'reupload'].map((actType) => (
+                                        <button
+                                          key={actType}
+                                          onClick={() => handleDocAction(c.id, 'nid', actType as any)}
+                                          className={`px-2 py-1.2 rounded text-[9.5px] font-black uppercase transition-all cursor-pointer ${
+                                            activeDocs['nid'] === actType
+                                              ? actType === 'approved' ? 'bg-[#1a1a2e] text-[#F97316] border border-[#F97316]/50' : actType === 'rejected' ? 'bg-red-650 text-white' : 'bg-amber-600 text-white'
+                                              : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                                          }`}
+                                        >
+                                          {actType === 'approved' ? 'Approve ✓' : actType === 'rejected' ? 'Reject ✗' : 'Re-upload'}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  {/* Doc 3: Corporate Bank statements */}
+                                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-3 bg-white/[0.01] rounded-lg border border-white/[0.02]">
+                                    <div>
+                                      <span className="text-[9.5px] text-slate-500 font-black uppercase">3. Corporate Bank Account Verification</span>
+                                      <p className="text-white font-mono text-[11px] mt-0.5 font-bold">Bank Name: {c.bankName || 'Prime Bank PLC'}</p>
+                                      <p className="text-[10px] text-slate-500 mt-0.5">Routing & MICR checked leaf: Yes</p>
+                                    </div>
+                                    <div className="flex gap-1.5 shrink-0">
+                                      {['approved', 'rejected', 'reupload'].map((actType) => (
+                                        <button
+                                          key={actType}
+                                          onClick={() => handleDocAction(c.id, 'bank', actType as any)}
+                                          className={`px-2 py-1.2 rounded text-[9.5px] font-black uppercase transition-all cursor-pointer ${
+                                            activeDocs['bank'] === actType
+                                              ? actType === 'approved' ? 'bg-[#1a1a2e] text-[#F97316] border border-[#F97316]/50' : actType === 'rejected' ? 'bg-red-650 text-white' : 'bg-amber-600 text-white'
+                                              : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                                          }`}
+                                        >
+                                          {actType === 'approved' ? 'Approve ✓' : actType === 'rejected' ? 'Reject ✗' : 'Re-upload'}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                </div>
+                              </div>
+                            )}
+
+                          </div>
                         </div>
-                        <p className="text-[10px] text-slate-400 block font-semibold">{lg.action}</p>
-                        <p className="text-[10px] text-slate-500 leading-normal">{lg.reason}</p>
-                        <span className="text-[9px] text-slate-600 font-mono block text-right">By {lg.adminUser}</span>
-                      </div>
-                    ))}
+                      );
+                    })
+                  )}
+                </div>
+
+                {/* Right Column: Immutable security trail logs */}
+                <div className="lg:col-span-1 space-y-4">
+                  <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+                    <div className="border-b border-app-border pb-2.5">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">🛡️ Studio Audit Security Trail</span>
+                      <span className="text-[9.5px] text-slate-400 block mt-0.5">Immutable record tracker for compliance operations</span>
+                    </div>
+
+                    <div className="space-y-3 max-h-[480px] overflow-y-auto custom-scrollbar pr-1">
+                      {logs.map(lg => (
+                        <div key={lg.id} className="p-3 bg-app-bg/55 border border-white/[0.03] rounded-lg text-xs space-y-1">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-[#F4631E] truncate max-w-[120px]">{lg.brandName}</span>
+                            <span className="text-[9px] text-slate-500 font-mono">{new Date(lg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                          </div>
+                          <p className="text-[10px] text-slate-400 block font-semibold">{lg.action}</p>
+                          <p className="text-[10px] text-slate-500 leading-normal">{lg.reason}</p>
+                          <span className="text-[9px] text-slate-600 font-mono block text-right">By {lg.adminUser}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
 
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* TAB 9: PRODUCTS WITH SIMULATOR (EXISTING PRESERVED) */}
         {activeTab === 'products' && (

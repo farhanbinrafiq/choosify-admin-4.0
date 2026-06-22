@@ -1,12 +1,11 @@
 import React from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
   CheckCircle2, 
   XCircle, 
   AlertCircle,
   Award,
-  PlayCircle,
   ThumbsUp,
   MessageSquare,
   Share2,
@@ -14,35 +13,82 @@ import {
   ShieldCheck,
   ShoppingBag
 } from 'lucide-react';
+import { sharedRecommendations } from '../Recommendations';
 
 export default function RecommendationPreview() {
   const { id } = useParams();
+  const navigate = useNavigate();
 
+  // Look up the recommendation from shared state repository
+  const foundRec = sharedRecommendations.find(r => r.id === id);
+
+  if (!foundRec) {
+    return (
+      <div className="max-w-2xl mx-auto my-12 p-8 text-center bg-app-card border border-app-border rounded-3xl space-y-4">
+        <AlertCircle className="w-12 h-12 text-red-500 mx-auto" />
+        <h3 className="text-white text-lg font-bold">Recommendation Guide Not Found</h3>
+        <p className="text-app-text-secondary text-xs">The requested curation record might have been removed or does not exist.</p>
+        <Link 
+          to="/admin/recommendations" 
+          className="inline-block px-6 py-2 bg-app-accent hover:bg-app-accent-light text-white rounded-xl text-xs font-bold transition"
+        >
+          Go back to moderation board
+        </Link>
+      </div>
+    );
+  }
+
+  // Model-level format mapper for render safety
   const recommendation = {
-    id: id,
-    title: 'Top 5 Flagship Smartphones for Content Creators in 2025',
+    id: foundRec.id,
+    title: foundRec.title,
     creator: {
-      name: 'Sifat Tanvir',
-      handle: '@sifat_reviews',
-      avatar: 'ST'
+      name: foundRec.creator,
+      handle: foundRec.creatorHandle || `@${foundRec.creator.toLowerCase().replace(/\s+/g, '_')}`,
+      avatar: foundRec.initials
     },
-    status: 'Pending Review',
-    submittedAt: 'Today, 11:24 AM',
-    category: 'Technology',
-    subCategory: 'Mobile Portfolio',
-    products: [
-      { id: 'p1', name: 'Samsung Galaxy S24 Ultra', price: '৳ 145,000', brand: 'Samsung' },
-      { id: 'p2', name: 'iPhone 15 Pro Max', price: '৳ 158,000', brand: 'Apple' },
-      { id: 'p3', name: 'Google Pixel 9 Pro', price: '৳ 115,000', brand: 'Google' },
+    status: foundRec.status === 'Pending' ? 'Pending Review' : foundRec.status,
+    submittedAt: new Date(foundRec.submittedAt).toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    }) + ' ' + new Date(foundRec.submittedAt).toLocaleTimeString('en-US', { 
+      hour: 'numeric', 
+      minute: '2-digit' 
+    }),
+    category: foundRec.category || 'Technology',
+    subCategory: foundRec.subCategory || 'General Curated',
+    products: foundRec.products || [
+       { id: 'p1', name: 'Premium Verified Gear', price: '৳ 3,500', brand: 'Genuine Retailer' }
     ],
-    content: `Choosing the right smartphone for content creation in Bangladesh can be challenging. You need a device that doesn't just have a great camera, but also has the processing power for quick mobile exports and a battery that lasts all day during outdoor shoots. 
+    content: foundRec.body,
+    tags: foundRec.tags
+  };
 
-In this list, I'm focusing on "Video Dynamic Range" and "Microphone Quality" which are often overlooked but crucial for 2025 content formats like high-fidelity Reels and long-form YouTube cinematic vlogs. I've personally tested these models across Dhaka's varying lighting conditions — from the bright daylight of Dhanmondi Lake to the tricky indoor neon of Banani's cafes.`,
-    tags: ['TechReview', 'ContentCreator', 'BDTech', 'Flagship2025']
+  const handleApprove = () => {
+    navigate('/admin/recommendations', {
+      state: {
+        action: 'approve',
+        id: foundRec.id
+      }
+    });
+  };
+
+  const handleReject = () => {
+    const reason = prompt("Please provide feedback or a reason for rejecting this recommendation:", "Does not meet community quality/source verification guidelines");
+    if (reason === null) return; // user cancelled prompt
+    
+    navigate('/admin/recommendations', {
+      state: {
+        action: 'reject',
+        id: foundRec.id,
+        reason: reason || 'Rejected via interactive moderation preview'
+      }
+    });
   };
 
   return (
-    <div className="space-y-6 pb-24">
+    <div className="space-y-6 pb-24 text-left">
       {/* Moderation Controls Sticky Top */}
       <div className="sticky top-0 z-20 bg-app-card/95 backdrop-blur border border-app-border rounded-2xl p-4 shadow-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
@@ -52,16 +98,22 @@ In this list, I'm focusing on "Video Dynamic Range" and "Microphone Quality" whi
            <div>
               <h4 className="text-sm font-bold text-white">Content Moderation Terminal</h4>
               <p className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest text-orange-500">
-                PENDING ACTION • {recommendation.submittedAt}
+                {recommendation.status.toUpperCase()} • {recommendation.submittedAt}
               </p>
            </div>
         </div>
         <div className="flex items-center gap-3">
-           <button className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg active:scale-95 flex items-center gap-2">
+           <button 
+             onClick={handleApprove}
+             className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg active:scale-95 flex items-center gap-2 cursor-pointer border-none"
+           >
               <CheckCircle2 className="w-4 h-4" /> Approve Recommendation
            </button>
-           <button className="px-6 py-2.5 bg-white/5 border border-red-500/20 text-red-500 hover:bg-red-500/10 rounded-xl text-sm font-bold transition-all flex items-center gap-2">
-              <XCircle className="w-4 h-4" /> Reject & Feedback
+           <button 
+             onClick={handleReject}
+             className="px-6 py-2.5 bg-white/5 border border-red-500/20 text-red-500 hover:bg-red-500/10 rounded-xl text-sm font-bold transition-all flex items-center gap-2 cursor-pointer"
+           >
+              <XCircle className="w-4 h-4" /> Reject &amp; Feedback
            </button>
         </div>
       </div>
@@ -80,7 +132,7 @@ In this list, I'm focusing on "Video Dynamic Range" and "Microphone Quality" whi
                     
                     <div className="flex items-center justify-between border-t border-b border-app-border py-4 mb-8">
                        <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center text-green-500 font-bold border border-green-500/20">
+                          <div className="w-10 h-10 rounded-full bg-green-500/10 flex items-center justify-center text-green-500 font-bold border border-green-500/20 text-sm">
                              {recommendation.creator.avatar}
                           </div>
                           <div>
@@ -89,8 +141,8 @@ In this list, I'm focusing on "Video Dynamic Range" and "Microphone Quality" whi
                           </div>
                        </div>
                        <div className="flex items-center gap-4 text-app-text-secondary">
-                          <div className="flex items-center gap-1.5 text-xs"><ThumbsUp className="w-4 h-4" /> 0</div>
-                          <div className="flex items-center gap-1.5 text-xs"><MessageSquare className="w-4 h-4" /> 0</div>
+                          <div className="flex items-center gap-1.5 text-xs"><ThumbsUp className="w-4 h-4" /> {foundRec.views > 200 ? Math.floor(foundRec.views / 25) : 0}</div>
+                          <div className="flex items-center gap-1.5 text-xs"><MessageSquare className="w-4 h-4" /> {foundRec.views > 500 ? Math.floor(foundRec.views / 110) : 0}</div>
                           <div className="flex items-center gap-1.5 text-xs"><Share2 className="w-4 h-4" /></div>
                        </div>
                     </div>
@@ -103,12 +155,12 @@ In this list, I'm focusing on "Video Dynamic Range" and "Microphone Quality" whi
 
                     <div className="flex flex-wrap gap-2 mt-8 font-mono text-[11px]">
                        {recommendation.tags.map(tag => (
-                         <span key={tag} className="text-app-text-secondary opacity-50 hover:opacity-100 transition-opacity cursor-default">#{tag}</span>
+                          <span key={tag} className="text-app-text-secondary opacity-50 hover:opacity-100 transition-opacity cursor-default">#{tag}</span>
                        ))}
                     </div>
                  </div>
               </div>
-              <div className="pt-64" h-full /> {/* Spacer for relative overlay */}
+              <div className="pt-64" h-full="true" /> {/* Spacer for relative overlay */}
               <div className="h-[400px]" /> {/* Extra spacer for overlay content overflow */}
            </div>
 
@@ -120,19 +172,19 @@ In this list, I'm focusing on "Video Dynamic Range" and "Microphone Quality" whi
               </h3>
               <div className="space-y-4">
                  {recommendation.products.map((p, i) => (
-                   <div key={i} className="group bg-app-sidebar/50 border border-app-border p-5 rounded-2xl flex items-center justify-between hover:border-app-accent/40 transition-all">
+                   <div key={i} className="group bg-app-sidebar/50 border border-app-border p-5 rounded-2xl flex items-center justify-between hover:border-app-accent/40 transition-all text-left">
                       <div className="flex items-center gap-4">
-                         <div className="w-12 h-12 bg-app-card rounded-xl flex items-center justify-center border border-app-border text-white font-bold text-xs">
-                            BG
+                         <div className="w-12 h-12 bg-app-card rounded-xl flex items-center justify-center border border-app-border text-white font-bold text-xs uppercase">
+                            {p.brand.slice(0, 2)}
                          </div>
                          <div>
                             <h5 className="text-[14px] font-bold text-white group-hover:text-app-accent-light transition-colors">{p.name}</h5>
                             <p className="text-[11px] text-app-text-secondary">{p.brand} Official Store</p>
                          </div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right font-medium">
                          <div className="text-[14px] font-extrabold text-app-accent-light">{p.price}</div>
-                         <button className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest flex items-center gap-1.5 mt-1 hover:text-white transition-colors">
+                         <button className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest flex items-center gap-1.5 mt-1 hover:text-white transition-colors bg-transparent border-none cursor-pointer">
                             View Product <ExternalLink className="w-3 h-3" />
                          </button>
                       </div>
@@ -151,13 +203,13 @@ In this list, I'm focusing on "Video Dynamic Range" and "Microphone Quality" whi
               </h4>
               <div className="space-y-4">
                  {[
-                   { label: 'Creator Verified', check: true },
+                   { label: 'Creator Verified', check: foundRec.creatorId !== '11' },
                    { label: 'Language Compatibility', check: true },
                    { label: 'Product Availability', check: true },
-                   { label: 'AI Review Pass', check: true },
-                   { label: 'Image Guidelines', check: false },
+                   { label: 'AI Review Pass', check: foundRec.creatorId !== '11' },
+                   { label: 'Image Guidelines', check: foundRec.creatorId !== '11' },
                  ].map((item, i) => (
-                   <div key={i} className="flex items-center justify-between text-[12px]">
+                   <div key={i} className="flex items-center justify-between text-[12px] font-medium">
                       <span className="text-app-text-secondary">{item.label}</span>
                       {item.check ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <AlertCircle className="w-4 h-4 text-orange-500" />}
                    </div>
@@ -184,11 +236,11 @@ In this list, I'm focusing on "Video Dynamic Range" and "Microphone Quality" whi
               <div className="space-y-4">
                  <div className="border-l-2 border-app-accent pl-4 py-1">
                     <p className="text-[11px] font-bold text-white">Submitted for Review</p>
-                    <p className="text-[10px] text-app-text-secondary">Today, 11:24 AM by Sifat Tanvir</p>
+                    <p className="text-[10px] text-app-text-secondary">Submitted on {new Date(foundRec.submittedAt).toLocaleDateString()}</p>
                  </div>
                  <div className="border-l-2 border-app-border pl-4 py-1">
                     <p className="text-[11px] font-bold text-app-text-secondary">AI Content Check</p>
-                    <p className="text-[10px] text-app-text-secondary opacity-50">Passed auto-moderation gates</p>
+                    <p className="text-[10px] text-app-text-secondary opacity-50">{foundRec.creatorId === '11' ? 'Failed confidence flags threshold check' : 'Passed auto-moderation gates setup'}</p>
                  </div>
               </div>
            </div>

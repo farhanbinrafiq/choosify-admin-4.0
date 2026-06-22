@@ -34,13 +34,15 @@ import {
   Lock,
   FolderLock,
   Activity,
-  AlertTriangle
+  AlertTriangle,
+  Search
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
 import { useCMS } from '../contexts/CMSContext';
 import { useOrders } from '../contexts/OrdersContext';
 import { useContact } from '../contexts/ContactInteractionContext';
+import { useBrandProfiles } from '../contexts/BrandProfilesContext';
 
 interface SidebarItem {
   label: string;
@@ -49,6 +51,14 @@ interface SidebarItem {
   path?: string;
   badge?: string | number;
   subItems?: { label: string; path: string; badge?: string | number }[];
+}
+
+interface SearchResultItem {
+  id: string;
+  title: string;
+  subtitle?: string;
+  type: 'Order' | 'Brand' | 'Seller' | 'Consumer';
+  path: string;
 }
 
 const roleMenus: Record<UserRole, SidebarItem[]> = {
@@ -60,8 +70,10 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'Order Console', icon: ListOrdered, path: '/admin/orders' },
     { label: 'Orders Overview', icon: BarChart3, path: '/admin/orders-overview' },
-    { label: 'Creators', icon: Award, path: '/admin/creators' },
+    { label: 'Creators', icon: Award, path: '/admin/creators?viewMode=creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
+    { label: 'Moderation Center', icon: ShieldCheck, path: '/admin/moderation' },
+    { label: 'Community Submissions', icon: Users, path: '/admin/community-submissions' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/moderation?tab=disputes' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 12 },
     { label: 'Trust Center', icon: ShieldCheck, path: '/admin/trust-center' },
@@ -71,14 +83,15 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
     
     { label: 'Super Admin Core', type: 'label' },
-    { label: 'Admin Management', icon: UserCheck, path: '/admin/admins' },
+    { label: 'Admin Management', icon: UserCheck, path: '/admin/admins?viewMode=admins' },
     { label: 'Role Management', icon: Lock, path: '/admin/settings?tab=roles' },
     { label: 'Permissions', icon: ShieldCheck, path: '/admin/settings?tab=permissions' },
     { label: 'System Configuration', icon: Bolt, path: '/admin/cms' },
     { label: 'Verification Center', icon: Award, path: '/admin/brand-verification' },
-    { label: 'Trust Engine', icon: Zap, path: '/admin/moderation-v2' },
+    { label: 'Fraud Detection Engine', icon: Zap, path: '/admin/moderation-v2' },
     { label: 'Subscription Plans', icon: Tag, path: '/admin/promotions?tab=plans' },
     { label: 'Monetization Center', icon: Wallet, path: '/admin/payouts' },
+    { label: 'Promo Codes', icon: Tag, path: '/admin/deals?tab=promocodes' },
     { label: 'Audit Logs', icon: History, path: '/admin/moderation?tab=reports' },
     { label: 'Security Center', icon: FolderLock, path: '/admin/settings?tab=security' },
     { label: 'Feature Flags', icon: Activity, path: '/admin/settings?tab=features' },
@@ -91,8 +104,9 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'Order Console', icon: ListOrdered, path: '/admin/orders' },
     { label: 'Orders Overview', icon: BarChart3, path: '/admin/orders-overview' },
-    { label: 'Creators', icon: Award, path: '/admin/creators' },
+    { label: 'Creators', icon: Award, path: '/admin/creators?viewMode=creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
+    { label: 'Community Submissions', icon: Users, path: '/admin/community-submissions', badge: 'New' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/moderation?tab=disputes' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
     { label: 'Trust Center', icon: ShieldCheck, path: '/admin/trust-center' },
@@ -163,6 +177,148 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
   const [isBrandsExpanded, setIsBrandsExpanded] = useState(true);
+
+  // Global Search State & Logic
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const searchContainerRef = React.useRef<HTMLDivElement>(null);
+
+  const { orders, customers } = useOrders();
+  let profiles: any[] = [];
+  try {
+    const brandCtx = useBrandProfiles();
+    if (brandCtx && brandCtx.profiles) {
+      profiles = brandCtx.profiles;
+    }
+  } catch (e) {
+    // fallback context safety
+  }
+
+  const searchResults = React.useMemo(() => {
+    if (searchQuery.trim().length < 3) return [];
+    
+    const query = searchQuery.toLowerCase().trim();
+    const results: SearchResultItem[] = [];
+
+    // 1. Orders
+    const matchedOrders = (orders || []).filter(o => 
+      o.id.toLowerCase().includes(query) || 
+      (o.invoice_id && o.invoice_id.toLowerCase().includes(query)) ||
+      (o.product?.name && o.product.name.toLowerCase().includes(query))
+    );
+    matchedOrders.forEach(o => {
+      results.push({
+        id: o.id,
+        title: `Order ${o.id}`,
+        subtitle: `${o.product?.name || 'Items'} - BDT ${o.earnings?.totalRevenue || 0}`,
+        type: 'Order',
+        path: `/upe/order/${o.id}`
+      });
+    });
+
+    // 2. Brands
+    const staticBrands = [
+      { id: 'b1', name: 'Samsung Mobile Bangladesh', category: 'Electronics' },
+      { id: 'b2', name: 'Aarong Saree & crafts', category: 'Fashion' },
+      { id: 'b3', name: 'Yellow clothing', category: 'Fashion' },
+      { id: 'b4', name: 'Apex Footwear', category: 'Accessories' },
+      { id: 'b5', name: 'Bata Bangladesh', category: 'Accessories' }
+    ];
+    const sourceBrands = profiles && profiles.length > 0 ? profiles : staticBrands;
+    const matchedBrands = sourceBrands.filter((b: any) => 
+      b.name.toLowerCase().includes(query) || 
+      (b.category && b.category.toLowerCase().includes(query))
+    );
+    matchedBrands.forEach((b: any) => {
+      results.push({
+        id: b.id,
+        title: b.name,
+        subtitle: `Brand / ${b.category || 'Retail'}`,
+        type: 'Brand',
+        path: `/upe/brand/${b.id}`
+      });
+    });
+
+    // 3. Sellers
+    const derivedSellers = new Map<string, { id: string; name: string; info?: string }>();
+    (orders || []).forEach(o => {
+      if (o.product?.sellerId && o.product?.sellerName) {
+        derivedSellers.set(o.product.sellerId, { id: o.product.sellerId, name: o.product.sellerName, info: o.product.brand });
+      }
+    });
+    const staticSellers = [
+      { id: 's1', name: 'Nadia Akter', info: 'Daraz Seller' },
+      { id: 's2', name: 'Rifat Hasan', info: 'Verified Influencer' },
+      { id: 's3', name: 'StyleCouture BD', info: 'Premium Boutique' }
+    ];
+    staticSellers.forEach(s => {
+      derivedSellers.set(s.id, s);
+    });
+    const matchedSellers = Array.from(derivedSellers.values()).filter(s => 
+      s.name.toLowerCase().includes(query)
+    );
+    matchedSellers.forEach(s => {
+      results.push({
+        id: s.id,
+        title: s.name,
+        subtitle: `Seller / ${s.info || 'Merchant'}`,
+        type: 'Seller',
+        path: `/upe/seller/${s.id}`
+      });
+    });
+
+    // 4. Consumers
+    const derivedConsumers = new Map<string, { id: string; name: string; email: string }>();
+    (customers || []).forEach(c => {
+      derivedConsumers.set(c.id, { id: c.id, name: c.name, email: c.email });
+    });
+    const staticConsumers = [
+      { id: 'c1', name: 'Mehedi Rahman', email: 'mehedi@gmail.com' },
+      { id: 'c2', name: 'Nusrat Jahan', email: 'nusrat@outlook.com' },
+      { id: 'c3', name: 'Farhana Islam', email: 'farhana@yahoo.com' }
+    ];
+    staticConsumers.forEach(c => {
+      derivedConsumers.set(c.id, c);
+    });
+    const matchedConsumers = Array.from(derivedConsumers.values()).filter(c => 
+      c.name.toLowerCase().includes(query) || c.email.toLowerCase().includes(query)
+    );
+    matchedConsumers.forEach(c => {
+      results.push({
+        id: c.id,
+        title: c.name,
+        subtitle: c.email,
+        type: 'Consumer',
+        path: `/upe/consumer/${c.id}`
+      });
+    });
+
+    return results;
+  }, [searchQuery, orders, customers, profiles]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
+        setIsSearchFocused(false);
+      }
+    };
+
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsSearchFocused(false);
+        if (searchContainerRef.current) {
+          (searchContainerRef.current.querySelector('input') as HTMLInputElement)?.blur();
+        }
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscapeKey);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscapeKey);
+    };
+  }, []);
 
   const toggleMenu = (label: string) => {
     setExpandedMenus(prev => ({
@@ -487,6 +643,70 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             <div className="text-[12px] text-app-text-secondary opacity-60">
               {currentRole.replace('_', ' ').toUpperCase()} / Dashboard / {location.pathname.split('/').pop()?.replace('-', ' ')}
             </div>
+          </div>
+
+          {/* MIDDLE GLOBAL SEARCH ENGINE */}
+          <div className="relative mx-4 flex-1 max-w-sm" ref={searchContainerRef}>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Search className="h-4 w-4 text-gray-400" />
+              </div>
+              <input
+                type="text"
+                placeholder="Search catalog, brands, sellers..."
+                value={searchQuery}
+                onFocus={() => setIsSearchFocused(true)}
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setIsSearchFocused(true);
+                }}
+                className="pl-9 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[12px] w-full max-w-xs placeholder-gray-400 outline-none focus:border-orange-400 text-slate-800 transition-colors"
+              />
+            </div>
+
+            {/* SEARCH DROPDOWN */}
+            {isSearchFocused && searchQuery.trim().length >= 3 && (
+              <div className="absolute left-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 z-50 max-h-80 overflow-y-auto py-2 divide-y divide-gray-50 text-slate-700 animate-in fade-in slide-in-from-top-1 duration-150">
+                {searchResults.length > 0 ? (
+                  searchResults.map((item) => (
+                    <div
+                      key={item.type + '-' + item.id}
+                      onClick={() => {
+                        navigate(item.path);
+                        setSearchQuery('');
+                        setIsSearchFocused(false);
+                      }}
+                      className="px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-center justify-between group"
+                    >
+                      <div className="min-w-0 pr-2">
+                        <div className="text-[12px] font-bold text-slate-950 truncate group-hover:text-orange-500 transition-colors">
+                          {item.title}
+                        </div>
+                        {item.subtitle && (
+                          <div className="text-[10px] text-slate-400 truncate mt-0.5">
+                            {item.subtitle}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Badge tags */}
+                      <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded shrink-0 ${
+                        item.type === 'Order' ? 'bg-orange-100 text-orange-600 border border-orange-200/50' :
+                        item.type === 'Brand' ? 'bg-indigo-100 text-indigo-600 border border-indigo-200/50' :
+                        item.type === 'Seller' ? 'bg-emerald-100 text-emerald-600 border border-emerald-200/50' :
+                        'bg-blue-100 text-blue-600 border border-blue-200/50'
+                      }`}>
+                        {item.type}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="px-4 py-5 text-center text-[11px] text-gray-400 font-medium">
+                    No matching results found
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex items-center gap-4">
              <div className="flex items-center gap-3">

@@ -74,6 +74,7 @@ const initialMockReviews: Review[] = [
 export default function ReviewsPage() {
   const { profile } = useAuth();
   const [reviews, setReviews] = useState<Review[]>(initialMockReviews);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'All' | 'Flagged' | 'Published' | 'Deleted' | 'Hidden'>('All');
   const [editingReviewId, setEditingReviewId] = useState<string | null>(null);
@@ -229,6 +230,76 @@ export default function ReviewsPage() {
         </div>
       </div>
 
+      {selectedIds.size > 0 && (
+        <div className="bg-[#1A1A2E] text-white px-4 py-3 rounded-xl flex items-center justify-between gap-3 mb-3 text-[12px] font-bold border border-white/10 shadow-lg animate-fade-in">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="bg-app-accent/20 text-app-accent-light px-2.5 py-1 rounded-lg font-mono">
+              {selectedIds.size} reviews selected
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  setReviews(prev => prev.map(r => selectedIds.has(r.id) ? { ...r, status: 'Hidden' } : r));
+                  showToast(`Headed Hidden to ${selectedIds.size} reviews`, 'info');
+                  setSelectedIds(new Set());
+                }}
+                className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors uppercase font-extrabold cursor-pointer"
+              >
+                Hide All
+              </button>
+              <button
+                onClick={() => {
+                  setReviews(prev => prev.filter(r => !selectedIds.has(r.id)));
+                  showToast(`Deleted ${selectedIds.size} reviews from state`, 'success');
+                  setSelectedIds(new Set());
+                }}
+                className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors uppercase font-extrabold cursor-pointer"
+              >
+                Delete All
+              </button>
+              <button
+                onClick={() => {
+                  setReviews(prev => prev.map(r => selectedIds.has(r.id) ? { ...r, status: 'Published', reports: 0 } : r));
+                  showToast(`Published ${selectedIds.size} reviews successfully`, 'success');
+                  setSelectedIds(new Set());
+                }}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors uppercase font-extrabold cursor-pointer"
+              >
+                Approve All
+              </button>
+            </div>
+          </div>
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-slate-400 hover:text-white px-3 py-1 cursor-pointer transition-colors uppercase text-[10px]"
+          >
+            ✕ Clear selection
+          </button>
+        </div>
+      )}
+
+      {/* Select All in tab Option */}
+      <div className="flex items-center gap-3 px-4 py-2.5 bg-app-card border border-app-border rounded-xl">
+        <input 
+          type="checkbox" 
+          id="select-all-reviews"
+          className="rounded border-white/10 bg-white/5 text-app-accent focus:ring-app-accent cursor-pointer"
+          checked={filteredReviews.length > 0 && filteredReviews.every(r => selectedIds.has(r.id))}
+          onChange={(e) => {
+            if (e.target.checked) {
+              setSelectedIds(new Set([...selectedIds, ...filteredReviews.map(r => r.id)]));
+            } else {
+              const newSelected = new Set(selectedIds);
+              filteredReviews.forEach(r => newSelected.delete(r.id));
+              setSelectedIds(newSelected);
+            }
+          }}
+        />
+        <label htmlFor="select-all-reviews" className="text-[11px] text-slate-400 font-bold uppercase tracking-wider cursor-pointer select-none">
+          Select All visible ({filteredReviews.length} reviews)
+        </label>
+      </div>
+
       {/* REVIEWS GRID LEAF */}
       <div className="space-y-4">
         {filteredReviews.length === 0 ? (
@@ -250,7 +321,21 @@ export default function ReviewsPage() {
               
               {/* Reviewer Details */}
               <div className="flex justify-between items-start flex-wrap gap-3 mb-4">
-                <div className="flex gap-3">
+                <div className="flex gap-3 items-center">
+                  <input 
+                    type="checkbox"
+                    className="rounded border-white/10 bg-white/5 text-app-accent focus:ring-app-accent cursor-pointer"
+                    checked={selectedIds.has(rev.id)}
+                    onChange={(e) => {
+                      const newSelected = new Set(selectedIds);
+                      if (e.target.checked) {
+                        newSelected.add(rev.id);
+                      } else {
+                        newSelected.delete(rev.id);
+                      }
+                      setSelectedIds(newSelected);
+                    }}
+                  />
                   <div className="w-10 h-10 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs shrink-0">
                     {rev.user.split(' ').map(n => n[0]).join('')}
                   </div>

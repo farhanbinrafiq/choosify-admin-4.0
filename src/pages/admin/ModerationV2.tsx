@@ -97,6 +97,9 @@ export default function ModerationV2() {
 
   return (
     <div className="space-y-6 pb-12 transition-all animate-in fade-in duration-300 text-app-text-primary">
+      <div className="bg-amber-50 border border-amber-100 text-amber-700 text-[10px] font-bold px-4 py-2 rounded-lg mb-4">
+        FRAUD DETECTION ENGINE — This module handles AI-assisted pattern detection and automated flagging. For manual content review, use the Moderation Center.
+      </div>
       
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

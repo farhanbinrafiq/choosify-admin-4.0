@@ -53,6 +53,7 @@ export interface BrandProfile {
   showOwnershipStatus: boolean;
   showClaimButton: boolean;
   showVerificationBadge: boolean;
+  claimStatus?: 'verified' | 'pending' | 'unclaimed' | string;
 
   // Analytics (Factual - no fake followers/ratings/metric slop)
   pageViews: number;
@@ -82,6 +83,17 @@ export interface OwnershipClaim {
   notes: string;
   internalNotes: string;
   businessRegistrationDocs: string;
+
+  // Prompt minimum fields
+  claimantName: string;
+  claimantPhone: string;
+  role: 'owner' | 'authorized_rep';
+  tradeLicenseNo?: string;
+  nidNumber?: string;
+  bankName?: string;
+  status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'requires_more_info';
+  submittedAt: string;
+  reviewerNote?: string;
 }
 
 export interface BrandAuditLog {
@@ -102,8 +114,8 @@ interface BrandProfilesContextProps {
   updateProfile: (id: string, updated: Partial<BrandProfile>) => void;
   deleteProfile: (id: string) => void;
   bulkUpdateProfiles: (ids: string[], action: 'publish' | 'unpublish' | 'archive' | 'delete' | 'feature' | 'assign_category', categoryValue?: string) => void;
-  submitClaim: (claim: Omit<OwnershipClaim, 'id' | 'submissionDate' | 'verificationStatus' | 'internalNotes'>) => void;
-  reviewClaim: (claimId: string, status: ClaimStatus, adminName: string, reason: string, customNotes?: string) => void;
+  submitClaim: (claim: Omit<OwnershipClaim, 'id' | 'submissionDate' | 'verificationStatus' | 'internalNotes' | 'status' | 'submittedAt'>) => void;
+  reviewClaim: (claimId: string, status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'requires_more_info', adminName: string, reason: string, customNotes?: string) => void;
   addInternalNotes: (claimId: string, notes: string) => void;
   addLog: (brandId: string, brandName: string, adminUser: string, action: string, reason: string) => void;
 }
@@ -297,7 +309,102 @@ const SEED_CLAIMS: OwnershipClaim[] = [
     socialLinks: 'Aarong Official Blue-Ticked FB page owner',
     notes: 'Please review our Aarong claim request. We have fully normalized our products and are ready to link our local merchant profile seller_001 to our official brand profile.',
     internalNotes: 'Documents matching Aarong corporate trade ledger. Checked registrar registry database. Awaiting final review from Lead Admin.',
-    businessRegistrationDocs: 'Aarong_Corp_Trade_License_2026_signed.pdf'
+    businessRegistrationDocs: 'Aarong_Corp_Trade_License_2026_signed.pdf',
+    
+    // Prompt minimum fields
+    claimantName: 'Rahim Uddin',
+    claimantPhone: '01711-554488',
+    role: 'owner',
+    tradeLicenseNo: 'TR-REG-7429188BD',
+    nidNumber: '19922612345678901',
+    bankName: 'Brac Bank PLC',
+    status: 'pending',
+    submittedAt: '2026-06-15T12:30:10.000Z',
+    reviewerNote: 'Documents matching Aarong corporate trade ledger.'
+  },
+  {
+    id: 'clm_walton_002',
+    brandId: 'brand_walton',
+    brandName: 'Walton',
+    applicantName: 'Maksud Alam',
+    sellerAccountId: 'seller_003',
+    businessEmail: 'maksud@waltonbd.com',
+    submissionDate: '2026-06-16T14:45:00.000Z',
+    verificationStatus: 'Under Investigation',
+    tradeLicense: 'TR-REG-5219488BD',
+    corpEmail: 'compliance@waltonbd.com',
+    websiteVerification: 'TXT Record: choosify-auth-verification=411s8z33r',
+    socialLinks: 'Walton Group Official Social Pages',
+    notes: 'We are registering Walton brand representation rights for the Choosify launch.',
+    internalNotes: 'Initial document check matches registries. Verified corporate email presence.',
+    businessRegistrationDocs: 'Walton_Corporate_Auth_Letter_2026.pdf',
+    
+    // Prompt minimum fields
+    claimantName: 'Maksud Alam',
+    claimantPhone: '01511-998822',
+    role: 'authorized_rep',
+    tradeLicenseNo: 'TR-REG-5219488BD',
+    nidNumber: '19952612345678902',
+    bankName: 'City Bank Ltd',
+    status: 'under_review',
+    submittedAt: '2026-06-16T14:45:00.000Z',
+    reviewerNote: 'Initial document check matches registries.'
+  },
+  {
+    id: 'clm_apex_003',
+    brandId: 'brand_apex',
+    brandName: 'Apex',
+    applicantName: 'Ripon Khan',
+    sellerAccountId: 'seller_007',
+    businessEmail: 'ripon@apex4u.com',
+    submissionDate: '2026-06-10T09:12:00.000Z',
+    verificationStatus: 'Rejected',
+    tradeLicense: 'TR-REG-8822119BD',
+    corpEmail: 'ripon@apex4u.com',
+    websiteVerification: 'DNS query failed',
+    socialLinks: 'Unverified personal profiles only',
+    notes: 'Trying to register Apex store on Choosify.',
+    internalNotes: 'Invalid trade license document provided. Re-upload or register again.',
+    businessRegistrationDocs: 'Apex_Scanned_License_Draft.pdf',
+    
+    // Prompt minimum fields
+    claimantName: 'Ripon Khan',
+    claimantPhone: '01311-667788',
+    role: 'authorized_rep',
+    tradeLicenseNo: 'TR-REG-8822119BD',
+    nidNumber: '19882612345678903',
+    bankName: 'Dutch-Bangla Bank',
+    status: 'rejected',
+    submittedAt: '2026-06-10T09:12:00.000Z',
+    reviewerNote: 'Invalid trade license document provided.'
+  },
+  {
+    id: 'clm_samsung_004',
+    brandId: 'brand_samsung',
+    brandName: 'Samsung Bangladesh',
+    applicantName: 'Fahim Ahmed',
+    sellerAccountId: 'seller_008',
+    businessEmail: 'fahim@samsung-bd.com',
+    submissionDate: '2026-06-18T10:00:00.000Z',
+    verificationStatus: 'Under Investigation',
+    tradeLicense: 'TR-REG-1122334BD',
+    corpEmail: 'retail-leads@samsung-bd.com',
+    websiteVerification: 'CNAME: verifier-samsung.choosify.com.bd',
+    socialLinks: 'Samsung Bangladesh verification team',
+    notes: 'Submitting core verification details representing authorized merchant partners for Samsung.',
+    internalNotes: 'NID selfie check failed or unclear. Requires more information.',
+    businessRegistrationDocs: 'Samsung_BD_Retail_Auth_2026.pdf',
+    
+    // Prompt minimum fields
+    claimantName: 'Fahim Ahmed',
+    claimantPhone: '01411-992211',
+    role: 'owner',
+    tradeLicenseNo: 'TR-REG-1122334BD',
+    nidNumber: '19902612345678904',
+    bankName: 'Prime Bank PLC',
+    status: 'requires_more_info',
+    submittedAt: '2026-06-18T10:00:00.000Z',
+    reviewerNote: 'Selfie with NID document is blurry. Please provide a clear HD upload.'
   }
 ];
 
@@ -333,7 +440,14 @@ export const BrandProfilesProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const [claims, setClaims] = useState<OwnershipClaim[]>(() => {
     const saved = localStorage.getItem('choosify_ownership_claims');
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.length >= 4) return parsed;
+      } catch (e) {
+        // fallback
+      }
+    }
     return SEED_CLAIMS;
   });
 
@@ -525,14 +639,19 @@ export const BrandProfilesProvider: React.FC<{ children: React.ReactNode }> = ({
     addLog('bulk_action', 'Bulk Operation', 'Admin', `Bulk Profiles Action: ${action}`, `Updated brand profiles: ${ids.join(', ')}`);
   };
 
-  const submitClaim = (newClaim: Omit<OwnershipClaim, 'id' | 'submissionDate' | 'verificationStatus' | 'internalNotes'>) => {
+  const submitClaim = (newClaim: Omit<OwnershipClaim, 'id' | 'submissionDate' | 'verificationStatus' | 'internalNotes' | 'status' | 'submittedAt'>) => {
     const claimId = 'clm_' + Date.now();
     const claim: OwnershipClaim = {
       ...newClaim,
       id: claimId,
       submissionDate: new Date().toISOString(),
       verificationStatus: 'Pending Review',
-      internalNotes: ''
+      internalNotes: '',
+      claimantName: newClaim.claimantName || newClaim.applicantName || '',
+      claimantPhone: newClaim.claimantPhone || '01711-000000',
+      role: newClaim.role || 'authorized_rep',
+      status: 'pending',
+      submittedAt: new Date().toISOString()
     };
 
     const updatedClaims = [claim, ...claims];
@@ -542,20 +661,37 @@ export const BrandProfilesProvider: React.FC<{ children: React.ReactNode }> = ({
     // Update Brand status to OWNERSHIP_PENDING
     updateProfile(newClaim.brandId, { 
       status: 'OWNERSHIP_PENDING',
+      claimStatus: 'pending',
       claimAttempts: (profiles.find(p => p.id === newClaim.brandId)?.claimAttempts || 0) + 1,
       badge: 'Ownership Pending'
     });
 
-    addLog(newClaim.brandId, newClaim.brandName, `${newClaim.applicantName} (Seller)`, 'Claim Requested', `Submitted official verification docs: ${newClaim.businessRegistrationDocs}`);
+    addLog(newClaim.brandId, newClaim.brandName, `${newClaim.claimantName || newClaim.applicantName} (Seller)`, 'Claim Requested', `Submitted official verification docs: ${newClaim.businessRegistrationDocs}`);
   };
 
-  const reviewClaim = (claimId: string, status: ClaimStatus, adminName: string, reason: string, customNotes?: string) => {
+  const reviewClaim = (
+    claimId: string, 
+    status: 'pending' | 'under_review' | 'approved' | 'rejected' | 'requires_more_info', 
+    adminName: string, 
+    reason: string, 
+    customNotes?: string
+  ) => {
+    const statusMap: Record<typeof status, ClaimStatus> = {
+      pending: 'Pending Review',
+      under_review: 'Under Investigation',
+      approved: 'Approved',
+      rejected: 'Rejected',
+      requires_more_info: 'Under Investigation'
+    };
+
     const updatedClaims = claims.map(c => {
       if (c.id === claimId) {
         return {
           ...c,
-          verificationStatus: status,
-          internalNotes: customNotes ? `${c.internalNotes}\n[${new Date().toLocaleDateString()}] ${customNotes}` : c.internalNotes
+          status,
+          verificationStatus: statusMap[status],
+          internalNotes: customNotes ? `${c.internalNotes}\n[${new Date().toLocaleDateString()}] ${customNotes}` : c.internalNotes,
+          reviewerNote: reason
         };
       }
       return c;
@@ -568,7 +704,7 @@ export const BrandProfilesProvider: React.FC<{ children: React.ReactNode }> = ({
     if (claimObj) {
       const previousStatus = profiles.find(p => p.id === claimObj.brandId)?.status || 'UNCLAIMED';
       
-      if (status === 'Approved') {
+      if (status === 'approved') {
         const savedRelations = localStorage.getItem('choosify_seller_brands');
         const parsedRelations = savedRelations ? JSON.parse(savedRelations) : sellerBrands;
         
@@ -587,6 +723,7 @@ export const BrandProfilesProvider: React.FC<{ children: React.ReactNode }> = ({
 
         updateProfile(claimObj.brandId, {
           status: 'VERIFIED_OWNER',
+          claimStatus: 'verified',
           ownerSellerId: claimObj.sellerAccountId,
           badge: 'Verified Brand Owner',
           showClaimButton: false
@@ -598,11 +735,12 @@ export const BrandProfilesProvider: React.FC<{ children: React.ReactNode }> = ({
           claimObj.brandName, 
           adminName, 
           'Ownership Claim Approved', 
-          `Ownership approved & assigned. Prev state: ${previousStatus}. New state: VERIFIED_OWNER. Seller assigned: ${claimObj.applicantName}. Reason: ${reason}`
+          `Ownership approved & assigned. Prev state: ${previousStatus}. New state: VERIFIED_OWNER. Seller assigned: ${claimObj.claimantName || claimObj.applicantName}. Reason: ${reason}`
         );
-      } else if (status === 'Rejected') {
+      } else if (status === 'rejected') {
         updateProfile(claimObj.brandId, {
           status: 'UNCLAIMED',
+          claimStatus: 'unclaimed',
           badge: 'Unclaimed Brand Profile',
           showClaimButton: true
         });
@@ -612,9 +750,15 @@ export const BrandProfilesProvider: React.FC<{ children: React.ReactNode }> = ({
           claimObj.brandName, 
           adminName, 
           'Ownership Claim Rejected', 
-          `Applicant ${claimObj.applicantName} request rejected. Reason: ${reason}`
+          `Applicant ${claimObj.claimantName || claimObj.applicantName} request rejected. Reason: ${reason}`
         );
       } else {
+        updateProfile(claimObj.brandId, {
+          status: 'OWNERSHIP_PENDING',
+          claimStatus: 'pending',
+          badge: 'Ownership Pending'
+        });
+
         addLog(
           claimObj.brandId, 
           claimObj.brandName, 

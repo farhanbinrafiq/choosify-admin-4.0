@@ -63,13 +63,46 @@ export default function AdsSponsorsPage() {
     rejectPromotionRequest,
     deletePromotionRequest,
     trackImpression,
-    trackClick
+    trackClick,
+    syncToWebCampaigns
   } = useAds();
 
   const [activeTab, setActiveTab] = useState<'campaigns' | 'requests' | 'analytics' | 'archived'>('campaigns');
   const [activeType, setActiveType] = useState<PromotionType | 'ALL'>('ALL');
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Sync state & helpers
+  const [lastSyncTime, setLastSyncTime] = useState<string | null>(() => {
+    const saved = localStorage.getItem('choosify_campaigns_sync_time');
+    return saved ? new Date(saved).toLocaleString() : null;
+  });
+
+  const isLiveOnWeb = (promo: Promotion): boolean => {
+    if (promo.status !== 'ACTIVE') return false;
+    const now = new Date();
+    if (promo.startDate && new Date(promo.startDate) > now) return false;
+    if (promo.endDate && new Date(promo.endDate) < now) return false;
+    try {
+      const saved = localStorage.getItem('choosify_campaigns');
+      if (saved) {
+        const syncedList = JSON.parse(saved);
+        return syncedList.some((item: any) => item.id === promo.id);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return false;
+  };
+
+  const handleSync = () => {
+    syncToWebCampaigns();
+    const activeCount = promotions.filter(p => p.status?.toUpperCase() === 'ACTIVE').length;
+    const nowStr = new Date().toISOString();
+    localStorage.setItem('choosify_campaigns_sync_time', nowStr);
+    setLastSyncTime(new Date(nowStr).toLocaleString());
+    showToast(`${activeCount} campaigns synced to website homepage.`);
+  };
 
   // Approve dialog builder state
   const [reviewingRequest, setReviewingRequest] = useState<PromotionRequest | null>(null);
@@ -239,13 +272,27 @@ export default function AdsSponsorsPage() {
           </p>
         </div>
         
-        <div className="flex items-center gap-3">
-          <button 
-            onClick={() => { setIsAdding(true); resetForm(); }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-app-accent text-white rounded-xl font-bold text-sm shadow-lg shadow-app-accent/20 hover:scale-[1.02] active:scale-95 transition-all"
-          >
-            <Plus className="w-4 h-4" /> Launch Campaign
-          </button>
+        <div className="flex flex-col items-end gap-1.5 matches-group shrink-0">
+          <div className="flex items-center gap-3">
+            <button 
+              id="btn-sync-to-web"
+              onClick={handleSync}
+              className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-600/20 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+            >
+              <Activity className="w-4 h-4" /> Sync to Website
+            </button>
+            <button 
+              onClick={() => { setIsAdding(true); resetForm(); }}
+              className="flex items-center gap-2 px-5 py-2.5 bg-app-accent text-white rounded-xl font-bold text-sm shadow-lg shadow-app-accent/20 hover:scale-[1.02] active:scale-95 transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" /> Launch Campaign
+            </button>
+          </div>
+          {lastSyncTime && (
+            <span className="text-[10px] text-app-text-secondary font-medium tracking-tight">
+              Last synced: {lastSyncTime}
+            </span>
+          )}
         </div>
       </div>
 
@@ -383,6 +430,21 @@ export default function AdsSponsorsPage() {
                             }`}>
                               {promo.status}
                             </span>
+
+                            {/* Web Preview Badge */}
+                            {(() => {
+                              const live = isLiveOnWeb(promo);
+                              return (
+                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[8px] font-black border ${
+                                  live 
+                                    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' 
+                                    : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
+                                }`}>
+                                  <span className={`w-1.5 h-1.5 rounded-full ${live ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+                                  {live ? 'Live on Web' : 'Not Synced'}
+                                </span>
+                              );
+                            })()}
                           </div>
                         </div>
 
