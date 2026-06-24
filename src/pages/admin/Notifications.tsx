@@ -131,7 +131,13 @@ export default function NotificationsPage() {
              <div>
                 <div className="flex justify-between items-center mb-2">
                    <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block">MESSAGE CONTENT</label>
-                   <span className="text-[10px] font-bold text-gray-400">{messageContent.length} / 280 characters</span>
+                   <span className={`text-[10px] font-bold ${
+                     messageContent.length >= 270 ? 'text-red-500' :
+                     messageContent.length >= 240 ? 'text-amber-500' :
+                     'text-gray-400'
+                   }`}>
+                     {messageContent.length} / 280 characters
+                   </span>
                 </div>
                 <textarea 
                   value={messageContent}

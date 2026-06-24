@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useOrders } from '../../contexts/OrdersContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
@@ -96,6 +96,7 @@ const getSupplierInfo = (sellerId: string, sellerName: string) => {
 export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { orders } = useOrders();
   const { profile: loggedInProfile } = useAuth();
 
@@ -109,13 +110,22 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
   // Resolve role dynamically if unspecified
   const activeRole = role || (loggedInProfile?.role === 'seller' ? 'seller' : 'admin');
 
-  // Search orders array
-  const order = orders.find(o => 
+  // Search orders array as context fallback
+  const contextOrder = orders.find(o => 
     o.id === id || 
     o.invoice_id === id || 
     `INV-${o.id}` === id || 
     `INV-${o.invoice_id}` === id
   );
+
+  const stateOrder = location.state?.order;
+  const fallbackOrder = (() => {
+    try {
+      const stored = sessionStorage.getItem(`choosify_invoice_${id}`);
+      return stored ? JSON.parse(stored) : null;
+    } catch { return null; }
+  })();
+  const order = stateOrder || fallbackOrder || contextOrder;
 
   const [notif, setNotif] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
 
@@ -139,21 +149,11 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
     );
   }
 
-  if (!order) {
-    return (
-      <div className="p-8 text-center bg-slate-950 text-slate-400 min-h-screen flex flex-col items-center justify-center">
-        <AlertTriangle className="w-12 h-12 text-[#ef3c23] mb-4" />
-        <h2 className="text-lg font-bold text-white mb-2 font-mono">Invoice Not Found</h2>
-        <p className="text-xs mb-6 max-w-sm">No orders or matching invoice record exists for ID: {id}</p>
-        <button 
-          onClick={() => navigate('/admin/orders')} 
-          className="px-4 py-2 bg-slate-800 text-white rounded text-xs font-bold"
-        >
-          Return to Orders
-        </button>
-      </div>
-    );
-  }
+  if (!order) return (
+    <div className="flex items-center justify-center h-64 text-gray-400 text-sm font-bold">
+      Invoice data not found. Please navigate here from the Orders page.
+    </div>
+  );
 
   const supplier = getSupplierInfo(order.product.sellerId, order.product.sellerName);
   

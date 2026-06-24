@@ -16,6 +16,7 @@ import {
   X 
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useSearchParams } from 'react-router-dom';
 
 // Deal Interface Definitions requested
 export interface Deal {
@@ -48,7 +49,15 @@ export interface PromoCode {
 }
 
 export default function DealsPage() {
-  const [activeTab, setActiveTab] = useState<'deals' | 'promo_codes'>('deals');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') === 'promocodes' ? 'promo_codes' : 'deals';
+  const [activeTab, setActiveTab] = useState<'deals' | 'promo_codes'>(initialTab);
+
+  useEffect(() => {
+    const urlTab = searchParams.get('tab');
+    if (urlTab === 'promocodes' && activeTab !== 'promo_codes') setActiveTab('promo_codes');
+    if (urlTab !== 'promocodes' && activeTab !== 'deals') setActiveTab('deals');
+  }, [searchParams]);
 
   // Initialize state with same 3 deals as seed data mapped to the required Deal interface
   const [deals, setDeals] = useState<Deal[]>([
@@ -559,6 +568,7 @@ export default function DealsPage() {
     setActiveTab(tab);
     setSearchTerm('');
     setSelectedIds([]);
+    setSearchParams(tab === 'promo_codes' ? { tab: 'promocodes' } : {});
   };
 
   const isFormActive = isAdding || editingDeal || isAddingPromo || editingPromo;

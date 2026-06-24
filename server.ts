@@ -31,6 +31,37 @@ async function startServer() {
     });
   });
 
+  // REST endpoints for creating and updating products as requested
+  app.post("/api/products", (req, res) => {
+    console.log("POST /api/products called with payload:", req.body);
+    res.status(201).json({
+      success: true,
+      message: "Product created successfully",
+      productId: "prod_" + Math.random().toString(36).substring(2, 11),
+      product: req.body
+    });
+  });
+
+  app.put("/api/products/:id", (req, res) => {
+    console.log(`PUT /api/products/${req.params.id} called with payload:`, req.body);
+    res.json({
+      success: true,
+      message: "Product fully updated successfully",
+      productId: req.params.id,
+      product: req.body
+    });
+  });
+
+  app.patch("/api/products/:id", (req, res) => {
+    console.log(`PATCH /api/products/${req.params.id} called with payload:`, req.body);
+    res.json({
+      success: true,
+      message: "Product partially updated successfully",
+      productId: req.params.id,
+      product: req.body
+    });
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");

@@ -368,6 +368,32 @@ export default function ModerationPage() {
     triggerToast(`✓ Reported target has been neutralized / actioned successfully!`);
   };
 
+  const handleExportAuditLog = () => {
+    const filtered = auditLogs.filter(log => {
+      const matchesAction = auditActionFilter === 'All' || log.actionType === auditActionFilter;
+      const matchesRole = auditRoleFilter === 'All' || log.role === auditRoleFilter;
+      return matchesAction && matchesRole;
+    });
+    const headers = ['Timestamp', 'Action', 'Entity', 'Performed By', 'Role', 'IP Address'];
+    const rows = filtered.map(log => [
+      log.timestamp,
+      log.actionType,
+      log.entity,
+      log.performedBy,
+      log.role,
+      log.ipAddress ? log.ipAddress.slice(0, 6) + '***' : ''
+    ]);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'choosify_audit_log.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+    triggerToast(`✓ Exported ${filtered.length} audit logs to CSV`);
+  };
+
   // RBAC Simulator and Control Room states
   const [rbacSelectedRole, setRbacSelectedRole] = useState<'super_admin' | 'moderator' | 'finance_manager' | 'support_agent' | 'marketing_manager'>('super_admin');
   const [actionOperatorId, setActionOperatorId] = useState('usr_admin_001');
@@ -2020,7 +2046,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
             {/* Reports List */}
             <div className="space-y-4">
               {filteredReports.map((r) => {
-                const isHighPriority = r.reason.includes('Counterfeit') || r.reason.includes('Fraud');
+                const isHighPriority = r.reason === 'Counterfeit / Fake Products' || r.reason === 'Pricing Manipulation / Fraud';
                 
                 // Color mapping for Report target types
                 const typeColors = {
@@ -2049,7 +2075,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
                   <div 
                     key={r.id} 
                     className={`p-5 bg-app-bg border border-app-border rounded-xl space-y-4 transition-all ${
-                      isHighPriority ? 'border-l-[4px] border-l-red-500 shadow-lg shadow-red-950/5' : ''
+                      isHighPriority ? 'border-l-4 border-l-red-500 shadow-lg shadow-red-950/5' : ''
                     }`}
                   >
                     {/* Header: Type, Priority and Status */}
@@ -2062,9 +2088,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
                           {r.reason}
                         </span>
                         {isHighPriority && (
-                          <span className="text-[8px] bg-red-600/15 text-red-400 border border-red-500/25 px-2 py-0.5 rounded uppercase font-black tracking-widest animate-pulse">
-                            🚨 High Priority
-                          </span>
+                          <span className="text-[8px] font-black uppercase tracking-widest bg-red-500 text-white px-2 py-0.5 rounded-full">HIGH PRIORITY</span>
                         )}
                       </div>
                       <span className={`text-[9px] font-mono font-extrabold uppercase px-2.5 py-1 rounded-full ${statusColors}`}>
@@ -2181,29 +2205,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
                 </p>
               </div>
               <button
-                onClick={() => {
-                  const filtered = auditLogs.filter(log => {
-                    const matchesAction = auditActionFilter === 'All' || log.actionType === auditActionFilter;
-                    const matchesRole = auditRoleFilter === 'All' || log.role === auditRoleFilter;
-                    return matchesAction && matchesRole;
-                  });
-                  const csvContent = "data:text/csv;charset=utf-8," 
-                    + ["ID,Timestamp,Action Type,Entity,Performed By,Role,IP Address,Description,Before Value,After Value"].join(",") + "\n"
-                    + filtered.map(log => {
-                        return `"${log.id}","${log.timestamp}","${log.actionType}","${log.entity}","${log.performedBy}","${log.role}","${log.ipAddress}","${log.description.replace(/"/g, '""')}","${(log.beforeValue || "").replace(/"/g, '""')}","${(log.afterValue || "").replace(/"/g, '""')}"`;
-                      }).join("\n");
-                  const encodedUri = encodeURI(csvContent);
-                  const link = document.createElement("a");
-                  link.setAttribute("href", encodedUri);
-                  link.setAttribute("download", `security_audit_log_export_${new Date().toISOString().slice(0,10)}.csv`);
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                  
-                  // Trigger simple browser notification or state toast if present
-                  setToastMessage(`✓ Exported ${filtered.length} audit logs to CSV`);
-                  setTimeout(() => setToastMessage(null), 3000);
-                }}
+                onClick={handleExportAuditLog}
                 className="bg-app-accent hover:bg-[#E44B00] text-white font-extrabold text-[11px] px-4.5 py-2.5 rounded-xl uppercase tracking-wider flex items-center gap-1.5 shadow-md active:scale-95 transition-all outline-none cursor-pointer text-center font-sans self-start sm:self-center"
               >
                 <Download className="w-4 h-4" /> Export Audit Log (CSV)

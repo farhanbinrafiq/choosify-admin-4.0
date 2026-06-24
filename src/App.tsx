@@ -32,7 +32,7 @@ const NotificationsPage = lazy(() => import('./pages/admin/Notifications'));
 const SettingsPage = lazy(() => import('./pages/admin/Settings'));
 const Moderation = lazy(() => import('./pages/admin/Moderation'));
 const Messages = lazy(() => import('./pages/admin/Messages'));
-const ProductEdit = lazy(() => import('./pages/admin/ProductEdit'));
+const ProductStudio = lazy(() => import('./pages/admin/ProductStudio'));
 const BrandDetails = lazy(() => import('./pages/admin/BrandDetails'));
 const SellerReview = lazy(() => import('./pages/admin/SellerReview'));
 const CMSPage = lazy(() => import('./pages/admin/CMS'));
@@ -130,8 +130,9 @@ export default function App() {
               <Route path="creators" element={<ViewModeWrapper mode="creators" />} />
               <Route path="creators/:id" element={<UnifiedProfileShell />} />
               <Route path="products" element={<Products />} />
-              <Route path="products/:id" element={<ProductEdit />} />
-              <Route path="products/:id/edit" element={<ProductEdit />} />
+              <Route path="products/new" element={<ProductStudio mode="create" />} />
+              <Route path="products/:id" element={<ProductStudio mode="edit" />} />
+              <Route path="products/:id/edit" element={<ProductStudio mode="edit" />} />
               <Route path="brands" element={<Navigate to="/admin/sellers" replace />} />
               <Route path="brands/:id" element={<UnifiedProfileShell />} />
               <Route path="recommendations" element={<Recommendations />} />
@@ -165,14 +166,25 @@ export default function App() {
             {/* Direct match for requested /dashboard/content-studio routes */}
             <Route path="/dashboard/content-studio/*" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Visual Content Studio...</div>}><Routes>
               <Route path="products" element={<Products />} />
-              <Route path="products/new" element={<ProductEdit />} />
-              <Route path="products/:id/edit" element={<ProductEdit />} />
+              <Route path="products/new" element={<ProductStudio mode="create" />} />
+              <Route path="products/:id" element={<ProductStudio mode="edit" />} />
+              <Route path="products/:id/edit" element={<ProductStudio mode="edit" />} />
               <Route path="brands" element={<BrandsStudioList />} />
               <Route path="brands/new" element={<BrandEditStudio />} />
               <Route path="brands/:id/edit" element={<BrandEditStudio />} />
               <Route path="guides" element={<GuidesStudioList />} />
               <Route path="guides/new" element={<GuideEditStudio />} />
               <Route path="guides/:id/edit" element={<GuideEditStudio />} />
+            </Routes></Suspense></AdminLayout></ProtectedRoute>} />
+
+            {/* Direct support for requested /seller products and root product listings */}
+            <Route path="/products" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><Products /></Suspense></AdminLayout></ProtectedRoute>} />
+            
+            <Route path="/seller/*" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Seller Interface...</div>}><Routes>
+              <Route path="products" element={<Products />} />
+              <Route path="products/new" element={<ProductStudio mode="create" />} />
+              <Route path="products/:id" element={<ProductStudio mode="edit" />} />
+              <Route path="products/:id/edit" element={<ProductStudio mode="edit" />} />
             </Routes></Suspense></AdminLayout></ProtectedRoute>} />
             
             <Route path="*" element={<Navigate to="/" />} />

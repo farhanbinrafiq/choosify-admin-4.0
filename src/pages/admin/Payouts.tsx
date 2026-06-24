@@ -248,7 +248,7 @@ export const Payouts = () => {
   const handleRejectPayout = () => {
     if (!selectedPayout) return;
     if (!noteText.trim()) {
-      alert("A specific note specified reason is required to reject a payout request.");
+      triggerToast("A rejection reason is required before rejecting this payout.");
       return;
     }
     setPayouts(prev => prev.map(p => p.id === selectedPayout.id ? { 

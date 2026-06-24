@@ -240,7 +240,7 @@ export default function ReviewsPage() {
               <button
                 onClick={() => {
                   setReviews(prev => prev.map(r => selectedIds.has(r.id) ? { ...r, status: 'Hidden' } : r));
-                  showToast(`Headed Hidden to ${selectedIds.size} reviews`, 'info');
+                  showToast(`Set ${selectedIds.size} reviews to Hidden`, 'info');
                   setSelectedIds(new Set());
                 }}
                 className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 rounded-lg transition-colors uppercase font-extrabold cursor-pointer"
@@ -250,7 +250,7 @@ export default function ReviewsPage() {
               <button
                 onClick={() => {
                   setReviews(prev => prev.filter(r => !selectedIds.has(r.id)));
-                  showToast(`Deleted ${selectedIds.size} reviews from state`, 'success');
+                  showToast(`Deleted ${selectedIds.size} reviews`, 'success');
                   setSelectedIds(new Set());
                 }}
                 className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors uppercase font-extrabold cursor-pointer"
@@ -260,7 +260,7 @@ export default function ReviewsPage() {
               <button
                 onClick={() => {
                   setReviews(prev => prev.map(r => selectedIds.has(r.id) ? { ...r, status: 'Published', reports: 0 } : r));
-                  showToast(`Published ${selectedIds.size} reviews successfully`, 'success');
+                  showToast(`Set ${selectedIds.size} reviews to Published`, 'success');
                   setSelectedIds(new Set());
                 }}
                 className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors uppercase font-extrabold cursor-pointer"

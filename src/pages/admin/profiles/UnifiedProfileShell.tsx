@@ -67,6 +67,14 @@ import ContentTable from '../../../components/profile/ContentTable';
 import BrandEditStudio from '../BrandEditStudio';
 import GuideStudioCMS from '../../../components/profile/GuideStudioCMS';
 
+const getMockProductId = (title: string): string => {
+  const t = title.toLowerCase();
+  if (t.includes('samsung') || t.includes('s25')) return '1';
+  if (t.includes('vision') || t.includes('tv')) return '2';
+  if (t.includes('fridge') || t.includes('walton')) return '4';
+  return '3'; // Default to Saree (Aarong Jamdani Saree)
+};
+
 // Static / fallback profiles database
 const FALLBACK_CONSUMERS = [
   {
@@ -1423,7 +1431,9 @@ export default function UnifiedProfileShell() {
                       </Link>
                     </div>
                     <div className="col-span-12 md:col-span-3">
-                      <span className="text-xs text-white font-bold block truncate">{ord.product.name}</span>
+                      <Link to={`/products/${getMockProductId(ord.product.name)}`} className="text-xs text-white font-bold block truncate hover:underline hover:text-app-accent transition-colors">
+                        {ord.product.name}
+                      </Link>
                       <span className="text-[10px] text-app-text-secondary font-semibold font-mono block mt-0.5">Brand: {ord.product.brand}</span>
                     </div>
                     <div className="col-span-4 md:col-span-1 text-center">
@@ -1984,7 +1994,11 @@ export default function UnifiedProfileShell() {
             ].map(prod => (
               <div key={prod.id} className="grid grid-cols-12 gap-4 py-3.5 items-center hover:bg-white/5 transition-all border-b border-white/5 px-2 font-sans">
                 <div className="col-span-2 text-xs font-mono text-app-text-secondary">{prod.id}</div>
-                <div className="col-span-4 text-xs font-bold text-white">{prod.title}</div>
+                <div className="col-span-4 text-xs font-bold text-white">
+                  <Link to={`/products/${getMockProductId(prod.title)}`} className="hover:underline hover:text-app-accent transition-colors">
+                    {prod.title}
+                  </Link>
+                </div>
                 <div className="col-span-2 text-xs font-bold text-white font-mono">{prod.price}</div>
                 <div className="col-span-2 text-xs text-app-text-secondary font-mono">{prod.stock}</div>
                 <div className="col-span-2 text-right">
@@ -2341,7 +2355,11 @@ export default function UnifiedProfileShell() {
                 .map(prod => (
                   <div key={prod.id} className="grid grid-cols-12 gap-4 py-3.5 items-center hover:bg-white/5 transition-all border-b border-white/5 px-2 font-sans">
                     <div className="col-span-2 text-xs font-mono text-app-text-secondary">{prod.id}</div>
-                    <div className="col-span-4 text-xs font-bold text-white">{prod.title}</div>
+                    <div className="col-span-4 text-xs font-bold text-white">
+                      <Link to={`/products/${getMockProductId(prod.title)}`} className="hover:underline hover:text-app-accent transition-colors">
+                        {prod.title}
+                      </Link>
+                    </div>
                     <div className="col-span-2 text-xs font-bold text-white font-mono">{prod.price}</div>
                     <div className="col-span-2 text-xs text-app-text-secondary font-mono">{prod.stock}</div>
                     <div className="col-span-2 text-right">
@@ -2411,7 +2429,9 @@ export default function UnifiedProfileShell() {
                       </Link>
                     </div>
                     <div className="col-span-6 md:col-span-4">
-                      <span className="text-xs text-white font-bold block truncate">{ord.product.name}</span>
+                      <Link to={`/products/${getMockProductId(ord.product.name)}`} className="text-xs text-white font-bold block truncate hover:underline hover:text-app-accent transition-colors">
+                        {ord.product.name}
+                      </Link>
                       <span className="text-[10px] text-app-text-secondary font-semibold font-mono block">Brand: {ord.product.brand}</span>
                     </div>
                     <div className="col-span-4 md:col-span-2">
@@ -3126,7 +3146,7 @@ export default function UnifiedProfileShell() {
 
                     <div className="col-span-6 md:col-span-2 flex justify-end gap-1.5">
                       <button 
-                        onClick={() => showToast(`✓ Redirecting to product page for ${prod.title}`)} 
+                        onClick={() => navigate(`/products/${getMockProductId(prod.title)}`)} 
                         className="p-1 px-2 bg-white/5 hover:bg-white/10 text-white rounded flex items-center justify-center text-[10px] font-bold cursor-pointer transition-colors font-sans whitespace-nowrap"
                       >
                         View Product

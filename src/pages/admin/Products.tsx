@@ -397,7 +397,11 @@ export default function ProductsPage() {
                         <Icon className="w-6 h-6" />
                       </div>
                       <div>
-                        <div className="text-[14px] font-bold text-white group-hover:text-app-accent-light transition-colors">{p.name}</div>
+                        <div className="text-[14px] font-bold text-white group-hover:text-app-accent-light transition-colors">
+                          <Link to={`/dashboard/content-studio/products/${p.id}/edit`} className="hover:underline">
+                            {p.name}
+                          </Link>
+                        </div>
                         <div className="flex items-center gap-2 mt-1">
                           <span className="text-[10px] text-app-text-secondary opacity-50 font-bold uppercase tracking-widest">{p.brand}</span>
                           <span className="w-1 h-1 rounded-full bg-white/10" />

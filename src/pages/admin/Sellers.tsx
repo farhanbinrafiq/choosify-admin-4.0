@@ -612,7 +612,7 @@ export default function SellersPage() {
 
   // Quick stats calculations
   const totalClaimsCount = claims.length;
-  const pendingClaimsCount = claims.filter(c => c.verificationStatus === 'Pending Review').length;
+  const pendingClaimsCount = claims.filter(c => c.status === 'pending').length;
   const unclaimedProfilesCount = profiles.filter(p => p.status === 'UNCLAIMED').length;
 
   return (
@@ -706,7 +706,7 @@ export default function SellersPage() {
         {[
           { id: 'all', label: `👥 All Brands (${unifiedBrands.length})` },
           { id: 'verified', label: `✔️ Verified Brands (${unifiedBrands.filter(b => b.status === 'VERIFIED_OWNER').length})` },
-          { id: 'requests', label: `🆕 Requests (${sellersList.filter(s => s.applicationStatus === 'Pending Review').length + claims.filter(c => c.verificationStatus === 'Pending Review').length})` },
+          { id: 'requests', label: `🆕 Requests (${sellersList.filter(s => s.applicationStatus === 'Pending Review').length + claims.filter(c => c.status === 'pending').length})` },
           { id: 'active', label: `🏪 Active Sellers (${sellersList.filter(s => s.applicationStatus === 'Approved').length})` },
           { id: 'claims', label: `📋 Ownership Claims (${claims.length})` },
           { id: 'flagged', label: `🚩 Flagged (${sellersList.filter(s => s.reportsCount && s.reportsCount > 0).length})` },

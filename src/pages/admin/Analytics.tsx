@@ -30,6 +30,17 @@ const defaultMockWeeklyData = [
 ];
 
 export default function AnalyticsPage() {
+  // Deterministic pseudo-random from seller id string — stable across renders
+  const stableRandom = (seed: string, min: number, max: number) => {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+      hash |= 0;
+    }
+    const normalized = (Math.abs(hash) % 1000) / 1000;
+    return min + normalized * (max - min);
+  };
+
   const [searchParams, setSearchParams] = useSearchParams();
   const currentTab = searchParams.get('tab') || 'realtime';
   const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d' | 'all'>('all');
@@ -150,9 +161,9 @@ export default function AnalyticsPage() {
       }
     });
 
-    const computedList = Object.values(sellerMap).map(s => {
+    const computedList = Object.values(sellerMap).map((s, idx) => {
       const hashVal = s.sellerId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const avgFulfillment = ((hashVal % 4) + 1.5).toFixed(1); 
+      const avgFulfillment = stableRandom(s.sellerId || s.sellerName || String(idx), 1, 5).toFixed(1); 
       const returnRateNum = (hashVal % 6) + 2; 
       const rate = s.totalAssigned > 0 ? (s.fulfilled / s.totalAssigned) * 100 : 100;
       
