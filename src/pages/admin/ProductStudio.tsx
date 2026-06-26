@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import {
   ArrowLeft, Pencil, Trash2, Plus, ArrowUp, ArrowDown, Lock, Star, Heart,
   Compass, Eye, Play, Sparkles, MapPin, Globe, Check, Phone, Info,
-  ExternalLink, ChevronRight, ChevronLeft, Sliders, Settings, LayoutGrid
+  ExternalLink, ChevronRight, ChevronLeft, Sliders, Settings, LayoutGrid, Coins
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../contexts/AuthContext";
@@ -37,6 +37,39 @@ interface OverviewBlock {
   id: string;
   title: string;
   bullets: string[];
+  enabled: boolean;
+}
+
+export interface BoxContentItem {
+  id: string;
+  icon: string;
+  title: string;
+  description?: string;
+  displayOrder: number;
+}
+
+export interface OptionGroup {
+  id: string;
+  name: string;
+  displayType: "dropdown" | "button" | "color" | "radio" | "Dropdown" | "Button" | "Color Swatch";
+  values: string[];
+}
+
+export interface ProductVariant {
+  id: string;
+  options: Record<string, string>; // Maps option group ID -> value (e.g., { "group-1": "Red", "group-2": "Large" })
+  sku: string;
+  barcode?: string;
+  price?: number; // compatible with client detail view
+  stock?: number; // compatible with client detail view
+  actualPrice?: number;
+  discountedPrice?: number;
+  stockLimit?: number;
+  weight?: string;
+  images?: string[];
+  shipping?: string;
+  availability?: "In Stock" | "Out of Stock" | "Pre-Order";
+  status?: "Draft" | "Live";
   enabled: boolean;
 }
 
@@ -145,6 +178,37 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const [overviewBlocks, setOverviewBlocks] = useState<OverviewBlock[]>([]);
   const [bestForTags, setBestForTags] = useState<string[]>([]);
 
+  // Enable/Disable toggles for each major card/section
+  const [enableSpecs, setEnableSpecs] = useState(true);
+  const [enableStoreComparison, setEnableStoreComparison] = useState(true);
+  const [enableInfluencerReviews, setEnableInfluencerReviews] = useState(true);
+  const [enableOverviewSection, setEnableOverviewSection] = useState(true);
+  const [enableBestForTags, setEnableBestForTags] = useState(true);
+  const [enablePhysicalStores, setEnablePhysicalStores] = useState(true);
+  const [enableBoxContents, setEnableBoxContents] = useState(false);
+  const [enableOptions, setEnableOptions] = useState(false);
+  const [enableActiveVariantSpecs, setEnableActiveVariantSpecs] = useState(true);
+
+  // New features data structures
+  const [boxContents, setBoxContents] = useState<BoxContentItem[]>([]);
+  const [optionGroups, setOptionGroups] = useState<OptionGroup[]>([]);
+  const [productVariants, setProductVariants] = useState<ProductVariant[]>([]);
+
+  // Size chart states
+  const [enableSizeChart, setEnableSizeChart] = useState(false);
+  const [sizeChartType, setSizeChartType] = useState<"table" | "image" | "html">("table");
+  const [sizeChartImage, setSizeChartImage] = useState("");
+  const [sizeChartHtml, setSizeChartHtml] = useState("");
+  const [sizeChartColumns, setSizeChartColumns] = useState<string[]>(["Size", "Chest", "Length", "Shoulder"]);
+  const [sizeChartRows, setSizeChartRows] = useState<any[]>([
+    { size: "S", chest: "38", length: "27", shoulder: "17" },
+    { size: "M", chest: "40", length: "28", shoulder: "18" },
+    { size: "L", chest: "42", length: "29", shoulder: "19" }
+  ]);
+
+  // Attribute Templates inside Specifications (Dynamic Attribute Engine)
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+
   // Action Toggles State Configuration
   const [actionFindInStore, setActionFindInStore] = useState(true);
   const [actionBuyOnline, setActionBuyOnline] = useState(true);
@@ -158,8 +222,10 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const [physicalStores, setPhysicalStores] = useState<PhysicalStore[]>([]);
   const [creatorContent, setCreatorContent] = useState<CreatorContentItem[]>([]);
 
-  // UI Drawer State Manager
-  const [activeDrawer, setActiveDrawer] = useState<"hero" | "creator" | "stores" | "specs" | "physical-stores" | "overview" | "tags" | null>(null);
+  // UI Inline Editing State Manager
+  const [editingSection, setEditingSection] = useState<"hero" | "creator" | "stores" | "specs" | "physical-stores" | "overview" | "tags" | "box-contents" | "options" | null>(null);
+  const activeDrawer = editingSection;
+  const setActiveDrawer = setEditingSection;
 
   // Temporary Editing states for dynamic additions inside right side panel drawer
   const [tempImagesInput, setTempImagesInput] = useState("");
@@ -172,6 +238,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const [tempOverview, setTempOverview] = useState<OverviewBlock[]>([]);
   const [tempTagsList, setTempTagsList] = useState<string[]>([]);
   const [newTagVal, setNewTagVal] = useState("");
+  const [tempBoxContents, setTempBoxContents] = useState<BoxContentItem[]>([]);
+  const [tempOptionGroups, setTempOptionGroups] = useState<OptionGroup[]>([]);
+  const [tempProductVariants, setTempProductVariants] = useState<ProductVariant[]>([]);
 
   const [publishStatus, setPublishStatus] = useState<"draft" | "live">("draft");
 
@@ -325,6 +394,39 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
         isFeatured: false
       }
     ]));
+
+    // Section Enable Toggles (ALL OFF for new listings)
+    setEnableSpecs(data.enableSpecs !== undefined ? data.enableSpecs : (isNewProduct ? false : true));
+    setEnableStoreComparison(data.enableStoreComparison !== undefined ? data.enableStoreComparison : (isNewProduct ? false : true));
+    setEnableInfluencerReviews(data.enableInfluencerReviews !== undefined ? data.enableInfluencerReviews : (isNewProduct ? false : true));
+    setEnableOverviewSection(data.enableOverviewSection !== undefined ? data.enableOverviewSection : (isNewProduct ? false : true));
+    setEnableBestForTags(data.enableBestForTags !== undefined ? data.enableBestForTags : (isNewProduct ? false : true));
+    setEnablePhysicalStores(data.enablePhysicalStores !== undefined ? data.enablePhysicalStores : (isNewProduct ? false : true));
+    setEnableBoxContents(data.enableBoxContents !== undefined ? data.enableBoxContents : false);
+    setEnableOptions(data.enableOptions !== undefined ? data.enableOptions : false);
+    setEnableActiveVariantSpecs(data.enableActiveVariantSpecs !== undefined ? data.enableActiveVariantSpecs : true);
+
+    // New schemas loading
+    setBoxContents(data.boxContents || (isNewProduct ? [] : [
+      { id: "bc1", icon: "Smartphone", title: "Samsung S25 Ultra Device", description: "Titanium Gray color, 512GB storage", displayOrder: 1 },
+      { id: "bc2", icon: "Cable", title: "USB-C Sourcing Cable", description: "Braided nylon, 1m black", displayOrder: 2 },
+      { id: "bc3", icon: "Shield", title: "Original TPU Armor Case", description: "Reinforced corner protection bumpers", displayOrder: 3 }
+    ]));
+
+    setOptionGroups(data.optionGroups || (isNewProduct ? [] : [
+      { id: "og-color", name: "Color", displayType: "color", values: ["Titanium Gray", "Cosmic Gold"] },
+      { id: "og-fit", name: "Fits Dimension", displayType: "button", values: ["Standard Fit", "Extra Protection Extended"] }
+    ]));
+
+    setProductVariants(data.productVariants || []);
+
+    setEnableSizeChart(data.enableSizeChart !== undefined ? data.enableSizeChart : false);
+    setSizeChartType(data.sizeChartType || "table");
+    setSizeChartImage(data.sizeChartImage || "");
+    setSizeChartHtml(data.sizeChartHtml || "");
+    if (data.sizeChartColumns) setSizeChartColumns(data.sizeChartColumns);
+    if (data.sizeChartRows) setSizeChartRows(data.sizeChartRows);
+
   }, [isNewProduct, profile, sellerBrands, allBrands, activeId, draftKey, publishKey]);
 
   // Sync draft edits to local storage incrementally upon changes
@@ -332,7 +434,10 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     const draftData = {
       brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
       storeComparisonList, overviewBlocks, bestForTags, physicalStores, creatorContent,
-      actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder
+      actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder,
+      enableSpecs, enableStoreComparison, enableInfluencerReviews, enableOverviewSection, enableBestForTags, enablePhysicalStores,
+      enableBoxContents, enableOptions, enableActiveVariantSpecs, boxContents, optionGroups, productVariants,
+      enableSizeChart, sizeChartType, sizeChartImage, sizeChartHtml, sizeChartColumns, sizeChartRows
     };
     localStorage.setItem(draftKey, JSON.stringify(draftData));
   };
@@ -342,7 +447,10 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   }, [
     brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
     storeComparisonList, overviewBlocks, bestForTags, physicalStores, creatorContent,
-    actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder
+    actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder,
+    enableSpecs, enableStoreComparison, enableInfluencerReviews, enableOverviewSection, enableBestForTags, enablePhysicalStores,
+    enableBoxContents, enableOptions, enableActiveVariantSpecs, boxContents, optionGroups, productVariants,
+    enableSizeChart, sizeChartType, sizeChartImage, sizeChartHtml, sizeChartColumns, sizeChartRows
   ]);
 
   // Interactive Zoom Engine methods
@@ -353,9 +461,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     setZoomPos({ x, y });
   };
 
-  // Open Edit Drawer Panel config
-  const handleOpenDrawer = (section: typeof activeDrawer) => {
-    setActiveDrawer(section);
+  // Open Inline Edit Mode
+  const handleStartEdit = (section: "hero" | "creator" | "stores" | "specs" | "physical-stores" | "overview" | "tags" | "box-contents" | "options" | null) => {
+    setEditingSection(section);
     if (section === "specs") {
       setTempSpecs([...specs]);
     } else if (section === "stores") {
@@ -366,6 +474,11 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       setTempOverview([...overviewBlocks]);
     } else if (section === "tags") {
       setTempTagsList([...bestForTags]);
+    } else if (section === "box-contents") {
+      setTempBoxContents([...boxContents]);
+    } else if (section === "options") {
+      setTempOptionGroups([...optionGroups]);
+      setTempProductVariants([...productVariants]);
     }
   };
 
@@ -383,18 +496,26 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       setOverviewBlocks([...tempOverview]);
     } else if (section === "tags") {
       setBestForTags([...tempTagsList]);
+    } else if (section === "box-contents") {
+      setBoxContents([...tempBoxContents]);
+    } else if (section === "options") {
+      setOptionGroups([...tempOptionGroups]);
+      setProductVariants([...tempProductVariants]);
     }
 
     serializeState();
     triggerToast(`✓ Section parameters saved successfully!`);
-    setActiveDrawer(null);
+    setEditingSection(null);
   };
 
   const handlePublishRelease = async () => {
     const liveData = {
       brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
       storeComparisonList, overviewBlocks, bestForTags, physicalStores, creatorContent,
-      actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder
+      actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder,
+      enableSpecs, enableStoreComparison, enableInfluencerReviews, enableOverviewSection, enableBestForTags, enablePhysicalStores,
+      enableBoxContents, enableOptions, enableActiveVariantSpecs, boxContents, optionGroups, productVariants,
+      enableSizeChart, sizeChartType, sizeChartImage, sizeChartHtml, sizeChartColumns, sizeChartRows
     };
     
     localStorage.setItem(publishKey, JSON.stringify(liveData));
@@ -532,18 +653,204 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
             {/* 1. LARGE PRODUCT MEDIA GALLERY (Hero) */}
         <div id="product-hero-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative group/card shadow-sm text-left">
           
-          {/* Floating Pencil Edit Trigger Card corner */}
-          <button
-            type="button"
-            onClick={() => handleOpenDrawer("hero")}
-            id="edit-hero-btn"
-            className="absolute top-6 right-6 z-10 w-8 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500 flex items-center justify-center transition-all duration-200 hover:scale-110 shadow-sm"
-            title="Configure Hero Details"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center shrink-0 border border-orange-500/15">
+                <LayoutGrid className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block leading-none mb-1">
+                  Primary Presentation Banner
+                </span>
+                <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] leading-none">
+                  CORE PRODUCT PROFILE
+                </h2>
+              </div>
+            </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
+            <div className="flex items-center gap-2.5 sm:self-center self-start">
+              <button
+                type="button"
+                onClick={() => {
+                  if (editingSection === "hero") {
+                    setEditingSection(null);
+                  } else {
+                    handleStartEdit("hero");
+                  }
+                }}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm ${
+                  editingSection === "hero"
+                    ? "bg-orange-500 text-white"
+                    : "bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500"
+                }`}
+                title="Configure Hero Details"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {editingSection === "hero" ? (
+            <div className="space-y-6">
+              {/* Inside, we show all Form 1 fields! */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Product Catalog SKU Name</label>
+                  <input 
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-bold uppercase font-mono"
+                    placeholder="SAMSUNG S25 ULTRA BD..."
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Brand Label</label>
+                    <input 
+                      value={brandName}
+                      onChange={(e) => setBrandName(e.target.value)}
+                      className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
+                    />
+                  </div>
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Breadcrumb Group</label>
+                    <input 
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Actual Price (৳)</label>
+                    <input 
+                      type="number"
+                      value={actualPrice}
+                      onChange={(e) => setActualPrice(Number(e.target.value))}
+                      className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-mono font-bold"
+                    />
+                  </div>
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Sale price (৳)</label>
+                    <input 
+                      type="number"
+                      value={discountedPrice}
+                      onChange={(e) => setDiscountedPrice(Number(e.target.value))}
+                      className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-mono font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Product bio about</label>
+                  <textarea 
+                    rows={3}
+                    value={about}
+                    onChange={(e) => setAbout(e.target.value)}
+                    className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 resize-none font-medium leading-relaxed"
+                  />
+                </div>
+              </div>
+
+              {/* Photo List editing nodes inside Hero */}
+              <div className="space-y-2.5 pt-3 border-t border-[#E5E7EB] text-left">
+                <span className="text-[10px] uppercase font-black text-slate-500 tracking-wider block">Modify Photos Grid</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {images.map((img, i) => (
+                    <div key={i} className="flex gap-2">
+                      <input 
+                        value={img}
+                        onChange={(e) => {
+                          const copy = [...images];
+                          copy[i] = e.target.value;
+                          setImages(copy);
+                        }}
+                        className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs truncate text-[#1A1A2E] outline-none focus:border-orange-500 font-mono"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setImages(images.filter((_, idx) => idx !== i))}
+                        className="p-2.5 bg-red-100/40 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 max-w-md">
+                  <input 
+                    value={tempImagesInput}
+                    onChange={(e) => setTempImagesInput(e.target.value)}
+                    placeholder="Add photo HTTPS url listings row..."
+                    className="flex-1 bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#1A1A2E] outline-none focus:border-orange-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (tempImagesInput.trim()) {
+                        setImages([...images, tempImagesInput.trim()]);
+                        setTempImagesInput("");
+                      }
+                    }}
+                    className="px-4 bg-[#1A1A2E] text-white hover:bg-slate-800 rounded-xl text-xs font-black uppercase"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              {/* Action buttons toggles config */}
+              <div className="space-y-2.5 pt-4 border-t border-[#E5E7EB] text-xs font-bold text-slate-600 text-left">
+                <span className="text-[10px] uppercase font-black text-slate-500 tracking-wider block">Enabled Interactive Checkout Actions</span>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1">
+                  {[
+                    { l: "Enable 'FIND IN STORE' Map search trigger", v: actionFindInStore, s: setActionFindInStore },
+                    { l: "Enable 'BUY ONLINE' direct portal", v: actionBuyOnline, s: setActionBuyOnline },
+                    { l: "Enable 'HEART LOVE' stats counter", v: actionLove, s: setActionLove },
+                    { l: "Enable 'WISHLIST' catalog bookmarking", v: actionWish, s: setActionWish },
+                    { l: "Enable 'DIGITAL CHAT WITH SELLER' assistant", v: actionContactSeller, s: setActionContactSeller },
+                    { l: "Enable 'REQUEST BULK QUOTE' document module", v: actionRequestQuote, s: setActionRequestQuote },
+                    { l: "Enable 'PRE ORDER' billing toggle", v: actionPreOrder, s: setActionPreOrder }
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex justify-between items-center py-2 border-b border-[#E5E7EB]/40">
+                      <span>{item.l}</span>
+                      <input 
+                        type="checkbox" 
+                        checked={item.v}
+                        onChange={(e) => item.s(e.target.checked)}
+                        className="rounded border-[#E5E7EB] text-orange-500 focus:ring-orange-500 w-4 h-4 accent-orange-500"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Save & Cancel buttons */}
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingSection(null)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveSection("hero")}
+                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
             
             {/* LEFT COLUMN: Media Viewer (60% equivalent to 6 cols) */}
             <div className="lg:col-span-6 space-y-5">
@@ -578,7 +885,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleOpenDrawer("hero")}
+                      onClick={() => handleStartEdit("hero")}
                       className="px-4 py-2 bg-[#FF5B00] text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all hover:bg-orange-600 shadow-md shadow-[#FF5B00]/10 cursor-pointer active:scale-95"
                     >
                       Upload Images / Videos
@@ -816,103 +1123,969 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
             </div>
 
           </div>
+          )}
 
+        </div>
+
+        {/* SECTION: PRODUCT OPTIONS & VARIANTS (Amazon / Shopify style) */}
+        <div id="product-options-variants-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left">
+          
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center shrink-0 border border-orange-500/15">
+                <Sliders className="w-5 h-5" />
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block leading-none mb-1">
+                  Shopify / Amazon Style Listing options
+                </span>
+                <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] leading-none flex items-center gap-2">
+                  🎨 PRODUCT OPTIONS & VARIANTS
+                  {enableOptions && optionGroups.length > 0 && (
+                    <span className="text-[9px] px-2 py-0.5 bg-green-100 text-[#2B9B00] border border-green-200/50 rounded-full font-bold uppercase">
+                      {productVariants.length} Variants Generated
+                    </span>
+                  )}
+                </h2>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 sm:self-center self-start">
+              <button
+                type="button"
+                onClick={() => setEnableOptions(!enableOptions)}
+                className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${
+                  enableOptions 
+                    ? "bg-green-100 text-green-700 border-green-200" 
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}
+              >
+                {enableOptions ? "ENABLED" : "DISABLED"}
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => {
+                  if (editingSection === "options") {
+                    setEditingSection(null);
+                  } else {
+                    handleStartEdit("options");
+                  }
+                }}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm ${
+                  editingSection === "options"
+                    ? "bg-orange-500 text-white animate-pulse"
+                    : "bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500"
+                }`}
+                title="Configure Options & Groups"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {editingSection === "options" ? (() => {
+            const generateVariants = (groups: OptionGroup[], basePrice: number): ProductVariant[] => {
+              if (groups.length === 0) return [];
+              const activeGroups = groups.filter(g => g.values.length > 0);
+              if (activeGroups.length === 0) return [];
+              const cartesian = (arrays: string[][]): string[][] => {
+                return arrays.reduce<string[][]>((a, b) => {
+                  return a.flatMap(d => b.map(e => [...d, e]));
+                }, [[]]);
+              };
+              const groupNames = activeGroups.map(g => g.name);
+              const valuesArrays = activeGroups.map(g => g.values);
+              const combos = cartesian(valuesArrays);
+              return combos.map((combo, idx) => {
+                const optionsObj: { [key: string]: string } = {};
+                groupNames.forEach((name, i) => {
+                  optionsObj[name] = combo[i];
+                });
+                const label = combo.join("-");
+                return {
+                  id: `v-${idx}-${Date.now()}`,
+                  options: optionsObj,
+                  sku: `${productName ? productName.replace(/\s+/g, "-").toUpperCase() : "PROD"}-${label.toUpperCase()}`,
+                  price: discountedPrice || basePrice || 0,
+                  stock: 100,
+                  weight: "0.5 kg",
+                  images: [],
+                  enabled: true
+                };
+              });
+            };
+
+            return (
+              <div className="space-y-6 text-left">
+                <div>
+                  <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Options Configuration</span>
+                  <p className="text-[10.5px] italic text-slate-500 leading-normal">
+                    Define Shopify-style option groups (like Color, Size, Style) and display formats.
+                  </p>
+                </div>
+
+                {/* Option Groups list */}
+                <div className="space-y-4">
+                  {tempOptionGroups.map((group, gIdx) => (
+                    <div key={group.id || gIdx} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl space-y-3 relative text-left text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setTempOptionGroups(tempOptionGroups.filter((_, i) => i !== gIdx))}
+                        className="absolute top-4 right-4 text-red-500 hover:text-red-700 cursor-pointer border-0 bg-transparent"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      <div className="space-y-1">
+                        <label className="text-[8px] uppercase font-black text-slate-400">Option Name</label>
+                        <input 
+                          value={group.name}
+                          onChange={(e) => {
+                            const copy = [...tempOptionGroups];
+                            copy[gIdx].name = e.target.value;
+                            setTempOptionGroups(copy);
+                          }}
+                          className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 focus:border-orange-500 outline-none uppercase font-bold text-xs"
+                          placeholder="e.g. Size"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[8px] uppercase font-black text-slate-400">Display Type</label>
+                        <select
+                          value={group.displayType}
+                          onChange={(e) => {
+                            const copy = [...tempOptionGroups];
+                            copy[gIdx].displayType = e.target.value as any;
+                            setTempOptionGroups(copy);
+                          }}
+                          className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 focus:border-orange-500 outline-none font-bold text-xs"
+                        >
+                          <option value="Button">Button/Badge Capsules</option>
+                          <option value="Color Swatch">Color Swatch Palette</option>
+                          <option value="Dropdown">Standard Dropdown Selector</option>
+                        </select>
+                      </div>
+
+                      {/* Option Values tags */}
+                      <div className="space-y-2">
+                        <label className="text-[8px] uppercase font-black text-slate-400 block">Values List</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {group.values.map((val, vIdx) => (
+                            <span key={vIdx} className="bg-orange-50 text-orange-600 border border-orange-100 rounded-lg px-2 py-1 text-[10px] font-bold flex items-center gap-1">
+                              <span>{val}</span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const copy = [...tempOptionGroups];
+                                  copy[gIdx].values = copy[gIdx].values.filter((_, i) => i !== vIdx);
+                                  setTempOptionGroups(copy);
+                                }}
+                                className="text-red-500 hover:text-red-700 ml-1 font-bold font-mono border-0 bg-transparent cursor-pointer"
+                              >
+                                x
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+
+                        {/* Value input sub-form */}
+                        <div className="flex gap-2">
+                          <input 
+                            id={`inline-new-val-input-${gIdx}`}
+                            placeholder="Type value (e.g. XL) & add..."
+                            className="flex-grow bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1 text-xs outline-none focus:border-orange-500 font-bold"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                const input = e.currentTarget;
+                                const text = input.value.trim();
+                                if (text && !group.values.includes(text)) {
+                                  const copy = [...tempOptionGroups];
+                                  copy[gIdx].values.push(text);
+                                  setTempOptionGroups(copy);
+                                  input.value = "";
+                                }
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const input = document.getElementById(`inline-new-val-input-${gIdx}`) as HTMLInputElement;
+                              const text = input?.value.trim();
+                              if (text && !group.values.includes(text)) {
+                                const copy = [...tempOptionGroups];
+                                copy[gIdx].values.push(text);
+                                setTempOptionGroups(copy);
+                                input.value = "";
+                              }
+                            }}
+                            className="px-3 bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl hover:bg-slate-100 font-bold uppercase text-[9px] cursor-pointer"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fresh: OptionGroup = {
+                        id: `og-${Date.now()}`,
+                        name: "New Option Group",
+                        displayType: "Button",
+                        values: ["Default Value"]
+                      };
+                      setTempOptionGroups([...tempOptionGroups, fresh]);
+                    }}
+                    className="flex-1 py-3 bg-[#FAFAFA] border border-dashed border-[#E5E7EB] hover:bg-slate-100 rounded-2xl text-[10px] text-[#FF5B00] font-black uppercase tracking-wider cursor-pointer"
+                  >
+                    + Add Option Group
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const variants = generateVariants(tempOptionGroups, discountedPrice || actualPrice || 0);
+                      setTempProductVariants(variants);
+                      triggerToast(`🔄 Successfully generated ${variants.length} variant combinations!`);
+                    }}
+                    className="flex-1 py-3 bg-green-500 hover:bg-green-600 border border-transparent text-white rounded-2xl text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                  >
+                    🔄 Generate Matrix
+                  </button>
+                </div>
+
+                {/* Size Chart Settings */}
+                <div className="pt-4 border-t border-[#E5E7EB] space-y-4">
+                  <div>
+                    <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Size Chart Profile</span>
+                    <p className="text-[10.5px] italic text-slate-500 leading-normal">
+                      Enable size guides in table, image or html form for customers.
+                    </p>
+                  </div>
+
+                  <div className="flex justify-between items-center py-2 border-b border-[#E5E7EB]/40">
+                    <span className="text-xs font-bold text-slate-600">Enable Size Chart link button</span>
+                    <input 
+                      type="checkbox" 
+                      checked={enableSizeChart}
+                      onChange={(e) => setEnableSizeChart(e.target.checked)}
+                      className="rounded border-[#E5E7EB] text-orange-500 focus:ring-orange-500 w-4 h-4 accent-orange-500"
+                    />
+                  </div>
+
+                  {enableSizeChart && (
+                    <div className="space-y-3 bg-[#FAFAFA] p-4 rounded-2xl border border-slate-150">
+                      <div className="space-y-1">
+                        <label className="text-[8px] uppercase font-black text-slate-400 block">Chart Mode</label>
+                        <select
+                          value={sizeChartType}
+                          onChange={(e) => setSizeChartType(e.target.value as any)}
+                          className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 font-bold text-xs"
+                        >
+                          <option value="table">Interactive Table Dimensions</option>
+                          <option value="image">Static High-Res Image Blueprint</option>
+                          <option value="html">Custom Rich Text/HTML spec</option>
+                        </select>
+                      </div>
+
+                      {sizeChartType === "image" && (
+                        <div className="space-y-1">
+                          <label className="text-[8px] uppercase font-black text-slate-400 block">Blueprint Image URL</label>
+                          <input 
+                            value={sizeChartImage}
+                            onChange={(e) => setSizeChartImage(e.target.value)}
+                            placeholder="https://..."
+                            className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 text-xs font-mono"
+                          />
+                        </div>
+                      )}
+
+                      {sizeChartType === "html" && (
+                        <div className="space-y-1">
+                          <label className="text-[8px] uppercase font-black text-slate-400 block">Custom HTML specification</label>
+                          <textarea 
+                            value={sizeChartHtml}
+                            onChange={(e) => setSizeChartHtml(e.target.value)}
+                            placeholder="&lt;div className='p-4 text-center'&gt;Size spec...&lt;/div&gt;"
+                            className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 text-xs font-mono h-24"
+                          />
+                        </div>
+                      )}
+
+                      {sizeChartType === "table" && (
+                        <div className="space-y-3">
+                          <label className="text-[8px] uppercase font-black text-slate-400 block">Dynamic Dimensions Rows ({sizeChartRows.length})</label>
+                          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                            {sizeChartRows.map((row, rIdx) => (
+                              <div key={rIdx} className="bg-white border border-[#E5E7EB] p-2 rounded-xl flex gap-1.5 items-center">
+                                <input 
+                                  value={row.size}
+                                  onChange={(e) => {
+                                    const copy = [...sizeChartRows];
+                                    copy[rIdx].size = e.target.value;
+                                    setSizeChartRows(copy);
+                                  }}
+                                  placeholder="Size"
+                                  className="w-12 bg-slate-50 border-0 rounded px-1.5 py-1 text-xs font-black uppercase text-center"
+                                />
+                                <input 
+                                  value={row.chest}
+                                  onChange={(e) => {
+                                    const copy = [...sizeChartRows];
+                                    copy[rIdx].chest = e.target.value;
+                                    setSizeChartRows(copy);
+                                  }}
+                                  placeholder="Chest"
+                                  className="w-16 border-0 rounded px-1.5 py-1 text-xs text-center"
+                                />
+                                <input 
+                                  value={row.length}
+                                  onChange={(e) => {
+                                    const copy = [...sizeChartRows];
+                                    copy[rIdx].length = e.target.value;
+                                    setSizeChartRows(copy);
+                                  }}
+                                  placeholder="Length"
+                                  className="w-16 border-0 rounded px-1.5 py-1 text-xs text-center"
+                                />
+                                <input 
+                                  value={row.shoulder}
+                                  onChange={(e) => {
+                                    const copy = [...sizeChartRows];
+                                    copy[rIdx].shoulder = e.target.value;
+                                    setSizeChartRows(copy);
+                                  }}
+                                  placeholder="Shoulder"
+                                  className="w-16 border-0 rounded px-1.5 py-1 text-xs text-center"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => setSizeChartRows(sizeChartRows.filter((_, i) => i !== rIdx))}
+                                  className="text-red-500 hover:text-red-700 font-bold border-0 bg-transparent cursor-pointer"
+                                >
+                                  x
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSizeChartRows([...sizeChartRows, { size: "XL", chest: "44", length: "29", shoulder: "18.5" }])}
+                            className="w-full py-2 border border-[#E5E7EB] bg-white text-slate-500 rounded-lg text-[10px] font-black uppercase hover:bg-slate-50 cursor-pointer"
+                          >
+                            + Add Table Row
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSection(null)}
+                    className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveSection("options")}
+                    className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            );
+          })() : !enableOptions ? (
+            <div className="py-8 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-400 font-medium">
+              This section is disabled. Only the parent product pricing and details will display on the storefront.
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {/* Option Groups list summary */}
+              {optionGroups.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                  <p className="mb-3">No option groups added yet. Click edit to define option groups like Color or Size.</p>
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit("options")}
+                    className="px-4 py-2 bg-orange-500 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl hover:bg-orange-600 transition-colors cursor-pointer"
+                  >
+                    Configure First Option Group
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {optionGroups.map((group) => (
+                    <div key={group.id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl text-xs space-y-2">
+                      <div className="flex justify-between items-center border-b border-slate-200/50 pb-1.5">
+                        <span className="font-extrabold uppercase text-[#1A1A2E]">{group.name}</span>
+                        <span className="text-[8px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded font-black uppercase font-mono">{group.displayType}</span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {group.values.map((val, idx) => (
+                          <span key={idx} className="px-2 py-1 bg-white border border-slate-200 rounded text-[9.5px] font-bold uppercase text-slate-600">
+                            {val}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Size Chart Summary if enabled */}
+              {enableSizeChart && (
+                <div className="bg-orange-500/5 border border-orange-500/10 p-4 rounded-2xl text-xs flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <LayoutGrid className="w-4 h-4 text-orange-500" />
+                    <div>
+                      <span className="font-bold text-[#1A1A2E] uppercase block">Size Guide Chart Attached</span>
+                      <span className="text-[10px] text-slate-500 capitalize">Source Type: {sizeChartType}</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit("options")}
+                    className="text-orange-500 font-extrabold text-[10px] uppercase tracking-wider hover:underline cursor-pointer"
+                  >
+                    Edit Chart
+                  </button>
+                </div>
+              )}
+
+              {/* AUTOMATIC VARIANT MATRIX LISTING */}
+              {optionGroups.length > 0 && productVariants.length > 0 && (
+                <div className="space-y-3.5">
+                  <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Automatically Generated Variant matrix ledger</span>
+                  
+                  <div className="border border-[#E5E7EB] rounded-2xl overflow-hidden bg-white shadow-sm overflow-x-auto">
+                    <table className="w-full text-left text-xs min-w-[900px]">
+                      <thead>
+                        <tr className="bg-[#FAFAFA] border-b border-[#E5E7EB] text-slate-400 font-extrabold uppercase text-[8.5px] tracking-widest font-mono">
+                          <th className="p-3">VARIANT</th>
+                          <th className="p-3">SKU REF</th>
+                          <th className="p-3">BARCODE</th>
+                          <th className="p-3">RETAIL PRICE (৳)</th>
+                          <th className="p-3">SALE PRICE (৳)</th>
+                          <th className="p-3">STOCK LIMIT</th>
+                          <th className="p-3">WEIGHT</th>
+                          <th className="p-3 text-center">ENABLED</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E5E7EB]">
+                        {productVariants.map((variant, idx) => {
+                          const variantLabel = optionGroups
+                            .map(g => variant.options[g.id])
+                            .filter(Boolean)
+                            .join(" / ");
+
+                          return (
+                            <tr key={variant.id} className={`hover:bg-slate-50/50 transition-colors ${!variant.enabled ? "opacity-50" : ""}`}>
+                              <td className="p-3 font-extrabold text-[#1A1A2E] uppercase tracking-tight text-[10px]">
+                                {variantLabel || "Default Spec"}
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  value={variant.sku}
+                                  onChange={(e) => {
+                                    const copy = [...productVariants];
+                                    copy[idx].sku = e.target.value;
+                                    setProductVariants(copy);
+                                  }}
+                                  className="bg-transparent border border-transparent hover:border-slate-300 focus:border-orange-500 rounded px-2 py-1 font-mono text-[10px] uppercase font-bold w-36"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  value={variant.barcode}
+                                  onChange={(e) => {
+                                    const copy = [...productVariants];
+                                    copy[idx].barcode = e.target.value;
+                                    setProductVariants(copy);
+                                  }}
+                                  className="bg-transparent border border-transparent hover:border-slate-300 focus:border-orange-500 rounded px-2 py-1 font-mono text-[10px] w-32"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="number"
+                                  value={variant.actualPrice}
+                                  onChange={(e) => {
+                                    const copy = [...productVariants];
+                                    copy[idx].actualPrice = Number(e.target.value);
+                                    setProductVariants(copy);
+                                  }}
+                                  className="bg-transparent border border-transparent hover:border-slate-300 focus:border-orange-500 rounded px-2 py-1 font-mono text-[11px] font-bold w-20"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="number"
+                                  value={variant.discountedPrice}
+                                  onChange={(e) => {
+                                    const copy = [...productVariants];
+                                    copy[idx].discountedPrice = Number(e.target.value);
+                                    setProductVariants(copy);
+                                  }}
+                                  className="bg-transparent border border-transparent hover:border-slate-300 focus:border-orange-500 rounded px-2 py-1 font-mono text-[11px] font-bold text-orange-500 w-20"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  type="number"
+                                  value={variant.stockLimit}
+                                  onChange={(e) => {
+                                    const copy = [...productVariants];
+                                    copy[idx].stockLimit = Number(e.target.value);
+                                    setProductVariants(copy);
+                                  }}
+                                  className="bg-transparent border border-transparent hover:border-slate-300 focus:border-orange-500 rounded px-2 py-1 font-mono text-[11px] w-16"
+                                />
+                              </td>
+                              <td className="p-3">
+                                <input
+                                  value={variant.weight}
+                                  onChange={(e) => {
+                                    const copy = [...productVariants];
+                                    copy[idx].weight = e.target.value;
+                                    setProductVariants(copy);
+                                  }}
+                                  className="bg-transparent border border-transparent hover:border-slate-300 focus:border-orange-500 rounded px-2 py-1 font-mono text-[10px] w-16"
+                                />
+                              </td>
+                              <td className="p-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  checked={variant.enabled}
+                                  onChange={(e) => {
+                                    const copy = [...productVariants];
+                                    copy[idx].enabled = e.target.checked;
+                                    setProductVariants(copy);
+                                  }}
+                                  className="w-4 h-4 accent-orange-500"
+                                />
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* SECTION 2: CREATOR EXPERIENCES (55% left) + PRICE ACROSS STORES TABLE (45% right) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           
           {/* LEFT: Creator experiences using reusable component */}
-          <div className="lg:col-span-7">
-            <CreatorExperienceSection
-              contextType="product"
-              contextName={productName || "Product"}
-              creatorContent={creatorContent}
-              onEditClick={() => handleOpenDrawer("creator")}
-              onAddReviewClick={() => handleOpenDrawer("creator")}
-            />
+          {/* LEFT: Creator experiences using reusable component */}
+          <div className="lg:col-span-7 relative" id="creator-reviews-card">
+            <div className="absolute top-6 right-6 flex items-center gap-2 z-10">
+              <button
+                type="button"
+                onClick={() => setEnableInfluencerReviews(!enableInfluencerReviews)}
+                className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${
+                  enableInfluencerReviews 
+                    ? "bg-green-100 text-green-700 border-green-200" 
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}
+              >
+                {enableInfluencerReviews ? "ENABLED" : "DISABLED"}
+              </button>
+            </div>
+
+            {enableInfluencerReviews ? (
+              editingSection === "creator" ? (
+                <div className="bg-white border border-[#E5E7EB] rounded-3xl p-6 shadow-sm text-left">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center shrink-0 border border-orange-500/15">
+                        <Sparkles className="w-5 h-5 animate-pulse" />
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block leading-none mb-1">
+                          Influencer Social Highlights
+                        </span>
+                        <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] leading-none">
+                          CREATOR EXPERIENCES
+                        </h2>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-[10.5px] italic text-slate-500 leading-normal mb-4">
+                    Configure digital creators highlights list. Reorder, add creator clips reviews, remove items, or mark specific item as top spotlight features card.
+                  </p>
+
+                  <div className="space-y-4 max-h-[500px] overflow-y-auto no-scrollbar pr-1 mb-6">
+                    {creatorContent.map((item, cIdx) => (
+                      <div key={item.id || cIdx} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl relative text-left text-xs space-y-2.5">
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                          <span className="font-extrabold text-orange-500 text-[10px] font-mono">@{item.creatorHandle}</span>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = creatorContent.map(c => ({
+                                  ...c,
+                                  isFeatured: c.id === item.id
+                                }));
+                                setCreatorContent(updated);
+                              }}
+                              className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-widest leading-none ${
+                                item.isFeatured ? "bg-orange-500 text-white" : "bg-white hover:bg-slate-200 text-slate-500 border border-slate-200"
+                              }`}
+                            >
+                              {item.isFeatured ? "Spotlight" : "Feature"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCreatorContent(creatorContent.filter(c => c.id !== item.id))}
+                              className="text-red-500 hover:text-red-700 font-bold"
+                              title="Delete Review"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Review Title</span>
+                          <input 
+                            value={item.title}
+                            onChange={(e) => {
+                              const updated = creatorContent.map(c => c.id === item.id ? { ...c, title: e.target.value } : c);
+                              setCreatorContent(updated);
+                            }}
+                            className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-[10px]">
+                          <div>
+                            <span className="text-[7.5px] uppercase font-black text-slate-400 font-mono tracking-widest">Platform</span>
+                            <select
+                              value={item.platform}
+                              onChange={(e) => {
+                                const updated = creatorContent.map(c => c.id === item.id ? { ...c, platform: e.target.value as any } : c);
+                                setCreatorContent(updated);
+                              }}
+                              className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 outline-none font-bold"
+                            >
+                              <option value="YOUTUBE">YouTube</option>
+                              <option value="INSTAGRAM">Instagram</option>
+                              <option value="TIKTOK">TikTok</option>
+                              <option value="FACEBOOK">Facebook</option>
+                            </select>
+                          </div>
+                          <div>
+                            <span className="text-[7.5px] uppercase font-black text-slate-400 font-mono tracking-widest">Duration</span>
+                            <input 
+                              value={item.duration}
+                              onChange={(e) => {
+                                const updated = creatorContent.map(c => c.id === item.id ? { ...c, duration: e.target.value } : c);
+                                setCreatorContent(updated);
+                              }}
+                              className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 outline-none font-medium"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fresh: CreatorContentItem = {
+                        id: `cc-${Date.now()}`,
+                        platform: "YOUTUBE",
+                        videoUrl: "https://youtube.com/watch?v=fresh",
+                        thumbnail: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400",
+                        title: "Brand New Unboxing Clip Review",
+                        description: "Review of the brand specs and details.",
+                        views: 1300,
+                        likes: 120,
+                        duration: "4:50",
+                        creatorHandle: "FreshTechMaker",
+                        creatorAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50",
+                        location: "Dhaka, BD",
+                        isFeatured: false
+                      };
+                      setCreatorContent([...creatorContent, fresh]);
+                    }}
+                    className="w-full py-3 border border-dashed border-[#E5E7EB] rounded-2xl text-[10px] text-orange-500 font-bold uppercase tracking-widest hover:bg-orange-50/10 hover:border-orange-500/50 transition-colors cursor-pointer mb-6"
+                  >
+                    + ADD CREATOR REVIEWS SLOT
+                  </button>
+
+                  <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB]">
+                    <button
+                      type="button"
+                      onClick={() => setEditingSection(null)}
+                      className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSaveSection("creator")}
+                      className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer"
+                    >
+                      Save Changes
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <CreatorExperienceSection
+                  contextType="product"
+                  contextName={productName || "Product"}
+                  creatorContent={creatorContent}
+                  onEditClick={() => handleStartEdit("creator")}
+                  onAddReviewClick={() => handleStartEdit("creator")}
+                />
+              )
+            ) : (
+              <div className="bg-white border border-[#E5E7EB] rounded-3xl p-6 shadow-sm text-left h-full min-h-[300px] flex flex-col justify-center items-center">
+                <span className="text-3xl mb-3">🎬</span>
+                <h3 className="text-sm font-black uppercase text-[#1A1A2E] tracking-wider mb-1">Creator Reviews Disabled</h3>
+                <p className="text-xs text-slate-400 italic text-center max-w-sm">This section is disabled. Influencer reviews and social videos will not render on the storefront page.</p>
+              </div>
+            )}
           </div>
 
           {/* RIGHT: Price across stores Comparative panel */}
           <div id="stores-comparison-card" className="lg:col-span-5 bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left flex flex-col justify-between">
             
-            {/* Top Right Floating pencil trigger */}
-            <button
-              type="button"
-              onClick={() => handleOpenDrawer("stores")}
-              id="edit-stores-list-btn"
-              className="absolute top-6 right-6 w-8 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm"
-              title="Edit comparative stores"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
-
-            <div>
-              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
-                Comparative Pricing Deals
-              </span>
-              <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] mb-4.5 flex items-center gap-2">
-                PRICE ACROSS STORES 
-                <span className="text-[9px] px-2 py-0.5 bg-green-100 text-[#2B9B00] border border-green-200/50 rounded-full font-bold uppercase">
-                  {storeComparisonList.length} DEALS ACTIVE
-                </span>
-              </h2>
-
-              {storeComparisonList.length > 0 ? (
-                <div className="border border-[#E5E7EB] rounded-2xl overflow-hidden bg-[#FAFAFA]/20">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="bg-[#FAFAFA] border-b border-[#E5E7EB] text-slate-400 font-extrabold uppercase text-[8.5px] tracking-widest font-mono">
-                        <th className="p-3">STORE LOCATION</th>
-                        <th className="p-3 text-right">PRICE</th>
-                        <th className="p-3 text-right">ACTION</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#E5E7EB]">
-                      {storeComparisonList.map((item, id) => (
-                        <tr key={item.id || id} className="hover:bg-slate-50 transition-colors">
-                          <td className="p-3">
-                            <span className="font-extrabold text-[#1A1A2E] block uppercase tracking-tight">{item.storeName}</span>
-                            <span className="text-[9.5px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5 uppercase">
-                              <MapPin className="w-3 h-3 text-slate-400" />
-                              {item.storeLocation || "Dhaka Outlet"}
-                            </span>
-                          </td>
-                          <td className="p-3 text-right">
-                            <span className="text-[12.5px] font-black font-mono text-orange-500">৳{item.price.toLocaleString()}</span>
-                            <span className="text-[8px] text-emerald-600 font-extrabold uppercase block mt-0.5">● {item.availability}</span>
-                          </td>
-                          <td className="p-3 text-right">
-                            <a 
-                              href={item.storeUrl || "https://choosify.bd"}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="px-3 py-1 bg-white border border-[#E5E7EB] hover:bg-zinc-50 rounded-lg text-[9px] font-black uppercase text-slate-800 tracking-wider shadow-sm select-none inline-block hover:scale-102"
-                            >
-                              BUY
-                            </a>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-6 w-full">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-orange-500/10 text-orange-600 flex items-center justify-center shrink-0 border border-orange-500/15">
+                  <Coins className="w-5 h-5" />
                 </div>
+                <div>
+                  <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block leading-none mb-1">
+                    Comparative Pricing Deals
+                  </span>
+                  <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] leading-none flex items-center gap-2">
+                    PRICE ACROSS STORES 
+                    {enableStoreComparison && (
+                      <span className="text-[9px] px-2 py-0.5 bg-green-100 text-[#2B9B00] border border-green-200/50 rounded-full font-bold uppercase">
+                        {storeComparisonList.length} DEALS
+                      </span>
+                    )}
+                  </h2>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 sm:self-center self-start">
+                <button
+                  type="button"
+                  onClick={() => setEnableStoreComparison(!enableStoreComparison)}
+                  className={`px-3 py-1.5 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${
+                    enableStoreComparison 
+                      ? "bg-green-100 text-green-700 border-green-200" 
+                      : "bg-slate-100 text-slate-600 border border-slate-200"
+                  }`}
+                >
+                  {enableStoreComparison ? "ENABLED" : "DISABLED"}
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (editingSection === "stores") {
+                      setEditingSection(null);
+                    } else {
+                      handleStartEdit("stores");
+                    }
+                  }}
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm ${
+                    editingSection === "stores"
+                      ? "bg-orange-500 text-white animate-pulse"
+                      : "bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500"
+                  }`}
+                  title="Configure Store pricing list"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {editingSection === "stores" ? (
+              <div className="space-y-4 text-left w-full">
+                <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Store comparative values</span>
+                
+                <div className="space-y-3.5 max-h-[400px] overflow-y-auto no-scrollbar pr-1">
+                  {tempStores.map((item, id) => (
+                    <div key={item.id || id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-3.5 rounded-2xl space-y-2 relative text-left text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setTempStores(tempStores.filter((_, idx) => idx !== id))}
+                        className="absolute top-3.5 right-3.5 text-red-500 hover:text-red-750"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+
+                      <div className="space-y-1">
+                        <label className="text-[7.5px] uppercase font-bold text-slate-400">Store Name</label>
+                        <input 
+                          value={item.storeName}
+                          onChange={(e) => {
+                            const copy = [...tempStores];
+                            copy[id] = { ...copy[id], storeName: e.target.value };
+                            setTempStores(copy);
+                          }}
+                          className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 font-bold"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 text-[10px]">
+                        <div>
+                          <label className="text-[7.5px] uppercase font-bold text-slate-400">Price (৳)</label>
+                          <input 
+                            type="number"
+                            value={item.price}
+                            onChange={(e) => {
+                              const copy = [...tempStores];
+                              copy[id] = { ...copy[id], price: Number(e.target.value) };
+                              setTempStores(copy);
+                            }}
+                            className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 font-mono font-bold"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[7.5px] uppercase font-bold text-slate-400">Location Area</label>
+                          <input 
+                            value={item.storeLocation || ""}
+                            onChange={(e) => {
+                              const copy = [...tempStores];
+                              copy[id] = { ...copy[id], storeLocation: e.target.value };
+                              setTempStores(copy);
+                            }}
+                            className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const fresh: StoreListing = {
+                      id: `sl-${Date.now()}`,
+                      storeName: "Star Tech BD",
+                      price: 148000,
+                      availability: "In Stock",
+                      storeRating: 4.8,
+                      storeUrl: "https://startech.com.bd",
+                      storeLocation: "Dhaka Mall"
+                    };
+                    setTempStores([...tempStores, fresh]);
+                  }}
+                  className="w-full py-2.5 bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl text-[10px] font-black uppercase text-slate-600 tracking-wider hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  + Add price comparisons Store
+                </button>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4 w-full">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSection(null)}
+                    className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveSection("stores")}
+                    className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full flex-grow flex flex-col justify-between">
+                <div>
+                  {enableStoreComparison ? (
+                storeComparisonList.length > 0 ? (
+                  <div className="border border-[#E5E7EB] rounded-2xl overflow-hidden bg-[#FAFAFA]/20">
+                    <table className="w-full text-left text-xs">
+                      <thead>
+                        <tr className="bg-[#FAFAFA] border-b border-[#E5E7EB] text-slate-400 font-extrabold uppercase text-[8.5px] tracking-widest font-mono">
+                          <th className="p-3">STORE LOCATION</th>
+                          <th className="p-3 text-right">PRICE</th>
+                          <th className="p-3 text-right">ACTION</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#E5E7EB]">
+                        {storeComparisonList.map((item, id) => (
+                          <tr key={item.id || id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-3">
+                              <span className="font-extrabold text-[#1A1A2E] block uppercase tracking-tight">{item.storeName}</span>
+                              <span className="text-[9.5px] text-slate-400 font-mono flex items-center gap-1.5 mt-0.5 uppercase">
+                                <MapPin className="w-3 h-3 text-slate-400" />
+                                {item.storeLocation || "Dhaka Outlet"}
+                              </span>
+                            </td>
+                            <td className="p-3 text-right">
+                              <span className="text-[12.5px] font-black font-mono text-orange-500">৳{item.price.toLocaleString()}</span>
+                              <span className="text-[8px] text-emerald-600 font-extrabold uppercase block mt-0.5">● {item.availability}</span>
+                            </td>
+                            <td className="p-3 text-right">
+                              <a 
+                                href={item.storeUrl || "https://choosify.bd"}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="px-3 py-1 bg-[#FAFAFA] border border-[#E5E7EB] hover:bg-zinc-50 rounded-lg text-[9px] font-black uppercase text-slate-800 tracking-wider shadow-sm select-none inline-block hover:scale-102 cursor-pointer"
+                              >
+                                BUY
+                              </a>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
+                    No competing checkout deals active for this product profile SKU.
+                  </div>
+                )
               ) : (
-                <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
-                  No competing checkout deals active for this product profile SKU.
+                <div className="py-12 bg-[#FAFAFA]/50 border border-dashed border-[#E5E7EB] rounded-2xl text-center text-slate-400 text-xs italic">
+                  Price across stores table is disabled and won't show on storefront.
                 </div>
               )}
             </div>
 
             <div className="pt-4 border-t border-[#E5E7EB]/60 mt-4.5">
               <p className="text-[10px] text-slate-400 leading-normal font-light">
-                Prices and store lists synchronize in real-time. Action buttons like "Buy" or "View Deal" links are configured locally inside properties drawer.
+                Prices and store lists synchronize in real-time. Action buttons like "Buy" or "View Deal" links are configured locally.
               </p>
             </div>
-
           </div>
+        )}
 
         </div>
+      </div>
 
         {/* SECTION 3: SPECIFICATIONS PARAMETERS (45% left) + PHYSICAL STORES CARDS (55% right) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -920,166 +2093,833 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
           {/* LEFT: Specifications Parameter Grid Table */}
           <div id="specs-card" className="lg:col-span-5 bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left flex flex-col justify-between">
             
-            <button
-              type="button"
-              onClick={() => handleOpenDrawer("specs")}
-              id="edit-specs-btn"
-              className="absolute top-6 right-6 w-8 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm"
-              title="Edit specifications list"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
+              <div>
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-0.5">
+                  Product Core Parameters
+                </span>
+                <h2 className="text-sm font-black uppercase tracking-wider text-[#1A1A2E]">
+                  SPECIFICATIONS
+                </h2>
+              </div>
 
-            <div>
-              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
-                Product Core Parameters
-              </span>
-              <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] mb-4.5 text-left">
-                SPECIFICATIONS
-              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEnableSpecs(!enableSpecs)}
+                  className={`px-2 py-1 text-[8px] font-black uppercase tracking-wider rounded-lg transition-all border cursor-pointer ${
+                    enableSpecs 
+                      ? "bg-green-100 text-green-700 border-green-200" 
+                      : "bg-slate-100 text-slate-600 border border-slate-200"
+                  }`}
+                >
+                  {enableSpecs ? "ENABLED" : "DISABLED"}
+                </button>
 
-              {specs.length > 0 ? (
-                <div className="divide-y divide-[#E5E7EB]">
-                  {specs.map((item, idx) => (
-                    <div key={idx} className="flex justify-between py-2 text-xs">
-                      <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] font-mono shrink-0 w-28 text-left">{item.key}</span>
-                      <span className="text-[#1A1A2E] font-semibold text-right uppercase tracking-tight truncate max-w-[200px]">{item.value}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (editingSection === "specs") {
+                      setEditingSection(null);
+                    } else {
+                      handleStartEdit("specs");
+                    }
+                  }}
+                  id="edit-specs-btn"
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm ${
+                    editingSection === "specs"
+                      ? "bg-orange-500 text-white animate-pulse"
+                      : "bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500"
+                  }`}
+                  title="Configure specifications list"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {editingSection === "specs" ? (
+              <div className="space-y-4 text-left w-full flex-grow flex flex-col justify-between">
+                <div className="space-y-2">
+                  <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Parameters Specifications Attributes</span>
+                  
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto no-scrollbar pr-1">
+                    {tempSpecs.map((item, idx) => (
+                      <div key={idx} className="flex gap-2 items-center bg-[#FAFAFA] p-2 rounded-xl border border-[#E5E7EB] relative">
+                        <div className="grid grid-cols-2 gap-2 flex-grow text-xs font-mono">
+                          <input 
+                            value={item.key}
+                            onChange={(e) => {
+                              const copy = [...tempSpecs];
+                              copy[idx].key = e.target.value;
+                              setTempSpecs(copy);
+                            }}
+                            className="bg-transparent border-0 outline-none uppercase font-bold text-slate-500 py-1"
+                            placeholder="Attribute key"
+                          />
+                          <input 
+                            value={item.value}
+                            onChange={(e) => {
+                              const copy = [...tempSpecs];
+                              copy[idx].value = e.target.value;
+                              setTempSpecs(copy);
+                            }}
+                            className="bg-transparent border-0 outline-none font-bold text-[#1A1A2E] py-1"
+                            placeholder="Value"
+                          />
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setTempSpecs(tempSpecs.filter((_, i) => i !== idx))}
+                          className="text-slate-400 hover:text-red-500 p-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setTempSpecs([...tempSpecs, { key: "New Parameter", value: "New Value" }])}
+                    className="w-full py-2 border border-[#E5E7EB] bg-white text-slate-500 rounded-lg text-[10px] font-black uppercase hover:bg-slate-50 cursor-pointer"
+                  >
+                    + ADD NEW ROW
+                  </button>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4 w-full">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSection(null)}
+                    className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveSection("specs")}
+                    className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full flex-grow flex flex-col justify-between">
+                <div>
+                  {enableSpecs ? (
+                    specs.length > 0 ? (
+                      <div className="divide-y divide-[#E5E7EB]">
+                        {specs.map((item, idx) => (
+                          <div key={idx} className="flex justify-between py-2 text-xs">
+                            <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] font-mono shrink-0 w-28 text-left">{item.key}</span>
+                            <span className="text-[#1A1A2E] font-semibold text-right uppercase tracking-tight truncate max-w-[200px]">{item.value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
+                        No attributes defined in this spec index structure.
+                      </div>
+                    )
+                  ) : (
+                    <div className="py-12 bg-[#FAFAFA]/50 border border-dashed border-[#E5E7EB] rounded-2xl text-center text-slate-400 text-xs italic">
+                      Specifications section is disabled and won't show on storefront.
                     </div>
-                  ))}
+                  )}
                 </div>
-              ) : (
-                <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
-                  No attributes defined in this spec index structure.
-                </div>
-              )}
-            </div>
 
-            <div className="pt-4 border-t border-[#E5E7EB]/60 mt-4.5">
-              <span className="text-[9px] text-slate-400 font-mono italic">
-                Sellers are advised to input verified values matching original serial parameters.
-              </span>
-            </div>
+                <div className="pt-4 border-t border-[#E5E7EB]/60 mt-4.5">
+                  <span className="text-[9px] text-slate-400 font-mono italic">
+                    Sellers are advised to input verified values matching original serial parameters.
+                  </span>
+                </div>
+              </div>
+            )}
 
           </div>
 
           {/* RIGHT: Physical Outlets store cards */}
           <div id="physical-stores-card" className="lg:col-span-7 bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left flex flex-col justify-between">
             
-            <button
-              type="button"
-              onClick={() => handleOpenDrawer("physical-stores")}
-              id="edit-physical-outlets-btn"
-              className="absolute top-6 right-6 w-8 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm"
-              title="Edit physical outlets list"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
+            <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-4 mb-4">
+              <div>
+                <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-0.5">
+                  Retail Outlets Locations
+                </span>
+                <h2 className="text-sm font-black uppercase tracking-wider text-[#1A1A2E]">
+                  PHYSICAL STORES
+                </h2>
+              </div>
 
-            <div>
-              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
-                Retail Outlets Locations
-              </span>
-              <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] mb-4.5 text-left">
-                PHYSICAL STORES
-              </h2>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEnablePhysicalStores(!enablePhysicalStores)}
+                  className={`px-2 py-1 text-[8px] font-black uppercase tracking-wider rounded-lg transition-all border cursor-pointer ${
+                    enablePhysicalStores 
+                      ? "bg-green-100 text-green-700 border-green-200" 
+                      : "bg-slate-100 text-slate-600 border border-slate-200"
+                  }`}
+                >
+                  {enablePhysicalStores ? "ENABLED" : "DISABLED"}
+                </button>
 
-              {physicalStores.length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {physicalStores.map((store, idx) => (
-                    <div 
-                      key={store.id || idx} 
-                      className="bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow-none hover:border-slate-300 transition-colors"
-                    >
-                      <div className="space-y-1.5 text-left">
-                        <div className="flex items-start justify-between">
-                          <span className="text-[10px] bg-orange-500/10 text-orange-600 border border-orange-500/20 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider leading-none">
-                            {store.badgeLabel || "Premium Store"}
-                          </span>
-                          <span className="text-[9px] text-slate-400 font-bold uppercase font-mono">{store.city}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (editingSection === "physical-stores") {
+                      setEditingSection(null);
+                    } else {
+                      handleStartEdit("physical-stores");
+                    }
+                  }}
+                  id="edit-physical-outlets-btn"
+                  className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm ${
+                    editingSection === "physical-stores"
+                      ? "bg-orange-500 text-white animate-pulse"
+                      : "bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500"
+                  }`}
+                  title="Configure physical stores list"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {editingSection === "physical-stores" ? (
+              <div className="space-y-4 text-left w-full flex-grow flex flex-col justify-between">
+                <div className="space-y-3.5 select-none">
+                  <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Physical stores outlets</span>
+                  
+                  <div className="space-y-4 max-h-[400px] overflow-y-auto no-scrollbar pr-1">
+                    {tempPhysicalStores.map((item, idx) => (
+                      <div key={item.id || idx} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl relative text-left text-xs space-y-3">
+                        <button
+                          type="button"
+                          onClick={() => setTempPhysicalStores(tempPhysicalStores.filter((_, i) => i !== idx))}
+                          className="absolute top-4 right-4 text-red-500 hover:text-red-750 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        <div className="space-y-1">
+                          <label className="text-[7.5px] uppercase font-bold text-slate-400">Outlet Sourcing Point Name</label>
+                          <input 
+                            value={item.storeName}
+                            onChange={(e) => {
+                              const copy = [...tempPhysicalStores];
+                              copy[idx] = { ...copy[idx], storeName: e.target.value };
+                              setTempPhysicalStores(copy);
+                            }}
+                            className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 focus:border-orange-500 outline-none uppercase font-bold"
+                          />
                         </div>
-                        <h4 className="text-xs font-black uppercase text-[#1A1A2E] tracking-wider leading-tight">
-                          {store.storeName}
-                        </h4>
-                        <p className="text-[11px] text-slate-500 font-light leading-snug">
-                          {store.address}
-                        </p>
-                      </div>
 
-                      <div className="pt-2 border-t border-slate-200/50 flex justify-between items-center text-[10px] text-slate-500 font-mono">
-                        <span className="flex items-center gap-1.5">
-                          <Phone className="w-3 h-3 text-slate-400" />
-                          {store.contactNumber}
-                        </span>
-                        <span className="text-[8.5px] bg-slate-200/50 text-slate-600 px-1.5 py-0.5 rounded font-extrabold uppercase">
-                          PICKUP AVAILABLE
-                        </span>
+                        <div className="space-y-1">
+                          <label className="text-[7.5px] uppercase font-bold text-slate-400">Street Address</label>
+                          <input 
+                            value={item.address}
+                            onChange={(e) => {
+                              const copy = [...tempPhysicalStores];
+                              copy[idx] = { ...copy[idx], address: e.target.value };
+                              setTempPhysicalStores(copy);
+                            }}
+                            className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 focus:border-orange-500 outline-none"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2 text-[10px]">
+                          <div>
+                            <label className="text-[7.5px] uppercase font-bold text-slate-400">City</label>
+                            <input 
+                              value={item.city}
+                              onChange={(e) => {
+                                const copy = [...tempPhysicalStores];
+                                copy[idx] = { ...copy[idx], city: e.target.value };
+                                setTempPhysicalStores(copy);
+                              }}
+                              className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 outline-none uppercase font-bold"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[7.5px] uppercase font-bold text-slate-400">Outlet Badge Tag</label>
+                            <select
+                              value={item.badgeLabel}
+                              onChange={(e) => {
+                                const copy = [...tempPhysicalStores];
+                                copy[idx] = { ...copy[idx], badgeLabel: e.target.value };
+                                setTempPhysicalStores(copy);
+                              }}
+                              className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 outline-none font-bold"
+                            >
+                              <option value="Flagship">Flagship Outlet</option>
+                              <option value="Premium">Premium Center</option>
+                              <option value="Authorized">Authorized Store</option>
+                              <option value="Express Pickup">Express Pickup Hub</option>
+                            </select>
+                          </div>
+                        </div>
                       </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const fresh: PhysicalStore = {
+                        id: `ps-${Date.now()}`,
+                        storeName: "Star Tech Multi-Outlet",
+                        address: "10th Floor, Mascot Plaza, Uttara",
+                        badgeLabel: "Authorized",
+                        contactNumber: "+8801711223355",
+                        city: "Dhaka"
+                      };
+                      setTempPhysicalStores([...tempPhysicalStores, fresh]);
+                    }}
+                    className="w-full py-2.5 bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl text-[10px] font-black uppercase text-slate-600 tracking-wider hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    + Add Retail Store Point
+                  </button>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4 w-full">
+                  <button
+                    type="button"
+                    onClick={() => setEditingSection(null)}
+                    className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveSection("physical-stores")}
+                    className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="w-full flex-grow flex flex-col justify-between">
+                <div>
+                  {enablePhysicalStores ? (
+                    physicalStores.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {physicalStores.map((store, idx) => (
+                          <div 
+                            key={store.id || idx} 
+                            className="bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl p-4 flex flex-col justify-between space-y-3 shadow-none hover:border-slate-300 transition-colors"
+                          >
+                            <div className="space-y-1.5 text-left">
+                              <div className="flex items-start justify-between">
+                                <span className="text-[10px] bg-orange-500/10 text-orange-600 border border-orange-500/20 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider leading-none">
+                                  {store.badgeLabel || "Premium Store"}
+                                </span>
+                                <span className="text-[9px] text-slate-400 font-bold uppercase font-mono">{store.city}</span>
+                              </div>
+                              <h4 className="text-xs font-black uppercase text-[#1A1A2E] tracking-wider leading-tight">
+                                {store.storeName}
+                              </h4>
+                              <p className="text-[11px] text-slate-500 font-light leading-snug">
+                                {store.address}
+                              </p>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-200/50 flex justify-between items-center text-[10px] text-slate-500 font-mono">
+                              <span className="flex items-center gap-1.5">
+                                <Phone className="w-3 h-3 text-slate-400" />
+                                {store.contactNumber}
+                              </span>
+                              <span className="text-[8.5px] bg-slate-200/50 text-slate-600 px-1.5 py-0.5 rounded font-extrabold uppercase">
+                                PICKUP AVAILABLE
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
+                        No verified brick-and-mortar outlet points indexed for showcase.
+                      </div>
+                    )
+                  ) : (
+                    <div className="py-12 bg-[#FAFAFA]/50 border border-dashed border-[#E5E7EB] rounded-2xl text-center text-slate-400 text-xs italic">
+                      Physical stores section is disabled and won't show on storefront.
                     </div>
-                  ))}
+                  )}
                 </div>
-              ) : (
-                <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
-                  No verified brick-and-mortar outlet points indexed for showcase.
-                </div>
-              )}
-            </div>
 
-            <div className="pt-4 border-t border-[#E5E7EB]/60 mt-4.5">
-              <span className="text-[9px] text-slate-400 font-mono">
-                Store details integrate dynamically into geographic checkout lists and digital pickup options.
-              </span>
-            </div>
+                <div className="pt-4 border-t border-[#E5E7EB]/60 mt-4.5">
+                  <span className="text-[9px] text-slate-400 font-mono">
+                    Store details integrate dynamically into geographic checkout lists and digital pickup options.
+                  </span>
+                </div>
+              </div>
+            )}
 
           </div>
 
         </div>
 
+        {/* SECTION: BOX CONTENTS / COMPLIMENTARY FEATURES */}
+        <div id="box-contents-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left">
+          
+          <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-3">
+            <div>
+              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
+                Included Accessories & Packages
+              </span>
+              <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] flex items-center gap-2">
+                📦 BOX CONTENTS / COMPLIMENTARY FEATURES
+                {enableBoxContents && boxContents.length > 0 && (
+                  <span className="text-[9px] px-2 py-0.5 bg-green-100 text-[#2B9B00] border border-green-200/50 rounded-full font-bold uppercase">
+                    {boxContents.length} Items included
+                  </span>
+                )}
+              </h2>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setEnableBoxContents(!enableBoxContents)}
+                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${
+                  enableBoxContents 
+                    ? "bg-green-100 text-green-700 border-green-200" 
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}
+              >
+                {enableBoxContents ? "ENABLED" : "DISABLED"}
+              </button>
+              
+              <button
+                type="button"
+                onClick={() => {
+                  if (editingSection === "box-contents") {
+                    setEditingSection(null);
+                  } else {
+                    handleStartEdit("box-contents");
+                  }
+                }}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm ${
+                  editingSection === "box-contents"
+                    ? "bg-orange-500 text-white animate-pulse"
+                    : "bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500"
+                }`}
+                title="Configure Box Contents"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {editingSection === "box-contents" ? (
+            <div className="space-y-4">
+              <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Box contents & free features</span>
+              <p className="text-[10.5px] italic text-slate-500 leading-normal">
+                Add items included in the purchase package. Customize optional icons, descriptions and display orders.
+              </p>
+
+              <div className="space-y-4 pr-1 max-h-[400px] overflow-y-auto no-scrollbar">
+                {tempBoxContents.sort((a,b) => a.displayOrder - b.displayOrder).map((item, idx) => (
+                  <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-3.5 rounded-2xl relative text-left text-xs space-y-2.5">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                      <span className="font-extrabold text-orange-500 text-[10px] font-mono">Package Item #{idx + 1}</span>
+                      <div className="flex items-center gap-1.5">
+                        {/* Order up / down buttons */}
+                        <button
+                          type="button"
+                          disabled={idx === 0}
+                          onClick={() => {
+                            const copy = [...tempBoxContents];
+                            const prevItem = copy[idx - 1];
+                            const currentItem = copy[idx];
+                            const tempOrder = prevItem.displayOrder;
+                            prevItem.displayOrder = currentItem.displayOrder;
+                            currentItem.displayOrder = tempOrder;
+                            setTempBoxContents(copy);
+                          }}
+                          className="text-slate-400 hover:text-slate-700 disabled:opacity-30 font-bold cursor-pointer"
+                          title="Move Up"
+                        >
+                          ▲
+                        </button>
+                        <button
+                          type="button"
+                          disabled={idx === tempBoxContents.length - 1}
+                          onClick={() => {
+                            const copy = [...tempBoxContents];
+                            const nextItem = copy[idx + 1];
+                            const currentItem = copy[idx];
+                            const tempOrder = nextItem.displayOrder;
+                            nextItem.displayOrder = currentItem.displayOrder;
+                            currentItem.displayOrder = tempOrder;
+                            setTempBoxContents(copy);
+                          }}
+                          className="text-slate-400 hover:text-slate-700 disabled:opacity-30 font-bold cursor-pointer"
+                          title="Move Down"
+                        >
+                          ▼
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTempBoxContents(tempBoxContents.filter(b => b.id !== item.id))}
+                          className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                          title="Delete Item"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Item Title</span>
+                      <input 
+                        value={item.title}
+                        onChange={(e) => {
+                          const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, title: e.target.value } : b);
+                          setTempBoxContents(updated);
+                        }}
+                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
+                        placeholder="e.g. Premium TPU Case"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Description (Optional)</span>
+                      <input 
+                        value={item.description || ""}
+                        onChange={(e) => {
+                          const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, description: e.target.value } : b);
+                          setTempBoxContents(updated);
+                        }}
+                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none"
+                        placeholder="e.g. Ultra thin clear protection sleeve"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Feature Icon Symbol</span>
+                      <select
+                        value={item.icon || "Box"}
+                        onChange={(e) => {
+                          const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, icon: e.target.value } : b);
+                          setTempBoxContents(updated);
+                        }}
+                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] font-bold outline-none"
+                      >
+                        {["Box", "Cable", "Battery", "Sparkles", "Smartphone", "Heart", "Shield", "Zap", "Award", "Clock"].map(ico => (
+                          <option key={ico} value={ico}>{ico}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const fresh: BoxContentItem = {
+                    id: `bc-${Date.now()}`,
+                    title: "Complimentary Adapter",
+                    icon: "Zap",
+                    description: "33W Super Fast charger plug included",
+                    displayOrder: tempBoxContents.length + 1
+                  };
+                  setTempBoxContents([...tempBoxContents, fresh]);
+                }}
+                className="w-full py-3 bg-[#FAFAFA] border border-dashed border-[#E5E7EB] hover:bg-slate-100 rounded-2xl text-[10px] text-orange-500 font-extrabold uppercase tracking-wider cursor-pointer transition-colors"
+              >
+                + Add Complimentary Box Item
+              </button>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4 w-full">
+                <button
+                  type="button"
+                  onClick={() => setEditingSection(null)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveSection("box-contents")}
+                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {!enableBoxContents ? (
+                <div className="py-8 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-400 font-medium">
+                  This section is disabled. Box contents information will remain hidden on the storefront page.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {boxContents.length === 0 ? (
+                    <div className="py-12 text-center text-xs text-slate-400 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                      <p className="mb-3">No box items configured yet. Click edit to define what is included with this listing.</p>
+                      <button
+                        type="button"
+                        onClick={() => handleStartEdit("box-contents")}
+                        className="px-4 py-2 bg-orange-500 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl hover:bg-orange-600 transition-colors cursor-pointer"
+                      >
+                        Add First Box Item
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {boxContents.map((item) => (
+                        <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl p-4 flex gap-3.5 items-start">
+                          <div className="text-2xl p-2.5 bg-white rounded-xl shadow-sm border border-slate-100 shrink-0">
+                            {(() => {
+                              switch (item.icon) {
+                                case "Box": return "📦";
+                                case "Cable": return "🔌";
+                                case "Battery": return "🔋";
+                                case "Sparkles": return "✨";
+                                case "Smartphone": return "📱";
+                                case "Heart": return "❤️";
+                                case "Shield": return "🛡️";
+                                case "Zap": return "⚡";
+                                case "Award": return "🏆";
+                                case "Clock": return "🕒";
+                                default: return "📦";
+                              }
+                            })()}
+                          </div>
+                          <div className="space-y-1 text-left min-w-0">
+                            <h4 className="text-xs font-black uppercase text-[#1A1A2E] tracking-wider truncate leading-tight">
+                              {item.title}
+                            </h4>
+                            {item.description && (
+                              <p className="text-[11px] text-slate-500 font-light leading-snug">
+                                {item.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
         {/* SECTION 4: PRODUCT OVERVIEW (Full Width Bento Grid of Bullet Feature blocks) */}
         <div id="product-overview-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left">
           
-          <button
-            type="button"
-            onClick={() => handleOpenDrawer("overview")}
-            id="edit-overview-btn"
-            className="absolute top-6 right-6 w-8 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm"
-            title="Configure spotlight categories"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-3">
+            <div>
+              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
+                Visual Sourcing Storyboards
+              </span>
+              <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E]">
+                PRODUCT SPOTLIGHT OVERVIEW
+              </h2>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setEnableOverviewSection(!enableOverviewSection)}
+                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${
+                  enableOverviewSection 
+                    ? "bg-green-100 text-green-700 border-green-200" 
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}
+              >
+                {enableOverviewSection ? "ENABLED" : "DISABLED"}
+              </button>
 
-          <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
-            Visual Sourcing Storyboards
-          </span>
-          <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] mb-6 text-left">
-            PRODUCT SPOTLIGHT OVERVIEW
-          </h2>
+              <button
+                type="button"
+                onClick={() => {
+                  if (editingSection === "overview") {
+                    setEditingSection(null);
+                  } else {
+                    handleStartEdit("overview");
+                  }
+                }}
+                id="edit-overview-btn"
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm ${
+                  editingSection === "overview"
+                    ? "bg-orange-500 text-white animate-pulse"
+                    : "bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500"
+                }`}
+                title="Configure spotlight categories"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
 
-          {overviewBlocks.filter(b => b.enabled).length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-              {overviewBlocks.filter(b => b.enabled).map((blk, idx) => (
-                <div 
-                  key={blk.id || idx} 
-                  className="bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl p-5 text-left border-l-4 border-l-orange-500 hover:shadow-sm transition-all"
+          {editingSection === "overview" ? (
+            <div className="space-y-4">
+              <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Overview Category Spotlight grids</span>
+              
+              <div className="space-y-4 max-h-[400px] overflow-y-auto no-scrollbar pr-1">
+                {tempOverview.map((blk, idx) => (
+                  <div key={blk.id || idx} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl space-y-3 relative text-left text-xs">
+                    <div className="flex justify-between items-center bg-white p-2 rounded-xl border border-slate-150">
+                      <input 
+                        value={blk.title}
+                        onChange={(e) => {
+                          const copy = [...tempOverview];
+                          copy[idx].title = e.target.value;
+                          setTempOverview(copy);
+                        }}
+                        className="font-extrabold text-orange-600 uppercase tracking-tight bg-transparent border-none outline-none py-0.5 focus:bg-slate-50 rounded px-1"
+                        placeholder="Block Title"
+                      />
+                      <div className="flex items-center gap-1.5">
+                        <button 
+                          type="button"
+                          onClick={() => {
+                            const copy = [...tempOverview];
+                            copy[idx].enabled = !copy[idx].enabled;
+                            setTempOverview(copy);
+                          }}
+                          className={`px-2 py-0.5 rounded text-[8px] font-black uppercase cursor-pointer ${
+                            blk.enabled ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {blk.enabled ? "ON" : "OFF"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setTempOverview(tempOverview.filter((_, i) => i !== idx))}
+                          className="text-red-500 hover:text-red-700 font-bold ml-1 cursor-pointer"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {blk.enabled && (
+                      <div className="space-y-2 text-[10px]">
+                        <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Highlight Bullets List</span>
+                        {blk.bullets.map((bullet, bIdx) => (
+                          <div key={bIdx} className="flex gap-1.5">
+                            <input 
+                              value={bullet}
+                              onChange={(e) => {
+                                const copy = [...tempOverview];
+                                copy[idx].bullets[bIdx] = e.target.value;
+                                setTempOverview(copy);
+                              }}
+                              className="flex-grow bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 uppercase font-bold"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const copy = [...tempOverview];
+                                copy[idx].bullets = copy[idx].bullets.filter((_, bSub) => bSub !== bIdx);
+                                setTempOverview(copy);
+                              }}
+                              className="text-red-500 hover:text-red-700 font-bold font-mono px-1 cursor-pointer"
+                            >
+                              x
+                            </button>
+                          </div>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const copy = [...tempOverview];
+                            copy[idx].bullets.push("NEW BULLET POINTER VALUE");
+                            setTempOverview(copy);
+                          }}
+                          className="text-orange-500 hover:underline text-[9.5px] font-black uppercase tracking-wider block pt-1 text-left cursor-pointer"
+                        >
+                          + ADD UNIQUE BULLET BLOCK
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const fresh: OverviewBlock = {
+                    id: `ob-${Date.now()}`,
+                    title: "New Spotlight Block",
+                    bullets: ["FIRST DEFAULT VALUE BENCHMARK PRO"],
+                    enabled: true
+                  };
+                  setTempOverview([...tempOverview, fresh]);
+                }}
+                className="w-full py-3 bg-[#FAFAFA] border border-dashed border-[#E5E7EB] hover:bg-slate-100 rounded-2xl text-[10px] text-orange-500 font-bold uppercase tracking-widest cursor-pointer transition-colors"
+              >
+                + Add Spotlight Story block
+              </button>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4 w-full">
+                <button
+                  type="button"
+                  onClick={() => setEditingSection(null)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
                 >
-                  <h3 className="text-sm font-black text-[#1A1A2E] uppercase tracking-wider mb-4 border-b border-[#E5E7EB] pb-2 flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-orange-500" />
-                    {blk.title}
-                  </h3>
-                  <ul className="space-y-2">
-                    {blk.bullets.map((bullet, i) => (
-                      <li key={i} className="text-xs text-slate-600 font-bold flex items-start gap-2 uppercase tracking-tight">
-                        <span className="text-emerald-500 mt-0.5 select-none shrink-0 font-bold">✓</span>
-                        <span>{bullet}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveSection("overview")}
+                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
             </div>
           ) : (
-            <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
-              No overview highlight blocks enabled.
-            </div>
+            <>
+              {!enableOverviewSection ? (
+                <div className="py-12 bg-[#FAFAFA]/50 border border-dashed border-[#E5E7EB] rounded-2xl text-center text-slate-400 text-xs italic">
+                  Spotlight overview section is disabled and won't show on storefront.
+                </div>
+              ) : (
+                <>
+                  {overviewBlocks.filter(b => b.enabled).length > 0 ? (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
+                      {overviewBlocks.filter(b => b.enabled).map((blk, idx) => (
+                        <div 
+                          key={blk.id || idx} 
+                          className="bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl p-5 text-left border-l-4 border-l-orange-500 hover:shadow-sm transition-all"
+                        >
+                          <h3 className="text-sm font-black text-[#1A1A2E] uppercase tracking-wider mb-4 border-b border-[#E5E7EB] pb-2 flex items-center gap-2">
+                            <Sparkles className="w-4 h-4 text-orange-500" />
+                            {blk.title}
+                          </h3>
+                          <ul className="space-y-2">
+                            {blk.bullets.map((bullet, i) => (
+                              <li key={i} className="text-xs text-slate-600 font-bold flex items-start gap-2 uppercase tracking-tight">
+                                <span className="text-emerald-500 mt-0.5 select-none shrink-0 font-bold">✓</span>
+                                <span>{bullet}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
+                      No overview highlight blocks enabled.
+                    </div>
+                  )}
+                </>
+              )}
+            </>
           )}
 
         </div>
@@ -1087,40 +2927,163 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
         {/* SECTION 5: BEST FOR TAGS CAPSULES (Full Width) */}
         <div id="product-tags-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left">
           
-          <button
-            type="button"
-            onClick={() => handleOpenDrawer("tags")}
-            id="edit-tags-btn"
-            className="absolute top-6 right-6 w-8 h-8 rounded-full bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500 flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm"
-            title="Edit tags listing"
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </button>
+          <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-3">
+            <div>
+              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
+                Search Taxonomy Identifiers
+              </span>
+              <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E]">
+                BEST FOR TAGS CAPSULES
+              </h2>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setEnableBestForTags(!enableBestForTags)}
+                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${
+                  enableBestForTags 
+                    ? "bg-green-100 text-green-700 border-green-200" 
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}
+              >
+                {enableBestForTags ? "ENABLED" : "DISABLED"}
+              </button>
 
-          <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
-            Search Taxonomy Identifiers
-          </span>
-          <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] mb-4.5 text-left">
-            BEST FOR TAGS CAPSULES
-          </h2>
-
-          <div className="flex flex-wrap gap-2">
-            {bestForTags.length > 0 ? (
-              bestForTags.map((tag, idx) => (
-                <span 
-                  key={idx} 
-                  className="px-4 py-2.5 bg-orange-50 text-[#FF5B00] border border-orange-100 rounded-2xl text-[10.5px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-sm"
-                >
-                  <span>★</span>
-                  <span>{tag}</span>
-                </span>
-              ))
-            ) : (
-              <div className="py-6 w-full border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
-                No taxonomy tagging configured. Click Edit on the top right to begin adding custom search tags.
-              </div>
-            )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (editingSection === "tags") {
+                    setEditingSection(null);
+                  } else {
+                    handleStartEdit("tags");
+                  }
+                }}
+                id="edit-tags-btn"
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm ${
+                  editingSection === "tags"
+                    ? "bg-orange-500 text-white animate-pulse"
+                    : "bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500"
+                }`}
+                title="Edit target tag labels"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
+
+          {editingSection === "tags" ? (
+            <div className="space-y-4">
+              
+              <div className="flex flex-wrap gap-2 mb-2 max-h-[150px] overflow-y-auto no-scrollbar pr-1">
+                {tempTagsList.map((tag, idx) => (
+                  <span 
+                    key={idx} 
+                    className="px-3 py-1.5 bg-orange-100 text-orange-700 border border-orange-200/50 rounded-lg text-[10.5px] font-bold uppercase tracking-widest flex items-center gap-1.5"
+                  >
+                    <span>{tag}</span>
+                    <button
+                      type="button"
+                      onClick={() => setTempTagsList(tempTagsList.filter((_, i) => i !== idx))}
+                      className="text-red-500 group-hover:text-red-700 font-bold text-xs cursor-pointer"
+                    >
+                      x
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              {/* Add dynamic capsule search */}
+              <div className="space-y-2 text-xs">
+                <label className="text-[10px] uppercase font-black text-slate-400 block font-mono">Input dynamic capsule tag</label>
+                <div className="flex gap-2">
+                  <input 
+                    value={newTagVal}
+                    onChange={(e) => setNewTagVal(e.target.value)}
+                    placeholder="e.g. durable leather casing, premium..."
+                    className="bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs flex-grow outline-none focus:border-orange-500 uppercase font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newTagVal.trim() && !tempTagsList.includes(newTagVal.trim().toLowerCase())) {
+                        setTempTagsList([...tempTagsList, newTagVal.trim().toLowerCase()]);
+                        setNewTagVal("");
+                      }
+                    }}
+                    className="px-4 bg-orange-500 text-white rounded-xl font-bold uppercase text-[10.5px] cursor-pointer"
+                  >
+                    Add tag
+                  </button>
+                </div>
+
+                {/* Autocomplete recommended list */}
+                <div className="pt-2 border-t border-[#E5E7EB]">
+                  <span className="text-[8.5px] uppercase font-bold text-slate-400 block tracking-widest font-mono mb-2">Recommended preset tags</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {["eco-friendly packaging", "premium lifestyle", "modern classic apparel", "high benchmarks zoom"].map(preset => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => {
+                          if (!tempTagsList.includes(preset)) {
+                            setTempTagsList([...tempTagsList, preset]);
+                          }
+                        }}
+                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded text-[9.5px] text-slate-600 uppercase font-semibold transition-colors cursor-pointer"
+                      >
+                        + {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4 w-full">
+                <button
+                  type="button"
+                  onClick={() => setEditingSection(null)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveSection("tags")}
+                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+
+            </div>
+          ) : (
+            <>
+              {!enableBestForTags ? (
+                <div className="py-12 bg-[#FAFAFA]/50 border border-dashed border-[#E5E7EB] rounded-2xl text-center text-slate-400 text-xs italic">
+                  Best For Tags section is disabled and won't show on storefront.
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {bestForTags.length > 0 ? (
+                    bestForTags.map((tag, idx) => (
+                      <span 
+                        key={idx} 
+                        className="px-4 py-2.5 bg-orange-50 text-[#FF5B00] border border-orange-100 rounded-2xl text-[10.5px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-sm"
+                      >
+                        <span>★</span>
+                        <span>{tag}</span>
+                      </span>
+                    ))
+                  ) : (
+                    <div className="py-6 w-full border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
+                      No taxonomy tagging configured. Click Edit on the top right to begin adding custom search tags.
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
 
           <div className="pt-4 border-t border-[#E5E7EB]/50 mt-6 text-slate-400 text-[10px] font-mono leading-none">
             Tag parameters automatically index listings across search modules and personalized category collections.
@@ -1130,9 +3093,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
         </>
       </div>
 
-      {/* RIGHT SLIDING PROPERTY DRAWER PANEL (Width: 480px) */}
+      {/* RIGHT SLIDING PROPERTY DRAWER PANEL (Bypassed) */}
       <AnimatePresence>
-        {activeDrawer && (
+        {false && (
           <div className="fixed inset-0 z-[400] overflow-hidden">
             {/* Backdrop Blur screen layer with click close trigger */}
             <motion.div 
@@ -1826,6 +3789,445 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
                     </div>
                   )}
+
+                  {/* FORM 8: BOX CONTENTS PANEL */}
+                  {activeDrawer === "box-contents" && (
+                    <div className="space-y-4">
+                      <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Box contents & free features</span>
+                      <p className="text-[10.5px] italic text-slate-500 leading-normal">
+                        Add items included in the purchase package. Customize optional icons, descriptions and display orders.
+                      </p>
+
+                      <div className="space-y-4 pr-1">
+                        {tempBoxContents.sort((a,b) => a.displayOrder - b.displayOrder).map((item, idx) => (
+                          <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-3.5 rounded-2xl relative text-left text-xs space-y-2.5">
+                            <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                              <span className="font-extrabold text-orange-500 text-[10px] font-mono">Package Item #{idx + 1}</span>
+                              <div className="flex items-center gap-1.5">
+                                {/* Order up / down buttons */}
+                                <button
+                                  type="button"
+                                  disabled={idx === 0}
+                                  onClick={() => {
+                                    const copy = [...tempBoxContents];
+                                    const prevItem = copy[idx - 1];
+                                    const currentItem = copy[idx];
+                                    const tempOrder = prevItem.displayOrder;
+                                    prevItem.displayOrder = currentItem.displayOrder;
+                                    currentItem.displayOrder = tempOrder;
+                                    setTempBoxContents(copy);
+                                  }}
+                                  className="text-slate-400 hover:text-slate-700 disabled:opacity-30 font-bold cursor-pointer"
+                                  title="Move Up"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={idx === tempBoxContents.length - 1}
+                                  onClick={() => {
+                                    const copy = [...tempBoxContents];
+                                    const nextItem = copy[idx + 1];
+                                    const currentItem = copy[idx];
+                                    const tempOrder = nextItem.displayOrder;
+                                    nextItem.displayOrder = currentItem.displayOrder;
+                                    currentItem.displayOrder = tempOrder;
+                                    setTempBoxContents(copy);
+                                  }}
+                                  className="text-slate-400 hover:text-slate-700 disabled:opacity-30 font-bold cursor-pointer"
+                                  title="Move Down"
+                                >
+                                  ▼
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setTempBoxContents(tempBoxContents.filter(b => b.id !== item.id))}
+                                  className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                                  title="Delete Item"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </div>
+
+                            <div className="space-y-1">
+                              <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Item Title</span>
+                              <input 
+                                value={item.title}
+                                onChange={(e) => {
+                                  const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, title: e.target.value } : b);
+                                  setTempBoxContents(updated);
+                                }}
+                                className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
+                                placeholder="e.g. Premium TPU Case"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Description (Optional)</span>
+                              <input 
+                                value={item.description || ""}
+                                onChange={(e) => {
+                                  const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, description: e.target.value } : b);
+                                  setTempBoxContents(updated);
+                                }}
+                                className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none"
+                                placeholder="e.g. Ultra thin clear protection sleeve"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Feature Icon Symbol</span>
+                              <select
+                                value={item.icon || "Box"}
+                                onChange={(e) => {
+                                  const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, icon: e.target.value } : b);
+                                  setTempBoxContents(updated);
+                                }}
+                                className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] font-bold outline-none"
+                              >
+                                {["Box", "Cable", "Battery", "Sparkles", "Smartphone", "Heart", "Shield", "Zap", "Award", "Clock"].map(ico => (
+                                  <option key={ico} value={ico}>{ico}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const fresh: BoxContentItem = {
+                            id: `bc-${Date.now()}`,
+                            title: "Complimentary Adapter",
+                            icon: "Zap",
+                            description: "33W Super Fast charger plug included",
+                            displayOrder: tempBoxContents.length + 1
+                          };
+                          setTempBoxContents([...tempBoxContents, fresh]);
+                        }}
+                        className="w-full py-3 bg-[#FAFAFA] border border-dashed border-[#E5E7EB] hover:bg-slate-100 rounded-2xl text-[10px] text-orange-500 font-extrabold uppercase tracking-wider cursor-pointer transition-colors"
+                      >
+                        + Add Complimentary Box Item
+                      </button>
+                    </div>
+                  )}
+
+                  {/* FORM 9: PRODUCT OPTIONS & VARIANTS PANEL */}
+                  {activeDrawer === "options" && (() => {
+                    // Variants generator Cartesian helper inside JSX block
+                    const generateVariants = (groups: OptionGroup[], basePrice: number): ProductVariant[] => {
+                      if (groups.length === 0) return [];
+                      
+                      const activeGroups = groups.filter(g => g.values.length > 0);
+                      if (activeGroups.length === 0) return [];
+
+                      const cartesian = (arrays: string[][]): string[][] => {
+                        return arrays.reduce<string[][]>((a, b) => {
+                          return a.flatMap(d => b.map(e => [...d, e]));
+                        }, [[]]);
+                      };
+
+                      const groupNames = activeGroups.map(g => g.name);
+                      const valuesArrays = activeGroups.map(g => g.values);
+                      const combos = cartesian(valuesArrays);
+
+                      return combos.map((combo, idx) => {
+                        const optionsObj: { [key: string]: string } = {};
+                        groupNames.forEach((name, i) => {
+                          optionsObj[name] = combo[i];
+                        });
+
+                        const label = combo.join("-");
+                        return {
+                          id: `v-${idx}-${Date.now()}`,
+                          options: optionsObj,
+                          sku: `${productName ? productName.replace(/\s+/g, "-").toUpperCase() : "PROD"}-${label.toUpperCase()}`,
+                          price: discountedPrice || basePrice || 0,
+                          stock: 100,
+                          weight: "0.5 kg",
+                          images: [],
+                          enabled: true
+                        };
+                      });
+                    };
+
+                    return (
+                      <div className="space-y-6">
+                        <div>
+                          <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Options Configuration</span>
+                          <p className="text-[10.5px] italic text-slate-500 leading-normal">
+                            Define Shopify-style option groups (like Color, Size, Style) and display formats.
+                          </p>
+                        </div>
+
+                        {/* Option Groups list */}
+                        <div className="space-y-4">
+                          {tempOptionGroups.map((group, gIdx) => (
+                            <div key={group.id || gIdx} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl space-y-3 relative text-left text-xs">
+                              <button
+                                type="button"
+                                onClick={() => setTempOptionGroups(tempOptionGroups.filter((_, i) => i !== gIdx))}
+                                className="absolute top-4 right-4 text-red-500 hover:text-red-700 cursor-pointer border-0 bg-transparent"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+
+                              <div className="space-y-1">
+                                <label className="text-[8px] uppercase font-black text-slate-400">Option Name</label>
+                                <input 
+                                  value={group.name}
+                                  onChange={(e) => {
+                                    const copy = [...tempOptionGroups];
+                                    copy[gIdx].name = e.target.value;
+                                    setTempOptionGroups(copy);
+                                  }}
+                                  className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 focus:border-orange-500 outline-none uppercase font-bold text-xs"
+                                  placeholder="e.g. Size"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[8px] uppercase font-black text-slate-400">Display Type</label>
+                                <select
+                                  value={group.displayType}
+                                  onChange={(e) => {
+                                    const copy = [...tempOptionGroups];
+                                    copy[gIdx].displayType = e.target.value as any;
+                                    setTempOptionGroups(copy);
+                                  }}
+                                  className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 focus:border-orange-500 outline-none font-bold text-xs"
+                                >
+                                  <option value="Button">Button/Badge Capsules</option>
+                                  <option value="Color Swatch">Color Swatch Palette</option>
+                                  <option value="Dropdown">Standard Dropdown Selector</option>
+                                </select>
+                              </div>
+
+                              {/* Option Values tags */}
+                              <div className="space-y-2">
+                                <label className="text-[8px] uppercase font-black text-slate-400 block">Values List</label>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {group.values.map((val, vIdx) => (
+                                    <span key={vIdx} className="bg-orange-50 text-orange-600 border border-orange-100 rounded-lg px-2 py-1 text-[10px] font-bold flex items-center gap-1">
+                                      <span>{val}</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const copy = [...tempOptionGroups];
+                                          copy[gIdx].values = copy[gIdx].values.filter((_, i) => i !== vIdx);
+                                          setTempOptionGroups(copy);
+                                        }}
+                                        className="text-red-500 hover:text-red-700 ml-1 font-bold font-mono border-0 bg-transparent cursor-pointer"
+                                      >
+                                        x
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+
+                                {/* Value input sub-form */}
+                                <div className="flex gap-2">
+                                  <input 
+                                    id={`new-val-input-${gIdx}`}
+                                    placeholder="Type value (e.g. XL) & add..."
+                                    className="flex-grow bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1 text-xs outline-none focus:border-orange-500 font-bold"
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        const input = e.currentTarget;
+                                        const text = input.value.trim();
+                                        if (text && !group.values.includes(text)) {
+                                          const copy = [...tempOptionGroups];
+                                          copy[gIdx].values.push(text);
+                                          setTempOptionGroups(copy);
+                                          input.value = "";
+                                        }
+                                      }
+                                    }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const input = document.getElementById(`new-val-input-${gIdx}`) as HTMLInputElement;
+                                      const text = input?.value.trim();
+                                      if (text && !group.values.includes(text)) {
+                                        const copy = [...tempOptionGroups];
+                                        copy[gIdx].values.push(text);
+                                        setTempOptionGroups(copy);
+                                        input.value = "";
+                                      }
+                                    }}
+                                    className="px-3 bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl hover:bg-slate-100 font-bold uppercase text-[9px] cursor-pointer"
+                                  >
+                                    Add
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const fresh: OptionGroup = {
+                                id: `og-${Date.now()}`,
+                                name: "New Option Group",
+                                displayType: "Button",
+                                values: ["Default Value"]
+                              };
+                              setTempOptionGroups([...tempOptionGroups, fresh]);
+                            }}
+                            className="flex-1 py-3 bg-[#FAFAFA] border border-dashed border-[#E5E7EB] hover:bg-slate-100 rounded-2xl text-[10px] text-[#FF5B00] font-black uppercase tracking-wider cursor-pointer"
+                          >
+                            + Add Option Group
+                          </button>
+                          
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const variants = generateVariants(tempOptionGroups, discountedPrice || actualPrice || 0);
+                              setTempProductVariants(variants);
+                              triggerToast(`🔄 Successfully generated ${variants.length} variant combinations!`);
+                            }}
+                            className="flex-1 py-3 bg-green-500 hover:bg-green-600 border border-transparent text-white rounded-2xl text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                          >
+                            🔄 Generate Matrix
+                          </button>
+                        </div>
+
+                        {/* Size Chart Settings */}
+                        <div className="pt-4 border-t border-[#E5E7EB] space-y-4">
+                          <div>
+                            <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Size Chart Profile</span>
+                            <p className="text-[10.5px] italic text-slate-500 leading-normal">
+                              Enable size guides in table, image or html form for customers.
+                            </p>
+                          </div>
+
+                          <div className="flex justify-between items-center py-2 border-b border-[#E5E7EB]/40">
+                            <span className="text-xs font-bold text-slate-600">Enable Size Chart link button</span>
+                            <input 
+                              type="checkbox" 
+                              checked={enableSizeChart}
+                              onChange={(e) => setEnableSizeChart(e.target.checked)}
+                              className="rounded border-[#E5E7EB] text-orange-500 focus:ring-orange-500 w-4 h-4 accent-orange-500"
+                            />
+                          </div>
+
+                          {enableSizeChart && (
+                            <div className="space-y-3 bg-[#FAFAFA] p-4 rounded-2xl border border-slate-150">
+                              <div className="space-y-1">
+                                <label className="text-[8px] uppercase font-black text-slate-400 block">Chart Mode</label>
+                                <select
+                                  value={sizeChartType}
+                                  onChange={(e) => setSizeChartType(e.target.value as any)}
+                                  className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 font-bold text-xs"
+                                >
+                                  <option value="table">Interactive Table Dimensions</option>
+                                  <option value="image">Static High-Res Image Blueprint</option>
+                                  <option value="html">Custom Rich Text/HTML spec</option>
+                                </select>
+                              </div>
+
+                              {sizeChartType === "image" && (
+                                <div className="space-y-1">
+                                  <label className="text-[8px] uppercase font-black text-slate-400 block">Blueprint Image URL</label>
+                                  <input 
+                                    value={sizeChartImage}
+                                    onChange={(e) => setSizeChartImage(e.target.value)}
+                                    placeholder="https://..."
+                                    className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 text-xs font-mono"
+                                  />
+                                </div>
+                              )}
+
+                              {sizeChartType === "html" && (
+                                <div className="space-y-1">
+                                  <label className="text-[8px] uppercase font-black text-slate-400 block">Custom HTML specification</label>
+                                  <textarea 
+                                    value={sizeChartHtml}
+                                    onChange={(e) => setSizeChartHtml(e.target.value)}
+                                    placeholder="&lt;div className='p-4 text-center'&gt;Size spec...&lt;/div&gt;"
+                                    className="w-full bg-white border border-[#E5E7EB] rounded-xl px-2.5 py-1.5 text-xs font-mono h-24"
+                                  />
+                                </div>
+                              )}
+
+                              {sizeChartType === "table" && (
+                                <div className="space-y-3">
+                                  <label className="text-[8px] uppercase font-black text-slate-400 block">Dynamic Dimensions Rows ({sizeChartRows.length})</label>
+                                  <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                                    {sizeChartRows.map((row, rIdx) => (
+                                      <div key={rIdx} className="bg-white border border-[#E5E7EB] p-2 rounded-xl flex gap-1.5 items-center">
+                                        <input 
+                                          value={row.size}
+                                          onChange={(e) => {
+                                            const copy = [...sizeChartRows];
+                                            copy[rIdx].size = e.target.value;
+                                            setSizeChartRows(copy);
+                                          }}
+                                          placeholder="Size"
+                                          className="w-12 bg-slate-50 border-0 rounded px-1.5 py-1 text-xs font-black uppercase text-center"
+                                        />
+                                        <input 
+                                          value={row.chest}
+                                          onChange={(e) => {
+                                            const copy = [...sizeChartRows];
+                                            copy[rIdx].chest = e.target.value;
+                                            setSizeChartRows(copy);
+                                          }}
+                                          placeholder="Chest"
+                                          className="w-16 border-0 rounded px-1.5 py-1 text-xs text-center"
+                                        />
+                                        <input 
+                                          value={row.length}
+                                          onChange={(e) => {
+                                            const copy = [...sizeChartRows];
+                                            copy[rIdx].length = e.target.value;
+                                            setSizeChartRows(copy);
+                                          }}
+                                          placeholder="Length"
+                                          className="w-16 border-0 rounded px-1.5 py-1 text-xs text-center"
+                                        />
+                                        <input 
+                                          value={row.shoulder}
+                                          onChange={(e) => {
+                                            const copy = [...sizeChartRows];
+                                            copy[rIdx].shoulder = e.target.value;
+                                            setSizeChartRows(copy);
+                                          }}
+                                          placeholder="Shoulder"
+                                          className="w-16 border-0 rounded px-1.5 py-1 text-xs text-center"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => setSizeChartRows(sizeChartRows.filter((_, i) => i !== rIdx))}
+                                          className="text-red-500 hover:text-red-700 font-bold border-0 bg-transparent cursor-pointer"
+                                        >
+                                          x
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setSizeChartRows([...sizeChartRows, { size: "XL", chest: "44", length: "30", shoulder: "20" }])}
+                                    className="text-orange-500 hover:underline text-[9.5px] font-black uppercase tracking-wider block text-left"
+                                  >
+                                    + ADD SIZE DIMENSION ROW
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                 </div>
 

@@ -87,6 +87,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Role Management', icon: Lock, path: '/admin/settings?tab=roles' },
     { label: 'Permissions', icon: ShieldCheck, path: '/admin/settings?tab=permissions' },
     { label: 'System Configuration', icon: Bolt, path: '/admin/cms' },
+    { label: '🌐 Website CMS Studio', icon: Globe, path: '/admin/cms-studio' },
     { label: 'Verification Center', icon: Award, path: '/admin/brand-verification' },
     { label: 'Fraud Detection Engine', icon: Zap, path: '/admin/moderation-v2' },
     { label: 'Subscription Plans', icon: Tag, path: '/admin/promotions?tab=plans' },
@@ -95,6 +96,13 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Audit Logs', icon: History, path: '/admin/moderation?tab=reports' },
     { label: 'Security Center', icon: FolderLock, path: '/admin/settings?tab=security' },
     { label: 'Feature Flags', icon: Activity, path: '/admin/settings?tab=features' },
+    { label: 'Website CMS Studio', type: 'label' },
+    {
+      label: 'Website CMS Studio',
+      icon: Globe,
+      path: '/admin/website-cms',
+      badge: 'NEW'
+    },
   ],
   admin: [
     { label: 'Admin Workspace', type: 'label' },
@@ -114,6 +122,14 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Finance', type: 'label' },
     { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
+    { label: '🌐 Website CMS Studio', icon: Globe, path: '/admin/cms-studio' },
+    { label: 'Website CMS Studio', type: 'label' },
+    {
+      label: 'Website CMS Studio',
+      icon: Globe,
+      path: '/admin/website-cms',
+      badge: 'NEW'
+    },
   ],
   seller: [
     { label: 'Seller Operations', type: 'label' },
@@ -166,6 +182,13 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Promotions', icon: Megaphone, path: '/admin/promotions' },
     { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
+    { label: '🌐 Website CMS Studio', icon: Globe, path: '/admin/cms-studio' },
+    {
+      label: 'Website CMS Studio',
+      icon: Globe,
+      path: '/admin/website-cms',
+      badge: 'NEW'
+    },
   ]
 };
 

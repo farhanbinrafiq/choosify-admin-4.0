@@ -4,7 +4,7 @@ import {
   ArrowRight, Truck, RefreshCw, MapPin, Edit3, Sparkles,
   ExternalLink, MessageSquare, Tag, Youtube, Play, FileText,
   AlertCircle, DollarSign, Store, HelpCircle, CheckCircle2,
-  ChevronDown, Layers, Clipboard
+  ChevronDown, Layers, Clipboard, Box, Zap, Award, Clock, Smartphone
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -93,7 +93,7 @@ export interface ProductData {
   cons: string[];
   specs: Spec[];
 
-  enableOptions: boolean;
+  enableOptions?: boolean;
   options: ProductOptions;
 
   enableSizeGuide: boolean;
@@ -123,6 +123,39 @@ export interface ProductData {
 
   enableBestForTags: boolean;
   bestForTags: string[];
+
+  enableBoxContents?: boolean;
+  boxContents?: {
+    id: string;
+    title: string;
+    icon?: string;
+    description?: string;
+    displayOrder: number;
+  }[];
+
+  optionGroups?: {
+    id: string;
+    name: string;
+    displayType: "Button" | "Color Swatch" | "Dropdown";
+    values: string[];
+  }[];
+  productVariants?: {
+    id: string;
+    options: { [groupName: string]: string };
+    sku: string;
+    price: number;
+    stock: number;
+    weight?: string;
+    images?: string[];
+    enabled: boolean;
+  }[];
+
+  enableSizeChart?: boolean;
+  sizeChartType?: "table" | "image" | "html";
+  sizeChartImage?: string;
+  sizeChartHtml?: string;
+  sizeChartColumns?: string[];
+  sizeChartRows?: any[];
   
   storeAvailability: string;
   returnPolicy: string;
@@ -156,6 +189,7 @@ export function ProductDetailView({
   const [selectedSubPlan, setSelectedSubPlan] = useState("");
   const [liked, setLiked] = useState(false);
   const [activeEmbedUrl, setActiveEmbedUrl] = useState<string | null>(null);
+  const [selectedCustomOptions, setSelectedCustomOptions] = useState<{ [key: string]: string }>({});
 
   const imagesList = data.images && data.images.length > 0 ? data.images : [PLACEHOLDER_IMAGE];
   const currentImg = imagesList[activePhotoIndex] || PLACEHOLDER_IMAGE;
@@ -187,9 +221,25 @@ export function ProductDetailView({
     );
   };
 
-  const actualDispPrice = selectedVersion 
-    ? data.discountedPrice + selectedVersion.priceDelta 
-    : data.discountedPrice || data.actualPrice;
+  // Find matching variant based on custom options selection
+  const matchingVariant = (() => {
+    if (!data.optionGroups || data.optionGroups.length === 0 || !data.productVariants) return null;
+    // If nothing selected yet, pre-initialize first combinations
+    return data.productVariants.find(variant => {
+      return Object.entries(selectedCustomOptions).every(([groupName, value]) => {
+        return !value || variant.options[groupName] === value;
+      });
+    });
+  })();
+
+  const actualDispPrice = (() => {
+    if (matchingVariant) {
+      return matchingVariant.price;
+    }
+    return selectedVersion 
+      ? data.discountedPrice + selectedVersion.priceDelta 
+      : data.discountedPrice || data.actualPrice;
+  })();
 
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 text-slate-800 font-sans leading-relaxed">
@@ -312,9 +362,8 @@ export function ProductDetailView({
                   </div>
                 )}
               </div>
-
               {/* DYNAMIC PRODUCT OPTIONS SELECTORS SYSTEM */}
-              {data.enableOptions && data.options && (
+              {data.enableOptions && (
                 <div 
                   className={getHighlightClass("options")}
                   onClick={() => isEdit && onSelectSection?.("options", "Overview & Content")}
@@ -325,148 +374,254 @@ export function ProductDetailView({
                   <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-4.5 space-y-4 text-left">
                     <span className="text-[8.5px] font-black uppercase text-app-accent/80 tracking-widest block font-mono">VARIANT ATTRIBUTES SELECTION</span>
                     
-                    {/* Color Variants */}
-                    {data.options.colorVariants?.enabled && data.options.colorVariants.values?.length > 0 && (
-                      <div className="space-y-1.5">
-                        <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">Available Color Variant ({selectedColor || "None selected"})</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {data.options.colorVariants.values.map(color => (
-                            <button
-                              key={color}
-                              type="button"
-                              onClick={() => setSelectedColor(color)}
-                              className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase transition-all whitespace-nowrap cursor-pointer ${
-                                selectedColor === color 
-                                  ? "bg-app-accent border-app-accent text-white" 
-                                  : "bg-slate-900 border-white/10 text-white/60 hover:border-white/20 hover:text-white"
-                              }`}
-                            >
-                              {color}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                    {data.optionGroups && data.optionGroups.length > 0 ? (
+                      // RENDER DYNAMIC CUSTOM OPTION GROUPS
+                      <div className="space-y-4">
+                        {data.optionGroups.map((group) => {
+                          const selectedValue = selectedCustomOptions[group.name] || "";
+                          return (
+                            <div key={group.id} className="space-y-2">
+                              <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">
+                                {group.name} {selectedValue && `(${selectedValue})`}
+                              </label>
 
-                    {/* Size Variants */}
-                    {data.options.sizeVariants?.enabled && data.options.sizeVariants.values?.length > 0 && (
-                      <div className="space-y-1.5">
-                        <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">Available Size Specs</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {data.options.sizeVariants.values.map(sz => (
-                            <button
-                              key={sz}
-                              type="button"
-                              onClick={() => setSelectedSize(sz)}
-                              className={`w-9 h-9 rounded-lg border text-[11px] font-black uppercase tracking-wide transition-all cursor-pointer flex items-center justify-center ${
-                                selectedSize === sz 
-                                  ? "bg-app-accent border-app-accent text-white" 
-                                  : "bg-slate-900 border-white/10 text-white/60 hover:border-white/20 hover:text-white"
-                              }`}
-                            >
-                              {sz}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                              {group.displayType === "Dropdown" ? (
+                                <select
+                                  value={selectedValue}
+                                  onChange={(e) => {
+                                    setSelectedCustomOptions({
+                                      ...selectedCustomOptions,
+                                      [group.name]: e.target.value
+                                    });
+                                  }}
+                                  className="w-full bg-slate-900 border border-white/10 text-white font-semibold text-xs rounded-xl px-3.5 py-2.5 outline-none focus:border-app-accent"
+                                >
+                                  <option value="">Select {group.name}...</option>
+                                  {group.values.map(val => (
+                                    <option key={val} value={val}>{val}</option>
+                                  ))}
+                                </select>
+                              ) : group.displayType === "Color Swatch" ? (
+                                <div className="flex flex-wrap gap-2">
+                                  {group.values.map(val => {
+                                    const isSelected = selectedValue === val;
+                                    return (
+                                      <button
+                                        key={val}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedCustomOptions({
+                                            ...selectedCustomOptions,
+                                            [group.name]: val
+                                          });
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                                          isSelected 
+                                            ? "bg-app-accent border-app-accent text-white" 
+                                            : "bg-slate-900 border-white/10 text-white/60 hover:border-white/20"
+                                        }`}
+                                      >
+                                        <span 
+                                          className="w-3 h-3 rounded-full border border-white/20 block"
+                                          style={{ backgroundColor: val.toLowerCase().replace(/\s+/g, '') }}
+                                        />
+                                        <span>{val}</span>
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                // Default is Button / Badge Capsules
+                                <div className="flex flex-wrap gap-1.5">
+                                  {group.values.map(val => {
+                                    const isSelected = selectedValue === val;
+                                    return (
+                                      <button
+                                        key={val}
+                                        type="button"
+                                        onClick={() => {
+                                          setSelectedCustomOptions({
+                                            ...selectedCustomOptions,
+                                            [group.name]: val
+                                          });
+                                        }}
+                                        className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase transition-all whitespace-nowrap cursor-pointer ${
+                                          isSelected 
+                                            ? "bg-app-accent border-app-accent text-white" 
+                                            : "bg-slate-900 border-white/10 text-white/60 hover:border-white/20 hover:text-white"
+                                        }`}
+                                      >
+                                        {val}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
 
-                    {/* Version Variants with dynamic pricing delta updates! */}
-                    {data.options.versionVariants?.enabled && data.options.versionVariants.values?.length > 0 && (
-                      <div className="space-y-1.5">
-                        <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">Core Device Version Model</label>
-                        <div className="flex flex-col gap-1.5">
-                          {data.options.versionVariants.values.map((ver, vIdx) => (
-                            <button
-                              key={ver.name + vIdx}
-                              type="button"
-                              onClick={() => setSelectedVersion(ver)}
-                              className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all text-left flex items-center justify-between cursor-pointer ${
-                                selectedVersion?.name === ver.name 
-                                  ? "bg-app-accent/10 border-app-accent text-white" 
-                                  : "bg-slate-900 border-white/5 text-white/70 hover:border-white/20"
-                              }`}
-                            >
-                              <span className="font-extrabold uppercase tracking-wide">{ver.name}</span>
-                              <span className="text-[10px] font-sans text-app-accent bg-app-accent/5 px-2 py-0.5 rounded-md font-extrabold">
-                                {ver.priceDelta >= 0 ? `+ ৳${ver.priceDelta.toLocaleString()}` : `- ৳${Math.abs(ver.priceDelta).toLocaleString()}`}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
+                        {matchingVariant && (
+                          <div className="pt-2 border-t border-white/5 space-y-1">
+                            <span className="text-[8.5px] uppercase font-black tracking-wider text-slate-400 block font-mono">VARIANT SPECIFICATION SUMMARY</span>
+                            <div className="text-[10px] text-white/70 font-mono space-y-0.5">
+                              <div>SKU: <span className="text-app-accent font-bold">{matchingVariant.sku}</span></div>
+                              {matchingVariant.weight && <div>WEIGHT: <span className="text-slate-300 font-bold">{matchingVariant.weight}</span></div>}
+                              <div>AVAILABILITY: <span className={matchingVariant.stock > 0 ? "text-emerald-400 font-bold" : "text-red-400 font-bold"}>
+                                {matchingVariant.stock > 0 ? `IN STOCK (${matchingVariant.stock} units)` : "OUT OF STOCK"}
+                              </span></div>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    )}
+                    ) : (
+                      // RENDER FALLBACK LEGACY OPTIONS
+                      data.options && (
+                        <div className="space-y-4">
+                          {/* Color Variants */}
+                          {data.options.colorVariants?.enabled && data.options.colorVariants.values?.length > 0 && (
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">Available Color Variant ({selectedColor || "None selected"})</label>
+                              <div className="flex flex-wrap gap-1.5">
+                                {data.options.colorVariants.values.map(color => (
+                                  <button
+                                    key={color}
+                                    type="button"
+                                    onClick={() => setSelectedColor(color)}
+                                    className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase transition-all whitespace-nowrap cursor-pointer ${
+                                      selectedColor === color 
+                                        ? "bg-app-accent border-app-accent text-white" 
+                                        : "bg-slate-900 border-white/10 text-white/60 hover:border-white/20 hover:text-white"
+                                    }`}
+                                  >
+                                    {color}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
 
-                    {/* Storage Variant Options */}
-                    {data.options.storageVariants?.enabled && data.options.storageVariants.values?.length > 0 && (
-                      <div className="space-y-1.5">
-                        <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">Available Storage Size</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {data.options.storageVariants.values.map(storage => (
-                            <button
-                              key={storage}
-                              onClick={() => setSelectedStorage(storage)}
-                              type="button"
-                              className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase transition-all whitespace-nowrap cursor-pointer ${
-                                selectedStorage === storage 
-                                  ? "bg-app-accent border-app-accent text-white" 
-                                  : "bg-slate-900 border-white/10 text-white/60 hover:border-white/20 hover:text-white"
-                              }`}
-                            >
-                              {storage}
-                            </button>
-                          ))}
+                          {/* Size Variants */}
+                          {data.options.sizeVariants?.enabled && data.options.sizeVariants.values?.length > 0 && (
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">Available Size Specs</label>
+                              <div className="flex flex-wrap gap-1.5">
+                                {data.options.sizeVariants.values.map(sz => (
+                                  <button
+                                    key={sz}
+                                    type="button"
+                                    onClick={() => setSelectedSize(sz)}
+                                    className={`w-9 h-9 rounded-lg border text-[11px] font-black uppercase tracking-wide transition-all cursor-pointer flex items-center justify-center ${
+                                      selectedSize === sz 
+                                        ? "bg-app-accent border-app-accent text-white" 
+                                        : "bg-slate-900 border-white/10 text-white/60 hover:border-white/20 hover:text-white"
+                                    }`}
+                                  >
+                                    {sz}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Version Variants with dynamic pricing delta updates! */}
+                          {data.options.versionVariants?.enabled && data.options.versionVariants.values?.length > 0 && (
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">Core Device Version Model</label>
+                              <div className="flex flex-col gap-1.5">
+                                {data.options.versionVariants.values.map((ver, vIdx) => (
+                                  <button
+                                    key={ver.name + vIdx}
+                                    type="button"
+                                    onClick={() => setSelectedVersion(ver)}
+                                    className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold transition-all text-left flex items-center justify-between cursor-pointer ${
+                                      selectedVersion?.name === ver.name 
+                                        ? "bg-app-accent/10 border-app-accent text-white" 
+                                        : "bg-slate-900 border-white/5 text-white/70 hover:border-white/20"
+                                    }`}
+                                  >
+                                    <span className="font-extrabold uppercase tracking-wide">{ver.name}</span>
+                                    <span className="text-[10px] font-sans text-app-accent bg-app-accent/5 px-2 py-0.5 rounded-md font-extrabold">
+                                      {ver.priceDelta >= 0 ? `+ ৳${ver.priceDelta.toLocaleString()}` : `- ৳${Math.abs(ver.priceDelta).toLocaleString()}`}
+                                    </span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Storage Variant Options */}
+                          {data.options.storageVariants?.enabled && data.options.storageVariants.values?.length > 0 && (
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">Available Storage Size</label>
+                              <div className="flex flex-wrap gap-1.5">
+                                {data.options.storageVariants.values.map(storage => (
+                                  <button
+                                    key={storage}
+                                    onClick={() => setSelectedStorage(storage)}
+                                    type="button"
+                                    className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase transition-all whitespace-nowrap cursor-pointer ${
+                                      selectedStorage === storage 
+                                        ? "bg-app-accent border-app-accent text-white" 
+                                        : "bg-slate-900 border-white/10 text-white/60 hover:border-white/20 hover:text-white"
+                                    }`}
+                                  >
+                                    {storage}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Capacity Variant Options */}
+                          {data.options.capacityVariants?.enabled && data.options.capacityVariants.values?.length > 0 && (
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">Functional Capacity Limits</label>
+                              <div className="flex flex-wrap gap-1.5">
+                                {data.options.capacityVariants.values.map(cap => (
+                                  <button
+                                    key={cap}
+                                    onClick={() => setSelectedCapacity(cap)}
+                                    type="button"
+                                    className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase transition-all whitespace-nowrap cursor-pointer ${
+                                      selectedCapacity === cap 
+                                        ? "bg-app-accent border-app-accent text-white" 
+                                        : "bg-slate-900 border-white/10 text-white/60 hover:border-white/20 hover:text-white"
+                                    }`}
+                                  >
+                                    {cap}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Subscription Plans */}
+                          {data.options.subscriptionPlans?.enabled && data.options.subscriptionPlans.values?.length > 0 && (
+                            <div className="space-y-1.5">
+                              <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">Available Contract Plans</label>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                {data.options.subscriptionPlans.values.map((plan, idx) => (
+                                  <button
+                                    key={idx}
+                                    onClick={() => setSelectedSubPlan(plan)}
+                                    type="button"
+                                    className={`p-3 border rounded-xl text-left font-bold transition-all cursor-pointer ${
+                                      selectedSubPlan === plan 
+                                        ? "bg-app-accent/10 border-app-accent text-white" 
+                                        : "bg-slate-900 border-white/5 text-white/60 hover:text-white"
+                                    }`}
+                                  >
+                                    <span className="block text-[8px] text-app-secondary uppercase tracking-widest font-mono mb-0.5">PLAN SCHEME {idx + 1}</span>
+                                    <span className="upper tracking-tight line-clamp-1">{plan}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
-                      </div>
+                      )
                     )}
-
-                    {/* Capacity Variant Options */}
-                    {data.options.capacityVariants?.enabled && data.options.capacityVariants.values?.length > 0 && (
-                      <div className="space-y-1.5">
-                        <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">Functional Capacity Limits</label>
-                        <div className="flex flex-wrap gap-1.5">
-                          {data.options.capacityVariants.values.map(cap => (
-                            <button
-                              key={cap}
-                              onClick={() => setSelectedCapacity(cap)}
-                              type="button"
-                              className={`px-3 py-1.5 rounded-lg border text-[10px] font-bold uppercase transition-all whitespace-nowrap cursor-pointer ${
-                                selectedCapacity === cap 
-                                  ? "bg-app-accent border-app-accent text-white" 
-                                  : "bg-slate-900 border-white/10 text-white/60 hover:border-white/20 hover:text-white"
-                              }`}
-                            >
-                              {cap}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Subscription Plans */}
-                    {data.options.subscriptionPlans?.enabled && data.options.subscriptionPlans.values?.length > 0 && (
-                      <div className="space-y-1.5">
-                        <label className="text-[9px] font-bold text-white/40 uppercase tracking-widest block">Available Contract Plans</label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                          {data.options.subscriptionPlans.values.map((plan, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => setSelectedSubPlan(plan)}
-                              type="button"
-                              className={`p-3 border rounded-xl text-left font-bold transition-all cursor-pointer ${
-                                selectedSubPlan === plan 
-                                  ? "bg-app-accent/10 border-app-accent text-white" 
-                                  : "bg-slate-900 border-white/5 text-white/60 hover:text-white"
-                              }`}
-                            >
-                              <span className="block text-[8px] text-app-secondary uppercase tracking-widest font-mono mb-0.5">PLAN SCHEME {idx + 1}</span>
-                              <span className="upper tracking-tight line-clamp-1">{plan}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
                   </div>
                 </div>
               )}
@@ -495,7 +650,9 @@ export function ProductDetailView({
 
                     <div className="text-right">
                       <span className="text-[8px] font-black text-[#50DC17] uppercase tracking-widest block mb-0.5">PLATFORM ASSURED STOCK</span>
-                      <span className="text-sm font-bold text-white font-mono">{data.stockLimit} Items Available</span>
+                      <span className="text-sm font-bold text-white font-mono">
+                        {matchingVariant ? matchingVariant.stock : data.stockLimit} Items Available
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -593,6 +750,58 @@ export function ProductDetailView({
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Box Contents / Complimentary Features Section */}
+      {data.enableBoxContents && data.boxContents && data.boxContents.length > 0 && (
+        <section className="bg-slate-50 border-b border-slate-200/60 py-10 text-left">
+          <div className="max-w-4xl mx-auto px-4 sm:px-6">
+            <div 
+              className={getHighlightClass("boxContents")}
+              onClick={() => isEdit && onSelectSection?.("boxContents", "Specifications")}
+              id="view-box-contents"
+            >
+              {editLabel("boxContents", "Box Contents / Features", "Specifications")}
+
+              <div className="mb-6">
+                <span className="text-[8.5px] font-black text-app-accent uppercase tracking-widest block font-mono mb-1">COMPLIMENTARY PACKAGE DETAILS</span>
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight italic">📦 Box Contents & Extras</h3>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {data.boxContents
+                  .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+                  .map((item, idx) => {
+                    // Match icons
+                    let IconComponent = Box;
+                    const icName = item.icon?.toLowerCase() || "";
+                    if (icName.includes("cable") || icName.includes("wire")) IconComponent = RefreshCw;
+                    else if (icName.includes("charger") || icName.includes("battery") || icName.includes("power")) IconComponent = Zap;
+                    else if (icName.includes("spark") || icName.includes("compliment")) IconComponent = Sparkles;
+                    else if (icName.includes("phone") || icName.includes("mobile")) IconComponent = Smartphone;
+                    else if (icName.includes("heart") || icName.includes("care")) IconComponent = Heart;
+                    else if (icName.includes("shield") || icName.includes("warranty")) IconComponent = ShieldCheck;
+                    else if (icName.includes("award") || icName.includes("premium")) IconComponent = Award;
+                    else if (icName.includes("clock") || icName.includes("time")) IconComponent = Clock;
+
+                    return (
+                      <div key={item.id || idx} className="bg-white border border-slate-150 p-4.5 rounded-2xl flex items-start gap-3.5 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="w-10 h-10 rounded-xl bg-app-accent/5 text-app-accent flex items-center justify-center shrink-0 border border-app-accent/10">
+                          <IconComponent size={18} />
+                        </div>
+                        <div className="text-left space-y-0.5">
+                          <span className="font-extrabold text-slate-900 text-xs block uppercase tracking-wide">{item.title}</span>
+                          {item.description && (
+                            <span className="text-[10px] text-slate-500 font-medium block leading-relaxed">{item.description}</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           </div>

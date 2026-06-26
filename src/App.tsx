@@ -36,6 +36,7 @@ const ProductStudio = lazy(() => import('./pages/admin/ProductStudio'));
 const BrandDetails = lazy(() => import('./pages/admin/BrandDetails'));
 const SellerReview = lazy(() => import('./pages/admin/SellerReview'));
 const CMSPage = lazy(() => import('./pages/admin/CMS'));
+const WebsiteCMSStudio = lazy(() => import('./pages/admin/WebsiteCMSStudio'));
 const AdsSponsorsPage = lazy(() => import('./pages/admin/AdsSponsors'));
 const SponsoredPromotionsPage = lazy(() => import('./pages/admin/SponsoredPromotions'));
 const Orders = lazy(() => import('./pages/admin/Orders'));
@@ -76,6 +77,7 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 };
 
 import { CMSProvider } from './contexts/CMSContext';
+import { CMSDataProvider } from './contexts/CMSDataContext';
 import { AdsProvider } from './contexts/AdsContext';
 import { ContactInteractionProvider } from './contexts/ContactInteractionContext';
 import { BrandProfilesProvider } from './contexts/BrandProfilesContext';
@@ -83,8 +85,9 @@ import { BrandProfilesProvider } from './contexts/BrandProfilesContext';
 export default function App() {
   return (
     <CMSProvider>
-      <AdsProvider>
-      <Router>
+      <CMSDataProvider>
+        <AdsProvider>
+        <Router>
         <AuthProvider>
           <CashBookProvider>
             <BrandProfilesProvider>
@@ -117,6 +120,7 @@ export default function App() {
 
               <Route path="dashboard" element={<DashboardRouter />} />
               <Route path="cms" element={<CMSPage />} />
+              <Route path="cms-studio" element={<WebsiteCMSStudio />} />
               <Route path="ads-sponsors" element={<AdsSponsorsPage />} />
               <Route path="promotions" element={<SponsoredPromotionsPage />} />
               <Route path="consumers" element={<Consumers />} />
@@ -155,6 +159,7 @@ export default function App() {
               <Route path="cashbook" element={<CashBookHub />} />
               <Route path="cashbook/:bookId" element={<CashBookHub />} />
               <Route path="cashbook/reports" element={<CashBookHub />} />
+              <Route path="website-cms" element={<WebsiteCMSStudio />} />
               
               {/* Trust & Safety Core Modular Paths */}
               <Route path="trust-center" element={<TrustCenter />} />
@@ -197,6 +202,7 @@ export default function App() {
       </AuthProvider>
     </Router>
     </AdsProvider>
+    </CMSDataProvider>
     </CMSProvider>
   );
 }
