@@ -399,8 +399,9 @@ export const Payouts = () => {
             </div>
 
             {/* Primary data table structure */}
-            <div className="w-full overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto -mx-4 px-4 custom-scrollbar">
+              <div className="min-w-[900px]">
+                <table className="w-full text-left border-collapse">
                 <thead className="bg-[#F8F9FA] border-b border-gray-150 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
                   <tr>
                     <th className="p-4">Recipient</th>
@@ -480,6 +481,7 @@ export const Payouts = () => {
                 )}
               </table>
             </div>
+          </div>
 
           </div>
         </div>

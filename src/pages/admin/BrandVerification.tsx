@@ -44,6 +44,8 @@ export default function BrandVerification() {
   // Review final states
   const [reviewerFeedback, setReviewerFeedback] = useState('');
   const [resubmissionNotes, setResubmissionNotes] = useState<Record<string, string>>({});
+  const [rejectingDocId, setRejectingDocId] = useState<string | null>(null);
+  const [rejectNotesInput, setRejectNotesInput] = useState('Doesn\'t match trade registration certificate requirements');
 
   // Simulation brands
   const [newBrandName, setNewBrandName] = useState('');
@@ -310,36 +312,66 @@ export default function BrandVerification() {
                       )}
 
                       {/* Interactive doc status buttons */}
-                      <div className="flex gap-2 pt-1 border-t border-white/[0.03]">
-                        <button
-                          onClick={() => {
-                            setActiveDocForModal(doc);
-                            setShowDocModal(true);
-                          }}
-                          className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 text-[10px] py-1 rounded-[2px] cursor-pointer flex items-center justify-center gap-1"
-                        >
-                          <Eye className="w-3 h-3" /> Audit Details
-                        </button>
-                        
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => updateDocumentStatus(selectedRequest.id, doc.id, 'approved', 'Document verified successfully by Lead Auditor.')}
-                            className="p-1 px-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-[2px] border border-green-500/15 cursor-pointer"
-                            title="Quick Approve Document"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                          </button>
+                      <div className="flex flex-col gap-1.5 pt-1 border-t border-white/[0.03]">
+                        <div className="flex gap-2">
                           <button
                             onClick={() => {
-                              const notesInput = prompt('Enter rejection notes for this document:') || 'Invalid format';
-                              updateDocumentStatus(selectedRequest.id, doc.id, 'rejected', notesInput);
+                              setActiveDocForModal(doc);
+                              setShowDocModal(true);
                             }}
-                            className="p-1 px-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-[2px] border border-red-500/15 cursor-pointer"
-                            title="Flag Document"
+                            className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 text-[10px] py-1 rounded-[2px] cursor-pointer flex items-center justify-center gap-1"
                           >
-                            <X className="w-3.5 h-3.5" />
+                            <Eye className="w-3 h-3" /> Audit Details
                           </button>
+                          
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => {
+                                updateDocumentStatus(selectedRequest.id, doc.id, 'approved', 'Document verified successfully by Lead Auditor.');
+                                if (rejectingDocId === doc.id) setRejectingDocId(null);
+                              }}
+                              className="p-1 px-2 bg-green-500/10 hover:bg-green-500/20 text-green-400 rounded-[2px] border border-green-500/15 cursor-pointer"
+                              title="Quick Approve Document"
+                            >
+                              <Check className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setRejectingDocId(prev => prev === doc.id ? null : doc.id);
+                              }}
+                              className="p-1 px-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-[2px] border border-red-500/15 cursor-pointer"
+                              title="Flag Document"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
+
+                        {rejectingDocId === doc.id && (
+                          <div className="p-2 bg-red-950/40 border border-red-500/30 rounded mt-1 flex flex-col gap-1.5 animate-fade-in text-[10px]">
+                            <span className="font-bold text-red-400">Rejection Reason:</span>
+                            <textarea
+                              value={rejectNotesInput}
+                              onChange={e => setRejectNotesInput(e.target.value)}
+                              rows={2}
+                              className="w-full bg-black/40 border border-white/10 rounded p-1 text-[10px] outline-none focus:border-red-500 text-slate-300"
+                              placeholder="Notes for the merchant..."
+                            />
+                            <div className="flex gap-1.5 justify-end">
+                              <button
+                                onClick={() => {
+                                  updateDocumentStatus(selectedRequest.id, doc.id, 'rejected', rejectNotesInput);
+                                  setRejectingDocId(null);
+                                }}
+                                className="px-2 py-0.5 bg-red-600 hover:bg-red-700 text-white rounded text-[9px] font-bold cursor-pointer"
+                              >Reject</button>
+                              <button
+                                onClick={() => setRejectingDocId(null)}
+                                className="px-2 py-0.5 bg-white/5 hover:bg-white/10 text-slate-350 rounded text-[9px] font-bold cursor-pointer"
+                              >Cancel</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

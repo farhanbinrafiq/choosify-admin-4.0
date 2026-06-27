@@ -398,6 +398,7 @@ export default function CashBookHub() {
 
   // Entry Detail Modal
   const [selectedEntry, setSelectedEntry] = useState<BookEntry | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   // Dash filters
   const [dashboardSort, setDashboardSort] = useState<'name' | 'updated' | 'entries'>('updated');
@@ -690,21 +691,19 @@ export default function CashBookHub() {
   // Delete transaction entry
   const handleDeleteEntry = (entryId: string) => {
     if (!bookId) return;
-    if (window.confirm('Are you sure you want to permanently delete this transaction entry?')) {
-      const currentBookEntries = entries[bookId] || [];
-      const updatedList = currentBookEntries.filter(e => e.id !== entryId);
-      const allUpdatedEntries = { ...entries, [bookId]: updatedList };
+    const currentBookEntries = entries[bookId] || [];
+    const updatedList = currentBookEntries.filter(e => e.id !== entryId);
+    const allUpdatedEntries = { ...entries, [bookId]: updatedList };
 
-      // Update book update time
-      const updatedBooks = books.map(b => b.id === bookId ? { ...b, updatedAt: new Date().toISOString() } : b);
-      handleSaveBooks(updatedBooks);
-      handleSaveAllEntries(allUpdatedEntries);
+    // Update book update time
+    const updatedBooks = books.map(b => b.id === bookId ? { ...b, updatedAt: new Date().toISOString() } : b);
+    handleSaveBooks(updatedBooks);
+    handleSaveAllEntries(allUpdatedEntries);
 
-      if (selectedEntry && selectedEntry.id === entryId) {
-        setSelectedEntry(null);
-      }
-      triggerToast('Transaction entry has been permanently deleted.', 'info');
+    if (selectedEntry && selectedEntry.id === entryId) {
+      setSelectedEntry(null);
     }
+    triggerToast('Transaction entry has been permanently deleted.', 'info');
   };
 
   // Handle report downloads mockup
@@ -1934,15 +1933,32 @@ export default function CashBookHub() {
                 <Edit3 className="w-3.5 h-3.5" />
                 Edit Record
               </button>
+              {confirmingDelete ? (
+                <div className="p-2 bg-red-50 border border-red-200 rounded-[5px] flex items-center gap-2 animate-fade-in">
+                  <span className="text-[10px] font-black text-red-600">Are you sure?</span>
+                  <button
+                    onClick={() => {
+                      handleDeleteEntry(selectedEntry.id);
+                      setConfirmingDelete(false);
+                    }}
+                    className="px-2.5 py-1 bg-red-500 hover:bg-red-600 text-white text-[9px] font-bold uppercase rounded border-none cursor-pointer"
+                  >Confirm</button>
+                  <button
+                    onClick={() => setConfirmingDelete(false)}
+                    className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-600 text-[9px] font-bold uppercase rounded border border-slate-200 cursor-pointer"
+                  >Cancel</button>
+                </div>
+              ) : (
+                <button 
+                  onClick={() => setConfirmingDelete(true)}
+                  className="px-4 py-2 border border-red-200 bg-red-50 text-[#EF4444] hover:bg-red-100 text-xs font-black rounded-[5px] flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete Record
+                </button>
+              )}
               <button 
-                onClick={() => handleDeleteEntry(selectedEntry.id)}
-                className="px-4 py-2 border border-red-200 bg-red-50 text-[#EF4444] hover:bg-red-100 text-xs font-black rounded-[5px] flex items-center gap-1.5 cursor-pointer"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Delete Record
-              </button>
-              <button 
-                onClick={() => setSelectedEntry(null)}
+                onClick={() => { setSelectedEntry(null); setConfirmingDelete(false); }}
                 className="px-5 py-2 bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold rounded-[5px] cursor-pointer"
               >
                 Close Audit

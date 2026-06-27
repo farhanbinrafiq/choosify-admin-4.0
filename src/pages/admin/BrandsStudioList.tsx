@@ -62,6 +62,11 @@ export default function BrandsStudioList() {
   const [viewLayout, setViewLayout] = useState<"grid" | "list">("grid");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [newBrandName, setNewBrandName] = useState('');
+  const [newBrandCategory, setNewBrandCategory] = useState('Retail & Lifestyle');
+
   useEffect(() => {
     const cached = localStorage.getItem(COMPILATION_KEY);
     let loaded: BrandStudioItem[] = [];
@@ -119,51 +124,13 @@ export default function BrandsStudioList() {
   };
 
   const handleDeleteBrand = (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this brand visual profile template?")) return;
     const updated = brands.filter((b) => b.id !== id);
     setBrands(updated);
     localStorage.setItem(COMPILATION_KEY, JSON.stringify(updated));
     triggerToast("✓ Brand visual blueprint removed from CMS registry.");
   };
 
-  const handleCreateBrandExperience = () => {
-    const name = prompt("Enter new brand experience name:");
-    if (!name || !name.trim()) return;
-    
-    const category = prompt("Enter brand category (e.g. Fashion, Electronics):") || "Retail & Lifestyle";
-    
-    const newBrandRef = requestNewBrand(name.trim(), category.trim());
-    const newId = newBrandRef?.id || `brand_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const initials = name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
-    const colors = [
-      "bg-[#0A2540] text-[#00D4B2]",
-      "bg-orange-950 text-orange-400",
-      "bg-blue-950 text-blue-400",
-      "bg-purple-950 text-purple-400",
-      "bg-green-950 text-emerald-400"
-    ];
-    const color = colors[Math.abs(name.length + newId.length) % colors.length];
-    
-    const newItem: BrandStudioItem = {
-      id: newId,
-      brandName: name.trim(),
-      category: category.trim(),
-      status: "Draft",
-      followersCount: "0",
-      loveCount: "0",
-      trustScore: 5.0,
-      initials: initials || "B",
-      color: color,
-      lastUpdated: new Date().toLocaleDateString('en-US', { month: 'long', day: '2-digit', year: 'numeric' })
-    };
-    
-    const updated = [newItem, ...brands];
-    setBrands(updated);
-    localStorage.setItem(COMPILATION_KEY, JSON.stringify(updated));
-    
-    triggerToast(`✓ Brand '${name.trim()}' experience draft created.`);
-  };
+
 
   const handleSaveContactDetails = (e: React.FormEvent) => {
     e.preventDefault();
@@ -225,14 +192,90 @@ export default function BrandsStudioList() {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 relative">
           {profile?.role === 'seller' ? (
-            <button
-              onClick={handleCreateBrandExperience}
-              className="flex items-center gap-2 bg-[#F4631E] hover:bg-orange-500 text-white px-5 py-3 rounded-xl text-xs font-bold transition-all shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-95"
-            >
-              <Plus className="w-4 h-4" /> Create Brand Experience
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowCreateForm(prev => !prev)}
+                className="flex items-center gap-2 bg-[#F4631E] hover:bg-orange-500 text-white px-5 py-3 rounded-xl text-xs font-bold transition-all shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-95"
+              >
+                <Plus className="w-4 h-4" /> Create Brand Experience
+              </button>
+              {showCreateForm && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-app-card border border-app-border rounded-2xl p-4 shadow-2xl z-[100] space-y-3">
+                  <span className="text-[10px] font-black text-app-accent uppercase tracking-widest block">New Brand Experience</span>
+                  
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-app-text-secondary uppercase">Brand Name</label>
+                    <input
+                      value={newBrandName}
+                      onChange={e => setNewBrandName(e.target.value)}
+                      placeholder="Enter brand name..."
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-medium text-white outline-none focus:border-app-accent"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-bold text-app-text-secondary uppercase">Brand Category</label>
+                    <input
+                      value={newBrandCategory}
+                      onChange={e => setNewBrandCategory(e.target.value)}
+                      placeholder="e.g. Fashion, Electronics"
+                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-medium text-white outline-none focus:border-app-accent"
+                    />
+                  </div>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (!newBrandName.trim()) return;
+                        const newBrandRef = requestNewBrand(newBrandName.trim(), newBrandCategory.trim());
+                        const newId = newBrandRef?.id || `brand_${Math.random().toString(36).substr(2, 9)}`;
+                        
+                        const initials = newBrandName.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+                        const colors = [
+                          "bg-[#0A2540] text-[#00D4B2]",
+                          "bg-orange-950 text-orange-400",
+                          "bg-blue-950 text-blue-400",
+                          "bg-purple-950 text-purple-400",
+                          "bg-green-950 text-emerald-400"
+                        ];
+                        const color = colors[Math.abs(newBrandName.length + newId.length) % colors.length];
+                        
+                        const updated = [
+                          {
+                            id: newId,
+                            brandName: newBrandName.trim(),
+                            category: newBrandCategory.trim() || "Retail & Lifestyle",
+                            status: "Live",
+                            followersCount: "0",
+                            loveCount: "0",
+                            trustScore: 5.0,
+                            initials: initials || "B",
+                            color: color,
+                            lastUpdated: "June 26, 2026"
+                          },
+                          ...brands
+                        ];
+                        setBrands(updated);
+                        localStorage.setItem(COMPILATION_KEY, JSON.stringify(updated));
+                        triggerToast("✓ New brand profile template generated successfully.");
+                        
+                        setShowCreateForm(false);
+                        setNewBrandName('');
+                        setNewBrandCategory('Retail & Lifestyle');
+                      }}
+                      disabled={!newBrandName.trim()}
+                      className="px-3 py-1.5 bg-app-accent text-white text-[10px] font-black uppercase rounded-lg hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    >Create</button>
+                    <button
+                      onClick={() => { setShowCreateForm(false); setNewBrandName(''); }}
+                      className="px-3 py-1.5 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-lg hover:bg-white/10 transition-colors"
+                    >Cancel</button>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
             <Link
               to="/dashboard/content-studio/brands/new"
@@ -481,13 +524,29 @@ export default function BrandsStudioList() {
                     <Edit3 className="w-3.5 h-3.5" /> Visual Builder
                   </Link>
                   <button 
-                    onClick={() => handleDeleteBrand(brand.id)}
+                    onClick={() => setConfirmingId(brand.id)}
                     className="p-2.5 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/20 text-slate-400 hover:text-red-400 rounded-xl transition-colors"
                     title="Delete Brand Configuration"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
+
+                {confirmingId === brand.id && (
+                  <div className="mt-2 p-3 bg-red-950/40 border border-red-500/30 rounded-xl flex flex-col gap-2">
+                    <span className="text-[10px] font-black text-red-400">Are you sure? This cannot be undone.</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { handleDeleteBrand(brand.id); setConfirmingId(null); }}
+                        className="px-3 py-1.5 bg-red-500 text-white text-[9px] font-black uppercase rounded-lg hover:bg-red-600 transition-colors border border-transparent"
+                      >Confirm</button>
+                      <button
+                        onClick={() => setConfirmingId(null)}
+                        className="px-3 py-1.5 bg-white/5 text-slate-300 text-[9px] font-black uppercase rounded-lg hover:bg-white/10 transition-colors border border-transparent"
+                      >Cancel</button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </motion.div>
@@ -554,21 +613,38 @@ export default function BrandsStudioList() {
                             </button>
                           )
                         )}
-                        <div className="flex justify-end gap-2">
-                          <Link 
-                            to={`/dashboard/content-studio/brands/${brand.id}/edit`}
-                            className="p-1.5 bg-app-accent/10 hover:bg-app-accent/20 text-app-accent hover:text-white rounded-lg transition-colors border border-transparent"
-                            title="Edit Experience"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </Link>
-                          <button 
-                            onClick={() => handleDeleteBrand(brand.id)}
-                            className="p-1.5 bg-white/5 hover:bg-red-500/10 text-slate-400 hover:text-red-400 rounded-lg transition-colors border border-white/10 hover:border-red-500/20"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                        <div className="flex flex-col items-end">
+                          <div className="flex justify-end gap-2">
+                            <Link 
+                              to={`/dashboard/content-studio/brands/${brand.id}/edit`}
+                              className="p-1.5 bg-app-accent/10 hover:bg-app-accent/20 text-app-accent hover:text-white rounded-lg transition-colors border border-transparent"
+                              title="Edit Experience"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </Link>
+                            <button 
+                              onClick={() => setConfirmingId(brand.id)}
+                              className="p-1.5 bg-white/5 hover:bg-red-500/10 text-slate-400 hover:text-red-400 rounded-lg transition-colors border border-white/10 hover:border-red-500/20"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          {confirmingId === brand.id && (
+                            <div className="mt-2 p-2 bg-red-950/40 border border-red-500/30 rounded-xl flex flex-col items-end gap-1.5 z-10">
+                              <span className="text-[9px] font-black text-red-400">Delete this brand?</span>
+                              <div className="flex gap-1.5">
+                                <button
+                                  onClick={() => { handleDeleteBrand(brand.id); setConfirmingId(null); }}
+                                  className="px-2 py-1 bg-red-500 text-white text-[8px] font-black uppercase rounded hover:bg-red-600 transition-colors border border-transparent"
+                                >Confirm</button>
+                                <button
+                                  onClick={() => setConfirmingId(null)}
+                                  className="px-2 py-1 bg-white/5 text-slate-300 text-[8px] font-black uppercase rounded hover:bg-white/10 transition-colors border border-transparent"
+                                >Cancel</button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>

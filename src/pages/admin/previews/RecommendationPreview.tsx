@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, 
@@ -18,6 +18,8 @@ import { sharedRecommendations } from '../Recommendations';
 export default function RecommendationPreview() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const [showRejectForm, setShowRejectForm] = useState(false);
+  const [rejectReason, setRejectReason] = useState("Does not meet community quality/source verification guidelines");
 
   // Look up the recommendation from shared state repository
   const foundRec = sharedRecommendations.find(r => r.id === id);
@@ -74,10 +76,7 @@ export default function RecommendationPreview() {
     });
   };
 
-  const handleReject = () => {
-    const reason = prompt("Please provide feedback or a reason for rejecting this recommendation:", "Does not meet community quality/source verification guidelines");
-    if (reason === null) return; // user cancelled prompt
-    
+  const handleReject = (reason: string) => {
     navigate('/admin/recommendations', {
       state: {
         action: 'reject',
@@ -102,19 +101,49 @@ export default function RecommendationPreview() {
               </p>
            </div>
         </div>
-        <div className="flex items-center gap-3">
-           <button 
-             onClick={handleApprove}
-             className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg active:scale-95 flex items-center gap-2 cursor-pointer border-none"
-           >
-              <CheckCircle2 className="w-4 h-4" /> Approve Recommendation
-           </button>
-           <button 
-             onClick={handleReject}
-             className="px-6 py-2.5 bg-white/5 border border-red-500/20 text-red-500 hover:bg-red-500/10 rounded-xl text-sm font-bold transition-all flex items-center gap-2 cursor-pointer"
-           >
-              <XCircle className="w-4 h-4" /> Reject &amp; Feedback
-           </button>
+        <div className="flex flex-col items-end gap-3">
+          <div className="flex items-center gap-3">
+             <button 
+               onClick={() => {
+                 handleApprove();
+                 setShowRejectForm(false);
+               }}
+               className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-bold transition-all shadow-lg active:scale-95 flex items-center gap-2 cursor-pointer border-none"
+             >
+                <CheckCircle2 className="w-4 h-4" /> Approve Recommendation
+             </button>
+             <button 
+               onClick={() => setShowRejectForm(prev => !prev)}
+               className="px-6 py-2.5 bg-white/5 border border-red-500/20 text-red-500 hover:bg-red-500/10 rounded-xl text-sm font-bold transition-all flex items-center gap-2 cursor-pointer"
+             >
+                <XCircle className="w-4 h-4" /> Reject &amp; Feedback
+             </button>
+          </div>
+          {showRejectForm && (
+            <div className="p-4 bg-app-card border border-red-500/30 rounded-2xl flex flex-col gap-3 w-96 max-w-full shadow-2xl animate-fade-in text-left">
+              <span className="text-xs font-black text-red-400 uppercase tracking-wider">Provide Rejection Feedback</span>
+              <textarea
+                value={rejectReason}
+                onChange={e => setRejectReason(e.target.value)}
+                rows={3}
+                className="w-full bg-black/40 border border-white/10 rounded-xl p-2.5 text-xs outline-none focus:border-red-500 text-slate-300 font-semibold"
+                placeholder="Explain the rejection reasons..."
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => {
+                    handleReject(rejectReason);
+                    setShowRejectForm(false);
+                  }}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                >Confirm Reject</button>
+                <button
+                  onClick={() => setShowRejectForm(false)}
+                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-slate-400 rounded-xl text-xs font-bold cursor-pointer"
+                >Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

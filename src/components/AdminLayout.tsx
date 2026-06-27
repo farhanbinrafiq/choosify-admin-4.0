@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
@@ -35,7 +35,8 @@ import {
   FolderLock,
   Activity,
   AlertTriangle,
-  Search
+  Search,
+  Menu
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
@@ -200,6 +201,18 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
   const [isBrandsExpanded, setIsBrandsExpanded] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const sidebarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (isSidebarOpen && sidebarRef.current && !sidebarRef.current.contains(e.target as Node)) {
+        setIsSidebarOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isSidebarOpen]);
 
   // Global Search State & Logic
   const [searchQuery, setSearchQuery] = useState('');
@@ -451,59 +464,74 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-app-bg text-app-text-primary font-sans relative">
       {/* Role Switcher Debug Panel */}
-      <div className="fixed bottom-6 right-6 z-[60]">
-         <button 
-           onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
-           className="w-12 h-12 bg-app-accent text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all group"
-           title="Switch Role (Debug)"
-         >
-            <RefreshCw className={`w-5 h-5 ${showRoleSwitcher ? 'rotate-180' : ''} transition-transform duration-500`} />
-         </button>
-         
-         <AnimatePresence>
-           {showRoleSwitcher && (
-             <motion.div 
-               initial={{ opacity: 0, scale: 0.8, y: 20 }}
-               animate={{ opacity: 1, scale: 1, y: 0 }}
-               exit={{ opacity: 0, scale: 0.8, y: 20 }}
-               className="absolute bottom-16 right-0 w-64 bg-app-card border border-app-border rounded-2xl p-4 shadow-2xl"
-             >
-                <div className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest mb-3 px-2">Switch Account Role</div>
-                <div className="space-y-1">
-                   {[
-                     'super_admin', 
-                     'admin',
-                     'moderator',
-                     'finance_manager',
-                     'support_agent',
-                     'marketing_manager',
-                     'seller', 
-                     'creator', 
-                   ].map((role) => (
-                     <button
-                       key={role}
-                       onClick={() => handleSwitchRole(role as UserRole)}
-                       className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[10px] font-bold transition-all ${
-                         currentRole === role 
-                           ? 'bg-app-accent text-white' 
-                           : 'text-app-text-secondary hover:bg-white/5 hover:text-white'
-                       }`}
-                     >
-                       <span className="capitalize">{role.replace('_', ' ')}</span>
-                       {currentRole === role && <ChevronRight className="w-3 h-3" />}
-                     </button>
-                   ))}
-                </div>
-                <div className="mt-4 pt-3 border-t border-app-border text-[9px] text-app-text-secondary italic px-2">
-                   Role switching updates navigation & dashboard instantly for testing.
-                </div>
-             </motion.div>
-           )}
-         </AnimatePresence>
-      </div>
+      {((import.meta as any).env?.DEV) && (
+        <div className="fixed bottom-6 right-6 z-[60]">
+           <button 
+             onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
+             className="w-12 h-12 bg-app-accent text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all group"
+             title="Switch Role (Debug)"
+           >
+              <RefreshCw className={`w-5 h-5 ${showRoleSwitcher ? 'rotate-180' : ''} transition-transform duration-500`} />
+           </button>
+           
+           <AnimatePresence>
+             {showRoleSwitcher && (
+               <motion.div 
+                 initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                 animate={{ opacity: 1, scale: 1, y: 0 }}
+                 exit={{ opacity: 0, scale: 0.8, y: 20 }}
+                 className="absolute bottom-16 right-0 w-64 bg-app-card border border-app-border rounded-2xl p-4 shadow-2xl"
+               >
+                  <div className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest mb-3 px-2">Switch Account Role</div>
+                  <div className="space-y-1">
+                     {[
+                       'super_admin', 
+                       'admin',
+                       'moderator',
+                       'finance_manager',
+                       'support_agent',
+                       'marketing_manager',
+                       'seller', 
+                       'creator', 
+                     ].map((role) => (
+                       <button
+                         key={role}
+                         onClick={() => handleSwitchRole(role as UserRole)}
+                         className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[10px] font-bold transition-all ${
+                           currentRole === role 
+                             ? 'bg-app-accent text-white' 
+                             : 'text-app-text-secondary hover:bg-white/5 hover:text-white'
+                         }`}
+                       >
+                         <span className="capitalize">{role.replace('_', ' ')}</span>
+                         {currentRole === role && <ChevronRight className="w-3 h-3" />}
+                       </button>
+                     ))}
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-app-border text-[9px] text-app-text-secondary italic px-2">
+                     Role switching updates navigation & dashboard instantly for testing.
+                  </div>
+               </motion.div>
+             )}
+           </AnimatePresence>
+        </div>
+      )}
+
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-[299] lg:hidden"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
 
       {/* Sidebar */}
-      <aside className="sidebar w-[240px] h-full bg-app-sidebar flex flex-col shrink-0 border-r border-app-border overflow-hidden">
+      <aside
+        ref={sidebarRef}
+        className={`sidebar w-[240px] h-full bg-app-sidebar flex flex-col shrink-0 border-r border-app-border overflow-hidden
+          fixed lg:relative z-[300] top-0 left-0 transition-transform duration-300
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}
+      >
         <div className="py-8 px-6 flex items-center gap-3">
           {cmsData.logos.header ? (
             <img src={cmsData.logos.header} alt="Choosify Logo" className="h-8 object-contain" />
@@ -599,6 +627,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                 ) : (
                   <NavLink
                     to={item.path!}
+                    onClick={() => setIsSidebarOpen(false)}
                     className={`group flex items-center gap-3 px-3.5 py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 ${
                       isActive 
                         ? 'active-sidebar-item bg-[#F97316] text-white border-white shadow-[0_4px_16px_rgba(249,115,22,0.15)]' 
@@ -629,6 +658,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                         <NavLink
                           key={sIdx}
                           to={sub.path}
+                          onClick={() => setIsSidebarOpen(false)}
                           className={`flex items-center gap-2 py-2 px-3 text-[11px] font-medium rounded-md transition-all ${
                             isSubActive 
                               ? 'text-white font-bold bg-[#F97316]' 
@@ -669,6 +699,14 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
         <header className="h-[64px] px-8 flex items-center justify-between shrink-0 mb-2 border-b border-app-border bg-app-card sticky top-0 z-40">
+          <button
+            className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg bg-app-card border border-app-border text-app-text-secondary hover:text-app-accent transition-colors mr-3 flex-shrink-0"
+            onClick={() => setIsSidebarOpen(true)}
+            aria-label="Open navigation menu"
+          >
+            <Menu className="w-4 h-4" />
+          </button>
+
           <div className="flex flex-col">
             <div className="text-[12px] text-app-text-secondary opacity-60">
               {currentRole.replace('_', ' ').toUpperCase()} / Dashboard / {location.pathname.split('/').pop()?.replace('-', ' ')}

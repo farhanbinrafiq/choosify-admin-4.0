@@ -71,6 +71,7 @@ export default function AdsSponsorsPage() {
   const [activeType, setActiveType] = useState<PromotionType | 'ALL'>('ALL');
   const [isAdding, setIsAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   // Sync state & helpers
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(() => {
@@ -180,10 +181,8 @@ export default function AdsSponsorsPage() {
   };
 
   const handleRejectRequest = async (requestId: string) => {
-    if (window.confirm('Are you sure you want to reject this request?')) {
-      await rejectPromotionRequest(requestId);
-      showToast('Sponsorship request was rejected.');
-    }
+    await rejectPromotionRequest(requestId);
+    showToast('Sponsorship request was rejected.');
   };
 
   const resetForm = () => {
@@ -536,19 +535,36 @@ export default function AdsSponsorsPage() {
                       </div>
                     </div>
 
-                    <div className="flex gap-3 justify-end mt-4 pt-3 border-t border-app-border">
-                      <button 
-                        onClick={() => handleRejectRequest(req.id)}
-                        className="px-4 py-2 bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-black uppercase rounded-xl hover:bg-red-500/20 transition-all"
-                      >
-                        Reject
-                      </button>
-                      <button 
-                        onClick={() => openReviewDialog(req)}
-                        className="px-4 py-2 bg-app-accent text-white text-[10px] font-black uppercase rounded-xl hover:scale-102 hover:shadow-lg hover:shadow-app-accent/20 transition-all flex items-center gap-1.5"
-                      >
-                        <Check className="w-3.5 h-3.5" /> Review & Approve
-                      </button>
+                    <div className="flex flex-col items-end gap-2 mt-4 pt-3 border-t border-app-border">
+                      <div className="flex gap-3 justify-end w-full">
+                        <button 
+                          onClick={() => setConfirmingId(req.id)}
+                          className="px-4 py-2 bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-black uppercase rounded-xl hover:bg-red-500/20 transition-all"
+                        >
+                          Reject
+                        </button>
+                        <button 
+                          onClick={() => openReviewDialog(req)}
+                          className="px-4 py-2 bg-app-accent text-white text-[10px] font-black uppercase rounded-xl hover:scale-102 hover:shadow-lg hover:shadow-app-accent/20 transition-all flex items-center gap-1.5"
+                        >
+                          <Check className="w-3.5 h-3.5" /> Review & Approve
+                        </button>
+                      </div>
+                      {confirmingId === req.id && (
+                        <div className="mt-2 p-3 bg-red-950/40 border border-red-500/30 rounded-xl flex flex-col items-end gap-2 max-w-xs self-end">
+                          <span className="text-[10px] font-black text-red-400">Are you sure you want to reject this request?</span>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => { handleRejectRequest(req.id); setConfirmingId(null); }}
+                              className="px-3 py-1.5 bg-red-500 text-white text-[9px] font-black uppercase rounded-lg hover:bg-red-600 transition-colors border border-transparent"
+                            >Confirm</button>
+                            <button
+                              onClick={() => setConfirmingId(null)}
+                              className="px-3 py-1.5 bg-white/5 text-slate-300 text-[9px] font-black uppercase rounded-lg hover:bg-white/10 transition-colors border border-transparent"
+                            >Cancel</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ))}

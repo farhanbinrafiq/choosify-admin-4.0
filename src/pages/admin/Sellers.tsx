@@ -772,8 +772,9 @@ export default function SellersPage() {
         {/* DIRECTORY TABLE (UNIFIED BRANDS & SELLERS LIST) */}
         {(activeTab !== 'products' && activeTab !== 'deals' && activeTab !== 'claims') && (
           <div className="bg-app-card border border-app-border rounded-2xl overflow-hidden shadow-2xl">
-            <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left border-collapse">
+            <div className="overflow-x-auto -mx-4 px-4 custom-scrollbar">
+              <div className="min-w-[900px]">
+                <table className="w-full text-left border-collapse">
                 <thead className="bg-white/[0.02] border-b border-app-border text-[9.5px] text-slate-400 uppercase tracking-widest font-black">
                   <tr>
                     <th className="p-5">Brand / Business Name</th>
@@ -967,6 +968,7 @@ export default function SellersPage() {
               </table>
             </div>
           </div>
+          </div>
         )}
 
         {/* EXPANDED TAB: OWNERSHIP CLAIMS CONSOLE */}
@@ -1088,6 +1090,14 @@ export default function SellersPage() {
                       const hasBank = !!c.bankName;
 
                       // Status Styling configs
+                      const STATUS_LABELS: Record<string, string> = {
+                        pending: 'Pending Review',
+                        under_review: 'Under Review',
+                        approved: 'Approved',
+                        rejected: 'Rejected',
+                        requires_more_info: 'Requires More Info',
+                      };
+
                       const statusColors: Record<string, { bg: string, text: string, border: string, dot: string }> = {
                         pending: { bg: 'bg-yellow-500/10', text: 'text-yellow-400', border: 'border-yellow-500/20', dot: 'bg-yellow-400' },
                         under_review: { bg: 'bg-blue-500/10', text: 'text-blue-400', border: 'border-blue-500/20', dot: 'bg-blue-400' },
@@ -1113,7 +1123,7 @@ export default function SellersPage() {
                                   {c.brandName}
                                   <span className={`inline-flex items-center gap-1.5 px-2.2 py-0.5 rounded text-[8.5px] font-extrabold uppercase tracking-wider ${style.bg} ${style.text} ${style.border}`}>
                                     <span className={`w-1.5 h-1.5 rounded-full ${style.dot} ${c.status === 'pending' ? 'animate-pulse' : ''}`} />
-                                    {c.status.replace('_', ' ')}
+                                    {STATUS_LABELS[c.status] || c.status}
                                   </span>
                                 </h4>
                                 <div className="text-[10px] text-slate-500 font-mono mt-0.5">

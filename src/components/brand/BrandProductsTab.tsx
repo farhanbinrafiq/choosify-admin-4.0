@@ -22,6 +22,7 @@ export const BrandProductsTab: React.FC<BrandProductsTabProps> = ({
   removeProduct,
   showToast
 }) => {
+  const [confirmingId, setConfirmingId] = React.useState<string | null>(null);
   return (
     <div className="space-y-6 text-left hover:no-underline" id="product_listings_panel">
       <div>
@@ -106,20 +107,37 @@ export const BrandProductsTab: React.FC<BrandProductsTabProps> = ({
                       </span>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => toggleProductStatus(p.id)}
-                          className="px-2.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-lg text-[10px] transition-all"
-                        >
-                          {p.status === 'Active' ? 'Archive' : 'Activate'}
-                        </button>
-                        <button
-                          onClick={() => removeProduct(p.id)}
-                          className="p-1.5 border border-red-100 hover:bg-red-50 text-red-600 rounded-lg transition-all"
-                          title="Delete catalog entry"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            onClick={() => toggleProductStatus(p.id)}
+                            className="px-2.5 py-1.5 border border-slate-200 hover:bg-slate-50 text-slate-600 font-bold rounded-lg text-[10px] transition-all"
+                          >
+                            {p.status === 'Active' ? 'Archive' : 'Activate'}
+                          </button>
+                          <button
+                            onClick={() => setConfirmingId(p.id)}
+                            className="p-1.5 border border-red-100 hover:bg-red-50 text-red-600 rounded-lg transition-all"
+                            title="Delete catalog entry"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                        {confirmingId === p.id && (
+                          <div className="p-2 bg-red-50 border border-red-200 rounded-lg flex flex-col items-end gap-1.5 z-10">
+                            <span className="text-[9px] font-black text-red-600">Delete this product?</span>
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => { removeProduct(p.id); setConfirmingId(null); }}
+                                className="px-2 py-1 bg-red-500 text-white text-[8px] font-black uppercase rounded hover:bg-red-600 transition-colors border border-transparent"
+                              >Confirm</button>
+                              <button
+                                onClick={() => setConfirmingId(null)}
+                                className="px-2 py-1 bg-white text-slate-600 border border-slate-200 text-[8px] font-black uppercase rounded hover:bg-slate-50 transition-colors"
+                              >Cancel</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>

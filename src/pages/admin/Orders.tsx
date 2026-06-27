@@ -569,26 +569,30 @@ GRAND TOTAL BILLED : ৳ ${(((order.product.price * (order.quantity || 1)) + (or
             </div>
           </div>
           
-          <table>
-            <thead>
-              <tr>
-                <th>Product Log Description</th>
-                <th>Global SKU</th>
-                <th style="text-align: center;">Qty</th>
-                <th class="text-right">Unit BDT Price</th>
-                <th class="text-right">Line Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td><strong>${order.product.name}</strong><br/><span style="font-size: 10px; color: #94a3b8;">Brand: ${order.product.brand}</span></td>
-                <td style="font-family: monospace; font-size: 12px;">SKU-${order.product.id}</td>
-                <td style="text-align: center;">1</td>
-                <td class="text-right">৳ ${order.product.price.toLocaleString()}</td>
-                <td class="text-right">৳ ${order.product.price.toLocaleString()}</td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="overflow-x-auto -mx-4 px-4 custom-scrollbar">
+            <div class="min-w-[900px]">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Product Log Description</th>
+                    <th>Global SKU</th>
+                    <th style="text-align: center;">Qty</th>
+                    <th class="text-right">Unit BDT Price</th>
+                    <th class="text-right">Line Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><strong>${order.product.name}</strong><br/><span style="font-size: 10px; color: #94a3b8;">Brand: ${order.product.brand}</span></td>
+                    <td style="font-family: monospace; font-size: 12px;">SKU-${order.product.id}</td>
+                    <td style="text-align: center;">1</td>
+                    <td class="text-right">৳ ${order.product.price.toLocaleString()}</td>
+                    <td class="text-right">৳ ${order.product.price.toLocaleString()}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
           
           <div class="totals-container">
             <div class="totals-box">

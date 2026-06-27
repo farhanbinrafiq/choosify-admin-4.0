@@ -29,18 +29,17 @@ const defaultMockWeeklyData = [
   { name: 'Sat', users: 3490, sessions: 4300, sales: 198000, commission: 23800 },
 ];
 
-export default function AnalyticsPage() {
-  // Deterministic pseudo-random from seller id string — stable across renders
-  const stableRandom = (seed: string, min: number, max: number) => {
-    let hash = 0;
-    for (let i = 0; i < seed.length; i++) {
-      hash = ((hash << 5) - hash) + seed.charCodeAt(i);
-      hash |= 0;
-    }
-    const normalized = (Math.abs(hash) % 1000) / 1000;
-    return min + normalized * (max - min);
-  };
+function stableRandom(seed: string, min: number, max: number): number {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    hash = ((hash << 5) - hash) + seed.charCodeAt(i);
+    hash |= 0;
+  }
+  const normalized = (Math.abs(hash) % 1000) / 1000;
+  return +(min + normalized * (max - min)).toFixed(1);
+}
 
+export default function AnalyticsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentTab = searchParams.get('tab') || 'realtime';
   const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d' | 'all'>('all');
@@ -162,16 +161,18 @@ export default function AnalyticsPage() {
     });
 
     const computedList = Object.values(sellerMap).map((s, idx) => {
-      const hashVal = s.sellerId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-      const avgFulfillment = stableRandom(s.sellerId || s.sellerName || String(idx), 1, 5).toFixed(1); 
-      const returnRateNum = (hashVal % 6) + 2; 
+      const seller = { id: s.sellerId, sellerName: s.sellerName };
+      const index = idx;
+
+      const avgFulfillment = stableRandom(seller.id || seller.sellerName || String(index), 1, 5).toFixed(1); 
+      const returnRateNum = stableRandom((seller.id || String(index)) + '_return', 2, 8); 
       const rate = s.totalAssigned > 0 ? (s.fulfilled / s.totalAssigned) * 100 : 100;
       
       return {
         ...s,
         fulfillmentRate: Number(rate.toFixed(0)),
         avgFulfillment,
-        returnRate: `${returnRateNum}.2%`
+        returnRate: `${returnRateNum}%`
       };
     });
 

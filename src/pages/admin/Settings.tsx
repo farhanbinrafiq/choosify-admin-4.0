@@ -158,6 +158,8 @@ export default function SettingsPage() {
     return defaultPermissions;
   });
 
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
   const handlePermissionToggle = (role: string, permKey: string, checked: boolean) => {
     const updated = {
       ...rolePermissions,
@@ -219,23 +221,17 @@ export default function SettingsPage() {
 
   // 6. Danger Actions
   const handleFlushAnalytics = () => {
-    if (window.confirm("Are you absolutely sure you want to flush all production analytics logs? This action is permanent and cannot be reverted.")) {
-      showToast("✓ All analytics and interaction intelligence data purged successfully.");
-    }
+    showToast("✓ All analytics and interaction intelligence data purged successfully.");
   };
 
   const handleResetFeatureFlags = () => {
-    if (window.confirm("Are you sure you want to reset all platform feature flags to system values?")) {
-      setFeatureFlags(defaultFeatureFlags);
-      localStorage.setItem('choosify_feature_flags', JSON.stringify(defaultFeatureFlags));
-      showToast("✓ Feature flags successfully reverted to system default configurations.");
-    }
+    setFeatureFlags(defaultFeatureFlags);
+    localStorage.setItem('choosify_feature_flags', JSON.stringify(defaultFeatureFlags));
+    showToast("✓ Feature flags successfully reverted to system default configurations.");
   };
 
   const handleClearSessions = () => {
-    if (window.confirm("This will instantly de-authorize and terminate the sessions of all other administrators and moderators. Click OK to confirm.")) {
-      showToast("✓ All active administrator, merchant, and moderator session tokens terminated.");
-    }
+    showToast("✓ All active administrator, merchant, and moderator session tokens terminated.");
   };
 
   const isCurrentTab = (tabId: string, aliases: string[] = []) => {
@@ -641,26 +637,77 @@ export default function SettingsPage() {
           </div>
 
           <div className="flex flex-col md:flex-row gap-4 flex-wrap">
-             <button 
-               onClick={handleFlushAnalytics}
-               className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-xl shadow-red-200 hover:bg-red-700 transition-colors cursor-pointer"
-             >
-                Flush All Analytics Logs
-             </button>
+             <div className="flex flex-col">
+               <button 
+                 onClick={() => setConfirmingId('flush_analytics')}
+                 className="bg-red-600 text-white px-6 py-3 rounded-xl font-bold text-sm shadow-xl shadow-red-200 hover:bg-red-700 transition-colors cursor-pointer"
+               >
+                  Flush All Analytics Logs
+               </button>
+               {confirmingId === 'flush_analytics' && (
+                 <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl flex flex-col gap-2 max-w-xs">
+                   <span className="text-[10px] font-black text-red-600">Flush all logs? This cannot be undone.</span>
+                   <div className="flex gap-2">
+                     <button
+                       onClick={() => { handleFlushAnalytics(); setConfirmingId(null); }}
+                       className="px-3 py-1.5 bg-red-500 text-white text-[9px] font-black uppercase rounded-lg hover:bg-red-600 transition-colors"
+                     >Confirm</button>
+                     <button
+                       onClick={() => setConfirmingId(null)}
+                       className="px-3 py-1.5 bg-gray-100 text-gray-600 text-[9px] font-black uppercase rounded-lg hover:bg-gray-200 transition-colors"
+                     >Cancel</button>
+                   </div>
+                 </div>
+               )}
+             </div>
 
-             <button 
-               onClick={handleResetFeatureFlags}
-               className="bg-red-100 text-red-700 border border-red-200 px-6 py-3 rounded-xl font-bold text-sm hover:bg-red-200 transition-colors cursor-pointer text-center"
-             >
-                Reset All Feature Flags to Default
-             </button>
+             <div className="flex flex-col">
+               <button 
+                 onClick={() => setConfirmingId('reset_flags')}
+                 className="bg-red-100 text-red-700 border border-red-200 px-6 py-3 rounded-xl font-bold text-sm hover:bg-red-200 transition-colors cursor-pointer text-center"
+               >
+                  Reset All Feature Flags to Default
+               </button>
+               {confirmingId === 'reset_flags' && (
+                 <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl flex flex-col gap-2 max-w-xs">
+                   <span className="text-[10px] font-black text-red-600">Reset all feature flags to default?</span>
+                   <div className="flex gap-2">
+                     <button
+                       onClick={() => { handleResetFeatureFlags(); setConfirmingId(null); }}
+                       className="px-3 py-1.5 bg-red-500 text-white text-[9px] font-black uppercase rounded-lg hover:bg-red-600 transition-colors"
+                     >Confirm</button>
+                     <button
+                       onClick={() => setConfirmingId(null)}
+                       className="px-3 py-1.5 bg-gray-100 text-gray-600 text-[9px] font-black uppercase rounded-lg hover:bg-gray-200 transition-colors"
+                     >Cancel</button>
+                   </div>
+                 </div>
+               )}
+             </div>
 
-             <button 
-               onClick={handleClearSessions}
-               className="bg-white text-red-600 border border-red-200 px-6 py-3 rounded-xl font-bold text-sm hover:bg-red-50 transition-colors cursor-pointer text-center"
-             >
-                Clear All Admin Sessions
-             </button>
+             <div className="flex flex-col">
+               <button 
+                 onClick={() => setConfirmingId('clear_sessions')}
+                 className="bg-white text-red-600 border border-red-200 px-6 py-3 rounded-xl font-bold text-sm hover:bg-red-50 transition-colors cursor-pointer text-center"
+               >
+                  Clear All Admin Sessions
+               </button>
+               {confirmingId === 'clear_sessions' && (
+                 <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl flex flex-col gap-2 max-w-xs">
+                   <span className="text-[10px] font-black text-red-600">Terminate all admin sessions?</span>
+                   <div className="flex gap-2">
+                     <button
+                       onClick={() => { handleClearSessions(); setConfirmingId(null); }}
+                       className="px-3 py-1.5 bg-red-500 text-white text-[9px] font-black uppercase rounded-lg hover:bg-red-600 transition-colors"
+                     >Confirm</button>
+                     <button
+                       onClick={() => setConfirmingId(null)}
+                       className="px-3 py-1.5 bg-gray-100 text-gray-600 text-[9px] font-black uppercase rounded-lg hover:bg-gray-200 transition-colors"
+                     >Cancel</button>
+                   </div>
+                 </div>
+               )}
+             </div>
           </div>
         </div>
       )}

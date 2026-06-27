@@ -456,10 +456,10 @@ export default function WebsiteCMSStudio() {
       </div>
 
       {/* THREE COLUMN AREA */}
-      <div className="flex flex-col xl:flex-row gap-6 items-start w-full overflow-hidden">
+      <div className="flex flex-row flex-1 overflow-hidden gap-4 p-4">
         
         {/* LEFT — Workspace Navigation (always visible, fixed 220px) */}
-        <aside className="w-full xl:w-[220px] bg-app-card border border-app-border rounded-xl p-4 shadow-sm shrink-0">
+        <aside className="w-[200px] lg:w-[220px] flex-shrink-0 bg-app-card border border-app-border rounded-xl p-3 shadow-sm overflow-y-auto self-start sticky top-6">
           <div className="space-y-5">
             {navigationGroups.map((group) => (
               <div key={group.label}>
@@ -495,11 +495,7 @@ export default function WebsiteCMSStudio() {
         </aside>
 
         {/* MIDDLE — Edit Panel (fills all remaining space when preview is closed) */}
-        <main className={`flex-1 min-w-0 bg-app-card border border-app-border rounded-xl p-5 shadow-sm min-h-[600px] transition-all duration-300 ${
-          activeTab === 'edit' ? 'block' : 'hidden xl:block'
-        } ${
-          previewPanelOpen ? 'xl:max-w-[calc(100%-220px-380px)]' : 'xl:max-w-[calc(100%-220px)]'
-        }`}>
+        <main className={`flex-1 min-w-0 overflow-y-auto bg-app-card border border-app-border rounded-xl p-5 shadow-sm min-h-[600px] transition-all duration-300`}>
           
           {/* WORKSPACE 1: Homepage Manager */}
           {activeWorkspace === 'homepage' && (
@@ -2577,10 +2573,8 @@ export default function WebsiteCMSStudio() {
               animate={{ width: 380, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.25, ease: 'easeInOut' }}
-              className={`w-full xl:w-[380px] bg-app-card border border-app-border rounded-xl p-4 shadow-sm shrink-0 sticky top-6 overflow-hidden ${
-                activeTab === 'preview' 
-                  ? 'block' 
-                  : (previewPanelOpen ? 'hidden xl:block' : 'hidden')
+              className={`flex-shrink-0 bg-app-card border border-app-border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${
+                previewPanelOpen ? 'w-[340px] lg:w-[380px]' : 'w-0 overflow-hidden'
               }`}
             >
           {/* Header */}

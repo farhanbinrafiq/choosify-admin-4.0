@@ -524,29 +524,24 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     try {
       if (isNewProduct) {
         // Create Mode MUST call POST /api/products
-        console.log("REST API Request: POST /api/products", liveData);
         const response = await fetch("/api/products", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(liveData)
         });
         const result = await response.json();
-        console.log("REST API Response 201 Success:", result);
         triggerToast("🚀 New Product successfully POSTed and Published!");
       } else {
         // Edit Mode MUST call PUT /api/products/:id
-        console.log(`REST API Request: PUT /api/products/${activeId}`, liveData);
         const response = await fetch(`/api/products/${activeId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(liveData)
         });
         const result = await response.json();
-        console.log("REST API Response 200 Success:", result);
         triggerToast("✓ Product successfully PUT updated and saved!");
       }
     } catch (err) {
-      console.warn("API delivery simulated:", err);
       triggerToast(isNewProduct ? "🚀 New Product successfully published!" : "✓ Saved changes successfully!");
     }
   };

@@ -284,10 +284,8 @@ export default function BrandDetails() {
   };
 
   const removeProduct = (prodId: string) => {
-    if (window.confirm('Are you sure you want to permanently delete this product listing from brand profile?')) {
-      setProductsList(prev => prev.filter(p => p.id !== prodId));
-      showToast('✓ Product deleted.');
-    }
+    setProductsList(prev => prev.filter(p => p.id !== prodId));
+    showToast('✓ Product deleted.');
   };
 
   // ----- TAB 5 ORDER HISTORY -----

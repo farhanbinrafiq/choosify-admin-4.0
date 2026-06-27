@@ -91,6 +91,7 @@ export default function GuidesStudioList() {
   const [statusFilter, setStatusFilter] = useState<"All" | "Live" | "Draft" | "Archived">("All");
   const [viewLayout, setViewLayout] = useState<"grid" | "list">("grid");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   useEffect(() => {
     const cached = localStorage.getItem(CHC_GUIDES_KEY);
@@ -111,8 +112,7 @@ export default function GuidesStudioList() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleDeleteGuide = (id: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to permanently delete the guide "${name}"?`)) return;
+  const handleDeleteGuide = (id: string) => {
     const updated = guides.filter((g) => g.id !== id);
     setGuides(updated);
     localStorage.setItem(CHC_GUIDES_KEY, JSON.stringify(updated));
@@ -376,13 +376,29 @@ export default function GuidesStudioList() {
                   </Link>
                   <button 
                     id={`btn-delete-${guide.id}`}
-                    onClick={() => handleDeleteGuide(guide.id, guide.guideTitle)}
+                    onClick={() => setConfirmingId(guide.id)}
                     className="p-2.5 bg-[#F9FAFB] hover:bg-rose-50 border border-[#E5E7EB] hover:border-rose-200 text-[#6B7280] hover:text-rose-600 rounded-xl transition-colors"
                     title="Delete Guide Template"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
+
+                {confirmingId === guide.id && (
+                  <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded-xl flex flex-col gap-2">
+                    <span className="text-[10px] font-black text-red-600">Are you sure? This cannot be undone.</span>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => { handleDeleteGuide(guide.id); setConfirmingId(null); }}
+                        className="px-3 py-1.5 bg-red-500 text-white text-[9px] font-black uppercase rounded-lg hover:bg-red-600 transition-colors"
+                      >Confirm</button>
+                      <button
+                        onClick={() => setConfirmingId(null)}
+                        className="px-3 py-1.5 bg-gray-100 text-gray-600 text-[9px] font-black uppercase rounded-lg hover:bg-gray-200 transition-colors"
+                      >Cancel</button>
+                    </div>
+                  </div>
+                )}
 
               </div>
             ))}
@@ -444,21 +460,38 @@ export default function GuidesStudioList() {
                       </span>
                     </td>
                     <td className="p-4.5 text-right">
-                      <div className="flex justify-end gap-2">
-                        <Link 
-                          to={`/dashboard/content-studio/guides/${guide.id}/edit`}
-                          className="p-1.5 bg-slate-100 hover:bg-[#0B1F3B] text-[#0B1F3B] hover:text-white rounded-lg transition-colors border border-[#E5E7EB]"
-                          title="Edit Guide"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </Link>
-                        <button 
-                          onClick={() => handleDeleteGuide(guide.id, guide.guideTitle)}
-                          className="p-1.5 bg-slate-100 hover:bg-rose-50 text-[#6B7280] hover:text-rose-600 rounded-lg transition-colors border border-[#E5E7EB]"
-                          title="Delete Guide"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                      <div className="flex flex-col items-end">
+                        <div className="flex justify-end gap-2">
+                          <Link 
+                            to={`/dashboard/content-studio/guides/${guide.id}/edit`}
+                            className="p-1.5 bg-slate-100 hover:bg-[#0B1F3B] text-[#0B1F3B] hover:text-white rounded-lg transition-colors border border-[#E5E7EB]"
+                            title="Edit Guide"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </Link>
+                          <button 
+                            onClick={() => setConfirmingId(guide.id)}
+                            className="p-1.5 bg-slate-100 hover:bg-rose-50 text-[#6B7280] hover:text-rose-600 rounded-lg transition-colors border border-[#E5E7EB]"
+                            title="Delete Guide"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {confirmingId === guide.id && (
+                          <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-xl flex flex-col items-end gap-1.5 z-10">
+                            <span className="text-[9px] font-black text-red-600">Delete this guide?</span>
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => { handleDeleteGuide(guide.id); setConfirmingId(null); }}
+                                className="px-2 py-1 bg-red-500 text-white text-[8px] font-black uppercase rounded hover:bg-red-600 transition-colors"
+                              >Confirm</button>
+                              <button
+                                onClick={() => setConfirmingId(null)}
+                                className="px-2 py-1 bg-gray-100 text-gray-600 text-[8px] font-black uppercase rounded hover:bg-gray-200 transition-colors"
+                              >Cancel</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </td>
                   </tr>

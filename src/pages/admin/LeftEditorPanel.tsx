@@ -33,6 +33,7 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
   const [productCategoryFilter, setProductCategoryFilter] = useState("all");
   const [productStatusFilter, setProductStatusFilter] = useState("all");
   const [editingProduct, setEditingProduct] = useState<BrandProductItem | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [isAddingProduct, setIsAddingProduct] = useState(false);
 
   // Simulated product fields
@@ -115,10 +116,8 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
   };
 
   const handleDeleteProduct = (prodId: string) => {
-    if (window.confirm("Delete this product from your Brand catalog?")) {
-      updateModelField("products", model.products.filter(p => p.id !== prodId));
-      setHasUnsavedChanges(true);
-    }
+    updateModelField("products", model.products.filter(p => p.id !== prodId));
+    setHasUnsavedChanges(true);
   };
 
   const executeAddProduct = () => {
@@ -717,13 +716,30 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
                           </button>
                         </td>
                         <td className="p-2 text-right">
-                          <div className="flex gap-1 justify-end">
-                            <button onClick={() => handleDuplicateProduct(p)} className="p-1 hover:bg-gray-100 rounded text-gray-500" title="Duplicate copy">
-                              <Copy className="w-3.5 h-3.5" />
-                            </button>
-                            <button onClick={() => handleDeleteProduct(p.id)} className="p-1 hover:bg-red-50 text-red-500 rounded" title="Delete product">
-                              <Trash className="w-3.5 h-3.5" />
-                            </button>
+                          <div className="flex flex-col items-end">
+                            <div className="flex gap-1 justify-end">
+                              <button onClick={() => handleDuplicateProduct(p)} className="p-1 hover:bg-gray-100 rounded text-gray-500" title="Duplicate copy">
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                              <button onClick={() => setConfirmingId(p.id)} className="p-1 hover:bg-red-50 text-red-500 rounded" title="Delete product">
+                                <Trash className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                            {confirmingId === p.id && (
+                              <div className="mt-1 p-2 bg-red-50 border border-red-200 rounded flex flex-col items-end gap-1">
+                                <span className="text-[8px] font-black text-red-600">Delete product?</span>
+                                <div className="flex gap-1">
+                                  <button
+                                    onClick={() => { handleDeleteProduct(p.id); setConfirmingId(null); }}
+                                    className="px-1.5 py-0.5 bg-red-500 text-white text-[8px] font-black uppercase rounded hover:bg-red-600 transition-colors border border-transparent"
+                                  >Confirm</button>
+                                  <button
+                                    onClick={() => setConfirmingId(null)}
+                                    className="px-1.5 py-0.5 bg-gray-100 text-gray-600 text-[8px] font-black uppercase rounded hover:bg-gray-200 transition-colors border border-transparent"
+                                  >Cancel</button>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </td>
                       </tr>

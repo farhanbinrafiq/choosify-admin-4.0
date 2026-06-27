@@ -161,6 +161,8 @@ export default function CommunitySubmissions() {
   // Track open rejection textareas for individual submissions
   const [rejectionIds, setRejectionIds] = useState<Record<string, string>>({});
   const [rejectingBoxId, setRejectingBoxId] = useState<string | null>(null);
+  const [showBulkRejectForm, setShowBulkRejectForm] = useState(false);
+  const [bulkRejectReason, setBulkRejectReason] = useState("Doesn't comply with Customer Favorites premium catalog layout guidelines");
 
   // Admin notes inline saving
   const [adminNotesStates, setAdminNotesStates] = useState<Record<string, string>>({});
@@ -217,10 +219,8 @@ export default function CommunitySubmissions() {
     setSelectedIds([]);
   };
 
-  const handleBulkReject = () => {
+  const handleBulkReject = (reason: string) => {
     if (selectedIds.length === 0) return;
-    const reason = prompt("Please specify a global feedback rejection reason for bulk selected submissions:", "Doesn't comply with Customer Favorites premium catalog layout guidelines");
-    if (reason === null) return;
     setSubmissions(prev => prev.map(s => selectedIds.includes(s.id) ? { 
       ...s, 
       status: 'rejected', 
@@ -377,33 +377,63 @@ export default function CommunitySubmissions() {
 
       {/* Bulk Action Panel floating */}
       {selectedIds.length > 0 && (
-        <div className="bg-[#1A1A2E] p-4 rounded-xl shadow-lg flex items-center justify-between text-white animate-fade-in">
-          <div className="flex items-center gap-2.5 text-xs">
-            <CheckSquare className="w-4 h-4 text-[#F97316]" />
-            <span className="font-bold">
-              Bulk Actions: <strong className="text-[#F97316] font-extrabold">{selectedIds.length}</strong> items selected
-            </span>
+        <div className="flex flex-col gap-2">
+          <div className="bg-[#1A1A2E] p-4 rounded-xl shadow-lg flex items-center justify-between text-white animate-fade-in">
+            <div className="flex items-center gap-2.5 text-xs">
+              <CheckSquare className="w-4 h-4 text-[#F97316]" />
+              <span className="font-bold">
+                Bulk Actions: <strong className="text-[#F97316] font-extrabold">{selectedIds.length}</strong> items selected
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleBulkApprove}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10.5px] uppercase tracking-wider rounded-lg border-none shadow-sm cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+              >
+                <Check className="w-3.5 h-3.5" /> Approve Selected
+              </button>
+              <button
+                onClick={() => setShowBulkRejectForm(prev => !prev)}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10.5px] uppercase tracking-wider rounded-lg border-none shadow-sm cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
+              >
+                <X className="w-3.5 h-3.5" /> Reject Selected
+              </button>
+              <button
+                onClick={() => { setSelectedIds([]); setShowBulkRejectForm(false); }}
+                className="px-2.5 py-1.5 text-[10px] uppercase font-bold text-gray-400 hover:text-white"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleBulkApprove}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10.5px] uppercase tracking-wider rounded-lg border-none shadow-sm cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
-            >
-              <Check className="w-3.5 h-3.5" /> Approve Selected
-            </button>
-            <button
-              onClick={handleBulkReject}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10.5px] uppercase tracking-wider rounded-lg border-none shadow-sm cursor-pointer transition-all active:scale-95 flex items-center gap-1.5"
-            >
-              <X className="w-3.5 h-3.5" /> Reject Selected
-            </button>
-            <button
-              onClick={() => setSelectedIds([])}
-              className="px-2.5 py-1.5 text-[10px] uppercase font-bold text-gray-400 hover:text-white"
-            >
-              Cancel
-            </button>
-          </div>
+          {showBulkRejectForm && (
+            <div className="bg-[#1F1F35] p-4 rounded-xl border border-rose-500/30 text-white flex flex-col gap-3 shadow-2xl">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-black text-rose-400 uppercase tracking-wider">Specify Bulk Rejection Reason</span>
+                <span className="text-[9px] text-slate-400">All selected {selectedIds.length} submissions will be rejected with this description:</span>
+              </div>
+              <textarea
+                value={bulkRejectReason}
+                onChange={e => setBulkRejectReason(e.target.value)}
+                rows={2}
+                className="w-full px-3 py-2 bg-black/40 border border-white/10 rounded-lg text-xs font-semibold outline-none focus:border-rose-500 text-slate-200"
+                placeholder="Enter rejection reason..."
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => {
+                    handleBulkReject(bulkRejectReason);
+                    setShowBulkRejectForm(false);
+                  }}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black uppercase tracking-widest rounded-lg cursor-pointer transition-colors"
+                >Confirm Reject ({selectedIds.length})</button>
+                <button
+                  onClick={() => setShowBulkRejectForm(false)}
+                  className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 text-[9px] font-black uppercase tracking-widest rounded-lg cursor-pointer transition-colors"
+                >Cancel</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

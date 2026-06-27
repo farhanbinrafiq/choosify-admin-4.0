@@ -168,7 +168,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
   }, [claims, brandId, brandName]);
 
   const activeClaim = useMemo(() => {
-    return matchedClaimsList.find(c => c.verificationStatus === 'Pending Review') || matchedClaimsList[0];
+    return matchedClaimsList.find(c => c.status === 'pending') || matchedClaimsList[0];
   }, [matchedClaimsList]);
 
   const isProfileBased = !!matchedProfile;
@@ -198,7 +198,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
   const [reviewReasonInput, setReviewReasonInput] = useState('');
 
   // Local state for warnings count
-  const [incidentsCount, setIncidentsCount] = useState(matchedClaimsList.some(c => c.verificationStatus === 'Rejected') ? 1 : 0);
+  const [incidentsCount, setIncidentsCount] = useState(matchedClaimsList.some(c => c.status === 'rejected') ? 1 : 0);
 
   // Mapped list of products belonging to this seller/brand
   const brandProducts = useMemo(() => {

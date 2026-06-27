@@ -177,6 +177,8 @@ export default function DealsPage() {
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [showBulkDeleteForm, setShowBulkDeleteForm] = useState(false);
 
   // Form slide-in state managers (Deals)
   const [isAdding, setIsAdding] = useState(false);
@@ -427,11 +429,9 @@ export default function DealsPage() {
   };
 
   const handleDelete = (id: string) => {
-    if (window.confirm("Are you sure you want to delete this deal?")) {
-      setDeals(prev => prev.filter(d => d.id !== id));
-      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
-      triggerToast("Deal removed successfully.");
-    }
+    setDeals(prev => prev.filter(d => d.id !== id));
+    setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
+    triggerToast("Deal removed successfully.");
   };
 
   // Bulk actions handlers
@@ -444,11 +444,9 @@ export default function DealsPage() {
   };
 
   const handleBulkDelete = () => {
-    if (window.confirm(`Are you sure you want to delete ${selectedIds.length} selected deals?`)) {
-      setDeals(prev => prev.filter(d => !selectedIds.includes(d.id)));
-      setSelectedIds([]);
-      triggerToast("Selected deals successfully removed.");
-    }
+    setDeals(prev => prev.filter(d => !selectedIds.includes(d.id)));
+    setSelectedIds([]);
+    triggerToast("Selected deals successfully removed.");
   };
 
   // Form submission handler (Deals)
@@ -779,57 +777,74 @@ export default function DealsPage() {
                             </span>
                           </td>
                           <td className="p-4 text-right">
-                            <div className="flex gap-2 justify-end">
-                               
-                               {/* Condition: Pending deal actions */}
-                               {dynamicStatus === 'Pending' ? (
-                                 <>
-                                   <button 
-                                     onClick={() => handleApprove(deal.id)} 
-                                     className="p-1 text-green-600 hover:bg-green-50 rounded border border-green-100 cursor-pointer transition"
-                                     title="Approve / Publish Live"
-                                   >
-                                     <CheckCircle className="w-4 h-4" />
-                                   </button>
-                                   <button 
-                                     onClick={() => handleReject(deal.id)} 
-                                     className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition"
-                                     title="Reject Request"
-                                   >
-                                     <XCircle className="w-4 h-4" />
-                                   </button>
-                                 </>
-                               ) : (
-                                 <>
-                                   {/* Condition: Live / expiring deals have Pause equivalent */}
-                                   {(dynamicStatus === 'Live' || dynamicStatus === 'Expiring') ? (
+                            <div className="flex flex-col items-end gap-1">
+                              <div className="flex gap-2 justify-end">
+                                 
+                                 {/* Condition: Pending deal actions */}
+                                 {dynamicStatus === 'Pending' ? (
+                                   <>
                                      <button 
-                                       onClick={() => handlePause(deal.id)} 
-                                       className="p-1 text-amber-600 hover:bg-amber-50 rounded border border-amber-100 cursor-pointer transition"
-                                       title="Pause / End Deal"
+                                       onClick={() => handleApprove(deal.id)} 
+                                       className="p-1 text-green-600 hover:bg-green-50 rounded border border-green-100 cursor-pointer transition"
+                                       title="Approve / Publish Live"
                                      >
-                                       <Pause className="w-4 h-4" />
+                                       <CheckCircle className="w-4 h-4" />
                                      </button>
-                                   ) : null}
-                                   
-                                   <button 
-                                     onClick={() => handleDelete(deal.id)} 
-                                     className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition"
-                                     title="Remove Deal"
-                                   >
-                                     <Trash2 className="w-4 h-4" />
-                                   </button>
-                                 </>
-                               )}
+                                     <button 
+                                       onClick={() => handleReject(deal.id)} 
+                                       className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition"
+                                       title="Reject Request"
+                                     >
+                                       <XCircle className="w-4 h-4" />
+                                     </button>
+                                   </>
+                                 ) : (
+                                   <>
+                                     {/* Condition: Live / expiring deals have Pause equivalent */}
+                                     {(dynamicStatus === 'Live' || dynamicStatus === 'Expiring') ? (
+                                       <button 
+                                         onClick={() => handlePause(deal.id)} 
+                                         className="p-1 text-amber-600 hover:bg-amber-50 rounded border border-amber-100 cursor-pointer transition"
+                                         title="Pause / End Deal"
+                                       >
+                                         <Pause className="w-4 h-4" />
+                                       </button>
+                                     ) : null}
+                                     
+                                     <button 
+                                       onClick={() => setConfirmingId(deal.id)} 
+                                       className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition"
+                                       title="Remove Deal"
+                                     >
+                                       <Trash2 className="w-4 h-4" />
+                                     </button>
+                                   </>
+                                 )}
 
-                               {/* Edit button populated on all rows */}
-                               <button 
-                                 onClick={() => setEditingDeal(deal)} 
-                                 className="p-1 text-blue-600 hover:bg-blue-50 rounded border border-blue-100 cursor-pointer transition"
-                                 title="Edit Deal Specifications"
-                               >
-                                 <Edit3 className="w-4 h-4" />
-                               </button>
+                                 {/* Edit button populated on all rows */}
+                                 <button 
+                                   onClick={() => setEditingDeal(deal)} 
+                                   className="p-1 text-blue-600 hover:bg-blue-50 rounded border border-blue-100 cursor-pointer transition"
+                                   title="Edit Deal Specifications"
+                                 >
+                                   <Edit3 className="w-4 h-4" />
+                                 </button>
+                              </div>
+                              {confirmingId === deal.id && (
+                                <div className="mt-1 p-2 bg-red-50 border border-red-200 rounded-lg flex flex-col items-end gap-1 z-10">
+                                  <span className="text-[9px] font-black text-red-600">Delete deal?</span>
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => { handleDelete(deal.id); setConfirmingId(null); }}
+                                      className="px-2 py-1 bg-red-500 text-white text-[8px] font-black uppercase rounded hover:bg-red-600 transition-colors border border-transparent"
+                                    >Confirm</button>
+                                    <button
+                                      onClick={() => setConfirmingId(null)}
+                                      className="px-2 py-1 bg-white border border-slate-250 text-slate-600 text-[8px] font-black uppercase rounded hover:bg-slate-50 transition-colors"
+                                    >Cancel</button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </td>
                        </tr>
@@ -915,29 +930,45 @@ export default function DealsPage() {
                             </label>
                           </td>
                           <td className="p-4 text-right">
-                            <div className="flex gap-2 justify-end">
-                              <button 
-                                onClick={() => {
-                                  setEditingPromo(promo);
-                                  setIsAddingPromo(false);
-                                }} 
-                                className="p-1 text-blue-600 hover:bg-blue-50 rounded border border-blue-100 cursor-pointer transition"
-                                title="Edit Promo Code"
-                              >
-                                <Edit3 className="w-4 h-4" />
-                              </button>
-                              <button 
-                                onClick={() => {
-                                  if (window.confirm(`Are you sure you want to delete promo code ${promo.code}?`)) {
-                                    setPromoCodes(prev => prev.filter(p => p.id !== promo.id));
-                                    triggerToast(`Promo code ${promo.code} deleted successfully.`);
-                                  }
-                                }} 
-                                className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition"
-                                title="Delete Promo Code"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                            <div className="flex flex-col items-end gap-1">
+                              <div className="flex gap-2 justify-end">
+                                <button 
+                                  onClick={() => {
+                                    setEditingPromo(promo);
+                                    setIsAddingPromo(false);
+                                  }} 
+                                  className="p-1 text-blue-600 hover:bg-blue-50 rounded border border-blue-100 cursor-pointer transition"
+                                  title="Edit Promo Code"
+                                >
+                                  <Edit3 className="w-4 h-4" />
+                                </button>
+                                <button 
+                                  onClick={() => setConfirmingId(promo.id)} 
+                                  className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition"
+                                  title="Delete Promo Code"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                              {confirmingId === promo.id && (
+                                <div className="mt-1 p-2 bg-red-50 border border-red-200 rounded-lg flex flex-col items-end gap-1 z-10">
+                                  <span className="text-[9px] font-black text-red-600">Delete promo?</span>
+                                  <div className="flex gap-1">
+                                    <button
+                                      onClick={() => {
+                                        setPromoCodes(prev => prev.filter(p => p.id !== promo.id));
+                                        triggerToast(`Promo code ${promo.code} deleted successfully.`);
+                                        setConfirmingId(null);
+                                      }}
+                                      className="px-2 py-1 bg-red-500 text-white text-[8px] font-black uppercase rounded hover:bg-red-600 transition-colors border border-transparent"
+                                    >Confirm</button>
+                                    <button
+                                      onClick={() => setConfirmingId(null)}
+                                      className="px-2 py-1 bg-white border border-slate-250 text-slate-600 text-[8px] font-black uppercase rounded hover:bg-slate-50 transition-colors"
+                                    >Cancel</button>
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           </td>
                        </tr>
@@ -1206,37 +1237,57 @@ export default function DealsPage() {
             initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-auto md:right-32 z-55 bg-[#1A1A2E] text-white px-6 py-3.5 rounded-2xl shadow-2xl flex items-center gap-6 border border-[#F4631E]/30"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-auto md:right-32 z-55 bg-[#1A1A2E] text-white px-6 py-3.5 rounded-2xl shadow-2xl flex flex-col gap-3 border border-[#F4631E]/30 w-96 max-w-full"
           >
-            <div className="flex items-center gap-2 text-left">
-              <span className="w-5 h-5 bg-[#F4631E] rounded-full text-[10px] font-black flex items-center justify-center text-white">
-                {selectedIds.length}
-              </span>
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-350">Selected Deals</span>
+            <div className="flex items-center justify-between gap-6">
+              <div className="flex items-center gap-2 text-left">
+                <span className="w-5 h-5 bg-[#F4631E] rounded-full text-[10px] font-black flex items-center justify-center text-white">
+                  {selectedIds.length}
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-350">Selected Deals</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleBulkApprove}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 border-none"
+                >
+                  <Check className="w-3.5 h-3.5" />
+                  <span>Approve</span>
+                </button>
+                <button
+                  onClick={() => setShowBulkDeleteForm(prev => !prev)}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 border-none"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Delete</span>
+                </button>
+                <button
+                  onClick={() => { setSelectedIds([]); setShowBulkDeleteForm(false); }}
+                  className="text-slate-400 hover:text-white font-bold text-xs px-2 py-1.5 bg-transparent border-none cursor-pointer"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-            <div className="h-4 w-[1px] bg-slate-700" />
-            <div className="flex gap-2">
-              <button
-                onClick={handleBulkApprove}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 border-none"
-              >
-                <Check className="w-3.5 h-3.5" />
-                <span>Approve Selected</span>
-              </button>
-              <button
-                onClick={handleBulkDelete}
-                className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 border-none"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                <span>Delete Selected</span>
-              </button>
-              <button
-                onClick={() => setSelectedIds([])}
-                className="text-slate-400 hover:text-white font-bold text-xs px-2 py-1.5 bg-transparent border-none cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
+            {showBulkDeleteForm && (
+              <div className="p-3 bg-[#1F1F35] rounded-xl border border-rose-500/30 text-white flex flex-col gap-2 shadow-2xl">
+                <span className="text-[10px] font-black text-rose-400 uppercase tracking-wider">Are you absolutely sure?</span>
+                <span className="text-[9px] text-slate-400">This will permanently delete all {selectedIds.length} selected deals from the platform database listings.</span>
+                <div className="flex gap-2 justify-end">
+                  <button
+                    onClick={() => {
+                      handleBulkDelete();
+                      setShowBulkDeleteForm(false);
+                    }}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black uppercase tracking-widest rounded-lg cursor-pointer transition-colors"
+                  >Confirm Bulk Delete</button>
+                  <button
+                    onClick={() => setShowBulkDeleteForm(false)}
+                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 text-[9px] font-black uppercase tracking-widest rounded-lg cursor-pointer transition-colors"
+                  >Cancel</button>
+                </div>
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>

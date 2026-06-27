@@ -10,6 +10,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { BrandCMSModel, CreatorVideoItem, PromoCodeItem, initialBrandSeeds } from "./brandSeeds";
 import { useAuth } from "../../contexts/AuthContext";
+import { useBrandProfiles } from "../../contexts/BrandProfilesContext";
 
 const COMPILATION_KEY = "choosify_brand_studio_list";
 
@@ -24,6 +25,17 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   const navigate = useNavigate();
   const activeId = overrideId || id || activeBrandId || "1";
 
+  const brandProfilesRef = useRef<any>(null);
+  try {
+    brandProfilesRef.current = useBrandProfiles();
+  } catch (e) {}
+
+  useEffect(() => {
+    try {
+      brandProfilesRef.current = useBrandProfiles();
+    } catch (e) {}
+  });
+
   // Brand Model state
   const [model, setModel] = useState<BrandCMSModel | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
@@ -33,6 +45,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   // Versions and historical rollbacks state
   const [versions, setVersions] = useState<{ timestamp: string; label: string; snapshot: BrandCMSModel }[]>([]);
   const [showVersions, setShowVersions] = useState(false);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   // Exit Modal, Publish Modal, and Drawer state
   const [showExitModal, setShowExitModal] = useState(false);
@@ -361,18 +374,36 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
         } catch (_) {}
       }
 
+      // Also update BrandProfilesContext so the brands list reflects this edit
+      try {
+        const { updateProfile } = brandProfilesRef.current || {};
+        if (updateProfile && activeId) {
+          updateProfile(activeId, {
+            name: model.brandName,
+            category: model.category,
+            logo: model.logo,
+            coverImage: model.coverImage,
+            websiteUrl: model.website,
+            facebookUrl: model.socialFbUrl,
+            instagramUrl: model.socialInstaUrl,
+            youtubeUrl: model.socialYtUrl,
+            description: model.tagline,
+          });
+        }
+      } catch (err) {
+        // Context update is best-effort; localStorage is the source of truth for now
+      }
+
       setIsPublishing(false);
       triggerToast("🚀 Brand Profile Published Live in Bangladesh!");
     }, 1200);
   };
 
   const restoreVersion = (snapshot: BrandCMSModel) => {
-    if (window.confirm("Restore this workspace snapshoot? Current workspace will become an unsaved draft.")) {
-      setModel(JSON.parse(JSON.stringify(snapshot)));
-      setHasUnsavedChanges(true);
-      setShowVersions(false);
-      triggerToast("Snapshoot Restored!");
-    }
+    setModel(JSON.parse(JSON.stringify(snapshot)));
+    setHasUnsavedChanges(true);
+    setShowVersions(false);
+    triggerToast("✓ Snapshot restored successfully!");
   };
 
   // --- DYNAMIC CREATORS ENGINE: REORDER, DEFINE, OR FEATURE ---
@@ -564,13 +595,29 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                         <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono">
                           <span>{ver.timestamp}</span>
                           <button 
-                            onClick={() => restoreVersion(ver.snapshot)}
+                            onClick={() => setConfirmingId(ver.timestamp)}
                             className="font-bold text-[#EF3C23] hover:underline text-[10px]"
                           >
                             RESTORE
                           </button>
                         </div>
                         <span className="text-xs font-semibold truncate text-[#1a1a2e]">{ver.label}</span>
+
+                        {confirmingId === ver.timestamp && (
+                          <div className="mt-1 p-2 bg-red-50 border border-red-200 rounded-lg flex flex-col gap-1.5">
+                            <span className="text-[9px] font-black text-red-600">Restore snapshot? Current draft will become unsaved.</span>
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => { restoreVersion(ver.snapshot); setConfirmingId(null); }}
+                                className="px-2 py-1 bg-red-500 text-white text-[8px] font-black uppercase rounded hover:bg-red-600 transition-colors"
+                              >Confirm</button>
+                              <button
+                                onClick={() => setConfirmingId(null)}
+                                className="px-2 py-1 bg-gray-100 text-gray-600 text-[8px] font-black uppercase rounded hover:bg-gray-200 transition-colors"
+                              >Cancel</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
