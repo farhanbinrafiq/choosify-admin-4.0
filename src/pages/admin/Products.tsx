@@ -21,6 +21,8 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import AddProductModal from '../../components/admin/AddProductModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
+import { catalogApi } from '../../services/catalogApi';
+import type { CatalogProduct } from '../../types/catalog';
 
 const mockProducts = [
   { id: '1', name: 'Samsung S25 Ultra', brand: 'Samsung Bangladesh', category: 'Mobile', seller: 'TechZone BD', price: '৳ 139,999', status: 'Pending', views: 842, icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' },
@@ -35,6 +37,20 @@ const mockProducts = [
   { id: 'techcore-2', name: 'TechCore Bluetooth Smart Watch V2', brand: 'TechCore', category: 'Consumer Tech', seller: 'Rahim Uddin', price: '৳ 3,800', status: 'Live', views: 5690, icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' },
 ];
 
+const mapCatalogProductToCard = (product: CatalogProduct) => ({
+  id: product.id,
+  name: product.title,
+  brand: product.brandName,
+  category: product.categoryName,
+  seller: 'Platform Admin',
+  price: `৳ ${Math.round(product.price).toLocaleString()}`,
+  status:
+    product.status === 'live' ? 'Live' : product.status === 'archived' ? 'Rejected' : 'Pending',
+  views: 0,
+  icon: product.categoryName.toLowerCase().includes('mobile') ? Smartphone : Box,
+  color: 'text-app-accent bg-app-accent/10',
+});
+
 export default function ProductsPage() {
   const { profile, activeBrandId, allBrands, sellerBrands } = useAuth();
   const location = useLocation();
@@ -46,19 +62,70 @@ export default function ProductsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [selectedBrandFilter, setSelectedBrandFilter] = useState<string | null>(activeBrandId);
 
-  const handleBulkApprove = () => {
+  React.useEffect(() => {
+    let cancelled = false;
+    async function loadCatalogProducts() {
+      try {
+        const remoteProducts = await catalogApi.listProducts();
+        if (!cancelled && remoteProducts.length > 0) {
+          setProducts(remoteProducts.map(mapCatalogProductToCard));
+        }
+      } catch (error) {
+        console.warn('[ProductsPage] Falling back to local products.', error);
+      }
+    }
+    loadCatalogProducts();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const handleBulkApprove = async () => {
+    await Promise.all(
+      products
+        .filter((item) => selectedIds.has(item.id))
+        .map((item) =>
+          catalogApi.updateProduct(item.id, {
+            title: item.name,
+            brandName: item.brand,
+            categoryName: item.category,
+            status: 'live',
+          })
+        )
+    ).catch((error) => {
+      console.warn('[ProductsPage] Failed to bulk-approve via API.', error);
+    });
     setProducts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, status: 'Live' } : p));
     showToast(`Approved ${selectedIds.size} products to Live`);
     setSelectedIds(new Set());
   };
 
-  const handleBulkReject = () => {
+  const handleBulkReject = async () => {
+    await Promise.all(
+      products
+        .filter((item) => selectedIds.has(item.id))
+        .map((item) =>
+          catalogApi.updateProduct(item.id, {
+            title: item.name,
+            brandName: item.brand,
+            categoryName: item.category,
+            status: 'archived',
+          })
+        )
+    ).catch((error) => {
+      console.warn('[ProductsPage] Failed to bulk-reject via API.', error);
+    });
     setProducts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, status: 'Rejected' } : p));
     showToast(`Rejected ${selectedIds.size} products`);
     setSelectedIds(new Set());
   };
 
-  const handleBulkDelete = () => {
+  const handleBulkDelete = async () => {
+    await Promise.all(
+      Array.from(selectedIds).map((id: string) => catalogApi.deleteProduct(id))
+    ).catch((error) => {
+      console.warn('[ProductsPage] Failed to bulk-delete via API.', error);
+    });
     setProducts(prev => prev.filter(p => !selectedIds.has(p.id)));
     showToast(`Deleted ${selectedIds.size} products from catalog`);
     setSelectedIds(new Set());
@@ -107,7 +174,7 @@ export default function ProductsPage() {
     return true;
   });
 
-  const handleAddProduct = (data: any) => {
+  const handleAddProduct = async (data: any) => {
     const newProduct = {
       id: Math.random().toString(36).substr(2, 9),
       name: data.productName,
@@ -120,8 +187,24 @@ export default function ProductsPage() {
       icon: data.category === 'Mobile' ? Smartphone : Box,
       color: 'text-app-accent bg-app-accent/10'
     };
-    setProducts([newProduct, ...products]);
-    showToast('Product added successfully as Draft');
+    try {
+      const saved = await catalogApi.createProduct({
+        id: newProduct.id,
+        title: newProduct.name,
+        brandName: newProduct.brand,
+        categoryName: newProduct.category,
+        price: Number(String(data.discountedPrice).replace(/[^0-9.-]/g, '')) || 0,
+        status: 'draft',
+        image: '',
+        modeType: 'retail',
+      });
+      setProducts([mapCatalogProductToCard(saved), ...products]);
+      showToast('Product added successfully as Draft');
+    } catch (error) {
+      console.warn('[ProductsPage] Failed to persist product.', error);
+      setProducts([newProduct, ...products]);
+      showToast('Saved locally (API unavailable)');
+    }
   };
 
   const showToast = (msg: string) => {
