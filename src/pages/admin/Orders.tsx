@@ -25,9 +25,14 @@ import {
   Printer,
   Download,
   ArrowLeft,
-  X
+  X,
+  Package,
+  AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { ShipmentProvider } from '../../contexts/ShipmentContext';
+import { ShipmentCard } from '../../components/Shipment/ShipmentCard';
+import { SplitLayout } from '../../components/Layout/SplitLayout';
 
 const getMockProductId = (title: string): string => {
   const t = title.toLowerCase();
@@ -53,6 +58,10 @@ type OrderConsoleTab =
 
 export default function OrdersPage() {
   const navigate = useNavigate();
+  const orderDetailsPanes = [
+    { size: 800, minSize: 600, maxSize: 1200 }, // Left side order info
+    { size: 400, minSize: 300, maxSize: 600 }   // Right side customer specs
+  ];
   const { profile } = useAuth();
   const { 
     orders, 
@@ -734,11 +743,10 @@ Thank you for using Choosify Commerce Network.
             </div>
           </div>
 
-          {/* 2-column Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* Main Info Column (Left 2 cols) */}
-            <div className="lg:col-span-2 space-y-8">
+          {/* 2-column Layout with Splitter */}
+          <SplitLayout layoutId="order-details-studio" panes={orderDetailsPanes} className="border border-app-border rounded-[2rem] overflow-hidden bg-app-card min-h-[600px]">
+            {/* Main Info Column */}
+            <div className="space-y-8 p-8 h-full overflow-y-auto">
               
               {/* Timeline Progress Bar */}
               <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl relative">
@@ -862,6 +870,25 @@ Thank you for using Choosify Commerce Network.
                     <Truck className="w-5 h-5 text-[#F4631E]" />
                     <h3 className="text-sm font-black uppercase tracking-wider text-white">Full-Stack ERP Logistics &amp; Fulfillment Control</h3>
                   </div>
+
+                  {order.status === 'Returned' && (
+                    <div className="bg-orange-950/40 text-orange-400 border border-orange-900/40 rounded-xl p-5 space-y-3">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="w-5 h-5 text-[#F4631E] shrink-0" />
+                        <h4 className="text-xs font-black uppercase tracking-wider text-white">Reverse Logistics &amp; Refund in Progress</h4>
+                      </div>
+                      <p className="text-[10px] text-slate-300 leading-relaxed font-medium">
+                        This order has been designated for customer return. All logistics tracking, warehouse inspection status, and SSL payout refunds should be actioned in the Returns &amp; Refunds center.
+                      </p>
+                      <button
+                        onClick={() => navigate('/admin/returns')}
+                        className="px-4 py-2 bg-[#F4631E] hover:bg-[#F4631E]/80 text-white font-black uppercase tracking-widest text-[9px] rounded-lg transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+                      >
+                        <Package className="w-3.5 h-3.5" />
+                        Go to Returns Dashboard
+                      </button>
+                    </div>
+                  )}
 
                   <div className="space-y-4">
                     <span className="text-xs font-black uppercase tracking-widest text-[#F4631E] block">Sellers Sub-Orders Dispatch &amp; Tracking</span>
@@ -1112,10 +1139,58 @@ Thank you for using Choosify Commerce Network.
                   </div>
                 </div>
               )}
+
+              {/* Logistics & Shipment Card */}
+              <ShipmentProvider
+                orderId={order.id}
+                sellerId={order.product.sellerId}
+                orderTotal={order.total_payable || (order.product.price * (order.quantity || 1)) + (order.delivery_charge || 120)}
+                deliveryDistrict={(order.customer as any).district || 'Dhaka'}
+                seller={{
+                  id: order.product.sellerId,
+                  name: order.product.sellerName,
+                  address: 'Uttara, Dhaka',
+                  phone: '01711122233',
+                  email: 'seller@lms.com'
+                }}
+                customer={order.customer}
+                items={[
+                  {
+                    productId: order.product.id,
+                    name: order.product.name,
+                    quantity: order.quantity || 1,
+                    price: order.product.price
+                  }
+                ]}
+                codAmount={order.total_payable || (order.product.price * (order.quantity || 1)) + (order.delivery_charge || 120)}
+              >
+                <div className="mt-8">
+                  <ShipmentCard
+                    orderId={order.id}
+                    seller={{
+                      id: order.product.sellerId,
+                      name: order.product.sellerName,
+                      address: 'Uttara, Dhaka',
+                      phone: '01711122233',
+                      email: 'seller@lms.com'
+                    }}
+                    customer={order.customer}
+                    items={[
+                      {
+                        productId: order.product.id,
+                        name: order.product.name,
+                        quantity: order.quantity || 1,
+                        price: order.product.price
+                      }
+                    ]}
+                    codAmount={order.total_payable || (order.product.price * (order.quantity || 1)) + (order.delivery_charge || 120)}
+                  />
+                </div>
+              </ShipmentProvider>
             </div>
 
-            {/* Customer Profile & Dispute Center (Right 1 col) */}
-            <div className="space-y-8">
+            {/* Customer Profile & Dispute Center */}
+            <div className="space-y-8 p-8 h-full overflow-y-auto bg-white/5 border-l border-app-border">
               
               {/* Customer Box */}
               <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl space-y-6">
@@ -1261,7 +1336,7 @@ Thank you for using Choosify Commerce Network.
                 </div>
               </div>
             </div>
-          </div>
+          </SplitLayout>
         </div>
       );
     }

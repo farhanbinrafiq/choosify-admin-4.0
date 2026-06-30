@@ -25,6 +25,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useCMS } from '../contexts/CMSContext';
 import { useAds } from '../contexts/AdsContext';
 import { useOrders } from '../contexts/OrdersContext';
+import { useCoupons } from '../contexts/CouponsContext';
 
 const platformIcons: Record<string, any> = {
   Facebook: Facebook,
@@ -39,11 +40,51 @@ export default function Home() {
   const { cmsData } = useCMS();
   const { promotions, trackClick } = useAds();
   const { createOrderNow } = useOrders();
+  const { validateCoupon } = useCoupons();
 
   const [selectedCheckoutProduct, setSelectedCheckoutProduct] = useState<any | null>(null);
   const [checkoutNotes, setCheckoutNotes] = useState('Assalamu alaikum. Please deliver the package with authentic packing intact. Contact me before delivery.');
   const [showCompleteToast, setShowCompleteToast] = useState(false);
   const [placedOrderId, setPlacedOrderId] = useState('');
+
+  // Coupon entry states in Checkout Selection Modal Drawer
+  const [promoInput, setPromoInput] = useState('');
+  const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
+  const [promoDiscount, setPromoDiscount] = useState(0);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoSuccess, setPromoSuccess] = useState<string | null>(null);
+
+  const handleApplyPromo = () => {
+    if (!promoInput.trim() || !selectedCheckoutProduct) return;
+    const cartTotal = selectedCheckoutProduct.priority || 4200;
+    
+    const itemArg = [{
+      id: selectedCheckoutProduct.id,
+      price: selectedCheckoutProduct.priority || 4200,
+      category: 'Fashion', // default simulated category
+      brand: selectedCheckoutProduct.subtitle || 'Aarong',
+      quantity: 1
+    }];
+
+    const res = validateCoupon(promoInput.toUpperCase().trim(), cartTotal, profile?.uid || 'cust_001', itemArg);
+    if (res.valid) {
+      setAppliedPromo(promoInput.toUpperCase().trim());
+      setPromoDiscount(res.discount);
+      setPromoSuccess(`Voucher applied! ৳${res.discount} discount deducted.`);
+      setPromoError(null);
+    } else {
+      setPromoError(res.reason || 'Invalid voucher code.');
+      setPromoSuccess(null);
+    }
+  };
+
+  const handleRemovePromo = () => {
+    setAppliedPromo(null);
+    setPromoInput('');
+    setPromoDiscount(0);
+    setPromoError(null);
+    setPromoSuccess(null);
+  };
 
   const submitTrustOrder = () => {
     if (!selectedCheckoutProduct) return;
@@ -59,11 +100,15 @@ export default function Home() {
       sellerName: selectedCheckoutProduct.subtitle?.includes('Samsung') ? 'TechZone BD' : 'Aarong Digital'
     };
 
-    createOrderNow(rawProd, checkoutNotes);
+    createOrderNow(rawProd, checkoutNotes, appliedPromo || undefined, promoDiscount || undefined);
     
     trackClick(selectedCheckoutProduct.id);
     setSelectedCheckoutProduct(null);
     setShowCompleteToast(true);
+    
+    // Reset promo code state
+    handleRemovePromo();
+
     setTimeout(() => setShowCompleteToast(false), 8000);
   };
 
@@ -417,6 +462,70 @@ export default function Home() {
             </div>
 
             <div className="space-y-4">
+              {/* Promo Code Input Section */}
+              <div className="space-y-2 p-4 bg-app-bg/50 border border-app-border rounded-2xl">
+                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Promo / Discount Code</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={promoInput}
+                    onChange={(e) => setPromoInput(e.target.value)}
+                    disabled={!!appliedPromo}
+                    placeholder="e.g. SUMMER2026, WELCOME250"
+                    className="flex-1 bg-app-bg border border-app-border rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-app-accent/40 disabled:opacity-50"
+                  />
+                  {appliedPromo ? (
+                    <button
+                      type="button"
+                      onClick={handleRemovePromo}
+                      className="px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/15 rounded-xl text-rose-400 text-[10px] font-black uppercase transition-all"
+                    >
+                      Remove
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleApplyPromo}
+                      className="px-5 py-2 bg-app-accent hover:bg-orange-500 rounded-xl text-white text-[10px] font-black uppercase tracking-wider transition-all"
+                    >
+                      Apply
+                    </button>
+                  )}
+                </div>
+
+                {/* Success/Error message labels */}
+                {promoError && (
+                  <div className="text-[9px] text-rose-400 font-bold font-mono tracking-wide">{promoError}</div>
+                )}
+                {promoSuccess && (
+                  <div className="text-[9px] text-emerald-400 font-bold font-mono tracking-wide">{promoSuccess}</div>
+                )}
+              </div>
+
+              {/* Price calculations breakdown */}
+              {selectedCheckoutProduct && (
+                <div className="p-4 bg-app-bg border border-app-border rounded-2xl text-[11px] font-semibold text-slate-400 space-y-1.5 font-mono">
+                  <div className="flex justify-between">
+                    <span>Product Subtotal:</span>
+                    <span className="text-white">৳ {(selectedCheckoutProduct.priority || 4200).toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Delivery Logistics Charge:</span>
+                    <span className="text-white">৳ 120</span>
+                  </div>
+                  {promoDiscount > 0 && (
+                    <div className="flex justify-between text-emerald-400 font-bold">
+                      <span>Promo Voucher Applied:</span>
+                      <span>-৳ {promoDiscount}</span>
+                    </div>
+                  )}
+                  <div className="border-t border-app-border/40 my-1 pt-1 flex justify-between text-white font-bold text-xs">
+                     <span className="text-slate-300 font-sans uppercase text-[10px] tracking-widest font-black">Grand Total Payable:</span>
+                     <span className="text-app-accent font-mono text-sm">৳ {Math.max(0, (selectedCheckoutProduct.priority || 4200) + 120 - promoDiscount).toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-2">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Add notes to Customer Support / Seller Inbox</label>
                 <textarea 

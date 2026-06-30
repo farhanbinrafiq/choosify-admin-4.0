@@ -175,7 +175,6 @@ export default function SettingsPage() {
 
   // 4. Feature Flags State
   const defaultFeatureFlags: Record<string, boolean> = {
-    enable_wholesale: false,
     enable_creator_marketplace: true,
     enable_community_submissions: true,
     enable_campaign_banners: true,
@@ -479,19 +478,6 @@ export default function SettingsPage() {
           </div>
 
           <div className="divide-y divide-gray-50">
-             <SettingRow 
-               icon={Smartphone}
-               label="Enable Wholesale Mode"
-               desc="Activate B2B ordering and special bulk rates for verified retail partners."
-               action={
-                 <button
-                   onClick={() => toggleFeatureFlag('enable_wholesale')}
-                   className={`w-10 h-5 rounded-full relative transition-colors duration-200 cursor-pointer ${featureFlags.enable_wholesale ? 'bg-[#ef3c23]' : 'bg-gray-200'}`}
-                 >
-                   <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all duration-200 ${featureFlags.enable_wholesale ? 'left-[22px]' : 'left-0.5'}`} />
-                 </button>
-               }
-             />
              <SettingRow 
                icon={User}
                label="Enable Creator Marketplace"

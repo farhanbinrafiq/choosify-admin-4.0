@@ -28,6 +28,7 @@ import {
   Compass,
   Zap,
   ChevronRight,
+  ChevronLeft,
   RefreshCw,
   Megaphone,
   UserCheck,
@@ -36,7 +37,11 @@ import {
   Activity,
   AlertTriangle,
   Search,
-  Menu
+  Menu,
+  FolderOpen,
+  Truck,
+  MapPin,
+  Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
@@ -44,6 +49,8 @@ import { useCMS } from '../contexts/CMSContext';
 import { useOrders } from '../contexts/OrdersContext';
 import { useContact } from '../contexts/ContactInteractionContext';
 import { useBrandProfiles } from '../contexts/BrandProfilesContext';
+import { ResizableSidebar } from './Layout/ResizableSidebar';
+import { useLayoutPreferences } from '../hooks/useLayoutPreferences';
 
 interface SidebarItem {
   label: string;
@@ -69,13 +76,16 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Consumers', icon: Users, path: '/admin/consumers' },
     { label: 'Brand Management Studio', icon: Globe, path: '/admin/sellers' },
     { label: 'Products', icon: Package, path: '/admin/products' },
+    { label: 'Category Taxonomy', icon: FolderOpen, path: '/admin/categories' },
     { label: 'Order Console', icon: ListOrdered, path: '/admin/orders' },
+    { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
+    { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
     { label: 'Orders Overview', icon: BarChart3, path: '/admin/orders-overview' },
     { label: 'Creators', icon: Award, path: '/admin/creators?viewMode=creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Moderation Center', icon: ShieldCheck, path: '/admin/moderation' },
     { label: 'Community Submissions', icon: Users, path: '/admin/community-submissions' },
-    { label: 'Disputes', icon: AlertTriangle, path: '/admin/moderation?tab=disputes' },
+    { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 12 },
     { label: 'Trust Center', icon: ShieldCheck, path: '/admin/trust-center' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
@@ -87,16 +97,22 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Admin Management', icon: UserCheck, path: '/admin/admins?viewMode=admins' },
     { label: 'Role Management', icon: Lock, path: '/admin/settings?tab=roles' },
     { label: 'Permissions', icon: ShieldCheck, path: '/admin/settings?tab=permissions' },
-    { label: 'System Configuration', icon: Bolt, path: '/admin/cms' },
-    { label: '🌐 Website CMS Studio', icon: Globe, path: '/admin/cms-studio' },
     { label: 'Verification Center', icon: Award, path: '/admin/brand-verification' },
     { label: 'Fraud Detection Engine', icon: Zap, path: '/admin/moderation-v2' },
     { label: 'Subscription Plans', icon: Tag, path: '/admin/promotions?tab=plans' },
     { label: 'Monetization Center', icon: Wallet, path: '/admin/payouts' },
-    { label: 'Promo Codes', icon: Tag, path: '/admin/deals?tab=promocodes' },
+    { label: 'Promo Codes & Vouchers', icon: Tag, path: '/admin/coupons' },
     { label: 'Audit Logs', icon: History, path: '/admin/moderation?tab=reports' },
     { label: 'Security Center', icon: FolderLock, path: '/admin/settings?tab=security' },
     { label: 'Feature Flags', icon: Activity, path: '/admin/settings?tab=features' },
+    
+    { label: 'Logistics Management', type: 'label' },
+    { label: 'Courier Providers', icon: Truck, path: '/admin/logistics/couriers' },
+    { label: 'Shipment Console', icon: Package, path: '/admin/logistics/shipments' },
+    { label: 'Tracking Center', icon: MapPin, path: '/admin/logistics/tracking' },
+    { label: 'Shipping Labels', icon: FileText, path: '/admin/logistics/labels' },
+    { label: 'Courier Analytics', icon: BarChart3, path: '/admin/logistics/analytics' },
+
     { label: 'Website CMS Studio', type: 'label' },
     {
       label: 'Website CMS Studio',
@@ -111,19 +127,29 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Consumers', icon: Users, path: '/admin/consumers' },
     { label: 'Brand Management Studio', icon: Globe, path: '/admin/sellers' },
     { label: 'Products', icon: Package, path: '/admin/products' },
+    { label: 'Category Taxonomy', icon: FolderOpen, path: '/admin/categories' },
     { label: 'Order Console', icon: ListOrdered, path: '/admin/orders' },
+    { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
+    { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
     { label: 'Orders Overview', icon: BarChart3, path: '/admin/orders-overview' },
     { label: 'Creators', icon: Award, path: '/admin/creators?viewMode=creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Community Submissions', icon: Users, path: '/admin/community-submissions', badge: 'New' },
-    { label: 'Disputes', icon: AlertTriangle, path: '/admin/moderation?tab=disputes' },
+    { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
     { label: 'Trust Center', icon: ShieldCheck, path: '/admin/trust-center' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     { label: 'Finance', type: 'label' },
     { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
-    { label: '🌐 Website CMS Studio', icon: Globe, path: '/admin/cms-studio' },
+    
+    { label: 'Logistics Management', type: 'label' },
+    { label: 'Courier Providers', icon: Truck, path: '/admin/logistics/couriers' },
+    { label: 'Shipment Console', icon: Package, path: '/admin/logistics/shipments' },
+    { label: 'Tracking Center', icon: MapPin, path: '/admin/logistics/tracking' },
+    { label: 'Shipping Labels', icon: FileText, path: '/admin/logistics/labels' },
+    { label: 'Courier Analytics', icon: BarChart3, path: '/admin/logistics/analytics' },
+
     { label: 'Website CMS Studio', type: 'label' },
     {
       label: 'Website CMS Studio',
@@ -137,11 +163,19 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'My Profile', icon: UserCheck, path: '/admin/sellers/seller_001?tab=overview' },
     { label: 'Order Console', icon: ListOrdered, path: '/admin/orders', badge: 4 },
+    { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
+    { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'My Brand Studio', icon: Globe, path: '/dashboard/content-studio/brands' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 2 },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+    
+    { label: 'Logistics', type: 'label' },
+    { label: 'Shipment Console', icon: Package, path: '/admin/logistics/shipments' },
+    { label: 'Tracking Center', icon: MapPin, path: '/admin/logistics/tracking' },
+    { label: 'Shipping Labels', icon: FileText, path: '/admin/logistics/labels' },
+
     { label: 'Finance', type: 'label' },
     { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
@@ -182,8 +216,9 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Marketing Workspace', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Promotions', icon: Megaphone, path: '/admin/promotions' },
+    { label: 'Promo Codes & Vouchers', icon: Tag, path: '/admin/coupons' },
     { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
-    { label: '🌐 Website CMS Studio', icon: Globe, path: '/admin/cms-studio' },
+    { label: 'Website CMS Studio', type: 'label' },
     {
       label: 'Website CMS Studio',
       icon: Globe,
@@ -198,6 +233,9 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const { cmsData } = useCMS();
   const location = useLocation();
   const navigate = useNavigate();
+  const { getSizes, setSizes, setCollapsed } = useLayoutPreferences('sidebar');
+  const savedSizes = getSizes();
+  const currentWidthVal = savedSizes.length > 0 ? savedSizes[0] : 280;
   const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
   const [isBrandsExpanded, setIsBrandsExpanded] = useState(true);
@@ -428,7 +466,10 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         '/admin/settings',
         '/admin/customers',
         '/admin/invoice',
-        '/admin/cashbook'
+        '/admin/cashbook',
+        '/admin/logistics/shipments',
+        '/admin/logistics/tracking',
+        '/admin/logistics/labels'
       ];
       
       const isAllowed = allowedSellers.some(p => path === p || path.startsWith(p + '/')) || (path.startsWith('/admin/sellers/') && path !== '/admin/sellers');
@@ -461,8 +502,227 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [profile, location.pathname, navigate]);
 
+  const renderSidebarContent = (isCollapsed = false, toggleCollapse = () => {}) => (
+    <>
+      <div className={`py-6 px-4 flex ${isCollapsed ? 'flex-col items-center justify-center' : 'items-center justify-between'} gap-3 border-b border-white/[0.03]`}>
+        {!isCollapsed && (
+          <div className="flex items-center gap-3 overflow-hidden">
+            {cmsData.logos.header ? (
+              <img src={cmsData.logos.header} alt="Choosify Logo" className="h-8 object-contain" />
+            ) : (
+              <>
+                <div className="w-8 h-8 bg-gradient-to-br from-app-accent to-app-bg rounded-lg flex items-center justify-center border border-app-accent/30 shadow-lg shadow-app-accent/20 shrink-0">
+                  <Bolt className="text-white w-5 h-5 fill-white" />
+                </div>
+                <div>
+                  <h1 className="text-xl font-extrabold tracking-tighter text-white truncate">
+                    Choosify<span className="text-app-accent">.bd</span>
+                  </h1>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        <button
+          onClick={toggleCollapse}
+          className={`w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-white flex items-center justify-center transition-all cursor-pointer shrink-0 ${isCollapsed ? 'mt-2' : ''}`}
+          title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+        >
+          {isCollapsed ? <Menu className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+        </button>
+      </div>
+
+      <nav className="flex-1 overflow-y-auto px-3 pt-2 pb-6 custom-scrollbar">
+        {sidebarItems.map((item, idx) => {
+          if (item.type === 'label') {
+            if (isCollapsed) return <div key={idx} className="h-px bg-white/[0.05] my-4 mx-2" />;
+            return (
+              <div key={idx} className="text-[10px] font-bold text-[#CBD5E1] px-3 pt-6 pb-2 uppercase tracking-widest truncate whitespace-nowrap">
+                {item.label}
+              </div>
+            );
+          }
+          const Icon = item.icon!;
+          const hasSub = item.subItems && item.subItems.length > 0;
+          
+          const [itemPath, itemQuery] = item.path ? item.path.split('?') : ['', ''];
+          
+          const isParentActive = item.path
+            ? (itemPath === '/admin/dashboard'
+                ? location.pathname === '/admin/dashboard'
+                : item.subItems
+                  ? (location.pathname === itemPath || (itemPath.length > 7 && location.pathname.startsWith(itemPath + '/')))
+                  : location.pathname === itemPath)
+            : false;
+          
+          const isChildActive = item.subItems?.some(sub => {
+            const [subPath, subQuery] = sub.path.split('?');
+            const pathMatches = location.pathname === subPath;
+            if (subQuery) {
+              const searchParam = subQuery.split('=')[1];
+              const cleanSearch = location.search.replace('?', '');
+              if (searchParam === 'overview' && cleanSearch === '') {
+                return pathMatches;
+              }
+              return pathMatches && cleanSearch.includes(searchParam);
+            }
+            return pathMatches;
+          }) || false;
+
+          const totalItemBadge = item.badge || item.subItems?.reduce((acc, sub) => {
+            const b = sub.badge;
+            if (typeof b === 'number') return acc + b;
+            if (typeof b === 'string') {
+              const num = parseInt(b, 10);
+              return acc + (isNaN(num) ? 0 : num);
+            }
+            return acc;
+          }, 0) || 0;
+
+          const isActive = isParentActive || isChildActive;
+          const isCurrentlyExpanded = expandedMenus[item.label] !== undefined 
+            ? expandedMenus[item.label] 
+            : (isChildActive || isParentActive);
+
+          return (
+            <div key={idx} className="mb-1">
+              {hasSub ? (
+                <button
+                  onClick={() => !isCollapsed && toggleMenu(item.label)}
+                  className={`w-full group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 text-left cursor-pointer min-w-0 ${
+                    isActive 
+                      ? 'bg-[#F97316] text-white border-white' 
+                      : 'border-transparent text-white hover:text-white hover:bg-white/10'
+                  }`}
+                  title={item.label}
+                >
+                  <Icon className="w-4 h-4 shrink-0 transition-all duration-300 text-white" />
+                  {!isCollapsed && (
+                    <>
+                      <span className="transition-colors duration-300 flex-1 text-white font-semibold flex items-center gap-2 min-w-0">
+                        <span className="truncate whitespace-nowrap flex-1 min-w-0">{item.label}</span>
+                        {totalItemBadge > 0 && (
+                          <span className={`text-[9.5px] px-1.5 py-0.2 rounded font-black shrink-0 ${
+                            isActive 
+                              ? 'bg-white text-[#F97316]' 
+                              : 'bg-[#F97316] text-white'
+                          }`}>
+                            {totalItemBadge}
+                          </span>
+                        )}
+                      </span>
+                      <ChevronRight className={`w-3.5 h-3.5 text-white transition-transform shrink-0 ${isCurrentlyExpanded ? 'rotate-90' : ''}`} />
+                    </>
+                  )}
+                  {isCollapsed && totalItemBadge > 0 && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full" />
+                  )}
+                </button>
+              ) : (
+                <NavLink
+                  to={item.path!}
+                  onClick={() => setIsSidebarOpen(false)}
+                  className={`group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 relative min-w-0 ${
+                    isActive 
+                      ? 'active-sidebar-item bg-[#F97316] text-white border-white shadow-[0_4px_16px_rgba(249,115,22,0.15)]' 
+                      : 'border-transparent text-white hover:text-white hover:bg-white/10'
+                  }`}
+                  title={item.label}
+                >
+                  <Icon className="w-4 h-4 shrink-0 transition-all duration-300 text-white" />
+                  {!isCollapsed && (
+                    <>
+                      <span className="transition-colors duration-300 text-white font-semibold truncate whitespace-nowrap flex-1 min-w-0">
+                        {item.label}
+                      </span>
+                      {item.badge && (
+                        <span className="ml-auto bg-white text-[#F97316] text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0">
+                          {item.badge}
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {isCollapsed && item.badge && (
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+                  )}
+                </NavLink>
+              )}
+
+              {!isCollapsed && hasSub && isCurrentlyExpanded && item.subItems && (
+                <div className="mt-1 pl-6 space-y-1 bg-white/[0.01] border-l border-white/[0.04] ml-5 rounded-bl-sm">
+                  {item.subItems.map((sub, sIdx) => {
+                    const [subPath, subQuery] = sub.path.split('?');
+                    const subParam = subQuery ? subQuery.split('=')[1] : null;
+                    const isSubActive = location.pathname === subPath && 
+                      (!subQuery || location.search.includes(subParam!) || (subParam === 'overview' && !location.search));
+                    
+                    return (
+                      <NavLink
+                        key={sIdx}
+                        to={sub.path}
+                        onClick={() => setIsSidebarOpen(false)}
+                        className={`flex items-center gap-2 py-2 px-3 text-[11px] font-medium rounded-md transition-all ${
+                          isSubActive 
+                            ? 'text-white font-bold bg-[#F97316]' 
+                            : 'text-[#E2E8F0] hover:text-white hover:bg-white/[0.02]'
+                        }`}
+                      >
+                        <ChevronRight className={`w-2.5 h-2.5 ${isSubActive ? 'text-white rotate-90 scale-110' : 'text-[#E2E8F0] opacity-60'}`} />
+                        <span className="truncate whitespace-nowrap flex-1 min-w-0">{sub.label}</span>
+                        {sub.badge && (
+                          <span className="ml-auto bg-[#F97316] text-white text-[8px] px-1 py-0.2 rounded font-black">
+                            {sub.badge}
+                          </span>
+                        )}
+                      </NavLink>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+
+      <div className={`p-4 border-t border-app-border flex ${isCollapsed ? 'flex-col gap-4 items-center justify-center' : 'items-center gap-3'} mt-auto`}>
+        <div className="w-8 h-8 rounded-full bg-app-accent flex items-center justify-center text-white text-[10px] font-bold shrink-0">
+          {profile?.displayName?.[0] || 'U'}
+        </div>
+        {!isCollapsed ? (
+          <>
+            <div className="flex-1 min-w-0">
+              <p className="text-white text-[11px] font-semibold truncate">{profile?.displayName || 'User'}</p>
+              <p className="text-[#CBD5E1] text-[9px] truncate">{profile?.email || 'user@example.com'}</p>
+            </div>
+            <button onClick={handleLogout} className="text-white hover:text-[#CBD5E1] transition-colors cursor-pointer">
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </>
+        ) : (
+          <button onClick={handleLogout} className="text-white hover:text-[#CBD5E1] transition-colors cursor-pointer" title="Logout">
+            <LogOut className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+    </>
+  );
+
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-app-bg text-app-text-primary font-sans relative">
+      {/* Floating Restore Button if size becomes 0 or invalid */}
+      {(currentWidthVal <= 0 || isNaN(currentWidthVal)) && (
+        <button
+          onClick={() => {
+            setSizes([280]);
+            setCollapsed(false);
+            window.location.reload();
+          }}
+          className="fixed top-4 left-4 z-[999] px-4 py-2 bg-orange-500 hover:bg-orange-650 text-white text-xs font-black uppercase tracking-wider rounded-lg shadow-2xl flex items-center gap-1.5 border border-orange-600 transition-all cursor-pointer"
+        >
+          <Menu className="w-4 h-4" /> Show Navigation
+        </button>
+      )}
       {/* Role Switcher Debug Panel */}
       {((import.meta as any).env?.DEV) && (
         <div className="fixed bottom-6 right-6 z-[60]">
@@ -519,188 +779,42 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
       {isSidebarOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-[299] lg:hidden"
+          className="fixed inset-0 bg-black/60 z-[299] sm:hidden"
           onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
+      {/* Mobile Sidebar */}
       <aside
         ref={sidebarRef}
         className={`sidebar w-[240px] h-full bg-app-sidebar flex flex-col shrink-0 border-r border-app-border overflow-hidden
-          fixed lg:relative z-[300] top-0 left-0 transition-transform duration-300
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+          fixed sm:hidden z-[300] top-0 left-0 transition-transform duration-300
+          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         `}
       >
-        <div className="py-8 px-6 flex items-center gap-3">
-          {cmsData.logos.header ? (
-            <img src={cmsData.logos.header} alt="Choosify Logo" className="h-8 object-contain" />
-          ) : (
-            <>
-              <div className="w-8 h-8 bg-gradient-to-br from-app-accent to-app-bg rounded-lg flex items-center justify-center border border-app-accent/30 shadow-lg shadow-app-accent/20">
-                <Bolt className="text-white w-5 h-5 fill-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-extrabold tracking-tighter text-white">
-                  Choosify<span className="text-app-accent">.bd</span>
-                </h1>
-              </div>
-            </>
-          )}
-        </div>
-
-        <nav className="flex-1 overflow-y-auto px-3 pt-2 pb-6 custom-scrollbar">
-          {sidebarItems.map((item, idx) => {
-            if (item.type === 'label') {
-              return (
-                <div key={idx} className="text-[10px] font-bold text-[#CBD5E1] px-3 pt-6 pb-2 uppercase tracking-widest">
-                  {item.label}
-                </div>
-              );
-            }
-            const Icon = item.icon!;
-            const hasSub = item.subItems && item.subItems.length > 0;
-            
-            const [itemPath, itemQuery] = item.path ? item.path.split('?') : ['', ''];
-            
-            const isParentActive = item.path 
-              ? (itemPath === '/admin/dashboard' 
-                  ? location.pathname === '/admin/dashboard' 
-                  : location.pathname === itemPath || location.pathname.startsWith(itemPath + '/')) 
-              : false;
-            
-            const isChildActive = item.subItems?.some(sub => {
-              const [subPath, subQuery] = sub.path.split('?');
-              const pathMatches = location.pathname === subPath;
-              if (subQuery) {
-                const searchParam = subQuery.split('=')[1];
-                const cleanSearch = location.search.replace('?', '');
-                if (searchParam === 'overview' && cleanSearch === '') {
-                  return pathMatches;
-                }
-                return pathMatches && cleanSearch.includes(searchParam);
-              }
-              return pathMatches;
-            }) || false;
-
-            const totalItemBadge = item.badge || item.subItems?.reduce((acc, sub) => {
-              const b = sub.badge;
-              if (typeof b === 'number') return acc + b;
-              if (typeof b === 'string') {
-                const num = parseInt(b, 10);
-                return acc + (isNaN(num) ? 0 : num);
-              }
-              return acc;
-            }, 0) || 0;
-
-            const isActive = isParentActive || isChildActive;
-            const isCurrentlyExpanded = expandedMenus[item.label] !== undefined 
-              ? expandedMenus[item.label] 
-              : (isChildActive || isParentActive);
-
-            return (
-              <div key={idx} className="mb-1">
-                {hasSub ? (
-                  <button
-                    onClick={() => toggleMenu(item.label)}
-                    className={`w-full group flex items-center gap-3 px-3.5 py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 text-left cursor-pointer ${
-                      isActive 
-                        ? 'bg-[#F97316] text-white border-white' 
-                        : 'border-transparent text-white hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 shrink-0 transition-all duration-300 text-white" />
-                    <span className="transition-colors duration-300 flex-1 text-white font-semibold flex items-center gap-2">
-                      {item.label}
-                      {totalItemBadge > 0 && (
-                        <span className={`text-[9.5px] px-1.5 py-0.2 rounded font-black ${
-                          isActive 
-                            ? 'bg-white text-[#F97316]' 
-                            : 'bg-[#F97316] text-white'
-                        }`}>
-                          {totalItemBadge}
-                        </span>
-                      )}
-                    </span>
-                    <ChevronRight className={`w-3.5 h-3.5 text-white transition-transform ${isCurrentlyExpanded ? 'rotate-90' : ''}`} />
-                  </button>
-                ) : (
-                  <NavLink
-                    to={item.path!}
-                    onClick={() => setIsSidebarOpen(false)}
-                    className={`group flex items-center gap-3 px-3.5 py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 ${
-                      isActive 
-                        ? 'active-sidebar-item bg-[#F97316] text-white border-white shadow-[0_4px_16px_rgba(249,115,22,0.15)]' 
-                        : 'border-transparent text-white hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 shrink-0 transition-all duration-300 text-white" />
-                    <span className="transition-colors duration-300 text-white font-semibold">
-                      {item.label}
-                    </span>
-                    {item.badge && (
-                      <span className="ml-auto bg-white text-[#F97316] text-[9px] px-1.5 py-0.5 rounded font-bold">
-                        {item.badge}
-                      </span>
-                    )}
-                  </NavLink>
-                )}
-
-                {hasSub && isCurrentlyExpanded && item.subItems && (
-                  <div className="mt-1 pl-6 space-y-1 bg-white/[0.01] border-l border-white/[0.04] ml-5 rounded-bl-sm">
-                    {item.subItems.map((sub, sIdx) => {
-                      const [subPath, subQuery] = sub.path.split('?');
-                      const subParam = subQuery ? subQuery.split('=')[1] : null;
-                      const isSubActive = location.pathname === subPath && 
-                        (!subQuery || location.search.includes(subParam!) || (subParam === 'overview' && !location.search));
-                      
-                      return (
-                        <NavLink
-                          key={sIdx}
-                          to={sub.path}
-                          onClick={() => setIsSidebarOpen(false)}
-                          className={`flex items-center gap-2 py-2 px-3 text-[11px] font-medium rounded-md transition-all ${
-                            isSubActive 
-                              ? 'text-white font-bold bg-[#F97316]' 
-                              : 'text-[#E2E8F0] hover:text-white hover:bg-white/[0.02]'
-                          }`}
-                        >
-                          <ChevronRight className={`w-2.5 h-2.5 ${isSubActive ? 'text-white rotate-90 scale-110' : 'text-[#E2E8F0] opacity-60'}`} />
-                          <span className="truncate">{sub.label}</span>
-                          {sub.badge && (
-                            <span className="ml-auto bg-[#F97316] text-white text-[8px] px-1 py-0.2 rounded font-black">
-                              {sub.badge}
-                            </span>
-                          )}
-                        </NavLink>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </nav>
-
-        <div className="p-4 border-t border-app-border flex items-center gap-3 mt-auto">
-          <div className="w-8 h-8 rounded-full bg-app-accent flex items-center justify-center text-white text-[10px] font-bold">
-            {profile?.displayName?.[0] || 'U'}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-white text-[11px] font-semibold truncate">{profile?.displayName || 'User'}</p>
-            <p className="text-[#CBD5E1] text-[9px] truncate">{profile?.email || 'user@example.com'}</p>
-          </div>
-          <button onClick={handleLogout} className="text-white hover:text-[#CBD5E1] transition-colors">
-            <LogOut className="w-3.5 h-3.5" />
-          </button>
-        </div>
+        {renderSidebarContent()}
       </aside>
+
+      {/* Desktop Resizable Sidebar */}
+      <ResizableSidebar
+        defaultWidth={280}
+        minWidth={72}
+        maxWidth={450}
+        className="hidden sm:flex h-full"
+      >
+        {(isCollapsed, toggleCollapse) => (
+          <div className="flex flex-col h-full w-full bg-app-sidebar border-r border-app-border">
+            {renderSidebarContent(isCollapsed, toggleCollapse)}
+          </div>
+        )}
+      </ResizableSidebar>
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
-        <header className="h-[64px] px-8 flex items-center justify-between shrink-0 mb-2 border-b border-app-border bg-app-card sticky top-0 z-40">
+        <header className="h-[64px] px-8 flex items-center justify-between shrink-0 mb-2 border-b border-app-border bg-[#0d0e1a] sticky top-0 z-40">
           <button
-            className="lg:hidden flex items-center justify-center w-9 h-9 rounded-lg bg-app-card border border-app-border text-app-text-secondary hover:text-app-accent transition-colors mr-3 flex-shrink-0"
+            className="sm:hidden flex items-center justify-center w-9 h-9 rounded-lg bg-app-card border border-app-border text-app-text-secondary hover:text-app-accent transition-colors mr-3 flex-shrink-0"
             onClick={() => setIsSidebarOpen(true)}
             aria-label="Open navigation menu"
           >

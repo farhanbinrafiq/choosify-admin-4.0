@@ -47,6 +47,8 @@ interface CashBookContextType {
   deleteEntry: (cashbookId: string, entryId: string) => void;
   toggleLock: (cashbookId: string) => void;
   createCashBook: (userId: string, userName: string, role: string, businessName: string) => void;
+  deleteBook: (cashbookId: string) => void;
+  exportOrdersToCashBook: (orders: Array<{id: string; total: number; buyerName: string; createdAt: string; paymentMethod: string}>) => string;
   logAudit: (actionType: AuditLog['actionType'], details: string, beforeState?: string, afterState?: string) => void;
   exportReport: (cashbookId: string, format: 'PDF' | 'CSV', reportRange: string) => void;
 }
@@ -433,6 +435,42 @@ export const CashBookProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     logAudit('report_generated', `Generated and downloaded daily/monthly consolidated financial CashBook report in ${format} format for user ${cb?.userName || cashbookId} (Period: ${reportRange})`);
   };
 
+  const deleteBook = (cashbookId: string) => {
+    setCashbooks(prev => { const next = {...prev}; delete next[cashbookId]; return next; });
+    setEntries(prev => { const next = {...prev}; delete next[cashbookId]; return next; });
+    logAudit('cashbook_accessed', `Deleted CashBook ID: ${cashbookId}`);
+  };
+
+  const exportOrdersToCashBook = (orders: Array<{id: string; total: number; buyerName: string; createdAt: string; paymentMethod: string}>): string => {
+    const newBookId = `book_orders_${Date.now()}`;
+    const newBook: CashBook = {
+      userId: profile?.id || 'unknown',
+      userName: profile?.displayName || profile?.name || 'User',
+      role: (profile?.role as CashBook['role']) || 'seller',
+      businessName: `Order Export — ${new Date().toLocaleDateString('en-BD', { month: 'long', year: 'numeric' })}`,
+      currency: 'BDT',
+      isLocked: false,
+    };
+    setCashbooks(prev => ({ ...prev, [newBookId]: newBook }));
+    const newEntries: CashBookEntry[] = orders.map((order, i) => ({
+      id: `oe_${newBookId}_${i}`,
+      type: 'Cash In',
+      amount: order.total,
+      date: order.createdAt.split('T')[0],
+      time: new Date(order.createdAt).toLocaleTimeString('en-BD', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      category: 'Sales',
+      contactName: order.buyerName,
+      remarks: `Order #${order.id}`,
+      paymentMode: order.paymentMethod === 'COD' ? 'Cash' : 'Bank Transfer',
+      attachments: [],
+      createdBy: { id: profile?.id || 'system', name: profile?.displayName || profile?.name || 'System', role: profile?.role || 'seller' },
+      deleted: false,
+    }));
+    setEntries(prev => ({ ...prev, [newBookId]: newEntries }));
+    logAudit('entry_created', `Exported ${orders.length} orders to new CashBook: ${newBook.businessName}`);
+    return newBookId;
+  };
+
   return (
     <CashBookContext.Provider value={{
       cashbooks,
@@ -443,6 +481,8 @@ export const CashBookProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       deleteEntry,
       toggleLock,
       createCashBook,
+      deleteBook,
+      exportOrdersToCashBook,
       logAudit,
       exportReport
     }}>

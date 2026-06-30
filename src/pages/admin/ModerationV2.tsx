@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useTrust, ModeratorReport, ContentFlag, ModerationRule, FlagType, SeverityType, ModeratableEntityType } from '../../contexts/TrustContext';
 import { 
   ShieldAlert, 
@@ -117,8 +118,16 @@ export default function ModerationV2() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-900 border border-app-border rounded-[4px] p-2 text-[10px] font-bold uppercase tracking-widest text-[#8E9BAE] font-mono select-none">
-          <span>Active Flagged records: {reports.filter(r => r.status === 'Pending').length} pending</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to="/admin/reviews"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#F4631E]/15 border border-[#F4631E]/30 hover:bg-[#F4631E]/25 text-[#F4631E] rounded-[4px] text-[10.5px] font-black uppercase tracking-widest transition-all shadow-md cursor-pointer"
+          >
+            Review Moderation Console
+          </Link>
+          <div className="flex items-center gap-2 bg-slate-900 border border-app-border rounded-[4px] p-2 text-[10px] font-bold uppercase tracking-widest text-[#8E9BAE] font-mono select-none">
+            <span>Active Flagged records: {reports.filter(r => r.status === 'Pending').length} pending</span>
+          </div>
         </div>
       </div>
 

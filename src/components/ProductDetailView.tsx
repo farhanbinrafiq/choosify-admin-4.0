@@ -703,17 +703,6 @@ export function ProductDetailView({
                         <span>Chat Sourcing Desk</span>
                       </button>
                     )}
-
-                    {data.purchaseOptions?.requestQuotation && (
-                      <button
-                        type="button"
-                        onClick={() => onTriggerOrder?.("Inquiry Notes: Requesting official B2B wholesale quotation volume pricing slab.")}
-                        className="py-3 px-4 bg-slate-900 border border-white/10 hover:border-white/20 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer text-center flex items-center justify-center gap-1.5"
-                      >
-                        <DollarSign size={13} className="text-[#4DBC15] shrink-0" />
-                        <span>Request Bulk Quote</span>
-                      </button>
-                    )}
                   </div>
                 </div>
               </div>

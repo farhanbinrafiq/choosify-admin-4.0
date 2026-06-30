@@ -32,6 +32,7 @@ import {
   X,
   FileDown,
   Check,
+  CheckSquare,
   ChevronLeft,
   Settings,
   Share2
@@ -50,6 +51,8 @@ import {
   Pie, 
   Cell 
 } from 'recharts';
+
+import { useOrders } from '../../contexts/OrdersContext';
 
 export interface Book {
   id: string;
@@ -74,6 +77,8 @@ export interface BookEntry {
   remarks: string;
   paymentMode: 'bKash' | 'Nagad' | 'Cash' | 'Bank Transfer';
   attachments: string[]; // List of file names
+  createdBy?: { id: string; name: string; role: string };
+  lastEditedBy?: { id: string; name: string; role: string };
 }
 
 // Pre-seeded multi-book datasets by User Id
@@ -356,6 +361,7 @@ const initialEntriesSeed: Record<string, BookEntry[]> = {
 
 export default function CashBookHub() {
   const { profile } = useAuth();
+  const { orders: ordersList } = useOrders();
   const location = useLocation();
   const navigate = useNavigate();
   const { bookId } = useParams<{ bookId?: string }>();
@@ -379,6 +385,28 @@ export default function CashBookHub() {
   const [newBookName, setNewBookName] = useState('');
   const [newBookEmoji, setNewBookEmoji] = useState('📒');
   const [newBookColor, setNewBookColor] = useState('#F97316');
+
+  // Book Deletion state
+  const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const [deleteConfirmError, setDeleteConfirmError] = useState('');
+
+  // Custom Categories state
+  const [customCategories, setCustomCategories] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('choosify_cashbook_custom_cats') || '[]');
+    } catch {
+      return [];
+    }
+  });
+  const [newCategoryInput, setNewCategoryInput] = useState('');
+  const [showAddCategory, setShowAddCategory] = useState(false);
+
+  // Bulk actions state
+  const [selectedEntryIds, setSelectedEntryIds] = useState<Set<string>>(new Set());
+  const [bulkMode, setBulkMode] = useState(false);
+  const [showMovePanel, setShowMovePanel] = useState(false);
+  const [showCopyPanel, setShowCopyPanel] = useState(false);
 
   // New/Edit Entry Modal
   const [isEntryModalOpen, setIsEntryModalOpen] = useState(false);
@@ -422,6 +450,19 @@ export default function CashBookHub() {
       setToast(null);
     }, 4000);
   };
+
+  const DEFAULT_CATEGORIES = [
+    'Sales', 'Inventory', 'Salary', 'Transport', 'Utilities',
+    'Marketing', 'Rent', 'Commission', 'Sponsorship', 'Affiliate',
+    'Refund', 'Tax', 'Miscellaneous', 'Loan', 'Investment',
+    ...customCategories
+  ];
+
+  const CASHBOOK_ROLES = [
+    { id: 'moderator_entry', label: 'Entry Level Operator', description: 'Can only log cash flows. No delete, edit, or report viewing permissions.' },
+    { id: 'moderator_auditor', label: 'Internal Auditor / Accountant', description: 'Full read and review, report generating. No deletion power.' },
+    { id: 'moderator_super', label: 'Co-Owner / Super Moderator', description: 'Full write, delete, export, settings toggling. Equal power.' }
+  ];
 
   // Synchronize dynamic local state
   useEffect(() => {
@@ -651,7 +692,9 @@ export default function CashBookHub() {
       contactName: formContact || 'General Customer',
       remarks: formRemarks,
       paymentMode: formPaymentMode,
-      attachments: formAttachments
+      attachments: formAttachments,
+      createdBy: editingEntry?.createdBy || { id: profile?.id || 'system', name: profile?.displayName || profile?.name || 'System', role: profile?.role || 'seller' },
+      ...(isEdit ? { lastEditedBy: { id: profile?.id || 'system', name: profile?.displayName || profile?.name || 'System', role: profile?.role || 'seller' } } : {})
     };
 
     const currentBookEntries = entries[bookId] || [];
@@ -706,6 +749,165 @@ export default function CashBookHub() {
     triggerToast('Transaction entry has been permanently deleted.', 'info');
   };
 
+  // Delete dynamic CashBook
+  const handleDeleteBook = (targetBookId: string) => {
+    // Remove the book from books list
+    const updatedBooks = books.filter(b => b.id !== targetBookId);
+    // Remove its entries
+    const updatedEntries = { ...entries };
+    delete updatedEntries[targetBookId];
+
+    handleSaveBooks(updatedBooks);
+    handleSaveAllEntries(updatedEntries);
+
+    triggerToast('Ledger CashBook has been permanently deleted.', 'info');
+    navigate('/admin/cashbook');
+  };
+
+  // Synchronize orders into CashBook
+  const handleImportOrders = () => {
+    if (!ordersList || ordersList.length === 0) {
+      triggerToast('No platform orders available to sync.', 'danger');
+      return;
+    }
+
+    const targetBookName = "Platform Sales Ledger";
+    let platformBook = books.find(b => b.name === targetBookName);
+
+    let updatedBooks = [...books];
+    let targetBookId = platformBook?.id;
+
+    if (!platformBook) {
+      targetBookId = 'book_platform_' + Date.now();
+      platformBook = {
+        id: targetBookId,
+        name: targetBookName,
+        emoji: '📦',
+        color: '#10B981',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        userId: currentUserId,
+        role: 'seller'
+      };
+      updatedBooks.push(platformBook);
+    }
+
+    const existingEntries = entries[targetBookId!] || [];
+    const newEntries: BookEntry[] = ordersList.map((ord: any) => ({
+      id: 'entry_order_' + ord.id,
+      bookId: targetBookId!,
+      type: 'Cash In',
+      amount: ord.total || ord.totalPrice || 0,
+      date: (ord.createdAt || new Date().toISOString()).split('T')[0],
+      time: '12:00 PM',
+      category: 'Sales',
+      contactName: ord.buyerName || ord.customerName || 'General Buyer',
+      remarks: `Platform Order #${ord.id} - status: ${ord.status || 'approved'}`,
+      paymentMode: 'Bank Transfer',
+      attachments: [],
+      createdBy: { id: profile?.id || 'system', name: profile?.displayName || profile?.name || 'System', role: profile?.role || 'seller' }
+    }));
+
+    const filteredNewEntries = newEntries.filter(
+      newE => !existingEntries.some(existingE => existingE.id === newE.id)
+    );
+
+    if (filteredNewEntries.length === 0) {
+      triggerToast('All existing orders have already been synchronized with the cash book.', 'info');
+      return;
+    }
+
+    const allUpdatedEntries = {
+      ...entries,
+      [targetBookId!]: [...filteredNewEntries, ...existingEntries]
+    };
+
+    handleSaveBooks(updatedBooks);
+    handleSaveAllEntries(allUpdatedEntries);
+
+    triggerToast(`✓ Synchronized ${filteredNewEntries.length} platform orders into "${targetBookName}".`, 'success');
+    navigate(`/admin/cashbook/${targetBookId}`);
+  };
+
+  // Bulk deletion
+  const handleBulkDelete = () => {
+    if (!bookId) return;
+    const currentBookEntries = entries[bookId] || [];
+    const updatedList = currentBookEntries.filter(e => !selectedEntryIds.has(e.id));
+    const allUpdatedEntries = { ...entries, [bookId]: updatedList };
+
+    const updatedBooks = books.map(b => b.id === bookId ? { ...b, updatedAt: new Date().toISOString() } : b);
+    handleSaveBooks(updatedBooks);
+    handleSaveAllEntries(allUpdatedEntries);
+
+    setSelectedEntryIds(new Set());
+    triggerToast(`✓ Deleted ${selectedEntryIds.size} transaction entries.`, 'success');
+  };
+
+  // Bulk flip transaction type
+  const handleBulkToggleType = () => {
+    if (!bookId) return;
+    const currentBookEntries = entries[bookId] || [];
+    const updatedList = currentBookEntries.map(e => {
+      if (selectedEntryIds.has(e.id)) {
+        return { ...e, type: e.type === 'Cash In' ? 'Cash Out' : 'Cash In' as const };
+      }
+      return e;
+    });
+    const allUpdatedEntries = { ...entries, [bookId]: updatedList };
+    handleSaveAllEntries(allUpdatedEntries);
+    setSelectedEntryIds(new Set());
+    triggerToast(`✓ Flipped transaction types for ${selectedEntryIds.size} entries.`, 'success');
+  };
+
+  // Bulk move entries
+  const handleBulkMove = (targetBookId: string) => {
+    if (!bookId || targetBookId === bookId) return;
+    const currentBookEntries = entries[bookId] || [];
+    const entriesToMove = currentBookEntries.filter(e => selectedEntryIds.has(e.id));
+    const entriesToKeep = currentBookEntries.filter(e => !selectedEntryIds.has(e.id));
+
+    const targetBookEntries = entries[targetBookId] || [];
+    const updatedTargetEntries = [
+      ...entriesToMove.map(e => ({ ...e, bookId: targetBookId })),
+      ...targetBookEntries
+    ];
+
+    const allUpdatedEntries = {
+      ...entries,
+      [bookId]: entriesToKeep,
+      [targetBookId]: updatedTargetEntries
+    };
+
+    handleSaveAllEntries(allUpdatedEntries);
+    setSelectedEntryIds(new Set());
+    setShowMovePanel(false);
+    triggerToast(`✓ Moved ${entriesToMove.length} entries to targeted book.`, 'success');
+  };
+
+  // Bulk copy entries
+  const handleBulkCopy = (targetBookId: string) => {
+    if (!bookId) return;
+    const currentBookEntries = entries[bookId] || [];
+    const entriesToCopy = currentBookEntries.filter(e => selectedEntryIds.has(e.id));
+
+    const targetBookEntries = entries[targetBookId] || [];
+    const updatedTargetEntries = [
+      ...entriesToCopy.map(e => ({ ...e, id: 'entry_copy_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5), bookId: targetBookId })),
+      ...targetBookEntries
+    ];
+
+    const allUpdatedEntries = {
+      ...entries,
+      [targetBookId]: updatedTargetEntries
+    };
+
+    handleSaveAllEntries(allUpdatedEntries);
+    setSelectedEntryIds(new Set());
+    setShowCopyPanel(false);
+    triggerToast(`✓ Copied ${entriesToCopy.length} entries to targeted book.`, 'success');
+  };
+
   // Handle report downloads mockup
   const handleExportMock = (format: 'PDF' | 'EXCEL' | 'CSV', scope: string = 'Full Book') => {
     triggerToast(`Compiling data... Exporting ${scope} in ${format} format. Check downloads list!`, 'success');
@@ -736,45 +938,86 @@ export default function CashBookHub() {
 
       {/* Admin Role Scope Header Switcher Panel */}
       {isAdmin && !isDetailView && !isReportsView && (
-        <div className="mb-6 p-4 bg-app-card border border-app-border rounded-[5px] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div>
-            <div className="text-[10px] font-black text-app-accent uppercase tracking-widest flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-app-accent"></span>
-              Platform Management Ledger System
+        <div className="mb-6 p-4 bg-app-card border border-app-border rounded-[5px] space-y-4">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-app-border pb-3">
+            <div>
+              <div className="text-[10px] font-black text-app-accent uppercase tracking-widest flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-app-accent"></span>
+                Platform Management Ledger System
+              </div>
+              <h3 className="text-sm font-bold text-app-text-primary mt-1">Auditing Accounts Workspace:</h3>
             </div>
-            <h3 className="text-sm font-bold text-app-text-primary mt-1">Auditing Accounts Workspace:</h3>
+            <div className="flex flex-wrap gap-2 w-full md:w-auto">
+              <button 
+                onClick={() => { setAdminAuditingUser('seller_001'); triggerToast('Switched to Rahim Uddin accounts and ledgers.', 'info'); }}
+                className={`px-4 py-2 text-[11px] font-bold border transition-all rounded-[5px] ${
+                  adminAuditingUser === 'seller_001' 
+                    ? 'bg-app-accent text-white border-app-accent' 
+                    : 'bg-white border-app-border text-app-text-secondary hover:bg-slate-50'
+                }`}
+              >
+                Rahim Uddin (Seller)
+              </button>
+              <button 
+                onClick={() => { setAdminAuditingUser('creator_001'); triggerToast('Switched to Sumaiya Akter accounts and ledgers.', 'info'); }}
+                className={`px-4 py-2 text-[11px] font-bold border transition-all rounded-[5px] ${
+                  adminAuditingUser === 'creator_001' 
+                    ? 'bg-app-accent text-white border-app-accent' 
+                    : 'bg-white border-app-border text-app-text-secondary hover:bg-slate-50'
+                }`}
+              >
+                Sumaiya Akter (Creator)
+              </button>
+              <button 
+                onClick={() => { setAdminAuditingUser('admin_002'); triggerToast("Switched to Tanvir Hossain personal admin account's assets.", 'info'); }}
+                className={`px-4 py-2 text-[11px] font-bold border transition-all rounded-[5px] ${
+                  adminAuditingUser === 'admin_002' 
+                    ? 'bg-app-accent text-white border-app-accent' 
+                    : 'bg-white border-app-border text-app-text-secondary hover:bg-slate-50'
+                }`}
+              >
+                My Admin Cashbook
+              </button>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2 w-full md:w-auto">
-            <button 
-              onClick={() => { setAdminAuditingUser('seller_001'); triggerToast('Switched to Rahim Uddin accounts and ledgers.', 'info'); }}
-              className={`px-4 py-2 text-[11px] font-bold border transition-all rounded-[5px] ${
-                adminAuditingUser === 'seller_001' 
-                  ? 'bg-app-accent text-white border-app-accent' 
-                  : 'bg-white border-app-border text-app-text-secondary hover:bg-slate-50'
-              }`}
-            >
-              Rahim Uddin (Seller)
-            </button>
-            <button 
-              onClick={() => { setAdminAuditingUser('creator_001'); triggerToast('Switched to Sumaiya Akter accounts and ledgers.', 'info'); }}
-              className={`px-4 py-2 text-[11px] font-bold border transition-all rounded-[5px] ${
-                adminAuditingUser === 'creator_001' 
-                  ? 'bg-app-accent text-white border-app-accent' 
-                  : 'bg-white border-app-border text-app-text-secondary hover:bg-slate-50'
-              }`}
-            >
-              Sumaiya Akter (Creator)
-            </button>
-            <button 
-              onClick={() => { setAdminAuditingUser('admin_002'); triggerToast("Switched to Tanvir Hossain personal admin account's assets.", 'info'); }}
-              className={`px-4 py-2 text-[11px] font-bold border transition-all rounded-[5px] ${
-                adminAuditingUser === 'admin_002' 
-                  ? 'bg-app-accent text-white border-app-accent' 
-                  : 'bg-white border-app-border text-app-text-secondary hover:bg-slate-50'
-              }`}
-            >
-              My Admin Cashbook
-            </button>
+
+          {/* Moderator Role Selection with Permission Matrix */}
+          <div className="pt-1">
+            <span className="text-[10px] font-black text-app-text-muted uppercase tracking-wider block mb-2.5">Configure Cashbook Moderator Role for {adminAuditingUser === 'seller_001' ? 'Rahim Uddin' : adminAuditingUser === 'creator_001' ? 'Sumaiya Akter' : 'Tanvir Hossain'}:</span>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {CASHBOOK_ROLES.map((roleObj) => {
+                const isSelected = (adminAuditingUser === 'seller_001' && roleObj.id === 'moderator_entry') ||
+                                    (adminAuditingUser === 'creator_001' && roleObj.id === 'moderator_auditor') ||
+                                    (adminAuditingUser === 'admin_002' && roleObj.id === 'moderator_super') ||
+                                    (localStorage.getItem(`role_${adminAuditingUser}`) === roleObj.id);
+
+                return (
+                  <button
+                    key={roleObj.id}
+                    type="button"
+                    onClick={() => {
+                      localStorage.setItem(`role_${adminAuditingUser}`, roleObj.id);
+                      triggerToast(`Assigned ${roleObj.label} permissions successfully.`, 'success');
+                      // trigger refresh
+                      setAdminAuditingUser(prev => prev === 'seller_001' ? 'seller_001' : prev === 'creator_001' ? 'creator_001' : 'admin_002');
+                    }}
+                    className={`p-3 text-left border rounded-[5px] transition-all cursor-pointer ${
+                      isSelected 
+                        ? 'bg-orange-50/50 border-app-accent ring-1 ring-app-accent' 
+                        : 'bg-white border-app-border hover:bg-slate-50/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected ? 'border-app-accent' : 'border-slate-300'}`}>
+                        {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-app-accent" />}
+                      </div>
+                      <span className="text-xs font-black text-app-text-primary">{roleObj.label}</span>
+                    </div>
+                    <p className="text-[10px] text-app-text-muted mt-1 leading-normal">{roleObj.description}</p>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
@@ -831,6 +1074,14 @@ export default function CashBookHub() {
               )}
 
               <button 
+                onClick={handleImportOrders}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer shadow-md border-0"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                Sync Orders
+              </button>
+
+              <button 
                 onClick={() => setIsNewBookModalOpen(true)}
                 className="px-4 py-2 bg-app-accent text-white hover:bg-[#EA580C] text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
               >
@@ -885,7 +1136,7 @@ export default function CashBookHub() {
                   <Wallet className="w-4 h-4" />
                 </div>
               </div>
-              <div className={`text-2xl font-black tracking-tight mt-2 ${aggregatedNet >= 0 ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
+              <div className="text-2xl font-black tracking-tight mt-2 text-[#F97316]">
                 ৳{aggregatedNet.toLocaleString()}
               </div>
               <div className="text-[10px] text-app-text-muted mt-2 flex items-center gap-1">
@@ -971,56 +1222,127 @@ export default function CashBookHub() {
                   const bookNet = bookIn - bookOut;
 
                   return (
-                    <div 
-                      key={book.id} 
-                      className="border border-app-border rounded-[5px] overflow-hidden flex flex-col justify-between transition-all hover:shadow-lg bg-white"
-                      style={{ borderTop: `4px solid ${book.color}` }}
-                    >
-                      <div className="p-5 flex-1">
-                        <div className="flex justify-between items-start">
-                          <span className="text-3xl p-1 bg-slate-50 border border-slate-100 rounded-[5px] inline-block">{book.emoji}</span>
-                          <span className="text-[10px] text-app-text-muted font-bold block text-right">
-                            {new Date(book.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                    <React.Fragment key={book.id}>
+                      <div 
+                        className="border border-app-border rounded-[5px] overflow-hidden flex flex-col justify-between transition-all hover:shadow-lg bg-white"
+                        style={{ borderTop: `4px solid ${book.color}` }}
+                      >
+                        <div className="p-5 flex-1">
+                          <div className="flex justify-between items-start">
+                            <span className="text-3xl p-1 bg-slate-50 border border-slate-100 rounded-[5px] inline-block">{book.emoji}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] text-app-text-muted font-bold block text-right">
+                                {new Date(book.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeletingBookId(book.id);
+                                  setDeleteConfirmName('');
+                                  setDeleteConfirmError('');
+                                }}
+                                className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-all cursor-pointer border-0"
+                                title="Delete Book"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <h3 className="text-sm font-black text-app-text-primary mt-3 truncate" title={book.name}>
+                            {book.name}
+                          </h3>
+
+                          <div className="text-[10px] text-app-text-muted font-black mt-1 flex items-center gap-1 uppercase">
+                            <FileText className="w-3.5 h-3.5" />
+                            {bookEntriesList.length} Entries
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-slate-100">
+                            <div>
+                              <span className="text-[9px] text-app-text-muted uppercase font-bold block">Inflow</span>
+                              <span className="text-xs font-bold text-[#22C55E]">৳{bookIn.toLocaleString()}</span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-app-text-muted uppercase font-bold block">Outflow</span>
+                              <span className="text-xs font-bold text-[#EF4444]">৳{bookOut.toLocaleString()}</span>
+                            </div>
+                          </div>
                         </div>
 
-                        <h3 className="text-sm font-black text-app-text-primary mt-3 truncate" title={book.name}>
-                          {book.name}
-                        </h3>
-
-                        <div className="text-[10px] text-app-text-muted font-black mt-1 flex items-center gap-1 uppercase">
-                          <FileText className="w-3.5 h-3.5" />
-                          {bookEntriesList.length} Entries
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-slate-100">
+                        {/* Card Footer Balance Action */}
+                        <div className="bg-slate-50 border-t border-slate-100 px-5 py-3 flex items-center justify-between">
                           <div>
-                            <span className="text-[9px] text-app-text-muted uppercase font-bold block">Inflow</span>
-                            <span className="text-xs font-bold text-[#22C55E]">৳{bookIn.toLocaleString()}</span>
+                            <span className="text-[9px] text-app-text-muted font-bold block">Net</span>
+                            <span className="text-xs font-black text-[#F97316]">
+                              ৳{bookNet.toLocaleString()}
+                            </span>
                           </div>
-                          <div>
-                            <span className="text-[9px] text-app-text-muted uppercase font-bold block">Outflow</span>
-                            <span className="text-xs font-bold text-[#EF4444]">৳{bookOut.toLocaleString()}</span>
-                          </div>
+                          <button 
+                            onClick={() => navigate(`/admin/cashbook/${book.id}`)}
+                            className="px-3 py-1 bg-white border border-app-border text-app-text-secondary hover:text-white hover:bg-[#F97316] hover:border-[#F97316] text-[10px] font-black rounded-[5px] transition-all cursor-pointer flex items-center gap-0.5"
+                          >
+                            Open Book →
+                          </button>
                         </div>
                       </div>
 
-                      {/* Card Footer Balance Action */}
-                      <div className="bg-slate-50 border-t border-slate-100 px-5 py-3 flex items-center justify-between">
-                        <div>
-                          <span className="text-[9px] text-app-text-muted font-bold block">Net</span>
-                          <span className={`text-xs font-black ${bookNet >= 0 ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
-                            ৳{bookNet.toLocaleString()}
-                          </span>
+                      {deletingBookId === book.id && (
+                        <div className="col-span-full bg-red-50 border border-red-200 rounded-[5px] p-5 text-xs space-y-3.5 shadow-md">
+                          <div className="flex items-center justify-between">
+                            <span className="font-extrabold text-red-700 flex items-center gap-1.5 uppercase tracking-wide">
+                              ⚠️ Danger: Confirm Deletion of "{book.name}"
+                            </span>
+                            <button 
+                              type="button" 
+                              onClick={() => { setDeletingBookId(null); setDeleteConfirmName(''); }}
+                              className="text-slate-400 hover:text-slate-600 font-bold border-0 bg-transparent text-sm cursor-pointer"
+                            >
+                              ✕ Cancel
+                            </button>
+                          </div>
+                          <p className="text-slate-600 font-medium leading-relaxed">
+                            Deleting this book will permanently purge its associated <strong className="font-black text-red-600">{bookEntriesList.length} transaction records</strong> and all meta history logs from local storage.
+                          </p>
+                          <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
+                              Type the book's name "<span className="font-black text-red-600">{book.name}</span>" below to authorize:
+                            </label>
+                            <div className="flex gap-3">
+                              <input 
+                                type="text"
+                                value={deleteConfirmName}
+                                onChange={(e) => {
+                                  setDeleteConfirmName(e.target.value);
+                                  setDeleteConfirmError('');
+                                }}
+                                placeholder={book.name}
+                                className="flex-1 px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-xs outline-none focus:border-red-500 font-bold text-slate-800"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (deleteConfirmName !== book.name) {
+                                    setDeleteConfirmError('Confirmation name does not match.');
+                                    return;
+                                  }
+                                  handleDeleteBook(book.id);
+                                  setDeletingBookId(null);
+                                  setDeleteConfirmName('');
+                                }}
+                                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-black text-[10px] uppercase rounded-lg cursor-pointer border-0 transition-all tracking-wider"
+                              >
+                                Delete Permanently
+                              </button>
+                            </div>
+                            {deleteConfirmError && (
+                              <p className="text-[10px] text-red-500 font-bold mt-1">{deleteConfirmError}</p>
+                            )}
+                          </div>
                         </div>
-                        <button 
-                          onClick={() => navigate(`/admin/cashbook/${book.id}`)}
-                          className="px-3 py-1 bg-white border border-app-border text-app-text-secondary hover:text-white hover:bg-[#F97316] hover:border-[#F97316] text-[10px] font-black rounded-[5px] transition-all cursor-pointer flex items-center gap-0.5"
-                        >
-                          Open Book →
-                        </button>
-                      </div>
-                    </div>
+                      )}
+                    </React.Fragment>
                   );
                 })}
               </div>
@@ -1115,7 +1437,7 @@ export default function CashBookHub() {
             <div className="bg-app-card border border-app-border rounded-[5px] p-5 shadow-sm flex flex-col justify-between">
               <div>
                 <div className="text-[10px] font-black text-app-text-muted uppercase tracking-wider block">Net Ledger Balance</div>
-                <div className={`text-2xl font-black mt-1.5 ${activeBookNet >= 0 ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
+                <div className="text-2xl font-black mt-1.5 text-[#F97316]">
                   ৳{activeBookNet.toLocaleString()}
                 </div>
               </div>
@@ -1195,7 +1517,23 @@ export default function CashBookHub() {
               </div>
 
               {/* + CASH IN / - CASH OUT action buttons */}
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setBulkMode(!bulkMode);
+                    setSelectedEntryIds(new Set());
+                    setShowMovePanel(false);
+                    setShowCopyPanel(false);
+                  }}
+                  className={`px-4 py-2.5 text-xs font-black rounded-[5px] border transition-all cursor-pointer flex items-center gap-1.5 ${
+                    bulkMode 
+                      ? 'bg-orange-500 text-white border-orange-500' 
+                      : 'bg-white text-app-text-secondary border-app-border hover:bg-slate-50'
+                  }`}
+                >
+                  {bulkMode ? 'Disable Bulk' : 'Bulk Actions'}
+                </button>
                 <button 
                   onClick={() => handleOpenEntryModal('Cash In')}
                   className="px-5 py-2.5 bg-[#22C55E] text-white hover:bg-[#1E9E47] text-xs font-black rounded-[5px] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
@@ -1234,6 +1572,115 @@ export default function CashBookHub() {
               </div>
             </div>
 
+            {/* Bulk Actions Control bar */}
+            {bulkMode && selectedEntryIds.size > 0 && (
+              <div className="bg-orange-50 border border-orange-200 rounded-[5px] p-4 mb-5 flex flex-col md:flex-row md:items-center justify-between gap-4 text-xs font-bold text-[#EA580C]">
+                <div className="flex items-center gap-2">
+                  <CheckSquare className="w-5 h-5 text-orange-600" />
+                  <span>
+                    <strong className="text-orange-700 text-sm">{selectedEntryIds.size}</strong> entries selected for batch processing
+                  </span>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleBulkToggleType}
+                    className="px-3.5 py-2 bg-white hover:bg-orange-100 border border-orange-200 rounded-[5px] text-[10.5px] text-[#EA580C] transition-all cursor-pointer flex items-center gap-1"
+                  >
+                    🔄 Flip Type
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowMovePanel(!showMovePanel);
+                      setShowCopyPanel(false);
+                    }}
+                    className={`px-3.5 py-2 border rounded-[5px] text-[10.5px] transition-all cursor-pointer flex items-center gap-1 ${
+                      showMovePanel
+                        ? 'bg-orange-600 text-white border-orange-600'
+                        : 'bg-white hover:bg-orange-100 border-orange-200 text-[#EA580C]'
+                    }`}
+                  >
+                    📦 Move to...
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCopyPanel(!showCopyPanel);
+                      setShowMovePanel(false);
+                    }}
+                    className={`px-3.5 py-2 border rounded-[5px] text-[10.5px] transition-all cursor-pointer flex items-center gap-1 ${
+                      showCopyPanel
+                        ? 'bg-orange-600 text-white border-orange-600'
+                        : 'bg-white hover:bg-orange-100 border-orange-200 text-[#EA580C]'
+                    }`}
+                  >
+                    📋 Copy to...
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleBulkDelete}
+                    className="px-3.5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-[5px] text-[10.5px] transition-all cursor-pointer flex items-center gap-1 border-0"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Delete Selected
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Move target selection sub-panel */}
+            {bulkMode && showMovePanel && (
+              <div className="bg-slate-50 border border-app-border rounded-[5px] p-4 mb-5">
+                <p className="text-[10px] font-black uppercase text-app-text-muted mb-2 tracking-wider">Select destination Ledger Cashbook to MOVE items to:</p>
+                {books.filter(b => b.id !== bookId).length === 0 ? (
+                  <p className="text-xs text-app-text-muted">No other cashbooks exist. Create another book first.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2.5">
+                    {books.filter(b => b.id !== bookId).map(b => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => handleBulkMove(b.id)}
+                        className="px-4 py-2 bg-white border border-app-border hover:border-[#EA580C] hover:bg-orange-50 text-xs font-bold text-app-text-primary rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span>{b.emoji}</span>
+                        <span>{b.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Copy target selection sub-panel */}
+            {bulkMode && showCopyPanel && (
+              <div className="bg-slate-50 border border-app-border rounded-[5px] p-4 mb-5">
+                <p className="text-[10px] font-black uppercase text-app-text-muted mb-2 tracking-wider">Select destination Ledger Cashbook to COPY items to:</p>
+                {books.filter(b => b.id !== bookId).length === 0 ? (
+                  <p className="text-xs text-app-text-muted">No other cashbooks exist. Create another book first.</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2.5">
+                    {books.filter(b => b.id !== bookId).map(b => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => handleBulkCopy(b.id)}
+                        className="px-4 py-2 bg-white border border-app-border hover:border-[#EA580C] hover:bg-orange-50 text-xs font-bold text-app-text-primary rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <span>{b.emoji}</span>
+                        <span>{b.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Transaction Entries Table List */}
             {entriesWithRunningBalance.length === 0 ? (
               <div className="py-16 text-center">
@@ -1246,6 +1693,22 @@ export default function CashBookHub() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-app-border text-app-text-muted uppercase text-[10px] font-black tracking-wider bg-slate-50/50">
+                      {bulkMode && (
+                        <th className="py-3.5 px-4 font-extrabold w-10">
+                          <input 
+                            type="checkbox"
+                            checked={entriesWithRunningBalance.length > 0 && entriesWithRunningBalance.every(e => selectedEntryIds.has(e.id))}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setSelectedEntryIds(new Set(entriesWithRunningBalance.map(entry => entry.id)));
+                              } else {
+                                setSelectedEntryIds(new Set());
+                              }
+                            }}
+                            className="w-4 h-4 rounded text-[#F97316] focus:ring-[#F97316] cursor-pointer"
+                          />
+                        </th>
+                      )}
                       <th className="py-3.5 px-4 font-extrabold">Date & Time</th>
                       <th className="py-3.5 px-4 font-extrabold">Details / Contact</th>
                       <th className="py-3.5 px-4 font-extrabold">Category</th>
@@ -1258,9 +1721,39 @@ export default function CashBookHub() {
                     {entriesWithRunningBalance.map((item) => (
                       <tr 
                         key={item.id} 
-                        onClick={() => setSelectedEntry(item)}
+                        onClick={() => {
+                          if (bulkMode) {
+                            const newSelected = new Set(selectedEntryIds);
+                            if (newSelected.has(item.id)) {
+                              newSelected.delete(item.id);
+                            } else {
+                              newSelected.add(item.id);
+                            }
+                            setSelectedEntryIds(newSelected);
+                          } else {
+                            setSelectedEntry(item);
+                          }
+                        }}
                         className="hover:bg-slate-50/80 transition-all cursor-pointer text-xs group"
                       >
+                        {bulkMode && (
+                          <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
+                            <input 
+                              type="checkbox"
+                              checked={selectedEntryIds.has(item.id)}
+                              onChange={(e) => {
+                                const newSelected = new Set(selectedEntryIds);
+                                if (e.target.checked) {
+                                  newSelected.add(item.id);
+                                } else {
+                                  newSelected.delete(item.id);
+                                }
+                                setSelectedEntryIds(newSelected);
+                              }}
+                              className="w-4 h-4 rounded text-[#F97316] focus:ring-[#F97316] cursor-pointer"
+                            />
+                          </td>
+                        )}
                         <td className="py-3.5 px-4">
                           <span className="font-bold block text-app-text-primary">{item.date}</span>
                           <span className="text-[10px] text-app-text-muted block mt-0.5">{item.time}</span>
@@ -1273,21 +1766,35 @@ export default function CashBookHub() {
                             <span className="w-1.5 h-1.5 rounded-full bg-app-accent"></span>
                             {item.contactName}
                           </span>
+                          {(item.createdBy || item.lastEditedBy) && (
+                            <div className="flex items-center gap-2 mt-1.5 pt-1 border-t border-[#E5E7EB]/50">
+                              {item.createdBy && (
+                                <span className="text-[9px] text-slate-400 font-medium">
+                                  Entered by <span className="font-black text-slate-500">{item.createdBy.name}</span>
+                                </span>
+                              )}
+                              {item.lastEditedBy && (
+                                <span className="text-[9px] text-slate-400 font-medium">
+                                  · Edited by <span className="font-black text-slate-500">{item.lastEditedBy.name}</span>
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="py-3.5 px-4">
                           <span className="px-2.5 py-1 rounded-[5px] bg-slate-100 text-app-text-secondary text-[10px] font-bold">
                             {item.category}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 font-bold text-app-text-secondary">
+                        <td className="py-3.5 px-4 font-black text-blue-600">
                           {item.paymentMode}
                         </td>
                         <td className={`py-3.5 px-4 text-right font-black text-sm select-none ${
-                          item.type === 'Cash In' ? 'text-[#22C55E]' : 'text-[#EF4444]'
+                          item.type === 'Cash In' ? 'text-blue-600' : 'text-red-500 font-black'
                         }`}>
                           {item.type === 'Cash In' ? '+' : '−'} ৳{item.amount.toLocaleString()}
                         </td>
-                        <td className="py-3.5 px-4 text-right font-bold text-app-text-primary font-mono bg-slate-50/20">
+                        <td className="py-3.5 px-4 text-right font-black text-[#F97316] font-mono bg-slate-50/20">
                           ৳{item.runningBalance.toLocaleString()}
                         </td>
                       </tr>
@@ -1713,27 +2220,70 @@ export default function CashBookHub() {
                     <label className="text-[11px] font-black uppercase text-app-text-secondary block mb-1.5">Transaction Classification Category</label>
                     <select 
                       value={formCategory}
-                      onChange={(e: any) => setFormCategory(e.target.value)}
+                      onChange={(e: any) => {
+                        if (e.target.value === '__add_custom__') {
+                          setShowAddCategory(true);
+                        } else {
+                          setFormCategory(e.target.value);
+                        }
+                      }}
                       className="w-full p-2.5 border border-app-border rounded-[5px] text-xs font-bold bg-white text-app-text-primary focus:outline-none focus:border-app-accent"
                     >
-                      {entryModalType === 'Cash In' ? (
-                        <>
-                          <option value="Sales">Sales (Outlets)</option>
-                          <option value="Sponsorship">Sponsorship integrations</option>
-                          <option value="Commission">Affiliate Commission sales</option>
-                          <option value="Consignment Refunding">Consignment Refunds</option>
-                          <option value="Others">Others</option>
-                        </>
-                      ) : (
-                        <>
-                          <option value="Inventory">Raw Materials / Inventory</option>
-                          <option value="Marketing">Social Boosting & Promo spends</option>
-                          <option value="Utilities">Electricity & office utilities</option>
-                          <option value="Salaries">Employee Salaries bonuses</option>
-                          <option value="Travel & Food">Logistics, shoot travel & food</option>
-                        </>
-                      )}
+                      <option value="">-- Select Category --</option>
+                      {DEFAULT_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                      <option value="__add_custom__" className="text-app-accent font-black">➕ Create Custom Category...</option>
                     </select>
+
+                    {showAddCategory && (
+                      <div className="mt-2.5 p-3 bg-orange-50 border border-orange-200 rounded-[5px] space-y-2">
+                        <label className="text-[10px] font-black uppercase text-orange-700 block">Create Custom Category:</label>
+                        <div className="flex gap-2">
+                          <input 
+                            type="text"
+                            value={newCategoryInput}
+                            onChange={(e) => setNewCategoryInput(e.target.value)}
+                            placeholder="e.g. Photography, Server Hosting"
+                            className="flex-1 px-2.5 py-1.5 bg-white border border-[#E5E7EB] rounded-md text-xs font-bold text-slate-800 focus:outline-none focus:border-app-accent"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const trimmed = newCategoryInput.trim();
+                              if (!trimmed) return;
+                              if (DEFAULT_CATEGORIES.includes(trimmed)) {
+                                triggerToast('Category already exists.', 'info');
+                                setFormCategory(trimmed);
+                                setShowAddCategory(false);
+                                setNewCategoryInput('');
+                                return;
+                              }
+                              const updatedCats = [...customCategories, trimmed];
+                              setCustomCategories(updatedCats);
+                              localStorage.setItem('choosify_cashbook_custom_cats', JSON.stringify(updatedCats));
+                              setFormCategory(trimmed);
+                              setShowAddCategory(false);
+                              setNewCategoryInput('');
+                              triggerToast(`✓ Added custom category "${trimmed}"`, 'success');
+                            }}
+                            className="px-3.5 py-1.5 bg-app-accent text-white font-black text-xs rounded-md cursor-pointer border-0"
+                          >
+                            Add
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setShowAddCategory(false);
+                              setNewCategoryInput('');
+                            }}
+                            className="px-2.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold text-xs rounded-md cursor-pointer border-0"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Payment Mode */}

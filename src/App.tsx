@@ -3,8 +3,14 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } fro
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AdminLayout } from './components/AdminLayout';
 import { OrdersProvider } from './contexts/OrdersContext';
+import { ReturnsProvider } from './contexts/ReturnsContext';
 import { TrustProvider } from './contexts/TrustContext';
+import { DisputeProvider } from './contexts/DisputeContext';
+import { CouponsProvider } from './contexts/CouponsContext';
+import { ReviewModerationProvider } from './contexts/ReviewModeration';
 import { CashBookProvider } from './contexts/CashBookContext';
+import { LogisticsProvider } from './contexts/LogisticsContext';
+import { InventoryProvider } from './contexts/InventoryContext';
 
 // Lazy load pages
 const Home = lazy(() => import('./pages/Home'));
@@ -21,6 +27,9 @@ const SellerDashboardPreview = lazy(() => import('./pages/admin/previews/SellerD
 const RecommendationPreview = lazy(() => import('./pages/admin/previews/RecommendationPreview'));
 const Sellers = lazy(() => import('./pages/admin/Sellers'));
 const Products = lazy(() => import('./pages/admin/Products'));
+const Categories = lazy(() => import('./pages/admin/Categories'));
+const Returns = lazy(() => import('./pages/admin/Returns'));
+const Inventory = lazy(() => import('./pages/admin/Inventory'));
 const Brands = lazy(() => import('./pages/admin/Brands'));
 const Recommendations = lazy(() => import('./pages/admin/Recommendations'));
 const Deals = lazy(() => import('./pages/admin/Deals'));
@@ -44,10 +53,20 @@ import OrdersOverview from './pages/admin/OrdersOverview';
 const SellerCustomers = lazy(() => import('./pages/admin/SellerCustomers'));
 const InvoiceView = lazy(() => import('./pages/admin/InvoiceView').then(m => ({ default: m.InvoiceView })));
 
+// Logistics Pages
+const CourierProviders = lazy(() => import('./pages/admin/Logistics/CourierProviders'));
+const ShipmentConsole = lazy(() => import('./pages/admin/Logistics/ShipmentConsole'));
+const TrackingCenter = lazy(() => import('./pages/admin/Logistics/TrackingCenter'));
+const ShippingLabels = lazy(() => import('./pages/admin/Logistics/ShippingLabels'));
+const CourierAnalytics = lazy(() => import('./pages/admin/Logistics/CourierAnalytics'));
+
 // Trust & Safety Core Modules
 const TrustCenter = lazy(() => import('./pages/admin/TrustCenter'));
+const DisputeCenter = lazy(() => import('./pages/admin/DisputeCenter'));
+const Coupons = lazy(() => import('./pages/admin/Coupons'));
 const BrandVerification = lazy(() => import('./pages/admin/BrandVerification'));
 const CreatorEconomy = lazy(() => import('./pages/admin/CreatorEconomy'));
+const CreatorEarnings = lazy(() => import('./pages/admin/CreatorEarnings'));
 const ModerationV2 = lazy(() => import('./pages/admin/ModerationV2'));
 
 const BrandsStudioList = lazy(() => import('./pages/admin/BrandsStudioList'));
@@ -81,6 +100,7 @@ import { CMSDataProvider } from './contexts/CMSDataContext';
 import { AdsProvider } from './contexts/AdsContext';
 import { ContactInteractionProvider } from './contexts/ContactInteractionContext';
 import { BrandProfilesProvider } from './contexts/BrandProfilesContext';
+import { CreatorProvider } from './contexts/CreatorContext';
 
 export default function App() {
   return (
@@ -89,11 +109,18 @@ export default function App() {
         <AdsProvider>
         <Router>
         <AuthProvider>
+          <LogisticsProvider>
           <CashBookProvider>
             <BrandProfilesProvider>
+            <InventoryProvider>
+          <CouponsProvider>
           <OrdersProvider>
+            <ReturnsProvider>
             <ContactInteractionProvider>
               <TrustProvider>
+              <CreatorProvider>
+              <ReviewModerationProvider>
+              <DisputeProvider>
               <Routes>
             <Route path="/login" element={<Suspense fallback={null}><LoginPage /></Suspense>} />
             <Route path="/products/:id" element={<Suspense fallback={null}><ProductDetailPage /></Suspense>} />
@@ -137,6 +164,9 @@ export default function App() {
               <Route path="products/new" element={<ProductStudio mode="create" />} />
               <Route path="products/:id" element={<ProductStudio mode="edit" />} />
               <Route path="products/:id/edit" element={<ProductStudio mode="edit" />} />
+              <Route path="categories" element={<Categories />} />
+              <Route path="returns" element={<Returns />} />
+              <Route path="inventory" element={<Inventory />} />
               <Route path="brands" element={<Navigate to="/admin/sellers" replace />} />
               <Route path="brands/:id" element={<UnifiedProfileShell />} />
               <Route path="recommendations" element={<Recommendations />} />
@@ -159,13 +189,23 @@ export default function App() {
               <Route path="cashbook" element={<CashBookHub />} />
               <Route path="cashbook/:bookId" element={<CashBookHub />} />
               <Route path="cashbook/reports" element={<CashBookHub />} />
+              
+              {/* Logistics Management Routes */}
+              <Route path="logistics/couriers" element={<CourierProviders />} />
+              <Route path="logistics/shipments" element={<ShipmentConsole />} />
+              <Route path="logistics/tracking" element={<TrackingCenter />} />
+              <Route path="logistics/labels" element={<ShippingLabels />} />
+              <Route path="logistics/analytics" element={<CourierAnalytics />} />
               <Route path="website-cms" element={<WebsiteCMSStudio />} />
               
               {/* Trust & Safety Core Modular Paths */}
               <Route path="trust-center" element={<TrustCenter />} />
               <Route path="brand-verification" element={<BrandVerification />} />
               <Route path="creator-hub" element={<CreatorEconomy />} />
+              <Route path="creator-earnings" element={<CreatorEarnings />} />
               <Route path="moderation-v2" element={<ModerationV2 />} />
+              <Route path="disputes" element={<DisputeCenter />} />
+              <Route path="coupons" element={<Coupons />} />
             </Routes></Suspense></AdminLayout></ProtectedRoute>} />
             
             {/* Direct match for requested /dashboard/content-studio routes */}
@@ -194,11 +234,18 @@ export default function App() {
             
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
+              </DisputeProvider>
+              </ReviewModerationProvider>
+              </CreatorProvider>
               </TrustProvider>
             </ContactInteractionProvider>
+            </ReturnsProvider>
           </OrdersProvider>
+          </CouponsProvider>
+          </InventoryProvider>
           </BrandProfilesProvider>
           </CashBookProvider>
+          </LogisticsProvider>
       </AuthProvider>
     </Router>
     </AdsProvider>

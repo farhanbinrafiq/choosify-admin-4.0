@@ -1082,19 +1082,6 @@ export default function DealsPage() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Target Deal Type</label>
-                        <select
-                          value={formType}
-                          onChange={(e) => setFormType(e.target.value as 'retail' | 'wholesale')}
-                          className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
-                        >
-                          <option value="retail">Retail (Shopper)</option>
-                          <option value="wholesale">Wholesale (Bulk)</option>
-                        </select>
-                      </div>
-
                       <div>
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Expiry Date</label>
                         <input 
@@ -1105,7 +1092,6 @@ export default function DealsPage() {
                           className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-2 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
                         />
                       </div>
-                    </div>
 
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5 text-left">Coupon Code (Optional)</label>

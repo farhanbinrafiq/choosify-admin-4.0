@@ -50,3 +50,15 @@ export interface Customer {
     instagram?: string;
   };
 }
+
+export interface CategoryType {
+  id: string;
+  parentId: string | null;
+  name: string;
+  slug: string;
+  icon: string;
+  description: string;
+  displayOrder: number;
+  enabled: boolean;
+}
+

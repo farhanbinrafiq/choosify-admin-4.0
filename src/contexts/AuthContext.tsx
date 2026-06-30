@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { CategoryType } from '../types';
 
 export type UserRole = 
   | 'super_admin' 
@@ -45,6 +46,15 @@ interface AuthContextType {
   sellerBrands: SellerBrandRelation[];
   allBrands: { id: string; name: string; category: string }[];
   requestNewBrand: (name: string, category: string) => void;
+  
+  // Categories Management System Integration
+  categories: CategoryType[];
+  createCategory: (parentId: string | null, name: string, icon: string, description: string) => CategoryType;
+  updateCategory: (id: string, updates: Partial<CategoryType>) => void;
+  deleteCategory: (id: string) => boolean;
+  moveCategory: (id: string, newParentId: string | null) => void;
+  reorderCategory: (id: string, newPosition: number) => void;
+  importCategories: (imported: CategoryType[]) => void;
 }
 
 const mockProfiles: Record<UserRole, UserProfile> = {
@@ -109,7 +119,14 @@ const AuthContext = createContext<AuthContextType>({
   setActiveBrandId: () => {},
   sellerBrands: [],
   allBrands: [],
-  requestNewBrand: () => {}
+  requestNewBrand: () => {},
+  categories: [],
+  createCategory: () => ({ id: '', parentId: null, name: '', slug: '', icon: '', description: '', displayOrder: 0, enabled: true }),
+  updateCategory: () => {},
+  deleteCategory: () => false,
+  moveCategory: () => {},
+  reorderCategory: () => {},
+  importCategories: () => {}
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -229,6 +246,143 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  // Categories Management System Implementation
+  const [categories, setCategories] = useState<CategoryType[]>(() => {
+    const saved = localStorage.getItem('choosify_categories');
+    if (saved) return JSON.parse(saved);
+    const initialCategories: CategoryType[] = [
+      { id: 'cat-fashion', parentId: null, name: 'Fashion & Apparel', slug: 'fashion-apparel', icon: 'Shirt', description: 'Clothing, traditional apparel, sarees, panjabis and wearable accessories.', displayOrder: 1, enabled: true },
+      { id: 'cat-sarees', parentId: 'cat-fashion', name: 'Jamdani & Silk Sarees', slug: 'sarees', icon: 'Layers', description: 'Traditional Jamdani, silk, and boutique sarees of Bangladesh.', displayOrder: 1, enabled: true },
+      { id: 'cat-panjabis', parentId: 'cat-fashion', name: 'Panjabis', slug: 'panjabis', icon: 'User', description: 'Traditional and designer Panjabis for men.', displayOrder: 2, enabled: true },
+      { id: 'cat-electronics', parentId: null, name: 'Electronics & Gadgets', slug: 'electronics-gadgets', icon: 'Smartphone', description: 'Smartphones, home devices, chargers, and tech accessories.', displayOrder: 2, enabled: true },
+      { id: 'cat-smartphones', parentId: 'cat-electronics', name: 'Smartphones', slug: 'smartphones', icon: 'Tablet', description: 'Latest smartphones from trusted global and local brands.', displayOrder: 1, enabled: true },
+      { id: 'cat-groceries', parentId: null, name: 'Organic Groceries', slug: 'organic-groceries', icon: 'Apple', description: 'Fresh, organic, and locally sourced safe food items.', displayOrder: 3, enabled: true },
+      { id: 'cat-home', parentId: null, name: 'Home & Living', slug: 'home-living', icon: 'Home', description: 'Furniture, kitchen items, and home decor items.', displayOrder: 4, enabled: true },
+    ];
+    localStorage.setItem('choosify_categories', JSON.stringify(initialCategories));
+    return initialCategories;
+  });
+
+  const createCategory = (parentId: string | null, name: string, icon: string, description: string) => {
+    const slug = name.toLowerCase().trim()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s_-]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    
+    let uniqueSlug = slug;
+    let counter = 1;
+    while (categories.some(c => c.slug === uniqueSlug && c.parentId === parentId)) {
+      uniqueSlug = `${slug}-${counter}`;
+      counter++;
+    }
+
+    const newCategory: CategoryType = {
+      id: 'cat-' + Date.now(),
+      parentId,
+      name,
+      slug: uniqueSlug,
+      icon,
+      description,
+      displayOrder: categories.filter(c => c.parentId === parentId).length + 1,
+      enabled: true
+    };
+
+    const updated = [...categories, newCategory];
+    setCategories(updated);
+    localStorage.setItem('choosify_categories', JSON.stringify(updated));
+    return newCategory;
+  };
+
+  const updateCategory = (id: string, updates: Partial<CategoryType>) => {
+    const updated = categories.map(c => {
+      if (c.id === id) {
+        const merged = { ...c, ...updates };
+        if (updates.name && updates.name !== c.name) {
+          const slug = updates.name.toLowerCase().trim()
+            .replace(/[^\w\s-]/g, '')
+            .replace(/[\s_-]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+          
+          let uniqueSlug = slug;
+          let counter = 1;
+          while (categories.some(cat => cat.slug === uniqueSlug && cat.parentId === c.parentId && cat.id !== id)) {
+            uniqueSlug = `${slug}-${counter}`;
+            counter++;
+          }
+          merged.slug = uniqueSlug;
+        }
+        return merged;
+      }
+      return c;
+    });
+    setCategories(updated);
+    localStorage.setItem('choosify_categories', JSON.stringify(updated));
+  };
+
+  const deleteCategory = (id: string): boolean => {
+    const hasChildren = categories.some(c => c.parentId === id);
+    if (hasChildren) {
+      return false;
+    }
+    const updated = categories.filter(c => c.id !== id);
+    setCategories(updated);
+    localStorage.setItem('choosify_categories', JSON.stringify(updated));
+    return true;
+  };
+
+  const moveCategory = (id: string, newParentId: string | null) => {
+    if (id === newParentId) return;
+    
+    let currentParent = newParentId;
+    while (currentParent !== null) {
+      if (currentParent === id) return;
+      const parentObj = categories.find(c => c.id === currentParent);
+      currentParent = parentObj ? parentObj.parentId : null;
+    }
+
+    const updated = categories.map(c => {
+      if (c.id === id) {
+        return { 
+          ...c, 
+          parentId: newParentId, 
+          displayOrder: categories.filter(cat => cat.parentId === newParentId).length + 1 
+        };
+      }
+      return c;
+    });
+    setCategories(updated);
+    localStorage.setItem('choosify_categories', JSON.stringify(updated));
+  };
+
+  const reorderCategory = (id: string, newPosition: number) => {
+    const targetCategory = categories.find(c => c.id === id);
+    if (!targetCategory) return;
+
+    const sameParent = categories.filter(c => c.parentId === targetCategory.parentId)
+      .sort((a, b) => a.displayOrder - b.displayOrder);
+
+    const index = sameParent.findIndex(c => c.id === id);
+    if (index === -1) return;
+
+    sameParent.splice(index, 1);
+    sameParent.splice(newPosition, 0, targetCategory);
+
+    const reorderedSameParent = sameParent.map((c, idx) => ({ ...c, displayOrder: idx + 1 }));
+
+    const updated = categories.map(c => {
+      const match = reorderedSameParent.find(r => r.id === c.id);
+      return match ? match : c;
+    });
+
+    setCategories(updated);
+    localStorage.setItem('choosify_categories', JSON.stringify(updated));
+  };
+
+  const importCategories = (imported: CategoryType[]) => {
+    setCategories(imported);
+    localStorage.setItem('choosify_categories', JSON.stringify(imported));
+  };
+
   return (
     <AuthContext.Provider value={{ 
       user: profile ? { uid: profile.id, email: profile.email } : null, 
@@ -241,7 +395,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setActiveBrandId,
       sellerBrands,
       allBrands,
-      requestNewBrand
+      requestNewBrand,
+      categories,
+      createCategory,
+      updateCategory,
+      deleteCategory,
+      moveCategory,
+      reorderCategory,
+      importCategories
     }}>
       {children}
     </AuthContext.Provider>

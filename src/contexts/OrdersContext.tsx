@@ -1,8 +1,33 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useInventory } from './InventoryContext';
+import { useCoupons } from './CouponsContext';
 
 export type OrderStatus = 'Pending' | 'Confirmed' | 'Dispatched' | 'In Transit' | 'Delivered' | 'Cancelled' | 'Rejected' | 'Returned' | 'Exchange' | 'Processing';
 export type PaymentStatus = 'Pending' | 'Paid' | 'Refunded';
 export type CustomerBehavior = 'Good' | 'Neutral' | 'Risk';
+
+export interface Review {
+  id: string;
+  user: string;
+  product: string;
+  store: string;
+  rating: number;
+  comment: string;
+  status: 'pending' | 'approved' | 'rejected' | 'Flagged' | 'Published' | 'Deleted' | 'Hidden';
+  reports: number;
+  flags?: string[];
+  response?: {
+    id: string;
+    author: string;
+    comment: string;
+    timestamp: string;
+  };
+  isAuthentic?: boolean;
+  authenticityScore?: number;
+  authenticityReason?: string;
+  notes?: string;
+  timestamp: string;
+}
 
 export interface Customer {
   id: string;
@@ -65,6 +90,8 @@ export interface Order {
   }[];
   adminNotes?: string[];
   codCollected?: boolean;
+  promoCode?: string;
+  promoDiscount?: number;
 }
 
 export interface ThreadMessage {
@@ -100,7 +127,7 @@ interface OrdersContextType {
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   flagCustomer: (customerId: string, flagged: boolean, reason: string) => void;
   sendChatMessage: (threadId: string, text: string, senderRole: 'customer' | 'seller' | 'admin', senderName: string) => void;
-  createOrderNow: (product: OrderProduct, customerMsg: string) => void;
+  createOrderNow: (product: OrderProduct, customerMsg: string, promoCode?: string, promoDiscount?: number) => void;
   createManualOrder: (params: {
     customerName: string;
     customerEmail: string;
@@ -112,6 +139,8 @@ interface OrdersContextType {
     quantity: number;
     priceOverride?: number;
     notes?: string;
+    promoCode?: string;
+    promoDiscount?: number;
   }) => void;
   markAllThreadsAsRead: () => void;
   markThreadAsRead: (threadId: string) => void;
@@ -263,6 +292,8 @@ const initialOrders: Order[] = [
 ];
 
 export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { allocateStock, deallocateStock, logStockChange } = useInventory();
+  const { applyCoupon } = useCoupons();
   const [orders, setOrders] = useState<Order[]>(() => {
     const saved = localStorage.getItem('choosify_orders');
     const parsed = saved ? JSON.parse(saved) : initialOrders;
@@ -336,6 +367,17 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Actions
   const approveOrder = (orderId: string, deliveryChargeNum?: number, note?: string) => {
+    try {
+      const orderToApprove = orders.find(o => o.id === orderId);
+      if (orderToApprove) {
+        const qty = orderToApprove.quantity || 1;
+        deallocateStock(orderToApprove.product.id, qty);
+        logStockChange(orderToApprove.product.id, -qty, 'order_placed', orderId);
+      }
+    } catch (e) {
+      console.error('Failed to log stock deduction on approval:', e);
+    }
+
     const timestampStr = new Date().toISOString();
     const invoiceIdGenerated = 'INV-' + Math.floor(100000 + Math.random() * 900000);
     const resolvedDeliveryCharge = deliveryChargeNum !== undefined ? deliveryChargeNum : 120;
@@ -419,6 +461,16 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const declineOrder = (orderId: string, reason: string) => {
+    try {
+      const orderToDecline = orders.find(o => o.id === orderId);
+      if (orderToDecline) {
+        const qty = orderToDecline.quantity || 1;
+        deallocateStock(orderToDecline.product.id, qty);
+      }
+    } catch (e) {
+      console.error('Failed to restore stock on decline:', e);
+    }
+
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
         return {
@@ -467,6 +519,20 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const cancelOrder = (orderId: string, reason: string) => {
+    try {
+      const orderToCancel = orders.find(o => o.id === orderId);
+      if (orderToCancel) {
+        const qty = orderToCancel.quantity || 1;
+        if (orderToCancel.status === 'Pending') {
+          deallocateStock(orderToCancel.product.id, qty);
+        } else if (orderToCancel.status === 'Confirmed' || orderToCancel.status === 'Dispatched' || orderToCancel.status === 'In Transit' || orderToCancel.status === 'Processing') {
+          logStockChange(orderToCancel.product.id, qty, 'cancel_order', orderId);
+        }
+      }
+    } catch (e) {
+      console.error('Failed to restore stock on cancel:', e);
+    }
+
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
         return {
@@ -644,9 +710,17 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }));
   };
 
-  const createOrderNow = (product: OrderProduct, customerMsg: string) => {
+  const createOrderNow = (product: OrderProduct, customerMsg: string, promoCode?: string, promoDiscount?: number) => {
     const orderId = 'CSS-' + Math.floor(1000 + Math.random() * 9000);
     const primaryCustomer = customers[0]; // Farhan Bin Rafiq (Default customer simulation)
+
+    const finalProductPrice = product.price;
+    const deliveryCharge = 120;
+    const discount = promoDiscount || 0;
+    const totalPayable = Math.max(0, finalProductPrice + deliveryCharge - discount);
+
+    const commPercent = 10;
+    const commission = Math.round(finalProductPrice * (commPercent / 100));
 
     const newOrder: Order = {
       id: orderId,
@@ -656,10 +730,35 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       paymentStatus: 'Pending',
       timestamp: new Date().toISOString(),
       customerNotes: [customerMsg],
-      earnings: createEarnings(product.price),
-    };
+      base_product_price: finalProductPrice,
+      delivery_charge: deliveryCharge,
+      total_payable: totalPayable,
+      earnings: {
+        totalRevenue: totalPayable,
+        commissionPercent: commPercent,
+        futureAutomatedDeduction: commission,
+        sellerNet: totalPayable - commission
+      },
+      quantity: 1,
+      promoCode,
+      promoDiscount: discount
+    } as any;
 
     setOrders(prev => [newOrder, ...prev]);
+    
+    if (promoCode && discount > 0) {
+      try {
+        applyCoupon(promoCode, orderId, finalProductPrice, primaryCustomer.id, discount);
+      } catch (err) {
+        console.error('Error applying coupon during order creation:', err);
+      }
+    }
+
+    try {
+      allocateStock(product.id, 1);
+    } catch (e) {
+      console.error('Failed to allocate stock for order:', e);
+    }
 
     // Create immediate inbox message link
     const newThread: MessageThread = {
@@ -708,6 +807,8 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     quantity: number;
     priceOverride?: number;
     notes?: string;
+    promoCode?: string;
+    promoDiscount?: number;
   }) => {
     const orderId = 'CSS-' + Math.floor(1000 + Math.random() * 9000);
     const invoiceId = 'INV-' + Math.floor(100000 + Math.random() * 900000);
@@ -716,7 +817,8 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const productPrice = params.priceOverride !== undefined ? params.priceOverride : params.product.price;
     const finalProductPrice = productPrice * params.quantity;
     const deliveryCharge = 120;
-    const totalPayable = finalProductPrice + deliveryCharge;
+    const discount = params.promoDiscount || 0;
+    const totalPayable = Math.max(0, finalProductPrice + deliveryCharge - discount);
 
     const newCustomer: Customer = {
       id: 'cust_' + Math.floor(1000 + Math.random() * 9000),
@@ -767,10 +869,25 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       isManual: true,
       platformSource: params.platformSource,
       chatRefId: params.chatRefId,
-      quantity: params.quantity
+      quantity: params.quantity,
+      promoCode: params.promoCode,
+      promoDiscount: discount
     } as any;
 
     setOrders(prev => [newOrder, ...prev]);
+
+    if (params.promoCode && discount > 0) {
+      try {
+        applyCoupon(params.promoCode, orderId, finalProductPrice, newCustomer.id, discount);
+      } catch (err) {
+        console.error('Error applying coupon during manual order creation:', err);
+      }
+    }
+    try {
+      allocateStock(params.product.id, params.quantity);
+    } catch (e) {
+      console.error('Failed to allocate stock for manual order:', e);
+    }
 
     // Create immediate inbox message thread linked to this manually generated order
     const newThread: MessageThread = {

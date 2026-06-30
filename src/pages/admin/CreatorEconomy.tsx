@@ -1,5 +1,7 @@
 import React, { useState, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { useTrust, CreatorCampaign, CreatorBrandPartnership, RecommendationMetric, CreatorPayout } from '../../contexts/TrustContext';
+import { useCreatorContext } from '../../contexts/CreatorContext';
 import { 
   Award, 
   TrendingUp, 
@@ -46,6 +48,8 @@ export default function CreatorEconomy() {
     logRecommendationActivity,
     dailyCreatorMetrics
   } = useTrust();
+
+  const { creatorPerformance } = useCreatorContext();
 
   // Active sub-tabs inside Creator Hub
   const [activeTab, setActiveTab] = useState<'analytics' | 'campaigns' | 'partnerships' | 'tiers' | 'payouts'>('analytics');
@@ -152,9 +156,18 @@ export default function CreatorEconomy() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2 bg-slate-900 border border-app-border rounded-[4px] px-3.5 py-1.5 text-xs text-white">
-          <span className="w-2.5 h-2.5 bg-green-400 rounded-full animate-ping" />
-          <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#8E9BAE]">Attribution Engine Live</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            to="/admin/creator-earnings"
+            className="px-4 py-2 bg-gradient-to-r from-[#F4631E]/20 to-[#F4631E]/10 hover:from-[#F4631E]/30 hover:to-[#F4631E]/15 border border-[#F4631E]/40 text-[#F4631E] text-xs font-black uppercase tracking-wider rounded-[4px] shadow cursor-pointer transition-all flex items-center gap-1.5"
+          >
+            <Wallet className="w-4 h-4 animate-pulse" /> Review Creator Earnings Console
+          </Link>
+
+          <div className="flex items-center gap-2 bg-slate-900 border border-app-border rounded-[4px] px-3.5 py-1.5 text-xs text-white">
+            <span className="w-2.5 h-2.5 bg-green-400 rounded-full animate-ping" />
+            <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#8E9BAE]">Attribution Engine Live</span>
+          </div>
         </div>
       </div>
 

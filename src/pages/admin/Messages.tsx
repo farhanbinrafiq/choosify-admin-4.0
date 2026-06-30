@@ -41,6 +41,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useOrders, MessageThread, ThreadMessage, Order } from "../../contexts/OrdersContext";
 import { UnifiedMessage, Conversation, Agent, Customer as TypesCustomer } from "../../types";
 import { io, Socket } from "socket.io-client";
+import { SplitLayout } from "../../components/Layout/SplitLayout";
 
 // Platform definitions with branding colors
 interface PlatformBranding {
@@ -94,6 +95,16 @@ function formatElapsedTime(timestampStr: string) {
 
 export default function MessagesPage() {
   const { profile } = useAuth();
+  const messagesCustomerPanes = [
+    { size: 340, minSize: 260, maxSize: 450 }, // Left sidebar channels
+    { size: 600, minSize: 400, maxSize: 1000 }, // Center chat area
+    { size: 340, minSize: 280, maxSize: 450 }  // Right context actions
+  ];
+  const messagesPlatformPanes = [
+    { size: 340, minSize: 260, maxSize: 450 }, // Left sidebar threads
+    { size: 600, minSize: 400, maxSize: 1000 }, // Center chat area
+    { size: 340, minSize: 280, maxSize: 450 }  // Right context actions
+  ];
   const { 
     orders, 
     messageThreads, 
@@ -800,10 +811,10 @@ export default function MessagesPage() {
         // =============================================================
         // CUSTOMER CHATS METAFRAME DESIGN (ONLY HANDLES WHATSAPP, MESSENGER, INSTAGRAM)
         // =============================================================
-        <div className="flex-1 flex overflow-hidden">
+        <SplitLayout layoutId="messages-customer-studio" panes={messagesCustomerPanes} className="flex-1 min-h-0 bg-slate-950">
           
           {/* A. LEFT BAR: META PLATFORM CHANNELS */}
-          <div className="w-[340px] bg-app-bg border-r border-app-border flex flex-col shrink-0">
+          <div className="w-full h-full bg-app-bg border-r border-app-border flex flex-col shrink-0">
             <div className="p-4 border-b border-app-border bg-slate-900/30">
               <div className="grid grid-cols-3 gap-1.5">
                 {(["whatsapp", "messenger", "instagram"] as const).map((p) => {
@@ -945,7 +956,7 @@ export default function MessagesPage() {
           </div>
 
           {/* B. CENTER CHAT LOG WITH rich product attachment integrations */}
-          <div className="flex-1 flex flex-col bg-slate-950/20">
+          <div className="flex-1 flex flex-col bg-slate-950/20 h-full">
             {selectedConv ? (
               <>
                 {/* Header info */}
@@ -1166,7 +1177,7 @@ export default function MessagesPage() {
           </div>
 
           {/* C. RIGHT ACTIONS SIDEBAR WITH DYNAMIC ORDER LIFECYCLE (RULE #4) */}
-          <div className="w-[340px] border-l border-app-border bg-slate-900/10 overflow-y-auto shrink-0 custom-scrollbar">
+          <div className="w-full h-full border-l border-app-border bg-slate-900/10 overflow-y-auto custom-scrollbar">
             
             {/* 1. Dynamic Order Context Panel if Auto-Linked */}
             {selectedConv && currentCommerce.linkedOrder ? (
@@ -1610,17 +1621,17 @@ export default function MessagesPage() {
 
           </div>
 
-        </div>
+        </SplitLayout>
 
       ) : (
 
         // =============================================================
         // PLATFORM INBOX DESIGN SEPARATED TAB (SYSTEM LAYER / ERP ALERTS) (RULE #1, #2)
         // =============================================================
-        <div className="flex-1 flex overflow-hidden">
+        <SplitLayout layoutId="messages-platform-studio" panes={messagesPlatformPanes} className="flex-1 min-h-0 bg-slate-950">
           
           {/* A. LEFT BAR: PLATFORM THREADS INBOX (DRIVEN BY ERP MESSAGE THREADS) */}
-          <div className="w-[340px] bg-app-bg border-r border-app-border flex flex-col shrink-0">
+          <div className="w-full h-full bg-app-bg border-r border-app-border flex flex-col shrink-0">
             <div className="p-4 border-b border-app-border bg-slate-900/30 space-y-3">
               <div className="flex justify-between items-center">
                 <div>
@@ -1710,7 +1721,7 @@ export default function MessagesPage() {
           </div>
 
           {/* B. CENTER MESSAGE CHAT AREA FOR PLATFORM SUPPORT TERMINAL */}
-          <div className="flex-1 flex flex-col bg-slate-950/20">
+          <div className="flex-1 flex flex-col bg-slate-950/20 h-full">
             {selectedThread ? (
               <>
                 <div className="h-16 border-b border-app-border px-6 flex items-center justify-between bg-slate-900/10">
@@ -1795,7 +1806,7 @@ export default function MessagesPage() {
           </div>
 
           {/* C. RIGHT ACTIONS SIDEBAR WITH CORE ORDER DETAILS INTEGRATION (RULE #1) */}
-          <div className="w-[340px] border-l border-app-border bg-slate-900/10 overflow-y-auto shrink-0 custom-scrollbar font-sans">
+          <div className="w-full h-full border-l border-app-border bg-slate-900/10 overflow-y-auto custom-scrollbar font-sans">
             {selectedThread && currentCommerce.linkedOrder ? (
               <div className="p-4 space-y-5">
                 
@@ -2052,7 +2063,7 @@ export default function MessagesPage() {
                       }}
                       className="bg-[#241A35] font-sans hover:bg-slate-900 border border-purple-500/10 text-purple-300 font-bold py-2 rounded-xl text-[9px] uppercase tracking-wider transition-all cursor-pointer"
                     >
-                      Approve B2B
+                      Approve Order
                     </button>
                   </div>
                 </div>
@@ -2064,7 +2075,7 @@ export default function MessagesPage() {
               </div>
             )}
           </div>
-        </div>
+        </SplitLayout>
       )}
 
       {/* =============================================================

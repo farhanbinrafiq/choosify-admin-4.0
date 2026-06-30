@@ -294,6 +294,99 @@
         }
       },
       "required": ["id", "name", "platformIds"]
+    },
+    "Shipment": {
+      "title": "Shipment",
+      "description": "LMS Shipment consignment record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "orderId": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "customerId": { "type": "string" },
+        "status": { "type": "string" },
+        "courier": {
+          "type": "object",
+          "properties": {
+            "code": { "type": "string" },
+            "name": { "type": "string" }
+          }
+        },
+        "trackingNumber": { "type": "string" },
+        "waybillNumber": { "type": "string" },
+        "weight": { "type": "number" },
+        "codAmount": { "type": "number" },
+        "deliveryCharge": { "type": "number" },
+        "totalCharge": { "type": "number" },
+        "trackingEvents": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "timestamp": { "type": "string" },
+              "status": { "type": "string" },
+              "location": { "type": "string" },
+              "remarks": { "type": "string" }
+            }
+          }
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "orderId", "sellerId", "status", "trackingNumber"]
+    },
+    "CourierProviderConfig": {
+      "title": "CourierProviderConfig",
+      "description": "Courier configuration and API keys",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "code": { "type": "string" },
+        "name": { "type": "string" },
+        "apiKey": { "type": "string" },
+        "apiSecret": { "type": "string" },
+        "webhookSecret": { "type": "string" },
+        "apiUrl": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "sandbox": { "type": "boolean" },
+        "healthStatus": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "code", "name", "enabled"]
+    },
+    "ShippingRule": {
+      "title": "ShippingRule",
+      "description": "Merchant automation rule for logistics",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "name": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "priority": { "type": "number" },
+        "conditions": { "type": "object" },
+        "action": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "sellerId", "name", "enabled", "priority", "conditions", "action"]
+    },
+    "Warehouse": {
+      "title": "Warehouse",
+      "description": "Merchant warehouse inventory storage and dispatch center",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "sellerId": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "object" },
+        "contactPerson": { "type": "object" },
+        "isDefault": { "type": "boolean" },
+        "couriers": { "type": "array" },
+        "preferredCourier": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "sellerId", "name", "isDefault"]
     }
   },
   "firestore": {
@@ -356,6 +449,22 @@
     "/omni_customers/{customerId}": {
       "schema": "OmniCustomer",
       "description": "Unified customer master registry"
+    },
+    "/shipments/{shipmentId}": {
+      "schema": "Shipment",
+      "description": "LMS Consignments"
+    },
+    "/courier_configs/{configId}": {
+      "schema": "CourierProviderConfig",
+      "description": "Courier Integrations Settings"
+    },
+    "/shipping_rules/{ruleId}": {
+      "schema": "ShippingRule",
+      "description": "Logistics Automation Rules"
+    },
+    "/warehouses/{warehouseId}": {
+      "schema": "Warehouse",
+      "description": "Merchant Warehouses Locations"
     }
   }
 }

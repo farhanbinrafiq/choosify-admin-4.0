@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
 import { messagingRouter, setSocketIO, seedOmnichannelData } from "./server/messagingHub";
+import { logisticsRouter } from "./server/logisticsRouter";
 
 dotenv.config();
 
@@ -15,6 +16,7 @@ async function startServer() {
 
   // Mount Unified Omnichannel Messaging APIs and Webhooks
   app.use("/api", messagingRouter);
+  app.use("/api", logisticsRouter);
 
   // API stats route
   app.get("/api/admin/stats", async (req, res) => {

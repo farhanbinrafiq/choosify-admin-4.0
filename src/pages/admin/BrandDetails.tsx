@@ -59,6 +59,7 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBrandProfiles } from '../../contexts/BrandProfilesContext';
+import { SplitLayout } from '../../components/Layout/SplitLayout';
 
 // Import newly refactored tab components matching Seller "My Profile" design rules
 import { BrandAccountTab } from '../../components/brand/BrandAccountTab';
@@ -129,6 +130,11 @@ export default function BrandDetails() {
       completionScore: 92
     };
   }, [profiles, id]);
+
+  const panes = [
+    { size: 280, minSize: 220, maxSize: 400 }, // Left subnav
+    { size: 850, minSize: 500, maxSize: 1400 } // Right canvas
+  ];
 
   // Current active sub-tab
   const [activeTab, setActiveTab] = useState<TabId>('account');
@@ -427,10 +433,10 @@ export default function BrandDetails() {
       </div>
 
       {/* Main Studio Area */}
-      <div className="max-w-7xl mx-auto px-8 mt-8 grid grid-cols-1 lg:grid-cols-4 gap-8">
-        
-        {/* Left Side Sub-Navigation Drawer / Tabs Sidebar */}
-        <div className="lg:col-span-1 space-y-4">
+      <div className="max-w-7xl mx-auto px-8 mt-8">
+        <SplitLayout layoutId="brand-details-studio" panes={panes} className="border border-slate-200 rounded-3xl overflow-hidden bg-white shadow-sm min-h-[70vh]">
+          {/* Left Side Sub-Navigation Drawer / Tabs Sidebar */}
+          <div className="space-y-4 p-6 bg-slate-50/50 h-full border-r border-slate-100 flex flex-col justify-between">
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-1">
              <div className="px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-400">STUDIO SECTIONS</div>
              
@@ -480,10 +486,9 @@ export default function BrandDetails() {
                 </div>
              </div>
           </div>
-        </div>
 
-        {/* Right Side Working Canvas Area */}
-        <div className="lg:col-span-3 space-y-8">
+          {/* Right Side Working Canvas Area */}
+          </div><div className="p-8 h-full overflow-y-auto">
            
            <AnimatePresence mode="wait">
              <motion.div
@@ -599,7 +604,8 @@ export default function BrandDetails() {
                 )}
              </motion.div>
            </AnimatePresence>
-        </div>
+          </div>
+        </SplitLayout>
       </div>
     </div>
   );

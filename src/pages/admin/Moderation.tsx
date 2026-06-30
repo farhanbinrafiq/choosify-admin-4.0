@@ -438,7 +438,7 @@ export default function ModerationPage() {
     },
     { 
       id: 'sel_v2', 
-      companyName: 'Aarong Handcrafts (B2B Distributor)', 
+      companyName: 'Aarong Handcrafts (Premium Distributor)', 
       ownerName: 'Mufizur Rahman', 
       phone: '01711-552211',
       tradeLicense: 'TL-9022415-BD', 
@@ -448,7 +448,7 @@ export default function ModerationPage() {
       nidChecked: true,
       bankChecked: true,
       status: 'Pending Review',
-      notes: 'All premium catalog attributes attached. B2B wholesaling documents cleared initial check.'
+      notes: 'All premium catalog attributes attached. Corporate trade license documents cleared initial check.'
     },
     { 
       id: 'sel_v3', 
@@ -522,19 +522,6 @@ export default function ModerationPage() {
     setProductModerationQueue(prev => prev.map(p => p.id === id ? { ...p, status: 'Disabled' } : p));
     const name = productModerationQueue.find(p => p.id === id)?.name;
     triggerToast(`🔒 Deactivated and disabled: ${name}`);
-  };
-
-
-  // 3. Wholesale B2B Management
-  const [wholesaleB2bQuotations, setWholesaleB2bQuotations] = useState([
-    { id: 'q_1', buyer: 'Shopnil Varieties Dhaka', seller: 'Aarong Handcrafts', product: 'Cotton Panjabi Bulk Lot', moq: 50, quotedPrice: 750, totalVal: 37500, status: 'Awaiting MOQ review' },
-    { id: 'q_2', buyer: 'Metro Retail Systems', seller: 'TechZone BD', product: 'Xiaomi Note 14 (Box of 20)', moq: 20, quotedPrice: 22000, totalVal: 440000, status: 'Quotation verified' },
-    { id: 'q_3', buyer: 'Kazi Super Shop', seller: 'Khaas Food Organic', product: 'Premium Mustard Oil (Cartons)', moq: 30, quotedPrice: 18000, totalVal: 540000, status: 'Awaiting supplier signature' }
-  ]);
-
-  const verifyMoqQuotation = (id: string) => {
-    setWholesaleB2bQuotations(prev => prev.map(q => q.id === id ? { ...q, status: 'Quotation verified' } : q));
-    triggerToast(`🤝 Quotation #${id} validated with minimum order limits.`);
   };
 
 
@@ -1222,7 +1209,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
           <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
             <Shield className="text-app-accent w-6 h-6" /> Backstage Moderation Control Center
           </h1>
-          <p className="text-app-text-secondary text-[12px]">Approved secure trade licenses, B2B workflows, product listings, buyer and seller reputations, and PostgreSQL relations database schema.</p>
+          <p className="text-app-text-secondary text-[12px]">Approved secure trade licenses, merchant workflows, product listings, buyer and seller reputations, and PostgreSQL relations database schema.</p>
         </div>
         <div className="flex gap-2">
           <div className="bg-app-card border border-app-border rounded-lg px-4 py-2 flex items-center gap-3">
@@ -1266,7 +1253,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
           <div className="space-y-6">
             <div className="flex justify-between items-center border-b border-white/[0.04] pb-3">
               <div>
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">🏢 B2B & B2C Seller Verification Desk</h3>
+                <h3 className="text-sm font-bold text-white uppercase tracking-wider">🏢 Brand & Merchant Verification Desk</h3>
                 <p className="text-[10px] text-app-text-secondary mt-1">Sellers cannot list products or receive payments before trade license approval and document review.</p>
               </div>
               <span className="text-[10px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/15 px-3 py-1 rounded-full font-bold">
@@ -1611,7 +1598,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
 
             {/* Visual ERD Entity Relation layout representation */}
             <div className="p-5 bg-app-bg border border-app-border rounded-xl space-y-4">
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Scalable Entity Relationships Mapping (B2C & B2B)</span>
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Scalable Entity Relationships Mapping (Retail & Influencer Economy)</span>
               
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
                 

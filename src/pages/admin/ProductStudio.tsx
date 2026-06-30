@@ -3,11 +3,14 @@ import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import {
   ArrowLeft, Pencil, Trash2, Plus, ArrowUp, ArrowDown, Lock, Star, Heart,
   Compass, Eye, Play, Sparkles, MapPin, Globe, Check, Phone, Info,
-  ExternalLink, ChevronRight, ChevronLeft, Sliders, Settings, LayoutGrid, Coins
+  ExternalLink, ChevronRight, ChevronLeft, Sliders, Settings, LayoutGrid, Coins,
+  ChevronUp, ChevronDown, Copy, X, RotateCcw
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../contexts/AuthContext";
+import { useInventory } from "../../contexts/InventoryContext";
 import { CreatorExperienceSection, CreatorContentItem } from "../../components/CreatorExperienceSection";
+import { SplitLayout } from "../../components/Layout/SplitLayout";
 
 interface Spec {
   key: string;
@@ -33,20 +36,34 @@ interface PhysicalStore {
   city: string;
 }
 
-interface OverviewBlock {
+export interface OverviewSection {
   id: string;
   title: string;
-  bullets: string[];
+  content: string; // rich text / plain text body
+  bullets: string[]; // bullet list items
+  listStyle: 'none' | 'bullet' | 'numbered';
   enabled: boolean;
+  sortOrder: number;
+  icon?: string; // lucide icon name string
+  images?: string[]; // image URLs
+  isCustom?: boolean; // true = seller created, false = template
 }
 
 export interface BoxContentItem {
   id: string;
-  icon: string;
   title: string;
   description?: string;
-  displayOrder: number;
+  icon?: string;
+  image?: string;
+  badge?: string;
+  price?: number;
+  isFree: boolean; // true = included free, false = optional paid add-on
+  enabled: boolean;
+  sortOrder: number;
+  displayOrder: number; // keep backward compat
 }
+
+export type OverviewBlock = OverviewSection; // legacy alias
 
 export interface OptionGroup {
   id: string;
@@ -109,6 +126,63 @@ const mockProductDetails: Record<string, any> = {
   }
 };
 
+const OVERVIEW_TEMPLATES: Record<string, OverviewSection[]> = {
+  'Mobile & Gadgets': [
+    { id: 't1', title: 'Key Specifications', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 0 },
+    { id: 't2', title: 'Compatibility', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 1 },
+    { id: 't3', title: 'Warranty & Support', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 2 },
+    { id: 't4', title: 'Installation Guide', content: '', bullets: [], listStyle: 'numbered', enabled: true, sortOrder: 3 },
+    { id: 't5', title: 'Shipping & Returns', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 4 },
+  ],
+  'Fashion & Clothing': [
+    { id: 't1', title: 'Quality & Materials', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 0 },
+    { id: 't2', title: 'Care Instructions', content: '', bullets: [], listStyle: 'numbered', enabled: true, sortOrder: 1 },
+    { id: 't3', title: 'Fit & Style Guide', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 2 },
+    { id: 't4', title: 'Shipping & Returns', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 3 },
+  ],
+  'Hotels & Travel': [
+    { id: 't1', title: 'Room Features & Amenities', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 0 },
+    { id: 't2', title: 'Check-in / Check-out', content: '', bullets: [], listStyle: 'none', enabled: true, sortOrder: 1 },
+    { id: 't3', title: 'Cancellation Policy', content: '', bullets: [], listStyle: 'none', enabled: true, sortOrder: 2 },
+    { id: 't4', title: 'Transport & Location', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 3 },
+  ],
+  'Food & Grocery': [
+    { id: 't1', title: 'Ingredients', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 0 },
+    { id: 't2', title: 'Preparation Instructions', content: '', bullets: [], listStyle: 'numbered', enabled: true, sortOrder: 1 },
+    { id: 't3', title: 'Serving Size & Nutrition', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 2 },
+    { id: 't4', title: 'Allergen Information', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 3 },
+    { id: 't5', title: 'Delivery & Refund', content: '', bullets: [], listStyle: 'none', enabled: true, sortOrder: 4 },
+  ],
+  'Beauty & Grooming': [
+    { id: 't1', title: 'Key Ingredients', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 0 },
+    { id: 't2', title: 'Suitable Skin Type', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 1 },
+    { id: 't3', title: 'How to Use', content: '', bullets: [], listStyle: 'numbered', enabled: true, sortOrder: 2 },
+    { id: 't4', title: 'Warnings & Precautions', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 3 },
+  ],
+  'Home Appliances': [
+    { id: 't1', title: 'Product Specifications', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 0 },
+    { id: 't2', title: 'Installation Guide', content: '', bullets: [], listStyle: 'numbered', enabled: true, sortOrder: 1 },
+    { id: 't3', title: 'Warranty & Service', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 2 },
+    { id: 't4', title: 'Safety Information', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 3 },
+    { id: 't5', title: 'Shipping & Returns', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 4 },
+  ],
+  'default': [
+    { id: 't1', title: 'Product Features', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 0 },
+    { id: 't2', title: 'Quality & Materials', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 1 },
+    { id: 't3', title: 'Warranty & Support', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 2 },
+    { id: 't4', title: 'Shipping & Returns', content: '', bullets: [], listStyle: 'bullet', enabled: true, sortOrder: 3 },
+  ],
+};
+
+function getTemplateForCategory(category: string): OverviewSection[] {
+  const key = Object.keys(OVERVIEW_TEMPLATES).find(k =>
+    category.toLowerCase().includes(k.toLowerCase()) ||
+    k.toLowerCase().includes(category.toLowerCase())
+  );
+  const template = OVERVIEW_TEMPLATES[key || 'default'];
+  return template.map(s => ({ ...s, id: `s_${Date.now()}_${Math.random().toString(36).slice(2,7)}` }));
+}
+
 interface ProductStudioProps {
   mode?: "create" | "edit";
   productId?: string;
@@ -119,6 +193,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const id = productId || routeId;
   const navigate = useNavigate();
   const location = useLocation();
+  const { updateStock } = useInventory();
 
   const isContentStudio = location.pathname.includes("content-studio");
   const backPath = isContentStudio ? "/dashboard/content-studio/products" : "/admin/products";
@@ -141,6 +216,11 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
   const draftKey = `choosify_draft_${activeId}`;
   const publishKey = `choosify_published_${activeId}`;
+
+  const productStudioPanes = [
+    { size: 700, minSize: 500, maxSize: 1000 }, // Left side media gallery
+    { size: 450, minSize: 300, maxSize: 600 }   // Right side attributes specs
+  ];
 
   // Basic Visual State Controllers
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -176,6 +256,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const [specs, setSpecs] = useState<Spec[]>([]);
   const [storeComparisonList, setStoreComparisonList] = useState<StoreListing[]>([]);
   const [overviewBlocks, setOverviewBlocks] = useState<OverviewBlock[]>([]);
+  const [overviewSectionLabel, setOverviewSectionLabel] = useState('Product Overview');
   const [bestForTags, setBestForTags] = useState<string[]>([]);
 
   // Enable/Disable toggles for each major card/section
@@ -299,6 +380,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       setSpecs([]);
       setStoreComparisonList([]);
       setOverviewBlocks([]);
+      setOverviewSectionLabel("Product Overview");
       setBestForTags([]);
     } else {
       setProductName(data.productName || dataSrc.productName || "");
@@ -309,6 +391,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       setSpecs(data.specs || dataSrc.specs || []);
       setStoreComparisonList(data.storeComparisonList || dataSrc.storeComparisonList || []);
       setOverviewBlocks(data.overviewBlocks || dataSrc.overviewBlocks || []);
+      if (data.overviewSectionLabel) setOverviewSectionLabel(data.overviewSectionLabel);
       setBestForTags(data.bestForTags || dataSrc.bestForTags || []);
     }
 
@@ -429,11 +512,17 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
   }, [isNewProduct, profile, sellerBrands, allBrands, activeId, draftKey, publishKey]);
 
+  useEffect(() => {
+    if (category && overviewBlocks.length === 0) {
+      setOverviewBlocks(getTemplateForCategory(category));
+    }
+  }, [category]);
+
   // Sync draft edits to local storage incrementally upon changes
   const serializeState = () => {
     const draftData = {
       brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
-      storeComparisonList, overviewBlocks, bestForTags, physicalStores, creatorContent,
+      storeComparisonList, overviewBlocks, overviewSectionLabel, bestForTags, physicalStores, creatorContent,
       actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder,
       enableSpecs, enableStoreComparison, enableInfluencerReviews, enableOverviewSection, enableBestForTags, enablePhysicalStores,
       enableBoxContents, enableOptions, enableActiveVariantSpecs, boxContents, optionGroups, productVariants,
@@ -446,7 +535,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     if (brandName) serializeState();
   }, [
     brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
-    storeComparisonList, overviewBlocks, bestForTags, physicalStores, creatorContent,
+    storeComparisonList, overviewBlocks, overviewSectionLabel, bestForTags, physicalStores, creatorContent,
     actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder,
     enableSpecs, enableStoreComparison, enableInfluencerReviews, enableOverviewSection, enableBestForTags, enablePhysicalStores,
     enableBoxContents, enableOptions, enableActiveVariantSpecs, boxContents, optionGroups, productVariants,
@@ -511,7 +600,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const handlePublishRelease = async () => {
     const liveData = {
       brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
-      storeComparisonList, overviewBlocks, bestForTags, physicalStores, creatorContent,
+      storeComparisonList, overviewBlocks, overviewSectionLabel, bestForTags, physicalStores, creatorContent,
       actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder,
       enableSpecs, enableStoreComparison, enableInfluencerReviews, enableOverviewSection, enableBestForTags, enablePhysicalStores,
       enableBoxContents, enableOptions, enableActiveVariantSpecs, boxContents, optionGroups, productVariants,
@@ -520,6 +609,19 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     
     localStorage.setItem(publishKey, JSON.stringify(liveData));
     setPublishStatus("live");
+
+    // Sync stock changes to Inventory audit log
+    try {
+      if (productVariants && productVariants.length > 0) {
+        productVariants.forEach((v: any, index: number) => {
+          updateStock(activeId || id || "1", v.stockLimit || 0, 'manual_adjustment', `Variant index ${index} (${v.color || ''} ${v.size || ''}) updated via Product Studio`, v.id);
+        });
+      } else {
+        updateStock(activeId || id || "1", 100, 'manual_adjustment', `Standard product stock updated via Product Studio`);
+      }
+    } catch (invErr) {
+      console.warn("Failed to sync stock to inventory context:", invErr);
+    }
 
     try {
       if (isNewProduct) {
@@ -845,10 +947,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-10 gap-8">
-            
-            {/* LEFT COLUMN: Media Viewer (60% equivalent to 6 cols) */}
-            <div className="lg:col-span-6 space-y-5">
+            <SplitLayout layoutId="product-studio-hero" panes={productStudioPanes} className="border border-slate-150 rounded-3xl overflow-hidden bg-white min-h-[500px]">
+              {/* LEFT COLUMN: Media Viewer */}
+              <div className="space-y-5 p-6 h-full overflow-y-auto">
               
               {/* Active Image Window Frame with Zoom effect */}
               <div 
@@ -1021,10 +1122,10 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                 </div>
               </div>
 
-            </div>
+              </div>
 
-            {/* RIGHT COLUMN: Specific Attributes Specifications & Stats (40% equivalent to 4 cols) */}
-            <div className="lg:col-span-4 flex flex-col justify-between space-y-6 lg:border-l lg:border-[#E5E7EB] lg:pl-6">
+              {/* RIGHT COLUMN: Specific Attributes Specifications & Stats */}
+              <div className="flex flex-col justify-between space-y-6 p-6 h-full overflow-y-auto bg-slate-50/50 border-l border-slate-100">
               
               <div className="space-y-4">
                 {/* Breadcrumb line & SUBMIT SAMPLE Pill badge */}
@@ -1115,9 +1216,8 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                 </div>
               </div>
 
-            </div>
-
-          </div>
+              </div>
+            </SplitLayout>
           )}
 
         </div>
@@ -2515,49 +2615,27 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
             <div className="space-y-4">
               <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Box contents & free features</span>
               <p className="text-[10.5px] italic text-slate-500 leading-normal">
-                Add items included in the purchase package. Customize optional icons, descriptions and display orders.
+                Add items included in the purchase package. Customize optional icons, descriptions, prices and badges.
               </p>
 
               <div className="space-y-4 pr-1 max-h-[400px] overflow-y-auto no-scrollbar">
-                {tempBoxContents.sort((a,b) => a.displayOrder - b.displayOrder).map((item, idx) => (
-                  <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-3.5 rounded-2xl relative text-left text-xs space-y-2.5">
+                {tempBoxContents.map((item, idx) => (
+                  <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl relative text-left text-xs space-y-3">
                     <div className="flex justify-between items-center pb-2 border-b border-slate-200">
                       <span className="font-extrabold text-orange-500 text-[10px] font-mono">Package Item #{idx + 1}</span>
                       <div className="flex items-center gap-1.5">
-                        {/* Order up / down buttons */}
                         <button
                           type="button"
-                          disabled={idx === 0}
                           onClick={() => {
                             const copy = [...tempBoxContents];
-                            const prevItem = copy[idx - 1];
-                            const currentItem = copy[idx];
-                            const tempOrder = prevItem.displayOrder;
-                            prevItem.displayOrder = currentItem.displayOrder;
-                            currentItem.displayOrder = tempOrder;
-                            setTempBoxContents(copy);
+                            const updatedItem = { ...item, enabled: !item.enabled };
+                            setTempBoxContents(copy.map(b => b.id === item.id ? updatedItem : b));
                           }}
-                          className="text-slate-400 hover:text-slate-700 disabled:opacity-30 font-bold cursor-pointer"
-                          title="Move Up"
+                          className={`px-2 py-0.5 rounded text-[8px] font-black uppercase cursor-pointer ${
+                            item.enabled !== false ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                          }`}
                         >
-                          ▲
-                        </button>
-                        <button
-                          type="button"
-                          disabled={idx === tempBoxContents.length - 1}
-                          onClick={() => {
-                            const copy = [...tempBoxContents];
-                            const nextItem = copy[idx + 1];
-                            const currentItem = copy[idx];
-                            const tempOrder = nextItem.displayOrder;
-                            nextItem.displayOrder = currentItem.displayOrder;
-                            currentItem.displayOrder = tempOrder;
-                            setTempBoxContents(copy);
-                          }}
-                          className="text-slate-400 hover:text-slate-700 disabled:opacity-30 font-bold cursor-pointer"
-                          title="Move Down"
-                        >
-                          ▼
+                          {item.enabled !== false ? "ON" : "OFF"}
                         </button>
                         <button
                           type="button"
@@ -2570,47 +2648,112 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                       </div>
                     </div>
 
-                    <div className="space-y-1">
-                      <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Item Title</span>
-                      <input 
-                        value={item.title}
-                        onChange={(e) => {
-                          const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, title: e.target.value } : b);
-                          setTempBoxContents(updated);
-                        }}
-                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
-                        placeholder="e.g. Premium TPU Case"
-                      />
-                    </div>
+                    {item.enabled !== false && (
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Item Title</span>
+                          <input 
+                            value={item.title}
+                            onChange={(e) => {
+                              const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, title: e.target.value } : b);
+                              setTempBoxContents(updated);
+                            }}
+                            className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
+                            placeholder="e.g. Premium TPU Case"
+                          />
+                        </div>
 
-                    <div className="space-y-1">
-                      <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Description (Optional)</span>
-                      <input 
-                        value={item.description || ""}
-                        onChange={(e) => {
-                          const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, description: e.target.value } : b);
-                          setTempBoxContents(updated);
-                        }}
-                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none"
-                        placeholder="e.g. Ultra thin clear protection sleeve"
-                      />
-                    </div>
+                        <div className="space-y-1">
+                          <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Description (Optional)</span>
+                          <input 
+                            value={item.description || ""}
+                            onChange={(e) => {
+                              const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, description: e.target.value } : b);
+                              setTempBoxContents(updated);
+                            }}
+                            className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none"
+                            placeholder="e.g. Ultra thin clear protection sleeve"
+                          />
+                        </div>
 
-                    <div className="space-y-1">
-                      <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Feature Icon Symbol</span>
-                      <select
-                        value={item.icon || "Box"}
-                        onChange={(e) => {
-                          const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, icon: e.target.value } : b);
-                          setTempBoxContents(updated);
-                        }}
-                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] font-bold outline-none"
-                      >
-                        {["Box", "Cable", "Battery", "Sparkles", "Smartphone", "Heart", "Shield", "Zap", "Award", "Clock"].map(ico => (
-                          <option key={ico} value={ico}>{ico}</option>
-                        ))}
-                      </select>
-                    </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Feature Icon Symbol</span>
+                            <select
+                              value={item.icon || "Box"}
+                              onChange={(e) => {
+                                const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, icon: e.target.value } : b);
+                                setTempBoxContents(updated);
+                              }}
+                              className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] font-bold outline-none"
+                            >
+                              {["Box", "Cable", "Battery", "Sparkles", "Smartphone", "Heart", "Shield", "Zap", "Award", "Clock"].map(ico => (
+                                <option key={ico} value={ico}>{ico}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Badge Tag (Optional)</span>
+                            <input 
+                              value={item.badge || ""}
+                              onChange={(e) => {
+                                const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, badge: e.target.value } : b);
+                                setTempBoxContents(updated);
+                              }}
+                              className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
+                              placeholder="e.g. Limited, Hot"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-3 gap-3 items-center pt-2">
+                          <div className="col-span-1 flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id={`inline-isFree-${item.id}`}
+                              checked={item.isFree !== false}
+                              onChange={(e) => {
+                                const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, isFree: e.target.checked } : b);
+                                setTempBoxContents(updated);
+                              }}
+                              className="rounded text-orange-500 focus:ring-orange-500 w-4 h-4 cursor-pointer"
+                            />
+                            <label htmlFor={`inline-isFree-${item.id}`} className="text-[10px] font-black uppercase font-mono tracking-tight cursor-pointer select-none">
+                              Free Included
+                            </label>
+                          </div>
+
+                          <div className="col-span-1 space-y-1">
+                            <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Add-on Price (৳)</span>
+                            <input
+                              type="number"
+                              disabled={item.isFree !== false}
+                              value={item.price || 0}
+                              onChange={(e) => {
+                                const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, price: parseFloat(e.target.value) || 0 } : b);
+                                setTempBoxContents(updated);
+                              }}
+                              className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-xs text-[#1A1A2E] outline-none disabled:opacity-50"
+                              placeholder="0"
+                            />
+                          </div>
+
+                          <div className="col-span-1 space-y-1">
+                            <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Sort Rank</span>
+                            <input
+                              type="number"
+                              value={item.sortOrder || 0}
+                              onChange={(e) => {
+                                const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, sortOrder: parseInt(e.target.value) || 0 } : b);
+                                setTempBoxContents(updated);
+                              }}
+                              className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-xs text-[#1A1A2E] outline-none"
+                              placeholder="0"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2623,6 +2766,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                     title: "Complimentary Adapter",
                     icon: "Zap",
                     description: "33W Super Fast charger plug included",
+                    isFree: true,
+                    enabled: true,
+                    sortOrder: tempBoxContents.length,
                     displayOrder: tempBoxContents.length + 1
                   };
                   setTempBoxContents([...tempBoxContents, fresh]);
@@ -2689,15 +2835,31 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                               }
                             })()}
                           </div>
-                          <div className="space-y-1 text-left min-w-0">
-                            <h4 className="text-xs font-black uppercase text-[#1A1A2E] tracking-wider truncate leading-tight">
-                              {item.title}
-                            </h4>
+                          <div className="space-y-1 text-left min-w-0 flex-grow">
+                            <div className="flex flex-wrap items-center gap-1">
+                              <h4 className="text-xs font-black uppercase text-[#1A1A2E] tracking-wider truncate leading-tight">
+                                {item.title}
+                              </h4>
+                              {item.badge && (
+                                <span className="bg-orange-100 text-orange-700 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md">
+                                  {item.badge}
+                                </span>
+                              )}
+                            </div>
                             {item.description && (
                               <p className="text-[11px] text-slate-500 font-light leading-snug">
                                 {item.description}
                               </p>
                             )}
+                            <div className="pt-1 flex items-center gap-1.5 text-[9px] font-black uppercase font-mono">
+                              {item.isFree ? (
+                                <span className="text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded">Free</span>
+                              ) : (
+                                <span className="text-slate-500 bg-slate-100 px-1 py-0.5 rounded">
+                                  +৳{item.price || 0}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}
@@ -2718,7 +2880,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                 Visual Sourcing Storyboards
               </span>
               <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E]">
-                PRODUCT SPOTLIGHT OVERVIEW
+                {overviewSectionLabel.toUpperCase()}
               </h2>
             </div>
             
@@ -2758,24 +2920,51 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
           </div>
 
           {editingSection === "overview" ? (
-            <div className="space-y-4">
-              <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Overview Category Spotlight grids</span>
+            <div className="space-y-6">
+              <div className="bg-orange-50/50 p-4 rounded-2xl border border-orange-100">
+                <span className="text-[10px] uppercase font-black text-orange-600 block font-mono mb-1">Overview Spotlight Custom Section Header Label</span>
+                <input
+                  value={overviewSectionLabel}
+                  onChange={(e) => setOverviewSectionLabel(e.target.value)}
+                  className="w-full bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-orange-500"
+                  placeholder="Section Title Label"
+                />
+              </div>
               
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Spotlight Blocks ({tempOverview.length})</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (category) {
+                      setTempOverview(getTemplateForCategory(category));
+                      triggerToast('✓ Category preloader templates reset successfully!');
+                    } else {
+                      triggerToast('⚠️ Please assign a product category first!');
+                    }
+                  }}
+                  className="text-xs text-orange-500 hover:underline flex items-center gap-1 font-bold uppercase tracking-wider bg-transparent border-0 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Load/Reset Template
+                </button>
+              </div>
+
               <div className="space-y-4 max-h-[400px] overflow-y-auto no-scrollbar pr-1">
                 {tempOverview.map((blk, idx) => (
-                  <div key={blk.id || idx} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl space-y-3 relative text-left text-xs">
-                    <div className="flex justify-between items-center bg-white p-2 rounded-xl border border-slate-150">
-                      <input 
+                  <div key={blk.id || idx} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl space-y-4 relative text-left text-xs">
+                    <div className="flex justify-between items-center bg-white p-2.5 rounded-xl border border-slate-200">
+                      <input
                         value={blk.title}
                         onChange={(e) => {
                           const copy = [...tempOverview];
                           copy[idx].title = e.target.value;
                           setTempOverview(copy);
                         }}
-                        className="font-extrabold text-orange-600 uppercase tracking-tight bg-transparent border-none outline-none py-0.5 focus:bg-slate-50 rounded px-1"
+                        className="font-extrabold text-orange-600 uppercase tracking-tight bg-transparent border-none outline-none py-0.5 focus:bg-slate-50 rounded px-1 flex-grow"
                         placeholder="Block Title"
                       />
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 ml-2">
                         <button 
                           type="button"
                           onClick={() => {
@@ -2800,44 +2989,95 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                     </div>
 
                     {blk.enabled && (
-                      <div className="space-y-2 text-[10px]">
-                        <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Highlight Bullets List</span>
-                        {blk.bullets.map((bullet, bIdx) => (
-                          <div key={bIdx} className="flex gap-1.5">
-                            <input 
-                              value={bullet}
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Rich Text Content/Body Description</span>
+                          <textarea
+                            value={blk.content || ""}
+                            onChange={(e) => {
+                              const copy = [...tempOverview];
+                              copy[idx].content = e.target.value;
+                              setTempOverview(copy);
+                            }}
+                            rows={3}
+                            className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none"
+                            placeholder="Add rich description detail paragraphs here..."
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Section List Style</span>
+                            <select
+                              value={blk.listStyle || 'bullet'}
                               onChange={(e) => {
                                 const copy = [...tempOverview];
-                                copy[idx].bullets[bIdx] = e.target.value;
+                                copy[idx].listStyle = e.target.value as any;
                                 setTempOverview(copy);
                               }}
-                              className="flex-grow bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 uppercase font-bold"
+                              className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 text-xs text-[#1A1A2E] outline-none font-bold"
+                            >
+                              <option value="none">None (Paragraph only)</option>
+                              <option value="bullet">Bullet Checklist (✓)</option>
+                              <option value="numbered">Numbered Process (1, 2, 3)</option>
+                            </select>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Sort Rank</span>
+                            <input
+                              type="number"
+                              value={blk.sortOrder || 0}
+                              onChange={(e) => {
+                                const copy = [...tempOverview];
+                                copy[idx].sortOrder = parseInt(e.target.value) || 0;
+                                setTempOverview(copy);
+                              }}
+                              className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 text-xs text-[#1A1A2E] outline-none"
                             />
+                          </div>
+                        </div>
+
+                        {blk.listStyle !== 'none' && (
+                          <div className="space-y-2 text-[10px] bg-slate-50 p-3 rounded-xl border border-slate-200">
+                            <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">List Elements / Bullet Items</span>
+                            {blk.bullets.map((bullet, bIdx) => (
+                              <div key={bIdx} className="flex gap-1.5">
+                                <input 
+                                  value={bullet}
+                                  onChange={(e) => {
+                                    const copy = [...tempOverview];
+                                    copy[idx].bullets[bIdx] = e.target.value;
+                                    setTempOverview(copy);
+                                  }}
+                                  className="flex-grow bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 uppercase font-bold"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const copy = [...tempOverview];
+                                    copy[idx].bullets = copy[idx].bullets.filter((_, bSub) => bSub !== bIdx);
+                                    setTempOverview(copy);
+                                  }}
+                                  className="text-red-500 hover:text-red-700 font-bold font-mono px-1 cursor-pointer"
+                                >
+                                  x
+                                </button>
+                              </div>
+                            ))}
+
                             <button
                               type="button"
                               onClick={() => {
                                 const copy = [...tempOverview];
-                                copy[idx].bullets = copy[idx].bullets.filter((_, bSub) => bSub !== bIdx);
+                                copy[idx].bullets.push("NEW LIST POINTER VALUE");
                                 setTempOverview(copy);
                               }}
-                              className="text-red-500 hover:text-red-700 font-bold font-mono px-1 cursor-pointer"
+                              className="text-orange-500 hover:underline text-[9px] font-black uppercase tracking-wider block pt-1 text-left cursor-pointer bg-transparent border-0"
                             >
-                              x
+                              + Add List Line Item
                             </button>
                           </div>
-                        ))}
-
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const copy = [...tempOverview];
-                            copy[idx].bullets.push("NEW BULLET POINTER VALUE");
-                            setTempOverview(copy);
-                          }}
-                          className="text-orange-500 hover:underline text-[9.5px] font-black uppercase tracking-wider block pt-1 text-left cursor-pointer"
-                        >
-                          + ADD UNIQUE BULLET BLOCK
-                        </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2847,11 +3087,14 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
               <button
                 type="button"
                 onClick={() => {
-                  const fresh: OverviewBlock = {
+                  const fresh: OverviewSection = {
                     id: `ob-${Date.now()}`,
                     title: "New Spotlight Block",
+                    content: "",
                     bullets: ["FIRST DEFAULT VALUE BENCHMARK PRO"],
-                    enabled: true
+                    listStyle: 'bullet',
+                    enabled: true,
+                    sortOrder: tempOverview.length
                   };
                   setTempOverview([...tempOverview, fresh]);
                 }}
@@ -2896,14 +3139,25 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                             <Sparkles className="w-4 h-4 text-orange-500" />
                             {blk.title}
                           </h3>
-                          <ul className="space-y-2">
-                            {blk.bullets.map((bullet, i) => (
-                              <li key={i} className="text-xs text-slate-600 font-bold flex items-start gap-2 uppercase tracking-tight">
-                                <span className="text-emerald-500 mt-0.5 select-none shrink-0 font-bold">✓</span>
-                                <span>{bullet}</span>
-                              </li>
-                            ))}
-                          </ul>
+                          {blk.content && (
+                            <p className="text-xs text-slate-700 leading-relaxed font-medium mb-4 whitespace-pre-wrap">
+                              {blk.content}
+                            </p>
+                          )}
+                          {blk.listStyle !== 'none' && blk.bullets && blk.bullets.length > 0 && (
+                            <ul className="space-y-2">
+                              {blk.bullets.map((bullet, i) => (
+                                <li key={i} className="text-xs text-slate-600 font-bold flex items-start gap-2 uppercase tracking-tight">
+                                  {blk.listStyle === 'numbered' ? (
+                                    <span className="text-orange-500 mt-0.5 select-none shrink-0 font-black">{i + 1}.</span>
+                                  ) : (
+                                    <span className="text-emerald-500 mt-0.5 select-none shrink-0 font-bold">✓</span>
+                                  )}
+                                  <span>{bullet}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -3618,15 +3872,51 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
                   {/* FORM 6: PRODUCT OVERVIEW */}
                   {activeDrawer === "overview" && (
-                    <div className="space-y-4">
-                      <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Overview Category Spotlight grids</span>
+                    <div className="space-y-6">
+                      <div className="bg-orange-50/50 p-4 rounded-2xl border border-orange-100">
+                        <span className="text-[10px] uppercase font-black text-orange-600 block font-mono mb-1">Overview Spotlight Custom Section Header Label</span>
+                        <input
+                          value={overviewSectionLabel}
+                          onChange={(e) => setOverviewSectionLabel(e.target.value)}
+                          className="w-full bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs font-bold outline-none focus:border-orange-500"
+                          placeholder="Section Title Label"
+                        />
+                      </div>
                       
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Spotlight Blocks ({tempOverview.length})</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (category) {
+                              setTempOverview(getTemplateForCategory(category));
+                              triggerToast('✓ Category preloader templates reset successfully!');
+                            } else {
+                              triggerToast('⚠️ Please assign a product category first!');
+                            }
+                          }}
+                          className="text-xs text-orange-500 hover:underline flex items-center gap-1 font-bold uppercase tracking-wider bg-transparent border-0 cursor-pointer"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Load/Reset Template
+                        </button>
+                      </div>
+
                       <div className="space-y-4">
                         {tempOverview.map((blk, idx) => (
-                          <div key={blk.id || idx} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl space-y-3 relative text-left text-xs">
-                            <div className="flex justify-between items-center bg-white p-2 rounded-xl border border-slate-150">
-                              <span className="font-extrabold text-orange-600 uppercase tracking-tight">{blk.title}</span>
-                              <div className="flex items-center gap-1.5">
+                          <div key={blk.id || idx} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl space-y-4 relative text-left text-xs">
+                            <div className="flex justify-between items-center bg-white p-2.5 rounded-xl border border-slate-200">
+                              <input
+                                value={blk.title}
+                                onChange={(e) => {
+                                  const copy = [...tempOverview];
+                                  copy[idx].title = e.target.value;
+                                  setTempOverview(copy);
+                                }}
+                                className="font-extrabold text-orange-600 uppercase tracking-tight bg-transparent border-none outline-none py-0.5 focus:bg-slate-50 rounded px-1 flex-grow"
+                                placeholder="Block Title"
+                              />
+                              <div className="flex items-center gap-1.5 ml-2">
                                 <button 
                                   type="button"
                                   onClick={() => {
@@ -3634,7 +3924,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                                     copy[idx].enabled = !copy[idx].enabled;
                                     setTempOverview(copy);
                                   }}
-                                  className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                                  className={`px-2 py-0.5 rounded text-[8px] font-black uppercase cursor-pointer ${
                                     blk.enabled ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
                                   }`}
                                 >
@@ -3643,7 +3933,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                                 <button
                                   type="button"
                                   onClick={() => setTempOverview(tempOverview.filter((_, i) => i !== idx))}
-                                  className="text-red-500 hover:text-red-700 font-bold ml-1"
+                                  className="text-red-500 hover:text-red-700 font-bold ml-1 cursor-pointer"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
@@ -3651,44 +3941,95 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                             </div>
 
                             {blk.enabled && (
-                              <div className="space-y-2 text-[10px]">
-                                <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Highlight Bullets List</span>
-                                {blk.bullets.map((bullet, bIdx) => (
-                                  <div key={bIdx} className="flex gap-1.5">
-                                    <input 
-                                      value={bullet}
+                              <div className="space-y-3">
+                                <div className="space-y-1">
+                                  <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Rich Text Content/Body Description</span>
+                                  <textarea
+                                    value={blk.content || ""}
+                                    onChange={(e) => {
+                                      const copy = [...tempOverview];
+                                      copy[idx].content = e.target.value;
+                                      setTempOverview(copy);
+                                    }}
+                                    rows={3}
+                                    className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none"
+                                    placeholder="Add rich description detail paragraphs here..."
+                                  />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="space-y-1">
+                                    <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Section List Style</span>
+                                    <select
+                                      value={blk.listStyle || 'bullet'}
                                       onChange={(e) => {
                                         const copy = [...tempOverview];
-                                        copy[idx].bullets[bIdx] = e.target.value;
+                                        copy[idx].listStyle = e.target.value as any;
                                         setTempOverview(copy);
                                       }}
-                                      className="flex-grow bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 uppercase font-bold"
+                                      className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 text-xs text-[#1A1A2E] outline-none font-bold"
+                                    >
+                                      <option value="none">None (Paragraph only)</option>
+                                      <option value="bullet">Bullet Checklist (✓)</option>
+                                      <option value="numbered">Numbered Process (1, 2, 3)</option>
+                                    </select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Sort Rank</span>
+                                    <input
+                                      type="number"
+                                      value={blk.sortOrder || 0}
+                                      onChange={(e) => {
+                                        const copy = [...tempOverview];
+                                        copy[idx].sortOrder = parseInt(e.target.value) || 0;
+                                        setTempOverview(copy);
+                                      }}
+                                      className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 text-xs text-[#1A1A2E] outline-none"
                                     />
+                                  </div>
+                                </div>
+
+                                {blk.listStyle !== 'none' && (
+                                  <div className="space-y-2 text-[10px] bg-slate-50 p-3 rounded-xl border border-slate-200">
+                                    <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">List Elements / Bullet Items</span>
+                                    {blk.bullets.map((bullet, bIdx) => (
+                                      <div key={bIdx} className="flex gap-1.5">
+                                        <input 
+                                          value={bullet}
+                                          onChange={(e) => {
+                                            const copy = [...tempOverview];
+                                            copy[idx].bullets[bIdx] = e.target.value;
+                                            setTempOverview(copy);
+                                          }}
+                                          className="flex-grow bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 uppercase font-bold"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            const copy = [...tempOverview];
+                                            copy[idx].bullets = copy[idx].bullets.filter((_, bSub) => bSub !== bIdx);
+                                            setTempOverview(copy);
+                                          }}
+                                          className="text-red-500 hover:text-red-700 font-bold font-mono px-1 cursor-pointer"
+                                        >
+                                          x
+                                        </button>
+                                      </div>
+                                    ))}
+
                                     <button
                                       type="button"
                                       onClick={() => {
                                         const copy = [...tempOverview];
-                                        copy[idx].bullets = copy[idx].bullets.filter((_, bSub) => bSub !== bIdx);
+                                        copy[idx].bullets.push("NEW LIST POINTER VALUE");
                                         setTempOverview(copy);
                                       }}
-                                      className="text-red-500 hover:text-red-700 font-bold font-mono px-1"
+                                      className="text-orange-500 hover:underline text-[9px] font-black uppercase tracking-wider block pt-1 text-left cursor-pointer bg-transparent border-0"
                                     >
-                                      x
+                                      + Add List Line Item
                                     </button>
                                   </div>
-                                ))}
-
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const copy = [...tempOverview];
-                                    copy[idx].bullets.push("NEW BULLET POINTER VALUE");
-                                    setTempOverview(copy);
-                                  }}
-                                  className="text-orange-500 hover:underline text-[9.5px] font-black uppercase tracking-wider block pt-1 text-left"
-                                >
-                                  + ADD UNIQUE BULLET BLOCK
-                                </button>
+                                )}
                               </div>
                             )}
                           </div>
@@ -3698,11 +4039,14 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                       <button
                         type="button"
                         onClick={() => {
-                          const fresh: OverviewBlock = {
+                          const fresh: OverviewSection = {
                             id: `ob-${Date.now()}`,
                             title: "New Spotlight Block",
+                            content: "",
                             bullets: ["FIRST DEFAULT VALUE BENCHMARK PRO"],
-                            enabled: true
+                            listStyle: 'bullet',
+                            enabled: true,
+                            sortOrder: tempOverview.length
                           };
                           setTempOverview([...tempOverview, fresh]);
                         }}
@@ -3710,7 +4054,6 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                       >
                         + Add Spotlight Story block
                       </button>
-
                     </div>
                   )}
 
@@ -3790,49 +4133,27 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                     <div className="space-y-4">
                       <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Box contents & free features</span>
                       <p className="text-[10.5px] italic text-slate-500 leading-normal">
-                        Add items included in the purchase package. Customize optional icons, descriptions and display orders.
+                        Add items included in the purchase package. Customize optional icons, descriptions, prices and badges.
                       </p>
 
                       <div className="space-y-4 pr-1">
-                        {tempBoxContents.sort((a,b) => a.displayOrder - b.displayOrder).map((item, idx) => (
-                          <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-3.5 rounded-2xl relative text-left text-xs space-y-2.5">
+                        {tempBoxContents.map((item, idx) => (
+                          <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl relative text-left text-xs space-y-3">
                             <div className="flex justify-between items-center pb-2 border-b border-slate-200">
                               <span className="font-extrabold text-orange-500 text-[10px] font-mono">Package Item #{idx + 1}</span>
                               <div className="flex items-center gap-1.5">
-                                {/* Order up / down buttons */}
                                 <button
                                   type="button"
-                                  disabled={idx === 0}
                                   onClick={() => {
                                     const copy = [...tempBoxContents];
-                                    const prevItem = copy[idx - 1];
-                                    const currentItem = copy[idx];
-                                    const tempOrder = prevItem.displayOrder;
-                                    prevItem.displayOrder = currentItem.displayOrder;
-                                    currentItem.displayOrder = tempOrder;
-                                    setTempBoxContents(copy);
+                                    const updatedItem = { ...item, enabled: !item.enabled };
+                                    setTempBoxContents(copy.map(b => b.id === item.id ? updatedItem : b));
                                   }}
-                                  className="text-slate-400 hover:text-slate-700 disabled:opacity-30 font-bold cursor-pointer"
-                                  title="Move Up"
+                                  className={`px-2 py-0.5 rounded text-[8px] font-black uppercase cursor-pointer ${
+                                    item.enabled !== false ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                                  }`}
                                 >
-                                  ▲
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={idx === tempBoxContents.length - 1}
-                                  onClick={() => {
-                                    const copy = [...tempBoxContents];
-                                    const nextItem = copy[idx + 1];
-                                    const currentItem = copy[idx];
-                                    const tempOrder = nextItem.displayOrder;
-                                    nextItem.displayOrder = currentItem.displayOrder;
-                                    currentItem.displayOrder = tempOrder;
-                                    setTempBoxContents(copy);
-                                  }}
-                                  className="text-slate-400 hover:text-slate-700 disabled:opacity-30 font-bold cursor-pointer"
-                                  title="Move Down"
-                                >
-                                  ▼
+                                  {item.enabled !== false ? "ON" : "OFF"}
                                 </button>
                                 <button
                                   type="button"
@@ -3845,47 +4166,112 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                               </div>
                             </div>
 
-                            <div className="space-y-1">
-                              <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Item Title</span>
-                              <input 
-                                value={item.title}
-                                onChange={(e) => {
-                                  const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, title: e.target.value } : b);
-                                  setTempBoxContents(updated);
-                                }}
-                                className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
-                                placeholder="e.g. Premium TPU Case"
-                              />
-                            </div>
+                            {item.enabled !== false && (
+                              <div className="space-y-3">
+                                <div className="space-y-1">
+                                  <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Item Title</span>
+                                  <input 
+                                    value={item.title}
+                                    onChange={(e) => {
+                                      const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, title: e.target.value } : b);
+                                      setTempBoxContents(updated);
+                                    }}
+                                    className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
+                                    placeholder="e.g. Premium TPU Case"
+                                  />
+                                </div>
 
-                            <div className="space-y-1">
-                              <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Description (Optional)</span>
-                              <input 
-                                value={item.description || ""}
-                                onChange={(e) => {
-                                  const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, description: e.target.value } : b);
-                                  setTempBoxContents(updated);
-                                }}
-                                className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none"
-                                placeholder="e.g. Ultra thin clear protection sleeve"
-                              />
-                            </div>
+                                <div className="space-y-1">
+                                  <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Description (Optional)</span>
+                                  <input 
+                                    value={item.description || ""}
+                                    onChange={(e) => {
+                                      const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, description: e.target.value } : b);
+                                      setTempBoxContents(updated);
+                                    }}
+                                    className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none"
+                                    placeholder="e.g. Ultra thin clear protection sleeve"
+                                  />
+                                </div>
 
-                            <div className="space-y-1">
-                              <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Feature Icon Symbol</span>
-                              <select
-                                value={item.icon || "Box"}
-                                onChange={(e) => {
-                                  const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, icon: e.target.value } : b);
-                                  setTempBoxContents(updated);
-                                }}
-                                className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] font-bold outline-none"
-                              >
-                                {["Box", "Cable", "Battery", "Sparkles", "Smartphone", "Heart", "Shield", "Zap", "Award", "Clock"].map(ico => (
-                                  <option key={ico} value={ico}>{ico}</option>
-                                ))}
-                              </select>
-                            </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div className="space-y-1">
+                                    <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Feature Icon Symbol</span>
+                                    <select
+                                      value={item.icon || "Box"}
+                                      onChange={(e) => {
+                                        const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, icon: e.target.value } : b);
+                                        setTempBoxContents(updated);
+                                      }}
+                                      className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] font-bold outline-none"
+                                    >
+                                      {["Box", "Cable", "Battery", "Sparkles", "Smartphone", "Heart", "Shield", "Zap", "Award", "Clock"].map(ico => (
+                                        <option key={ico} value={ico}>{ico}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className="space-y-1">
+                                    <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Badge Tag (Optional)</span>
+                                    <input 
+                                      value={item.badge || ""}
+                                      onChange={(e) => {
+                                        const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, badge: e.target.value } : b);
+                                        setTempBoxContents(updated);
+                                      }}
+                                      className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
+                                      placeholder="e.g. Limited, Hot"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-3 gap-3 items-center pt-2">
+                                  <div className="col-span-1 flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`drawer-isFree-${item.id}`}
+                                      checked={item.isFree !== false}
+                                      onChange={(e) => {
+                                        const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, isFree: e.target.checked } : b);
+                                        setTempBoxContents(updated);
+                                      }}
+                                      className="rounded text-orange-500 focus:ring-orange-500 w-4 h-4 cursor-pointer"
+                                    />
+                                    <label htmlFor={`drawer-isFree-${item.id}`} className="text-[10px] font-black uppercase font-mono tracking-tight cursor-pointer select-none">
+                                      Free Included
+                                    </label>
+                                  </div>
+
+                                  <div className="col-span-1 space-y-1">
+                                    <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Add-on Price (৳)</span>
+                                    <input
+                                      type="number"
+                                      disabled={item.isFree !== false}
+                                      value={item.price || 0}
+                                      onChange={(e) => {
+                                        const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, price: parseFloat(e.target.value) || 0 } : b);
+                                        setTempBoxContents(updated);
+                                      }}
+                                      className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-xs text-[#1A1A2E] outline-none disabled:opacity-50"
+                                      placeholder="0"
+                                    />
+                                  </div>
+
+                                  <div className="col-span-1 space-y-1">
+                                    <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Sort Rank</span>
+                                    <input
+                                      type="number"
+                                      value={item.sortOrder || 0}
+                                      onChange={(e) => {
+                                        const updated = tempBoxContents.map(b => b.id === item.id ? { ...b, sortOrder: parseInt(e.target.value) || 0 } : b);
+                                        setTempBoxContents(updated);
+                                      }}
+                                      className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-xs text-[#1A1A2E] outline-none"
+                                      placeholder="0"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -3898,6 +4284,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                             title: "Complimentary Adapter",
                             icon: "Zap",
                             description: "33W Super Fast charger plug included",
+                            isFree: true,
+                            enabled: true,
+                            sortOrder: tempBoxContents.length,
                             displayOrder: tempBoxContents.length + 1
                           };
                           setTempBoxContents([...tempBoxContents, fresh]);

@@ -1,0 +1,567 @@
+import React, { useState, useEffect } from 'react';
+import { LogisticsService } from '../../../services/logistics/LogisticsService';
+import { Shipment, ShipmentStatus } from '../../../types/shipment';
+import { 
+  Package, 
+  Search, 
+  Filter, 
+  Calendar, 
+  Truck, 
+  Clock, 
+  CheckCircle, 
+  XCircle, 
+  RefreshCw, 
+  Download,
+  AlertTriangle,
+  User,
+  MapPin,
+  ExternalLink,
+  Printer,
+  Ban,
+  Boxes,
+  HelpCircle
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+
+export default function ShipmentConsole() {
+  const logisticsService = LogisticsService.getInstance();
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+  const [selectedCourier, setSelectedCourier] = useState<string>('all');
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+
+  // Batch Selection State
+  const [selectedShipmentIds, setSelectedShipmentIds] = useState<string[]>([]);
+  const [batchActionRunning, setBatchActionRunning] = useState(false);
+  const [batchStatusMsg, setBatchStatusMsg] = useState<string | null>(null);
+
+  // Load shipments on mount
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const data = await logisticsService.getShipments();
+      setShipments(data);
+    } catch (err) {
+      console.error('Failed to load shipments:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const handleSyncTracking = async (shipmentId: string) => {
+    setSyncingId(shipmentId);
+    try {
+      const updated = await logisticsService.syncTracking(shipmentId);
+      setShipments(prev => prev.map(s => s.id === shipmentId ? updated : s));
+    } catch (err) {
+      console.error('Sync failed:', err);
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
+  const handleDownloadLabel = async (shipmentId: string) => {
+    try {
+      const blob = await logisticsService.generateLabel(shipmentId, 'pdf');
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Label-${shipmentId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    } catch (err) {
+      console.error('Failed to download label:', err);
+    }
+  };
+
+  // Selection helpers
+  const handleToggleSelectRow = (id: string) => {
+    setSelectedShipmentIds(prev => 
+      prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]
+    );
+  };
+
+  const handleToggleSelectAll = (filteredRows: Shipment[]) => {
+    const allFilteredIds = filteredRows.map(r => r.id);
+    const areAllSelected = allFilteredIds.every(id => selectedShipmentIds.includes(id));
+    
+    if (areAllSelected) {
+      // Unselect all filtered rows
+      setSelectedShipmentIds(prev => prev.filter(id => !allFilteredIds.includes(id)));
+    } else {
+      // Select all filtered rows (add them to already selected if not there)
+      setSelectedShipmentIds(prev => {
+        const union = new Set([...prev, ...allFilteredIds]);
+        return Array.from(union);
+      });
+    }
+  };
+
+  // BATCH ACTIONS
+  const handleBatchSchedulePickup = async () => {
+    if (selectedShipmentIds.length === 0) return;
+    setBatchActionRunning(true);
+    setBatchStatusMsg(`Requesting courier pickup dispatch for ${selectedShipmentIds.length} parcels...`);
+
+    let successCount = 0;
+    for (const id of selectedShipmentIds) {
+      const shipment = shipments.find(s => s.id === id);
+      if (shipment && shipment.status === 'pending_pickup') {
+        try {
+          await logisticsService.requestPickup(id);
+          successCount++;
+        } catch (err) {
+          console.warn(`Failed batch pickup request for shipment ${id}`, err);
+        }
+      }
+    }
+
+    setBatchStatusMsg(`Successfully scheduled pickup for ${successCount} shipments.`);
+    setTimeout(() => {
+      setBatchStatusMsg(null);
+      setSelectedShipmentIds([]);
+      setBatchActionRunning(false);
+      loadData();
+    }, 2000);
+  };
+
+  const handleBatchDownloadLabels = async () => {
+    if (selectedShipmentIds.length === 0) return;
+    setBatchActionRunning(true);
+    setBatchStatusMsg(`Generating bundled waybills for ${selectedShipmentIds.length} parcels...`);
+
+    try {
+      // Download waybills one-by-one or in sequence in sandbox mode
+      for (const id of selectedShipmentIds) {
+        await handleDownloadLabel(id);
+      }
+      setBatchStatusMsg(`Downloaded ${selectedShipmentIds.length} shipping label waybills!`);
+    } catch (err) {
+      console.error(err);
+      setBatchStatusMsg('Finished printing shipping labels.');
+    }
+
+    setTimeout(() => {
+      setBatchStatusMsg(null);
+      setSelectedShipmentIds([]);
+      setBatchActionRunning(false);
+    }, 2000);
+  };
+
+  const handleBatchSyncTracking = async () => {
+    if (selectedShipmentIds.length === 0) return;
+    setBatchActionRunning(true);
+    setBatchStatusMsg(`Syncing logistics checkpoints from carrier nodes for ${selectedShipmentIds.length} parcels...`);
+
+    let successCount = 0;
+    for (const id of selectedShipmentIds) {
+      try {
+        await logisticsService.syncTracking(id);
+        successCount++;
+      } catch (err) {
+        console.warn(`Sync failed for shipment ${id}`, err);
+      }
+    }
+
+    setBatchStatusMsg(`Synchronized checkpoint history for ${successCount} shipments!`);
+    setTimeout(() => {
+      setBatchStatusMsg(null);
+      setSelectedShipmentIds([]);
+      setBatchActionRunning(false);
+      loadData();
+    }, 2000);
+  };
+
+  const handleBatchCancel = async () => {
+    if (selectedShipmentIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to CANCEL all ${selectedShipmentIds.length} selected shipments?`)) return;
+
+    setBatchActionRunning(true);
+    setBatchStatusMsg(`Sending cancellation codes to courier APIs for ${selectedShipmentIds.length} shipments...`);
+
+    let successCount = 0;
+    for (const id of selectedShipmentIds) {
+      try {
+        await logisticsService.cancelShipment(id, 'Batch cancellation requested from admin dashboard.');
+        successCount++;
+      } catch (err) {
+        console.warn(`Cancellation failed for shipment ${id}`, err);
+      }
+    }
+
+    setBatchStatusMsg(`Cancelled ${successCount} shipments.`);
+    setTimeout(() => {
+      setBatchStatusMsg(null);
+      setSelectedShipmentIds([]);
+      setBatchActionRunning(false);
+      loadData();
+    }, 2000);
+  };
+
+  // Filter logic
+  const filteredShipments = shipments.filter(s => {
+    const matchesSearch = 
+      s.trackingNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.orderId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.customerContact.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.sellerContact.name.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesStatus = selectedStatus === 'all' || s.status === selectedStatus;
+    const matchesCourier = selectedCourier === 'all' || s.courier.code === selectedCourier;
+
+    return matchesSearch && matchesStatus && matchesCourier;
+  });
+
+  // Calculate metrics
+  const totalCount = filteredShipments.length;
+  const inTransitCount = filteredShipments.filter(s => s.status === 'in_transit').length;
+  const deliveredCount = filteredShipments.filter(s => s.status === 'delivered').length;
+  const pendingPickupCount = filteredShipments.filter(s => s.status === 'pending_pickup').length;
+  const failedCount = filteredShipments.filter(s => s.status === 'failed_delivery' || s.status === 'delivery_failed').length;
+
+  return (
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900 tracking-tight flex items-center gap-2">
+          <Package className="h-6 w-6 text-indigo-600" />
+          Shipment Console
+        </h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Monitor dispatch operations, trace waybills, sync carrier checkpoints, and manage consignment status in batch.
+        </p>
+      </div>
+
+      {/* Metrics Banner */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        {[
+          { label: 'Total Shipments', val: totalCount, icon: Package, col: 'indigo' },
+          { label: 'Pending Pickup', val: pendingPickupCount, icon: Clock, col: 'amber' },
+          { label: 'In Transit', val: inTransitCount, icon: Truck, col: 'blue' },
+          { label: 'Delivered', val: deliveredCount, icon: CheckCircle, col: 'emerald' },
+          { label: 'Failed Delivery', val: failedCount, icon: AlertTriangle, col: 'rose' }
+        ].map((m, idx) => (
+          <div key={idx} className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-3">
+            <div className={`p-2 rounded-lg bg-${m.col}-50 text-${m.col}-600 border border-${m.col}-100`}>
+              <m.icon className="h-5 w-5" />
+            </div>
+            <div>
+              <span className="text-xs text-gray-500 font-medium block uppercase tracking-wider">{m.label}</span>
+              <span className="text-xl font-semibold text-gray-900 font-mono">{m.val}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Filter Toolbar */}
+      <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+        {/* Search */}
+        <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-1 max-w-md">
+          <Search className="h-4 w-4 text-gray-400 mr-2" />
+          <input
+            type="text"
+            placeholder="Search by Tracking, Order ID, Customer, or Brand..."
+            className="w-full text-sm outline-none text-gray-700 bg-transparent"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+
+        {/* Dropdowns */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <Filter className="h-3.5 w-3.5 text-gray-400" />
+            <span className="text-xs text-gray-500 font-medium uppercase">Status:</span>
+          </div>
+          <select
+            value={selectedStatus}
+            onChange={(e) => setSelectedStatus(e.target.value)}
+            className="text-xs font-semibold px-2.5 py-1.5 border border-gray-200 rounded-lg bg-white outline-none focus:border-indigo-500 text-gray-700"
+          >
+            <option value="all">All Statuses</option>
+            <option value="pending_pickup">Pending Pickup</option>
+            <option value="picked_up">Picked Up</option>
+            <option value="in_transit">In Transit</option>
+            <option value="delivered">Delivered</option>
+            <option value="failed_delivery">Failed Delivery</option>
+            <option value="returned">Returned</option>
+            <option value="cancelled">Cancelled</option>
+          </select>
+
+          <select
+            value={selectedCourier}
+            onChange={(e) => setSelectedCourier(e.target.value)}
+            className="text-xs font-semibold px-2.5 py-1.5 border border-gray-200 rounded-lg bg-white outline-none focus:border-indigo-500 text-gray-700"
+          >
+            <option value="all">All Carriers</option>
+            <option value="steadfast">Steadfast</option>
+            <option value="pathao">Pathao</option>
+            <option value="redx">REDX</option>
+            <option value="paperfly">Paperfly</option>
+            <option value="ecourier">eCourier</option>
+            <option value="sundarban">Sundarban</option>
+          </select>
+
+          <button
+            onClick={loadData}
+            className="text-xs font-semibold text-gray-700 hover:text-gray-900 border border-gray-200 bg-white hover:bg-gray-50 px-2.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-colors"
+          >
+            <RefreshCw className="h-3 w-3" />
+            Reload Consignments
+          </button>
+        </div>
+      </div>
+
+      {/* Select All Bar */}
+      {filteredShipments.length > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 rounded-lg border border-gray-100 text-xs text-gray-600">
+          <input
+            type="checkbox"
+            className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+            checked={filteredShipments.length > 0 && filteredShipments.every(r => selectedShipmentIds.includes(r.id))}
+            onChange={() => handleToggleSelectAll(filteredShipments)}
+          />
+          <span className="font-semibold text-gray-700">Select All Filtered Shipments ({filteredShipments.length} matching)</span>
+        </div>
+      )}
+
+      {/* Shipment Grid / Table */}
+      {loading ? (
+        <div className="space-y-4 animate-pulse">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="h-32 bg-gray-100 rounded-xl border border-gray-200" />
+          ))}
+        </div>
+      ) : filteredShipments.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
+          <Package className="h-10 w-10 text-gray-400 mx-auto mb-3" />
+          <p className="text-gray-900 font-medium">No shipments match your current criteria.</p>
+          <p className="text-sm text-gray-400 mt-1">Try adjusting the search query or status filter parameters.</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {filteredShipments.map((s) => {
+            const isDelivered = s.status === 'delivered';
+            const isInTransit = s.status === 'in_transit';
+            const isPendingPickup = s.status === 'pending_pickup';
+            const isFailed = s.status === 'failed_delivery' || s.status === 'delivery_failed' || s.status === 'failed';
+            const isSelected = selectedShipmentIds.includes(s.id);
+
+            return (
+              <motion.div
+                key={s.id}
+                initial={{ opacity: 0, y: 5 }}
+                animate={{ opacity: 1, y: 0 }}
+                className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all ${
+                  isSelected ? 'border-indigo-500 ring-1 ring-indigo-500/30' : 'border-gray-200 hover:border-gray-300'
+                }`}
+              >
+                {/* Upper row */}
+                <div className="p-5 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                  
+                  {/* Select Checkbox */}
+                  <div className="md:col-span-0.5 flex justify-center">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 cursor-pointer"
+                      checked={isSelected}
+                      onChange={() => handleToggleSelectRow(s.id)}
+                    />
+                  </div>
+
+                  {/* Waybill / Courier */}
+                  <div className="md:col-span-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 font-semibold uppercase">
+                        {s.courier.name}
+                      </span>
+                      <span className="text-xs text-gray-400 font-mono">#{s.id}</span>
+                    </div>
+                    <div>
+                      <span className="text-xs text-gray-500 block uppercase font-medium">Tracking Code</span>
+                      <p className="font-mono text-sm font-semibold text-gray-900">{s.trackingNumber}</p>
+                    </div>
+                  </div>
+
+                  {/* Order & Seller info */}
+                  <div className="md:col-span-2.5 space-y-1">
+                    <span className="text-xs text-gray-500 block uppercase font-medium">Platform Link</span>
+                    <p className="text-sm font-semibold text-gray-900 flex items-center gap-1">
+                      {s.orderId}
+                    </p>
+                    <span className="text-xs text-indigo-600 bg-indigo-50/50 px-2 py-0.5 rounded border border-indigo-100/50 font-medium inline-block">
+                      Brand: {s.sellerContact.name}
+                    </span>
+                  </div>
+
+                  {/* Customer & Destination */}
+                  <div className="md:col-span-3 space-y-1">
+                    <span className="text-xs text-gray-500 block uppercase font-medium">Delivery Consignee</span>
+                    <p className="text-sm font-semibold text-gray-900 flex items-center gap-1">
+                      <User className="h-3.5 w-3.5 text-gray-400" />
+                      {s.customerContact.name}
+                    </p>
+                    <span className="text-xs text-gray-500 flex items-center gap-1">
+                      <MapPin className="h-3 w-3 text-gray-400" />
+                      {s.deliveryAddress.city}, {s.deliveryAddress.district}
+                    </span>
+                  </div>
+
+                  {/* COD & Weight */}
+                  <div className="md:col-span-1.5 space-y-1 text-left md:text-right">
+                    <span className="text-xs text-gray-500 block uppercase font-medium">COD Amount</span>
+                    <p className="text-sm font-bold text-indigo-700 font-mono">BDT {s.codAmount}</p>
+                    <span className="text-[10px] text-gray-400 block uppercase font-mono">{s.weight} kg • {s.packageType}</span>
+                  </div>
+
+                  {/* Status Indicator */}
+                  <div className="md:col-span-1.5 flex flex-col items-start md:items-end gap-2">
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border ${
+                      isDelivered 
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                        : isInTransit 
+                        ? 'bg-blue-50 text-blue-700 border-blue-200'
+                        : isPendingPickup
+                        ? 'bg-amber-50 text-amber-700 border-amber-200'
+                        : isFailed
+                        ? 'bg-rose-50 text-rose-700 border-rose-200'
+                        : 'bg-gray-50 text-gray-700 border-gray-200'
+                    }`}>
+                      {s.status.toUpperCase().replace('_', ' ')}
+                    </span>
+                    <span className="text-[10px] text-gray-400 block">
+                      {new Date(s.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Lower timeline row / Action panel */}
+                <div className="bg-gray-50/50 px-5 py-3 border-t border-gray-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  {/* Package contents summary */}
+                  <div className="text-xs text-gray-500 flex items-center gap-2">
+                    <span className="font-semibold text-gray-700">Contents:</span>
+                    <span>{s.contents.map(c => `${c.name} (x${c.quantity})`).join(', ')}</span>
+                  </div>
+
+                  {/* Quick actions */}
+                  <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                    <button
+                      onClick={() => handleSyncTracking(s.id)}
+                      disabled={syncingId === s.id}
+                      className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 disabled:opacity-50 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-100 transition-colors"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${syncingId === s.id ? 'animate-spin' : ''}`} />
+                      Sync Courier
+                    </button>
+
+                    <button
+                      onClick={() => handleDownloadLabel(s.id)}
+                      className="text-xs font-semibold text-gray-700 hover:text-gray-900 flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-gray-50 rounded-lg border border-gray-200 shadow-sm transition-colors"
+                    >
+                      <Download className="h-3 w-3 text-gray-400" />
+                      Waybill PDF
+                    </button>
+                  </div>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* FLOATING ACTION BAR FOR BATCH OPERATIONS */}
+      <AnimatePresence>
+        {selectedShipmentIds.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 50, scale: 0.95 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 max-w-2xl w-full px-4"
+          >
+            <div className="bg-slate-900 border border-slate-800 text-white rounded-2xl shadow-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center font-bold text-indigo-400 text-sm">
+                  {selectedShipmentIds.length}
+                </div>
+                <div>
+                  <h4 className="text-sm font-semibold">Consignments Selected</h4>
+                  <p className="text-xs text-slate-400">Apply operation to all checked items</p>
+                </div>
+              </div>
+
+              {/* Operations */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={handleBatchSchedulePickup}
+                  disabled={batchActionRunning}
+                  className="flex items-center gap-1 px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-xs font-semibold shadow transition-colors disabled:opacity-50"
+                  title="Schedule courier pickup"
+                >
+                  <Truck className="h-3.5 w-3.5" />
+                  Request Pickup
+                </button>
+
+                <button
+                  onClick={handleBatchDownloadLabels}
+                  disabled={batchActionRunning}
+                  className="flex items-center gap-1 px-3 py-2 bg-white hover:bg-slate-100 text-slate-800 rounded-lg text-xs font-semibold shadow transition-colors disabled:opacity-50"
+                  title="Bulk generate waybills"
+                >
+                  <Printer className="h-3.5 w-3.5 text-slate-500" />
+                  Print Labels
+                </button>
+
+                <button
+                  onClick={handleBatchSyncTracking}
+                  disabled={batchActionRunning}
+                  className="flex items-center gap-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                  title="Ping carrier servers"
+                >
+                  <RefreshCw className="h-3.5 w-3.5 text-indigo-400" />
+                  Sync Status
+                </button>
+
+                <button
+                  onClick={handleBatchCancel}
+                  disabled={batchActionRunning}
+                  className="flex items-center gap-1 px-3 py-2 bg-rose-950/40 border border-rose-900/30 hover:bg-rose-900/50 text-rose-200 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                  title="Cancel waybills"
+                >
+                  <Ban className="h-3.5 w-3.5" />
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Batch Action Status / Progress overlay */}
+      <AnimatePresence>
+        {batchStatusMsg && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white border border-gray-200 max-w-sm w-full p-6 rounded-2xl shadow-2xl text-center space-y-4"
+            >
+              <RefreshCw className="h-10 w-10 text-indigo-600 animate-spin mx-auto" />
+              <div>
+                <h4 className="font-semibold text-gray-900 text-lg">Batch Operation Running</h4>
+                <p className="text-sm text-gray-500 mt-1">{batchStatusMsg}</p>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}

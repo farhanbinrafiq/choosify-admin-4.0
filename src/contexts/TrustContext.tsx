@@ -340,6 +340,13 @@ interface TrustContextType {
     metadata: Record<string, any>
   ) => void;
   
+  logDisputeImpact: (
+    entity_id: string,
+    entity_name: string,
+    entity_type: TrustEntityType,
+    impactType: 'created' | 'escalated' | 'resolved_against' | 'dismissed'
+  ) => void;
+  
   calculateTrustScore: (entity_type: TrustEntityType, entity_id: string) => TrustScore | undefined;
   generateTrustAlert: (
     entity_type: TrustEntityType,
@@ -1148,6 +1155,37 @@ export const TrustProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setModerationRules(prev => prev.map(r => r.id === rule_id ? { ...r, active: !r.active } : r));
   };
 
+  const logDisputeImpact = (
+    entity_id: string,
+    entity_name: string,
+    entity_type: TrustEntityType,
+    impactType: 'created' | 'escalated' | 'resolved_against' | 'dismissed'
+  ) => {
+    let eventType: TrustEventType = 'complaint_received';
+    let points = 0;
+    let details = '';
+
+    if (impactType === 'created') {
+      points = -5;
+      eventType = 'complaint_received';
+      details = `Dispute opened against ${entity_name}`;
+    } else if (impactType === 'escalated') {
+      points = -10;
+      eventType = 'complaint_received';
+      details = `Dispute escalated for ${entity_name}`;
+    } else if (impactType === 'resolved_against') {
+      points = -20;
+      eventType = 'complaint_received';
+      details = `Dispute resolved against ${entity_name}`;
+    } else if (impactType === 'dismissed') {
+      points = 15;
+      eventType = 'complaint_resolved';
+      details = `Dispute dismissed or resolved in favor of ${entity_name}`;
+    }
+
+    addTrustEvent(entity_type, entity_id, entity_name, eventType, points, { details });
+  };
+
 
   return (
     <TrustContext.Provider value={{
@@ -1176,6 +1214,7 @@ export const TrustProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       dailyOrderMetrics,
 
       addTrustEvent,
+      logDisputeImpact,
       calculateTrustScore,
       generateTrustAlert,
       resolveTrustAlert,
