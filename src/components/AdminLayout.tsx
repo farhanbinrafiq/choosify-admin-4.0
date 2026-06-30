@@ -538,7 +538,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           if (item.type === 'label') {
             if (isCollapsed) return <div key={idx} className="h-px bg-white/[0.05] my-4 mx-2" />;
             return (
-              <div key={idx} className="text-[10px] font-bold text-[#CBD5E1] px-3 pt-6 pb-2 uppercase tracking-widest truncate whitespace-nowrap">
+              <div key={idx} className="text-[10px] font-bold text-white px-3 pt-6 pb-2 uppercase tracking-widest truncate whitespace-nowrap">
                 {item.label}
               </div>
             );
@@ -593,7 +593,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                   className={`w-full group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 text-left cursor-pointer min-w-0 ${
                     isActive 
                       ? 'bg-[#F97316] text-white border-white' 
-                      : 'border-transparent text-white hover:text-white hover:bg-white/10'
+                      : 'border-transparent text-white/90 hover:text-white hover:bg-white/10'
                   }`}
                   title={item.label}
                 >
@@ -626,7 +626,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                   className={`group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 relative min-w-0 ${
                     isActive 
                       ? 'active-sidebar-item bg-[#F97316] text-white border-white shadow-[0_4px_16px_rgba(249,115,22,0.15)]' 
-                      : 'border-transparent text-white hover:text-white hover:bg-white/10'
+                      : 'border-transparent text-white/90 hover:text-white hover:bg-white/10'
                   }`}
                   title={item.label}
                 >
@@ -665,10 +665,10 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                         className={`flex items-center gap-2 py-2 px-3 text-[11px] font-medium rounded-md transition-all ${
                           isSubActive 
                             ? 'text-white font-bold bg-[#F97316]' 
-                            : 'text-[#E2E8F0] hover:text-white hover:bg-white/[0.02]'
+                            : 'text-white/80 hover:text-white hover:bg-white/[0.05]'
                         }`}
                       >
-                        <ChevronRight className={`w-2.5 h-2.5 ${isSubActive ? 'text-white rotate-90 scale-110' : 'text-[#E2E8F0] opacity-60'}`} />
+                        <ChevronRight className={`w-2.5 h-2.5 ${isSubActive ? 'text-white rotate-90 scale-110' : 'text-white/60 rotate-90'}`} />
                         <span className="truncate whitespace-nowrap flex-1 min-w-0">{sub.label}</span>
                         {sub.badge && (
                           <span className="ml-auto bg-[#F97316] text-white text-[8px] px-1 py-0.2 rounded font-black">
@@ -693,7 +693,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           <>
             <div className="flex-1 min-w-0">
               <p className="text-white text-[11px] font-semibold truncate">{profile?.displayName || 'User'}</p>
-              <p className="text-[#CBD5E1] text-[9px] truncate">{profile?.email || 'user@example.com'}</p>
+              <p className="text-white/70 text-[9px] truncate">{profile?.email || 'user@example.com'}</p>
             </div>
             <button onClick={handleLogout} className="text-white hover:text-[#CBD5E1] transition-colors cursor-pointer">
               <LogOut className="w-3.5 h-3.5" />
@@ -804,7 +804,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         className="hidden sm:flex h-full"
       >
         {(isCollapsed, toggleCollapse) => (
-          <div className="flex flex-col h-full w-full bg-app-sidebar border-r border-app-border">
+          <div className="sidebar flex flex-col h-full w-full bg-app-sidebar border-r border-app-border">
             {renderSidebarContent(isCollapsed, toggleCollapse)}
           </div>
         )}
