@@ -95,6 +95,18 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [id]);
 
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('print') === 'true' && order) {
+      const timer = setTimeout(() => {
+        window.print();
+        const cleanUrl = window.location.pathname;
+        window.history.replaceState({}, '', cleanUrl);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [location.search, order]);
+
   if (!loggedInProfile) {
     return (
       <div className="p-8 text-center bg-app-bg text-app-text-secondary min-h-screen flex flex-col items-center justify-center">
@@ -131,6 +143,12 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
     day: 'numeric'
   }) : 'June 16, 2026';
 
+  const dueDate = order.timestamp ? new Date(new Date(order.timestamp).getTime() + 9 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }) : 'June 25, 2026';
+
   const triggerPrint = () => {
     window.print();
   };
@@ -144,13 +162,14 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Invoice ${invoiceId} - Choosify Merchandising</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
     
     body {
       margin: 0;
+      padding: 40px 0;
       font-family: 'Inter', sans-serif;
       color: #1a1a1a;
-      background-color: #ffffff;
+      background-color: #F0F8FF;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
     }
@@ -159,131 +178,283 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
       width: 794px; /* A4 width */
       min-height: 1123px; /* A4 height */
       margin: 0 auto;
-      padding: 40px;
+      padding: 48px;
       box-sizing: border-box;
       background: #ffffff;
+      border-radius: 8px;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+      border: 1px solid #eeeeee;
       position: relative;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }
 
-    .brand-header-strip {
-      background-color: #1a1a2e;
-      padding: 24px;
-      border-radius: 8px;
+    .header-row {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: 30px;
+      align-items: flex-start;
+      margin-bottom: 24px;
     }
 
     .logo-container {
-      width: 180px;
+      width: 160px;
     }
 
-    .logo-svg {
-      width: 100%;
+    .logo-container svg * {
+      /* Do not add fill overrides here — handled by SVG internal styles */
+    }
+    .logo-container svg {
+      width: 160px;
       height: auto;
+      display: block;
+    }
+
+    .logo-container svg path,
+    .logo-container svg rect,
+    .logo-container svg text,
+    .logo-container svg tspan {
+      /* intentionally empty — let SVG internal styles control fills */
+    }
+
+    /* Override protection */
+    .chfy-fill-navy { fill: #18154c !important; }
+    .chfy-fill-red  { fill: #ef3c23 !important; }
+
+    .subtitle-brand {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      color: #888888;
+      text-transform: uppercase;
+      margin-top: 6px;
+      margin-bottom: 8px;
+    }
+
+    .contact-details {
+      font-size: 12px;
+      line-height: 1.5;
+      color: #888888;
     }
 
     .header-right {
       text-align: right;
-    }
-
-    .official-text {
-      color: #ef3c23;
-      font-size: 20px;
-      font-weight: 800;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      margin: 0 0 4px 0;
-    }
-
-    .subtitle-text {
-      color: #ffffff;
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 3px;
-      margin: 0 0 10px 0;
-      text-transform: uppercase;
-      opacity: 0.9;
-    }
-
-    .invoice-details-meta {
       font-size: 12px;
-      color: #e2e8f0;
-      font-weight: 500;
+      line-height: 1.5;
+      color: #888888;
     }
 
-    .grid-2 {
+    .header-right .addr-line {
+      font-weight: 500;
+      color: #1a1a1a;
+    }
+
+    .divider {
+      height: 1px;
+      background-color: #eeeeee;
+      width: 100%;
+      margin: 20px 0;
+    }
+
+    .info-row {
       display: flex;
       justify-content: space-between;
-      gap: 30px;
-      margin-bottom: 30px;
+      gap: 24px;
+      margin-bottom: 20px;
     }
 
-    .block-card {
-      width: 48%;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 16px;
-      box-sizing: border-box;
+    .info-left {
+      width: 50%;
     }
 
-    .block-title {
+    .info-right {
+      width: 50%;
+      text-align: right;
+    }
+
+    .section-label {
       font-size: 11px;
-      font-weight: 800;
-      color: #1a1a2e;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #888888;
       text-transform: uppercase;
-      letter-spacing: 1.5px;
-      margin-bottom: 12px;
-      border-bottom: 2px solid #e2e8f0;
-      padding-bottom: 6px;
+      margin-bottom: 8px;
     }
 
-    .block-content {
-      font-size: 12px;
-      line-height: 1.6;
+    .billed-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: #1a1a2e;
+      margin-bottom: 4px;
     }
 
-    .block-content strong {
+    .billed-text {
+      font-size: 13px;
+      line-height: 1.5;
+      color: #555555;
+    }
+
+    .meta-grid {
+      display: inline-grid;
+      grid-template-columns: auto auto;
+      gap: 6px 16px;
+      text-align: left;
+    }
+
+    .info-right .meta-label {
+      font-size: 11px;
+      color: #888888;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      align-self: center;
+    }
+
+    .info-right .meta-value {
       font-size: 13px;
       color: #1a1a2e;
+      font-weight: 600;
+      text-align: right;
     }
 
-    .badge-certified {
-      background-color: #dcfce7;
-      color: #15803d;
-      font-size: 9px;
+    .info-right .meta-value.amount {
+      font-size: 32px;
       font-weight: 800;
-      padding: 2px 6px;
-      border-radius: 4px;
-      display: inline-block;
-      margin-top: 4px;
-      text-transform: uppercase;
+      color: #EF3C23;
+      line-height: 1;
     }
 
-    .product-section {
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 16px;
-      margin-bottom: 30px;
-    }
-
-    .product-details {
+    .supplier-strip {
+      background-color: #F8F8F8;
+      border: 1px solid #eeeeee;
+      border-radius: 8px;
+      padding: 16px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-top: 8px;
+      margin-bottom: 20px;
     }
 
-    .prod-meta {
+    .supplier-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .seller-logo-box {
+      width: 60px;
+      height: 60px;
+      min-width: 60px;
+      background: #F0F3FA;
+      border: 1px solid #dddddd;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      color: #888888;
+      font-size: 10px;
+      font-weight: 600;
+    }
+
+    .seller-details {
+      font-size: 13px;
+      line-height: 1.5;
+      color: #555555;
+    }
+
+    .seller-details strong {
+      color: #1a1a2e;
+      font-size: 14px;
+    }
+
+    .supplier-right {
+      text-align: right;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: flex-end;
+    }
+
+    .pill-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 20px;
+      display: inline-block;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .pill-badge.verified {
+      background-color: #E8F5E9;
+      color: #2E7D32;
+      border: 1px solid #C8E6C9;
+    }
+
+    .pill-badge.certified {
+      background-color: #FFF4ED;
+      color: #EF3C23;
+      border: 1px solid #FFD3C4;
+    }
+
+    .specs-grid {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 20px;
+    }
+
+    .specs-left-col {
+      width: 60%;
+    }
+
+    .specs-right-col {
+      width: 40%;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #555555;
+    }
+
+    .specs-right-col strong {
+      color: #1a1a2e;
+    }
+
+    .specs-image-placeholder {
+      width: 100%;
+      height: 180px;
+      background: linear-gradient(135deg, #F0F3FA, #E4E8F0);
+      border: 1px solid #dddddd;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .specs-image-placeholder svg {
+      width: 40px;
+      height: 40px;
+      fill: #aaaaaa;
+      margin-bottom: 8px;
+    }
+
+    .specs-image-placeholder .title-text {
       font-size: 12px;
-      color: #475569;
+      font-weight: 600;
+      color: #888888;
+      margin-bottom: 2px;
+    }
+
+    .specs-image-placeholder .sub-text {
+      font-size: 10px;
+      color: #bbbbbb;
     }
 
     .table-container {
-      margin-bottom: 30px;
+      margin-bottom: 24px;
     }
 
     table {
@@ -292,14 +463,14 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
     }
 
     th {
-      background-color: #1a1a2e;
-      color: #ffffff;
       font-size: 11px;
       font-weight: 700;
-      letter-spacing: 1px;
+      letter-spacing: 0.08em;
+      color: #888888;
       text-transform: uppercase;
-      padding: 12px;
+      padding: 12px 16px;
       text-align: left;
+      border-bottom: 1px solid #eeeeee;
     }
 
     th.right, td.right {
@@ -307,146 +478,167 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
     }
 
     td {
-      padding: 12px;
-      font-size: 12px;
-      border-bottom: 1px solid #e2e8f0;
+      padding: 16px;
+      font-size: 13px;
+      color: #1a1a1a;
+      border-bottom: 1px solid #eeeeee;
     }
 
-    .amount-box-container {
+    td .item-title {
+      font-weight: 700;
+      color: #1a1a2e;
+      font-size: 14px;
+    }
+
+    td .item-sub {
+      font-size: 11px;
+      color: #888888;
+      margin-top: 4px;
+    }
+
+    .summary-section {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 30px;
+      margin-bottom: 24px;
     }
 
-    .amount-box {
-      width: 320px;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
-      padding: 16px;
+    .summary-box {
+      width: 300px;
     }
 
-    .amount-row {
+    .summary-row {
       display: flex;
       justify-content: space-between;
-      font-size: 12px;
+      font-size: 13px;
       padding: 6px 0;
-      color: #475569;
+      color: #555555;
     }
 
-    .amount-row.pay {
-      border-top: 2px dashed #cbd5e1;
+    .summary-row.total-row {
+      border-top: 1px solid #eeeeee;
       margin-top: 8px;
-      padding-top: 10px;
-      font-weight: bold;
-      font-size: 15px;
-      color: #ef3c23;
+      padding-top: 12px;
+      font-weight: 700;
+      font-size: 20px;
+      color: #EF3C23;
     }
 
-    .badge-cod {
-      background-color: #fee2e2;
-      color: #ef3c23;
+    .pill-badge.cod {
+      background-color: #1a1a2e;
+      color: #ffffff;
       font-size: 10px;
-      font-weight: 800;
-      padding: 4px 8px;
+      font-weight: 700;
+      padding: 4px 10px;
       border-radius: 4px;
-      display: inline-block;
       margin-top: 8px;
+      display: inline-block;
       text-transform: uppercase;
-      text-align: center;
-      width: calc(100% - 16px);
+      letter-spacing: 0.05em;
     }
 
     .notes-box {
-      background: #f8fafc;
-      border-left: 4px solid #1a1a2e;
-      border-radius: 4px;
-      padding: 12px 16px;
-      margin-bottom: 30px;
-      font-size: 11.5px;
-      line-height: 1.5;
-      color: #475569;
+      background-color: #FFF8F7;
+      border-left: 3px solid #EF3C23;
+      border-radius: 0 8px 8px 0;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #444444;
+      font-style: italic;
     }
 
-    .notes-title {
+    .notes-label {
+      font-size: 10px;
       font-weight: 700;
-      color: #1a1a2e;
+      color: #EF3C23;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-style: normal;
       margin-bottom: 4px;
     }
 
-    .logistics-strip {
-      background: #f1f5f9;
-      border: 1px dashed #cbd5e1;
-      border-radius: 6px;
+    .shipping-strip {
+      background-color: #F8F8F8;
+      border: 1px solid #eeeeee;
+      border-radius: 8px;
       padding: 14px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 40px;
+      margin-bottom: 32px;
+      font-size: 12px;
     }
 
-    .logistics-title {
-      font-size: 12px;
+    .shipping-left .label {
+      font-size: 10px;
+      font-weight: 700;
+      color: #888888;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .shipping-left .value {
       font-weight: 700;
       color: #1a1a2e;
     }
 
-    .logistics-val {
-      font-size: 11px;
-      color: #475569;
-      margin-top: 2px;
+    .shipping-right a {
+      color: #EF3C23;
+      font-weight: 700;
+      text-decoration: underline;
     }
 
-    .tracking-link {
-      background-color: #1a1a2e;
-      color: #ffffff;
-      text-decoration: none;
-      font-size: 10px;
-      font-weight: bold;
-      padding: 6px 12px;
-      border-radius: 4px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .footer {
-      border-top: 2px solid #f1f5f9;
+    .footer-section {
+      border-top: 2px solid #EF3C23;
       padding-top: 24px;
-      text-align: center;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      position: relative;
     }
 
-    .footer-thankyou {
-      font-size: 13px;
+    .footer-left {
+      max-width: 80%;
+    }
+
+    .footer-thanks {
+      font-size: 22px;
       font-weight: 700;
       color: #1a1a2e;
       margin-bottom: 8px;
     }
 
-    .footer-disclaimer {
+    .footer-terms {
       font-size: 10px;
-      color: #94a3b8;
-      line-height: 1.4;
-      max-width: 550px;
-      margin: 0 auto 12px auto;
+      color: #888888;
+      line-height: 1.5;
     }
 
-    .footer-watermark {
-      font-size: 9px;
-      font-weight: bold;
-      color: #cbd5e1;
-      letter-spacing: 1px;
-      text-transform: uppercase;
+    .footer-right {
+      width: 64px;
+      height: 64px;
+      opacity: 0.15;
+    }
+
+    .footer-watermark-svg {
+      width: 100%;
+      height: auto;
+      fill: #18154c;
     }
 
     @media print {
       body {
         margin: 0;
         background: #ffffff;
+        padding: 0;
       }
       .invoice-container {
         padding: 0;
         width: 100%;
         min-height: auto;
+        box-shadow: none;
+        border: none;
       }
       .no-print {
         display: none !important;
@@ -456,167 +648,236 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
 </head>
 <body>
   <div class="invoice-container">
-    <div class="brand-header-strip">
-      <div class="logo-container">
-        <!-- Developer provided inline SVG -->
-        <svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2585.84 505.4" class="logo-svg">
-          <defs>
-            <style>
-              .cls-svg-white { fill: #ffffff; }
-              .cls-svg-red { fill: #ef3c23; }
-            </style>
-          </defs>
-          <g>
-            <g>
-              <path class="cls-svg-red" d="M921.65,303.09c0-47.35-38.42-85.71-85.76-85.71s-85.76,38.36-85.76,85.71,38.42,85.76,85.76,85.76c8.22,0,16.14-1.17,23.65-3.3-3.3-5.38-5.23-11.77-5.23-18.57,0-19.74,15.99-35.73,35.68-35.73,8.93,0,17.1,3.3,23.34,8.68,5.33-11.16,8.32-23.65,8.32-36.84Z"/>
-              <path class="cls-svg-red" d="M356.15,303.09c0-47.35-38.42-85.71-85.76-85.71s-85.76,38.36-85.76,85.71c0,47.35,38.42,85.76,85.76,85.76,8.22,0,16.14-1.17,23.65-3.3-3.3-5.38-5.23-11.77-5.23-18.57,0-19.74,15.99-35.73,35.68-35.73,8.93,0,17.1,3.3,23.34,8.68,5.33-11.16,8.32-23.65,8.32-36.84Z"/>
-              <path class="cls-svg-red" d="M252.7,505.4C113.36,505.4,0,392.04,0,252.7S113.36,0,252.7,0s252.7,113.36,252.7,252.7-113.36,252.7-252.7,252.7ZM252.7,57.74c-107.5,0-194.96,87.46-194.96,194.96s87.46,194.96,194.96,194.96,194.96-87.46,194.96-194.96S360.2,57.74,252.7,57.74Z"/>
-              <path class="cls-svg-red" d="M779.18,505.4c-139.34,0-252.7-113.36-252.7-252.7S639.84,0,779.18,0s252.7,113.36,252.7,252.7-113.36,252.7-252.7,252.7ZM779.18,57.74c-107.5,0-194.96,87.46-194.96,194.96s87.46,194.96,194.96,194.96,194.96-87.46,194.96-194.96-87.46-194.96-194.96-194.96Z"/>
-            </g>
-            <g>
-              <path class="cls-svg-white" d="M1094.27,260.83c0-54.18,36.9-95.48,93.45-95.48,48.09,0,77.9,27.43,84.31,66.7h-51.45c-3.72-16.59-14.55-27.09-32.15-27.09-26.77,0-40.3,22.01-40.3,55.88s13.53,55.19,40.3,55.19c19.62,0,31.48-11.85,33.85-32.51h51.13c-1.7,40.97-34.21,72.8-84.31,72.8-57.58,0-94.83-41.64-94.83-95.48Z"/>
-              <path class="cls-svg-white" d="M1351.4,350.56h-53.18V98.64h53.18v69.42c0,1.68,0,16.25-.35,28.1h1.03c10.84-19.3,29.11-30.81,54.18-30.81,39.59,0,62.64,26.4,62.64,66.7v118.52h-52.83v-108.36c0-19.64-10.48-32.84-30.13-32.84-20.65,0-34.53,16.59-34.53,39.62v101.58Z"/>
-              <path class="cls-svg-white" d="M1494.41,260.83c0-54.18,37.92-95.48,95.5-95.48s94.8,41.31,94.8,95.48-37.57,95.48-94.8,95.48-95.5-41.64-95.5-95.48ZM1630.88,260.83c0-34.21-14.91-57.56-41.32-57.56s-41.29,23.35-41.29,57.56,14.2,56.89,41.29,56.89,41.32-23.03,41.32-56.89Z"/>
-              <path class="cls-svg-white" d="M1703.14,260.83c0-54.18,37.92-95.48,95.5-95.48s94.8,41.31,94.8,95.48-37.57,95.48-94.8,95.48-95.5-41.64-95.5-95.48ZM1839.61,260.83c0-34.21-14.91-57.56-41.32-57.56s-41.29,23.35-41.29,57.56,14.2,56.89,41.29,56.89,41.32-23.03,41.32-56.89Z"/>
-              <path class="cls-svg-white" d="M1908.8,295.02h50.11c3.05,16.94,15.93,26.42,36.58,26.42,18.98,0,29.81-7.79,29.81-20.65,0-16.25-21.35-18.29-46.39-23.03-32.19-6.09-64.69-14.22-64.69-56.21,0-36.9,33.53-56.2,75.85-56.2,50.11,0,75.18,21.67,79.92,53.15h-49.43c-3.4-12.86-13.56-19.3-30.49-19.3s-26.74,6.78-26.74,18.29c0,13.54,19.62,15.58,44.34,19.97,32.19,5.75,68.76,14.22,68.76,59.6,0,38.95-34.56,59.26-81.27,59.26-52.16,0-83.64-25.05-86.36-61.29Z"/>
-              <rect class="cls-svg-white" x="2102.94" y="170.41" width="53.18" height="180.15"/>
-              <path class="cls-svg-white" d="M2260.83,204.96v145.61h-53.18v-145.61h-27.09v-34.54h27.09v-15.23c0-19.3,4.74-32.84,15.26-42.33,11.83-10.5,30.46-14.55,53.47-14.22,7.12,0,14.59.34,22.02,1.35v37.92c-26.74-1.01-37.57.69-37.57,21v11.51h37.57v34.54h-37.57Z"/>
-              <path class="cls-svg-white" d="M2335.71,410.16v-41.64h2.72c.67.34,15.9.34,17.28.34,16.57,0,24.72-6.09,25.71-18.29,0-6.09-3.05-19.97-9.46-36.23l-55.88-143.92h55.88l23.02,69.09c8.11,24.38,14.91,62.64,14.91,62.64h.67s8.11-38.6,15.9-62.64l22.02-69.09h52.83l-64.34,184.56c-14.59,41.64-31.16,55.86-65.69,55.86-1.7,0-34.56-.34-35.58-.67Z"/>
-              <path class="cls-svg-red" d="M2129.7,152.15c15.9,0,28.78-12.9,28.78-28.8,0-15.9-12.88-28.8-28.78-28.8-15.9,0-28.8,12.9-28.8,28.8,0,2.76.39,5.42,1.11,7.94,1.81-1.11,3.95-1.76,6.24-1.76,6.63,0,12,5.37,12,11.98,0,3-1.11,5.74-2.91,7.84,3.75,1.79,7.94,2.79,12.37,2.79Z"/>
-            </g>
-          </g>
-          <g>
-            <path class="cls-svg-white" d="M2529.31,313.17h17.3c7.28,0,12.13,4.22,12.13,10.5,0,4.43-2.06,7.81-6.91,9.13v.16c3.48,1,5.27,3.01,5.75,7.6.53,5.33.32,9.39,1.64,9.97v.37h-7.33c-.95-.42-1.06-4.64-1.37-8.7-.32-4.11-2.64-6.44-7.38-6.44h-6.17v15.14h-7.65v-37.72ZM2536.96,329.84h8.12c4.17,0,6.22-2.16,6.22-5.17s-1.95-5.33-6.01-5.33h-8.33v10.5Z"/>
-            <path class="cls-svg-white" d="M2543.58,375.14c-11.29,0-21.9-4.4-29.88-12.38-7.98-7.98-12.38-18.59-12.38-29.88s4.4-21.9,12.38-29.88c7.98-7.98,18.59-12.38,29.88-12.38s21.9,4.4,29.88,12.38c7.98,7.98,12.38,18.59,12.38,29.88s-4.4,21.9-12.38,29.88c-7.98,7.98-18.59,12.38-29.88,12.38ZM2543.58,299.28c-18.53,0-33.6,15.07-33.6,33.6s15.07,33.6,33.6,33.6,33.6-15.07,33.6-33.6-15.07-33.6-33.6-33.6Z"/>
-          </g>
+    <div>
+      <!-- Brand Header -->
+      <div class="header-row">
+        <div>
+          <div class="logo-container">
+            <!-- Inline Brand Logo SVG             <svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 3337.55 651.43" class="logo-svg" style="width: 160px; height: auto; display: block;">
+              <defs>
+                <style>
+                  .chfy-fill-navy { fill: #18154c !important; }
+                  .chfy-fill-red  { fill: #ef3c23 !important; }
+                  .chfy-text {
+                    font-family: HaasGrotDispRTrial-65Medium, 'Haas Grot Disp R Trial';
+                    font-size: 68px;
+                    font-weight: 500;
+                    fill: #18154c !important;
+                  }
+                </style>
+              </defs>
+              <g>
+                <g>
+                  <path class="chfy-fill-red" d="M1187.96,390.67c0-61.03-49.52-110.48-110.54-110.48s-110.54,49.45-110.54,110.48,49.52,110.54,110.54,110.54c10.6,0,20.8-1.51,30.48-4.25-4.25-6.93-6.74-15.17-6.74-23.94,0-25.44,20.61-46.05,45.98-46.05,11.51,0,22.04,4.25,30.09,11.18,6.87-14.39,10.73-30.48,10.73-47.49Z"/>
+                  <path class="chfy-fill-red" d="M459.06,390.67c0-61.03-49.52-110.48-110.54-110.48s-110.54,49.45-110.54,110.48c0,61.03,49.52,110.54,110.54,110.54c10.6,0,20.8-1.51,30.48-4.25-4.25-6.93-6.74-15.17-6.74-23.94,0-25.44,20.61-46.05,45.98-46.05,11.51,0,22.04,4.25,30.09,11.18,6.87-14.39,10.73-30.48,10.73-47.49Z"/>
+                  <path class="chfy-fill-red" d="M325.71,651.43C146.11,651.43,0,505.31,0,325.71S146.11,0,325.71,0s325.71,146.11,325.71,325.71-146.11,325.71-325.71,325.71ZM325.71,74.42c-138.56,0-251.29,112.73-251.29,251.29s112.73,251.29,251.29,251.29,251.29-112.73,251.29-251.29-112.73-251.29-251.29-251.29Z"/>
+                  <path class="chfy-fill-red" d="M1004.32,651.43c-179.6,0-325.71-146.12-325.71-325.71S824.72,0,1004.32,0s325.71,146.11,325.71,325.71-146.11,325.71-325.71,325.71ZM1004.32,74.42c-138.56,0-251.29,112.73-251.29,251.29s112.73,251.29,251.29,251.29,251.29-112.73,251.29-251.29-112.73-251.29-251.29-251.29Z"/>
+                </g>
+                <g>
+                  <path class="chfy-fill-navy" d="M1410.45,336.2c0-69.83,47.56-123.07,120.45-123.07,61.98,0,100.41,35.35,108.67,85.97h-66.32c-4.79-21.38-18.76-34.92-41.45-34.92-34.5,0-51.94,28.37-51.94,72.02s17.44,71.13,51.94,71.13c25.29,0,40.58-15.27,43.64-41.9h65.91c-2.19,52.81-44.09,93.84-108.67,93.84-74.21,0-122.23-53.68-122.23-123.07Z"/>
+                  <path class="chfy-fill-navy" d="M1741.88,451.86h-68.55V127.14h68.55v89.48c0,2.17,0,20.95-.45,36.22h1.32c13.97-24.88,37.52-39.71,69.83-39.71,51.03,0,80.74,34.03,80.74,85.97v152.76h-68.1v-139.67c0-25.31-13.51-42.33-38.84-42.33-26.61,0-44.5,21.38-44.5,51.07v130.93Z"/>
+                  <path class="chfy-fill-navy" d="M1926.22,336.2c0-69.83,48.88-123.07,123.1-123.07s122.19,53.24,122.19,123.07-48.43,123.07-122.19,123.07-123.1-53.68-123.1-123.07ZM2102.12,336.2c0-44.09-19.21-74.19-53.26-74.19s-53.22,30.1-53.22,74.19,18.31,73.32,53.22,73.32,53.26-29.69,53.26-73.32Z"/>
+                  <path class="chfy-fill-navy" d="M2195.26,336.2c0-69.83,48.88-123.07,123.1-123.07s122.19,53.24,122.19,123.07-48.43,123.07-122.19,123.07-123.1-53.68-123.1-123.07ZM2371.16,336.2c0-44.09-19.21-74.19-53.26-74.19s-53.22,30.1-53.22,74.19,18.31,73.32,53.22,73.32,53.26-29.69,53.26-73.32Z"/>
+                  <path class="chfy-fill-navy" d="M2460.33,380.27h64.58c3.93,21.84,20.54,34.05,47.15,34.05,24.46,0,38.43-10.04,38.43-26.61,0-20.95-27.52-23.57-59.79-29.69-41.49-7.85-83.39-18.33-83.39-72.46,0-47.56,43.22-72.44,97.77-72.44,64.58,0,96.9,27.93,103.01,68.51h-63.72c-4.38-16.57-17.48-24.88-39.3-24.88s-34.46,8.74-34.46,23.57c0,17.46,25.29,20.08,57.15,25.74,41.49,7.42,88.63,18.33,88.63,76.82,0,50.21-44.54,76.38-104.75,76.38-67.23,0-107.81-32.29-111.32-79.01Z"/>
+                  <rect class="chfy-fill-navy" x="2710.57" y="219.65" width="68.55" height="232.2"/>
+                  <path class="chfy-fill-navy" d="M2914.08,264.18v187.68h-68.55v-187.68h-34.92v-44.52h34.92v-19.63c0-24.88,6.12-42.33,19.67-54.56,15.25-13.53,39.25-18.76,68.92-18.33,9.17,0,18.8.43,28.39,1.74v48.88c-34.46-1.3-48.43.89-48.43,27.07v14.83h48.43v44.52h-48.43Z"/>
+                  <path class="chfy-fill-navy" d="M3010.61,528.67v-53.68h3.51c.87.43,20.5.43,22.27.43,21.36,0,31.86-7.85,33.14-23.57,0-7.85-3.93-25.74-12.19-46.69l-72.02-185.51h72.02l29.67,89.05c10.45,31.42,19.21,80.74,19.21,80.74h.87s10.45-49.75,20.5-80.74l28.39-89.05h68.1l-82.93,237.89c-18.8,53.68-40.16,72-84.67,72-2.19,0-44.54-.43-45.87-.87Z"/>
+                  <path class="chfy-fill-red" d="M2745.07,196.11c20.49,0,37.1-16.63,37.1-37.12,0-20.49-16.6-37.12-37.1-37.12-20.49,0-37.12,16.63-37.12,37.12,0,3.56.51,6.98,1.43,10.23,2.33-1.43,5.09-2.26,8.04-2.26,8.54,0,15.46,6.92,15.46,15.44,0,3.87-1.43,7.4-3.76,10.1,4.83,2.31,10.23,3.6,15.95,3.6Z"/>
+                </g>
+              </g>
+              <g>
+                <text class="chfy-text" transform="translate(3260.9454 431.2889)"><tspan x="0" y="0">R</tspan></text>
+                <path class="chfy-fill-navy" d="M3283.08,462.56c-14.55,0-28.23-5.67-38.52-15.95-10.29-10.29-15.95-23.97-15.95-38.52s5.67-28.23,15.95-38.52,23.97-15.95,38.52-15.95,28.23,5.67,38.52,15.95c10.29,10.29,15.95,23.97,15.95,38.52s-5.67,28.23-15.95,38.52c-10.29,10.29-23.97,15.95-38.52,15.95ZM3283.08,364.77c-23.88,0-43.31,19.43-43.31,43.31s19.43,43.31,43.31,43.31,43.31-19.43,43.31-43.31-19.43-43.31-43.31-43.31Z"/>
+              </g>
+            </svg>
+          </div>
+          <div class="subtitle-brand">Choosify Merchandising</div>
+          <div class="contact-details">
+            choosify.bd<br>
+            support@choosify.bd<br>
+            +880 1711-456789
+          </div>
+        </div>
+        <div class="header-right">
+          <div style="font-weight: 700; color: #1a1a2e; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px;">Business Address</div>
+          <div class="addr-line">Uttara, Dhaka - 1230, Bangladesh</div>
+          <div>Trade License: TR-2026-REG-1099</div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Two Column Details Section -->
+      <div class="info-row">
+        <div class="info-left">
+          <div class="section-label">Billed To</div>
+          <div class="billed-name">${order.customer.name}</div>
+          <div class="billed-text">
+            ${order.customer.address || 'House 14, Road 4, Sector 12, Uttara, Dhaka'}<br>
+            Phone: ${order.customer.phone || '+880 1711-456789'}<br>
+            Email: ${order.customer.email}
+          </div>
+        </div>
+        <div class="info-right">
+          <div class="meta-grid">
+            <div class="meta-label">Invoice Number</div>
+            <div class="meta-value" style="font-weight: 700;">#${invoiceId}</div>
+
+            <div class="meta-label" style="margin-top: 4px;">Invoice Amount</div>
+            <div class="meta-value amount">৳ ${codPayable.toLocaleString()}</div>
+
+            <div class="meta-label">Reference</div>
+            <div class="meta-value">${invoiceId}</div>
+
+            <div class="meta-label">Invoice Date</div>
+            <div class="meta-value">${displayDate}</div>
+
+            <div class="meta-label">Due Date</div>
+            <div class="meta-value">${dueDate}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Supplier Info Strip -->
+      <div class="supplier-strip">
+        <div class="supplier-left">
+          <!-- Replace with actual seller/store logo URL -->
+          <div class="seller-logo-box" id="seller-logo-img">
+            Store Logo
+          </div>
+          <div class="seller-details">
+            <div class="section-label" style="margin-bottom: 2px;">Supplier / Merchant Info</div>
+            <strong>${supplier.storeName}</strong><br>
+            Authorized Owner: ${supplier.owner} | Trade ID: ${supplier.tradeId}<br>
+            Vetted Contract: ${supplier.license}
+          </div>
+        </div>
+        <div class="supplier-right">
+          <span class="pill-badge verified">✓ System Verified</span>
+          <span class="pill-badge certified">Official Supply Hub – Choosify Certified</span>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Product Visual + Specs Row -->
+      <div class="section-label" style="margin-bottom: 12px;">Ordered Product & Visual Specifications</div>
+      <div class="specs-grid">
+        <div class="specs-left-col">
+          <!-- Replace src with actual product image URL from order -->
+          <div class="specs-image-placeholder">
+            ${order.product.image ? `
+              <img id="product-image" src="${order.product.image}" style="width: 100%; height: 100%; object-fit: cover;" alt="${order.product.name}" />
+            ` : `
+              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M12 2c1.1 0 2 .9 2 2v1h2c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H6c-1.1 0-2-.9-2-2V7c0-1.1.9-2 2-2h2V4c0-1.1.9-2 2-2h2zm4 5H8v12h8V7zm-4-3h-2v1h2V4z" />
+              </svg>
+              <div class="title-text">${order.product.name}</div>
+              <div class="sub-text">Product image loads from order data</div>
+              <img id="product-image" src="" style="display: none; width: 100%; height: 100%; object-fit: cover; position: absolute; top:0; left:0;" />
+            `}
+          </div>
+        </div>
+        <div class="specs-right-col">
+          <div class="section-label" style="margin-bottom: 4px; color: #EF3C23;">Product Details</div>
+          <div style="font-size: 16px; font-weight: 700; color: #1a1a2e; margin-bottom: 6px;">${order.product.name}</div>
+          <div><strong>Brand:</strong> ${order.product.brand}</div>
+          <div><strong>SKU:</strong> SKU-${order.product.id}</div>
+          <div><strong>Variant:</strong> Elite Edition</div>
+          <div><strong>Color & Specs:</strong> Crimson Space Gray (Steel Loop)</div>
+          <div><strong>Category:</strong> Clothing & Lifestyle</div>
+          <div style="margin-top: 8px; font-size: 14px; color: #EF3C23; font-weight: 700;">
+            Authorized Qty: 1 Unit
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Item Details Table -->
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Item Detail</th>
+              <th class="right">Qty</th>
+              <th class="right">Rate</th>
+              <th class="right">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>
+                <div class="item-title">${order.product.name}</div>
+                <div class="item-sub">SKU-${order.product.id} · Elite Edition · Crimson Space Gray</div>
+              </td>
+              <td class="right">1</td>
+              <td class="right">৳ ${subtotal.toLocaleString()}</td>
+              <td class="right">৳ ${subtotal.toLocaleString()}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Payment Summary -->
+      <div class="summary-section">
+        <div class="summary-box">
+          <div class="summary-row">
+            <span>Supplier Subtotal:</span>
+            <span>৳ ${subtotal.toLocaleString()}</span>
+          </div>
+          <div class="summary-row">
+            <span>Logistics Shipping:</span>
+            <span>৳ ${shipping.toLocaleString()}</span>
+          </div>
+          <div class="summary-row">
+            <span>Advance Paid:</span>
+            <span>৳ ${advancePayment.toLocaleString()}</span>
+          </div>
+          <div class="summary-row total-row">
+            <span>Total COD Payable:</span>
+            <span>৳ ${codPayable.toLocaleString()}</span>
+          </div>
+          <div style="text-align: right;">
+            <span class="pill-badge cod">COD — Cash On Delivery</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Customer Special Notes Block -->
+      <div class="notes-box">
+        <div class="notes-label">Special Delivery Notes</div>
+        "${order.customerNotes?.[0] || 'Please execute dispatch and coordinate delivery times. Ring the customer upon arrival.'}"
+      </div>
+
+      <!-- Shipping Info Strip -->
+      <div class="shipping-strip">
+        <div class="shipping-left">
+          <div class="label">Shipping & Logistics</div>
+          <div class="value">Active Courier: ${order.deliveryPartner || "Pathao / SteadFast BD Courier"}</div>
+        </div>
+        <div class="shipping-right">
+          <a href="${order.trackingUrl || 'https://track.pathao.com/sheet/9921'}" target="_blank">Click to track parcel</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer-section">
+      <div class="footer-left">
+        <div class="footer-thanks">Thanks for shopping with Choosify.</div>
+        <div class="footer-terms">
+          Terms & Conditions: Payment due upon delivery via COD. This is a system-generated invoice — no signature required. Powered by Choosify.bd
+        </div>
+      </div>
+      <div class="footer-right">
+        <!-- SVG Watermark of logo mark -->
+        <svg class="footer-watermark-svg" viewBox="0 0 651.43 651.43" xmlns="http://www.w3.org/2000/svg">
+          <path d="M325.71,651.43C146.11,651.43,0,505.31,0,325.71S146.11,0,325.71,0s325.71,146.11,325.71,325.71-146.11,325.71-325.71,325.71ZM325.71,74.42c-138.56,0-251.29,112.73-251.29,251.29s112.73,251.29,251.29,251.29,251.29-112.73,251.29-251.29-112.73-251.29-251.29-251.29Z"/>
         </svg>
       </div>
-      <div class="header-right">
-        <h1 class="official-text">OFFICIAL INVOICE</h1>
-        <p class="subtitle-text">CHOOSIFY MERCHANDISING</p>
-        <div class="invoice-details-meta">
-          <strong>Invoice ID:</strong> ${invoiceId}<br>
-          <strong>Date:</strong> ${displayDate}
-        </div>
-      </div>
-    </div>
-
-    <div class="grid-2">
-      <div class="block-card">
-        <div class="block-title">SUPPLIER INFORMATION</div>
-        <div class="block-content">
-          <strong>${supplier.storeName}</strong><br>
-          Owner: ${supplier.owner}<br>
-          Trade ID: ${supplier.tradeId}<br>
-          Certification License: ${supplier.license}<br>
-          <span class="badge-certified">Certified Partner</span>
-        </div>
-      </div>
-
-      <div class="block-card">
-        <div class="block-title">CUSTOMER BILLING TO</div>
-        <div class="block-content">
-          <strong>${order.customer.name}</strong><br>
-          Email: ${order.customer.email}<br>
-          Phone: ${order.customer.phone || '+880 1711-456789'}<br>
-          Address: ${order.customer.address || "Sector 11, Uttara, Dhaka, Bangladesh"}
-        </div>
-      </div>
-    </div>
-
-    <div class="product-section">
-      <div class="block-title" style="border: 0; padding: 0; margin-bottom: 4px;">SECURED PRODUCT SPECIFICATIONS</div>
-      <div class="product-details">
-        <div>
-          <strong style="font-size: 14px; color: #1a1a2e;">${order.product.name}</strong>
-          <div class="prod-meta" style="margin-top: 4px;">
-            <span><strong>Brand:</strong> ${order.product.brand}</span> | 
-            <span><strong>Product SKU:</strong> SKU-${order.product.id}</span>
-          </div>
-          <div class="prod-meta" style="margin-top: 2px;">
-            <span><strong>Variant:</strong> Retail Standard Edition</span> | 
-            <span><strong>Verification Specs:</strong> Brand authentic physically inspected node</span>
-          </div>
-        </div>
-        <div style="font-size: 14px; font-weight: bold; color: #ef3c23;">
-          QTY: 1
-        </div>
-      </div>
-    </div>
-
-    <div class="table-container">
-      <table>
-        <thead>
-          <tr>
-            <th>Item Description</th>
-            <th>SKU Code</th>
-            <th class="right">Qty</th>
-            <th class="right">Unit Price</th>
-            <th class="right">Total Line</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td style="font-weight: 600;">${order.product.name} - Official Supply Pack</td>
-            <td>SKU-${order.product.id}</td>
-            <td class="right">1</td>
-            <td class="right">৳ ${subtotal.toLocaleString()}</td>
-            <td class="right">৳ ${subtotal.toLocaleString()}</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="amount-box-container">
-      <div class="amount-box">
-        <div class="amount-row">
-          <span>Supplier Subtotal:</span>
-          <span>৳ ${subtotal.toLocaleString()}</span>
-        </div>
-        <div class="amount-row">
-          <span>Logistics Shipping:</span>
-          <span>৳ ${shipping.toLocaleString()}</span>
-        </div>
-        <div class="amount-row">
-          <span>Advance Paid:</span>
-          <span>৳ ${advancePayment.toLocaleString()}</span>
-        </div>
-        
-        <div class="amount-row pay">
-          <span>Total COD Payable:</span>
-          <span>৳ ${codPayable.toLocaleString()}</span>
-        </div>
-        
-        <div class="badge-cod">
-          COD Balance Lock Secured
-        </div>
-      </div>
-    </div>
-
-    <div class="notes-box">
-      <div class="notes-title">SPECIAL RECIPIENT NOTES & INSTRUCTIONS</div>
-      <div>${order.customerNotes?.[0] || 'Please complete dispatch and coordinate delivery times through registered tracking. Delivery partner should ring the customer upon arrival.'}</div>
-    </div>
-
-    <div class="logistics-strip">
-      <div>
-        <div class="logistics-title">LOGISTICS PARTNER DEPLOYMENT</div>
-        <div class="logistics-val">
-          <strong>Courier:</strong> ${order.deliveryPartner || "RedX Logistics Bangladesh"} | 
-          <strong>Status:</strong> ${order.status}
-        </div>
-      </div>
-      <div>
-        <a href="${order.trackingUrl || 'https://redx.com.bd/track/' + order.id}" class="tracking-link">Secure Tracking Link</a>
-      </div>
-    </div>
-
-    <div class="footer">
-      <div class="footer-thankyou">Thank you for choosing Choosify Merchandising!</div>
-      <div class="footer-disclaimer">
-        This document is an official cryptographic invoice generated from the Choosify secure platform network (System UUID ${order.id}). Standard seller contracts and customer authentications apply. Content logs are preserved in our distributed secure audit vault ledger.
-      </div>
-      <div class="footer-watermark">✓ CRYPTO LEDGER SECURE • ALL SYSTEMS REGISTERED</div>
     </div>
   </div>
 </body>
@@ -640,6 +901,15 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
 
   return (
     <div className="p-4 sm:p-6 lg:p-8 bg-app-card border-t border-app-border text-app-text-primary min-h-screen">
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          .no-print { display: none !important; }
+          #printBtn { display: none !important; }
+          body { background: #F0F8FF !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .invoice-card { box-shadow: none !important; border: none !important; margin: 0 !important; width: 100% !important; max-width: 100% !important; }
+          @page { margin: 15mm; size: A4; }
+        }
+      ` }} />
       
       {/* Toast Notification */}
       {notif && (
@@ -706,198 +976,216 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* Printable/Preview area */}
-        <div className="lg:col-span-8 flex flex-col items-center">
+        <div className="lg:col-span-8 flex flex-col items-center bg-[#F0F3FA] p-4 sm:p-8 rounded-2xl border border-slate-200">
           
           {/* Main Visual Invoice Card (Design mimics static page with real-time responsive styling) */}
-          <div className="w-full max-w-[794px] min-h-[1123px] bg-white text-slate-900 shadow-2xl p-6 sm:p-10 rounded-2xl border border-slate-200 flex flex-col justify-between selection:bg-slate-200">
+          <div className="invoice-card w-full max-w-[794px] min-h-[1123px] bg-white text-slate-900 shadow-2xl p-6 sm:p-12 rounded-lg border border-slate-200 flex flex-col justify-between selection:bg-slate-200">
             
             <div>
-              {/* Header inside Navy block to preserve white text within the print-friendly design */}
-              <div className="bg-[#1a1a2e] text-app-text-primary p-6 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+              {/* Brand Header */}
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6 mb-6">
                 <div>
-                  <div className="bg-app-bg/10 p-2 rounded-lg inline-block mb-3 border border-app-border">
-                    <ChoosifyLogo className="h-7 w-auto select-none" />
+                  <div className="logo-container max-w-[160px] mb-2">
+                    <ChoosifyLogo className="h-8 w-auto text-[#18154c]" />
                   </div>
-                  <h3 className="text-[10px] text-app-text-secondary tracking-[0.3em] font-bold uppercase">Choosify Authorized Supply Node</h3>
-                  <p className="text-[11px] font-medium text-[#ef3c23] uppercase tracking-wider mt-1">{supplier.storeName}</p>
+                  <div className="text-[11px] font-black tracking-widest text-slate-400 uppercase">Choosify Merchandising</div>
+                  <div className="text-xs text-slate-400 mt-2 leading-relaxed font-medium">
+                    choosify.bd<br />
+                    support@choosify.bd<br />
+                    +880 1711-456789
+                  </div>
                 </div>
-                
-                <div className="sm:text-right">
-                  <h2 className="text-[#ef3c23] text-xl font-black tracking-widest uppercase font-mono">Official Invoice</h2>
-                  <p className="text-[9.5px] text-app-text-secondary tracking-wider uppercase font-bold mt-1">CHOOSIFY MERCHANDISING</p>
-                  
-                  <div className="mt-4 text-xs text-app-text-secondary font-mono space-y-1">
-                    <div><span className="text-slate-500 font-sans">ID:</span> {invoiceId}</div>
-                    <div><span className="text-slate-500 font-sans">Date:</span> {displayDate}</div>
+                <div className="sm:text-right font-medium">
+                  <div className="text-[11px] font-black tracking-widest text-slate-900 uppercase mb-1">Business Address</div>
+                  <div className="text-xs text-slate-800 leading-relaxed">
+                    <span className="font-semibold text-slate-900">Uttara, Dhaka - 1230, Bangladesh</span><br />
+                    Trade License: TR-2026-REG-1099
                   </div>
                 </div>
               </div>
 
-              {/* Two Column details block */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                
-                {/* Supplier Detail Block */}
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex flex-col justify-between">
+              <div className="h-[1px] bg-slate-100 my-5" />
+
+              {/* Two Column Details Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">
+                <div>
+                  <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">Billed To</div>
+                  <div className="text-base font-extrabold text-[#1a1a2e]">{order.customer.name}</div>
+                  <div className="text-xs text-slate-500 mt-1.5 leading-relaxed font-medium">
+                    {order.customer.address || 'House 14, Road 4, Sector 12, Uttara, Dhaka'}<br />
+                    Phone: {order.customer.phone || '+880 1711-456789'}<br />
+                    Email: {order.customer.email}
+                  </div>
+                </div>
+                <div className="flex flex-col md:items-end">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-left md:text-right">
+                    <div className="text-slate-400 uppercase tracking-wider font-semibold">Invoice Number</div>
+                    <div className="font-extrabold text-[#1a1a2e]">#{invoiceId}</div>
+
+                    <div className="text-slate-400 uppercase tracking-wider font-semibold self-center">Invoice Amount</div>
+                    <div className="text-[28px] font-black text-[#EF3C23] leading-none">৳ {codPayable.toLocaleString()}</div>
+
+                    <div className="text-slate-400 uppercase tracking-wider font-semibold">Reference</div>
+                    <div className="font-semibold text-slate-800">{invoiceId}</div>
+
+                    <div className="text-slate-400 uppercase tracking-wider font-semibold">Invoice Date</div>
+                    <div className="font-semibold text-slate-800">{displayDate}</div>
+
+                    <div className="text-slate-400 uppercase tracking-wider font-semibold">Due Date</div>
+                    <div className="font-semibold text-slate-800">{dueDate}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="h-[1px] bg-slate-100 my-5" />
+
+              {/* Supplier Info Strip */}
+              <div className="bg-[#F8F8F8] border border-slate-100 rounded-lg p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
+                <div className="flex items-center gap-4">
+                  <div className="w-[60px] h-[60px] min-w-[60px] bg-[#F0F3FA] border border-slate-200 rounded-lg flex items-center justify-center text-[10px] font-bold text-slate-400">
+                    Store Logo
+                  </div>
                   <div>
-                    <h4 className="text-[10.5px] font-black text-[#1a1a2e] tracking-widest uppercase border-b-2 border-slate-200 pb-2 mb-3">
-                      Supplier / Merchant Info
-                    </h4>
-                    <div className="text-xs space-y-1.5 text-slate-600">
-                      <div className="font-extrabold text-sm text-slate-800">{supplier.storeName}</div>
-                      <div><strong>Authorized Owner:</strong> {supplier.owner}</div>
-                      <div><strong>Trade ID:</strong> {supplier.tradeId}</div>
-                      <div className="text-[11px]"><strong>Vetted Contract:</strong> {supplier.license}</div>
+                    <div className="text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-0.5">Supplier / Merchant Info</div>
+                    <div className="font-extrabold text-slate-900 text-sm">{supplier.storeName}</div>
+                    <div className="text-[11px] text-slate-500 font-medium">
+                      Owner: {supplier.owner} | Trade ID: {supplier.tradeId}<br />
+                      Vetted Contract: {supplier.license}
                     </div>
-                  </div>
-                  
-                  <div className="mt-4 pt-2 border-t border-slate-200/50 flex items-center justify-between">
-                    <span className="text-[9.5px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider block inline-block">
-                      ✓ System Verified
-                    </span>
-                    <span className="text-[10px] font-mono text-app-text-secondary">{supplier.email}</span>
                   </div>
                 </div>
-
-                {/* Customer Billing block */}
-                <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex flex-col justify-between">
-                  <div>
-                    <h4 className="text-[10.5px] font-black text-[#1a1a2e] tracking-widest uppercase border-b-2 border-slate-200 pb-2 mb-3">
-                      Customer Billing To
-                    </h4>
-                    <div className="text-xs space-y-1.5 text-slate-600">
-                      <div className="font-extrabold text-sm text-slate-800">{order.customer.name}</div>
-                      <div><strong>Secure Email:</strong> {order.customer.email}</div>
-                      <div><strong>Verified Contact:</strong> {order.customer.phone || '+880 1711-456789'}</div>
-                      <div className="leading-relaxed"><strong>Fulfillment Node Address:</strong> {order.customer.address || "House 14, Sector 7, Uttara, Dhaka-1230, Bangladesh"}</div>
-                    </div>
-                  </div>
-
-                  {order.customer.flagged && activeRole === 'admin' && (
-                    <div className="mt-3 px-2 py-1 bg-amber-50 border border-amber-200 rounded text-[10px] text-amber-700 flex items-center gap-1 font-mono">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                      <span>Admin Note: Customer has validation triggers active.</span>
-                    </div>
-                  )}
-                </div>
-
-              </div>
-
-              {/* Dynamic Product Specifications area */}
-              <div className="p-4 mb-8 bg-white border border-slate-200 rounded-lg">
-                <h4 className="text-[10.5px] font-black text-[#1a1a2e] tracking-widest uppercase pb-1 mb-2">
-                  Secured Product Specifications
-                </h4>
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                  <div className="space-y-1">
-                    <div className="font-extrabold text-[#1a1a2e] text-sm">{order.product.name}</div>
-                    <div className="text-slate-500 font-mono text-[11px]">
-                      <span><strong>Brand ID:</strong> {order.product.brand}</span> · <span><strong>SKU:</strong> SKU-{order.product.id}</span>
-                    </div>
-                    <div className="text-slate-500 text-[11px]">
-                      <span><strong>Category:</strong> Retail Standard Distribution Pack</span>
-                    </div>
-                  </div>
-                  
-                  <div className="sm:text-right shrink-0">
-                    <span className="text-[10px] text-app-text-secondary block font-mono uppercase font-black">Authorized Qty</span>
-                    <span className="text-lg font-black text-[#ef3c23]">1 Unit</span>
-                  </div>
+                <div className="flex flex-col items-start md:items-end gap-1.5 shrink-0">
+                  <span className="text-[9.5px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    ✓ System Verified
+                  </span>
+                  <span className="text-[9.5px] font-black text-[#EF3C23] bg-orange-50 border border-orange-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    Official Supply Hub
+                  </span>
                 </div>
               </div>
 
-              {/* Line Items Table */}
-              <div className="mb-8 border border-slate-200 rounded-lg overflow-hidden">
-                <table className="w-full text-left text-xs border-collapse">
+              <div className="h-[1px] bg-slate-100 my-5" />
+
+              {/* Product Visual + Specs Row */}
+              <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-3">Ordered Product & Visual Specifications</div>
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-5">
+                <div className="md:col-span-7">
+                  <div className="w-full h-[180px] bg-gradient-to-br from-[#F0F3FA] to-[#E4E8F0] border border-slate-200 rounded-lg overflow-hidden flex flex-col items-center justify-center text-center relative shadow-sm">
+                    {order.product.image ? (
+                      <img src={order.product.image} className="w-full h-full object-cover" alt={order.product.name} />
+                    ) : (
+                      <div className="p-4 flex flex-col items-center">
+                        <Truck className="w-10 h-10 text-slate-400 mb-2" />
+                        <div className="text-xs font-semibold text-slate-500">{order.product.name}</div>
+                        <div className="text-[10px] text-slate-400 mt-1">Product image loads from order data</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="md:col-span-5 flex flex-col justify-center">
+                  <div className="text-[10px] font-bold text-[#EF3C23] uppercase tracking-wider mb-1">Product Details</div>
+                  <div className="font-extrabold text-slate-900 text-base mb-1.5">{order.product.name}</div>
+                  <div className="text-xs text-slate-600 space-y-1 font-medium">
+                    <div><strong>Brand:</strong> {order.product.brand}</div>
+                    <div><strong>SKU:</strong> SKU-{order.product.id}</div>
+                    <div><strong>Variant:</strong> Elite Edition</div>
+                    <div><strong>Color & Specs:</strong> Crimson Space Gray (Steel Loop)</div>
+                    <div><strong>Category:</strong> Clothing & Lifestyle</div>
+                  </div>
+                  <div className="mt-3 text-sm font-black text-[#EF3C23]">Authorized Qty: 1 Unit</div>
+                </div>
+              </div>
+
+              <div className="h-[1px] bg-slate-100 my-5" />
+
+              {/* Item Details Table */}
+              <div className="mb-6">
+                <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-[#1a1a2e] text-app-text-primary">
-                      <th className="p-3 font-semibold uppercase tracking-wider text-[11px]">Item Description</th>
-                      <th className="p-3 font-semibold uppercase tracking-wider text-[11px]">SKU Code</th>
-                      <th className="p-3 font-semibold uppercase tracking-wider text-[11px] text-right">Qty</th>
-                      <th className="p-3 font-semibold uppercase tracking-wider text-[11px] text-right">Unit Price</th>
-                      <th className="p-3 font-semibold uppercase tracking-wider text-[11px] text-right">Total Line</th>
+                    <tr className="border-b border-slate-200">
+                      <th className="pb-3 text-[11px] font-bold text-slate-400 tracking-wider uppercase text-left">Item Detail</th>
+                      <th className="pb-3 text-[11px] font-bold text-slate-400 tracking-wider uppercase text-right">Qty</th>
+                      <th className="pb-3 text-[11px] font-bold text-slate-400 tracking-wider uppercase text-right">Rate</th>
+                      <th className="pb-3 text-[11px] font-bold text-slate-400 tracking-wider uppercase text-right">Amount</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-b border-slate-200">
-                      <td className="p-3">
-                        <div className="font-bold text-slate-800">{order.product.name}</div>
-                        <div className="text-[10px] text-app-text-secondary mt-0.5">Includes standard store authentic packaging & warranty logs.</div>
+                    <tr className="border-b border-slate-100">
+                      <td className="py-4">
+                        <div className="font-bold text-[#1a1a2e] text-sm">{order.product.name}</div>
+                        <div className="text-[11px] text-slate-400 mt-1">SKU-{order.product.id} · Elite Edition · Crimson Space Gray</div>
                       </td>
-                      <td className="p-3 font-mono text-slate-500">SKU-{order.product.id}</td>
-                      <td className="p-3 text-right">1</td>
-                      <td className="p-3 text-right font-semibold">৳ {subtotal.toLocaleString()}</td>
-                      <td className="p-3 text-right font-extrabold text-[#1a1a2e]">৳ {subtotal.toLocaleString()}</td>
+                      <td className="py-4 text-right text-slate-700 font-medium">1</td>
+                      <td className="py-4 text-right text-slate-700 font-medium">৳ {subtotal.toLocaleString()}</td>
+                      <td className="py-4 text-right text-slate-900 font-extrabold">৳ {subtotal.toLocaleString()}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
 
-              {/* Payment Summary Box */}
-              <div className="flex justify-end mb-8">
-                <div className="w-full sm:w-[320px] p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-2 text-xs">
+              {/* Payment Summary */}
+              <div className="flex justify-end mb-6">
+                <div className="w-[300px] text-xs space-y-2 font-medium">
                   <div className="flex justify-between text-slate-500">
                     <span>Supplier Subtotal:</span>
-                    <span className="font-mono">৳ {subtotal.toLocaleString()}</span>
+                    <span>৳ {subtotal.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-slate-500">
                     <span>Logistics Shipping:</span>
-                    <span className="font-mono">৳ {shipping.toLocaleString()}</span>
+                    <span>৳ {shipping.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-slate-500">
-                    <span>Advance Payment Credit:</span>
-                    <span className="font-mono">৳ {advancePayment.toLocaleString()}</span>
+                    <span>Advance Paid:</span>
+                    <span>৳ {advancePayment.toLocaleString()}</span>
                   </div>
-
-                  <div className="border-t border-slate-200/80 pt-2 flex justify-between items-center text-sm font-extrabold text-[#ef3c23]">
+                  <div className="flex justify-between font-extrabold text-sm text-[#EF3C23] border-t border-slate-100 pt-2.5">
                     <span>Total COD Payable:</span>
-                    <span className="text-base font-black font-mono">৳ {codPayable.toLocaleString()}</span>
+                    <span className="text-base font-black">৳ {codPayable.toLocaleString()}</span>
                   </div>
-
-                  <div className="text-center bg-red-50 border border-red-100 rounded text-[9.5px] font-black text-[#ef3c23] py-1 uppercase tracking-widest mt-2">
-                    🛡️ Cash On Delivery Unlocked
+                  <div className="text-right">
+                    <span className="inline-block mt-2 text-[10px] font-bold text-white bg-[#1a1a2e] px-2.5 py-0.5 rounded uppercase tracking-wider">
+                      COD — Cash On Delivery
+                    </span>
                   </div>
                 </div>
               </div>
 
               {/* Customer Special Notes Block */}
-              <div className="p-4 bg-slate-50 border-l-4 border-[#1a1a2e] rounded-r-lg mb-8 text-xs text-slate-600">
-                <h5 className="font-bold text-[#1a1a2e] uppercase mb-1">Special Delivery Customer Notes</h5>
+              <div className="bg-[#FFF8F7] border-l-4 border-[#EF3C23] rounded-r-lg p-4 mb-5 text-xs text-slate-700">
+                <div className="text-[10px] font-bold text-[#EF3C23] uppercase tracking-wider mb-1">Special Delivery Notes</div>
                 <p className="italic">
                   "{order.customerNotes?.[0] || 'Please execute dispatch and coordinate delivery times. Ring the customer upon arrival.'}"
                 </p>
               </div>
 
-              {/* Logistics tracking block */}
-              <div className="p-4 bg-slate-50 border border-dashed border-slate-300 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="space-y-1">
-                  <div className="text-xs font-bold text-[#1a1a2e] uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                    <Truck className="w-4 h-4 text-slate-600" />
-                    Courier Logistics System
-                  </div>
-                  <div className="text-xs text-slate-500">
-                    Deployed Carrier: <strong className="text-slate-700">{order.deliveryPartner || "RedX Logistics BD"}</strong> | Status: <strong className="text-slate-700">{order.status}</strong>
-                  </div>
+              {/* Shipping Info Strip */}
+              <div className="bg-[#F8F8F8] border border-slate-100 rounded-lg p-4 flex justify-between items-center text-xs mb-6 font-medium">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-400 tracking-wider uppercase mb-1">Shipping & Logistics</div>
+                  <div className="font-bold text-slate-800">Active Courier: {order.deliveryPartner || "Pathao / SteadFast BD Courier"}</div>
                 </div>
-                
-                <a 
-                  href={order.trackingUrl || `https://redx.com.bd/track/${order.id}`}
-                  target="_blank" 
-                  rel="noreferrer"
-                  className="px-3 py-1.5 bg-[#1a1a2e] text-app-text-primary rounded text-[10px] font-bold text-center uppercase tracking-wider hover:bg-[#ef3c23] transition-all flex items-center justify-center gap-1"
-                >
-                  Track Shipment <ExternalLink className="w-3 h-3" />
-                </a>
+                <div>
+                  <a href={order.trackingUrl || 'https://track.pathao.com/sheet/9921'} target="_blank" rel="noopener noreferrer" className="text-[#EF3C23] font-bold underline">
+                    Click to track parcel
+                  </a>
+                </div>
               </div>
 
             </div>
 
-            {/* Print Footer */}
-            <div className="mt-12 pt-6 border-t border-slate-100 text-center text-app-text-secondary text-[10px] space-y-1">
-              <p className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider">Thank you for utilizing Choosify Merchandising Network</p>
-              <p className="max-w-[500px] mx-auto text-app-text-secondary">
-                This document is a certified dynamic invoice generated cryptographically under System UUID {order.id}. Historical logs are kept safe on our secure cloud vault.
-              </p>
-              <p className="font-mono font-bold tracking-widest text-[#ef3c23] pt-2">✓ ALL LEDGER BALANCES VERIFIED AND PROTOCOL SECURE</p>
+            {/* Footer */}
+            <div className="border-t-2 border-[#EF3C23] pt-5 flex justify-between items-start">
+              <div className="max-w-[80%]">
+                <div className="text-lg font-extrabold text-[#1a1a2e] mb-1">Thanks for shopping with Choosify.</div>
+                <div className="text-[10px] text-slate-400 leading-relaxed">
+                  Terms & Conditions: Payment due upon delivery via COD. This is a system-generated invoice — no signature required. Powered by Choosify.bd
+                </div>
+              </div>
+              <div className="w-16 h-16 opacity-15">
+                <svg className="w-full h-auto fill-[#18154c]" viewBox="0 0 651.43 651.43" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M325.71,651.43C146.11,651.43,0,505.31,0,325.71S146.11,0,325.71,0s325.71,146.11,325.71,325.71-146.11,325.71-325.71,325.71ZM325.71,74.42c-138.56,0-251.29,112.73-251.29,251.29s112.73,251.29,251.29,251.29,251.29-112.73,251.29-251.29-112.73-251.29-251.29-251.29Z" />
+                </svg>
+              </div>
             </div>
 
           </div>

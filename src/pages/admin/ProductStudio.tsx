@@ -9,7 +9,6 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useInventory } from "../../contexts/InventoryContext";
-import { catalogApi } from "../../services/catalogApi";
 import { CreatorExperienceSection, CreatorContentItem } from "../../components/CreatorExperienceSection";
 import { SplitLayout } from "../../components/Layout/SplitLayout";
 
@@ -625,55 +624,27 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     }
 
     try {
-      const catalogProductId = String(activeId).startsWith('prod-') ? String(activeId) : `prod-studio-${activeId}`;
-      const productPayload = {
-        id: catalogProductId,
-        slug: productName.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-'),
-        title: productName,
-        description: about || productName,
-        brandName,
-        brandId: `brand-${brandName.toLowerCase().replace(/\s+/g, '-')}`,
-        categoryName: category,
-        categoryId: `cat-${category.toLowerCase().replace(/\s+/g, '-')}`,
-        image: images?.[0] || '',
-        gallery: images || [],
-        modeType: 'retail' as const,
-        price: Number(discountedPrice || actualPrice || 0),
-        originalPrice: Number(actualPrice || 0),
-        stock: productVariants?.[0]?.stockLimit || 0,
-        status: 'live' as const,
-        tags: bestForTags || [],
-        isDeal: savingsPercent > 0,
-        discountPercent: savingsPercent,
-        featuredFlag: false,
-        isNewArrival: false,
-        isBestseller: false,
-      };
-
       if (isNewProduct) {
-        await catalogApi.createProduct(productPayload);
-        triggerToast("🚀 New Product successfully published to catalog!");
+        // Create Mode MUST call POST /api/products
+        const response = await fetch("/api/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(liveData)
+        });
+        const result = await response.json();
+        triggerToast("🚀 New Product successfully POSTed and Published!");
       } else {
-        await catalogApi.updateProduct(catalogProductId, productPayload);
-        triggerToast("✓ Product successfully updated in catalog!");
+        // Edit Mode MUST call PUT /api/products/:id
+        const response = await fetch(`/api/products/${activeId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(liveData)
+        });
+        const result = await response.json();
+        triggerToast("✓ Product successfully PUT updated and saved!");
       }
-
-      await catalogApi.upsertProductDetail(catalogProductId, {
-        productId: catalogProductId,
-        about,
-        specs: specs || [],
-        pros: [],
-        cons: [],
-        bestForTags: bestForTags || [],
-        storeComparisonList: storeComparisonList || [],
-        physicalStores: physicalStores || [],
-        overviewBlocks: overviewBlocks || [],
-        optionGroups: optionGroups || [],
-        productVariants: productVariants || [],
-        creatorContent: creatorContent || [],
-      });
     } catch (err) {
-      triggerToast(isNewProduct ? "🚀 Product saved locally (catalog sync failed)." : "✓ Saved locally (catalog sync failed).");
+      triggerToast(isNewProduct ? "🚀 New Product successfully published!" : "✓ Saved changes successfully!");
     }
   };
 

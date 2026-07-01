@@ -15,7 +15,6 @@ import { useCMS, createCMSLogEntry } from '../../contexts/CMSContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBrandProfiles } from '../../contexts/BrandProfilesContext';
 import { useAds } from '../../contexts/AdsContext';
-import { catalogApi } from '../../services/catalogApi';
 
 // Types for workspaces
 type WorkspaceId = 
@@ -29,7 +28,6 @@ type WorkspaceId =
 
 export interface FeaturedItem {
   id: string;
-  catalogId?: string;
   name: string;
   image?: string;
   brand?: string;
@@ -117,31 +115,6 @@ const INITIAL_PROMOTIONS = [
   { id: '7', name: 'New Year Offers', status: 'active', hasCountdown: false, endDate: '2025-01-01', bannerUrl: '', ctaText: 'Explore New Year', ctaUrl: '/promotions/newyear' },
   { id: '8', name: 'Valentine\'s Picks', status: 'draft', hasCountdown: false, endDate: '2025-02-14', bannerUrl: '', ctaText: 'Shop Gifts', ctaUrl: '/promotions/valentines' },
 ];
-
-const slugify = (value: string): string =>
-  value
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9\s-]/g, '')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-');
-
-const placementForSponsorType = (type: string): string => {
-  if (type === 'sponsored_deal') return 'deals_section';
-  if (type === 'spotlight_brand') return 'spotlight_section';
-  if (type === 'sponsored_brand') return 'sponsored_listing';
-  if (type === 'sponsored_product') return 'category_top';
-  if (type === 'sponsored_recommendation') return 'homepage_sponsored_ads';
-  return 'homepage_sponsored_ads';
-};
-
-const entityTypeForItem = (item: FeaturedItem | SponsoredItem): 'product' | 'brand' | 'deal' | 'guide' | 'creator' => {
-  if (item.type === 'creator') return 'creator';
-  if (item.type === 'guide') return 'guide';
-  if (item.type === 'brand') return 'brand';
-  if ((item as SponsoredItem).sponsorType === 'sponsored_deal') return 'deal';
-  return 'product';
-};
 
 export default function WebsiteCMSStudio() {
   const { cmsData, updateCMSData, loading: cmsLoading } = useCMS();
@@ -305,115 +278,6 @@ export default function WebsiteCMSStudio() {
   const handlePublishAll = async () => {
     setIsPublishing(true);
     try {
-      const resolveFeaturedIds = (items: any[]) =>
-        items.map((item) => String(item.catalogId || item.id || '')).filter(Boolean);
-
-      const sectionItemIds = (sectionId: string): string[] => {
-        switch (sectionId) {
-          case 'featured-products':
-          case 'trending':
-          case 'recommended-products':
-            return resolveFeaturedIds(featuredProducts);
-          case 'featured-brands':
-            return resolveFeaturedIds(featuredBrands);
-          case 'featured-deals':
-          case 'deals':
-            return resolveFeaturedIds(featuredDeals);
-          case 'creators':
-          case 'featured-creators':
-            return resolveFeaturedIds(featuredCreators);
-          case 'recommended':
-          case 'featured-recommendations':
-            return resolveFeaturedIds(featuredRecommendations);
-          default:
-            return [];
-        }
-      };
-
-      const creatorIds = resolveFeaturedIds(featuredCreators);
-      const guideIds = resolveFeaturedIds(featuredRecommendations.filter((item) => item.type === 'guide'));
-      const productIds = resolveFeaturedIds(featuredProducts);
-      const brandIds = resolveFeaturedIds(featuredBrands);
-      const dealIds = resolveFeaturedIds(featuredDeals);
-
-      const homepagePayload = {
-        id: 'default' as const,
-        heroBanners: localHeroBanners.map((banner: any, idx: number) => ({
-          id: String(banner.id || `hero-${idx + 1}`),
-          headline: banner.headline || '',
-          subtitle: banner.subtitle || '',
-          ctaText: banner.ctaText || '',
-          ctaUrl: banner.ctaUrl || '/products',
-          backgroundImage: banner.backgroundImage || '',
-          isActive: banner.isActive !== false,
-          order: typeof banner.order === 'number' ? banner.order : idx,
-        })),
-        sections: localHomepageSections.map((section: any, idx: number) => {
-          const sectionId = String(section.id || `section-${idx + 1}`);
-          return {
-            id: sectionId,
-            label: section.label || sectionId,
-            isVisible: section.isVisible !== false,
-            order: typeof section.order === 'number' ? section.order : idx,
-            itemIds: sectionItemIds(sectionId),
-          };
-        }),
-        featuredProductIds: productIds,
-        featuredBrandIds: brandIds,
-        featuredDealIds: dealIds,
-        featuredCreatorIds: creatorIds,
-        featuredGuideIds: guideIds,
-        updatedAt: new Date().toISOString(),
-      };
-
-      const sitePayload = {
-        id: 'default' as const,
-        navigation: (localNav || []).map((item: any, idx: number) => ({
-          id: String(item.id || `nav-${idx + 1}`),
-          label: item.label || 'Link',
-          path: item.path || '/',
-          order: typeof item.order === 'number' ? item.order : idx,
-        })),
-        footer: {
-          description: localFooter?.description || '',
-          copyrightText: localFooter?.copyrightText || '',
-          columns: (localFooter?.columns || []).map((column: any, idx: number) => ({
-            id: String(column.id || `footer-col-${idx + 1}`),
-            title: column.title || 'Links',
-            links: (column.links || []).map((link: any) => ({
-              label: link.label || '',
-              url: link.url || '/',
-            })),
-          })),
-          newsletterEnabled: localFooter?.newsletterEnabled !== false,
-        },
-        socialLinks: (localSocialLinks || []).map((link: any, idx: number) => ({
-          id: String(link.id || `social-${idx + 1}`),
-          platform: link.platform || 'Facebook',
-          url: link.url || '#',
-          isVisible: link.isVisible !== false,
-          order: typeof link.order === 'number' ? link.order : idx,
-        })),
-        popularSearches: (localPopularSearches || []).map((item: any, idx: number) => ({
-          id: String(item.id || `search-${idx + 1}`),
-          term: item.term || '',
-          order: typeof item.order === 'number' ? item.order : idx,
-          isActive: item.isActive !== false,
-        })),
-        seoEntries: (localSeoEntries || []).map((entry: any, idx: number) => ({
-          pageId: String(entry.pageId || `page-${idx + 1}`),
-          pageLabel: entry.pageLabel || 'Page',
-          title: entry.title || '',
-          metaDescription: entry.metaDescription || entry.description || '',
-          keywords: entry.keywords || '',
-          ogImage: entry.ogImage || '',
-          canonicalUrl: entry.canonicalUrl || '',
-        })),
-        announcementBarText: localGlobalSettings?.announcementBarText || '',
-        announcementBarEnabled: localGlobalSettings?.announcementBarEnabled === true,
-        updatedAt: new Date().toISOString(),
-      };
-
       await updateCMSData({
         heroBanners: localHeroBanners,
         homepageSections: localHomepageSections,
@@ -436,122 +300,6 @@ export default function WebsiteCMSStudio() {
           ...(cmsData.cmsActivityLog || []).slice(0, 49) // cap log at 50 entries
         ]
       });
-      await catalogApi.updateHomepage(homepagePayload);
-      await catalogApi.updateSiteConfig(sitePayload);
-
-      const nowIso = new Date().toISOString();
-      await Promise.all(
-        featuredCreators.map((item, idx) => {
-          const creatorId = String(item.catalogId || item.id || `creator-${idx + 1}`);
-          return catalogApi.upsertCreator(creatorId, {
-            id: creatorId,
-            slug: slugify(item.name || creatorId),
-            name: item.name || 'Creator',
-            handle: (item as any).handle || `@${slugify(item.name || 'creator')}`,
-            avatar: item.image || '',
-            score: Number((item as any).trustScore || 90),
-            bestFor: item.category || 'General',
-            bestForTags: item.category ? [item.category] : [],
-            platforms: ['YouTube'],
-            bio: '',
-            followers: {},
-            verifiedStatus: true,
-            featuredFlag: true,
-            videos: [],
-            reels: [],
-            blogs: [],
-            status: 'live',
-            createdAt: nowIso,
-            updatedAt: nowIso,
-          });
-        }),
-      );
-
-      let studioGuides: any[] = [];
-      try {
-        studioGuides = JSON.parse(localStorage.getItem('choosify_guides_studio_list') || '[]');
-      } catch {
-        studioGuides = [];
-      }
-      const guidesToPublish = [
-        ...featuredRecommendations.filter((item) => item.type === 'guide'),
-        ...studioGuides
-          .filter((guide) => guide.status === 'Published')
-          .map((guide) => ({
-            id: guide.id,
-            catalogId: guide.id,
-            name: guide.guideTitle,
-            image: guide.heroImage,
-            category: guide.category,
-            type: 'guide' as const,
-            addedAt: nowIso,
-          })),
-      ];
-      await Promise.all(
-        guidesToPublish.map((item, idx) => {
-          const guideId = String(item.catalogId || item.id || `guide-${idx + 1}`);
-          const studioMatch = studioGuides.find((g) => String(g.id) === guideId);
-          return catalogApi.upsertGuide(guideId, {
-            id: guideId,
-            slug: studioMatch?.slug || slugify(item.name || guideId),
-            title: studioMatch?.guideTitle || item.name || 'Guide',
-            author: studioMatch?.authorName || 'Choosify Editorial',
-            authorAvatar: studioMatch?.authorAvatar,
-            category: studioMatch?.category || item.category || 'General',
-            excerpt: studioMatch?.takeawayBody || studioMatch?.methodologyDescription,
-            image: studioMatch?.heroImage || item.image || '',
-            type: 'article',
-            readTime: studioMatch?.readTime || '5 MIN READ',
-            views: String(studioMatch?.perfViews || '0'),
-            tags: [],
-            productIds: studioMatch?.rankedProductIds || [],
-            whatWeLike: studioMatch?.verdictPros || [],
-            whatToConsider: studioMatch?.verdictCons || [],
-            seoTitle: studioMatch?.seoTitle,
-            seoDescription: studioMatch?.seoDescription,
-            seoKeywords: studioMatch?.seoKeywords,
-            seoOgImage: studioMatch?.seoOgImage,
-            seoCanonicalUrl: studioMatch?.seoCanonicalUrl,
-            status: studioMatch?.status === 'Published' ? 'live' : 'draft',
-            publishedAt: nowIso,
-            updatedAt: nowIso,
-          });
-        }),
-      );
-
-      const placementSources: SponsoredItem[] = [
-        ...spotlightBrands,
-        ...sponsoredItems,
-        ...featuredDeals.map((deal) => ({
-          ...deal,
-          sponsorType: 'sponsored_deal' as const,
-        })),
-      ];
-      await Promise.all(
-        placementSources.map((item, idx) => {
-          const placementId = String(item.id || `placement-${idx + 1}`);
-          const sponsorType = item.sponsorType || 'sponsored_product';
-          return catalogApi.upsertPlacement(placementId, {
-            id: placementId,
-            entityType: entityTypeForItem(item),
-            entityId: String(item.catalogId || item.id || ''),
-            sponsorType,
-            placement: placementForSponsorType(sponsorType),
-            title: item.name,
-            image: item.image,
-            startDate: item.startDate || nowIso,
-            endDate: item.endDate || nowIso,
-            hasCountdown: item.hasCountdown === true,
-            dealPrice: item.dealPrice,
-            originalPrice: item.originalPrice,
-            priority: idx,
-            isActive: true,
-            createdAt: nowIso,
-            updatedAt: nowIso,
-          });
-        }),
-      );
-
       localStorage.setItem('choosify_cms_featured_products', JSON.stringify(featuredProducts));
       localStorage.setItem('choosify_cms_featured_brands', JSON.stringify(featuredBrands));
       localStorage.setItem('choosify_cms_featured_creators', JSON.stringify(featuredCreators));

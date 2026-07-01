@@ -9,7 +9,6 @@ import {
   Search, Sliders, Hash, Layers, CheckSquare, Sparkles as SparklesIcon
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { catalogApi } from "../../services/catalogApi";
 
 const CHC_GUIDES_KEY = "choosify_guides_studio_list";
 const CHC_VERSIONS_KEY = "choosify_guides_versions";
@@ -385,41 +384,6 @@ export default function GuideEditStudio() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const syncGuideToCatalog = async (guideData: GuideData, publishLive = false) => {
-    const guideId = String(guideData.id).startsWith('guide') ? String(guideData.id) : `guide-${guideData.id}`;
-    const status =
-      publishLive || guideData.status === 'Published'
-        ? 'live'
-        : guideData.status === 'Archived'
-          ? 'archived'
-          : 'draft';
-    await catalogApi.upsertGuide(guideId, {
-      id: guideId,
-      slug: guideData.slug || guideId,
-      title: guideData.guideTitle,
-      author: guideData.authorName,
-      authorAvatar: guideData.authorAvatar,
-      category: guideData.category,
-      excerpt: guideData.takeawayBody || guideData.methodologyDescription,
-      image: guideData.heroImage,
-      type: 'article',
-      readTime: guideData.readTime,
-      views: String(guideData.perfViews || 0),
-      tags: guideData.whyThisWonTags?.map((tag) => tag.label) || [],
-      productIds: guideData.rankedProductIds || [],
-      whatWeLike: guideData.verdictPros || [],
-      whatToConsider: guideData.verdictCons || [],
-      seoTitle: guideData.seoTitle,
-      seoDescription: guideData.seoDescription,
-      seoKeywords: guideData.seoKeywords,
-      seoOgImage: guideData.seoOgImage,
-      seoCanonicalUrl: guideData.seoCanonicalUrl,
-      status,
-      publishedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
-  };
-
   const handleFieldChange = (field: keyof GuideData, value: any) => {
     setGuide(prev => ({
       ...prev,
@@ -448,7 +412,6 @@ export default function GuideEditStudio() {
 
     localStorage.setItem(CHC_GUIDES_KEY, JSON.stringify(currentGuidesList));
     setSavingState("Saved");
-    syncGuideToCatalog(guide).catch(() => undefined);
     triggerToast(`✓ Section [${sectionName.toUpperCase()}] saved independently & catalog updated.`);
     
     // Auto backup checkpoint
@@ -565,14 +528,9 @@ export default function GuideEditStudio() {
           </div>
 
           <button
-            onClick={async () => {
+            onClick={() => {
               handleFieldChange("status", "Published");
-              try {
-                await syncGuideToCatalog({ ...guide, status: 'Published' }, true);
-                triggerToast("✓ Guide published to catalog API successfully!");
-              } catch {
-                triggerToast("✓ Guide status updated locally (catalog sync failed).");
-              }
+              triggerToast("✓ Guide status updated to PUBLISHED successfully!");
             }}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all"
           >
