@@ -3,6 +3,16 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
+    { "source": "/api/v1/catalog/products", "destination": "/api/catalog-products-flat" },
+    { "source": "/api/v1/catalog/products/:id", "destination": "/api/catalog-products-id?id=:id" },
+    { "source": "/api/v1/catalog/categories", "destination": "/api/catalog-categories" },
+    { "source": "/api/v1/catalog/categories/:id", "destination": "/api/catalog-categories-id?id=:id" },
+    { "source": "/api/v1/catalog/brands", "destination": "/api/catalog-brands" },
+    { "source": "/api/v1/catalog/brands/:id", "destination": "/api/catalog-brands-id?id=:id" },
+    { "source": "/api/v1/catalog/deals", "destination": "/api/catalog-deals" },
+    { "source": "/api/v1/catalog/deals/:id", "destination": "/api/catalog-deals-id?id=:id" },
+    { "source": "/api/v1/catalog/home", "destination": "/api/catalog-home" },
+    { "source": "/api/v1/catalog/snapshot", "destination": "/api/catalog-snapshot" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
