@@ -4,6 +4,7 @@ import type {
   CatalogDeal,
   CatalogProduct,
   HomepageConfig,
+  SiteConfig,
 } from './catalogTypes';
 import {
   defaultBrands,
@@ -11,6 +12,7 @@ import {
   defaultDeals,
   defaultHomepage,
   defaultProducts,
+  defaultSiteConfig,
 } from './catalogDefaults';
 import { catalogStore as memoryStore } from './catalogMemoryStore';
 import { hasFirebaseAdminCredentials } from './firebaseAdmin';
@@ -208,6 +210,23 @@ export const catalogStore = {
     }
     return memoryStore.upsertHomepage(homepage);
   },
+
+  async getSiteConfig(): Promise<SiteConfig> {
+    if (useAdminFirestore) {
+      const admin = await getAdminStore();
+      const site = await admin.getSiteConfig();
+      return site ?? memoryStore.getSiteConfig();
+    }
+    return memoryStore.getSiteConfig();
+  },
+
+  async upsertSiteConfig(site: SiteConfig): Promise<SiteConfig> {
+    if (useAdminFirestore) {
+      const admin = await getAdminStore();
+      return admin.upsertSiteConfig(site);
+    }
+    return memoryStore.upsertSiteConfig(site);
+  },
 };
 
 export async function ensureCatalogSeedData(): Promise<void> {
@@ -230,6 +249,7 @@ export async function ensureCatalogSeedData(): Promise<void> {
     ...defaultProducts().map((item) => catalogStore.upsertProduct(item)),
     ...defaultDeals().map((item) => catalogStore.upsertDeal(item)),
     catalogStore.upsertHomepage(defaultHomepage()),
+    catalogStore.upsertSiteConfig(defaultSiteConfig()),
   ]);
 
   const mode = useAdminFirestore ? 'firestore-admin' : 'memory';

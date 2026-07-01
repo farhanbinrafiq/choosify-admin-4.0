@@ -4,6 +4,7 @@ import type {
   CatalogDeal,
   CatalogProduct,
   HomepageConfig,
+  SiteConfig,
 } from './catalogTypes';
 import { getAdminFirestore } from './firebaseAdmin';
 
@@ -12,6 +13,7 @@ const CATEGORIES_COLLECTION = 'catalog_categories';
 const BRANDS_COLLECTION = 'catalog_brands';
 const DEALS_COLLECTION = 'catalog_deals';
 const HOMEPAGE_DOC = { collection: 'settings', id: 'catalog_homepage' } as const;
+const SITE_DOC = { collection: 'settings', id: 'catalog_site' } as const;
 
 async function dbOrThrow() {
   const db = await getAdminFirestore();
@@ -75,6 +77,18 @@ export const firestoreAdminStore = {
     const db = await dbOrThrow();
     await db.collection(HOMEPAGE_DOC.collection).doc(HOMEPAGE_DOC.id).set(homepage, { merge: true });
     return homepage;
+  },
+
+  async getSiteConfig(): Promise<SiteConfig | null> {
+    const db = await dbOrThrow();
+    const snapshot = await db.collection(SITE_DOC.collection).doc(SITE_DOC.id).get();
+    return snapshot.exists ? (snapshot.data() as SiteConfig) : null;
+  },
+
+  async upsertSiteConfig(site: SiteConfig): Promise<SiteConfig> {
+    const db = await dbOrThrow();
+    await db.collection(SITE_DOC.collection).doc(SITE_DOC.id).set(site, { merge: true });
+    return site;
   },
 
   async hasAnyProducts(): Promise<boolean> {

@@ -107,3 +107,52 @@ export interface HomepageConfig {
   featuredDealIds: string[];
   updatedAt: string;
 }
+
+export interface SiteNavItem {
+  id: string;
+  label: string;
+  path: string;
+  order: number;
+}
+
+export interface SiteFooterLink {
+  label: string;
+  url: string;
+}
+
+export interface SiteFooterColumn {
+  id: string;
+  title: string;
+  links: SiteFooterLink[];
+}
+
+export interface SiteSocialLink {
+  id: string;
+  platform: string;
+  url: string;
+  isVisible: boolean;
+  order: number;
+}
+
+export interface SitePopularSearch {
+  id: string;
+  term: string;
+  order: number;
+  isActive: boolean;
+}
+
+export interface SiteConfig {
+  id: 'default';
+  navigation: SiteNavItem[];
+  footer: {
+    description: string;
+    copyrightText: string;
+    columns: SiteFooterColumn[];
+    newsletterEnabled: boolean;
+  };
+  socialLinks: SiteSocialLink[];
+  popularSearches: SitePopularSearch[];
+  announcementBarText: string;
+  announcementBarEnabled: boolean;
+  updatedAt: string;
+}

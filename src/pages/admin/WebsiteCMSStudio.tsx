@@ -279,6 +279,29 @@ export default function WebsiteCMSStudio() {
   const handlePublishAll = async () => {
     setIsPublishing(true);
     try {
+      const resolveFeaturedIds = (items: any[]) =>
+        items.map((item) => String(item.catalogId || item.id || '')).filter(Boolean);
+
+      const sectionItemIds = (sectionId: string): string[] => {
+        switch (sectionId) {
+          case 'featured-products':
+          case 'trending':
+          case 'recommended-products':
+            return resolveFeaturedIds(featuredProducts);
+          case 'featured-brands':
+            return resolveFeaturedIds(featuredBrands);
+          case 'featured-deals':
+          case 'deals':
+            return resolveFeaturedIds(featuredDeals);
+          default:
+            return [];
+        }
+      };
+
+      const productIds = resolveFeaturedIds(featuredProducts);
+      const brandIds = resolveFeaturedIds(featuredBrands);
+      const dealIds = resolveFeaturedIds(featuredDeals);
+
       const homepagePayload = {
         id: 'default' as const,
         heroBanners: localHeroBanners.map((banner: any, idx: number) => ({
@@ -293,21 +316,56 @@ export default function WebsiteCMSStudio() {
         })),
         sections: localHomepageSections.map((section: any, idx: number) => {
           const sectionId = String(section.id || `section-${idx + 1}`);
-          let itemIds: string[] = [];
-          if (sectionId === 'featured-products') itemIds = featuredProducts.map((item) => item.id);
-          if (sectionId === 'featured-brands') itemIds = featuredBrands.map((item) => item.id);
-          if (sectionId === 'featured-deals') itemIds = featuredDeals.map((item) => item.id);
           return {
             id: sectionId,
             label: section.label || sectionId,
             isVisible: section.isVisible !== false,
             order: typeof section.order === 'number' ? section.order : idx,
-            itemIds,
+            itemIds: sectionItemIds(sectionId),
           };
         }),
-        featuredProductIds: featuredProducts.map((item) => item.id),
-        featuredBrandIds: featuredBrands.map((item) => item.id),
-        featuredDealIds: featuredDeals.map((item) => item.id),
+        featuredProductIds: productIds,
+        featuredBrandIds: brandIds,
+        featuredDealIds: dealIds,
+        updatedAt: new Date().toISOString(),
+      };
+
+      const sitePayload = {
+        id: 'default' as const,
+        navigation: (localNav || []).map((item: any, idx: number) => ({
+          id: String(item.id || `nav-${idx + 1}`),
+          label: item.label || 'Link',
+          path: item.path || '/',
+          order: typeof item.order === 'number' ? item.order : idx,
+        })),
+        footer: {
+          description: localFooter?.description || '',
+          copyrightText: localFooter?.copyrightText || '',
+          columns: (localFooter?.columns || []).map((column: any, idx: number) => ({
+            id: String(column.id || `footer-col-${idx + 1}`),
+            title: column.title || 'Links',
+            links: (column.links || []).map((link: any) => ({
+              label: link.label || '',
+              url: link.url || '/',
+            })),
+          })),
+          newsletterEnabled: localFooter?.newsletterEnabled !== false,
+        },
+        socialLinks: (localSocialLinks || []).map((link: any, idx: number) => ({
+          id: String(link.id || `social-${idx + 1}`),
+          platform: link.platform || 'Facebook',
+          url: link.url || '#',
+          isVisible: link.isVisible !== false,
+          order: typeof link.order === 'number' ? link.order : idx,
+        })),
+        popularSearches: (localPopularSearches || []).map((item: any, idx: number) => ({
+          id: String(item.id || `search-${idx + 1}`),
+          term: item.term || '',
+          order: typeof item.order === 'number' ? item.order : idx,
+          isActive: item.isActive !== false,
+        })),
+        announcementBarText: localGlobalSettings?.announcementBarText || '',
+        announcementBarEnabled: localGlobalSettings?.announcementBarEnabled === true,
         updatedAt: new Date().toISOString(),
       };
 
@@ -334,6 +392,7 @@ export default function WebsiteCMSStudio() {
         ]
       });
       await catalogApi.updateHomepage(homepagePayload);
+      await catalogApi.updateSiteConfig(sitePayload);
       localStorage.setItem('choosify_cms_featured_products', JSON.stringify(featuredProducts));
       localStorage.setItem('choosify_cms_featured_brands', JSON.stringify(featuredBrands));
       localStorage.setItem('choosify_cms_featured_creators', JSON.stringify(featuredCreators));

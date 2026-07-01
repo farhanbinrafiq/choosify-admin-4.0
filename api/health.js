@@ -73,7 +73,7 @@ async function remove2(collectionName, id) {
   const db = await dbOrThrow();
   await db.collection(collectionName).doc(id).delete();
 }
-var PRODUCTS_COLLECTION2, CATEGORIES_COLLECTION2, BRANDS_COLLECTION2, DEALS_COLLECTION2, HOMEPAGE_DOC, firestoreAdminStore;
+var PRODUCTS_COLLECTION2, CATEGORIES_COLLECTION2, BRANDS_COLLECTION2, DEALS_COLLECTION2, HOMEPAGE_DOC, SITE_DOC, firestoreAdminStore;
 var init_catalogFirestoreAdmin = __esm({
   "lib/vercel-catalog/catalogFirestoreAdmin.ts"() {
     init_firebaseAdmin();
@@ -82,6 +82,7 @@ var init_catalogFirestoreAdmin = __esm({
     BRANDS_COLLECTION2 = "catalog_brands";
     DEALS_COLLECTION2 = "catalog_deals";
     HOMEPAGE_DOC = { collection: "settings", id: "catalog_homepage" };
+    SITE_DOC = { collection: "settings", id: "catalog_site" };
     firestoreAdminStore = {
       listProducts: () => listCollection2(PRODUCTS_COLLECTION2),
       getProduct: (id) => getById2(PRODUCTS_COLLECTION2, id),
@@ -108,6 +109,16 @@ var init_catalogFirestoreAdmin = __esm({
         const db = await dbOrThrow();
         await db.collection(HOMEPAGE_DOC.collection).doc(HOMEPAGE_DOC.id).set(homepage, { merge: true });
         return homepage;
+      },
+      async getSiteConfig() {
+        const db = await dbOrThrow();
+        const snapshot = await db.collection(SITE_DOC.collection).doc(SITE_DOC.id).get();
+        return snapshot.exists ? snapshot.data() : null;
+      },
+      async upsertSiteConfig(site) {
+        const db = await dbOrThrow();
+        await db.collection(SITE_DOC.collection).doc(SITE_DOC.id).set(site, { merge: true });
+        return site;
       },
       async hasAnyProducts() {
         const db = await dbOrThrow();
@@ -358,13 +369,85 @@ var defaultHomepage = () => {
       }
     ],
     sections: [
-      { id: "featured-products", label: "Featured Products", isVisible: true, order: 0, itemIds: ["prod-s24-ultra", "prod-macbook-air-m3"] },
-      { id: "featured-brands", label: "Featured Brands", isVisible: true, order: 1, itemIds: ["brand-samsung", "brand-apple"] },
-      { id: "featured-deals", label: "Featured Deals", isVisible: true, order: 2, itemIds: ["deal-s24-flash"] }
+      { id: "hero", label: "Hero Banner", isVisible: true, order: 0, itemIds: [] },
+      { id: "categories", label: "Featured Categories", isVisible: true, order: 1, itemIds: [] },
+      { id: "trending", label: "Trending Products", isVisible: true, order: 2, itemIds: ["prod-s24-ultra", "prod-macbook-air-m3"] },
+      { id: "featured-brands", label: "Featured Brands", isVisible: true, order: 3, itemIds: ["brand-samsung", "brand-apple"] },
+      { id: "deals", label: "Flash Deals", isVisible: true, order: 4, itemIds: ["deal-s24-flash"] },
+      { id: "creators", label: "Featured Creators", isVisible: true, order: 5, itemIds: [] },
+      { id: "recommended", label: "Recommended For You", isVisible: false, order: 6, itemIds: [] },
+      { id: "newsletter", label: "Newsletter Banner", isVisible: true, order: 7, itemIds: [] }
     ],
     featuredProductIds: ["prod-s24-ultra", "prod-macbook-air-m3"],
     featuredBrandIds: ["brand-samsung", "brand-apple"],
     featuredDealIds: ["deal-s24-flash"],
+    updatedAt: ts
+  };
+};
+var defaultSiteConfig = () => {
+  const ts = nowIso();
+  return {
+    id: "default",
+    navigation: [
+      { id: "nav-home", label: "Home", path: "/", order: 0 },
+      { id: "nav-categories", label: "Categories", path: "/categories", order: 1 },
+      { id: "nav-products", label: "Products", path: "/products", order: 2 },
+      { id: "nav-brands", label: "Brands", path: "/brands", order: 3 },
+      { id: "nav-guides", label: "Recommendations", path: "/guides", order: 4 },
+      { id: "nav-deals", label: "Deals", path: "/deals", order: 5 },
+      { id: "nav-creators", label: "Creators", path: "/creators", order: 6 }
+    ],
+    footer: {
+      description: "Bangladesh's Smartest Product Discovery Platform. Find the best brands, compare prices, and shop with confidence.",
+      copyrightText: "\xA9 2025 Choosify Bangladesh. All rights reserved.",
+      columns: [
+        {
+          id: "discover",
+          title: "Discover",
+          links: [
+            { label: "Top Brands", url: "/brands" },
+            { label: "New Arrivals", url: "/products" },
+            { label: "Compare", url: "/compare" },
+            { label: "Best Deals", url: "/deals" }
+          ]
+        },
+        {
+          id: "company",
+          title: "Company",
+          links: [
+            { label: "Suggest a Brand", url: "/suggest-brand" },
+            { label: "Partnership", url: "/partnership" },
+            { label: "Advertise", url: "/advertise" },
+            { label: "B2B Solutions", url: "/b2b" }
+          ]
+        },
+        {
+          id: "legal",
+          title: "Legal",
+          links: [
+            { label: "Terms", url: "/terms" },
+            { label: "Privacy", url: "/privacy" },
+            { label: "Contact", url: "/contact" },
+            { label: "About", url: "/about" }
+          ]
+        }
+      ],
+      newsletterEnabled: true
+    },
+    socialLinks: [
+      { id: "social-fb", platform: "Facebook", url: "https://www.facebook.com/choosify.bd", isVisible: true, order: 0 },
+      { id: "social-ig", platform: "Instagram", url: "https://www.instagram.com/choosify.bd/", isVisible: true, order: 1 },
+      { id: "social-tt", platform: "TikTok", url: "https://www.tiktok.com/@choosify5", isVisible: true, order: 2 },
+      { id: "social-yt", platform: "YouTube", url: "https://www.youtube.com/@choosify5", isVisible: true, order: 3 }
+    ],
+    popularSearches: [
+      { id: "ps-samsung", term: "Samsung", order: 0, isActive: true },
+      { id: "ps-apple", term: "Apple", order: 1, isActive: true },
+      { id: "ps-aarong", term: "Aarong", order: 2, isActive: true },
+      { id: "ps-sailor", term: "Sailor", order: 3, isActive: true }
+    ],
+    announcementBarText: "",
+    announcementBarEnabled: false,
     updatedAt: ts
   };
 };
@@ -379,7 +462,8 @@ var memoryState = {
   categories: defaultCategories(),
   brands: defaultBrands(),
   deals: defaultDeals(),
-  homepage: defaultHomepage()
+  homepage: defaultHomepage(),
+  site: defaultSiteConfig()
 };
 var collectionMemoryRef = (collectionName) => {
   switch (collectionName) {
@@ -440,6 +524,13 @@ var catalogStore = {
   async upsertHomepage(homepage) {
     memoryState.homepage = homepage;
     return homepage;
+  },
+  async getSiteConfig() {
+    return memoryState.site;
+  },
+  async upsertSiteConfig(site) {
+    memoryState.site = site;
+    return site;
   }
 };
 
@@ -616,6 +707,21 @@ var catalogStore2 = {
       return admin.upsertHomepage(homepage);
     }
     return catalogStore.upsertHomepage(homepage);
+  },
+  async getSiteConfig() {
+    if (useAdminFirestore) {
+      const admin = await getAdminStore();
+      const site = await admin.getSiteConfig();
+      return site ?? catalogStore.getSiteConfig();
+    }
+    return catalogStore.getSiteConfig();
+  },
+  async upsertSiteConfig(site) {
+    if (useAdminFirestore) {
+      const admin = await getAdminStore();
+      return admin.upsertSiteConfig(site);
+    }
+    return catalogStore.upsertSiteConfig(site);
   }
 };
 async function ensureCatalogSeedData() {
@@ -636,7 +742,8 @@ async function ensureCatalogSeedData() {
     ...defaultBrands().map((item) => catalogStore2.upsertBrand(item)),
     ...defaultProducts().map((item) => catalogStore2.upsertProduct(item)),
     ...defaultDeals().map((item) => catalogStore2.upsertDeal(item)),
-    catalogStore2.upsertHomepage(defaultHomepage())
+    catalogStore2.upsertHomepage(defaultHomepage()),
+    catalogStore2.upsertSiteConfig(defaultSiteConfig())
   ]);
   const mode = useAdminFirestore ? "firestore-admin" : "memory";
   console.log(`[Catalog Seed] Seeded default catalog snapshot (${mode}).`);
@@ -15426,6 +15533,74 @@ var normalizeHomepageInput = (payload, existing) => {
   };
   return homepageSchema.parse(normalized);
 };
+var normalizeNavItem = (payload, idx) => {
+  const raw = payload ?? {};
+  const id = toString(raw.id, `nav-${idx + 1}`);
+  return {
+    id,
+    label: toString(raw.label, "Link"),
+    path: toString(raw.path, "/"),
+    order: Math.floor(toNumber(raw.order, idx))
+  };
+};
+var normalizeFooterColumn = (payload, idx) => {
+  const raw = payload ?? {};
+  const links = Array.isArray(raw.links) ? raw.links : [];
+  return {
+    id: toString(raw.id, `footer-col-${idx + 1}`),
+    title: toString(raw.title, "Links"),
+    links: links.map((link) => {
+      const item = link ?? {};
+      return {
+        label: toString(item.label),
+        url: toString(item.url, "/")
+      };
+    }).filter((link) => link.label.length > 0)
+  };
+};
+var normalizeSocialLink = (payload, idx) => {
+  const raw = payload ?? {};
+  return {
+    id: toString(raw.id, `social-${idx + 1}`),
+    platform: toString(raw.platform, "Facebook"),
+    url: toString(raw.url, "#"),
+    isVisible: toBoolean(raw.isVisible, true),
+    order: Math.floor(toNumber(raw.order, idx))
+  };
+};
+var normalizePopularSearch = (payload, idx) => {
+  const raw = payload ?? {};
+  return {
+    id: toString(raw.id, `search-${idx + 1}`),
+    term: toString(raw.term, ""),
+    order: Math.floor(toNumber(raw.order, idx)),
+    isActive: toBoolean(raw.isActive, true)
+  };
+};
+var normalizeSiteInput = (payload, existing) => {
+  const raw = payload ?? {};
+  const footerRaw = raw.footer ?? existing?.footer ?? {};
+  const columnsInput = Array.isArray(footerRaw.columns) ? footerRaw.columns : existing?.footer.columns ?? [];
+  return {
+    id: "default",
+    navigation: (Array.isArray(raw.navigation) ? raw.navigation : existing?.navigation ?? []).map(normalizeNavItem),
+    footer: {
+      description: toString(footerRaw.description, existing?.footer.description ?? ""),
+      copyrightText: toString(footerRaw.copyrightText, existing?.footer.copyrightText ?? ""),
+      columns: columnsInput.map(normalizeFooterColumn),
+      newsletterEnabled: toBoolean(footerRaw.newsletterEnabled, existing?.footer.newsletterEnabled ?? true)
+    },
+    socialLinks: (Array.isArray(raw.socialLinks) ? raw.socialLinks : existing?.socialLinks ?? []).map(
+      normalizeSocialLink
+    ),
+    popularSearches: (Array.isArray(raw.popularSearches) ? raw.popularSearches : existing?.popularSearches ?? []).map(
+      normalizePopularSearch
+    ),
+    announcementBarText: toString(raw.announcementBarText, existing?.announcementBarText ?? ""),
+    announcementBarEnabled: toBoolean(raw.announcementBarEnabled, existing?.announcementBarEnabled ?? false),
+    updatedAt: nowIso2()
+  };
+};
 
 // lib/vercel-catalog/catalogApiUtils.ts
 var setCorsHeaders = (res) => {
@@ -15659,15 +15834,29 @@ async function handleHome(req, res) {
   }
   sendError(res, 405, "Method not allowed");
 }
+async function handleSite(req, res) {
+  if (req.method === "GET") {
+    res.status(200).json({ site: await catalogStore2.getSiteConfig() });
+    return;
+  }
+  if (req.method === "PUT") {
+    const current = await catalogStore2.getSiteConfig().catch(() => void 0);
+    const saved = await catalogStore2.upsertSiteConfig(normalizeSiteInput(await readJsonBody(req), current));
+    res.status(200).json({ success: true, site: saved });
+    return;
+  }
+  sendError(res, 405, "Method not allowed");
+}
 async function handleSnapshot(_req, res) {
-  const [products, categories, brands, deals, homepage] = await Promise.all([
+  const [products, categories, brands, deals, homepage, site] = await Promise.all([
     catalogStore2.listProducts(),
     catalogStore2.listCategories(),
     catalogStore2.listBrands(),
     catalogStore2.listDeals(),
-    catalogStore2.getHomepage()
+    catalogStore2.getHomepage(),
+    catalogStore2.getSiteConfig()
   ]);
-  res.status(200).json({ products, categories, brands, deals, homepage });
+  res.status(200).json({ products, categories, brands, deals, homepage, site });
 }
 async function handleVercelCatalogRequest(req, res) {
   setCorsHeaders(res);
@@ -15702,6 +15891,9 @@ async function handleVercelCatalogRequest(req, res) {
         return;
       case "home":
         await handleHome(req, res);
+        return;
+      case "site":
+        await handleSite(req, res);
         return;
       case "snapshot":
         if (req.method === "GET") {

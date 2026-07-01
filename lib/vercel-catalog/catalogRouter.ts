@@ -6,6 +6,7 @@ import {
   normalizeDealInput,
   normalizeHomepageInput,
   normalizeProductInput,
+  normalizeSiteInput,
 } from './catalogContract';
 import type { CatalogProduct } from './catalogTypes';
 import { readJsonBody, sendError, setCorsHeaders } from './catalogApiUtils';
@@ -236,15 +237,30 @@ async function handleHome(req: VercelRequest, res: VercelResponse) {
   sendError(res, 405, 'Method not allowed');
 }
 
+async function handleSite(req: VercelRequest, res: VercelResponse) {
+  if (req.method === 'GET') {
+    res.status(200).json({ site: await catalogStore.getSiteConfig() });
+    return;
+  }
+  if (req.method === 'PUT') {
+    const current = await catalogStore.getSiteConfig().catch(() => undefined);
+    const saved = await catalogStore.upsertSiteConfig(normalizeSiteInput(await readJsonBody(req), current));
+    res.status(200).json({ success: true, site: saved });
+    return;
+  }
+  sendError(res, 405, 'Method not allowed');
+}
+
 async function handleSnapshot(_req: VercelRequest, res: VercelResponse) {
-  const [products, categories, brands, deals, homepage] = await Promise.all([
+  const [products, categories, brands, deals, homepage, site] = await Promise.all([
     catalogStore.listProducts(),
     catalogStore.listCategories(),
     catalogStore.listBrands(),
     catalogStore.listDeals(),
     catalogStore.getHomepage(),
+    catalogStore.getSiteConfig(),
   ]);
-  res.status(200).json({ products, categories, brands, deals, homepage });
+  res.status(200).json({ products, categories, brands, deals, homepage, site });
 }
 
 export async function handleVercelCatalogRequest(req: VercelRequest, res: VercelResponse) {
@@ -283,6 +299,9 @@ export async function handleVercelCatalogRequest(req: VercelRequest, res: Vercel
         return;
       case 'home':
         await handleHome(req, res);
+        return;
+      case 'site':
+        await handleSite(req, res);
         return;
       case 'snapshot':
         if (req.method === 'GET') {

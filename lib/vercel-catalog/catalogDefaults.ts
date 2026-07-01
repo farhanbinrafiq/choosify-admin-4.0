@@ -253,13 +253,87 @@ export const defaultHomepage = (): HomepageConfig => {
       },
     ],
     sections: [
-      { id: 'featured-products', label: 'Featured Products', isVisible: true, order: 0, itemIds: ['prod-s24-ultra', 'prod-macbook-air-m3'] },
-      { id: 'featured-brands', label: 'Featured Brands', isVisible: true, order: 1, itemIds: ['brand-samsung', 'brand-apple'] },
-      { id: 'featured-deals', label: 'Featured Deals', isVisible: true, order: 2, itemIds: ['deal-s24-flash'] },
+      { id: 'hero', label: 'Hero Banner', isVisible: true, order: 0, itemIds: [] },
+      { id: 'categories', label: 'Featured Categories', isVisible: true, order: 1, itemIds: [] },
+      { id: 'trending', label: 'Trending Products', isVisible: true, order: 2, itemIds: ['prod-s24-ultra', 'prod-macbook-air-m3'] },
+      { id: 'featured-brands', label: 'Featured Brands', isVisible: true, order: 3, itemIds: ['brand-samsung', 'brand-apple'] },
+      { id: 'deals', label: 'Flash Deals', isVisible: true, order: 4, itemIds: ['deal-s24-flash'] },
+      { id: 'creators', label: 'Featured Creators', isVisible: true, order: 5, itemIds: [] },
+      { id: 'recommended', label: 'Recommended For You', isVisible: false, order: 6, itemIds: [] },
+      { id: 'newsletter', label: 'Newsletter Banner', isVisible: true, order: 7, itemIds: [] },
     ],
     featuredProductIds: ['prod-s24-ultra', 'prod-macbook-air-m3'],
     featuredBrandIds: ['brand-samsung', 'brand-apple'],
     featuredDealIds: ['deal-s24-flash'],
+    updatedAt: ts,
+  };
+};
+
+export const defaultSiteConfig = (): import('./catalogTypes').SiteConfig => {
+  const ts = nowIso();
+  return {
+    id: 'default',
+    navigation: [
+      { id: 'nav-home', label: 'Home', path: '/', order: 0 },
+      { id: 'nav-categories', label: 'Categories', path: '/categories', order: 1 },
+      { id: 'nav-products', label: 'Products', path: '/products', order: 2 },
+      { id: 'nav-brands', label: 'Brands', path: '/brands', order: 3 },
+      { id: 'nav-guides', label: 'Recommendations', path: '/guides', order: 4 },
+      { id: 'nav-deals', label: 'Deals', path: '/deals', order: 5 },
+      { id: 'nav-creators', label: 'Creators', path: '/creators', order: 6 },
+    ],
+    footer: {
+      description:
+        "Bangladesh's Smartest Product Discovery Platform. Find the best brands, compare prices, and shop with confidence.",
+      copyrightText: '© 2025 Choosify Bangladesh. All rights reserved.',
+      columns: [
+        {
+          id: 'discover',
+          title: 'Discover',
+          links: [
+            { label: 'Top Brands', url: '/brands' },
+            { label: 'New Arrivals', url: '/products' },
+            { label: 'Compare', url: '/compare' },
+            { label: 'Best Deals', url: '/deals' },
+          ],
+        },
+        {
+          id: 'company',
+          title: 'Company',
+          links: [
+            { label: 'Suggest a Brand', url: '/suggest-brand' },
+            { label: 'Partnership', url: '/partnership' },
+            { label: 'Advertise', url: '/advertise' },
+            { label: 'B2B Solutions', url: '/b2b' },
+          ],
+        },
+        {
+          id: 'legal',
+          title: 'Legal',
+          links: [
+            { label: 'Terms', url: '/terms' },
+            { label: 'Privacy', url: '/privacy' },
+            { label: 'Contact', url: '/contact' },
+            { label: 'About', url: '/about' },
+          ],
+        },
+      ],
+      newsletterEnabled: true,
+    },
+    socialLinks: [
+      { id: 'social-fb', platform: 'Facebook', url: 'https://www.facebook.com/choosify.bd', isVisible: true, order: 0 },
+      { id: 'social-ig', platform: 'Instagram', url: 'https://www.instagram.com/choosify.bd/', isVisible: true, order: 1 },
+      { id: 'social-tt', platform: 'TikTok', url: 'https://www.tiktok.com/@choosify5', isVisible: true, order: 2 },
+      { id: 'social-yt', platform: 'YouTube', url: 'https://www.youtube.com/@choosify5', isVisible: true, order: 3 },
+    ],
+    popularSearches: [
+      { id: 'ps-samsung', term: 'Samsung', order: 0, isActive: true },
+      { id: 'ps-apple', term: 'Apple', order: 1, isActive: true },
+      { id: 'ps-aarong', term: 'Aarong', order: 2, isActive: true },
+      { id: 'ps-sailor', term: 'Sailor', order: 3, isActive: true },
+    ],
+    announcementBarText: '',
+    announcementBarEnabled: false,
     updatedAt: ts,
   };
 };

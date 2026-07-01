@@ -7,6 +7,11 @@ import type {
   HomepageConfig,
   HomepageHeroBanner,
   HomepageSectionConfig,
+  SiteConfig,
+  SiteFooterColumn,
+  SiteNavItem,
+  SitePopularSearch,
+  SiteSocialLink,
 } from './catalogTypes';
 
 const nonEmpty = z.string().trim().min(1);
@@ -339,4 +344,80 @@ export const normalizeHomepageInput = (
   };
 
   return homepageSchema.parse(normalized);
+};
+
+const normalizeNavItem = (payload: unknown, idx: number): SiteNavItem => {
+  const raw = (payload ?? {}) as Record<string, unknown>;
+  const id = toString(raw.id, `nav-${idx + 1}`);
+  return {
+    id,
+    label: toString(raw.label, 'Link'),
+    path: toString(raw.path, '/'),
+    order: Math.floor(toNumber(raw.order, idx)),
+  };
+};
+
+const normalizeFooterColumn = (payload: unknown, idx: number): SiteFooterColumn => {
+  const raw = (payload ?? {}) as Record<string, unknown>;
+  const links = Array.isArray(raw.links) ? raw.links : [];
+  return {
+    id: toString(raw.id, `footer-col-${idx + 1}`),
+    title: toString(raw.title, 'Links'),
+    links: links
+      .map((link) => {
+        const item = (link ?? {}) as Record<string, unknown>;
+        return {
+          label: toString(item.label),
+          url: toString(item.url, '/'),
+        };
+      })
+      .filter((link) => link.label.length > 0),
+  };
+};
+
+const normalizeSocialLink = (payload: unknown, idx: number): SiteSocialLink => {
+  const raw = (payload ?? {}) as Record<string, unknown>;
+  return {
+    id: toString(raw.id, `social-${idx + 1}`),
+    platform: toString(raw.platform, 'Facebook'),
+    url: toString(raw.url, '#'),
+    isVisible: toBoolean(raw.isVisible, true),
+    order: Math.floor(toNumber(raw.order, idx)),
+  };
+};
+
+const normalizePopularSearch = (payload: unknown, idx: number): SitePopularSearch => {
+  const raw = (payload ?? {}) as Record<string, unknown>;
+  return {
+    id: toString(raw.id, `search-${idx + 1}`),
+    term: toString(raw.term, ''),
+    order: Math.floor(toNumber(raw.order, idx)),
+    isActive: toBoolean(raw.isActive, true),
+  };
+};
+
+export const normalizeSiteInput = (payload: unknown, existing?: SiteConfig): SiteConfig => {
+  const raw = (payload ?? {}) as Record<string, unknown>;
+  const footerRaw = (raw.footer ?? existing?.footer ?? {}) as Record<string, unknown>;
+  const columnsInput = Array.isArray(footerRaw.columns) ? footerRaw.columns : existing?.footer.columns ?? [];
+
+  return {
+    id: 'default',
+    navigation: (Array.isArray(raw.navigation) ? raw.navigation : existing?.navigation ?? []).map(normalizeNavItem),
+    footer: {
+      description: toString(footerRaw.description, existing?.footer.description ?? ''),
+      copyrightText: toString(footerRaw.copyrightText, existing?.footer.copyrightText ?? ''),
+      columns: columnsInput.map(normalizeFooterColumn),
+      newsletterEnabled: toBoolean(footerRaw.newsletterEnabled, existing?.footer.newsletterEnabled ?? true),
+    },
+    socialLinks: (Array.isArray(raw.socialLinks) ? raw.socialLinks : existing?.socialLinks ?? []).map(
+      normalizeSocialLink,
+    ),
+    popularSearches: (Array.isArray(raw.popularSearches) ? raw.popularSearches : existing?.popularSearches ?? []).map(
+      normalizePopularSearch,
+    ),
+    announcementBarText: toString(raw.announcementBarText, existing?.announcementBarText ?? ''),
+    announcementBarEnabled: toBoolean(raw.announcementBarEnabled, existing?.announcementBarEnabled ?? false),
+    updatedAt: nowIso(),
+  };
 };
