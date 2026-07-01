@@ -4,6 +4,7 @@ import type {
   CatalogDeal,
   CatalogProduct,
   HomepageConfig,
+  SiteConfig,
 } from './catalogTypes';
 import {
   defaultBrands,
@@ -11,6 +12,7 @@ import {
   defaultDeals,
   defaultHomepage,
   defaultProducts,
+  defaultSiteConfig,
 } from './catalogDefaults';
 
 export { defaultHomepage } from './catalogDefaults';
@@ -26,12 +28,14 @@ const memoryState: {
   brands: CatalogBrand[];
   deals: CatalogDeal[];
   homepage: HomepageConfig;
+  site: SiteConfig;
 } = {
   products: defaultProducts(),
   categories: defaultCategories(),
   brands: defaultBrands(),
   deals: defaultDeals(),
   homepage: defaultHomepage(),
+  site: defaultSiteConfig(),
 };
 
 const collectionMemoryRef = (collectionName: string): unknown[] => {
@@ -104,6 +108,15 @@ export const catalogStore = {
     memoryState.homepage = homepage;
     return homepage;
   },
+
+  async getSiteConfig(): Promise<SiteConfig> {
+    return memoryState.site;
+  },
+
+  async upsertSiteConfig(site: SiteConfig): Promise<SiteConfig> {
+    memoryState.site = site;
+    return site;
+  },
 };
 
 export async function ensureCatalogSeedData(): Promise<void> {
@@ -113,6 +126,7 @@ export async function ensureCatalogSeedData(): Promise<void> {
     ...defaultProducts().map((item) => catalogStore.upsertProduct(item)),
     ...defaultDeals().map((item) => catalogStore.upsertDeal(item)),
     catalogStore.upsertHomepage(defaultHomepage()),
+    catalogStore.upsertSiteConfig(defaultSiteConfig()),
   ]);
 
   console.log('[Catalog Seed] Seeded default catalog snapshot (memory mode).');

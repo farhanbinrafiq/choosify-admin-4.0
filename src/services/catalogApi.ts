@@ -4,6 +4,7 @@ import type {
   CatalogDeal,
   CatalogProduct,
   HomepageConfig,
+  SiteConfig,
 } from '../types/catalog';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
@@ -99,5 +100,14 @@ export const catalogApi = {
   updateHomepage: async (payload: HomepageConfig): Promise<HomepageConfig> => {
     const result = await request<{ homepage: HomepageConfig }>('/catalog/home', 'PUT', payload);
     return result.homepage;
+  },
+
+  getSiteConfig: async (): Promise<SiteConfig> => {
+    const result = await request<{ site: SiteConfig }>('/catalog/site');
+    return result.site;
+  },
+  updateSiteConfig: async (payload: SiteConfig): Promise<SiteConfig> => {
+    const result = await request<{ site: SiteConfig }>('/catalog/site', 'PUT', payload);
+    return result.site;
   },
 };
