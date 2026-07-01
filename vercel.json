@@ -3,7 +3,8 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "rewrites": [
-    { "source": "/api/v1/catalog/:path*", "destination": "/api/health?catalogPath=:path*" },
+    { "source": "/api/health", "destination": "/api/health.cjs" },
+    { "source": "/api/v1/catalog/:path*", "destination": "/api/health.cjs?catalogPath=:path*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ]
 }
