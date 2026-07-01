@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { CategoryType } from '../types';
+import { catalogApi } from '../services/catalogApi';
 
 export type UserRole = 
   | 'super_admin' 
@@ -166,6 +167,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   });
 
   const [activeBrandId, setActiveBrandIdState] = useState<string | null>(null);
+  const [catalogSynced, setCatalogSynced] = useState(false);
 
   const setActiveBrandId = (id: string | null) => {
     setActiveBrandIdState(id);
@@ -183,6 +185,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProfile(mockProfiles[savedRole]);
     }
     setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function hydrateCatalog() {
+      try {
+        const [remoteBrands, remoteCategories] = await Promise.all([
+          catalogApi.listBrands(),
+          catalogApi.listCategories(),
+        ]);
+
+        if (!cancelled) {
+          if (remoteBrands.length > 0) {
+            const mappedBrands = remoteBrands.map((brand) => ({
+              id: brand.id,
+              name: brand.name,
+              category: brand.category,
+            }));
+            setAllBrands(mappedBrands);
+            localStorage.setItem('choosify_all_brands', JSON.stringify(mappedBrands));
+          }
+
+          if (remoteCategories.length > 0) {
+            const mappedCategories: CategoryType[] = remoteCategories.map((category) => ({
+              id: category.id,
+              parentId: category.parentId,
+              name: category.name,
+              slug: category.slug,
+              icon: category.icon,
+              description: category.description,
+              displayOrder: category.displayOrder,
+              enabled: category.enabled,
+            }));
+            setCategories(mappedCategories);
+            localStorage.setItem('choosify_categories', JSON.stringify(mappedCategories));
+          }
+          setCatalogSynced(true);
+        }
+      } catch (error) {
+        console.warn('[AuthContext] Catalog API hydrate failed, using local fallback.', error);
+      }
+    }
+
+    hydrateCatalog();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // When profile loads or changes, manage activeBrandId
@@ -227,6 +277,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updatedBrands = [...allBrands, newBrand];
     setAllBrands(updatedBrands);
     localStorage.setItem('choosify_all_brands', JSON.stringify(updatedBrands));
+    catalogApi
+      .createBrand({
+        id: brandId,
+        name,
+        category,
+        slug: name.toLowerCase().replace(/\s+/g, '-'),
+        description: '',
+        logo: name.slice(0, 2).toUpperCase(),
+      })
+      .catch((error) => {
+        console.warn('[AuthContext] Failed to persist new brand.', error);
+      });
 
     // 2. Add relation for current seller
     if (profile && profile.role === 'seller') {
@@ -290,6 +352,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = [...categories, newCategory];
     setCategories(updated);
     localStorage.setItem('choosify_categories', JSON.stringify(updated));
+    catalogApi
+      .createCategory(newCategory)
+      .catch((error) => {
+        console.warn('[AuthContext] Failed to persist new category.', error);
+      });
     return newCategory;
   };
 
@@ -317,6 +384,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     setCategories(updated);
     localStorage.setItem('choosify_categories', JSON.stringify(updated));
+    const target = updated.find((item) => item.id === id);
+    if (target) {
+      catalogApi.updateCategory(id, target).catch((error) => {
+        console.warn('[AuthContext] Failed to persist category update.', error);
+      });
+    }
   };
 
   const deleteCategory = (id: string): boolean => {
@@ -327,6 +400,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const updated = categories.filter(c => c.id !== id);
     setCategories(updated);
     localStorage.setItem('choosify_categories', JSON.stringify(updated));
+    catalogApi.deleteCategory(id).catch((error) => {
+      console.warn('[AuthContext] Failed to delete category from API.', error);
+    });
     return true;
   };
 
@@ -352,6 +428,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     setCategories(updated);
     localStorage.setItem('choosify_categories', JSON.stringify(updated));
+    const target = updated.find((item) => item.id === id);
+    if (target) {
+      catalogApi.updateCategory(id, target).catch((error) => {
+        console.warn('[AuthContext] Failed to persist moved category.', error);
+      });
+    }
   };
 
   const reorderCategory = (id: string, newPosition: number) => {
@@ -376,11 +458,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     setCategories(updated);
     localStorage.setItem('choosify_categories', JSON.stringify(updated));
+    const target = updated.find((item) => item.id === id);
+    if (target) {
+      catalogApi.updateCategory(id, target).catch((error) => {
+        console.warn('[AuthContext] Failed to persist reordered category.', error);
+      });
+    }
   };
 
   const importCategories = (imported: CategoryType[]) => {
     setCategories(imported);
     localStorage.setItem('choosify_categories', JSON.stringify(imported));
+    Promise.all(
+      imported.map((category) => catalogApi.updateCategory(category.id, category).catch(() => catalogApi.createCategory(category)))
+    ).catch((error) => {
+      console.warn('[AuthContext] Failed to persist imported categories.', error);
+    });
   };
 
   return (

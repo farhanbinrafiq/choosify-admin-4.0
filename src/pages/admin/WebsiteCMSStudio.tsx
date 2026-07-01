@@ -15,6 +15,7 @@ import { useCMS, createCMSLogEntry } from '../../contexts/CMSContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBrandProfiles } from '../../contexts/BrandProfilesContext';
 import { useAds } from '../../contexts/AdsContext';
+import { catalogApi } from '../../services/catalogApi';
 
 // Types for workspaces
 type WorkspaceId = 
@@ -278,6 +279,38 @@ export default function WebsiteCMSStudio() {
   const handlePublishAll = async () => {
     setIsPublishing(true);
     try {
+      const homepagePayload = {
+        id: 'default' as const,
+        heroBanners: localHeroBanners.map((banner: any, idx: number) => ({
+          id: String(banner.id || `hero-${idx + 1}`),
+          headline: banner.headline || '',
+          subtitle: banner.subtitle || '',
+          ctaText: banner.ctaText || '',
+          ctaUrl: banner.ctaUrl || '/products',
+          backgroundImage: banner.backgroundImage || '',
+          isActive: banner.isActive !== false,
+          order: typeof banner.order === 'number' ? banner.order : idx,
+        })),
+        sections: localHomepageSections.map((section: any, idx: number) => {
+          const sectionId = String(section.id || `section-${idx + 1}`);
+          let itemIds: string[] = [];
+          if (sectionId === 'featured-products') itemIds = featuredProducts.map((item) => item.id);
+          if (sectionId === 'featured-brands') itemIds = featuredBrands.map((item) => item.id);
+          if (sectionId === 'featured-deals') itemIds = featuredDeals.map((item) => item.id);
+          return {
+            id: sectionId,
+            label: section.label || sectionId,
+            isVisible: section.isVisible !== false,
+            order: typeof section.order === 'number' ? section.order : idx,
+            itemIds,
+          };
+        }),
+        featuredProductIds: featuredProducts.map((item) => item.id),
+        featuredBrandIds: featuredBrands.map((item) => item.id),
+        featuredDealIds: featuredDeals.map((item) => item.id),
+        updatedAt: new Date().toISOString(),
+      };
+
       await updateCMSData({
         heroBanners: localHeroBanners,
         homepageSections: localHomepageSections,
@@ -300,6 +333,7 @@ export default function WebsiteCMSStudio() {
           ...(cmsData.cmsActivityLog || []).slice(0, 49) // cap log at 50 entries
         ]
       });
+      await catalogApi.updateHomepage(homepagePayload);
       localStorage.setItem('choosify_cms_featured_products', JSON.stringify(featuredProducts));
       localStorage.setItem('choosify_cms_featured_brands', JSON.stringify(featuredBrands));
       localStorage.setItem('choosify_cms_featured_creators', JSON.stringify(featuredCreators));
