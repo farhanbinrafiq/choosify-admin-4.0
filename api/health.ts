@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { handleVercelCatalogRequest } from '../server/vercelCatalogRouter';
 
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const { handleVercelCatalogRequest } = await import('../server/vercelCatalogRouter');
   return handleVercelCatalogRequest(req, res);
 }

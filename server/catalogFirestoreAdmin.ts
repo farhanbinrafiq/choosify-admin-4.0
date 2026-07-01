@@ -13,8 +13,8 @@ const BRANDS_COLLECTION = 'catalog_brands';
 const DEALS_COLLECTION = 'catalog_deals';
 const HOMEPAGE_DOC = { collection: 'settings', id: 'catalog_homepage' } as const;
 
-function dbOrThrow() {
-  const db = getAdminFirestore();
+async function dbOrThrow() {
+  const db = await getAdminFirestore();
   if (!db) {
     throw new Error('Firestore Admin is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON on the server.');
   }
@@ -22,25 +22,25 @@ function dbOrThrow() {
 }
 
 async function listCollection<T>(collectionName: string): Promise<T[]> {
-  const db = dbOrThrow();
+  const db = await dbOrThrow();
   const snapshot = await db.collection(collectionName).get();
   return snapshot.docs.map((doc) => doc.data() as T);
 }
 
 async function getById<T>(collectionName: string, id: string): Promise<T | null> {
-  const db = dbOrThrow();
+  const db = await dbOrThrow();
   const snapshot = await db.collection(collectionName).doc(id).get();
   return snapshot.exists ? (snapshot.data() as T) : null;
 }
 
 async function upsert<T extends { id: string }>(collectionName: string, data: T): Promise<T> {
-  const db = dbOrThrow();
+  const db = await dbOrThrow();
   await db.collection(collectionName).doc(data.id).set(data, { merge: true });
   return data;
 }
 
 async function remove(collectionName: string, id: string): Promise<void> {
-  const db = dbOrThrow();
+  const db = await dbOrThrow();
   await db.collection(collectionName).doc(id).delete();
 }
 
@@ -66,19 +66,19 @@ export const firestoreAdminStore = {
   deleteDeal: (id: string) => remove(DEALS_COLLECTION, id),
 
   async getHomepage(): Promise<HomepageConfig | null> {
-    const db = dbOrThrow();
+    const db = await dbOrThrow();
     const snapshot = await db.collection(HOMEPAGE_DOC.collection).doc(HOMEPAGE_DOC.id).get();
     return snapshot.exists ? (snapshot.data() as HomepageConfig) : null;
   },
 
   async upsertHomepage(homepage: HomepageConfig): Promise<HomepageConfig> {
-    const db = dbOrThrow();
+    const db = await dbOrThrow();
     await db.collection(HOMEPAGE_DOC.collection).doc(HOMEPAGE_DOC.id).set(homepage, { merge: true });
     return homepage;
   },
 
   async hasAnyProducts(): Promise<boolean> {
-    const db = dbOrThrow();
+    const db = await dbOrThrow();
     const snapshot = await db.collection(PRODUCTS_COLLECTION).limit(1).get();
     return !snapshot.empty;
   },
