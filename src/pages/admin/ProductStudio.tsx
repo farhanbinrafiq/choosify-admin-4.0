@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useInventory } from "../../contexts/InventoryContext";
 import { catalogApi } from "../../services/catalogApi";
+import { readImageFileAsDataUrl } from "../../components/admin/ImageUploadField";
 import { CreatorExperienceSection, CreatorContentItem } from "../../components/CreatorExperienceSection";
 import { SplitLayout } from "../../components/Layout/SplitLayout";
 
@@ -311,6 +312,22 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
   // Temporary Editing states for dynamic additions inside right side panel drawer
   const [tempImagesInput, setTempImagesInput] = useState("");
+  const handleProductImageFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files?.length) return;
+    const urls = await Promise.all(
+      Array.from(files).map(async (file: File) => {
+        try {
+          return await readImageFileAsDataUrl(file);
+        } catch {
+          return URL.createObjectURL(file);
+        }
+      }),
+    );
+    setImages((prev) => [...prev, ...urls].slice(0, 12));
+    setEditingSection("hero");
+    event.target.value = "";
+  };
   const [tempColorsInput, setTempColorsInput] = useState("Titanium Gray, Cosmic Gold, Pearl White");
 
   // Temporary state holders inside Drawer
@@ -909,12 +926,12 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                   ))}
                 </div>
 
-                <div className="flex gap-2 max-w-md">
+                <div className="flex gap-2 max-w-md flex-wrap">
                   <input 
                     value={tempImagesInput}
                     onChange={(e) => setTempImagesInput(e.target.value)}
                     placeholder="Add photo HTTPS url listings row..."
-                    className="flex-1 bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#1A1A2E] outline-none focus:border-orange-500"
+                    className="flex-1 min-w-[200px] bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#1A1A2E] outline-none focus:border-orange-500"
                   />
                   <button
                     type="button"
@@ -928,6 +945,10 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                   >
                     Add
                   </button>
+                  <label className="px-4 py-2 bg-orange-500 text-white hover:bg-orange-600 rounded-xl text-xs font-black uppercase cursor-pointer">
+                    Upload
+                    <input type="file" multiple accept="image/*,video/*" className="hidden" onChange={handleProductImageFiles} />
+                  </label>
                 </div>
               </div>
 
@@ -1008,13 +1029,10 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                         Drag your product photos here, or click to browse. Supports high-resolution JPG, PNG, and MP4 videos.
                       </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleStartEdit("hero")}
-                      className="px-4 py-2 bg-[#FF5B00] text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all hover:bg-orange-600 shadow-md shadow-[#FF5B00]/10 cursor-pointer active:scale-95"
-                    >
+                    <label className="px-4 py-2 bg-[#FF5B00] text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all hover:bg-orange-600 shadow-md shadow-[#FF5B00]/10 cursor-pointer active:scale-95">
                       Upload Images / Videos
-                    </button>
+                      <input type="file" multiple accept="image/*,video/*" className="hidden" onChange={handleProductImageFiles} />
+                    </label>
                   </div>
                 )}
 

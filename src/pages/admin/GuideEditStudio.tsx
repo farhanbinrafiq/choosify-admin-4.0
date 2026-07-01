@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { catalogApi } from "../../services/catalogApi";
+import { ImageUploadField } from "../../components/admin/ImageUploadField";
 
 const CHC_GUIDES_KEY = "choosify_guides_studio_list";
 const CHC_VERSIONS_KEY = "choosify_guides_versions";
@@ -689,7 +690,7 @@ export default function GuideEditStudio() {
             </div>
 
             {/* Loved state stats inside Hero */}
-            <div className="flex items-center gap-4 bg-slate-50 px-4 py-2.5 rounded-2xl border border-slate-150">
+            <div className="flex items-center gap-4 bg-slate-50 px-4 py-2.5 rounded-2xl border border-slate-200">
               <button 
                 onClick={() => handleFieldChange("myLoved", !guide.myLoved)}
                 className={`flex items-center gap-1.5 text-xs font-bold uppercase transition-all${guide.myLoved ? "text-rose-650" : "text-slate-400 hover:text-slate-600"}`}
@@ -700,12 +701,12 @@ export default function GuideEditStudio() {
               <div className="w-[1px] h-4 bg-slate-200" />
               <div className="text-[10px] font-mono leading-none text-left">
                 <span className="text-slate-900 block font-black">{guide.totalLovedCount}</span>
-                <span className="text-slate-450">Total Lovers</span>
+                <span className="text-slate-500">Total Lovers</span>
               </div>
               <div className="w-[1px] h-4 bg-slate-200" />
               <div className="text-[10px] font-mono text-left">
                 <span className="text-emerald-600 block font-black">{guide.awarenessScore}%</span>
-                <span className="text-slate-455">Awareness</span>
+                <span className="text-slate-500">Awareness</span>
               </div>
             </div>
           </div>
@@ -906,7 +907,7 @@ export default function GuideEditStudio() {
         </div>
 
         {/* QUICK TIP SUBSIDIARY BANNER */}
-        <div className="bg-amber-50/70 border border-amber-150 p-5 rounded-2xl mb-6 text-left relative group">
+        <div className="bg-amber-50/70 border border-amber-200 p-5 rounded-2xl mb-6 text-left relative group">
           <button 
             id="edit-trigger-tip"
             onClick={() => setActiveDrawerSection("creator")}
@@ -989,7 +990,7 @@ export default function GuideEditStudio() {
             </div>
 
             {/* Pros */}
-            <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl">
+            <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl">
               <span className="text-[9px] font-mono font-black text-slate-600 uppercase tracking-widest block mb-2">● {guide.verdictHeaders.pros}</span>
               <ul className="space-y-1.5 font-serif">
                 {guide.verdictPros.map((t, idx) => (
@@ -999,7 +1000,7 @@ export default function GuideEditStudio() {
             </div>
 
             {/* Cons */}
-            <div className="bg-slate-50 border border-slate-150 p-4 rounded-xl">
+            <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl">
               <span className="text-[9px] font-mono font-black text-slate-600 uppercase tracking-widest block mb-2">▲ {guide.verdictHeaders.cons}</span>
               <ul className="space-y-1.5 font-serif">
                 {guide.verdictCons.map((t, idx) => (
@@ -1009,13 +1010,13 @@ export default function GuideEditStudio() {
             </div>
 
             {/* Value Assessment */}
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-150">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <span className="text-[9px] font-mono text-orange-700 block uppercase tracking-widest mb-1 font-bold">{guide.verdictHeaders.valueVerdict}</span>
               <p className="text-[11px] text-slate-700 leading-normal font-serif">{guide.verdictValueBody}</p>
             </div>
 
             {/* Performance Verdict */}
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-150">
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
               <span className="text-[9px] font-mono text-emerald-750 block uppercase tracking-widest mb-1 font-bold">{guide.verdictHeaders.performanceVerdict}</span>
               <p className="text-[11px] text-slate-700 leading-normal font-serif">{guide.verdictPerformanceBody}</p>
             </div>
@@ -1175,7 +1176,7 @@ export default function GuideEditStudio() {
           </span>
 
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
-            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase${guide.disclosureAffiliate ? "bg-orange-505/10 border-orange-200 text-orange-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
+            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase${guide.disclosureAffiliate ? "bg-orange-500/10 border-orange-200 text-orange-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
               Affiliate Links
             </div>
             <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase${guide.disclosureSponsored ? "bg-[#d4b200]/10 border-[#d4b200]/20 text-yellow-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
@@ -1274,7 +1275,7 @@ export default function GuideEditStudio() {
               </div>
 
               {/* Drawer Scroll body inputs */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar bg-slate-905">
+              <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar bg-white">
                 
                 {/* SECTION 1: HERO CONFIG */}
                 {activeDrawerSection === "hero" && (
@@ -1288,15 +1289,12 @@ export default function GuideEditStudio() {
                         className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary outline-none"
                       />
                     </div>
-                    <div>
-                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">FEATURED HERO IMAGE URL</label>
-                      <input 
-                        type="text"
-                        value={guide.heroImage}
-                        onChange={(e) => handleFieldChange("heroImage", e.target.value)}
-                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary outline-none"
-                      />
-                    </div>
+                    <ImageUploadField
+                      label="Featured hero image"
+                      value={guide.heroImage}
+                      previewClassName="w-24 h-16"
+                      onChange={(nextValue) => handleFieldChange("heroImage", nextValue)}
+                    />
                     <div>
                       <label className="text-[10px] text-app-text-secondary font-mono block mb-1">SUBMIT SAMPLE BADGE TEXT</label>
                       <input 
@@ -1306,19 +1304,38 @@ export default function GuideEditStudio() {
                         className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary outline-none"
                       />
                     </div>
-                    <div className="p-3 bg-app-bg/10 rounded-xl border border-app-border space-y-1.5">
-                      <span className="text-[9px] font-mono text-slate-500 uppercase block">Active Gallery Image Strips</span>
+                    <div className="p-3 bg-app-bg/10 rounded-xl border border-app-border space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-mono text-slate-500 uppercase block">Active Gallery Image Strips</span>
+                        <button
+                          type="button"
+                          onClick={() => handleFieldChange("galleryImages", [...guide.galleryImages, ""])}
+                          className="px-2 py-1 bg-orange-50 text-orange-700 rounded text-[9px] font-black uppercase"
+                        >
+                          + Add image
+                        </button>
+                      </div>
                       {guide.galleryImages.map((g, idx) => (
-                        <input
-                          key={idx}
-                          value={g}
-                          onChange={(e) => {
-                            const copy = [...guide.galleryImages];
-                            copy[idx] = e.target.value;
-                            handleFieldChange("galleryImages", copy);
-                          }}
-                          className="w-full bg-app-bg border border-app-border p-2 rounded text-[10px] text-app-text-secondary font-mono outline-none"
-                        />
+                        <div key={idx} className="space-y-2">
+                          <ImageUploadField
+                            label={`Gallery image ${idx + 1}`}
+                            compact
+                            value={g}
+                            previewClassName="w-14 h-14"
+                            onChange={(nextValue) => {
+                              const copy = [...guide.galleryImages];
+                              copy[idx] = nextValue;
+                              handleFieldChange("galleryImages", copy);
+                            }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleFieldChange("galleryImages", guide.galleryImages.filter((_, i) => i !== idx))}
+                            className="text-[9px] font-bold uppercase text-red-600"
+                          >
+                            Remove
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -1343,7 +1360,7 @@ export default function GuideEditStudio() {
                                 restoreVersionSnapshot(snap);
                                 setActiveDrawerSection(null);
                               }}
-                              className="px-3 py-1.5 bg-orange-650 hover:bg-orange-500 text-white font-mono text-[9px] font-black uppercase rounded-lg"
+                              className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white font-mono text-[9px] font-black uppercase rounded-lg"
                             >
                               Restore ⏎
                             </button>
@@ -1538,7 +1555,7 @@ export default function GuideEditStudio() {
                     {guide.whyThisWonTags.map((tag, idx) => (
                       <div key={tag.id} className="p-3 bg-app-bg border border-app-border rounded-xl space-y-2">
                         <div className="flex justify-between items-center text-[10px] font-mono">
-                          <span className="text-slate-550">Reason Tag #{idx+1}</span>
+                          <span className="text-slate-600">Reason Tag #{idx+1}</span>
                           <span className="text-orange-500">Pill color type</span>
                         </div>
                         <div className="flex gap-2">
@@ -1814,6 +1831,24 @@ export default function GuideEditStudio() {
                           className="w-full bg-app-bg border border-app-border p-2.5 rounded-xl text-xs text-app-text-primary"
                         />
                       </div>
+                    </div>
+
+                    <ImageUploadField
+                      label="SEO Open Graph image"
+                      value={guide.seoOgImage || ''}
+                      previewClassName="w-20 h-12"
+                      onChange={(nextValue) => handleFieldChange("seoOgImage", nextValue)}
+                    />
+
+                    <div>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">CANONICAL URL</label>
+                      <input
+                        type="text"
+                        value={guide.seoCanonicalUrl || ''}
+                        onChange={(e) => handleFieldChange("seoCanonicalUrl", e.target.value)}
+                        placeholder="https://www.choosify.bd/guides/..."
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary"
+                      />
                     </div>
                   </div>
                 )}

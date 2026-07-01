@@ -347,7 +347,7 @@ export default function CMSPage() {
               resetToDefault();
               showToast('CMS restored to seed preloads! 🌀');
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-app-bg border border-app-border rounded-xl text-app-text-secondary hover:text-white hover:bg-slate-700/80 transition-all text-xs font-bold"
+            className="flex items-center gap-2 px-4 py-2.5 bg-app-bg border border-app-border rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-all text-xs font-bold"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Reset Defaults
@@ -657,7 +657,7 @@ export default function CMSPage() {
               <div className="relative">
                 <button 
                   onClick={() => setIsAddModalOpen(true)}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-app-card hover:bg-slate-800 text-app-text-primary text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 animate-pulse-subtle hover:scale-[1.01]"
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-app-card hover:bg-orange-50 hover:text-orange-700 text-app-text-primary text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 animate-pulse-subtle hover:scale-[1.01]"
                 >
                   <Plus className="w-4 h-4 text-orange-500 animate-bounce" />
                   Add Content Item
@@ -696,7 +696,7 @@ export default function CMSPage() {
                   className={`px-3 py-1.5 rounded-lg transition-all${
                     previewMode === 'mobile' 
                       ? 'bg-orange-600 text-white shadow' 
-                      : 'text-slate-400 hover:text-white'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
                   Mobile View
@@ -706,7 +706,7 @@ export default function CMSPage() {
                   className={`px-3 py-1.5 rounded-lg transition-all${
                     previewMode === 'desktop' 
                       ? 'bg-orange-600 text-white shadow' 
-                      : 'text-slate-400 hover:text-white'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
                   }`}
                 >
                   Desktop Web

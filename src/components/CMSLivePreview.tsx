@@ -177,7 +177,7 @@ export default function CMSLivePreview({
       {/* Choosify Authentic Portal Branding Header */}
       <div className="flex items-center justify-between border-b border-slate-200/80 pb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#EF3C23] flex items-center justify-center font-black text-app-text-primary text-lg shadow-md shadow-red-500/20 tracking-tighter">
+          <div className="w-10 h-10 rounded-xl bg-[#EF3C23] flex items-center justify-center font-black text-white text-lg shadow-md shadow-red-500/20 tracking-tighter">
             C
           </div>
           <div>
@@ -339,7 +339,7 @@ export default function CMSLivePreview({
                               Sponsored partner: {items[adIndex]?.brand}
                             </p>
                             <div className="mt-4">
-                              <button className="px-5 py-2 bg-[#EF3C23] hover:bg-orange-500 text-app-text-primary font-extrabold text-[10px] md:text-xs rounded-xl shadow-lg transition-all">
+                              <button className="px-5 py-2 bg-[#EF3C23] hover:bg-orange-500 text-white font-extrabold text-[10px] md:text-xs rounded-xl shadow-lg transition-all">
                                 Shop Collection ↗
                               </button>
                             </div>

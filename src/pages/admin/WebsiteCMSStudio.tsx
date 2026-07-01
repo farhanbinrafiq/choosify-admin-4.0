@@ -16,6 +16,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useBrandProfiles } from '../../contexts/BrandProfilesContext';
 import { useAds } from '../../contexts/AdsContext';
 import { catalogApi } from '../../services/catalogApi';
+import { ImageUploadField } from '../../components/admin/ImageUploadField';
 
 // Types for workspaces
 type WorkspaceId = 
@@ -1074,22 +1075,18 @@ export default function WebsiteCMSStudio() {
                                   className="w-full px-3 py-2 bg-white border border-app-border rounded-lg text-[12px] font-medium text-app-text-primary focus:outline-none focus:border-app-accent transition-colors"
                                 />
                               </div>
-                              <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-app-text-secondary mb-1 block">Background Image URL</label>
-                                <input 
-                                  type="text"
-                                  placeholder="https://..."
-                                  value={banner.backgroundImage}
-                                  onChange={(e) => {
-                                    const updated = localHeroBanners.map(b => 
-                                      b.id === banner.id ? { ...b, backgroundImage: e.target.value } : b
-                                    );
-                                    setLocalHeroBanners(updated);
-                                    setHasDraftChanges(true);
-                                  }}
-                                  className="w-full px-3 py-2 bg-white border border-app-border rounded-lg text-[12px] font-medium text-app-text-primary focus:outline-none focus:border-app-accent transition-colors"
-                                />
-                              </div>
+                              <ImageUploadField
+                                label="Background Image"
+                                value={banner.backgroundImage || ''}
+                                previewClassName="w-20 h-12"
+                                onChange={(nextValue) => {
+                                  const updated = localHeroBanners.map((b) =>
+                                    b.id === banner.id ? { ...b, backgroundImage: nextValue } : b,
+                                  );
+                                  setLocalHeroBanners(updated);
+                                  setHasDraftChanges(true);
+                                }}
+                              />
                             </div>
 
                             <div>
@@ -2362,16 +2359,16 @@ export default function WebsiteCMSStudio() {
                         <div className="space-y-1 flex-1">
                           <h4 className="text-[13px] font-bold text-app-text-primary">{asset.label}</h4>
                           <p className="text-[10px] text-app-text-secondary">{asset.desc}</p>
-                          <input 
-                            type="text"
-                            placeholder="https://images.unsplash.com/... or relative path"
+                          <ImageUploadField
+                            label=""
+                            compact
                             value={val}
-                            onChange={(e) => {
-                              const updated = { ...localAssets, [asset.key]: e.target.value };
+                            previewClassName="hidden"
+                            onChange={(nextValue) => {
+                              const updated = { ...localAssets, [asset.key]: nextValue };
                               setLocalAssets(updated);
                               setHasDraftChanges(true);
                             }}
-                            className="w-full px-2.5 py-1.5 bg-gray-50 border border-app-border rounded-lg text-[11px] mt-1.5 focus:outline-none focus:border-app-accent"
                           />
                         </div>
                       </div>
@@ -2506,22 +2503,18 @@ export default function WebsiteCMSStudio() {
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div>
-                                <label className="text-[10px] font-black uppercase tracking-widest text-app-text-secondary mb-1 block">OG Image URL</label>
-                                <input 
-                                  type="text"
-                                  placeholder="https://..."
-                                  value={seo.ogImage}
-                                  onChange={(e) => {
-                                    const updated = localSeoEntries.map(s => 
-                                      s.pageId === seo.pageId ? { ...s, ogImage: e.target.value } : s
-                                    );
-                                    setLocalSeoEntries(updated);
-                                    setHasDraftChanges(true);
-                                  }}
-                                  className="w-full px-3 py-2 bg-white border border-app-border rounded-lg text-[12px]"
-                                />
-                              </div>
+                              <ImageUploadField
+                                label="OG Image"
+                                value={seo.ogImage || ''}
+                                previewClassName="w-14 h-14"
+                                onChange={(nextValue) => {
+                                  const updated = localSeoEntries.map((s) =>
+                                    s.pageId === seo.pageId ? { ...s, ogImage: nextValue } : s,
+                                  );
+                                  setLocalSeoEntries(updated);
+                                  setHasDraftChanges(true);
+                                }}
+                              />
                               <div>
                                 <label className="text-[10px] font-black uppercase tracking-widest text-app-text-secondary mb-1 block">Canonical URL Link</label>
                                 <input 
@@ -2956,6 +2949,12 @@ interface FeaturedItemsWorkspaceProps {
 
 function FeaturedItemsWorkspace({ title, itemType, storageKey, onDraftStateChange }: FeaturedItemsWorkspaceProps) {
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{ name: string; details: string; image: string }>({
+    name: '',
+    details: '',
+    image: '',
+  });
   const [items, setItems] = useState<any[]>(() => {
     const saved = localStorage.getItem(storageKey);
     return saved ? JSON.parse(saved) : [];
@@ -3102,7 +3101,7 @@ function FeaturedItemsWorkspace({ title, itemType, storageKey, onDraftStateChang
                       <div className="text-[13px] font-bold text-app-text-primary flex items-center gap-2">
                         {item.name}
                         {item.pinned && (
-                          <span className="text-[9px] bg-app-accent text-app-text-primary font-black px-1.5 py-0.5 rounded uppercase tracking-widest flex items-center gap-0.5">
+                          <span className="text-[9px] bg-app-accent text-white font-black px-1.5 py-0.5 rounded uppercase tracking-widest flex items-center gap-0.5">
                             <Star className="w-2.5 h-2.5 fill-current" /> Pinned
                           </span>
                         )}
@@ -3112,6 +3111,21 @@ function FeaturedItemsWorkspace({ title, itemType, storageKey, onDraftStateChang
                   </div>
 
                   <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingItemId(item.id);
+                        setEditDraft({
+                          name: item.name || '',
+                          details: item.details || '',
+                          image: item.image || '',
+                        });
+                      }}
+                      className="p-1.5 text-app-accent hover:bg-orange-50 rounded"
+                      title="Edit item"
+                    >
+                      <Pencil className="w-4 h-4" />
+                    </button>
                     {/* Pin button */}
                     <button 
                       onClick={() => {
@@ -3183,6 +3197,62 @@ function FeaturedItemsWorkspace({ title, itemType, storageKey, onDraftStateChang
           </div>
         )}
       </div>
+
+      {editingItemId && (
+        <div className="fixed inset-0 z-[120] bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-app-border shadow-2xl w-full max-w-lg p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Edit featured {itemType}</h3>
+              <button type="button" onClick={() => setEditingItemId(null)} className="p-1.5 hover:bg-gray-100 rounded-lg">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-app-text-secondary mb-1 block">Display name</label>
+              <input
+                value={editDraft.name}
+                onChange={(e) => setEditDraft((prev) => ({ ...prev, name: e.target.value }))}
+                className="w-full px-3 py-2 border border-app-border rounded-lg text-[12px]"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase tracking-widest text-app-text-secondary mb-1 block">Details line</label>
+              <input
+                value={editDraft.details}
+                onChange={(e) => setEditDraft((prev) => ({ ...prev, details: e.target.value }))}
+                className="w-full px-3 py-2 border border-app-border rounded-lg text-[12px]"
+              />
+            </div>
+            <ImageUploadField
+              label="Cover image"
+              value={editDraft.image}
+              previewClassName="w-20 h-20"
+              onChange={(nextValue) => setEditDraft((prev) => ({ ...prev, image: nextValue }))}
+            />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setEditingItemId(null)} className="px-4 py-2 text-[11px] font-bold uppercase text-app-text-secondary">
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = items.map((entry) =>
+                    entry.id === editingItemId
+                      ? { ...entry, name: editDraft.name, details: editDraft.details, image: editDraft.image }
+                      : entry,
+                  );
+                  setItems(updated);
+                  setEditingItemId(null);
+                  onDraftStateChange();
+                }}
+                className="px-4 py-2 bg-app-accent text-white rounded-lg text-[11px] font-black uppercase"
+              >
+                Save changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

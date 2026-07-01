@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { BrandCMSModel, CreatorVideoItem, PromoCodeItem, initialBrandSeeds } from "./brandSeeds";
 import { useAuth } from "../../contexts/AuthContext";
 import { useBrandProfiles } from "../../contexts/BrandProfilesContext";
+import { ImageUploadField } from "../../components/admin/ImageUploadField";
 
 const COMPILATION_KEY = "choosify_brand_studio_list";
 
@@ -552,7 +553,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
         <div className="flex items-center gap-4">
           <button 
             onClick={() => hasUnsavedChanges ? setShowExitModal(true) : navigate(isNested ? "/dashboard/content-studio/brands" : "/admin/brands")}
-            className="p-2 bg-slate-100 text-slate-750 hover:bg-slate-200 rounded-xl transition-colors flex items-center gap-1 text-[#1a1a2e]"
+            className="p-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors flex items-center gap-1 text-[#1a1a2e]"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -563,7 +564,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                 ● LIVE PROFILE
               </span>
             </div>
-            <p className="text-[10px] text-slate-550 font-mono tracking-wider">Choosify V3 Dashboard Platform</p>
+            <p className="text-[10px] text-slate-600 font-mono tracking-wider">Choosify V3 Dashboard Platform</p>
           </div>
         </div>
 
@@ -587,11 +588,11 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               <div className="absolute right-0 mt-2 bg-white border border-slate-200 shadow-2xl rounded-2xl p-4 w-80 z-40 text-left text-slate-800">
                 <p className="text-xs font-black uppercase text-[#EF3C23] border-b border-slate-100 pb-2">History Logs & Revisions</p>
                 {versions.length === 0 ? (
-                  <p className="text-[11px] font-mono text-slate-450 py-4">No snapshots registered in this session.</p>
+                  <p className="text-[11px] font-mono text-slate-500 py-4">No snapshots registered in this session.</p>
                 ) : (
                   <div className="space-y-2 max-h-52 overflow-y-auto mt-2 custom-scrollbar">
                     {versions.map((ver, idx) => (
-                      <div key={idx} className="p-2 bg-slate-50 rounded-xl border border-slate-150 flex flex-col gap-1">
+                      <div key={idx} className="p-2 bg-slate-50 rounded-xl border border-slate-200 flex flex-col gap-1">
                         <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono">
                           <span>{ver.timestamp}</span>
                           <button 
@@ -666,7 +667,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
             {model.coverImage ? (
               <img src={model.coverImage} alt="" className="w-full h-full object-cover filter brightness-95" />
             ) : (
-              <div className="w-full h-full bg-gradient-to-r from-slate-100 to-slate-200 flex items-center justify-center text-xs text-slate-450">
+              <div className="w-full h-full bg-gradient-to-r from-slate-100 to-slate-200 flex items-center justify-center text-xs text-slate-500">
                 Choosify Banner Cover Photo Placeholder
               </div>
             )}
@@ -708,7 +709,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
             {/* CTA action buttons representation */}
             <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto mt-4 md:mt-0">
               <div className="flex flex-col items-center">
-                <button className="px-5 py-2.5 bg-[#EF3C23] hover:bg-red-650 text-app-text-primary text-xs font-black uppercase tracking-wider rounded-xl shadow transition flex items-center gap-1 border-none cursor-pointer">
+                <button className="px-5 py-2.5 bg-[#EF3C23] hover:bg-red-600 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow transition flex items-center gap-1 border-none cursor-pointer">
                   <Heart className="w-3.5 h-3.5 fill-white" />
                   <span>LOVE BRAND</span>
                 </button>
@@ -723,7 +724,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
             </div>
 
             {/* Right side Score Panel display representation from Image layout */}
-            <div className="flex flex-col items-end text-right w-full md:w-auto border-t md:border-t-0 border-slate-150 pt-4 md:pt-0">
+            <div className="flex flex-col items-end text-right w-full md:w-auto border-t md:border-t-0 border-slate-200 pt-4 md:pt-0">
               <div className="bg-[#f8f9fb] border border-slate-200 rounded-2xl p-4 w-full md:w-56 text-center relative overflow-hidden shadow-sm">
                 <span className="absolute -top-1 -left-1 text-[8px] bg-emerald-500 text-white font-mono uppercase px-1.5 rounded">AUTO</span>
                 <p className="text-[10px] text-slate-500 font-mono font-black uppercase tracking-wider">TRUST SCORE</p>
@@ -740,7 +741,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               {/* Read only stats visual indicators with lock icon */}
               <div className="flex gap-4 mt-3 w-full justify-center md:justify-end text-[10px] text-slate-500">
                 <span className="flex items-center gap-1 border border-slate-200 bg-[#f8f9fb] px-2 py-1 rounded" title="Calculated Automatically. Read only.">
-                  <Lock className="w-2.5 h-2.5 text-app-text-secondary" /> Validation Status: <span className="font-bold text-slate-650 text-slate-600">{model.verificationStatus}</span>
+                  <Lock className="w-2.5 h-2.5 text-app-text-secondary" /> Validation Status: <span className="font-bold text-slate-600 text-slate-600">{model.verificationStatus}</span>
                 </span>
               </div>
             </div>
@@ -753,17 +754,17 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">FIND US ON</span>
               <div className="flex items-center gap-2">
                 {model.socialFbUrl && (
-                  <a href={model.socialFbUrl} target="_blank" rel="noreferrer" className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-650 hover:text-[#EF3C23] transition" title="Facebook">
+                  <a href={model.socialFbUrl} target="_blank" rel="noreferrer" className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 hover:text-[#EF3C23] transition" title="Facebook">
                     <Facebook className="w-3.5 h-3.5" />
                   </a>
                 )}
                 {model.socialInstaUrl && (
-                  <a href={model.socialInstaUrl} target="_blank" rel="noreferrer" className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-650 hover:text-[#EF3C23] transition" title="Instagram">
+                  <a href={model.socialInstaUrl} target="_blank" rel="noreferrer" className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 hover:text-[#EF3C23] transition" title="Instagram">
                     <Instagram className="w-3.5 h-3.5" />
                   </a>
                 )}
                 {model.website && (
-                  <a href={model.website} target="_blank" rel="noreferrer" className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-650 hover:text-[#EF3C23] transition" title="Official Storefront Website">
+                  <a href={model.website} target="_blank" rel="noreferrer" className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 hover:text-[#EF3C23] transition" title="Official Storefront Website">
                     <Globe className="w-3.5 h-3.5" />
                   </a>
                 )}
@@ -846,7 +847,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
             {/* Feature Content card visualization */}
             {activeCreator ? (
               <div className="mt-6 bg-[#f8f9fb] border border-slate-200 rounded-2xl overflow-hidden p-4 relative group/video">
-                <span className="absolute top-4 left-4 z-10 bg-red-650 bg-[#EF3C23] text-white px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded-md flex items-center gap-1">
+                <span className="absolute top-4 left-4 z-10 bg-red-600 bg-[#EF3C23] text-white px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded-md flex items-center gap-1">
                   <Play className="w-2 h-2 fill-white" /> {activeCreator.platform.toUpperCase()} PARTNERSHIP
                 </span>
                 
@@ -895,10 +896,10 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                 <div key={v.id} className="bg-[#f8f9fb] border border-slate-200 p-3 rounded-2xl flex flex-col justify-between hover:border-slate-300 transition space-y-3 text-left">
                   <div className="aspect-video relative rounded-lg overflow-hidden bg-slate-100">
                     <img src={v.thumbnailUrl} alt="" className="w-full h-full object-cover filter brightness-90" />
-                    <span className="absolute bottom-1 right-1 bg-app-card/20 text-app-text-primary p-0.5 rounded text-[8px] font-mono leading-none">
+                    <span className="absolute bottom-1 right-1 bg-black/70 text-white p-0.5 rounded text-[8px] font-mono leading-none">
                       {v.duration}
                     </span>
-                    <div className="absolute top-1 left-1 bg-app-card/20 text-app-text-primary px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold">
+                    <div className="absolute top-1 left-1 bg-black/70 text-white px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold">
                       {v.platform}
                     </div>
                   </div>
@@ -960,7 +961,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     <p className="text-xs font-black uppercase text-[#1a1a2e]">
                       {code.discountType === "Percentage" ? `${code.discountValue}% SAVINGS GIFT` : `BDT ${code.discountValue} FLAT DISCOUNT`}
                     </p>
-                    <p className="text-[10px] text-slate-550 mt-1">Minimum purchase requirement apply</p>
+                    <p className="text-[10px] text-slate-600 mt-1">Minimum purchase requirement apply</p>
                   </div>
 
                   {/* Promo Box highlighted inside code box */}
@@ -1037,11 +1038,11 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                 <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#F97316] block">CONTACT INFORMATIONS</span>
                 <div className="space-y-1">
                   <p className="text-xs text-slate-500 font-bold font-mono">EMAIL DESK:</p>
-                  <p className="text-xs font-semibold text-slate-850 font-mono text-slate-800">{model.contactEmail}</p>
+                  <p className="text-xs font-semibold text-slate-800 font-mono text-slate-800">{model.contactEmail}</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-xs text-slate-500 font-bold font-mono">PHONE SERVICE:</p>
-                  <p className="text-xs font-semibold text-slate-850 font-mono text-slate-800">{model.phone}</p>
+                  <p className="text-xs font-semibold text-slate-800 font-mono text-slate-800">{model.phone}</p>
                 </div>
               </div>
             </div>
@@ -1052,9 +1053,9 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               <div className="space-y-2">
                 <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#F97316] block">PRICE & AUDIENCE</span>
                 <div className="space-y-1 text-xs">
-                  <p className="text-app-text-secondary font-bold">BDT RANGE: <span className="text-slate-850 font-black text-slate-800">{model.priceRange || "General / Medium"}</span></p>
+                  <p className="text-app-text-secondary font-bold">BDT RANGE: <span className="text-slate-800 font-black text-slate-800">{model.priceRange || "General / Medium"}</span></p>
                   <p className="text-app-text-secondary font-bold">AGE FOCUS: <span className="text-[#0B122C] font-black">{model.ageRange}</span></p>
-                  <p className="text-slate-450 font-black text-[#F97316] tracking-wide mt-1 uppercase text-[10px]">{model.genderFocus || "Unisex focus"}</p>
+                  <p className="text-slate-500 font-black text-[#F97316] tracking-wide mt-1 uppercase text-[10px]">{model.genderFocus || "Unisex focus"}</p>
                 </div>
               </div>
             </div>
@@ -1159,24 +1160,18 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                         className="w-full p-2.5 border rounded-xl text-xs bg-slate-50 border-slate-200 focus:ring-[#F97316]"
                       />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Logo URL Address</label>
-                      <input 
-                        type="text"
-                        value={headerForm.logo}
-                        onChange={e => setHeaderForm(prev => ({ ...prev, logo: e.target.value }))}
-                        className="w-full p-2.5 border rounded-xl text-xs bg-slate-50 border-slate-200 focus:ring-[#F97316]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Cover Banner Image URL</label>
-                      <input 
-                        type="text"
-                        value={headerForm.coverImage}
-                        onChange={e => setHeaderForm(prev => ({ ...prev, coverImage: e.target.value }))}
-                        className="w-full p-2.5 border rounded-xl text-xs bg-slate-50 border-slate-200 focus:ring-[#F97316]"
-                      />
-                    </div>
+                    <ImageUploadField
+                      label="Logo"
+                      value={headerForm.logo}
+                      previewClassName="w-16 h-16"
+                      onChange={(nextValue) => setHeaderForm((prev) => ({ ...prev, logo: nextValue }))}
+                    />
+                    <ImageUploadField
+                      label="Cover banner image"
+                      value={headerForm.coverImage}
+                      previewClassName="w-24 h-14"
+                      onChange={(nextValue) => setHeaderForm((prev) => ({ ...prev, coverImage: nextValue }))}
+                    />
                     <div className="space-y-1">
                       <label className="text-[10px] font-bold text-slate-500 uppercase">Brand Tagline</label>
                       <input 
@@ -1423,7 +1418,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                               </button>
                               <button 
                                 onClick={() => deletePromoItem(p.id)}
-                                className="font-bold text-red-650 text-[11px] text-red-600"
+                                className="font-bold text-red-600 text-[11px] text-red-600"
                               >
                                 DELETE
                               </button>
@@ -1661,7 +1656,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                             />
                             <button
                               onClick={() => setOverviewForm(prev => ({ ...prev, services: prev.services.filter((_, i) => i !== idx) }))}
-                              className="p-1 hover:bg-red-50 text-red-650 hover:underline text-xs text-red-650 text-red-600"
+                              className="p-1 hover:bg-red-50 text-red-600 hover:underline text-xs text-red-600 text-red-600"
                             >
                               ✕
                             </button>
@@ -1703,7 +1698,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                             <button
                               key={suggested}
                               onClick={() => setOverviewForm(prev => ({ ...prev, bestForTags: [...prev.bestForTags, suggested] }))}
-                              className="p-1 px-2.5 bg-slate-50 border hover:bg-slate-100 rounded-lg text-[9px] text-slate-650 text-slate-600 font-bold"
+                              className="p-1 px-2.5 bg-slate-50 border hover:bg-slate-100 rounded-lg text-[9px] text-slate-600 text-slate-600 font-bold"
                             >
                               ＋ #{suggested}
                             </button>
@@ -1783,7 +1778,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                   setShowExitModal(false);
                   navigate(isNested ? "/dashboard/content-studio/brands" : "/admin/brands");
                 }}
-                className="w-full py-2 bg-red-50 text-red-650 hover:bg-red-100 text-red-600 rounded-xl font-bold text-xs"
+                className="w-full py-2 bg-red-50 text-red-600 hover:bg-red-100 text-red-600 rounded-xl font-bold text-xs"
               >
                 Discard changes & Exit
               </button>
