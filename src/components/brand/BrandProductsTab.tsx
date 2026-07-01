@@ -33,7 +33,7 @@ export const BrandProductsTab: React.FC<BrandProductsTabProps> = ({
       {/* Search & Filter bar styled identical to Seller Profile / Orders */}
       <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-app-text-secondary absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search products by SKU or Name..."
@@ -48,9 +48,9 @@ export const BrandProductsTab: React.FC<BrandProductsTabProps> = ({
             <button
               key={status}
               onClick={() => setProductFilterStatus(status)}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all shrink-0${
                 productFilterStatus === status
-                  ? 'bg-slate-900 text-white'
+                  ? 'bg-app-card text-white'
                   : 'bg-slate-50 text-slate-600 border border-slate-205 hover:bg-slate-100'
               }`}
             >
@@ -65,7 +65,7 @@ export const BrandProductsTab: React.FC<BrandProductsTabProps> = ({
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-slate-400 font-black uppercase tracking-wider">
+              <tr className="bg-slate-50 border-b border-slate-200 text-app-text-secondary font-black uppercase tracking-wider">
                 <th className="px-6 py-4">Item Details</th>
                 <th className="px-6 py-4">Category</th>
                 <th className="px-6 py-4">Price Value</th>
@@ -77,7 +77,7 @@ export const BrandProductsTab: React.FC<BrandProductsTabProps> = ({
             <tbody className="divide-y divide-slate-100 font-medium">
               {filteredProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400 font-mono text-xs">
+                  <td colSpan={6} className="px-6 py-12 text-center text-app-text-secondary font-mono text-xs">
                     No matching products available inside brand catalog.
                   </td>
                 </tr>
@@ -86,7 +86,7 @@ export const BrandProductsTab: React.FC<BrandProductsTabProps> = ({
                   <tr key={p.id} className="hover:bg-slate-50/40 transition-colors">
                     <td className="px-6 py-4 flex items-center gap-3">
                       <div className="w-10 h-10 bg-slate-100 border border-slate-200 rounded-xl flex items-center justify-center shrink-0">
-                        <Package className="w-5 h-5 text-slate-400" />
+                        <Package className="w-5 h-5 text-app-text-secondary" />
                       </div>
                       <div>
                         <span className="font-bold text-slate-900 block leading-tight">{p.name}</span>
@@ -97,7 +97,7 @@ export const BrandProductsTab: React.FC<BrandProductsTabProps> = ({
                     <td className="px-6 py-4 text-slate-900 font-extrabold font-mono">{p.price}</td>
                     <td className="px-6 py-4 font-mono">{p.stock} units</td>
                     <td className="px-6 py-4">
-                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border ${
+                      <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase border${
                         p.status === 'Active' ? 'bg-emerald-50 text-emerald-600 border-green-150' :
                         p.status === 'Draft' ? 'bg-slate-50 text-slate-500 border-slate-200' :
                         p.status === 'Pending' ? 'bg-yellow-50 text-yellow-600 border-yellow-200 animate-pulse' :

@@ -635,7 +635,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
           <button
             onClick={() => setShowPublishModal(true)}
-            className="px-5 py-2 bg-[#EF3C23] hover:bg-red-600 text-white font-black rounded-xl text-xs shadow-md transition"
+            className="px-5 py-2 bg-[#EF3C23] hover:bg-red-600 text-app-text-primary font-black rounded-xl text-xs shadow-md transition"
           >
             Publish Live Profile
           </button>
@@ -708,7 +708,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
             {/* CTA action buttons representation */}
             <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto mt-4 md:mt-0">
               <div className="flex flex-col items-center">
-                <button className="px-5 py-2.5 bg-[#EF3C23] hover:bg-red-650 text-white text-xs font-black uppercase tracking-wider rounded-xl shadow transition flex items-center gap-1 border-none cursor-pointer">
+                <button className="px-5 py-2.5 bg-[#EF3C23] hover:bg-red-650 text-app-text-primary text-xs font-black uppercase tracking-wider rounded-xl shadow transition flex items-center gap-1 border-none cursor-pointer">
                   <Heart className="w-3.5 h-3.5 fill-white" />
                   <span>LOVE BRAND</span>
                 </button>
@@ -740,7 +740,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               {/* Read only stats visual indicators with lock icon */}
               <div className="flex gap-4 mt-3 w-full justify-center md:justify-end text-[10px] text-slate-500">
                 <span className="flex items-center gap-1 border border-slate-200 bg-[#f8f9fb] px-2 py-1 rounded" title="Calculated Automatically. Read only.">
-                  <Lock className="w-2.5 h-2.5 text-slate-400" /> Validation Status: <span className="font-bold text-slate-650 text-slate-600">{model.verificationStatus}</span>
+                  <Lock className="w-2.5 h-2.5 text-app-text-secondary" /> Validation Status: <span className="font-bold text-slate-650 text-slate-600">{model.verificationStatus}</span>
                 </span>
               </div>
             </div>
@@ -832,7 +832,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                 <button
                   key={tab}
                   onClick={() => setCreatorFilter(tab)}
-                  className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase transition cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase transition cursor-pointer${
                     creatorFilter === tab 
                       ? "bg-[#EF3C23] text-white" 
                       : "bg-[#f8f9fb] text-slate-600 hover:bg-slate-100 border border-slate-200"
@@ -851,14 +851,14 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                 </span>
                 
                 <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
-                  <div className="md:col-span-5 aspect-video md:aspect-[4/3] relative rounded-xl overflow-hidden bg-slate-900 group-hover:shadow-md transition">
+                  <div className="md:col-span-5 aspect-video md:aspect-[4/3] relative rounded-xl overflow-hidden bg-app-card group-hover:shadow-md transition">
                     <img src={activeCreator.thumbnailUrl} alt="" className="w-full h-full object-cover opacity-80" />
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="w-12 h-12 bg-[#EF3C23] hover:scale-110 duration-250 cursor-pointer shadow-2xl text-white rounded-full flex items-center justify-center">
+                      <span className="w-12 h-12 bg-[#EF3C23] hover:scale-110 duration-250 cursor-pointer shadow-2xl text-app-text-primary rounded-full flex items-center justify-center">
                         <Play className="w-5 h-5 fill-white ml-0.5" />
                       </span>
                     </div>
-                    <span className="absolute bottom-2 right-2 bg-black/85 text-[10px] text-white px-2 py-0.5 rounded font-mono font-bold">
+                    <span className="absolute bottom-2 right-2 bg-app-card/20 text-[10px] text-app-text-primary px-2 py-0.5 rounded font-mono font-bold">
                       {activeCreator.duration}
                     </span>
                   </div>
@@ -874,7 +874,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     </div>
 
                     <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
-                      <div className="w-8 h-8 rounded-full bg-[#EF3C23] flex items-center justify-center font-black text-white text-[10px]">
+                      <div className="w-8 h-8 rounded-full bg-[#EF3C23] flex items-center justify-center font-black text-app-text-primary text-[10px]">
                         {activeCreator.creatorName.slice(0, 2).toUpperCase()}
                       </div>
                       <div>
@@ -895,10 +895,10 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                 <div key={v.id} className="bg-[#f8f9fb] border border-slate-200 p-3 rounded-2xl flex flex-col justify-between hover:border-slate-300 transition space-y-3 text-left">
                   <div className="aspect-video relative rounded-lg overflow-hidden bg-slate-100">
                     <img src={v.thumbnailUrl} alt="" className="w-full h-full object-cover filter brightness-90" />
-                    <span className="absolute bottom-1 right-1 bg-black/85 text-white p-0.5 rounded text-[8px] font-mono leading-none">
+                    <span className="absolute bottom-1 right-1 bg-app-card/20 text-app-text-primary p-0.5 rounded text-[8px] font-mono leading-none">
                       {v.duration}
                     </span>
-                    <div className="absolute top-1 left-1 bg-black/75 text-white px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold">
+                    <div className="absolute top-1 left-1 bg-app-card/20 text-app-text-primary px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold">
                       {v.platform}
                     </div>
                   </div>
@@ -948,7 +948,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               {(model.promoCodes || []).map((code) => (
                 <div 
                   key={code.id}
-                  className={`border rounded-2xl p-4 text-center relative overflow-hidden transition ${
+                  className={`border rounded-2xl p-4 text-center relative overflow-hidden transition${
                     code.enabled ? "bg-[#f8f9fb] border-slate-200" : "bg-slate-50 border-slate-100 opacity-60"
                   }`}
                 >
@@ -1005,7 +1005,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
           <span className="text-[10px] font-black tracking-widest text-[#EF3C23] uppercase">OUR HERITAGE BRAND SPECIFICATIONS</span>
           <h3 className="text-lg font-black text-[#1a1a2e] mt-1">BRAND OVERVIEW</h3>
-          <p className="text-xs text-slate-400 font-mono mt-0.5">{model.brandName}</p>
+          <p className="text-xs text-app-text-secondary font-mono mt-0.5">{model.brandName}</p>
 
           {/* Overview Grid sections */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
@@ -1052,8 +1052,8 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               <div className="space-y-2">
                 <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#F97316] block">PRICE & AUDIENCE</span>
                 <div className="space-y-1 text-xs">
-                  <p className="text-slate-400 font-bold">BDT RANGE: <span className="text-slate-850 font-black text-slate-800">{model.priceRange || "General / Medium"}</span></p>
-                  <p className="text-slate-400 font-bold">AGE FOCUS: <span className="text-[#0B122C] font-black">{model.ageRange}</span></p>
+                  <p className="text-app-text-secondary font-bold">BDT RANGE: <span className="text-slate-850 font-black text-slate-800">{model.priceRange || "General / Medium"}</span></p>
+                  <p className="text-app-text-secondary font-bold">AGE FOCUS: <span className="text-[#0B122C] font-black">{model.ageRange}</span></p>
                   <p className="text-slate-450 font-black text-[#F97316] tracking-wide mt-1 uppercase text-[10px]">{model.genderFocus || "Unisex focus"}</p>
                 </div>
               </div>
@@ -1084,7 +1084,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     </span>
                   ))}
                   {(!model.bestForTags || model.bestForTags.length === 0) && (
-                    <p className="text-xs text-slate-400 italic">No brand tags added.</p>
+                    <p className="text-xs text-app-text-secondary italic">No brand tags added.</p>
                   )}
                 </div>
               </div>
@@ -1106,7 +1106,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               animate={{ opacity: 0.5 }}
               exit={{ opacity: 0 }}
               onClick={() => setActiveDrawer(null)}
-              className="fixed inset-0 bg-black z-40"
+              className="fixed inset-0 bg-app-card z-40"
             />
 
             {/* Slide-out Panel Right Side */}
@@ -1132,7 +1132,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                   </div>
                   <button 
                     onClick={() => setActiveDrawer(null)}
-                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"
+                    className="p-1.5 hover:bg-slate-100 rounded-lg text-app-text-secondary"
                   >
                     ✕
                   </button>
@@ -1188,7 +1188,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     </div>
                     
                     <div className="border-t border-slate-100 pt-3 space-y-3">
-                      <p className="text-[9px] font-black text-slate-400 uppercase">Social Connectivity Coordinates</p>
+                      <p className="text-[9px] font-black text-app-text-secondary uppercase">Social Connectivity Coordinates</p>
                       <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1">
                           <label className="text-[9px] font-bold text-slate-500">Facebook URL</label>
@@ -1221,9 +1221,9 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     </div>
 
                     <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-1 relative">
-                      <span className="block text-[10px] font-bold text-slate-400">READ ONLY SECTOR</span>
+                      <span className="block text-[10px] font-bold text-app-text-secondary">READ ONLY SECTOR</span>
                       <p className="text-xs text-slate-500">Verification Seal: <span className="font-bold text-red-600">{model.verificationStatus}</span></p>
-                      <span className="absolute top-2 right-2 text-slate-400"><Lock className="w-3.5 h-3.5" /></span>
+                      <span className="absolute top-2 right-2 text-app-text-secondary"><Lock className="w-3.5 h-3.5" /></span>
                     </div>
                   </div>
                 )}
@@ -1234,11 +1234,11 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     
                     {/* Creators list visual editor list */}
                     <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl max-h-48 overflow-y-auto space-y-2">
-                      <span className="block text-[9px] font-black text-slate-400 uppercase">Creator Library Items ({tempCreators.length})</span>
+                      <span className="block text-[9px] font-black text-app-text-secondary uppercase">Creator Library Items ({tempCreators.length})</span>
                       {tempCreators.map((cr, idx) => (
                         <div key={cr.id} className="p-2 bg-white border rounded-xl flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 truncate">
-                            <span className="text-xs font-black p-1 bg-[#12182F] text-white rounded text-[9px] uppercase">{cr.platform}</span>
+                            <span className="text-xs font-black p-1 bg-[#12182F] text-app-text-primary rounded text-[9px] uppercase">{cr.platform}</span>
                             <span className="text-xs font-bold text-slate-800 truncate">@{cr.creatorName}</span>
                           </div>
                           <div className="flex items-center gap-1 shrink-0">
@@ -1376,7 +1376,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
                       <button
                         onClick={addOrUpdateCreator}
-                        className="w-full mt-2 py-2 bg-slate-900 text-white rounded-lg text-xs font-black uppercase tracking-wider hover:bg-slate-800"
+                        className="w-full mt-2 py-2 bg-app-card text-app-text-primary rounded-lg text-xs font-black uppercase tracking-wider hover:bg-slate-800"
                       >
                         {editingCreatorId ? "💾 Save Review Item" : "＋ Add Creator Review"}
                       </button>
@@ -1391,7 +1391,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     
                     {/* Exiting voucher coupons list */}
                     <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl max-h-48 overflow-y-auto space-y-2">
-                      <span className="block text-[9px] font-black text-slate-400 uppercase">Promo Vouchers list ({tempPromos.length})</span>
+                      <span className="block text-[9px] font-black text-app-text-secondary uppercase">Promo Vouchers list ({tempPromos.length})</span>
                       {tempPromos.map((p) => (
                         <div key={p.id} className="p-2.5 bg-white border rounded-xl flex flex-col gap-1 text-xs">
                           <div className="flex justify-between items-center bg-slate-50 p-1 rounded">
@@ -1468,7 +1468,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                           />
                           <button
                             onClick={autoGeneratePromoCode}
-                            className="px-3 py-2 bg-slate-900 text-white rounded-lg text-[10px] uppercase font-black tracking-wi"
+                            className="px-3 py-2 bg-app-card text-app-text-primary rounded-lg text-[10px] uppercase font-black tracking-wi"
                           >
                             GENERATE
                           </button>
@@ -1532,7 +1532,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
                       <button
                         onClick={addOrUpdatePromo}
-                        className="w-full mt-2 py-2.5 bg-slate-900 text-white rounded-lg text-xs font-black uppercase tracking-wider hover:bg-slate-800"
+                        className="w-full mt-2 py-2.5 bg-app-card text-app-text-primary rounded-lg text-xs font-black uppercase tracking-wider hover:bg-slate-800"
                       >
                         {editingPromoId ? "💾 Update Coupon Voucher" : "＋ Create Coupon Voucher"}
                       </button>
@@ -1617,7 +1617,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                       
                       {/* Checkbox checklist genders */}
                       <div className="space-y-1.5 pt-1.5 border-t border-slate-100">
-                        <label className="text-[9px] font-black text-slate-400 block uppercase">GENDER AUDIENCE CHECKLIST</label>
+                        <label className="text-[9px] font-black text-app-text-secondary block uppercase">GENDER AUDIENCE CHECKLIST</label>
                         <div className="flex flex-wrap gap-x-4 gap-y-1.5">
                           {["Unisex", "Male", "Female", "Youth", "Kids"].map((gender) => {
                             const selected = overviewForm.genders.includes(gender);
@@ -1694,7 +1694,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                       </div>
 
                       {/* Autocomplete Quick Suggested selection pills */}
-                      <p className="text-[9px] font-black text-slate-400 uppercase">Suggested Category tags (Click to Add)</p>
+                      <p className="text-[9px] font-black text-app-text-secondary uppercase">Suggested Category tags (Click to Add)</p>
                       <div className="flex flex-wrap gap-1.5 pt-1.5 border-t border-slate-100">
                         {["Fashion", "Premium", "Lifestyle", "HolidayWear", "WeddingCollection", "Gifts", "Electronics", "Artisanal", "Durable", "Corporate"].map(suggested => {
                           const exist = overviewForm.bestForTags.includes(suggested);
@@ -1732,7 +1732,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     if (activeDrawer === "promos") savePromosSection();
                     if (activeDrawer === "overview") saveOverviewSection();
                   }}
-                  className="flex-1 py-2.5 bg-[#EA6C0A] hover:bg-[#F97316] text-white text-xs font-black uppercase tracking-wider rounded-xl transition shadow-lg"
+                  className="flex-1 py-2.5 bg-[#EA6C0A] hover:bg-[#F97316] text-app-text-primary text-xs font-black uppercase tracking-wider rounded-xl transition shadow-lg"
                 >
                   Save Section
                 </button>
@@ -1750,16 +1750,16 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9 }}
-            className="fixed bottom-6 right-6 z-[600] bg-[#12182F] text-white border border-green-500/30 p-4.5 p-4 rounded-2xl shadow-2xl flex items-center gap-3"
+            className="fixed bottom-6 right-6 z-[600] bg-[#12182F] text-app-text-primary border border-green-500/30 p-4.5 p-4 rounded-2xl shadow-2xl flex items-center gap-3"
           >
             <span className="w-2.5 h-2.5 bg-green-550 bg-green-500 rounded-full animate-ping shrink-0" />
             <div className="text-left text-xs bg-transparent">
               <span className="font-extrabold text-orange-400 block uppercase text-[10px]">Information Saved</span>
-              <p className="text-[11px] text-slate-300 font-medium mt-0.5">{toastMessage}</p>
+              <p className="text-[11px] text-app-text-secondary font-medium mt-0.5">{toastMessage}</p>
             </div>
             <button 
               onClick={() => setToastMessage(null)}
-              className="text-slate-400 hover:text-white font-mono ml-4 text-xs font-bold"
+              className="text-app-text-secondary hover:text-white font-mono ml-4 text-xs font-bold"
             >
               ✕
             </button>
@@ -1769,7 +1769,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
       {/* --- DRAFT UNSAVED EXIT WARNING OVERLAY --- */}
       {showExitModal && (
-        <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-4">
+        <div className="fixed inset-0 z-[1000] bg-app-card/20 backdrop-blur-sm flex flex-col items-center justify-center p-4">
           <div className="bg-white border rounded-2xl p-6 max-w-sm w-full space-y-4 text-center">
             <span className="text-3xl">⚠️</span>
             <h3 className="text-sm font-black uppercase text-[#111827]">Unsaved Profile changes exist</h3>
@@ -1793,7 +1793,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                   setShowExitModal(false);
                   navigate(isNested ? "/dashboard/content-studio/brands" : "/admin/brands");
                 }}
-                className="w-full py-2 bg-green-600 text-white hover:bg-green-700 rounded-xl font-bold text-xs"
+                className="w-full py-2 bg-green-600 text-app-text-primary hover:bg-green-700 rounded-xl font-bold text-xs"
               >
                 Save Draft first then Exit
               </button>
@@ -1810,7 +1810,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
       {/* --- LIVE PUBLISH CONFIRM WARNING OVERLAY --- */}
       {showPublishModal && (
-        <div className="fixed inset-0 z-[1000] bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center p-4">
+        <div className="fixed inset-0 z-[1000] bg-app-card/20 backdrop-blur-sm flex flex-col items-center justify-center p-4">
           <div className="bg-white border rounded-2xl p-6 max-w-sm w-full space-y-4 text-center">
             <span className="text-3xl">🚀</span>
             <h3 className="text-sm font-black uppercase">Publish Profile updates Live?</h3>
@@ -1837,7 +1837,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
       {/* --- LIVE BROADCAST SPINNER BACKGROUND --- */}
       {isPublishing && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[1500] flex flex-col items-center justify-center gap-3 text-white">
+        <div className="fixed inset-0 bg-app-card/20 backdrop-blur-sm z-[1500] flex flex-col items-center justify-center gap-3 text-app-text-primary">
           <RotateCw className="w-12 h-12 animate-spin text-[#F97316]" />
           <span className="text-xs font-mono font-bold uppercase tracking-wider">Compiling live production content logs...</span>
         </div>

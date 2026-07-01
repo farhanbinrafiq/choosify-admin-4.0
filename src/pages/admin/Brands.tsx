@@ -1,33 +1,16 @@
 import React from 'react';
 import { Plus, Search, Filter, ShieldCheck, TrendingUp, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
+
+const mockBrands = [
+  { id: '1', name: 'Samsung Bangladesh', category: 'Electronics · Mobile', status: 'Verified', followers: '12,400', products: 48, initials: 'SB', color: 'bg-blue-600 text-white' },
+  { id: '2', name: 'Aarong', category: 'Fashion & Lifestyle', status: 'Verified', followers: '8,920', products: 124, initials: 'AB', color: 'bg-orange-100 text-orange-700' },
+  { id: '3', name: 'Walton', category: 'Electronics · Home', status: 'Verified', followers: '7,310', products: 87, initials: 'WB', color: 'bg-blue-100 text-blue-800' },
+  { id: '4', name: 'Xiaomi', category: 'Mobile · Smart Home', status: 'Pending', followers: '3,840', products: 22, initials: 'XM', color: 'bg-orange-500 text-white' },
+  { id: '5', name: 'Unilever BD', category: 'Beauty & FMCG', status: 'Verified', followers: '5,200', products: 63, initials: 'UB', color: 'bg-green-100 text-green-800' },
+];
 
 export default function BrandsPage() {
-  const { allBrands, requestNewBrand } = useAuth();
-  const mappedBrands = allBrands.map((brand, idx) => ({
-    id: brand.id,
-    name: brand.name,
-    category: brand.category,
-    status: 'Verified',
-    followers: `${(1200 + idx * 137).toLocaleString()}`,
-    products: 24 + idx * 3,
-    initials: brand.name
-      .split(' ')
-      .slice(0, 2)
-      .map((segment) => segment[0] || '')
-      .join('')
-      .toUpperCase(),
-    color: idx % 2 === 0 ? 'bg-blue-600 text-white' : 'bg-orange-100 text-orange-700',
-  }));
-
-  const handleAddBrand = () => {
-    const name = window.prompt('New brand name');
-    if (!name) return;
-    const category = window.prompt('Brand category', 'General') || 'General';
-    requestNewBrand(name.trim(), category.trim());
-  };
-
   return (
     <div className="space-y-6">
        <div className="flex justify-between items-center">
@@ -41,7 +24,7 @@ export default function BrandsPage() {
                 <div className="text-[10px] text-app-text-secondary uppercase font-bold tracking-wider mt-0.5">Verified</div>
              </div>
           </div>
-          <button onClick={handleAddBrand} className="bg-[#F4631E] text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg shadow-orange-500/20 hover:scale-105 transition-transform">
+          <button className="bg-[#F4631E] text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg shadow-orange-500/20 hover:scale-105 transition-transform">
              <Plus className="w-4 h-4" /> Add Brand
           </button>
        </div>
@@ -65,7 +48,7 @@ export default function BrandsPage() {
        </div>
 
        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-         {mappedBrands.map(brand => (
+         {mockBrands.map(brand => (
            <div key={brand.id} className="bg-app-card rounded-xl border border-app-border p-5 hover:border-app-accent/30 transition-all group">
              <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">

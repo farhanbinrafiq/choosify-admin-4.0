@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useOrders } from '../../contexts/OrdersContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { ChoosifyLogo } from '../../components/common/ChoosifyLogo';
 import { 
   ArrowLeft, 
   Printer, 
@@ -17,45 +18,6 @@ import {
 interface InvoiceViewProps {
   role?: 'admin' | 'seller';
 }
-
-// Inline SVG logo component provided by developer
-const ChoosifyLogo: React.FC<{ className?: string }> = ({ className = "h-8" }) => (
-  <svg 
-    id="Layer_1" 
-    data-name="Layer 1" 
-    xmlns="http://www.w3.org/2000/svg" 
-    viewBox="0 0 2585.84 505.4" 
-    className={className}
-    referrerPolicy="no-referrer"
-  >
-    <defs>
-      <style>{`.cls-logo-white-text { fill: #ffffff; } .cls-logo-red-dot { fill: #ef3c23; }`}</style>
-    </defs>
-    <g>
-      <g>
-        <path className="cls-logo-red-dot" d="M921.65,303.09c0-47.35-38.42-85.71-85.76-85.71s-85.76,38.36-85.76,85.71,38.42,85.76,85.76,85.76c8.22,0,16.14-1.17,23.65-3.3-3.3-5.38-5.23-11.77-5.23-18.57,0-19.74,15.99-35.73,35.68-35.73,8.93,0,17.1,3.3,23.34,8.68,5.33-11.16,8.32-23.65,8.32-36.84Z"/>
-        <path className="cls-logo-red-dot" d="M356.15,303.09c0-47.35-38.42-85.71-85.76-85.71s-85.76,38.36-85.76,85.71c0,47.35,38.42,85.76,85.76,85.76,8.22,0,16.14-1.17,23.65-3.3-3.3-5.38-5.23-11.77-5.23-18.57,0-19.74,15.99-35.73,35.68-35.73,8.93,0,17.1,3.3,23.34,8.68,5.33-11.16,8.32-23.65,8.32-36.84Z"/>
-        <path className="cls-logo-red-dot" d="M252.7,505.4C113.36,505.4,0,392.04,0,252.7S113.36,0,252.7,0s252.7,113.36,252.7,252.7-113.36,252.7-252.7,252.7ZM252.7,57.74c-107.5,0-194.96,87.46-194.96,194.96s87.46,194.96,194.96,194.96,194.96-87.46,194.96-194.96S360.2,57.74,252.7,57.74Z"/>
-        <path className="cls-logo-red-dot" d="M779.18,505.4c-139.34,0-252.7-113.36-252.7-252.7S639.84,0,779.18,0s252.7,113.36,252.7,252.7-113.36,252.7-252.7,252.7ZM779.18,57.74c-107.5,0-194.96,87.46-194.96,194.96s87.46,194.96,194.96,194.96,194.96-87.46,194.96-194.96-87.46-194.96-194.96-194.96Z"/>
-      </g>
-      <g>
-        <path className="cls-logo-white-text" d="M1094.27,260.83c0-54.18,36.9-95.48,93.45-95.48,48.09,0,77.9,27.43,84.31,66.7h-51.45c-3.72-16.59-14.55-27.09-32.15-27.09-26.77,0-40.3,22.01-40.3,55.88s13.53,55.19,40.3,55.19c19.62,0,31.48-11.85,33.85-32.51h51.13c-1.7,40.97-34.21,72.8-84.31,72.8-57.58,0-94.83-41.64-94.83-95.48Z"/>
-        <path className="cls-logo-white-text" d="M1351.4,350.56h-53.18V98.64h53.18v69.42c0,1.68,0,16.25-.35,28.1h1.03c10.84-19.3,29.11-30.81,54.18-30.81,39.59,0,62.64,26.4,62.64,66.7v118.52h-52.83v-108.36c0-19.64-10.48-32.84-30.13-32.84-20.65,0-34.53,16.59-34.53,39.62v101.58Z"/>
-        <path className="cls-logo-white-text" d="M1494.41,260.83c0-54.18,37.92-95.48,95.5-95.48s94.8,41.31,94.8,95.48-37.57,95.48-94.8,95.48-95.5-41.64-95.5-95.48ZM1630.88,260.83c0-34.21-14.91-57.56-41.32-57.56s-41.29,23.35-41.29,57.56,14.2,56.89,41.29,56.89,41.32-23.03,41.32-56.89Z"/>
-        <path className="cls-logo-white-text" d="M1703.14,260.83c0-54.18,37.92-95.48,95.5-95.48s94.8,41.31,94.8,95.48-37.57,95.48-94.8,95.48-95.5-41.64-95.5-95.48ZM1839.61,260.83c0-34.21-14.91-57.56-41.32-57.56s-41.29,23.35-41.29,57.56,14.2,56.89,41.29,56.89,41.32-23.03,41.32-56.89Z"/>
-        <path className="cls-logo-white-text" d="M1908.8,295.02h50.11c3.05,16.94,15.93,26.42,36.58,26.42,18.98,0,29.81-7.79,29.81-20.65,0-16.25-21.35-18.29-46.39-23.03-32.19-6.09-64.69-14.22-64.69-56.21,0-36.9,33.53-56.2,75.85-56.2,50.11,0,75.18,21.67,79.92,53.15h-49.43c-3.4-12.86-13.56-19.3-30.49-19.3s-26.74,6.78-26.74,18.29c0,13.54,19.62,15.58,44.34,19.97,32.19,5.75,68.76,14.22,68.76,59.6,0,38.95-34.56,59.26-81.27,59.26-52.16,0-83.64-25.05-86.36-61.29Z"/>
-        <rect className="cls-logo-white-text" x="2102.94" y="170.41" width="53.18" height="180.15"/>
-        <path className="cls-logo-white-text" d="M2260.83,204.96v145.61h-53.18v-145.61h-27.09v-34.54h27.09v-15.23c0-19.3,4.74-32.84,15.26-42.33,11.83-10.5,30.46-14.55,53.47-14.22,7.12,0,14.59.34,22.02,1.35v37.92c-26.74-1.01-37.57.69-37.57,21v11.51h37.57v34.54h-37.57Z"/>
-        <path className="cls-logo-white-text" d="M2335.71,410.16v-41.64h2.72c.67.34,15.9.34,17.28.34,16.57,0,24.72-6.09,25.71-18.29,0-6.09-3.05-19.97-9.46-36.23l-55.88-143.92h55.88l23.02,69.09c8.11,24.38,14.91,62.64,14.91,62.64h.67s8.11-38.6,15.9-62.64l22.02-69.09h52.83l-64.34,184.56c-14.59,41.64-31.16,55.86-65.69,55.86-1.7,0-34.56-.34-35.58-.67Z"/>
-        <path className="cls-logo-red-dot" d="M2129.7,152.15c15.9,0,28.78-12.9,28.78-28.8,0-15.9-12.88-28.8-28.78-28.8-15.9,0-28.8,12.9-28.8,28.8,0,2.76.39,5.42,1.11,7.94,1.81-1.11,3.95-1.76,6.24-1.76,6.63,0,12,5.37,12,11.98,0,3-1.11,5.74-2.91,7.84,3.75,1.79,7.94,2.79,12.37,2.79Z"/>
-      </g>
-    </g>
-    <g>
-      <path className="cls-logo-white-text" d="M2529.31,313.17h17.3c7.28,0,12.13,4.22,12.13,10.5,0,4.43-2.06,7.81-6.91,9.13v.16c3.48,1,5.27,3.01,5.75,7.6.53,5.33.32,9.39,1.64,9.97v.37h-7.33c-.95-.42-1.06-4.64-1.37-8.7-.32-4.11-2.64-6.44-7.38-6.44h-6.17v15.14h-7.65v-37.72ZM2536.96,329.84h8.12c4.17,0,6.22-2.16,6.22-5.17s-1.95-5.33-6.01-5.33h-8.33v10.5Z"/>
-      <path className="cls-logo-white-text" d="M2543.58,375.14c-11.29,0-21.9-4.4-29.88-12.38-7.98-7.98-12.38-18.59-12.38-29.88s4.4-21.9,12.38-29.88c7.98-7.98,18.59-12.38,29.88-12.38s21.9,4.4,29.88,12.38c7.98,7.98,12.38,18.59,12.38,29.88s-4.4,21.9-12.38,29.88c-7.98,7.98-18.59,12.38-29.88,12.38ZM2543.58,299.28c-18.53,0-33.6,15.07-33.6,33.6s15.07,33.6,33.6,33.6,33.6-15.07,33.6-33.6-15.07-33.6-33.6-33.6Z"/>
-    </g>
-  </svg>
-);
 
 // Supplier dictionary helper
 const getSupplierInfo = (sellerId: string, sellerName: string) => {
@@ -135,13 +97,13 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
 
   if (!loggedInProfile) {
     return (
-      <div className="p-8 text-center bg-slate-950 text-slate-400 min-h-screen flex flex-col items-center justify-center">
+      <div className="p-8 text-center bg-app-bg text-app-text-secondary min-h-screen flex flex-col items-center justify-center">
         <ShieldCheck className="w-12 h-12 text-[#ef3c23] mb-4 animate-pulse" />
-        <h2 className="text-lg font-bold text-white mb-2 font-mono uppercase">Authorization Required</h2>
+        <h2 className="text-lg font-bold text-app-text-primary mb-2 font-mono uppercase">Authorization Required</h2>
         <p className="text-xs mb-6 max-w-sm">Please log in to your merchant credential profile to authorize viewing of this transaction invoice.</p>
         <button 
           onClick={() => navigate('/login')} 
-          className="px-4 py-2 bg-[#ef3c23] hover:bg-orange-600 text-white rounded text-xs font-bold uppercase tracking-wider"
+          className="px-4 py-2 bg-[#ef3c23] hover:bg-orange-600 text-app-text-primary rounded text-xs font-bold uppercase tracking-wider"
         >
           Forward to Login
         </button>
@@ -150,7 +112,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
   }
 
   if (!order) return (
-    <div className="flex items-center justify-center h-64 text-gray-400 text-sm font-bold">
+    <div className="flex items-center justify-center h-64 text-app-text-secondary text-sm font-bold">
       Invoice data not found. Please navigate here from the Orders page.
     </div>
   );
@@ -677,11 +639,11 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 bg-slate-900 border-t border-slate-800 text-slate-100 min-h-screen">
+    <div className="p-4 sm:p-6 lg:p-8 bg-app-card border-t border-app-border text-app-text-primary min-h-screen">
       
       {/* Toast Notification */}
       {notif && (
-        <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl text-xs font-bold font-mono border shadow-2xl flex items-center gap-2 max-w-md animate-bounce ${
+        <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl text-xs font-bold font-mono border shadow-2xl flex items-center gap-2 max-w-md animate-bounce${
           notif.type === 'success' 
             ? 'bg-emerald-950 text-emerald-400 border-emerald-500/20' 
             : 'bg-indigo-950 text-indigo-400 border-indigo-500/20'
@@ -696,13 +658,13 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="p-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-400 hover:text-white transition-all cursor-pointer"
+            className="p-2 bg-app-bg border border-app-border rounded-lg text-app-text-secondary hover:text-white transition-all cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
             <div className="text-[10px] tracking-[0.2em] text-[#ef3c23] uppercase font-black">Merchandising Operations</div>
-            <h1 className="text-xl font-black text-white tracking-tight uppercase font-mono mt-0.5">
+            <h1 className="text-xl font-black text-app-text-primary tracking-tight uppercase font-mono mt-0.5">
               Invoice Console
             </h1>
           </div>
@@ -711,7 +673,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
         <div className="flex items-center gap-2">
           <button
             onClick={triggerPrint}
-            className="flex items-center gap-1.5 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-white rounded-lg text-[10.5px] font-extrabold uppercase tracking-wider cursor-pointer transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 bg-app-bg hover:bg-slate-700 border border-app-border text-app-text-primary rounded-lg text-[10.5px] font-extrabold uppercase tracking-wider cursor-pointer transition-all"
           >
             <Printer className="w-3.5 h-3.5" />
             Print / Save PDF
@@ -719,7 +681,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
           
           <button
             onClick={downloadHtmlTemplate}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#ef3c23] hover:bg-[#ef3c23]/90 text-white rounded-lg text-[10.5px] font-extrabold uppercase tracking-wider cursor-pointer shadow-lg shadow-[#ef3c23]/10 transition-all border border-[#ef3c23]/20"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#ef3c23] hover:bg-[#ef3c23]/90 text-app-text-primary rounded-lg text-[10.5px] font-extrabold uppercase tracking-wider cursor-pointer shadow-lg shadow-[#ef3c23]/10 transition-all border border-[#ef3c23]/20"
           >
             <Download className="w-3.5 h-3.5" />
             Export Static A4 HTML
@@ -751,20 +713,20 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
             
             <div>
               {/* Header inside Navy block to preserve white text within the print-friendly design */}
-              <div className="bg-[#1a1a2e] text-white p-6 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+              <div className="bg-[#1a1a2e] text-app-text-primary p-6 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
                 <div>
-                  <div className="bg-slate-950/20 p-2 rounded-lg inline-block mb-3 border border-slate-800">
+                  <div className="bg-app-bg/10 p-2 rounded-lg inline-block mb-3 border border-app-border">
                     <ChoosifyLogo className="h-7 w-auto select-none" />
                   </div>
-                  <h3 className="text-[10px] text-slate-400 tracking-[0.3em] font-bold uppercase">Choosify Authorized Supply Node</h3>
+                  <h3 className="text-[10px] text-app-text-secondary tracking-[0.3em] font-bold uppercase">Choosify Authorized Supply Node</h3>
                   <p className="text-[11px] font-medium text-[#ef3c23] uppercase tracking-wider mt-1">{supplier.storeName}</p>
                 </div>
                 
                 <div className="sm:text-right">
                   <h2 className="text-[#ef3c23] text-xl font-black tracking-widest uppercase font-mono">Official Invoice</h2>
-                  <p className="text-[9.5px] text-slate-400 tracking-wider uppercase font-bold mt-1">CHOOSIFY MERCHANDISING</p>
+                  <p className="text-[9.5px] text-app-text-secondary tracking-wider uppercase font-bold mt-1">CHOOSIFY MERCHANDISING</p>
                   
-                  <div className="mt-4 text-xs text-slate-300 font-mono space-y-1">
+                  <div className="mt-4 text-xs text-app-text-secondary font-mono space-y-1">
                     <div><span className="text-slate-500 font-sans">ID:</span> {invoiceId}</div>
                     <div><span className="text-slate-500 font-sans">Date:</span> {displayDate}</div>
                   </div>
@@ -792,7 +754,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                     <span className="text-[9.5px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider block inline-block">
                       ✓ System Verified
                     </span>
-                    <span className="text-[10px] font-mono text-slate-400">{supplier.email}</span>
+                    <span className="text-[10px] font-mono text-app-text-secondary">{supplier.email}</span>
                   </div>
                 </div>
 
@@ -837,7 +799,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                   </div>
                   
                   <div className="sm:text-right shrink-0">
-                    <span className="text-[10px] text-slate-400 block font-mono uppercase font-black">Authorized Qty</span>
+                    <span className="text-[10px] text-app-text-secondary block font-mono uppercase font-black">Authorized Qty</span>
                     <span className="text-lg font-black text-[#ef3c23]">1 Unit</span>
                   </div>
                 </div>
@@ -847,7 +809,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
               <div className="mb-8 border border-slate-200 rounded-lg overflow-hidden">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="bg-[#1a1a2e] text-white">
+                    <tr className="bg-[#1a1a2e] text-app-text-primary">
                       <th className="p-3 font-semibold uppercase tracking-wider text-[11px]">Item Description</th>
                       <th className="p-3 font-semibold uppercase tracking-wider text-[11px]">SKU Code</th>
                       <th className="p-3 font-semibold uppercase tracking-wider text-[11px] text-right">Qty</th>
@@ -859,7 +821,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                     <tr className="border-b border-slate-200">
                       <td className="p-3">
                         <div className="font-bold text-slate-800">{order.product.name}</div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">Includes standard store authentic packaging & warranty logs.</div>
+                        <div className="text-[10px] text-app-text-secondary mt-0.5">Includes standard store authentic packaging & warranty logs.</div>
                       </td>
                       <td className="p-3 font-mono text-slate-500">SKU-{order.product.id}</td>
                       <td className="p-3 text-right">1</td>
@@ -921,7 +883,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                   href={order.trackingUrl || `https://redx.com.bd/track/${order.id}`}
                   target="_blank" 
                   rel="noreferrer"
-                  className="px-3 py-1.5 bg-[#1a1a2e] text-white rounded text-[10px] font-bold text-center uppercase tracking-wider hover:bg-[#ef3c23] transition-all flex items-center justify-center gap-1"
+                  className="px-3 py-1.5 bg-[#1a1a2e] text-app-text-primary rounded text-[10px] font-bold text-center uppercase tracking-wider hover:bg-[#ef3c23] transition-all flex items-center justify-center gap-1"
                 >
                   Track Shipment <ExternalLink className="w-3 h-3" />
                 </a>
@@ -930,9 +892,9 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
             </div>
 
             {/* Print Footer */}
-            <div className="mt-12 pt-6 border-t border-slate-100 text-center text-slate-400 text-[10px] space-y-1">
+            <div className="mt-12 pt-6 border-t border-slate-100 text-center text-app-text-secondary text-[10px] space-y-1">
               <p className="font-extrabold text-slate-800 text-[11px] uppercase tracking-wider">Thank you for utilizing Choosify Merchandising Network</p>
-              <p className="max-w-[500px] mx-auto text-slate-400">
+              <p className="max-w-[500px] mx-auto text-app-text-secondary">
                 This document is a certified dynamic invoice generated cryptographically under System UUID {order.id}. Historical logs are kept safe on our secure cloud vault.
               </p>
               <p className="font-mono font-bold tracking-widest text-[#ef3c23] pt-2">✓ ALL LEDGER BALANCES VERIFIED AND PROTOCOL SECURE</p>
@@ -945,15 +907,15 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
         {/* Informative Side Panel (no-print) */}
         <div className="lg:col-span-4 space-y-6 no-print">
           
-          <div className="p-5 bg-slate-950 border border-slate-800 rounded-xl space-y-4">
-            <h3 className="text-xs font-extrabold text-slate-300 uppercase tracking-widest border-b border-slate-800 pb-2">
+          <div className="p-5 bg-app-bg border border-app-border rounded-xl space-y-4">
+            <h3 className="text-xs font-extrabold text-app-text-secondary uppercase tracking-widest border-b border-app-border pb-2">
               Invoice Ledger Audit
             </h3>
             
             <div className="space-y-3.5 text-xs">
               <div className="flex justify-between">
                 <span className="text-slate-500">Current Status:</span>
-                <span className={`px-2 py-0.5 rounded font-bold font-mono uppercase text-[9.5px] ${
+                <span className={`px-2 py-0.5 rounded font-bold font-mono uppercase text-[9.5px]${
                   order.status === 'Delivered' 
                     ? 'bg-emerald-500/20 text-emerald-400' 
                     : order.status === 'Cancelled' 
@@ -966,14 +928,14 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
 
               <div className="flex justify-between">
                 <span className="text-slate-500">Payment Lock:</span>
-                <span className={`font-mono font-bold ${order.paymentStatus === 'Paid' ? 'text-emerald-400' : 'text-amber-500'}`}>
+                <span className={`font-mono font-bold${order.paymentStatus === 'Paid' ? 'text-emerald-400' : 'text-amber-500'}`}>
                   {order.paymentStatus === 'Paid' ? 'PAID REVENUE' : 'COD BALANCE DUE'}
                 </span>
               </div>
 
               {activeRole === 'admin' && (
                 <>
-                  <div className="border-t border-slate-900 pt-3 flex justify-between">
+                  <div className="border-t border-app-border pt-3 flex justify-between">
                     <span className="text-slate-500">Commission Rate:</span>
                     <span className="font-mono text-indigo-400">{order.earnings?.commissionPercent || 10}%</span>
                   </div>
@@ -994,17 +956,17 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
 
           <div className="p-5 bg-[#1a1a2e]/20 border border-indigo-500/10 rounded-xl">
             <h4 className="text-[10px] font-black text-indigo-300 uppercase tracking-wider mb-2">Print & Export Instructions</h4>
-            <ul className="text-[11px] text-slate-400 list-disc list-inside space-y-1.5 leading-relaxed">
-              <li>Click <strong className="text-white">Print / Save PDF</strong> to execute system-level printer driver integrations.</li>
+            <ul className="text-[11px] text-app-text-secondary list-disc list-inside space-y-1.5 leading-relaxed">
+              <li>Click <strong className="text-app-text-primary">Print / Save PDF</strong> to execute system-level printer driver integrations.</li>
               <li>Toggle "Background Graphics" on in the print screen for full exact styling.</li>
               <li>Choose "Save as PDF" to generate a high fidelity digital copy.</li>
-              <li>Click <strong className="text-white">Export Static HTML</strong> to get a portable single-file offline format.</li>
+              <li>Click <strong className="text-app-text-primary">Export Static HTML</strong> to get a portable single-file offline format.</li>
             </ul>
           </div>
 
-          <div className="p-5 bg-slate-950 border border-slate-800 rounded-xl text-center">
+          <div className="p-5 bg-app-bg border border-app-border rounded-xl text-center">
             <div className="text-[9.5px] font-mono text-slate-500 tracking-wider">SECURE PLATFORM SYSTEM ID</div>
-            <div className="text-[11px] font-bold font-mono text-slate-300 break-all mt-1">{order.id}-{order.product.sellerId}</div>
+            <div className="text-[11px] font-bold font-mono text-app-text-secondary break-all mt-1">{order.id}-{order.product.sellerId}</div>
           </div>
 
         </div>

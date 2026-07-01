@@ -158,9 +158,9 @@ export default function ProductDetailPage() {
       {/* Mini Customer Page Navbar Header banner */}
       <div className="bg-slate-900 text-white/50 text-[10px] uppercase tracking-wider py-3 px-6 h-12 flex items-center justify-between border-b border-white/5">
         <div className="flex items-center gap-2">
-          <Link to="/" className="text-white hover:text-app-accent flex items-center gap-1">
+          <Link to="/marketplace" className="text-white hover:text-app-accent flex items-center gap-1">
             <ArrowLeft size={12} className="text-white shrink-0" />
-            <span className="font-bold">Home</span>
+            <span className="font-bold">Marketplace</span>
           </Link>
           <ChevronRight size={10} className="text-white/20" />
           <span className="text-white/30 font-semibold">{product.brandName}</span>

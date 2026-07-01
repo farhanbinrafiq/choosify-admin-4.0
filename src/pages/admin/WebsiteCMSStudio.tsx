@@ -15,7 +15,6 @@ import { useCMS, createCMSLogEntry } from '../../contexts/CMSContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useBrandProfiles } from '../../contexts/BrandProfilesContext';
 import { useAds } from '../../contexts/AdsContext';
-import { catalogApi } from '../../services/catalogApi';
 
 // Types for workspaces
 type WorkspaceId = 
@@ -61,10 +60,10 @@ const Toggle = ({ enabled, onChange }: { enabled: boolean; onChange: (val: boole
   return (
     <div 
       onClick={() => onChange(!enabled)}
-      className={`w-10 h-5 rounded-full cursor-pointer transition-colors relative flex items-center ${enabled ? 'bg-app-accent' : 'bg-gray-200'}`}
+      className={`w-10 h-5 rounded-full cursor-pointer transition-colors relative flex items-center${enabled ? 'bg-app-accent' : 'bg-gray-200'}`}
     >
       <div 
-        className={`w-4 h-4 rounded-full bg-white shadow absolute transition-transform duration-200 ${enabled ? 'translate-x-[22px]' : 'translate-x-1'}`}
+        className={`w-4 h-4 rounded-full bg-white shadow absolute transition-transform duration-200${enabled ? 'translate-x-[22px]' : 'translate-x-1'}`}
       />
     </div>
   );
@@ -279,96 +278,6 @@ export default function WebsiteCMSStudio() {
   const handlePublishAll = async () => {
     setIsPublishing(true);
     try {
-      const resolveFeaturedIds = (items: any[]) =>
-        items.map((item) => String(item.catalogId || item.id || '')).filter(Boolean);
-
-      const sectionItemIds = (sectionId: string): string[] => {
-        switch (sectionId) {
-          case 'featured-products':
-          case 'trending':
-          case 'recommended-products':
-            return resolveFeaturedIds(featuredProducts);
-          case 'featured-brands':
-            return resolveFeaturedIds(featuredBrands);
-          case 'featured-deals':
-          case 'deals':
-            return resolveFeaturedIds(featuredDeals);
-          default:
-            return [];
-        }
-      };
-
-      const productIds = resolveFeaturedIds(featuredProducts);
-      const brandIds = resolveFeaturedIds(featuredBrands);
-      const dealIds = resolveFeaturedIds(featuredDeals);
-
-      const homepagePayload = {
-        id: 'default' as const,
-        heroBanners: localHeroBanners.map((banner: any, idx: number) => ({
-          id: String(banner.id || `hero-${idx + 1}`),
-          headline: banner.headline || '',
-          subtitle: banner.subtitle || '',
-          ctaText: banner.ctaText || '',
-          ctaUrl: banner.ctaUrl || '/products',
-          backgroundImage: banner.backgroundImage || '',
-          isActive: banner.isActive !== false,
-          order: typeof banner.order === 'number' ? banner.order : idx,
-        })),
-        sections: localHomepageSections.map((section: any, idx: number) => {
-          const sectionId = String(section.id || `section-${idx + 1}`);
-          return {
-            id: sectionId,
-            label: section.label || sectionId,
-            isVisible: section.isVisible !== false,
-            order: typeof section.order === 'number' ? section.order : idx,
-            itemIds: sectionItemIds(sectionId),
-          };
-        }),
-        featuredProductIds: productIds,
-        featuredBrandIds: brandIds,
-        featuredDealIds: dealIds,
-        updatedAt: new Date().toISOString(),
-      };
-
-      const sitePayload = {
-        id: 'default' as const,
-        navigation: (localNav || []).map((item: any, idx: number) => ({
-          id: String(item.id || `nav-${idx + 1}`),
-          label: item.label || 'Link',
-          path: item.path || '/',
-          order: typeof item.order === 'number' ? item.order : idx,
-        })),
-        footer: {
-          description: localFooter?.description || '',
-          copyrightText: localFooter?.copyrightText || '',
-          columns: (localFooter?.columns || []).map((column: any, idx: number) => ({
-            id: String(column.id || `footer-col-${idx + 1}`),
-            title: column.title || 'Links',
-            links: (column.links || []).map((link: any) => ({
-              label: link.label || '',
-              url: link.url || '/',
-            })),
-          })),
-          newsletterEnabled: localFooter?.newsletterEnabled !== false,
-        },
-        socialLinks: (localSocialLinks || []).map((link: any, idx: number) => ({
-          id: String(link.id || `social-${idx + 1}`),
-          platform: link.platform || 'Facebook',
-          url: link.url || '#',
-          isVisible: link.isVisible !== false,
-          order: typeof link.order === 'number' ? link.order : idx,
-        })),
-        popularSearches: (localPopularSearches || []).map((item: any, idx: number) => ({
-          id: String(item.id || `search-${idx + 1}`),
-          term: item.term || '',
-          order: typeof item.order === 'number' ? item.order : idx,
-          isActive: item.isActive !== false,
-        })),
-        announcementBarText: localGlobalSettings?.announcementBarText || '',
-        announcementBarEnabled: localGlobalSettings?.announcementBarEnabled === true,
-        updatedAt: new Date().toISOString(),
-      };
-
       await updateCMSData({
         heroBanners: localHeroBanners,
         homepageSections: localHomepageSections,
@@ -391,8 +300,6 @@ export default function WebsiteCMSStudio() {
           ...(cmsData.cmsActivityLog || []).slice(0, 49) // cap log at 50 entries
         ]
       });
-      await catalogApi.updateHomepage(homepagePayload);
-      await catalogApi.updateSiteConfig(sitePayload);
       localStorage.setItem('choosify_cms_featured_products', JSON.stringify(featuredProducts));
       localStorage.setItem('choosify_cms_featured_brands', JSON.stringify(featuredBrands));
       localStorage.setItem('choosify_cms_featured_creators', JSON.stringify(featuredCreators));
@@ -501,7 +408,7 @@ export default function WebsiteCMSStudio() {
           </button>
           <button
             onClick={() => setPreviewPanelOpen(prev => !prev)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all border ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider transition-all border${
               previewPanelOpen
                 ? 'bg-app-accent text-white border-app-accent'
                 : 'bg-app-card text-app-text-secondary border-app-border hover:border-app-accent hover:text-app-accent'
@@ -516,7 +423,7 @@ export default function WebsiteCMSStudio() {
           <button 
             onClick={handlePublishAll}
             disabled={isPublishing}
-            className="px-4 py-2 bg-app-accent text-white rounded-lg text-[11px] font-black uppercase tracking-wider cursor-pointer hover:opacity-90 disabled:opacity-55 transition-all flex items-center gap-1.5"
+            className="px-4 py-2 bg-app-accent text-app-text-primary rounded-lg text-[11px] font-black uppercase tracking-wider cursor-pointer hover:opacity-90 disabled:opacity-55 transition-all flex items-center gap-1.5"
           >
             <Save className="w-3.5 h-3.5" />
             {isPublishing ? 'Publishing...' : 'Publish All Changes'}
@@ -528,7 +435,7 @@ export default function WebsiteCMSStudio() {
       <div className="flex xl:hidden mb-6 bg-gray-100 p-1 rounded-xl w-full max-w-xs">
         <button
           onClick={() => setActiveTab('edit')}
-          className={`flex-1 py-2 text-center text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+          className={`flex-1 py-2 text-center text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer${
             activeTab === 'edit' 
               ? 'bg-white text-app-text-primary shadow-sm font-bold' 
               : 'text-app-text-secondary hover:text-app-text-primary'
@@ -538,7 +445,7 @@ export default function WebsiteCMSStudio() {
         </button>
         <button
           onClick={() => setActiveTab('preview')}
-          className={`flex-1 py-2 text-center text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer ${
+          className={`flex-1 py-2 text-center text-[10px] font-black uppercase tracking-wider rounded-lg transition-all cursor-pointer${
             activeTab === 'preview' 
               ? 'bg-white text-app-text-primary shadow-sm font-bold' 
               : 'text-app-text-secondary hover:text-app-text-primary'
@@ -570,7 +477,7 @@ export default function WebsiteCMSStudio() {
                           setActiveWorkspace(item.id);
                           setActiveTab('edit'); // Auto switch to edit tab when selecting workspace on mobile
                         }}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold text-left transition-all cursor-pointer ${
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg text-[11px] font-bold text-left transition-all cursor-pointer${
                           isActive 
                             ? 'bg-app-accent text-white shadow-sm' 
                             : 'text-app-text-secondary hover:bg-gray-100 hover:text-app-text-primary'
@@ -630,12 +537,12 @@ export default function WebsiteCMSStudio() {
                       className="flex items-center justify-between bg-white border border-app-border p-3 rounded-lg shadow-sm hover:shadow transition-all"
                     >
                       <div className="flex items-center gap-3">
-                        <GripVertical className="w-4 h-4 text-gray-400 cursor-grab" />
+                        <GripVertical className="w-4 h-4 text-app-text-secondary cursor-grab" />
                         <div>
                           <div className="text-[13px] font-bold text-app-text-primary flex items-center gap-1.5">
                             {section.label}
                             {section.isLocked && (
-                              <span className="text-[9px] bg-slate-900 text-white font-black px-1.5 py-0.5 rounded uppercase tracking-widest">
+                              <span className="text-[9px] bg-app-card text-app-text-primary font-black px-1.5 py-0.5 rounded uppercase tracking-widest">
                                 Required
                               </span>
                             )}
@@ -682,7 +589,7 @@ export default function WebsiteCMSStudio() {
                                         setActiveTab('edit');
                                       }
                                     }}
-                                    className={`${className} text-[9px] font-bold px-2 py-0.5 rounded-full cursor-pointer transition-all border-none outline-none`}
+                                    className={`${className}text-[9px] font-bold px-2 py-0.5 rounded-full cursor-pointer transition-all border-none outline-none`}
                                   >
                                     {text}
                                   </button>
@@ -819,7 +726,7 @@ export default function WebsiteCMSStudio() {
                     setHasDraftChanges(true);
                     setExpandedBannerId(newBanner.id);
                   }}
-                  className="px-3 py-1.5 bg-app-accent text-white rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer hover:opacity-90 flex items-center gap-1"
+                  className="px-3 py-1.5 bg-app-accent text-app-text-primary rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer hover:opacity-90 flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add New Banner
                 </button>
@@ -838,7 +745,7 @@ export default function WebsiteCMSStudio() {
                             <span className="text-[10px] font-black uppercase tracking-wider text-app-accent bg-orange-50 px-2 py-0.5 rounded">
                               Banner #{index + 1}
                             </span>
-                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
+                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded${
                               banner.isActive ? 'bg-emerald-50 text-emerald-600' : 'bg-gray-100 text-gray-500'
                             }`}>
                               {banner.isActive ? 'Active' : 'Inactive'}
@@ -848,7 +755,7 @@ export default function WebsiteCMSStudio() {
                           <p className="text-[11px] text-app-text-secondary line-clamp-1">{banner.subtitle}</p>
                           
                           {banner.backgroundImage && (
-                            <div className="text-[10px] font-mono text-gray-400 line-clamp-1">Image: {banner.backgroundImage}</div>
+                            <div className="text-[10px] font-mono text-app-text-secondary line-clamp-1">Image: {banner.backgroundImage}</div>
                           )}
                           <div className="flex items-center gap-1.5 mt-1">
                             <span className="text-[10px] font-black uppercase text-app-text-secondary bg-gray-50 border border-gray-100 px-2 py-0.5 rounded-full">
@@ -993,7 +900,7 @@ export default function WebsiteCMSStudio() {
                                         setLocalHeroBanners(updated);
                                         setHasDraftChanges(true);
                                       }}
-                                      className={`flex-1 py-2 text-[10px] font-black uppercase tracking-wider transition-all ${
+                                      className={`flex-1 py-2 text-[10px] font-black uppercase tracking-wider transition-all${
                                         banner.textAlignment === align 
                                           ? 'bg-app-accent text-white' 
                                           : 'text-app-text-secondary hover:bg-gray-50'
@@ -1042,7 +949,7 @@ export default function WebsiteCMSStudio() {
                             <div className="flex justify-end pt-2">
                               <button 
                                 onClick={() => setExpandedBannerId(null)}
-                                className="px-4 py-2 bg-slate-900 text-white rounded-lg text-[11px] font-black uppercase tracking-wider cursor-pointer hover:opacity-95"
+                                className="px-4 py-2 bg-app-card text-app-text-primary rounded-lg text-[11px] font-black uppercase tracking-wider cursor-pointer hover:opacity-95"
                               >
                                 Save Banner Configuration
                               </button>
@@ -1076,7 +983,7 @@ export default function WebsiteCMSStudio() {
                     setLocalNav([...localNav, newItem]);
                     setHasDraftChanges(true);
                   }}
-                  className="px-3 py-1.5 bg-app-accent text-white rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer hover:opacity-90 flex items-center gap-1"
+                  className="px-3 py-1.5 bg-app-accent text-app-text-primary rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer hover:opacity-90 flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add Menu Item
                 </button>
@@ -1089,7 +996,7 @@ export default function WebsiteCMSStudio() {
                   .map((item, idx) => (
                     <div key={item.id} className="flex items-center justify-between bg-white border border-app-border p-3.5 rounded-lg shadow-sm">
                       <div className="flex items-center gap-3 flex-1 mr-4">
-                        <GripVertical className="w-4 h-4 text-gray-400" />
+                        <GripVertical className="w-4 h-4 text-app-text-secondary" />
                         <div className="grid grid-cols-2 gap-4 flex-1">
                           <div>
                             <input 
@@ -1185,7 +1092,7 @@ export default function WebsiteCMSStudio() {
                     </nav>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] bg-slate-900 text-white font-black px-2.5 py-1 rounded uppercase tracking-wider">Join Seller</span>
+                    <span className="text-[10px] bg-app-card text-app-text-primary font-black px-2.5 py-1 rounded uppercase tracking-wider">Join Seller</span>
                   </div>
                 </div>
               </div>
@@ -1316,7 +1223,7 @@ export default function WebsiteCMSStudio() {
                                 setLocalFooter({ ...localFooter, columns: newCols });
                                 setHasDraftChanges(true);
                               }}
-                              className="p-1 text-gray-400 hover:bg-gray-100 rounded"
+                              className="p-1 text-app-text-secondary hover:bg-gray-100 rounded"
                             >
                               <X className="w-3 h-3" />
                             </button>
@@ -1408,7 +1315,7 @@ export default function WebsiteCMSStudio() {
                     setLocalPopularSearches([...localPopularSearches, newSearch]);
                     setHasDraftChanges(true);
                   }}
-                  className="px-3 py-1.5 bg-app-accent text-white rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer hover:opacity-90 flex items-center gap-1"
+                  className="px-3 py-1.5 bg-app-accent text-app-text-primary rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer hover:opacity-90 flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" /> Add Search Term
                 </button>
@@ -1421,7 +1328,7 @@ export default function WebsiteCMSStudio() {
                   .map((item, idx) => (
                     <div key={item.id} className="flex items-center justify-between bg-white border border-app-border p-3 rounded-lg shadow-sm">
                       <div className="flex items-center gap-3 flex-1 mr-4">
-                        <GripVertical className="w-4 h-4 text-gray-400" />
+                        <GripVertical className="w-4 h-4 text-app-text-secondary" />
                         <input 
                           type="text"
                           value={item.term}
@@ -1500,8 +1407,8 @@ export default function WebsiteCMSStudio() {
                 <div className="text-[10px] font-black uppercase tracking-widest text-app-text-secondary mb-3">How it looks on website (Active Searches)</div>
                 <div className="bg-white border border-app-border px-4 py-3 rounded-lg flex flex-col gap-3">
                   <div className="flex items-center gap-2 border border-gray-200 px-3 py-2 rounded-lg bg-gray-50">
-                    <Search className="w-4 h-4 text-gray-400" />
-                    <span className="text-[11px] text-gray-400 font-medium">Search Aarong, Apex, Le Reve and 100+ trusted brands...</span>
+                    <Search className="w-4 h-4 text-app-text-secondary" />
+                    <span className="text-[11px] text-app-text-secondary font-medium">Search Aarong, Apex, Le Reve and 100+ trusted brands...</span>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-[10px] font-black uppercase tracking-widest text-app-text-secondary">Popular:</span>
@@ -1539,7 +1446,7 @@ export default function WebsiteCMSStudio() {
                     setLocalBadges([...localBadges, newBadge]);
                     setHasDraftChanges(true);
                   }}
-                  className="px-3 py-1.5 bg-app-accent text-white rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer hover:opacity-90 flex items-center gap-1"
+                  className="px-3 py-1.5 bg-app-accent text-app-text-primary rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer hover:opacity-90 flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" /> Create Badge
                 </button>
@@ -1554,7 +1461,7 @@ export default function WebsiteCMSStudio() {
                         {/* Live Pill Preview */}
                         <span 
                           style={{ backgroundColor: badge.color }}
-                          className="px-2.5 py-1 text-white text-[10px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 shadow-sm"
+                          className="px-2.5 py-1 text-app-text-primary text-[10px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 shadow-sm"
                         >
                           <Sparkles className="w-3 h-3" /> {badge.label || 'Badge Label'}
                         </span>
@@ -1873,7 +1780,7 @@ export default function WebsiteCMSStudio() {
                     <div key={promo.id} className="bg-white border border-app-border rounded-xl p-4 shadow-sm flex flex-col justify-between relative overflow-hidden">
                       <div className="space-y-2">
                         <div className="flex items-center justify-between gap-1.5">
-                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded ${
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded${
                             promo.status === 'active' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
                             promo.status === 'scheduled' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
                             'bg-amber-50 text-amber-600 border border-amber-100'
@@ -1921,7 +1828,7 @@ export default function WebsiteCMSStudio() {
                               showToast(`Failed to push campaign: ${err.message}`, 'error');
                             }
                           }}
-                          className="px-3 py-1.5 bg-app-accent hover:bg-app-accent/90 text-white rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                          className="px-3 py-1.5 bg-app-accent hover:bg-app-accent/90 text-app-text-primary rounded text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
                         >
                           <Megaphone className="w-3 h-3" /> Push to Ads
                         </button>
@@ -2064,7 +1971,7 @@ export default function WebsiteCMSStudio() {
                             <div className="flex justify-end gap-2 pt-2">
                               <button 
                                 onClick={() => setExpandedPromoId(null)}
-                                className="px-3 py-1 bg-slate-900 text-white rounded text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                                className="px-3 py-1 bg-app-card text-app-text-primary rounded text-[10px] font-black uppercase tracking-wider cursor-pointer"
                               >
                                 Save campaign
                               </button>
@@ -2196,7 +2103,7 @@ export default function WebsiteCMSStudio() {
                           {val ? (
                             <img src={val} alt="preview" className="w-full h-full object-contain" referrerPolicy="no-referrer" />
                           ) : (
-                            <ImageIcon className="w-6 h-6 text-gray-300" />
+                            <ImageIcon className="w-6 h-6 text-app-text-secondary" />
                           )}
                         </div>
 
@@ -2286,7 +2193,7 @@ export default function WebsiteCMSStudio() {
                               <div>
                                 <div className="flex items-center justify-between mb-1">
                                   <label className="text-[10px] font-black uppercase tracking-widest text-app-text-secondary">Meta Title</label>
-                                  <span className={`text-[10px] font-black ${
+                                  <span className={`text-[10px] font-black${
                                     titleCount >= 60 ? 'text-red-500 font-black' : titleCount >= 48 ? 'text-amber-500 font-bold' : 'text-gray-400'
                                   }`}>
                                     {titleCount}/60 chars
@@ -2326,7 +2233,7 @@ export default function WebsiteCMSStudio() {
                             <div>
                               <div className="flex items-center justify-between mb-1">
                                 <label className="text-[10px] font-black uppercase tracking-widest text-app-text-secondary">Meta Description</label>
-                                <span className={`text-[10px] font-black ${
+                                <span className={`text-[10px] font-black${
                                   descCount >= 160 ? 'text-red-500 font-black' : descCount >= 128 ? 'text-amber-500 font-bold' : 'text-gray-400'
                                 }`}>
                                   {descCount}/160 chars
@@ -2383,7 +2290,7 @@ export default function WebsiteCMSStudio() {
                             <div className="flex justify-end pt-2">
                               <button 
                                 onClick={() => setExpandedSeoPageId(null)}
-                                className="px-3.5 py-1.5 bg-slate-900 text-white rounded text-[10px] font-black uppercase tracking-wider"
+                                className="px-3.5 py-1.5 bg-app-card text-app-text-primary rounded text-[10px] font-black uppercase tracking-wider"
                               >
                                 Save SEO Params
                               </button>
@@ -2591,7 +2498,7 @@ export default function WebsiteCMSStudio() {
                       document.body.removeChild(link);
                       showToast('CSV downloaded successfully!', 'success');
                     }}
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                    className="px-3 py-1.5 bg-app-card hover:bg-slate-800 text-app-text-primary rounded-lg text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
                   >
                     Export Log (CSV)
                   </button>
@@ -2600,7 +2507,7 @@ export default function WebsiteCMSStudio() {
 
               {(!cmsData.cmsActivityLog || cmsData.cmsActivityLog.length === 0) ? (
                 <div className="flex flex-col items-center justify-center p-12 border border-dashed border-app-border rounded-xl text-app-text-secondary text-center space-y-3">
-                  <Activity className="w-12 h-12 text-gray-300 stroke-[1.5]" />
+                  <Activity className="w-12 h-12 text-app-text-secondary stroke-[1.5]" />
                   <div>
                     <h4 className="text-[13px] font-bold text-app-text-primary">No CMS changes recorded yet</h4>
                     <p className="text-[10px] text-app-text-secondary max-w-xs mx-auto mt-1">When any admin publishes edits, audit records will stream here instantly.</p>
@@ -2666,7 +2573,7 @@ export default function WebsiteCMSStudio() {
               animate={{ width: 380, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
               transition={{ duration: 0.25, ease: 'easeInOut' }}
-              className={`flex-shrink-0 bg-app-card border border-app-border rounded-xl shadow-sm overflow-hidden transition-all duration-300 ${
+              className={`flex-shrink-0 bg-app-card border border-app-border rounded-xl shadow-sm overflow-hidden transition-all duration-300${
                 previewPanelOpen ? 'w-[340px] lg:w-[380px]' : 'w-0 overflow-hidden'
               }`}
             >
@@ -2678,7 +2585,7 @@ export default function WebsiteCMSStudio() {
             <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
               <button
                 onClick={() => setDeviceMode('desktop')}
-                className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer${
                   deviceMode === 'desktop' 
                     ? 'bg-white text-app-text-primary shadow-sm font-bold' 
                     : 'text-app-text-secondary hover:text-app-text-primary'
@@ -2688,7 +2595,7 @@ export default function WebsiteCMSStudio() {
               </button>
               <button
                 onClick={() => setDeviceMode('mobile')}
-                className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                className={`px-2.5 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition-all cursor-pointer${
                   deviceMode === 'mobile' 
                     ? 'bg-white text-app-text-primary shadow-sm font-bold' 
                     : 'text-app-text-secondary hover:text-app-text-primary'
@@ -2708,7 +2615,7 @@ export default function WebsiteCMSStudio() {
                 <span className="w-2 h-2 rounded-full bg-amber-400 block" />
                 <span className="w-2 h-2 rounded-full bg-emerald-400 block" />
               </div>
-              <div className="flex-1 bg-white rounded-md border border-gray-200 text-center text-[9px] font-mono text-gray-400 py-0.5 select-none">
+              <div className="flex-1 bg-white rounded-md border border-gray-200 text-center text-[9px] font-mono text-app-text-secondary py-0.5 select-none">
                 choosify.bd
               </div>
             </div>
@@ -2718,7 +2625,7 @@ export default function WebsiteCMSStudio() {
               <div className="w-[200px] mx-auto border-[6px] border-gray-800 rounded-[28px] overflow-hidden shadow-2xl bg-white relative">
                 {/* Simulated Notch */}
                 <div className="absolute top-0 inset-x-0 h-3 bg-gray-800 rounded-b-md flex justify-center items-center z-10">
-                  <div className="w-12 h-1 rounded-full bg-black" />
+                  <div className="w-12 h-1 rounded-full bg-app-card" />
                 </div>
                 <div className="pt-3 max-h-[500px] overflow-y-auto bg-white custom-scrollbar">
                   <HomepagePreview
@@ -2772,7 +2679,7 @@ export default function WebsiteCMSStudio() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
-            className={`fixed bottom-6 right-6 z-[200] px-5 py-3.5 rounded-xl shadow-2xl text-white text-[11px] font-black uppercase tracking-wider flex items-center gap-2.5 ${
+            className={`fixed bottom-6 right-6 z-[200] px-5 py-3.5 rounded-xl shadow-2xl text-app-text-primary text-[11px] font-black uppercase tracking-wider flex items-center gap-2.5${
               toast.type === 'success' ? 'bg-emerald-600' : 
               toast.type === 'error' ? 'bg-red-500' : 'bg-app-accent'
             }`}
@@ -2867,7 +2774,7 @@ function FeaturedItemsWorkspace({ title, itemType, storageKey, onDraftStateChang
       <div className="relative space-y-1.5">
         <label className="text-[10px] font-black uppercase tracking-widest text-app-text-secondary">Search {itemType}s to feature</label>
         <div className="relative flex items-center">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3" />
+          <Search className="w-4 h-4 text-app-text-secondary absolute left-3" />
           <input 
             type="text"
             placeholder={`Type to search e.g. ${queryPool[0]?.name || ''}...`}
@@ -2933,17 +2840,17 @@ function FeaturedItemsWorkspace({ title, itemType, storageKey, onDraftStateChang
               return (
                 <div 
                   key={item.id} 
-                  className={`flex items-center justify-between bg-white border p-3.5 rounded-lg shadow-sm ${
+                  className={`flex items-center justify-between bg-white border p-3.5 rounded-lg shadow-sm${
                     item.pinned ? 'border-orange-200 bg-orange-50/10' : 'border-app-border'
                   }`}
                 >
                   <div className="flex items-center gap-3">
-                    <GripVertical className="w-4 h-4 text-gray-400" />
+                    <GripVertical className="w-4 h-4 text-app-text-secondary" />
                     <div>
                       <div className="text-[13px] font-bold text-app-text-primary flex items-center gap-2">
                         {item.name}
                         {item.pinned && (
-                          <span className="text-[9px] bg-app-accent text-white font-black px-1.5 py-0.5 rounded uppercase tracking-widest flex items-center gap-0.5">
+                          <span className="text-[9px] bg-app-accent text-app-text-primary font-black px-1.5 py-0.5 rounded uppercase tracking-widest flex items-center gap-0.5">
                             <Star className="w-2.5 h-2.5 fill-current" /> Pinned
                           </span>
                         )}
@@ -2962,7 +2869,7 @@ function FeaturedItemsWorkspace({ title, itemType, storageKey, onDraftStateChang
                         setItems(updated);
                         onDraftStateChange();
                       }}
-                      className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border transition-all ${
+                      className={`px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider border transition-all${
                         item.pinned 
                           ? 'bg-orange-50 border-orange-200 text-app-accent' 
                           : 'bg-white border-app-border text-app-text-secondary hover:bg-gray-50'
@@ -3477,7 +3384,7 @@ function EntityPickerWorkspace({
               setConfigMode('add');
               setPickerOpen(true);
             }}
-            className="px-3.5 py-2 bg-app-accent text-white rounded-lg text-[11px] font-black uppercase tracking-wider hover:opacity-95 flex items-center gap-1 cursor-pointer transition-all shrink-0"
+            className="px-3.5 py-2 bg-app-accent text-app-text-primary rounded-lg text-[11px] font-black uppercase tracking-wider hover:opacity-95 flex items-center gap-1 cursor-pointer transition-all shrink-0"
           >
             <Plus className="w-4 h-4" /> Add {entityType === 'guide' ? 'Guide' : entityType.charAt(0).toUpperCase() + entityType.slice(1)}
           </button>
@@ -3496,7 +3403,7 @@ function EntityPickerWorkspace({
             <button
               key={tab.id}
               onClick={() => setActiveTabFilter(tab.id as any)}
-              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all border ${
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all border${
                 activeTabFilter === tab.id
                   ? 'bg-orange-500 text-white border-orange-500'
                   : 'bg-white text-app-text-secondary border-app-border hover:bg-gray-50'
@@ -3534,7 +3441,7 @@ function EntityPickerWorkspace({
           <div className="text-center py-16 border border-dashed border-app-border rounded-xl text-app-text-secondary text-[11px] space-y-2">
             <p>No items assigned to this section yet.</p>
             {sponsoredAdsMode ? (
-              <p className="text-[10px] text-gray-400">Click one of the sponsored add buttons above to start curating.</p>
+              <p className="text-[10px] text-app-text-secondary">Click one of the sponsored add buttons above to start curating.</p>
             ) : (
               <button
                 onClick={() => {
@@ -3557,7 +3464,7 @@ function EntityPickerWorkspace({
               return (
                 <div
                   key={item.id}
-                  className={`flex flex-col md:flex-row md:items-center justify-between gap-4 p-3.5 bg-white border rounded-xl shadow-sm hover:shadow transition-all ${
+                  className={`flex flex-col md:flex-row md:items-center justify-between gap-4 p-3.5 bg-white border rounded-xl shadow-sm hover:shadow transition-all${
                     item.isPinned ? 'border-orange-200 bg-orange-50/5' : 'border-app-border'
                   }`}
                 >
@@ -3589,7 +3496,7 @@ function EntityPickerWorkspace({
                         className="w-10 h-10 rounded-lg object-cover border border-app-border shrink-0 bg-gray-50"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-lg text-gray-400 font-bold shrink-0 border border-app-border">
+                      <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center text-lg text-app-text-secondary font-bold shrink-0 border border-app-border">
                         {item.type === 'product' || (!item.type && currentEntityType === 'product') ? '📦' : 
                          item.type === 'brand' || (!item.type && currentEntityType === 'brand') ? '🛡️' : 
                          item.type === 'creator' || (!item.type && currentEntityType === 'creator') ? '✨' : '📖'}
@@ -3643,7 +3550,7 @@ function EntityPickerWorkspace({
                   <div className="flex items-center gap-2 self-end md:self-center shrink-0">
                     <button
                       onClick={() => handleTogglePin(item.id)}
-                      className={`px-2 py-1 border rounded text-[9px] font-black uppercase tracking-wider transition-all ${
+                      className={`px-2 py-1 border rounded text-[9px] font-black uppercase tracking-wider transition-all${
                         item.isPinned
                           ? 'bg-orange-500 text-white border-orange-500 hover:bg-orange-600'
                           : 'bg-white text-app-text-secondary border-app-border hover:bg-gray-50'
@@ -3683,7 +3590,7 @@ function EntityPickerWorkspace({
               animate={{ opacity: 0.3 }}
               exit={{ opacity: 0 }}
               onClick={() => setPickerOpen(false)}
-              className="absolute inset-0 bg-black z-40 rounded-xl"
+              className="absolute inset-0 bg-app-card z-40 rounded-xl"
             />
 
             {/* Slide-in Panel */}
@@ -3715,7 +3622,7 @@ function EntityPickerWorkspace({
                       🔍 Search {entityType}s
                     </label>
                     <div className="relative">
-                      <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-2.5" />
+                      <Search className="w-3.5 h-3.5 text-app-text-secondary absolute left-2.5 top-2.5" />
                       <input
                         type="text"
                         placeholder={`Search ${entityType}s...`}
@@ -3748,7 +3655,7 @@ function EntityPickerWorkspace({
                                 handleAddFeatured(entity);
                               }
                             }}
-                            className={`px-2 py-1 rounded font-bold uppercase tracking-wider shrink-0 border ${
+                            className={`px-2 py-1 rounded font-bold uppercase tracking-wider shrink-0 border${
                               isAdded
                                 ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed'
                                 : 'bg-orange-50 border-orange-200 text-app-accent hover:bg-orange-100'
@@ -3900,7 +3807,7 @@ function EntityPickerWorkspace({
                   </button>
                   <button
                     onClick={handleAddSponsored}
-                    className="flex-1 py-2 bg-app-accent hover:opacity-95 text-white rounded-lg text-[10px] font-black uppercase tracking-wider"
+                    className="flex-1 py-2 bg-app-accent hover:opacity-95 text-app-text-primary rounded-lg text-[10px] font-black uppercase tracking-wider"
                   >
                     Confirm Campaign
                   </button>
@@ -3994,14 +3901,14 @@ function HomepagePreview({
     <div className="bg-white text-[#0F172A] flex flex-col font-sans select-none min-h-[600px] w-full text-left">
       
       {/* 1. Navbar */}
-      <div className="bg-[#0F172A] text-white px-3 py-2 flex items-center justify-between text-[10px] shrink-0 sticky top-0 z-50 shadow-sm">
+      <div className="bg-[#0F172A] text-app-text-primary px-3 py-2 flex items-center justify-between text-[10px] shrink-0 sticky top-0 z-50 shadow-sm">
         <div className="flex items-center gap-1.5">
           <div className="w-4 h-4 rounded bg-orange-500 flex items-center justify-center font-black text-white text-[9px] tracking-tighter">
             C
           </div>
-          <span className="font-extrabold tracking-tight text-white text-[9px]">Choosify</span>
+          <span className="font-extrabold tracking-tight text-app-text-primary text-[9px]">Choosify</span>
         </div>
-        <div className="flex items-center gap-2 text-[8px] font-bold text-gray-300">
+        <div className="flex items-center gap-2 text-[8px] font-bold text-app-text-secondary">
           <span className="text-orange-500">Home</span>
           <span>Brands</span>
           <span>Deals</span>
@@ -4035,14 +3942,14 @@ function HomepagePreview({
             return (
               <div 
                 key={sec.id}
-                className={`relative group p-4 text-center bg-gradient-to-br from-orange-500 via-orange-600 to-amber-600 text-white border-y border-transparent transition-all ${
+                className={`relative group p-4 text-center bg-gradient-to-br from-orange-500 via-orange-600 to-amber-600 text-white border-y border-transparent transition-all${
                   highlighted ? 'ring-4 ring-orange-500 ring-offset-2 animate-pulse' : 'hover:border-orange-500/30'
                 }`}
               >
-                <div className="absolute top-1 right-1 bg-black/80 text-white text-[6px] font-black px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest pointer-events-none z-10">
+                <div className="absolute top-1 right-1 bg-app-card/20 text-app-text-primary text-[6px] font-black px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest pointer-events-none z-10">
                   {sec.label}
                 </div>
-                <h2 className="text-[11px] font-black tracking-tight text-white mb-1 leading-tight max-w-xs mx-auto">
+                <h2 className="text-[11px] font-black tracking-tight text-app-text-primary mb-1 leading-tight max-w-xs mx-auto">
                   {activeBanner.headline}
                 </h2>
                 <p className="text-[7.5px] text-orange-50 mb-2 max-w-xs mx-auto leading-normal">
@@ -4060,7 +3967,7 @@ function HomepagePreview({
             return (
               <div 
                 key={sec.id}
-                className={`p-3 bg-white border-b border-gray-100 group relative transition-all ${
+                className={`p-3 bg-white border-b border-gray-100 group relative transition-all${
                   highlighted ? 'ring-4 ring-orange-500 ring-offset-2 animate-pulse' : 'hover:border-orange-500/30'
                 }`}
               >
@@ -4071,14 +3978,14 @@ function HomepagePreview({
                 {/* Search Experience embedded */}
                 <div className="mb-3 max-w-xs mx-auto">
                   <div className="relative flex items-center">
-                    <Search className="w-2.5 h-2.5 text-gray-400 absolute left-2" />
-                    <div className="w-full pl-6 pr-2 py-1 bg-gray-50 border border-gray-200 rounded text-[7.5px] text-gray-400 font-medium select-none text-left">
+                    <Search className="w-2.5 h-2.5 text-app-text-secondary absolute left-2" />
+                    <div className="w-full pl-6 pr-2 py-1 bg-gray-50 border border-gray-200 rounded text-[7.5px] text-app-text-secondary font-medium select-none text-left">
                       Search verified brands, products or creators...
                     </div>
                   </div>
                   {popularSearches && popularSearches.length > 0 && (
                     <div className="flex flex-wrap items-center gap-1 mt-1.5">
-                      <span className="text-[6px] text-gray-400 font-bold uppercase tracking-wider">Trending:</span>
+                      <span className="text-[6px] text-app-text-secondary font-bold uppercase tracking-wider">Trending:</span>
                       {popularSearches.slice(0, 4).map((ps, idx) => (
                         <span key={ps.id || idx} className="px-1.5 py-0.5 bg-gray-100 border border-gray-200 rounded text-[6px] font-medium text-gray-600">
                           {ps.query}
@@ -4119,7 +4026,7 @@ function HomepagePreview({
               <div key={sec.id} className="bg-white border-b border-gray-100">
                 
                 {/* 1. SPOTLIGHT BRANDS */}
-                <div className={`p-3 border-b border-gray-50 group relative transition-all ${
+                <div className={`p-3 border-b border-gray-50 group relative transition-all${
                   spotlightHighlighted ? 'ring-4 ring-orange-500 ring-offset-2 z-10 animate-pulse' : 'hover:border-orange-500/20'
                 }`}>
                   <div className="absolute top-1 right-1 bg-orange-500 text-white text-[6px] font-black px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest pointer-events-none z-10">
@@ -4142,7 +4049,7 @@ function HomepagePreview({
                           ) : (
                             <span className="text-[7px] font-black text-gray-700 truncate w-full text-center">{brand.name || brand.title}</span>
                           )}
-                          <span className="text-[5px] text-gray-400 font-medium truncate w-full text-center mt-0.5">{brand.category || 'Verified'}</span>
+                          <span className="text-[5px] text-app-text-secondary font-medium truncate w-full text-center mt-0.5">{brand.category || 'Verified'}</span>
                         </div>
                       );
                     })}
@@ -4150,7 +4057,7 @@ function HomepagePreview({
                 </div>
 
                 {/* 2. SPONSORED PRODUCTS */}
-                <div className={`p-3 border-b border-gray-50 group relative transition-all ${
+                <div className={`p-3 border-b border-gray-50 group relative transition-all${
                   sponsoredHighlighted ? 'ring-4 ring-orange-500 ring-offset-2 z-10 animate-pulse' : 'hover:border-orange-500/20'
                 }`}>
                   <div className="absolute top-1 right-1 bg-orange-500 text-white text-[6px] font-black px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest pointer-events-none z-10">
@@ -4172,7 +4079,7 @@ function HomepagePreview({
                 </div>
 
                 {/* 3. TRENDING PRODUCTS */}
-                <div className={`p-3 group relative transition-all ${
+                <div className={`p-3 group relative transition-all${
                   trendingHighlighted ? 'ring-4 ring-orange-500 ring-offset-2 z-10 animate-pulse' : 'hover:border-orange-500/20'
                 }`}>
                   <div className="absolute top-1 right-1 bg-orange-500 text-white text-[6px] font-black px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest pointer-events-none z-10">
@@ -4222,7 +4129,7 @@ function HomepagePreview({
             return (
               <div 
                 key={sec.id}
-                className={`p-3 bg-[#0F172A] text-white border-b border-gray-50 group relative transition-all ${
+                className={`p-3 bg-[#0F172A] text-app-text-primary border-b border-gray-50 group relative transition-all${
                   highlighted ? 'ring-4 ring-orange-500 ring-offset-2 z-10 animate-pulse' : 'hover:border-orange-500/30'
                 }`}
               >
@@ -4231,7 +4138,7 @@ function HomepagePreview({
                 </div>
                 <div className="flex items-center justify-between mb-1.5">
                   <div className="flex items-center gap-1.5">
-                    <h3 className="text-[8px] font-black uppercase tracking-wider text-white flex items-center gap-1">
+                    <h3 className="text-[8px] font-black uppercase tracking-wider text-app-text-primary flex items-center gap-1">
                       <Zap className="w-2.5 h-2.5 text-amber-400" /> Flash Deals
                     </h3>
                     <span className="bg-amber-500 text-slate-900 text-[6px] font-black px-1 rounded animate-pulse">
@@ -4243,17 +4150,17 @@ function HomepagePreview({
                 <div className="flex gap-1.5 overflow-x-auto scrollbar-none">
                   {activeDeals.length > 0 ? (
                     activeDeals.slice(0, 3).map((deal, idx) => (
-                      <div key={deal.id || idx} className="w-20 bg-slate-900 border border-slate-800 rounded p-1 shrink-0">
+                      <div key={deal.id || idx} className="w-20 bg-app-card border border-app-border rounded p-1 shrink-0">
                         <img src={deal.bannerUrl || deal.imageUrl || 'https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=200&q=80'} referrerPolicy="no-referrer" alt={deal.name || deal.title} className="w-full aspect-[16/10] object-cover rounded" />
-                        <span className="text-[6.5px] font-black text-white truncate mt-1 w-full block leading-none">{deal.name || deal.title}</span>
-                        <span className="text-[5.5px] text-gray-400 truncate mt-0.5 w-full block">{deal.ctaText || 'Grab Offer'}</span>
+                        <span className="text-[6.5px] font-black text-app-text-primary truncate mt-1 w-full block leading-none">{deal.name || deal.title}</span>
+                        <span className="text-[5.5px] text-app-text-secondary truncate mt-0.5 w-full block">{deal.ctaText || 'Grab Offer'}</span>
                       </div>
                     ))
                   ) : (
                     Array.from({ length: 2 }).map((_, idx) => (
-                      <div key={idx} className="w-20 bg-slate-900 border border-slate-800 rounded p-1 animate-pulse shrink-0">
-                        <div className="w-full aspect-[16/10] bg-slate-800 rounded" />
-                        <div className="h-1 bg-slate-800 rounded mt-1 w-3/4" />
+                      <div key={idx} className="w-20 bg-app-card border border-app-border rounded p-1 animate-pulse shrink-0">
+                        <div className="w-full aspect-[16/10] bg-app-bg rounded" />
+                        <div className="h-1 bg-app-bg rounded mt-1 w-3/4" />
                       </div>
                     ))
                   )}
@@ -4267,7 +4174,7 @@ function HomepagePreview({
             return (
               <div 
                 key={sec.id}
-                className={`p-3 bg-white border-b border-gray-100 group relative transition-all ${
+                className={`p-3 bg-white border-b border-gray-100 group relative transition-all${
                   highlighted ? 'ring-4 ring-orange-500 ring-offset-2 z-10 animate-pulse' : 'hover:border-orange-500/30'
                 }`}
               >
@@ -4307,7 +4214,7 @@ function HomepagePreview({
             return (
               <div 
                 key={sec.id}
-                className={`p-3 bg-white border-b border-gray-100 group relative transition-all ${
+                className={`p-3 bg-white border-b border-gray-100 group relative transition-all${
                   highlighted ? 'ring-4 ring-orange-500 ring-offset-2 z-10 animate-pulse' : 'hover:border-orange-500/30'
                 }`}
               >
@@ -4333,7 +4240,7 @@ function HomepagePreview({
                           </div>
                           <div className="min-w-0 flex-1">
                             <span className="text-[7px] font-black text-gray-800 block truncate leading-none">{creator.name}</span>
-                            <span className="text-[5.5px] text-gray-400 block truncate mt-0.5">{handle}</span>
+                            <span className="text-[5.5px] text-app-text-secondary block truncate mt-0.5">{handle}</span>
                           </div>
                           <span className="text-[6px] font-black text-orange-600 bg-orange-50 px-1 py-0.5 rounded shrink-0">
                             {trustScore}%
@@ -4360,13 +4267,13 @@ function HomepagePreview({
                 <div className="absolute top-1 right-1 bg-orange-900 text-white text-[6px] font-black px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity uppercase tracking-widest pointer-events-none z-10">
                   {sec.label}
                 </div>
-                <h4 className="text-[8px] font-black uppercase tracking-widest text-white mb-0.5">Stay Ahead of the Market</h4>
+                <h4 className="text-[8px] font-black uppercase tracking-widest text-app-text-primary mb-0.5">Stay Ahead of the Market</h4>
                 <p className="text-[6.5px] text-orange-50 mt-0.5 max-w-xs mx-auto leading-normal">
                   Subscribe for verified local guides, seller insights & flash campaign alerts.
                 </p>
                 <div className="mt-2 flex items-center max-w-[150px] mx-auto bg-white rounded overflow-hidden p-0.5">
-                  <div className="flex-1 text-[6.5px] text-gray-400 text-left pl-1.5 font-medium">Enter email...</div>
-                  <button className="bg-[#0F172A] text-white px-2 py-0.5 rounded text-[6.5px] font-black uppercase">
+                  <div className="flex-1 text-[6.5px] text-app-text-secondary text-left pl-1.5 font-medium">Enter email...</div>
+                  <button className="bg-[#0F172A] text-app-text-primary px-2 py-0.5 rounded text-[6.5px] font-black uppercase">
                     Join
                   </button>
                 </div>
@@ -4380,17 +4287,17 @@ function HomepagePreview({
       })}
 
       {/* 13. Footer */}
-      <div className="bg-[#0F172A] text-gray-400 px-3 py-4 text-center select-none mt-auto">
+      <div className="bg-[#0F172A] text-app-text-secondary px-3 py-4 text-center select-none mt-auto">
         <div className="flex items-center justify-center gap-1 mb-1.5">
           <div className="w-3 h-3 rounded bg-orange-500 flex items-center justify-center font-black text-white text-[7px] tracking-tighter">
             C
           </div>
-          <span className="font-extrabold text-[8px] tracking-tight text-white">Choosify Bangladesh</span>
+          <span className="font-extrabold text-[8px] tracking-tight text-app-text-primary">Choosify Bangladesh</span>
         </div>
-        <p className="text-[7px] text-gray-400 max-w-xs mx-auto leading-relaxed">
+        <p className="text-[7px] text-app-text-secondary max-w-xs mx-auto leading-relaxed">
           {localFooter?.description || "Bangladesh's most trusted curated product discovery platform."}
         </p>
-        <div className="border-t border-slate-800 mt-2.5 pt-2 text-[6px] text-slate-500 font-semibold uppercase">
+        <div className="border-t border-app-border mt-2.5 pt-2 text-[6px] text-slate-500 font-semibold uppercase">
           {localFooter?.copyrightText || "© 2025 Choosify Bangladesh. All rights reserved."}
         </div>
       </div>

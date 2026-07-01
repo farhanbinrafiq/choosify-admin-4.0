@@ -304,9 +304,9 @@ export default function DisputeCenter() {
           <button 
             id="file-dispute-btn"
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm transition"
+            className="flex items-center gap-2 bg-app-card hover:bg-slate-800 text-app-text-primary px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm transition"
           >
-            <Plus className="w-4 h-4 text-white" />
+            <Plus className="w-4 h-4 text-app-text-primary" />
             Intake New Complaint
           </button>
         </div>
@@ -319,9 +319,9 @@ export default function DisputeCenter() {
             <AlertTriangle className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">Overdue Breached Cases</div>
+            <div className="text-xs font-semibold text-app-text-secondary uppercase tracking-wider font-mono">Overdue Breached Cases</div>
             <div className="text-2xl font-bold text-rose-700 font-mono mt-0.5">
-              {stats.overdue} <span className="text-xs font-normal text-slate-400 font-sans">cases past SLA</span>
+              {stats.overdue} <span className="text-xs font-normal text-app-text-secondary font-sans">cases past SLA</span>
             </div>
           </div>
         </div>
@@ -331,9 +331,9 @@ export default function DisputeCenter() {
             <Clock className="w-6 h-6 animate-pulse" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">Mediation & Investigation</div>
+            <div className="text-xs font-semibold text-app-text-secondary uppercase tracking-wider font-mono">Mediation & Investigation</div>
             <div className="text-2xl font-bold text-amber-700 font-mono mt-0.5">
-              {stats.inProgress} <span className="text-xs font-normal text-slate-400 font-sans">cases actively reviewed</span>
+              {stats.inProgress} <span className="text-xs font-normal text-app-text-secondary font-sans">cases actively reviewed</span>
             </div>
           </div>
         </div>
@@ -343,9 +343,9 @@ export default function DisputeCenter() {
             <CheckCircle2 className="w-6 h-6" />
           </div>
           <div>
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider font-mono">Resolved This Month</div>
+            <div className="text-xs font-semibold text-app-text-secondary uppercase tracking-wider font-mono">Resolved This Month</div>
             <div className="text-2xl font-bold text-emerald-700 font-mono mt-0.5">
-              {stats.resolvedThisMonth} <span className="text-xs font-normal text-slate-400 font-sans">cases successfully closed</span>
+              {stats.resolvedThisMonth} <span className="text-xs font-normal text-app-text-secondary font-sans">cases successfully closed</span>
             </div>
           </div>
         </div>
@@ -355,9 +355,9 @@ export default function DisputeCenter() {
       <div className="border-b border-slate-200 mb-6 flex overflow-x-auto gap-4" id="dispute-navigation-tabs">
         <button
           onClick={() => setActiveTab('active')}
-          className={`pb-3 text-sm font-semibold border-b-2 px-1 transition whitespace-nowrap flex items-center gap-2 ${
+          className={`pb-3 text-sm font-semibold border-b-2 px-1 transition whitespace-nowrap flex items-center gap-2${
             activeTab === 'active' 
-              ? 'border-slate-900 text-slate-950' 
+              ? 'border-app-border text-slate-950' 
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -373,9 +373,9 @@ export default function DisputeCenter() {
               toast.error('Select an active case from the queue to view its detail.');
             }
           }}
-          className={`pb-3 text-sm font-semibold border-b-2 px-1 transition whitespace-nowrap flex items-center gap-2 ${
+          className={`pb-3 text-sm font-semibold border-b-2 px-1 transition whitespace-nowrap flex items-center gap-2${
             activeTab === 'detail' 
-              ? 'border-slate-900 text-slate-950 font-bold' 
+              ? 'border-app-border text-slate-950 font-bold' 
               : 'border-transparent text-slate-400 hover:text-slate-800'
           }`}
         >
@@ -385,9 +385,9 @@ export default function DisputeCenter() {
 
         <button
           onClick={() => setActiveTab('history')}
-          className={`pb-3 text-sm font-semibold border-b-2 px-1 transition whitespace-nowrap flex items-center gap-2 ${
+          className={`pb-3 text-sm font-semibold border-b-2 px-1 transition whitespace-nowrap flex items-center gap-2${
             activeTab === 'history' 
-              ? 'border-slate-900 text-slate-950' 
+              ? 'border-app-border text-slate-950' 
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -397,9 +397,9 @@ export default function DisputeCenter() {
 
         <button
           onClick={() => setActiveTab('escalated')}
-          className={`pb-3 text-sm font-semibold border-b-2 px-1 transition whitespace-nowrap flex items-center gap-2 ${
+          className={`pb-3 text-sm font-semibold border-b-2 px-1 transition whitespace-nowrap flex items-center gap-2${
             activeTab === 'escalated' 
-              ? 'border-slate-900 text-slate-950' 
+              ? 'border-app-border text-slate-950' 
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -409,9 +409,9 @@ export default function DisputeCenter() {
 
         <button
           onClick={() => setActiveTab('analytics')}
-          className={`pb-3 text-sm font-semibold border-b-2 px-1 transition whitespace-nowrap flex items-center gap-2 ${
+          className={`pb-3 text-sm font-semibold border-b-2 px-1 transition whitespace-nowrap flex items-center gap-2${
             activeTab === 'analytics' 
-              ? 'border-slate-900 text-slate-950' 
+              ? 'border-app-border text-slate-950' 
               : 'border-transparent text-slate-500 hover:text-slate-800'
           }`}
         >
@@ -437,7 +437,7 @@ export default function DisputeCenter() {
               {/* Search and Filters Strip */}
               <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
                 <div className="relative w-full md:w-80">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                  <Search className="w-4 h-4 text-app-text-secondary absolute left-3 top-3.5" />
                   <input
                     type="text"
                     value={searchQuery}
@@ -448,7 +448,7 @@ export default function DisputeCenter() {
                 </div>
 
                 <div className="flex flex-wrap gap-2 w-full md:w-auto items-center justify-end">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 font-mono">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-app-text-secondary font-mono">
                     <ListFilter className="w-3.5 h-3.5" />
                     FILTERS:
                   </div>
@@ -510,7 +510,7 @@ export default function DisputeCenter() {
                     <tbody className="divide-y divide-slate-150 text-sm">
                       {paginatedActiveQueue.length === 0 ? (
                         <tr>
-                          <td colSpan={9} className="text-center py-12 text-slate-400 font-medium">
+                          <td colSpan={9} className="text-center py-12 text-app-text-secondary font-medium">
                             No active disputes matching your criteria are in the queue.
                           </td>
                         </tr>
@@ -523,27 +523,27 @@ export default function DisputeCenter() {
                           return (
                             <tr 
                               key={dispute.id} 
-                              className={`hover:bg-slate-50 transition ${isOverdue ? 'bg-rose-50/30' : isCritical ? 'bg-amber-50/20' : ''}`}
+                              className={`hover:bg-slate-50 transition${isOverdue ? 'bg-rose-50/30' : isCritical ? 'bg-amber-50/20' : ''}`}
                             >
                               <td className="px-6 py-4 font-mono font-bold text-slate-900">
                                 <button onClick={() => handleViewDetail(dispute)} className="hover:underline text-slate-900 cursor-pointer text-left">
                                   {dispute.disputeNumber}
                                 </button>
-                                <div className="text-xs text-slate-400 font-sans font-normal truncate max-w-xs">{dispute.title}</div>
+                                <div className="text-xs text-app-text-secondary font-sans font-normal truncate max-w-xs">{dispute.title}</div>
                               </td>
                               <td className="px-6 py-4 font-medium text-slate-800">
                                 {dispute.buyer.name}
-                                <div className="text-xs text-slate-400 font-normal">{dispute.buyer.contactInfo || 'N/A'}</div>
+                                <div className="text-xs text-app-text-secondary font-normal">{dispute.buyer.contactInfo || 'N/A'}</div>
                               </td>
                               <td className="px-6 py-4 text-slate-700">
                                 <span className="font-semibold text-slate-900">{dispute.seller.name}</span>
-                                <div className="text-xs text-slate-400">{dispute.seller.id}</div>
+                                <div className="text-xs text-app-text-secondary">{dispute.seller.id}</div>
                               </td>
                               <td className="px-6 py-4 uppercase text-xs font-mono tracking-wider font-semibold">
                                 {dispute.type.replace('_', ' ')}
                               </td>
                               <td className="px-6 py-4">
-                                <span className={`px-2 py-1 rounded text-xs font-bold uppercase font-mono ${
+                                <span className={`px-2 py-1 rounded text-xs font-bold uppercase font-mono${
                                   dispute.status === 'open' ? 'bg-blue-100 text-blue-800' :
                                   dispute.status === 'in_investigation' ? 'bg-purple-100 text-purple-800' :
                                   dispute.status === 'mediation' ? 'bg-amber-100 text-amber-800' :
@@ -559,13 +559,13 @@ export default function DisputeCenter() {
                                     <AlertCircle className="w-3.5 h-3.5" /> OVERDUE ({Math.abs(daysLeft)}d)
                                   </span>
                                 ) : (
-                                  <span className={`font-mono text-xs font-bold ${isCritical ? 'text-amber-600 animate-pulse' : 'text-slate-600'}`}>
+                                  <span className={`font-mono text-xs font-bold${isCritical ? 'text-amber-600 animate-pulse' : 'text-slate-600'}`}>
                                     {daysLeft} days remaining
                                   </span>
                                 )}
                               </td>
                               <td className="px-6 py-4">
-                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize${
                                   dispute.severity === 'high' ? 'bg-red-50 text-red-700' :
                                   dispute.severity === 'medium' ? 'bg-amber-50 text-amber-700' :
                                   'bg-blue-50 text-blue-700'
@@ -576,7 +576,7 @@ export default function DisputeCenter() {
                               <td className="px-6 py-4 text-xs font-mono text-slate-500">
                                 {dispute.admin ? (
                                   <span className="flex items-center gap-1">
-                                    <UserCheck className="w-3.5 h-3.5 text-slate-400" />
+                                    <UserCheck className="w-3.5 h-3.5 text-app-text-secondary" />
                                     {dispute.admin === 'usr_admin_001' ? 'Principal Mediator' : 'Internal Legal'}
                                   </span>
                                 ) : (
@@ -594,7 +594,7 @@ export default function DisputeCenter() {
                                 )}
                                 <button
                                   onClick={() => handleViewDetail(dispute)}
-                                  className="bg-slate-900 hover:bg-slate-800 text-white px-2.5 py-1.5 rounded text-xs font-semibold transition"
+                                  className="bg-app-card hover:bg-slate-800 text-app-text-primary px-2.5 py-1.5 rounded text-xs font-semibold transition"
                                 >
                                   Open Workspace
                                 </button>
@@ -610,7 +610,7 @@ export default function DisputeCenter() {
                 {/* Pagination footer */}
                 {filteredActiveQueue.length > itemsPerPage && (
                   <div className="bg-slate-50 border-t border-slate-200 px-6 py-4 flex justify-between items-center">
-                    <span className="text-xs text-slate-400 font-mono">
+                    <span className="text-xs text-app-text-secondary font-mono">
                       Showing {(activePage-1)*itemsPerPage + 1} - {Math.min(activePage*itemsPerPage, filteredActiveQueue.length)} of {filteredActiveQueue.length} Active Cases
                     </span>
                     <div className="flex gap-2">
@@ -646,10 +646,10 @@ export default function DisputeCenter() {
             >
               {!currentDispute ? (
                 <div className="bg-white border border-slate-200 p-12 text-center rounded-xl shadow-sm">
-                  <AlertCircle className="w-12 h-12 text-slate-400 mx-auto mb-4" />
+                  <AlertCircle className="w-12 h-12 text-app-text-secondary mx-auto mb-4" />
                   <h3 className="text-lg font-bold text-slate-800 mb-1">No Active Case Selected</h3>
                   <p className="text-sm text-slate-500 mb-4">Please pick a dispute file from the Case Queue to enter the administrative mediation workspace.</p>
-                  <button onClick={() => setActiveTab('active')} className="bg-slate-900 text-white hover:bg-slate-800 px-4 py-2 rounded-lg text-sm font-semibold transition">
+                  <button onClick={() => setActiveTab('active')} className="bg-app-card text-app-text-primary hover:bg-slate-800 px-4 py-2 rounded-lg text-sm font-semibold transition">
                     Return to Active Cases
                   </button>
                 </div>
@@ -661,7 +661,7 @@ export default function DisputeCenter() {
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-xl font-bold font-mono tracking-tight text-slate-900">{currentDispute.disputeNumber}</span>
-                        <span className={`px-2 py-0.5 rounded text-xs font-bold font-mono uppercase ${
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold font-mono uppercase${
                           currentDispute.status === 'open' ? 'bg-blue-100 text-blue-800' :
                           currentDispute.status === 'in_investigation' ? 'bg-purple-100 text-purple-800' :
                           currentDispute.status === 'mediation' ? 'bg-amber-100 text-amber-800' :
@@ -670,13 +670,13 @@ export default function DisputeCenter() {
                         }`}>
                           {currentDispute.status.replace('_', ' ')}
                         </span>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize${
                           currentDispute.severity === 'high' ? 'bg-rose-50 text-rose-700' :
                           'bg-amber-50 text-amber-700'
                         }`}>
                           {currentDispute.severity} Severity
                         </span>
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize ${
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold capitalize${
                           currentDispute.priority === 'urgent' ? 'bg-rose-100 text-rose-700 animate-pulse' : 'bg-slate-100 text-slate-700'
                         }`}>
                           {currentDispute.priority} Priority
@@ -700,7 +700,7 @@ export default function DisputeCenter() {
 
                       <button
                         onClick={() => setActiveTab('active')}
-                        className="bg-slate-900 hover:bg-slate-800 text-white px-3.5 py-2 rounded-lg text-xs font-semibold transition"
+                        className="bg-app-card hover:bg-slate-800 text-app-text-primary px-3.5 py-2 rounded-lg text-xs font-semibold transition"
                       >
                         Back to Queue
                       </button>
@@ -723,7 +723,7 @@ export default function DisputeCenter() {
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-                          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">Disputant Customer</div>
+                          <div className="text-[11px] font-bold text-app-text-secondary uppercase tracking-wider font-mono">Disputant Customer</div>
                           <div className="flex items-center gap-2.5 mt-2">
                             <img 
                               src={currentDispute.buyer.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"} 
@@ -733,20 +733,20 @@ export default function DisputeCenter() {
                             />
                             <div>
                               <div className="font-semibold text-slate-900 text-sm">{currentDispute.buyer.name}</div>
-                              <div className="text-xs text-slate-400 font-mono">{currentDispute.buyer.contactInfo || 'Private Customer'}</div>
+                              <div className="text-xs text-app-text-secondary font-mono">{currentDispute.buyer.contactInfo || 'Private Customer'}</div>
                             </div>
                           </div>
                         </div>
 
                         <div className="bg-slate-50 p-3.5 rounded-lg border border-slate-100">
-                          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider font-mono">Target Marketplace Merchant</div>
+                          <div className="text-[11px] font-bold text-app-text-secondary uppercase tracking-wider font-mono">Target Marketplace Merchant</div>
                           <div className="flex items-center gap-2.5 mt-2">
                             <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center font-bold text-slate-600 border border-slate-200">
                               {currentDispute.seller.name.charAt(0)}
                             </div>
                             <div>
                               <div className="font-semibold text-slate-900 text-sm">{currentDispute.seller.name}</div>
-                              <div className="text-xs text-slate-400 font-mono">ID: {currentDispute.seller.id}</div>
+                              <div className="text-xs text-app-text-secondary font-mono">ID: {currentDispute.seller.id}</div>
                             </div>
                           </div>
                         </div>
@@ -772,7 +772,7 @@ export default function DisputeCenter() {
                       </div>
 
                       {currentDispute.evidence.length === 0 ? (
-                        <div className="text-center py-8 text-slate-400 text-sm font-medium">
+                        <div className="text-center py-8 text-app-text-secondary text-sm font-medium">
                           No official diagnostic evidence has been uploaded for this case file yet.
                         </div>
                       ) : (
@@ -782,26 +782,26 @@ export default function DisputeCenter() {
                             return (
                               <div key={item.id} className="group relative border border-slate-200 rounded-lg overflow-hidden bg-slate-50 transition hover:border-slate-300">
                                 {isImage ? (
-                                  <div className="aspect-video w-full relative overflow-hidden bg-slate-900 cursor-pointer" onClick={() => setExpandedImage(item.url)}>
+                                  <div className="aspect-video w-full relative overflow-hidden bg-app-card cursor-pointer" onClick={() => setExpandedImage(item.url)}>
                                     <img 
                                       src={item.url.startsWith('#') ? 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=400' : item.url} 
                                       alt={item.description} 
                                       className="w-full h-full object-cover group-hover:scale-105 transition duration-300" 
                                       referrerPolicy="no-referrer"
                                     />
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                      <span className="text-[10px] text-white font-bold tracking-wider font-mono bg-black/60 px-2 py-1 rounded">CLICK TO VIEW</span>
+                                    <div className="absolute inset-0 bg-app-card/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                      <span className="text-[10px] text-app-text-primary font-bold tracking-wider font-mono bg-app-card/20 px-2 py-1 rounded">CLICK TO VIEW</span>
                                     </div>
                                   </div>
                                 ) : (
                                   <div className="aspect-video w-full flex flex-col items-center justify-center p-3 bg-slate-100 text-slate-600 text-center border-b border-slate-200">
-                                    <FileText className="w-8 h-8 text-slate-400 mb-1" />
+                                    <FileText className="w-8 h-8 text-app-text-secondary mb-1" />
                                     <span className="text-[10px] font-bold font-mono tracking-wider text-slate-500 uppercase">{item.type}</span>
                                   </div>
                                 )}
                                 <div className="p-2">
                                   <div className="text-xs font-semibold text-slate-700 truncate">{item.description}</div>
-                                  <div className="text-[10px] text-slate-400 font-mono mt-0.5">By {item.uploadedBy === 'cust_002' ? 'Sabrina Sharmin' : 'Admin'}</div>
+                                  <div className="text-[10px] text-app-text-secondary font-mono mt-0.5">By {item.uploadedBy === 'cust_002' ? 'Sabrina Sharmin' : 'Admin'}</div>
                                 </div>
                               </div>
                             );
@@ -831,7 +831,7 @@ export default function DisputeCenter() {
                       {/* Chat messages */}
                       <div className="space-y-4 max-h-[360px] overflow-y-auto pr-1">
                         {currentDispute.messages.length === 0 ? (
-                          <div className="text-center py-10 text-slate-400 text-sm">
+                          <div className="text-center py-10 text-app-text-secondary text-sm">
                             No messages on file. Write an update below to message the parties.
                           </div>
                         ) : (
@@ -842,7 +842,7 @@ export default function DisputeCenter() {
                             return (
                               <div 
                                 key={msg.id} 
-                                className={`p-3.5 rounded-lg text-sm border ${
+                                className={`p-3.5 rounded-lg text-sm border${
                                   isInternal 
                                     ? 'bg-amber-50/45 border-amber-200 text-slate-800 ml-4' 
                                     : isAdmin
@@ -862,7 +862,7 @@ export default function DisputeCenter() {
                                       </span>
                                     )}
                                   </div>
-                                  <span className="text-[10px] text-slate-400 font-mono">
+                                  <span className="text-[10px] text-app-text-secondary font-mono">
                                     {new Date(msg.timestamp).toLocaleString()}
                                   </span>
                                 </div>
@@ -881,7 +881,7 @@ export default function DisputeCenter() {
                             onChange={(e) => setComposerText(e.target.value)}
                             placeholder={isInternalNote ? "Write private investigation logs (only visible to platform Admins)..." : "Draft message broadcasted instantly to both Customer and Seller inbox..."}
                             rows={3}
-                            className={`w-full p-3 border rounded-xl text-sm focus:outline-none focus:ring-1 transition ${
+                            className={`w-full p-3 border rounded-xl text-sm focus:outline-none focus:ring-1 transition${
                               isInternalNote 
                                 ? 'bg-amber-50/20 border-amber-300 focus:border-amber-400 focus:ring-amber-400' 
                                 : 'border-slate-200 focus:border-slate-400 focus:ring-slate-400'
@@ -890,10 +890,10 @@ export default function DisputeCenter() {
                           <div className="absolute right-3.5 bottom-3.5 flex items-center gap-2">
                             <button
                               type="submit"
-                              className={`px-4 py-2 rounded-lg text-xs font-bold text-white shadow flex items-center gap-1.5 transition ${
+                              className={`px-4 py-2 rounded-lg text-xs font-bold text-app-text-primary shadow flex items-center gap-1.5 transition${
                                 isInternalNote 
                                   ? 'bg-amber-600 hover:bg-amber-700' 
-                                  : 'bg-slate-900 hover:bg-slate-800'
+                                  : 'bg-app-card hover:bg-slate-800'
                               }`}
                             >
                               <Send className="w-3 h-3" />
@@ -972,7 +972,7 @@ export default function DisputeCenter() {
                               reopenDispute(currentDispute.id, 'New evidence submitted regarding physical damages');
                               toast.success('Case status reset to Active open.');
                             }}
-                            className="w-full bg-slate-900 hover:bg-slate-800 text-white p-3 rounded-lg text-center text-sm font-semibold transition"
+                            className="w-full bg-app-card hover:bg-slate-800 text-app-text-primary p-3 rounded-lg text-center text-sm font-semibold transition"
                           >
                             Re-Open Dispute File
                           </button>
@@ -990,7 +990,7 @@ export default function DisputeCenter() {
                             <User className="w-4 h-4 text-slate-500" />
                           </div>
                           <div>
-                            <div className="text-xs text-slate-400 font-mono">ASSIGNED AGENT</div>
+                            <div className="text-xs text-app-text-secondary font-mono">ASSIGNED AGENT</div>
                             <div className="text-sm font-bold text-slate-800">
                               {currentDispute.admin ? (currentDispute.admin === 'usr_admin_001' ? 'Principal Mediator' : 'Internal Legal Office') : 'Unassigned Pool'}
                             </div>
@@ -1025,11 +1025,11 @@ export default function DisputeCenter() {
                       <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide border-b border-slate-100 pb-2">SLA Deadline</h3>
                       
                       <div>
-                        <div className="flex justify-between text-xs text-slate-400 font-mono">
+                        <div className="flex justify-between text-xs text-app-text-secondary font-mono">
                           <span>SLA DUE DATE:</span>
                           <span className="font-bold text-slate-700">{new Date(currentDispute.dueDateForResolution).toLocaleDateString()}</span>
                         </div>
-                        <div className="flex justify-between text-xs text-slate-400 font-mono mt-1">
+                        <div className="flex justify-between text-xs text-app-text-secondary font-mono mt-1">
                           <span>DAYS LEFT:</span>
                           <span className="font-bold text-slate-700">
                             {getDaysRemaining(currentDispute.dueDateForResolution)} Business Days
@@ -1129,7 +1129,7 @@ export default function DisputeCenter() {
                     <div className="bg-white border border-slate-200 p-6 rounded-xl shadow-sm space-y-3">
                       <div className="flex justify-between items-center border-b border-slate-100 pb-2">
                         <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wide">Case Audit Trail</h3>
-                        <button onClick={() => setShowAuditModal(true)} className="text-[10px] font-bold font-mono uppercase tracking-wider text-slate-400 hover:text-slate-800">
+                        <button onClick={() => setShowAuditModal(true)} className="text-[10px] font-bold font-mono uppercase tracking-wider text-app-text-secondary hover:text-slate-800">
                           View Full Trail
                         </button>
                       </div>
@@ -1164,7 +1164,7 @@ export default function DisputeCenter() {
               {/* Filter Strip */}
               <div className="bg-white border border-slate-200 p-4 rounded-xl shadow-sm flex flex-col md:flex-row gap-4 justify-between items-center">
                 <div className="relative w-full md:w-80">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3.5" />
+                  <Search className="w-4 h-4 text-app-text-secondary absolute left-3 top-3.5" />
                   <input
                     type="text"
                     value={historySearchQuery}
@@ -1209,7 +1209,7 @@ export default function DisputeCenter() {
                     <tbody className="divide-y divide-slate-150 text-sm">
                       {filteredHistoryQueue.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="text-center py-12 text-slate-400 font-medium">
+                          <td colSpan={8} className="text-center py-12 text-app-text-secondary font-medium">
                             No resolved dispute files on record.
                           </td>
                         </tr>
@@ -1283,7 +1283,7 @@ export default function DisputeCenter() {
                     <tbody className="divide-y divide-slate-150 text-sm">
                       {escalatedQueue.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="text-center py-12 text-slate-400 font-medium">
+                          <td colSpan={6} className="text-center py-12 text-app-text-secondary font-medium">
                             Splendid! No escalated or breached cases on board.
                           </td>
                         </tr>
@@ -1348,9 +1348,9 @@ export default function DisputeCenter() {
                     <button
                       key={range}
                       onClick={() => setReportRange(range as any)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-mono uppercase transition ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-mono uppercase transition${
                         reportRange === range 
-                          ? 'bg-slate-900 text-white' 
+                          ? 'bg-app-card text-white' 
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
@@ -1363,31 +1363,31 @@ export default function DisputeCenter() {
               {/* Big Metrics Grid */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-sm">
-                  <div className="text-xs font-bold text-slate-400 font-mono uppercase">Dispute Rate (Total Cases)</div>
+                  <div className="text-xs font-bold text-app-text-secondary font-mono uppercase">Dispute Rate (Total Cases)</div>
                   <div className="text-3xl font-extrabold text-slate-900 font-mono mt-2">{analyticsReport.totalCount}</div>
-                  <div className="text-xs text-slate-400 mt-1">Disputes raised in date range</div>
+                  <div className="text-xs text-app-text-secondary mt-1">Disputes raised in date range</div>
                 </div>
 
                 <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-sm">
-                  <div className="text-xs font-bold text-slate-400 font-mono uppercase">Case Resolution Ratio</div>
+                  <div className="text-xs font-bold text-app-text-secondary font-mono uppercase">Case Resolution Ratio</div>
                   <div className="text-3xl font-extrabold text-emerald-600 font-mono mt-2">
                     {analyticsReport.totalCount > 0 
                       ? `${((analyticsReport.resolvedCount / analyticsReport.totalCount) * 100).toFixed(0)}%` 
                       : '100%'}
                   </div>
-                  <div className="text-xs text-slate-400 mt-1">{analyticsReport.resolvedCount} of {analyticsReport.totalCount} resolved</div>
+                  <div className="text-xs text-app-text-secondary mt-1">{analyticsReport.resolvedCount} of {analyticsReport.totalCount} resolved</div>
                 </div>
 
                 <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-sm">
-                  <div className="text-xs font-bold text-slate-400 font-mono uppercase">Average Case Lifecycle</div>
+                  <div className="text-xs font-bold text-app-text-secondary font-mono uppercase">Average Case Lifecycle</div>
                   <div className="text-3xl font-extrabold text-indigo-600 font-mono mt-2">{analyticsReport.avgResolutionDays}</div>
-                  <div className="text-xs text-slate-400 mt-1">Business days to close file</div>
+                  <div className="text-xs text-app-text-secondary mt-1">Business days to close file</div>
                 </div>
 
                 <div className="bg-white border border-slate-200 p-5 rounded-xl shadow-sm">
-                  <div className="text-xs font-bold text-slate-400 font-mono uppercase">Active Caseload</div>
+                  <div className="text-xs font-bold text-app-text-secondary font-mono uppercase">Active Caseload</div>
                   <div className="text-3xl font-extrabold text-amber-600 font-mono mt-2">{analyticsReport.activeCount}</div>
-                  <div className="text-xs text-slate-400 mt-1">Cases actively open</div>
+                  <div className="text-xs text-app-text-secondary mt-1">Cases actively open</div>
                 </div>
               </div>
 
@@ -1399,7 +1399,7 @@ export default function DisputeCenter() {
                   <h4 className="text-sm font-bold text-slate-900 font-sans mb-4 uppercase tracking-wide">Cases Filed by Dispute Type</h4>
                   <div className="h-64">
                     {analyticsReport.typeBreakdown.length === 0 ? (
-                      <div className="h-full flex items-center justify-center text-slate-400 text-xs">No data filed.</div>
+                      <div className="h-full flex items-center justify-center text-app-text-secondary text-xs">No data filed.</div>
                     ) : (
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={analyticsReport.typeBreakdown}>
@@ -1418,7 +1418,7 @@ export default function DisputeCenter() {
                   <h4 className="text-sm font-bold text-slate-900 font-sans mb-4 uppercase tracking-wide">Arbitration Resolution Distribution</h4>
                   <div className="h-64 flex flex-col md:flex-row items-center justify-center">
                     {analyticsReport.resolutionBreakdown.length === 0 ? (
-                      <div className="text-slate-400 text-xs">No closed cases on record to show resolution outcomes.</div>
+                      <div className="text-app-text-secondary text-xs">No closed cases on record to show resolution outcomes.</div>
                     ) : (
                       <>
                         <div className="w-1/2 h-full">
@@ -1460,7 +1460,7 @@ export default function DisputeCenter() {
                   <h4 className="text-sm font-bold text-slate-900 font-sans mb-4 uppercase tracking-wide">Top Troublesome Merchants (Frequent Complaints)</h4>
                   
                   {analyticsReport.topTroublesomeSellers.length === 0 ? (
-                    <div className="text-center py-6 text-slate-400 text-xs">No merchants flagged. Excellent vendor compliance index.</div>
+                    <div className="text-center py-6 text-app-text-secondary text-xs">No merchants flagged. Excellent vendor compliance index.</div>
                   ) : (
                     <div className="space-y-3">
                       {analyticsReport.topTroublesomeSellers.map((seller: any, index: number) => {
@@ -1469,21 +1469,21 @@ export default function DisputeCenter() {
                         return (
                           <div key={seller.name} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100 transition">
                             <div className="flex items-center gap-3">
-                              <span className="font-mono text-sm font-bold text-slate-400">#0{index+1}</span>
+                              <span className="font-mono text-sm font-bold text-app-text-secondary">#0{index+1}</span>
                               <div>
                                 <div className="text-sm font-bold text-slate-900">{seller.name}</div>
-                                <div className="text-[11px] text-slate-400 font-mono">Merchant ID Code: {seller.id}</div>
+                                <div className="text-[11px] text-app-text-secondary font-mono">Merchant ID Code: {seller.id}</div>
                               </div>
                             </div>
 
                             <div className="flex items-center gap-6">
                               <div className="text-right">
-                                <div className="text-xs text-slate-400 font-mono uppercase">Cases Filed</div>
+                                <div className="text-xs text-app-text-secondary font-mono uppercase">Cases Filed</div>
                                 <div className="text-sm font-bold text-red-600 font-mono">{seller.count} disputes</div>
                               </div>
 
                               <div className="text-right border-l border-slate-200 pl-4">
-                                <div className="text-xs text-slate-400 font-mono uppercase">Reputation Score</div>
+                                <div className="text-xs text-app-text-secondary font-mono uppercase">Reputation Score</div>
                                 <div className="text-sm font-bold text-slate-800 font-mono">
                                   {matchedTrust ? `${matchedTrust.current_score} / 100` : '85 / 100'}
                                 </div>
@@ -1505,11 +1505,11 @@ export default function DisputeCenter() {
 
       {/* MODAL 1: CREATE DISPUTE MODAL (LODGED BY ADMIN INTRO) */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="create-dispute-modal">
+        <div className="fixed inset-0 bg-app-bg/10 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in" id="create-dispute-modal">
           <div className="bg-white border border-slate-200 rounded-xl shadow-xl max-w-xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-slate-150 flex justify-between items-center">
               <h3 className="text-lg font-bold text-slate-900 font-sans">Administrative Case Intake Portal</h3>
-              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+              <button onClick={() => setShowCreateModal(false)} className="text-app-text-secondary hover:text-slate-600 text-lg">&times;</button>
             </div>
 
             <form onSubmit={(e) => {
@@ -1684,7 +1684,7 @@ export default function DisputeCenter() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition"
+                  className="px-4 py-2 bg-app-card hover:bg-slate-800 text-app-text-primary rounded-lg text-xs font-semibold transition"
                 >
                   Lodge Case Intake
                 </button>
@@ -1697,11 +1697,11 @@ export default function DisputeCenter() {
 
       {/* MODAL 2: ADD EVIDENCE MODAL */}
       {showEvidenceModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50" id="add-evidence-modal">
+        <div className="fixed inset-0 bg-app-bg/10 backdrop-blur-xs flex items-center justify-center p-4 z-50" id="add-evidence-modal">
           <div className="bg-white border border-slate-200 rounded-xl shadow-xl max-w-md w-full">
             <div className="p-6 border-b flex justify-between items-center">
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider font-mono">Upload Administrative Evidence</h3>
-              <button onClick={() => setShowEvidenceModal(false)} className="text-slate-400 hover:text-slate-600">&times;</button>
+              <button onClick={() => setShowEvidenceModal(false)} className="text-app-text-secondary hover:text-slate-600">&times;</button>
             </div>
 
             <form onSubmit={(e) => {
@@ -1743,7 +1743,7 @@ export default function DisputeCenter() {
                   className="w-full px-3 py-2 border rounded-lg text-xs font-mono"
                   required
                 />
-                <div className="mt-1 text-[10px] text-slate-400">
+                <div className="mt-1 text-[10px] text-app-text-secondary">
                   You can pass any public Unsplash link, raw file asset URL, or mock document target.
                 </div>
               </div>
@@ -1770,7 +1770,7 @@ export default function DisputeCenter() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold transition"
+                  className="px-4 py-2 bg-app-card hover:bg-slate-800 text-app-text-primary rounded-lg text-xs font-semibold transition"
                 >
                   Link Asset
                 </button>
@@ -1783,11 +1783,11 @@ export default function DisputeCenter() {
 
       {/* MODAL 3: REASSIGN DISPUTE MODAL */}
       {showAssignModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-app-bg/10 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white border border-slate-200 rounded-xl shadow-xl max-w-sm w-full">
             <div className="p-6 border-b flex justify-between items-center">
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider font-mono">Reassign Case Officer</h3>
-              <button onClick={() => setShowAssignModal(false)} className="text-slate-400 hover:text-slate-600">&times;</button>
+              <button onClick={() => setShowAssignModal(false)} className="text-app-text-secondary hover:text-slate-600">&times;</button>
             </div>
 
             <div className="p-6 space-y-4">
@@ -1806,7 +1806,7 @@ export default function DisputeCenter() {
                 </select>
               </div>
 
-              <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-medium">
+              <div className="flex items-center gap-1.5 text-[11px] text-app-text-secondary font-medium">
                 <input type="checkbox" defaultChecked className="rounded border-slate-300" id="notify-officer-chk" />
                 <label htmlFor="notify-officer-chk">Broadcast email notification alert to assignee.</label>
               </div>
@@ -1826,7 +1826,7 @@ export default function DisputeCenter() {
                     }
                     setShowAssignModal(false);
                   }}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-semibold shadow"
+                  className="px-4 py-2 bg-app-card hover:bg-slate-800 text-app-text-primary rounded-lg text-xs font-semibold shadow"
                 >
                   Assign Officer
                 </button>
@@ -1838,11 +1838,11 @@ export default function DisputeCenter() {
 
       {/* MODAL 4: FULL AUDIT TRAIL MODAL */}
       {showAuditModal && currentDispute && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 bg-app-bg/10 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white border border-slate-200 rounded-xl shadow-xl max-w-md w-full">
             <div className="p-6 border-b flex justify-between items-center">
               <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider font-mono">Full Case Log Trail: {currentDispute.disputeNumber}</h3>
-              <button onClick={() => setShowAuditModal(false)} className="text-slate-400 hover:text-slate-600 text-lg">&times;</button>
+              <button onClick={() => setShowAuditModal(false)} className="text-app-text-secondary hover:text-slate-600 text-lg">&times;</button>
             </div>
 
             <div className="p-6 space-y-3 max-h-[60vh] overflow-y-auto">
@@ -1857,7 +1857,7 @@ export default function DisputeCenter() {
             <div className="p-6 border-t flex justify-end">
               <button
                 onClick={() => setShowAuditModal(false)}
-                className="px-4 py-2 bg-slate-900 text-white hover:bg-slate-800 rounded-lg text-xs font-bold shadow"
+                className="px-4 py-2 bg-app-card text-app-text-primary hover:bg-slate-800 rounded-lg text-xs font-bold shadow"
               >
                 Close Audit Sheet
               </button>
@@ -1868,10 +1868,10 @@ export default function DisputeCenter() {
 
       {/* IMAGE EXPAND MODAL */}
       {expandedImage && (
-        <div className="fixed inset-0 bg-slate-950/90 flex items-center justify-center p-4 z-50" onClick={() => setExpandedImage(null)}>
+        <div className="fixed inset-0 bg-app-bg/10 flex items-center justify-center p-4 z-50" onClick={() => setExpandedImage(null)}>
           <div className="relative max-w-3xl w-full">
             <img src={expandedImage.startsWith('#') ? 'https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=400' : expandedImage} alt="Expanded evidence view" className="max-w-full max-h-[85vh] rounded-xl object-contain mx-auto shadow-2xl" referrerPolicy="no-referrer" />
-            <button className="absolute -top-10 right-0 text-white font-bold text-xl hover:text-slate-300">Close &times;</button>
+            <button className="absolute -top-10 right-0 text-app-text-primary font-bold text-xl hover:text-slate-300">Close &times;</button>
           </div>
         </div>
       )}

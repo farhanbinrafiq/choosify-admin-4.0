@@ -21,8 +21,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import AddProductModal from '../../components/admin/AddProductModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
-import { catalogApi } from '../../services/catalogApi';
-import type { CatalogProduct } from '../../types/catalog';
 
 const mockProducts = [
   { id: '1', name: 'Samsung S25 Ultra', brand: 'Samsung Bangladesh', category: 'Mobile', seller: 'TechZone BD', price: '৳ 139,999', status: 'Pending', views: 842, icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' },
@@ -37,20 +35,6 @@ const mockProducts = [
   { id: 'techcore-2', name: 'TechCore Bluetooth Smart Watch V2', brand: 'TechCore', category: 'Consumer Tech', seller: 'Rahim Uddin', price: '৳ 3,800', status: 'Live', views: 5690, icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' },
 ];
 
-const mapCatalogProductToCard = (product: CatalogProduct) => ({
-  id: product.id,
-  name: product.title,
-  brand: product.brandName,
-  category: product.categoryName,
-  seller: 'Platform Admin',
-  price: `৳ ${Math.round(product.price).toLocaleString()}`,
-  status:
-    product.status === 'live' ? 'Live' : product.status === 'archived' ? 'Rejected' : 'Pending',
-  views: 0,
-  icon: product.categoryName.toLowerCase().includes('mobile') ? Smartphone : Box,
-  color: 'text-app-accent bg-app-accent/10',
-});
-
 export default function ProductsPage() {
   const { profile, activeBrandId, allBrands, sellerBrands } = useAuth();
   const location = useLocation();
@@ -62,70 +46,19 @@ export default function ProductsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [selectedBrandFilter, setSelectedBrandFilter] = useState<string | null>(activeBrandId);
 
-  React.useEffect(() => {
-    let cancelled = false;
-    async function loadCatalogProducts() {
-      try {
-        const remoteProducts = await catalogApi.listProducts();
-        if (!cancelled && remoteProducts.length > 0) {
-          setProducts(remoteProducts.map(mapCatalogProductToCard));
-        }
-      } catch (error) {
-        console.warn('[ProductsPage] Falling back to local products.', error);
-      }
-    }
-    loadCatalogProducts();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleBulkApprove = async () => {
-    await Promise.all(
-      products
-        .filter((item) => selectedIds.has(item.id))
-        .map((item) =>
-          catalogApi.updateProduct(item.id, {
-            title: item.name,
-            brandName: item.brand,
-            categoryName: item.category,
-            status: 'live',
-          })
-        )
-    ).catch((error) => {
-      console.warn('[ProductsPage] Failed to bulk-approve via API.', error);
-    });
+  const handleBulkApprove = () => {
     setProducts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, status: 'Live' } : p));
     showToast(`Approved ${selectedIds.size} products to Live`);
     setSelectedIds(new Set());
   };
 
-  const handleBulkReject = async () => {
-    await Promise.all(
-      products
-        .filter((item) => selectedIds.has(item.id))
-        .map((item) =>
-          catalogApi.updateProduct(item.id, {
-            title: item.name,
-            brandName: item.brand,
-            categoryName: item.category,
-            status: 'archived',
-          })
-        )
-    ).catch((error) => {
-      console.warn('[ProductsPage] Failed to bulk-reject via API.', error);
-    });
+  const handleBulkReject = () => {
     setProducts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, status: 'Rejected' } : p));
     showToast(`Rejected ${selectedIds.size} products`);
     setSelectedIds(new Set());
   };
 
-  const handleBulkDelete = async () => {
-    await Promise.all(
-      Array.from(selectedIds).map((id: string) => catalogApi.deleteProduct(id))
-    ).catch((error) => {
-      console.warn('[ProductsPage] Failed to bulk-delete via API.', error);
-    });
+  const handleBulkDelete = () => {
     setProducts(prev => prev.filter(p => !selectedIds.has(p.id)));
     showToast(`Deleted ${selectedIds.size} products from catalog`);
     setSelectedIds(new Set());
@@ -174,7 +107,7 @@ export default function ProductsPage() {
     return true;
   });
 
-  const handleAddProduct = async (data: any) => {
+  const handleAddProduct = (data: any) => {
     const newProduct = {
       id: Math.random().toString(36).substr(2, 9),
       name: data.productName,
@@ -187,24 +120,8 @@ export default function ProductsPage() {
       icon: data.category === 'Mobile' ? Smartphone : Box,
       color: 'text-app-accent bg-app-accent/10'
     };
-    try {
-      const saved = await catalogApi.createProduct({
-        id: newProduct.id,
-        title: newProduct.name,
-        brandName: newProduct.brand,
-        categoryName: newProduct.category,
-        price: Number(String(data.discountedPrice).replace(/[^0-9.-]/g, '')) || 0,
-        status: 'draft',
-        image: '',
-        modeType: 'retail',
-      });
-      setProducts([mapCatalogProductToCard(saved), ...products]);
-      showToast('Product added successfully as Draft');
-    } catch (error) {
-      console.warn('[ProductsPage] Failed to persist product.', error);
-      setProducts([newProduct, ...products]);
-      showToast('Saved locally (API unavailable)');
-    }
+    setProducts([newProduct, ...products]);
+    showToast('Product added successfully as Draft');
   };
 
   const showToast = (msg: string) => {
@@ -216,7 +133,7 @@ export default function ProductsPage() {
     <div className="space-y-8 pb-12">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
         <div>
-           <h1 className="text-xl font-bold text-white tracking-tight">
+           <h1 className="text-xl font-bold text-app-text-primary tracking-tight">
              {isContentStudio ? 'Product Studio (Visual Product CMS)' : 'Inventory Management'}
            </h1>
            <p className="text-app-text-secondary text-[12px]">
@@ -230,14 +147,14 @@ export default function ProductsPage() {
            {isContentStudio ? (
              <Link 
                to="/dashboard/content-studio/products/new"
-               className="flex items-center gap-2 bg-app-accent hover:bg-app-accent-light text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-app-accent/20 active:scale-95"
+               className="flex items-center gap-2 bg-app-accent hover:bg-app-accent-light text-app-text-primary px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-app-accent/20 active:scale-95"
              >
                 <Plus className="w-4 h-4" /> Add Visual Product
              </Link>
            ) : (
              <button 
                onClick={() => navigate("/dashboard/content-studio/products/new")}
-               className="flex items-center gap-2 bg-app-accent hover:bg-app-accent-light text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-app-accent/20 active:scale-95"
+               className="flex items-center gap-2 bg-app-accent hover:bg-app-accent-light text-app-text-primary px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-app-accent/20 active:scale-95"
              >
                 <Plus className="w-4 h-4" /> Add Product
              </button>
@@ -253,10 +170,10 @@ export default function ProductsPage() {
           { label: 'Flagged Products', val: '88', color: 'border-red-500', change: '-12% vs last wk' },
           { label: 'Conversion Avg', val: '3.42%', color: 'border-purple-500', change: '+0.15% trend' },
         ].map(s => (
-          <div key={s.label} className={`bg-app-card p-4 rounded-2xl border border-app-border border-l-[4px] shadow-lg ${s.color}`}>
-            <div className="text-2xl font-bold text-white tracking-tight">{s.val}</div>
+          <div key={s.label} className={`bg-app-card p-4 rounded-2xl border border-app-border border-l-[4px] shadow-lg${s.color}`}>
+            <div className="text-2xl font-bold text-app-text-primary tracking-tight">{s.val}</div>
             <div className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest mt-1 opacity-60">{s.label}</div>
-            <div className="text-[9px] text-[#EB4501] font-semibold mt-1 bg-white/[0.02] inline-block px-1.5 py-0.5 rounded border border-white/5">{s.change}</div>
+            <div className="text-[9px] text-[#EB4501] font-semibold mt-1 bg-white/[0.02] inline-block px-1.5 py-0.5 rounded border border-app-border">{s.change}</div>
           </div>
         ))}
       </div>
@@ -270,24 +187,24 @@ export default function ProductsPage() {
             <span className="text-[9px] bg-white/5 px-2 py-0.5 rounded text-app-text-secondary font-semibold">Real-time</span>
           </div>
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs border-b border-white/[0.02] pb-2">
+            <div className="flex items-center justify-between text-xs border-b border-app-border pb-2">
               <span className="text-app-text-secondary font-medium">Most Viewed</span>
               <div className="text-right">
-                <span className="block font-bold text-white text-[12px] truncate max-w-[150px]">Samsung S25 Ultra</span>
+                <span className="block font-bold text-app-text-primary text-[12px] truncate max-w-[150px]">Samsung S25 Ultra</span>
                 <span className="text-[10px] text-green-500 font-mono">12,840 views</span>
               </div>
             </div>
-            <div className="flex items-center justify-between text-xs border-b border-white/[0.02] pb-2">
+            <div className="flex items-center justify-between text-xs border-b border-app-border pb-2">
               <span className="text-app-text-secondary font-medium">Most Searched</span>
               <div className="text-right">
-                <span className="block font-bold text-white text-[12px] truncate max-w-[150px]">Aarong Jamdani</span>
+                <span className="block font-bold text-app-text-primary text-[12px] truncate max-w-[150px]">Aarong Jamdani</span>
                 <span className="text-[10px] text-app-accent-light font-mono">8,410 queries</span>
               </div>
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-app-text-secondary font-medium">Most Saved</span>
               <div className="text-right">
-                <span className="block font-bold text-white text-[12px] truncate max-w-[150px]">Walton 2-Door Fridge</span>
+                <span className="block font-bold text-app-text-primary text-[12px] truncate max-w-[150px]">Walton 2-Door Fridge</span>
                 <span className="text-[10px] text-blue-400 font-mono">1,920 saves</span>
               </div>
             </div>
@@ -308,11 +225,11 @@ export default function ProductsPage() {
             ].map((item, idx) => (
               <div key={idx} className="space-y-1">
                 <div className="flex justify-between text-[11px] font-medium">
-                  <span className="text-white">{item.cat}</span>
+                  <span className="text-app-text-primary">{item.cat}</span>
                   <span className="text-app-text-secondary font-mono">{item.val} ({item.share})</span>
                 </div>
                 <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                  <div className={`h-full bg-gradient-to-r from-app-accent to-[#F4631E] ${item.width} rounded-full`} />
+                  <div className={`h-full bg-gradient-to-r from-app-accent to-[#F4631E]${item.width}rounded-full`} />
                 </div>
               </div>
             ))}
@@ -328,14 +245,14 @@ export default function ProductsPage() {
           <div className="space-y-3">
             <div className="flex items-center justify-between text-xs">
               <span className="text-app-text-secondary">Detail-to-Cart Conversion</span>
-              <span className="font-mono font-bold text-white text-[12px]">8.24%</span>
+              <span className="font-mono font-bold text-app-text-primary text-[12px]">8.24%</span>
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-app-text-secondary">Cart-to-Checkout Conversion</span>
-              <span className="font-mono font-bold text-white text-[12px]">41.5%</span>
+              <span className="font-mono font-bold text-app-text-primary text-[12px]">41.5%</span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-app-text-secondary font-semibold text-white">Net Conversion Trend</span>
+              <span className="text-app-text-secondary font-semibold text-app-text-primary">Net Conversion Trend</span>
               <span className="font-mono font-bold text-green-500 text-[12px]">3.42%</span>
             </div>
             {/* Simple sparkline visualizer */}
@@ -353,7 +270,7 @@ export default function ProductsPage() {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-app-text-secondary group-focus-within:text-app-accent transition-colors" />
           <input 
             placeholder="Search products, brands, sellers..." 
-            className="w-full bg-app-sidebar border border-app-border rounded-xl pl-11 pr-4 py-2.5 text-[12px] text-white outline-none focus:border-app-accent/40 transition-all font-medium" 
+            className="w-full bg-app-sidebar border border-app-border rounded-xl pl-11 pr-4 py-2.5 text-[12px] text-app-text-primary outline-none focus:border-app-accent/40 transition-all font-medium" 
           />
         </div>
         <div className="flex gap-2">
@@ -361,7 +278,7 @@ export default function ProductsPage() {
              <select 
                value={selectedBrandFilter || ''}
                onChange={(e) => setSelectedBrandFilter(e.target.value || null)}
-               className="bg-app-sidebar border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-white font-medium outline-none focus:border-app-accent/40 cursor-pointer"
+               className="bg-app-sidebar border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-app-text-primary font-medium outline-none focus:border-app-accent/40 cursor-pointer"
              >
                <option value="">All Brands</option>
                {allBrands.filter(b => ownedBrandIds.includes(b.id)).map(b => (
@@ -369,13 +286,13 @@ export default function ProductsPage() {
                ))}
              </select>
            )}
-           <select className="bg-app-sidebar border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-white font-medium outline-none focus:border-app-accent/40">
+           <select className="bg-app-sidebar border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-app-text-primary font-medium outline-none focus:border-app-accent/40">
              <option>All Categories</option>
              <option>Mobile</option>
              <option>Electronics</option>
              <option>Fashion</option>
            </select>
-           <select className="bg-app-sidebar border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-white font-medium outline-none focus:border-app-accent/40">
+           <select className="bg-app-sidebar border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-app-text-primary font-medium outline-none focus:border-app-accent/40">
              <option>Status: Any</option>
              <option>Live</option>
              <option>Pending</option>
@@ -385,7 +302,7 @@ export default function ProductsPage() {
       </div>
 
       {selectedIds.size > 0 && (
-        <div className="bg-[#1A1A2E] text-white px-4 py-3 rounded-xl flex items-center justify-between gap-3 mb-3 text-[12px] font-bold border border-white/10 shadow-lg animate-fade-in">
+        <div className="bg-app-card text-app-text-primary px-4 py-3 rounded-xl flex items-center justify-between gap-3 mb-3 text-[12px] font-bold border border-app-border shadow-lg animate-fade-in">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="bg-app-accent/20 text-app-accent-light px-2.5 py-1 rounded-lg font-mono">
               {selectedIds.size} items selected
@@ -419,7 +336,7 @@ export default function ProductsPage() {
           </div>
           <button
             onClick={() => setSelectedIds(new Set())}
-            className="text-slate-400 hover:text-white px-3 py-1 cursor-pointer transition-colors uppercase text-[10px]"
+            className="text-app-text-secondary hover:text-white px-3 py-1 cursor-pointer transition-colors uppercase text-[10px]"
           >
             ✕ Clear selection
           </button>
@@ -433,7 +350,7 @@ export default function ProductsPage() {
               <th className="p-6 w-12 text-center">
                 <input 
                   type="checkbox" 
-                  className="rounded border-white/10 bg-white/5 text-app-accent focus:ring-app-accent cursor-pointer"
+                  className="rounded border-app-border bg-white/5 text-app-accent focus:ring-app-accent cursor-pointer"
                   checked={displayedProducts.length > 0 && displayedProducts.every(p => selectedIds.has(p.id))}
                   onChange={(e) => {
                     if (e.target.checked) {
@@ -461,7 +378,7 @@ export default function ProductsPage() {
                   <td className="p-6 w-12 text-center">
                     <input 
                       type="checkbox" 
-                      className="rounded border-white/10 bg-white/5 text-app-accent focus:ring-app-accent cursor-pointer"
+                      className="rounded border-app-border bg-white/5 text-app-accent focus:ring-app-accent cursor-pointer"
                       checked={selectedIds.has(p.id)}
                       onChange={(e) => {
                         const newSelected = new Set(selectedIds);
@@ -476,11 +393,11 @@ export default function ProductsPage() {
                   </td>
                   <td className="p-6">
                     <div className="flex items-center gap-4">
-                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center border border-white/5 shadow-inner ${p.color}`}>
+                      <div className={`w-12 h-12 rounded-xl flex items-center justify-center border border-app-border shadow-inner${p.color}`}>
                         <Icon className="w-6 h-6" />
                       </div>
                       <div>
-                        <div className="text-[14px] font-bold text-white group-hover:text-app-accent-light transition-colors">
+                        <div className="text-[14px] font-bold text-app-text-primary group-hover:text-app-accent-light transition-colors">
                           <Link to={`/dashboard/content-studio/products/${p.id}/edit`} className="hover:underline">
                             {p.name}
                           </Link>
@@ -497,11 +414,11 @@ export default function ProductsPage() {
                     <span className="text-[10px] px-3 py-1 rounded-lg bg-app-sidebar border border-app-border text-app-text-primary font-bold uppercase tracking-widest">{p.category}</span>
                   </td>
                   <td className="p-6">
-                    <div className="text-[14px] font-extrabold text-white">{p.price}</div>
+                    <div className="text-[14px] font-extrabold text-app-text-primary">{p.price}</div>
                     <div className="text-[9px] text-app-text-secondary font-bold uppercase tracking-widest">Est. Commission: ৳ 420</div>
                   </td>
                   <td className="p-6">
-                    <span className={`text-[10px] px-3 py-1 rounded-lg font-bold uppercase tracking-widest border ${
+                    <span className={`text-[10px] px-3 py-1 rounded-lg font-bold uppercase tracking-widest border${
                       p.status === 'Live' ? 'bg-green-500/10 text-green-500 border-green-500/20' :
                       p.status === 'Pending' ? 'bg-orange-500/10 text-orange-500 border-orange-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'
                     }`}>
@@ -543,7 +460,7 @@ export default function ProductsPage() {
             initial={{ opacity: 0, y: 50 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 bg-app-accent text-white rounded-2xl shadow-2xl shadow-app-accent/40 font-bold text-sm flex items-center gap-3 z-[100]"
+            className="fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 bg-app-accent text-app-text-primary rounded-2xl shadow-2xl shadow-app-accent/40 font-bold text-sm flex items-center gap-3 z-[100]"
           >
             <CheckCircle className="w-5 h-5" />
             {toast}

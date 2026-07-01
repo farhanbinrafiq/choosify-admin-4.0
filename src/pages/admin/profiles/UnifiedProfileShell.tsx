@@ -705,7 +705,7 @@ export default function UnifiedProfileShell() {
       <div className="flex flex-col items-center justify-center min-h-[500px] text-app-text-primary">
         <AlertTriangle className="w-12 h-12 text-[#F4631E] animate-bounce" />
         <p className="mt-4 font-mono text-xs uppercase tracking-widest text-[#F4631E]">ERROR: ENTITY RESOLUTION FAILED</p>
-        <Link to="/admin/dashboard" className="mt-6 px-4 py-2 bg-app-sidebar border border-app-border rounded-lg text-xs font-bold text-white hover:bg-white/5 transition-all flex items-center gap-2">
+        <Link to="/admin/dashboard" className="mt-6 px-4 py-2 bg-app-sidebar border border-app-border rounded-lg text-xs font-bold text-app-text-primary hover:bg-white/5 transition-all flex items-center gap-2">
           <ArrowLeft className="w-3.5 h-3.5" /> Return To Platform Central
         </Link>
       </div>
@@ -935,7 +935,7 @@ export default function UnifiedProfileShell() {
     if (!selectedGuide) return null;
 
     return (
-      <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-app-bg/10 backdrop-blur-sm flex items-center justify-center p-4">
         <div className="bg-app-card border border-app-border rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl transition-all font-sans">
           
           <div className="p-5 border-b border-app-border flex items-start justify-between">
@@ -953,7 +953,7 @@ export default function UnifiedProfileShell() {
                   </span>
                 )}
               </div>
-              <h3 className="text-base font-bold text-white leading-tight">
+              <h3 className="text-base font-bold text-app-text-primary leading-tight">
                 {selectedGuide.guideTitle}
               </h3>
             </div>
@@ -966,28 +966,28 @@ export default function UnifiedProfileShell() {
           </div>
 
           <div className="p-6 space-y-6 animate-in fade-in duration-200">
-            <div className="bg-white/5 border border-white/10 rounded-lg p-5">
+            <div className="bg-white/5 border border-app-border rounded-lg p-5">
               <h4 className="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-4 flex items-center gap-1.5 font-sans">
                 <Star className="w-4 h-4" />
                 <span>Real-Time Performance Stats</span>
               </h4>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="bg-slate-950/30 border border-white/5 p-3.5 rounded-[4px]">
+                <div className="bg-app-bg/10 border border-app-border p-3.5 rounded-[4px]">
                   <span className="text-[9px] text-app-text-secondary uppercase tracking-wider block">Audience CTR</span>
-                  <span className="text-base font-bold text-white block mt-0.5">14.8%</span>
+                  <span className="text-base font-bold text-app-text-primary block mt-0.5">14.8%</span>
                   <span className="text-[8.5px] text-emerald-400 block font-mono">1.2% vs last mo</span>
                 </div>
-                <div className="bg-slate-950/30 border border-white/5 p-3.5 rounded-[4px]">
+                <div className="bg-app-bg/10 border border-app-border p-3.5 rounded-[4px]">
                   <span className="text-[9px] text-app-text-secondary uppercase tracking-wider block">Avg Reading Time</span>
-                  <span className="text-base font-bold text-white block mt-0.5">3m 48s</span>
+                  <span className="text-base font-bold text-app-text-primary block mt-0.5">3m 48s</span>
                   <span className="text-[8.5px] text-app-text-secondary/50 block font-mono">Target: 4m max</span>
                 </div>
-                <div className="bg-slate-950/30 border border-white/5 p-3.5 rounded-[4px]">
+                <div className="bg-app-bg/10 border border-app-border p-3.5 rounded-[4px]">
                   <span className="text-[9px] text-app-text-secondary uppercase tracking-wider block">Total Clickouts</span>
-                  <span className="text-base font-bold text-white block mt-0.5">1,245 clicks</span>
+                  <span className="text-base font-bold text-app-text-primary block mt-0.5">1,245 clicks</span>
                   <span className="text-[8.5px] text-emerald-400 block font-mono">92% Completion</span>
                 </div>
-                <div className="bg-slate-950/30 border border-white/5 p-3.5 rounded-[4px]">
+                <div className="bg-app-bg/10 border border-app-border p-3.5 rounded-[4px]">
                   <span className="text-[9px] text-app-text-secondary uppercase tracking-wider block">Earnings Influenced</span>
                   <span className="text-base font-bold text-emerald-400 block mt-0.5">৳38,200</span>
                   <span className="text-[8.5px] text-emerald-400 block font-mono">8.4% Comm. split</span>
@@ -997,21 +997,21 @@ export default function UnifiedProfileShell() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-white/80 border-b border-white/10 pb-2">
+                <h4 className="text-xs font-bold uppercase tracking-widest text-white/80 border-b border-app-border pb-2">
                   CMS Registry Properties
                 </h4>
                 <div className="space-y-3 font-medium">
                   <div className="flex justify-between text-xs py-0.5">
                     <span className="text-app-text-secondary">Category Segment:</span>
-                    <span className="text-white font-bold">{selectedGuide.category}</span>
+                    <span className="text-app-text-primary font-bold">{selectedGuide.category}</span>
                   </div>
                   <div className="flex justify-between text-xs py-0.5">
                     <span className="text-app-text-secondary">Target Audience:</span>
-                    <span className="text-white">{selectedGuide.audienceType}</span>
+                    <span className="text-app-text-primary">{selectedGuide.audienceType}</span>
                   </div>
                   <div className="flex justify-between text-xs py-0.5">
                     <span className="text-app-text-secondary">Read Time Estimate:</span>
-                    <span className="text-white font-mono">{selectedGuide.readTime}</span>
+                    <span className="text-app-text-primary font-mono">{selectedGuide.readTime}</span>
                   </div>
                   <div className="flex justify-between text-xs py-0.5">
                     <span className="text-app-text-secondary">Winner Champion:</span>
@@ -1021,14 +1021,14 @@ export default function UnifiedProfileShell() {
               </div>
 
               <div className="space-y-4">
-                <h4 className="text-xs font-bold uppercase tracking-widest text-white/80 border-b border-white/10 pb-2">
+                <h4 className="text-xs font-bold uppercase tracking-widest text-white/80 border-b border-app-border pb-2">
                   Audit Verification Trail
                 </h4>
                 <div className="space-y-3.5">
                   <div className="flex gap-3 items-start">
                     <div className="w-1.5 h-1.5 rounded-full bg-green-400 mt-1.5" />
                     <div>
-                      <span className="text-xs font-bold text-white block">Published Live State Verified</span>
+                      <span className="text-xs font-bold text-app-text-primary block">Published Live State Verified</span>
                       <span className="text-[10px] text-app-text-secondary font-mono block mt-0.5">14 June, 2026 | 02:44 pm by automated sync agent</span>
                     </div>
                   </div>
@@ -1044,8 +1044,8 @@ export default function UnifiedProfileShell() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 font-sans">
-                <div className="bg-slate-950/40 p-4 rounded-lg border border-app-border space-y-2">
-                  <label className="text-[10px] font-bold text-white uppercase tracking-wider block">Publications Standing</label>
+                <div className="bg-app-bg/10 p-4 rounded-lg border border-app-border space-y-2">
+                  <label className="text-[10px] font-bold text-app-text-primary uppercase tracking-wider block">Publications Standing</label>
                   <div className="grid grid-cols-3 gap-1.5">
                     {(['Live', 'Draft', 'Archived'] as const).map(st => (
                       <button
@@ -1054,7 +1054,7 @@ export default function UnifiedProfileShell() {
                           const updated = { ...selectedGuide, status: st };
                           setSelectedGuide(updated);
                         }}
-                        className={`px-1 py-1 rounded-[3px] text-[10px] font-bold cursor-pointer transition-colors border leading-[14px] ${
+                        className={`px-1 py-1 rounded-[3px] text-[10px] font-bold cursor-pointer transition-colors border leading-[14px]${
                           selectedGuide.status === st 
                             ? "bg-app-accent border-app-accent text-white" 
                             : "bg-white/5 border-white/10 text-app-text-secondary hover:text-white"
@@ -1066,16 +1066,16 @@ export default function UnifiedProfileShell() {
                   </div>
                 </div>
 
-                <div className="bg-slate-950/40 p-4 rounded-lg border border-app-border flex flex-col justify-between">
+                <div className="bg-app-bg/10 p-4 rounded-lg border border-app-border flex flex-col justify-between">
                   <div>
-                    <span className="text-[10px] font-bold text-white uppercase tracking-wider block">Content Flag & Quarantine</span>
+                    <span className="text-[10px] font-bold text-app-text-primary uppercase tracking-wider block">Content Flag & Quarantine</span>
                   </div>
                   <button
                     onClick={() => {
                       const updated = { ...selectedGuide, flaggedByModerator: !selectedGuide.flaggedByModerator };
                       setSelectedGuide(updated);
                     }}
-                    className={`px-3 py-1.5 rounded-[4px] text-[10px] font-bold border transition-colors mt-2 cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-[4px] text-[10px] font-bold border transition-colors mt-2 cursor-pointer${
                       selectedGuide.flaggedByModerator
                         ? "bg-red-500/20 border-red-500/40 text-red-400 hover:bg-red-500/30"
                         : "bg-white/5 border-white/10 text-app-text-secondary hover:text-white hover:bg-white/5"
@@ -1085,16 +1085,16 @@ export default function UnifiedProfileShell() {
                   </button>
                 </div>
 
-                <div className="bg-slate-950/40 p-4 rounded-lg border border-app-border flex flex-col justify-between">
+                <div className="bg-app-bg/10 p-4 rounded-lg border border-app-border flex flex-col justify-between">
                   <div>
-                    <span className="text-[10px] font-bold text-white uppercase tracking-wider block">Expert Badge Verification</span>
+                    <span className="text-[10px] font-bold text-app-text-primary uppercase tracking-wider block">Expert Badge Verification</span>
                   </div>
                   <button
                     onClick={() => {
                       const updated = { ...selectedGuide, verifiedContributor: !selectedGuide.verifiedContributor };
                       setSelectedGuide(updated);
                     }}
-                    className={`px-3 py-1.5 rounded-[4px] text-[10px] font-bold border transition-colors mt-2 cursor-pointer ${
+                    className={`px-3 py-1.5 rounded-[4px] text-[10px] font-bold border transition-colors mt-2 cursor-pointer${
                       selectedGuide.verifiedContributor
                         ? "bg-green-500/20 border-green-500/40 text-green-400 hover:bg-green-400/30"
                         : "bg-white/5 border-white/10 text-app-text-secondary hover:text-white hover:bg-white/5"
@@ -1107,7 +1107,7 @@ export default function UnifiedProfileShell() {
             </div>
           </div>
 
-          <div className="p-5 border-t border-app-border bg-slate-950/20 flex items-center justify-between font-mono">
+          <div className="p-5 border-t border-app-border bg-app-bg/10 flex items-center justify-between font-mono">
             <span className="text-[10px] text-app-text-secondary opacity-60">
               Double-check rules before committing alterations.
             </span>
@@ -1124,7 +1124,7 @@ export default function UnifiedProfileShell() {
                   flaggedByModerator: selectedGuide.flaggedByModerator,
                   verifiedContributor: selectedGuide.verifiedContributor
                 })}
-                className="px-4 py-2 bg-app-accent hover:bg-app-accent-light rounded-[4px] text-xs font-bold text-white cursor-pointer shadow-md"
+                className="px-4 py-2 bg-app-accent hover:bg-app-accent-light rounded-[4px] text-xs font-bold text-app-text-primary cursor-pointer shadow-md"
               >
                 Save Sync Overrides
               </button>
@@ -1205,8 +1205,8 @@ export default function UnifiedProfileShell() {
           <div className="space-y-6 text-left font-sans">
             {/* Billing & Shipping Addresses (Editable Mocks) */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Associated Delivery Addresses</h3>
+              <div className="border-b border-app-border pb-3">
+                <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Associated Delivery Addresses</h3>
                 <p className="text-[11px] text-app-text-secondary mt-1 font-sans">Physical shipping address endpoints registered for cargo dispatch pipelines.</p>
               </div>
 
@@ -1218,31 +1218,31 @@ export default function UnifiedProfileShell() {
                     <textarea 
                       value={defaultShippingAddress} 
                       onChange={(e) => setDefaultShippingAddress(e.target.value)}
-                      className="text-xs text-white font-semibold bg-transparent border-0 focus:ring-0 p-0 resize-none w-full h-16 block mt-1 scrollbar-hide focus:outline-none"
+                      className="text-xs text-app-text-primary font-semibold bg-transparent border-0 focus:ring-0 p-0 resize-none w-full h-16 block mt-1 scrollbar-hide focus:outline-none"
                     />
                   </div>
                   <button onClick={() => showToast('✓ Default shipping address saved locally')} className="mt-2 text-[10px] text-indigo-400 font-bold hover:underline cursor-pointer block">Save Changes</button>
                 </div>
 
-                <div className="bg-white/5 border border-white/5 p-5 rounded-[4px] relative">
+                <div className="bg-white/5 border border-app-border p-5 rounded-[4px] relative">
                   <div className="space-y-2">
                     <span className="text-[9px] text-app-text-secondary uppercase block font-bold">Alternative Shipping</span>
                     <textarea 
                       value={shippingAddress} 
                       onChange={(e) => setShippingAddress(e.target.value)}
-                      className="text-xs text-white font-semibold bg-transparent border-0 focus:ring-0 p-0 resize-none w-full h-16 block mt-1 scrollbar-hide focus:outline-none"
+                      className="text-xs text-app-text-primary font-semibold bg-transparent border-0 focus:ring-0 p-0 resize-none w-full h-16 block mt-1 scrollbar-hide focus:outline-none"
                     />
                   </div>
                   <button onClick={() => showToast('✓ Alternative shipping address saved locally')} className="mt-2 text-[10px] text-indigo-400 font-bold hover:underline cursor-pointer block">Save Changes</button>
                 </div>
 
-                <div className="bg-white/5 border border-white/5 p-5 rounded-[4px] relative">
+                <div className="bg-white/5 border border-app-border p-5 rounded-[4px] relative">
                   <div className="space-y-2">
                     <span className="text-[9px] text-app-text-secondary uppercase block font-bold">Billing Address</span>
                     <textarea 
                       value={billingAddress} 
                       onChange={(e) => setBillingAddress(e.target.value)}
-                      className="text-xs text-white font-semibold bg-transparent border-0 focus:ring-0 p-0 resize-none w-full h-16 block mt-1 scrollbar-hide focus:outline-none"
+                      className="text-xs text-app-text-primary font-semibold bg-transparent border-0 focus:ring-0 p-0 resize-none w-full h-16 block mt-1 scrollbar-hide focus:outline-none"
                     />
                   </div>
                   <button onClick={() => showToast('✓ Billing address saved locally')} className="mt-2 text-[10px] text-indigo-400 font-bold hover:underline cursor-pointer block">Save Changes</button>
@@ -1255,51 +1255,51 @@ export default function UnifiedProfileShell() {
               
               {/* Access Settings & Notification Settings */}
               <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-4 text-left">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider border-b border-white/5 pb-2">Communication & Security</h4>
+                <h4 className="text-xs font-bold text-app-text-primary uppercase tracking-wider border-b border-app-border pb-2">Communication & Security</h4>
                 
                 <div className="space-y-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-300">Email Notifications</span>
+                    <span className="text-xs text-app-text-secondary">Email Notifications</span>
                     <button 
                       onClick={() => {
                         setCommunicationPref(p => ({ ...p, email: !p.email }));
                         showToast(`✓ Email notifications ${!communicationPref.email ? 'enabled' : 'disabled'}`);
                       }}
-                      className={`w-10 h-5.5 rounded-full p-1 transition-colors cursor-pointer ${communicationPref.email ? 'bg-[#F4631E]' : 'bg-white/10'}`}
+                      className={`w-10 h-5.5 rounded-full p-1 transition-colors cursor-pointer${communicationPref.email ? 'bg-[#F4631E]' : 'bg-white/10'}`}
                     >
-                      <div className={`w-3.5 h-3.5 bg-white rounded-full transition-transform ${communicationPref.email ? 'translate-x-4.5' : 'translate-x-0'}`} />
+                      <div className={`w-3.5 h-3.5 bg-white rounded-full transition-transform${communicationPref.email ? 'translate-x-4.5' : 'translate-x-0'}`} />
                     </button>
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-300">SMS Alerts & Broadcasts</span>
+                    <span className="text-xs text-app-text-secondary">SMS Alerts & Broadcasts</span>
                     <button 
                       onClick={() => {
                         setCommunicationPref(p => ({ ...p, sms: !p.sms }));
                         showToast(`✓ SMS alerts ${!communicationPref.sms ? 'enabled' : 'disabled'}`);
                       }}
-                      className={`w-10 h-5.5 rounded-full p-1 transition-colors cursor-pointer ${communicationPref.sms ? 'bg-[#F4631E]' : 'bg-white/10'}`}
+                      className={`w-10 h-5.5 rounded-full p-1 transition-colors cursor-pointer${communicationPref.sms ? 'bg-[#F4631E]' : 'bg-white/10'}`}
                     >
-                      <div className={`w-3.5 h-3.5 bg-white rounded-full transition-transform ${communicationPref.sms ? 'translate-x-4.5' : 'translate-x-0'}`} />
+                      <div className={`w-3.5 h-3.5 bg-white rounded-full transition-transform${communicationPref.sms ? 'translate-x-4.5' : 'translate-x-0'}`} />
                     </button>
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <span className="text-xs text-slate-300">Two-Factor Auth (2FA)</span>
+                    <span className="text-xs text-app-text-secondary">Two-Factor Auth (2FA)</span>
                     <button 
                       onClick={() => {
                         setCommunicationPref(p => ({ ...p, push: !p.push }));
                         showToast(`✓ Two-factor authentication status updated`);
                       }}
-                      className={`w-10 h-5.5 rounded-full p-1 transition-colors cursor-pointer ${communicationPref.push ? 'bg-emerald-500' : 'bg-white/10'}`}
+                      className={`w-10 h-5.5 rounded-full p-1 transition-colors cursor-pointer${communicationPref.push ? 'bg-emerald-500' : 'bg-white/10'}`}
                     >
-                      <div className={`w-3.5 h-3.5 bg-white rounded-full transition-transform ${communicationPref.push ? 'translate-x-4.5' : 'translate-x-0'}`} />
+                      <div className={`w-3.5 h-3.5 bg-white rounded-full transition-transform${communicationPref.push ? 'translate-x-4.5' : 'translate-x-0'}`} />
                     </button>
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-white/5 space-y-2">
-                  <button onClick={() => showToast('✓ Reset password link dispatched to client email address')} className="w-full py-2 bg-white/5 hover:bg-white/10 text-white font-bold text-xs rounded transition-colors text-center cursor-pointer">
+                <div className="pt-4 border-t border-app-border space-y-2">
+                  <button onClick={() => showToast('✓ Reset password link dispatched to client email address')} className="w-full py-2 bg-white/5 hover:bg-white/10 text-app-text-primary font-bold text-xs rounded transition-colors text-center cursor-pointer">
                     Trigger Password Reset
                   </button>
                 </div>
@@ -1307,28 +1307,28 @@ export default function UnifiedProfileShell() {
 
               {/* Connected Accounts */}
               <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-4 text-left">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider border-b border-white/5 pb-2">Connected Accounts</h4>
+                <h4 className="text-xs font-bold text-app-text-primary uppercase tracking-wider border-b border-app-border pb-2">Connected Accounts</h4>
                 <div className="space-y-3 text-xs font-sans">
-                  <div className="flex items-center justify-between p-2.5 bg-white/5 border border-white/5 rounded">
+                  <div className="flex items-center justify-between p-2.5 bg-white/5 border border-app-border rounded">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                      <span className="text-slate-200 font-bold">Google Auth ID</span>
+                      <span className="text-app-text-secondary font-bold">Google Auth ID</span>
                     </div>
                     <span className="text-[10px] text-app-text-secondary font-mono">FR-995201-99</span>
                   </div>
 
-                  <div className="flex items-center justify-between p-2.5 bg-white/5 border border-white/5 rounded">
+                  <div className="flex items-center justify-between p-2.5 bg-white/5 border border-app-border rounded">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-slate-500" />
-                      <span className="text-slate-400">Facebook Connect</span>
+                      <span className="text-app-text-secondary">Facebook Connect</span>
                     </div>
                     <span className="text-[10px] text-slate-500 font-bold uppercase font-mono">Not Linked</span>
                   </div>
 
-                  <div className="flex items-center justify-between p-2.5 bg-white/5 border border-white/5 rounded">
+                  <div className="flex items-center justify-between p-2.5 bg-white/5 border border-app-border rounded">
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                      <span className="text-slate-200 font-bold">Github OAuth</span>
+                      <span className="text-app-text-secondary font-bold">Github OAuth</span>
                     </div>
                     <span className="text-[10px] text-app-text-secondary font-mono">farhan-bin-rafiq</span>
                   </div>
@@ -1337,17 +1337,17 @@ export default function UnifiedProfileShell() {
 
               {/* Login Security Trail */}
               <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-4 text-left">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider border-b border-white/5 pb-2">Active Sessions Security Trail</h4>
+                <h4 className="text-xs font-bold text-app-text-primary uppercase tracking-wider border-b border-app-border pb-2">Active Sessions Security Trail</h4>
                 
                 <div className="space-y-2.5 font-sans text-xs">
-                  <div className="p-3 bg-white/5 border border-white/5 rounded relative">
+                  <div className="p-3 bg-white/5 border border-app-border rounded relative">
                     <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-[2px] text-[8px] font-bold uppercase absolute top-2 right-2">Current</span>
-                    <span className="text-[11px] font-bold text-white block">Dhaka, Bangladesh</span>
+                    <span className="text-[11px] font-bold text-app-text-primary block">Dhaka, Bangladesh</span>
                     <span className="text-[10px] text-app-text-secondary block mt-0.5">Chrome/Windows • Today at 10:24 AM</span>
                   </div>
 
-                  <div className="p-3 bg-white/5 border border-white/5 rounded">
-                    <span className="text-[11px] font-bold text-white block">Chittagong, Bangladesh</span>
+                  <div className="p-3 bg-white/5 border border-app-border rounded">
+                    <span className="text-[11px] font-bold text-app-text-primary block">Chittagong, Bangladesh</span>
                     <span className="text-[10px] text-app-text-secondary block mt-0.5">Safari/iOS • 2 days ago</span>
                   </div>
                 </div>
@@ -1358,24 +1358,24 @@ export default function UnifiedProfileShell() {
 
         {activeTab === 'identity' && typeKey === 'seller' && (
           <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-            <div className="border-b border-white/[0.04] pb-3">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider text-app-accent-light">NBR Business Registry Verification Documents</h3>
+            <div className="border-b border-app-border pb-3">
+              <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider text-app-accent-light">NBR Business Registry Verification Documents</h3>
               <p className="text-[11px] text-app-text-secondary mt-1">Merchant registered enterprise records and tax certificates of compliance.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
-              <div className="p-4 bg-white/5 border border-white/5 rounded space-y-1">
+              <div className="p-4 bg-white/5 border border-app-border rounded space-y-1">
                 <span className="text-[9.5px] font-bold text-emerald-400 block uppercase tracking-widest font-sans">Trade License Registration</span>
-                <span className="text-white block font-black">{(entityData as any).legalId}</span>
+                <span className="text-app-text-primary block font-black">{(entityData as any).legalId}</span>
                 <span className="text-[9px] text-app-text-secondary uppercase">Status: ACTIVE SLA</span>
               </div>
-              <div className="p-4 bg-white/5 border border-white/5 rounded space-y-1">
+              <div className="p-4 bg-white/5 border border-app-border rounded space-y-1">
                 <span className="text-[9.5px] font-bold text-indigo-400 block uppercase tracking-widest font-sans">Tax Certificate (TIN)</span>
-                <span className="text-white block font-black">{(entityData as any).tin}</span>
+                <span className="text-app-text-primary block font-black">{(entityData as any).tin}</span>
                 <span className="text-[9px] text-app-text-secondary uppercase">Status: APPROVED TAXPAYER</span>
               </div>
-              <div className="p-4 bg-white/5 border border-white/5 rounded space-y-1">
+              <div className="p-4 bg-white/5 border border-app-border rounded space-y-1">
                 <span className="text-[9.5px] font-bold text-violet-400 block uppercase tracking-widest font-sans">VAT Business Identification (BIN)</span>
-                <span className="text-white block font-black">{(entityData as any).bin}</span>
+                <span className="text-app-text-primary block font-black">{(entityData as any).bin}</span>
                 <span className="text-[9px] text-app-text-secondary uppercase">Status: VERIFIED 2026</span>
               </div>
             </div>
@@ -1393,7 +1393,7 @@ export default function UnifiedProfileShell() {
                     setOrderStatusFilter(status);
                     showToast(`✓ Switched order filter: ${status}`);
                   }}
-                  className={`text-xs font-bold px-4 py-2 rounded-[2px] transition-all cursor-pointer whitespace-nowrap ${
+                  className={`text-xs font-bold px-4 py-2 rounded-[2px] transition-all cursor-pointer whitespace-nowrap${
                     orderStatusFilter === status
                       ? 'bg-[#F4631E] text-white shadow font-sans'
                       : 'text-slate-400 hover:text-white hover:bg-white/5 font-sans'
@@ -1424,23 +1424,23 @@ export default function UnifiedProfileShell() {
                   return o.status === orderStatusFilter;
                 })
                 .map((ord: any) => (
-                  <div key={ord.id} className="grid grid-cols-12 gap-4 py-3.5 items-center hover:bg-white/5 transition-colors border-b border-white/5 px-2 font-sans">
+                  <div key={ord.id} className="grid grid-cols-12 gap-4 py-3.5 items-center hover:bg-white/5 transition-colors border-b border-app-border px-2 font-sans">
                     <div className="col-span-12 md:col-span-2">
                       <Link to={`/upe/order/${ord.id}`} className="text-xs font-bold text-[#F4631E] hover:underline font-mono">
                         #{ord.id}
                       </Link>
                     </div>
                     <div className="col-span-12 md:col-span-3">
-                      <Link to={`/products/${getMockProductId(ord.product.name)}`} className="text-xs text-white font-bold block truncate hover:underline hover:text-app-accent transition-colors">
+                      <Link to={`/products/${getMockProductId(ord.product.name)}`} className="text-xs text-app-text-primary font-bold block truncate hover:underline hover:text-app-accent transition-colors">
                         {ord.product.name}
                       </Link>
                       <span className="text-[10px] text-app-text-secondary font-semibold font-mono block mt-0.5">Brand: {ord.product.brand}</span>
                     </div>
                     <div className="col-span-4 md:col-span-1 text-center">
-                      <span className="text-xs text-slate-300">{ord.quantity} items</span>
+                      <span className="text-xs text-app-text-secondary">{ord.quantity} items</span>
                     </div>
                     <div className="col-span-4 md:col-span-1.5">
-                      <span className={`px-2 py-0.5 rounded-[2px] text-[9px] font-bold uppercase tracking-widest border font-mono inline-block ${
+                      <span className={`px-2 py-0.5 rounded-[2px] text-[9px] font-bold uppercase tracking-widest border font-mono inline-block${
                         ord.paymentStatus === 'Paid' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
                         ord.paymentStatus === 'Unpaid' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
                         'bg-rose-500/10 text-rose-400 border-rose-500/20'
@@ -1449,7 +1449,7 @@ export default function UnifiedProfileShell() {
                       </span>
                     </div>
                     <div className="col-span-4 md:col-span-1.5">
-                      <span className={`px-2 py-0.5 rounded-[2px] text-[9px] font-bold uppercase tracking-widest border font-mono inline-block ${
+                      <span className={`px-2 py-0.5 rounded-[2px] text-[9px] font-bold uppercase tracking-widest border font-mono inline-block${
                         ord.carrierStatus === 'Delivered' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                         ord.carrierStatus === 'Cancelled' ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' :
                         'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'
@@ -1457,7 +1457,7 @@ export default function UnifiedProfileShell() {
                         {ord.carrierStatus}
                       </span>
                     </div>
-                    <div className="col-span-6 md:col-span-1.5 text-right font-mono text-xs font-bold text-white px-2">
+                    <div className="col-span-6 md:col-span-1.5 text-right font-mono text-xs font-bold text-app-text-primary px-2">
                       ৳{(ord.price * ord.quantity).toLocaleString()}
                     </div>
                     <div className="col-span-6 md:col-span-1 flex justify-end gap-1 px-1.5">
@@ -1500,27 +1500,27 @@ export default function UnifiedProfileShell() {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <span className="text-[10px] text-app-text-secondary uppercase block font-semibold">Reputation & Loyalty</span>
-                    <h4 className="text-xl font-bold text-white mt-1">SLA Trust Rating</h4>
+                    <h4 className="text-xl font-bold text-app-text-primary mt-1">SLA Trust Rating</h4>
                   </div>
                   <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-[2px] text-[9px] font-bold uppercase font-mono">Clean Tier 1</span>
                 </div>
                 
                 <div className="space-y-4 pt-2">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Average Rating Given</span>
-                    <span className="text-white font-bold font-mono">4.8 / 5.0</span>
+                    <span className="text-app-text-secondary">Average Rating Given</span>
+                    <span className="text-app-text-primary font-bold font-mono">4.8 / 5.0</span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Total Helpful Votes</span>
-                    <span className="text-white font-bold font-mono">42 Votes</span>
+                    <span className="text-app-text-secondary">Total Helpful Votes</span>
+                    <span className="text-app-text-primary font-bold font-mono">42 Votes</span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Review Approval Rate</span>
+                    <span className="text-app-text-secondary">Review Approval Rate</span>
                     <span className="text-emerald-400 font-bold font-mono">100.0%</span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Removed Reviews</span>
-                    <span className="text-slate-400 font-mono">0 Flags</span>
+                    <span className="text-app-text-secondary">Removed Reviews</span>
+                    <span className="text-app-text-secondary font-mono">0 Flags</span>
                   </div>
                 </div>
               </div>
@@ -1530,27 +1530,27 @@ export default function UnifiedProfileShell() {
                 <div className="flex justify-between items-start mb-4">
                   <div>
                     <span className="text-[10px] text-app-text-secondary uppercase block font-semibold">Fulfillment Reliability</span>
-                    <h4 className="text-xl font-bold text-white mt-1">Trust Score</h4>
+                    <h4 className="text-xl font-bold text-app-text-primary mt-1">Trust Score</h4>
                   </div>
                   <span className="text-lg font-mono font-black text-emerald-400">98 / 100</span>
                 </div>
 
                 <div className="space-y-4 pt-2">
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Successful Orders</span>
-                    <span className="text-white font-bold font-mono">18 Completed</span>
+                    <span className="text-app-text-secondary">Successful Orders</span>
+                    <span className="text-app-text-primary font-bold font-mono">18 Completed</span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Return Rate</span>
+                    <span className="text-app-text-secondary">Return Rate</span>
                     <span className="text-indigo-400 font-bold font-mono">3.4% MTD</span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Cancellation Rate</span>
+                    <span className="text-app-text-secondary">Cancellation Rate</span>
                     <span className="text-rose-400 font-bold font-mono">1.2%</span>
                   </div>
                   <div className="flex justify-between items-center text-xs">
-                    <span className="text-slate-400">Active Dispute Rate</span>
-                    <span className="text-slate-400 font-mono">0.0%</span>
+                    <span className="text-app-text-secondary">Active Dispute Rate</span>
+                    <span className="text-app-text-secondary font-mono">0.0%</span>
                   </div>
                 </div>
               </div>
@@ -1559,24 +1559,24 @@ export default function UnifiedProfileShell() {
               <div className="bg-app-card border border-app-border p-6 rounded-[4px] shadow-xl">
                 <div className="mb-4">
                   <span className="text-[10px] text-app-text-secondary uppercase block font-semibold">System Diagnostics</span>
-                  <h4 className="text-xl font-bold text-white mt-1">Security Audit</h4>
+                  <h4 className="text-xl font-bold text-app-text-primary mt-1">Security Audit</h4>
                 </div>
 
                 <div className="space-y-4 pt-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">IP Location Sync Ratio</span>
+                    <span className="text-app-text-secondary">IP Location Sync Ratio</span>
                     <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-[2px] text-[10px] font-bold uppercase font-mono font-sans">MATCHED</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Chargeback Registry Index</span>
+                    <span className="text-app-text-secondary">Chargeback Registry Index</span>
                     <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-[2px] text-[10px] font-bold uppercase font-mono font-sans">0 FLAGS</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Rapid Multi-device Drops</span>
+                    <span className="text-app-text-secondary">Rapid Multi-device Drops</span>
                     <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-[2px] text-[10px] font-bold uppercase font-mono font-sans font-sans">CLEAN</span>
                   </div>
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-slate-400">Loyalty Level</span>
+                    <span className="text-app-text-secondary">Loyalty Level</span>
                     <span className="text-[#F4631E] font-black font-sans uppercase">VIP Tier</span>
                   </div>
                 </div>
@@ -1586,9 +1586,9 @@ export default function UnifiedProfileShell() {
 
             {/* Submitted Reviews List */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="border-b border-app-border pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Submitted Product & Brand Reviews</h3>
+                  <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Submitted Product & Brand Reviews</h3>
                   <p className="text-[11px] text-app-text-secondary mt-1">Verified user rating allocations disbursed across the platform.</p>
                 </div>
                 
@@ -1597,7 +1597,7 @@ export default function UnifiedProfileShell() {
                     <button
                       key={f}
                       onClick={() => setSelectedReviewFilter(f)}
-                      className={`px-3 py-1 text-[10px] font-bold border rounded-[2px] transition-colors cursor-pointer ${
+                      className={`px-3 py-1 text-[10px] font-bold border rounded-[2px] transition-colors cursor-pointer${
                         selectedReviewFilter === f ? 'bg-indigo-600 border-indigo-500 text-white' : 'border-white/5 bg-white/5 text-slate-400 hover:text-white'
                       }`}
                     >
@@ -1616,11 +1616,11 @@ export default function UnifiedProfileShell() {
                 ]
                   .filter(r => selectedReviewFilter === 'All' ? true : r.type === selectedReviewFilter)
                   .map(rev => (
-                    <div key={rev.id} className="p-4 bg-white/5 border border-white/5 rounded flex flex-col gap-3 hover:border-white/10 transition-colors">
+                    <div key={rev.id} className="p-4 bg-white/5 border border-app-border rounded flex flex-col gap-3 hover:border-white/10 transition-colors">
                       <div className="flex justify-between items-start">
                         <div>
                           <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 rounded-[2px] text-[8px] font-bold uppercase tracking-widest font-mono inline-block mb-1">{rev.type} Review</span>
-                          <h4 className="text-xs font-bold text-white block">{rev.entityName}</h4>
+                          <h4 className="text-xs font-bold text-app-text-primary block">{rev.entityName}</h4>
                         </div>
                         <span className="text-[10px] text-app-text-secondary font-mono">{rev.date}</span>
                       </div>
@@ -1631,7 +1631,7 @@ export default function UnifiedProfileShell() {
                         ))}
                       </div>
 
-                      <p className="text-xs text-slate-300 font-sans italic leading-relaxed font-semibold">"{rev.comment}"</p>
+                      <p className="text-xs text-app-text-secondary font-sans italic leading-relaxed font-semibold">"{rev.comment}"</p>
                     </div>
                   ))}
               </div>
@@ -1643,8 +1643,8 @@ export default function UnifiedProfileShell() {
         {activeTab === 'followed_brands' && typeKey === 'consumer' && (
           <div className="space-y-6 text-left font-sans">
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl">
-              <div className="border-b border-white/[0.04] pb-3 mb-6">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Followed Handcraft Brands</h3>
+              <div className="border-b border-app-border pb-3 mb-6">
+                <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Followed Handcraft Brands</h3>
                 <p className="text-[11px] text-app-text-secondary mt-1 font-sans">Monitored merchant suppliers and physical store channels followed by the consumer.</p>
               </div>
 
@@ -1655,28 +1655,28 @@ export default function UnifiedProfileShell() {
                     
                     <div className="space-y-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-[2px] bg-slate-800 overflow-hidden border border-white/10 shrink-0">
+                        <div className="w-12 h-12 rounded-[2px] bg-app-bg overflow-hidden border border-app-border shrink-0">
                           <img referrerPolicy="no-referrer" src={b.logo} alt="" className="w-full h-full object-cover" />
                         </div>
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <span className="text-xs font-bold text-white">{b.name}</span>
+                            <span className="text-xs font-bold text-app-text-primary">{b.name}</span>
                             {b.verified && <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />}
                           </div>
                           <span className="text-[10px] text-app-text-secondary font-semibold font-mono block mt-0.5">{b.category}</span>
                         </div>
                       </div>
 
-                      <div className="bg-white/5 border border-white/5 p-3 rounded-[2px]">
+                      <div className="bg-white/5 border border-app-border p-3 rounded-[2px]">
                         <span className="text-[8.5px] uppercase font-bold text-[#F4631E] block font-mono">Latest Activity Update</span>
-                        <p className="text-[11px] text-slate-300 mt-1 leading-snug">{b.lastActivity}</p>
+                        <p className="text-[11px] text-app-text-secondary mt-1 leading-snug">{b.lastActivity}</p>
                       </div>
                     </div>
 
-                    <div className="pt-4 mt-4 border-t border-white/5 flex gap-2">
+                    <div className="pt-4 mt-4 border-t border-app-border flex gap-2">
                       <button 
                         onClick={() => showToast(`✓ Loading verified profile for: ${b.name}`)}
-                        className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 text-white font-bold text-[10px] rounded-[2px] text-center cursor-pointer transition-colors"
+                        className="flex-1 py-1.5 bg-white/5 hover:bg-white/10 text-app-text-primary font-bold text-[10px] rounded-[2px] text-center cursor-pointer transition-colors"
                       >
                         View Brand Profile
                       </button>
@@ -1699,15 +1699,15 @@ export default function UnifiedProfileShell() {
         {activeTab === 'saved_items' && typeKey === 'consumer' && (
           <div className="space-y-6 text-left font-sans">
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl">
-              <div className="border-b border-white/[0.04] pb-3 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="border-b border-app-border pb-3 mb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Saved & Bookmarked Catalogs</h3>
+                  <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Saved & Bookmarked Catalogs</h3>
                   <p className="text-[11px] text-app-text-secondary mt-1">Consumer bookmarked items, promotions, and active discount campaigns.</p>
                 </div>
                 
                 <button 
                   onClick={() => showToast('✓ Cleaned up expired bookmark codes')}
-                  className="px-3 py-1.5 bg-white/5 border border-white/10 text-xs font-bold font-sans text-slate-300 hover:text-white rounded-[2px] transition-colors cursor-pointer"
+                  className="px-3 py-1.5 bg-white/5 border border-app-border text-xs font-bold font-sans text-app-text-secondary hover:text-white rounded-[2px] transition-colors cursor-pointer"
                 >
                   Verify All Saved Availability
                 </button>
@@ -1715,18 +1715,18 @@ export default function UnifiedProfileShell() {
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-fade-in">
                 {consumerSavedItems.map(item => (
-                  <div key={item.id} className="bg-slate-950/20 border border-app-border rounded-[4px] overflow-hidden flex flex-col justify-between transition-all hover:border-white/[0.08]">
+                  <div key={item.id} className="bg-app-bg/10 border border-app-border rounded-[4px] overflow-hidden flex flex-col justify-between transition-all hover:border-white/[0.08]">
                     
-                    <div className="relative aspect-square w-full bg-slate-900 border-b border-white/5 overflow-hidden">
+                    <div className="relative aspect-square w-full bg-app-card border-b border-app-border overflow-hidden">
                       <img referrerPolicy="no-referrer" src={item.image} alt="" className="w-full h-full object-cover" />
-                      <span className="absolute top-2.5 left-2.5 px-2 py-0.5 bg-slate-950/85 backdrop-blur-md rounded-[2px] text-[8px] font-bold uppercase tracking-wider text-slate-300 border border-white/5">
+                      <span className="absolute top-2.5 left-2.5 px-2 py-0.5 bg-app-bg/10 backdrop-blur-md rounded-[2px] text-[8px] font-bold uppercase tracking-wider text-app-text-secondary border border-app-border">
                         {item.type}
                       </span>
                     </div>
 
                     <div className="p-4 space-y-2 text-left">
                       <span className="text-[9.5px] font-bold text-app-text-secondary uppercase block font-mono">{item.brand}</span>
-                      <h4 className="text-xs font-bold text-white block truncate leading-tight">{item.name}</h4>
+                      <h4 className="text-xs font-bold text-app-text-primary block truncate leading-tight">{item.name}</h4>
                       
                       <div className="flex justify-between items-center pt-2">
                         <span className="text-xs font-extrabold text-[#F4631E] font-mono">৳{item.price.toLocaleString()}</span>
@@ -1742,7 +1742,7 @@ export default function UnifiedProfileShell() {
                       <div className="grid grid-cols-2 gap-1.5">
                         <button 
                           onClick={() => showToast(`Redirecting to catalog: ${item.name}`)}
-                          className="py-1.5 bg-white/5 hover:bg-white/10 text-white font-bold text-[9px] rounded-[2px] transition-colors cursor-pointer text-center font-sans"
+                          className="py-1.5 bg-white/5 hover:bg-white/10 text-app-text-primary font-bold text-[9px] rounded-[2px] transition-colors cursor-pointer text-center font-sans"
                         >
                           View Item
                         </button>
@@ -1775,8 +1775,8 @@ export default function UnifiedProfileShell() {
         {activeTab === 'followed_creators' && typeKey === 'consumer' && (
           <div className="space-y-6 text-left font-sans">
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl">
-              <div className="border-b border-white/[0.04] pb-3 mb-6">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Followed Heritage Creators</h3>
+              <div className="border-b border-app-border pb-3 mb-6">
+                <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Followed Heritage Creators</h3>
                 <p className="text-[11px] text-app-text-secondary mt-1">Creative ambassadors, authentic handloom advocates, and textile bloggers.</p>
               </div>
 
@@ -1785,29 +1785,29 @@ export default function UnifiedProfileShell() {
                   <div key={creator.id} className="bg-[#050512] border border-app-border p-5 rounded-[4px] flex flex-col justify-between transition-all hover:border-white/[0.08] shadow-lg">
                     
                     <div className="flex gap-4">
-                      <div className="w-14 h-14 rounded-full overflow-hidden border border-white/5 shrink-0 bg-slate-800">
+                      <div className="w-14 h-14 rounded-full overflow-hidden border border-app-border shrink-0 bg-app-bg">
                         <img referrerPolicy="no-referrer" src={creator.avatarUrl} alt="" className="w-full h-full object-cover" />
                       </div>
                       
                       <div className="space-y-1 bg-transparent flex-1 text-left">
                         <div className="flex items-center gap-1.5 pt-0.5">
-                          <h4 className="text-xs font-bold text-white leading-none">{creator.name}</h4>
+                          <h4 className="text-xs font-bold text-app-text-primary leading-none">{creator.name}</h4>
                           {creator.verified && <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />}
                         </div>
                         <span className="text-[10px] text-[#00D4B2] font-semibold tracking-wide font-sans">{creator.specialty}</span>
-                        <span className="text-[9.5px] text-app-text-secondary block font-sans">Reach: <strong className="text-slate-200">{creator.followers} followers</strong></span>
+                        <span className="text-[9.5px] text-app-text-secondary block font-sans">Reach: <strong className="text-app-text-secondary">{creator.followers} followers</strong></span>
                       </div>
                     </div>
 
-                    <div className="bg-white/5 border border-white/5 rounded-[4px] p-3 mt-4 text-xs font-sans text-left">
+                    <div className="bg-white/5 border border-app-border rounded-[4px] p-3 mt-4 text-xs font-sans text-left">
                       <span className="text-[9px] uppercase font-bold text-[#F4631E] tracking-wider block font-mono">Latest Published Content Guide</span>
-                      <p className="text-slate-300 font-medium leading-relaxed mt-1">"{creator.latestContent}"</p>
+                      <p className="text-app-text-secondary font-medium leading-relaxed mt-1">"{creator.latestContent}"</p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-white/5">
+                    <div className="grid grid-cols-2 gap-2 mt-4 pt-4 border-t border-app-border">
                       <button 
                         onClick={() => showToast(`Redirecting sandbox to creator profile: ${creator.name}`)}
-                        className="py-1.5 bg-white/5 hover:bg-white/10 text-white font-bold text-[10px] rounded-[2px] transition-colors cursor-pointer text-center font-sans"
+                        className="py-1.5 bg-white/5 hover:bg-white/10 text-app-text-primary font-bold text-[10px] rounded-[2px] transition-colors cursor-pointer text-center font-sans"
                       >
                         View Creator Profile
                       </button>
@@ -1833,28 +1833,28 @@ export default function UnifiedProfileShell() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="bg-[#050512] border border-app-border p-5 rounded-[4px] shadow-xl">
                 <span className="text-[9.5px] text-app-text-secondary uppercase block font-bold">Frequent Category</span>
-                <span className="text-base font-extrabold text-white block mt-1">Silk & Premium Sarees</span>
+                <span className="text-base font-extrabold text-app-text-primary block mt-1">Silk & Premium Sarees</span>
                 <span className="text-[9.5px] text-emerald-400 block mt-1 font-mono font-bold">42 Search Entries MTD</span>
               </div>
               
               <div className="bg-app-card border border-app-border p-5 rounded-[4px] shadow-xl">
                 <span className="text-[9.5px] text-app-text-secondary uppercase block font-bold">Top Keyword Query</span>
-                <span className="text-base font-extrabold text-white block mt-1">Traditional Jamdani Saree</span>
+                <span className="text-base font-extrabold text-app-text-primary block mt-1">Traditional Jamdani Saree</span>
                 <span className="text-[9.5px] text-indigo-400 block mt-1 font-mono font-bold">14 Unique Sessions</span>
               </div>
 
               <div className="bg-app-card border border-app-border p-5 rounded-[4px] shadow-xl">
                 <span className="text-[9.5px] text-app-text-secondary uppercase block font-bold">Search Frequency Timeline</span>
-                <span className="text-base font-extrabold text-white block mt-1">High Intensity</span>
-                <span className="text-[9.5px] text-slate-400 block mt-1 font-sans">Daily trace spikes noted between 8PM-11PM</span>
+                <span className="text-base font-extrabold text-app-text-primary block mt-1">High Intensity</span>
+                <span className="text-[9.5px] text-app-text-secondary block mt-1 font-sans">Daily trace spikes noted between 8PM-11PM</span>
               </div>
             </div>
 
             {/* Keyword log table list */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+              <div className="border-b border-app-border pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Search History Log Trace</h3>
+                  <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Search History Log Trace</h3>
                   <p className="text-[11px] text-app-text-secondary mt-1">Administrative audit trails tracking catalog matching search intents.</p>
                 </div>
 
@@ -1870,10 +1870,10 @@ export default function UnifiedProfileShell() {
               </div>
 
               {consumerSearchHistory.length > 0 ? (
-                <div className="overflow-x-auto rounded border border-white/5 bg-slate-950/25 text-xs text-left">
+                <div className="overflow-x-auto rounded border border-app-border bg-app-bg/10 text-xs text-left">
                   <table className="min-w-full divide-y divide-white/5 font-sans">
                     <thead>
-                      <tr className="bg-slate-950 text-[10px] text-app-text-secondary uppercase text-left font-sans font-bold">
+                      <tr className="bg-app-bg text-[10px] text-app-text-secondary uppercase text-left font-sans font-bold">
                         <th className="px-4 py-3">Keyword Query</th>
                         <th className="px-4 py-3">Category Target</th>
                         <th className="px-4 py-3">Timestamp GTM+6</th>
@@ -1882,23 +1882,23 @@ export default function UnifiedProfileShell() {
                         <th className="px-4 py-3 text-right">Actions</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/[0.01] text-slate-200">
+                    <tbody className="divide-y divide-white/[0.01] text-app-text-secondary">
                       {consumerSearchHistory.map((search) => (
                         <tr key={search.id} className="hover:bg-white/[0.01] transition-colors font-sans font-medium text-xs">
-                          <td className="px-4 py-3 text-white font-black">{search.keyword}</td>
+                          <td className="px-4 py-3 text-app-text-primary font-black">{search.keyword}</td>
                           <td className="px-4 py-3 font-semibold text-indigo-400">{search.category}</td>
-                          <td className="px-4 py-3 text-slate-400">{search.time}</td>
+                          <td className="px-4 py-3 text-app-text-secondary">{search.time}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`px-2 py-0.5 rounded-[2px] text-[10px] font-mono font-bold border ${search.results > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/15' : 'bg-rose-500/10 text-rose-400 border-rose-500/15'}`}>
+                            <span className={`px-2 py-0.5 rounded-[2px] text-[10px] font-mono font-bold border${search.results > 0 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/15' : 'bg-rose-500/10 text-rose-400 border-rose-500/15'}`}>
                               {search.results} items
                             </span>
                           </td>
-                          <td className="px-4 py-3 text-slate-400">{search.device}</td>
+                          <td className="px-4 py-3 text-app-text-secondary">{search.device}</td>
                           <td className="px-4 py-3 text-right">
                             <div className="flex justify-end gap-1.5">
                               <button 
                                 onClick={() => showToast(`✓ Opening search details log for keyword: "${search.keyword}"`)}
-                                className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white rounded-[2px] text-[10px] font-bold cursor-pointer font-sans"
+                                className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-app-text-secondary hover:text-white rounded-[2px] text-[10px] font-bold cursor-pointer font-sans"
                               >
                                 View Details
                               </button>
@@ -1919,7 +1919,7 @@ export default function UnifiedProfileShell() {
                   </table>
                 </div>
               ) : (
-                <div className="py-12 text-center text-app-text-secondary font-semibold text-xs border border-white/5 rounded">
+                <div className="py-12 text-center text-app-text-secondary font-semibold text-xs border border-app-border rounded">
                   All platform search history logs have been destroyed or cleared.
                 </div>
               )}
@@ -1930,31 +1930,31 @@ export default function UnifiedProfileShell() {
         {/* Module D: Timeline Activities for Orders */}
         {activeTab === 'timeline' && typeKey === 'order' && (
           <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6 text-left">
-            <div className="border-b border-white/[0.04] pb-3">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">Ecosystem Active Conversation Wire</h3>
+            <div className="border-b border-app-border pb-3">
+              <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Ecosystem Active Conversation Wire</h3>
               <p className="text-[11px] text-app-text-secondary mt-1">Audit log traces and messaging syncing conduits.</p>
             </div>
             <div className="space-y-4 font-sans text-xs">
               {((entityData as any).chatHistory || []).map((chat: any, idx: number) => (
-                <div key={idx} className="p-3 bg-white/5 border border-white/5 rounded text-slate-200">
+                <div key={idx} className="p-3 bg-white/5 border border-app-border rounded text-app-text-secondary">
                   <div className="flex justify-between items-center mb-1">
                     <span className="font-bold text-[#F4631E]">{chat.sender}</span>
                     <span className="text-[9.5px] text-app-text-secondary">{chat.time}</span>
                   </div>
-                  <p className="text-slate-300 mt-1 leading-relaxed">{chat.text}</p>
+                  <p className="text-app-text-secondary mt-1 leading-relaxed">{chat.text}</p>
                 </div>
               ))}
             </div>
 
-            <form onSubmit={handleSendChatMessage} className="space-y-3 pt-4 border-t border-white/10">
+            <form onSubmit={handleSendChatMessage} className="space-y-3 pt-4 border-t border-app-border">
               <textarea 
                 value={chatMessageText}
                 onChange={(e) => setChatMessageText(e.target.value)}
                 placeholder="Draft system sync message..."
-                className="w-full p-2.5 bg-white/5 border border-white/10 rounded text-xs focus:ring-1 focus:ring-app-accent focus:outline-none"
+                className="w-full p-2.5 bg-white/5 border border-app-border rounded text-xs focus:ring-1 focus:ring-app-accent focus:outline-none"
                 rows={2}
               />
-              <button type="submit" className="px-4 py-2 bg-app-accent hover:bg-app-accent-light text-white text-xs font-bold rounded cursor-pointer shadow">
+              <button type="submit" className="px-4 py-2 bg-app-accent hover:bg-app-accent-light text-app-text-primary text-xs font-bold rounded cursor-pointer shadow">
                 Push message
               </button>
             </form>
@@ -1968,9 +1968,9 @@ export default function UnifiedProfileShell() {
             headers={['ID', 'Brand Name', 'Commission Split', 'Connection status']}
           >
             {((entityData as any).brands || []).map((b: any) => (
-              <div key={b.id} className="grid grid-cols-12 gap-4 py-3.5 items-center hover:bg-white/5 transition-all border-b border-white/5 px-2">
+              <div key={b.id} className="grid grid-cols-12 gap-4 py-3.5 items-center hover:bg-white/5 transition-all border-b border-app-border px-2">
                 <div className="col-span-2 font-mono text-xs text-app-accent-light font-bold">{b.id}</div>
-                <div className="col-span-4 text-xs font-bold text-white">{b.name}</div>
+                <div className="col-span-4 text-xs font-bold text-app-text-primary">{b.name}</div>
                 <div className="col-span-3 text-xs font-semibold text-emerald-400 font-mono">{b.commissionCut} Split</div>
                 <div className="col-span-3 text-right">
                   <span className="inline-block px-2 py-0.5 rounded-[2px] bg-emerald-500/10 text-emerald-400 text-[9px] font-bold border border-emerald-500/20 uppercase font-mono">
@@ -1992,14 +1992,14 @@ export default function UnifiedProfileShell() {
               { id: 'p101', title: 'Summer Cotton Silk Saree', price: '৳ 4,200', stock: '24 Available', status: 'Live' },
               { id: 'p102', title: 'Monsoon Pure Nakshi Kantha Saree', price: '৳ 12,500', stock: '8 Available', status: 'Live' }
             ].map(prod => (
-              <div key={prod.id} className="grid grid-cols-12 gap-4 py-3.5 items-center hover:bg-white/5 transition-all border-b border-white/5 px-2 font-sans">
+              <div key={prod.id} className="grid grid-cols-12 gap-4 py-3.5 items-center hover:bg-white/5 transition-all border-b border-app-border px-2 font-sans">
                 <div className="col-span-2 text-xs font-mono text-app-text-secondary">{prod.id}</div>
-                <div className="col-span-4 text-xs font-bold text-white">
+                <div className="col-span-4 text-xs font-bold text-app-text-primary">
                   <Link to={`/products/${getMockProductId(prod.title)}`} className="hover:underline hover:text-app-accent transition-colors">
                     {prod.title}
                   </Link>
                 </div>
-                <div className="col-span-2 text-xs font-bold text-white font-mono">{prod.price}</div>
+                <div className="col-span-2 text-xs font-bold text-app-text-primary font-mono">{prod.price}</div>
                 <div className="col-span-2 text-xs text-app-text-secondary font-mono">{prod.stock}</div>
                 <div className="col-span-2 text-right">
                   <span className="inline-block px-1.5 py-0.5 rounded-[2px] bg-green-500/10 text-green-400 text-[9px] font-bold font-mono">
@@ -2014,13 +2014,13 @@ export default function UnifiedProfileShell() {
         {/* Module G: Brand Properties Account */}
         {activeTab === 'account' && typeKey !== 'seller' && typeKey !== 'brand' && (
           <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-            <div className="border-b border-white/[0.04] pb-3">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">Creative Brand Asset Description</h3>
+            <div className="border-b border-app-border pb-3">
+              <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Creative Brand Asset Description</h3>
               <p className="text-[11px] text-app-text-secondary mt-1">Ecosystem segment classifications and primary categories.</p>
             </div>
-            <div className="p-4 bg-white/5 border border-white/5 rounded space-y-2">
+            <div className="p-4 bg-white/5 border border-app-border rounded space-y-2">
               <span className="text-[10px] text-app-text-secondary uppercase">Brand Manifesto Overview</span>
-              <p className="text-xs text-slate-300 leading-relaxed font-sans">
+              <p className="text-xs text-app-text-secondary leading-relaxed font-sans">
                 "{entityData.description}"
               </p>
             </div>
@@ -2030,15 +2030,15 @@ export default function UnifiedProfileShell() {
         {/* Module H: Brand verification checkpoint */}
         {activeTab === 'verification' && typeKey !== 'seller' && typeKey !== 'brand' && (
           <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-            <div className="border-b border-white/[0.04] pb-3">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">Brand Partnership Verification Checklist</h3>
+            <div className="border-b border-app-border pb-3">
+              <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Brand Partnership Verification Checklist</h3>
               <p className="text-[11px] text-app-text-secondary mt-1">Trademark checks and verified license credentials approvals.</p>
             </div>
             <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded flex items-start gap-3">
               <ShieldCheck className="w-5 h-5 text-emerald-400 mt-0.5" />
               <div>
                 <span className="text-xs font-bold text-emerald-400 block tracking-widest font-mono uppercase">VERIFICATION PASSED</span>
-                <p className="text-xs text-slate-300 leading-normal mt-1">
+                <p className="text-xs text-app-text-secondary leading-normal mt-1">
                   Brand claims successfully locked. Owner status authenticated under secure registry protocols.
                 </p>
               </div>
@@ -2051,11 +2051,11 @@ export default function UnifiedProfileShell() {
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-                <div className="border-b border-white/[0.04] pb-3">
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Promotion Campaigns</h3>
+                <div className="border-b border-app-border pb-3">
+                  <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Promotion Campaigns</h3>
                   <p className="text-[11px] text-app-text-secondary mt-1">Scheduled visibility caps, budget allocations, and conversion margins.</p>
                 </div>
-                <div className="overflow-x-auto rounded border border-white/5 bg-app-bg/50 text-xs font-mono">
+                <div className="overflow-x-auto rounded border border-app-border bg-app-bg/50 text-xs font-mono">
                   <table className="min-w-full divide-y divide-[#CBD5E1]/5">
                     <thead>
                       <tr className="bg-app-bg text-[10px] text-app-text-secondary uppercase text-left">
@@ -2065,14 +2065,14 @@ export default function UnifiedProfileShell() {
                         <th className="px-4 py-3 text-center">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/[0.01] text-slate-200">
+                    <tbody className="divide-y divide-white/[0.01] text-app-text-secondary">
                       {[
                         { name: 'Traditional Monsoon Festival Mega Boost', budget: '৳ 35,000', spend: '৳ 32,400', status: 'Active' },
                         { name: 'Eid Fashion Premium Spot', budget: '৳ 15,000', spend: '৳ 9,800', status: 'Scheduled' }
                       ].map((ad, idx) => (
                         <tr key={idx} className="hover:bg-white/[0.01]">
-                          <td className="px-4 py-3 font-bold text-white">{ad.name}</td>
-                          <td className="px-4 py-3 text-slate-400">{ad.budget}</td>
+                          <td className="px-4 py-3 font-bold text-app-text-primary">{ad.name}</td>
+                          <td className="px-4 py-3 text-app-text-secondary">{ad.budget}</td>
                           <td className="px-4 py-3 text-right text-[#F4631E]">{ad.spend}</td>
                           <td className="px-4 py-3 text-center">
                             <span className="px-2 py-0.5 rounded-[2px] bg-emerald-500/10 text-emerald-400 text-[9px] font-bold border border-emerald-500/20 uppercase font-mono">
@@ -2087,7 +2087,7 @@ export default function UnifiedProfileShell() {
               </div>
 
               <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-4">
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Historical ROI Conversions Chart</h3>
+                <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Historical ROI Conversions Chart</h3>
                 <div className="h-44 pt-2">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={[
@@ -2119,8 +2119,8 @@ export default function UnifiedProfileShell() {
         {activeTab === 'account' && (typeKey === 'seller' || typeKey === 'brand') && (
           <div className="space-y-6 text-left">
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Account Settings & Communication Preferences</h3>
+              <div className="border-b border-app-border pb-3">
+                <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Account Settings & Communication Preferences</h3>
                 <p className="text-[11px] text-app-text-secondary mt-1">Manage passwords, sound notifications, message alerts, and 2FA keys.</p>
               </div>
 
@@ -2128,17 +2128,17 @@ export default function UnifiedProfileShell() {
                 <div className="space-y-4">
                   <h4 className="text-xs font-bold text-violet-400 uppercase tracking-wider">Communication & Notifications</h4>
                   <div className="space-y-3">
-                    <label className="flex items-center gap-3 bg-white/5 border border-white/5 p-3 rounded cursor-pointer hover:bg-white/[0.08] transition-colors">
-                      <input type="checkbox" defaultChecked className="rounded border-white/10 text-app-accent focus:ring-0" />
+                    <label className="flex items-center gap-3 bg-white/5 border border-app-border p-3 rounded cursor-pointer hover:bg-white/[0.08] transition-colors">
+                      <input type="checkbox" defaultChecked className="rounded border-app-border text-app-accent focus:ring-0" />
                       <div>
-                        <span className="text-xs font-bold text-white block">Email Dispatch Alerts</span>
+                        <span className="text-xs font-bold text-app-text-primary block">Email Dispatch Alerts</span>
                         <span className="text-[10px] text-app-text-secondary block">Receive automated SLA alerts when dispatch windows close.</span>
                       </div>
                     </label>
-                    <label className="flex items-center gap-3 bg-white/5 border border-white/5 p-3 rounded cursor-pointer hover:bg-white/[0.08] transition-colors">
-                      <input type="checkbox" defaultChecked className="rounded border-white/10 text-app-accent focus:ring-0" />
+                    <label className="flex items-center gap-3 bg-white/5 border border-app-border p-3 rounded cursor-pointer hover:bg-white/[0.08] transition-colors">
+                      <input type="checkbox" defaultChecked className="rounded border-app-border text-app-accent focus:ring-0" />
                       <div>
-                        <span className="text-xs font-bold text-white block">Whatsapp Sync Dispatch Logs</span>
+                        <span className="text-xs font-bold text-app-text-primary block">Whatsapp Sync Dispatch Logs</span>
                         <span className="text-[10px] text-app-text-secondary block">Ping warehouse manager directly on Whatsapp for incoming orders.</span>
                       </div>
                     </label>
@@ -2148,19 +2148,19 @@ export default function UnifiedProfileShell() {
                 <div className="space-y-4">
                   <h4 className="text-xs font-bold text-app-accent-light uppercase tracking-wider">Authentication Credentials</h4>
                   <div className="space-y-3 text-xs">
-                    <div className="p-3 bg-white/5 border border-white/5 rounded space-y-2">
+                    <div className="p-3 bg-white/5 border border-app-border rounded space-y-2">
                       <div className="flex justify-between items-center">
-                        <span className="font-bold text-white block">Admin Password</span>
+                        <span className="font-bold text-app-text-primary block">Admin Password</span>
                         <span className="text-[10px] text-app-text-secondary">Last updated 12 days ago</span>
                       </div>
                       <div className="flex gap-2">
-                        <input type="password" value="••••••••••••" readOnly className="flex-1 bg-black/25 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white outline-none" />
-                        <button onClick={() => showToast('✓ Reset instruction sent to registered email.')} className="px-3 py-1.5 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded font-bold cursor-pointer transition-colors text-xs">Reset</button>
+                        <input type="password" value="••••••••••••" readOnly className="flex-1 bg-app-card/20 border border-app-border rounded px-2.5 py-1.5 text-xs text-app-text-primary outline-none" />
+                        <button onClick={() => showToast('✓ Reset instruction sent to registered email.')} className="px-3 py-1.5 bg-white/5 border border-app-border hover:bg-white/10 text-app-text-primary rounded font-bold cursor-pointer transition-colors text-xs">Reset</button>
                       </div>
                     </div>
-                    <div className="p-3.5 bg-white/5 border border-white/5 rounded flex justify-between items-center">
+                    <div className="p-3.5 bg-white/5 border border-app-border rounded flex justify-between items-center">
                       <div>
-                        <span className="font-bold text-white block">Two-Factor Authentication (2FA)</span>
+                        <span className="font-bold text-app-text-primary block">Two-Factor Authentication (2FA)</span>
                         <span className="text-[10px] text-emerald-400 font-semibold truncate block mt-0.5">✓ SECURED WITH GOOGLE AUTHENTICATOR</span>
                       </div>
                       <span className="px-2.5 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded text-[10px] uppercase font-black font-mono">ACTIVE</span>
@@ -2176,9 +2176,9 @@ export default function UnifiedProfileShell() {
         {activeTab === 'verification' && (typeKey === 'seller' || typeKey === 'brand') && (
           <div className="space-y-6 text-left">
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="border-b border-app-border pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Enterprise Verification Checklist & KYC Center</h3>
+                  <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Enterprise Verification Checklist & KYC Center</h3>
                   <p className="text-[11px] text-app-text-secondary mt-1">Review legal documents, corporate tax clearances, and bank settlements escrow status.</p>
                 </div>
                 <div className="px-3.5 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-xl text-[10px] font-black uppercase tracking-wider self-start sm:self-auto flex items-center gap-1.5">
@@ -2188,28 +2188,28 @@ export default function UnifiedProfileShell() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono">
-                <div className="p-4 bg-white/5 border border-white/5 rounded space-y-1">
+                <div className="p-4 bg-white/5 border border-app-border rounded space-y-1">
                   <span className="text-[9.5px] font-bold text-emerald-400 block uppercase tracking-widest font-sans">Trade License Registration</span>
-                  <span className="text-white block font-black">{(entityData as any).legalId || 'TRADE-RE-9410A'}</span>
+                  <span className="text-app-text-primary block font-black">{(entityData as any).legalId || 'TRADE-RE-9410A'}</span>
                   <span className="text-[9px] text-app-text-secondary uppercase">Status: ACTIVE SLA</span>
                 </div>
-                <div className="p-4 bg-white/5 border border-white/5 rounded space-y-1">
+                <div className="p-4 bg-white/5 border border-app-border rounded space-y-1">
                   <span className="text-[9.5px] font-bold text-indigo-400 block uppercase tracking-widest font-sans">Tax Certificate (TIN)</span>
-                  <span className="text-white block font-black">{(entityData as any).tin || 'TIN-48291039401'}</span>
+                  <span className="text-app-text-primary block font-black">{(entityData as any).tin || 'TIN-48291039401'}</span>
                   <span className="text-[9px] text-app-text-secondary uppercase">Status: APPROVED TAXPAYER</span>
                 </div>
-                <div className="p-4 bg-white/5 border border-white/5 rounded space-y-1">
+                <div className="p-4 bg-white/5 border border-app-border rounded space-y-1">
                   <span className="text-[9.5px] font-bold text-violet-400 block uppercase tracking-widest font-sans">VAT Business Identification (BIN)</span>
-                  <span className="text-white block font-black">{(entityData as any).bin || 'BIN-10928391039'}</span>
+                  <span className="text-app-text-primary block font-black">{(entityData as any).bin || 'BIN-10928391039'}</span>
                   <span className="text-[9px] text-app-text-secondary uppercase">Status: VERIFIED 2026</span>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-white/[0.04] space-y-3">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Settlement & Escrow Bank Verification</h4>
+              <div className="pt-4 border-t border-app-border space-y-3">
+                <h4 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Settlement & Escrow Bank Verification</h4>
                 <div className="p-4 bg-[#05050C] border border-[#202030] rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-4 font-sans text-xs">
                   <div className="space-y-1">
-                    <span className="font-bold text-white block">Mutual Trust Bank Bangladesh Ltd.</span>
+                    <span className="font-bold text-app-text-primary block">Mutual Trust Bank Bangladesh Ltd.</span>
                     <span className="text-[10.5px] text-app-text-secondary font-mono">Acc: 0182-0391-4829 &bull; Routing: 1352718911</span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -2219,25 +2219,25 @@ export default function UnifiedProfileShell() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-white/[0.04] space-y-3">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Submitted Trademark & Legal Attachments</h4>
+              <div className="pt-4 border-t border-app-border space-y-3">
+                <h4 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Submitted Trademark & Legal Attachments</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs font-sans">
-                  <div className="p-3 bg-white/5 border border-white/5 hover:border-white/10 rounded flex justify-between items-center transition-colors">
+                  <div className="p-3 bg-white/5 border border-app-border hover:border-white/10 rounded flex justify-between items-center transition-colors">
                     <div className="flex items-center gap-2.5">
                       <FileCheck className="w-4.5 h-4.5 text-emerald-400 overflow-hidden shrink-0" />
                       <div className="overflow-hidden">
-                        <span className="font-bold text-white block truncate">Corporate_Trade_License_Aarong.pdf</span>
+                        <span className="font-bold text-app-text-primary block truncate">Corporate_Trade_License_Aarong.pdf</span>
                         <span className="text-[10px] text-app-text-secondary font-mono">3.4 MB &bull; Signed Copy</span>
                       </div>
                     </div>
                     <button onClick={() => showToast('✓ Downloading Trade License PDF document.')} className="text-xs text-app-accent-light font-bold hover:underline cursor-pointer">Download</button>
                   </div>
 
-                  <div className="p-3 bg-white/5 border border-white/5 hover:border-white/10 rounded flex justify-between items-center transition-colors">
+                  <div className="p-3 bg-white/5 border border-app-border hover:border-white/10 rounded flex justify-between items-center transition-colors">
                     <div className="flex items-center gap-2.5">
                       <FileCheck className="w-4.5 h-4.5 text-emerald-400 overflow-hidden shrink-0" />
                       <div className="overflow-hidden">
-                        <span className="font-bold text-white block truncate">TIN_NBR_Revenue_Certificate.pdf</span>
+                        <span className="font-bold text-app-text-primary block truncate">TIN_NBR_Revenue_Certificate.pdf</span>
                         <span className="text-[10px] text-app-text-secondary font-mono">1.2 MB &bull; Digitally Signed</span>
                       </div>
                     </div>
@@ -2248,36 +2248,36 @@ export default function UnifiedProfileShell() {
             </div>
 
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Verification History & Administrative Actions</h3>
+              <div className="border-b border-app-border pb-3">
+                <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Verification History & Administrative Actions</h3>
                 <p className="text-[11px] text-app-text-secondary mt-1">Audit trial history for verification updates, claim approvals, or missing documents queries.</p>
               </div>
 
               <div className="space-y-3 text-xs font-mono">
-                <div className="p-3.5 bg-white/[0.02] border border-white/[0.04] rounded flex items-start gap-3">
+                <div className="p-3.5 bg-white/[0.02] border border-app-border rounded flex items-start gap-3">
                   <span className="w-2 h-2 rounded-full bg-emerald-400 mt-1.5 shrink-0" />
                   <div className="space-y-1 flex-grow">
                     <div className="flex justify-between flex-wrap gap-1">
-                      <span className="font-bold text-white block">COMPLIANCE claim APPROVED</span>
+                      <span className="font-bold text-app-text-primary block">COMPLIANCE claim APPROVED</span>
                       <span className="text-[9.5px] text-slate-500 font-sans">June 12, 2026 - 11:30 AM</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 font-sans font-medium">Trade registry credentials matching complete database records. KYC clearance confirmed lock status verified.</p>
+                    <p className="text-[11px] text-app-text-secondary font-sans font-medium">Trade registry credentials matching complete database records. KYC clearance confirmed lock status verified.</p>
                   </div>
                 </div>
 
-                <div className="p-3.5 bg-white/[0.02] border border-white/[0.04] rounded flex items-start gap-3">
+                <div className="p-3.5 bg-white/[0.02] border border-app-border rounded flex items-start gap-3">
                   <span className="w-2 h-2 rounded-full bg-yellow-500 mt-1.5 shrink-0" />
                   <div className="space-y-1 flex-grow">
                     <div className="flex justify-between flex-wrap gap-1">
-                      <span className="font-bold text-white block">TIN Document Upgrade requested</span>
+                      <span className="font-bold text-app-text-primary block">TIN Document Upgrade requested</span>
                       <span className="text-[9.5px] text-slate-500 font-sans">June 08, 2026 - 02:15 PM</span>
                     </div>
-                    <p className="text-[11px] text-slate-400 font-sans font-medium">Request uploaded updated digital proof for TIN ledger as signature was legacy. Document successfully re-uploaded by seller.</p>
+                    <p className="text-[11px] text-app-text-secondary font-sans font-medium">Request uploaded updated digital proof for TIN ledger as signature was legacy. Document successfully re-uploaded by seller.</p>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-white/[0.04] flex flex-wrap gap-3">
+              <div className="pt-4 border-t border-app-border flex flex-wrap gap-3">
                 <button onClick={() => showToast('✓ Request dispatched: Missing SLA TIN Document alert.')} className="px-4 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 text-xs font-bold border border-yellow-500/30 rounded cursor-pointer transition-all">Request Update / Alert Missing Doc</button>
                 <button onClick={() => showToast('✓ Certification claim locked with NBR Registry.')} className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30 rounded cursor-pointer transition-all">Lock Verification Claim</button>
               </div>
@@ -2291,7 +2291,7 @@ export default function UnifiedProfileShell() {
             {typeKey === 'seller' && (entityData as any)?.brands?.length > 1 && (
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
                 <div className="text-left space-y-1">
-                  <h3 className="text-sm font-bold text-white">Active Customizer Brand Context</h3>
+                  <h3 className="text-sm font-bold text-app-text-primary">Active Customizer Brand Context</h3>
                   <p className="text-[11px] text-app-text-secondary">Select which owned brand portfolio you are designing using the Visual CMS.</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -2302,7 +2302,7 @@ export default function UnifiedProfileShell() {
                       setSelectedCMSBrandId(e.target.value);
                       showToast('✓ Switched visual portfolio dashboard brand context.');
                     }}
-                    className="bg-[#05051C] border border-white/10 text-xs font-bold text-white px-4 py-2 rounded-[2px] outline-none focus:border-app-accent"
+                    className="bg-[#05051C] border border-app-border text-xs font-bold text-app-text-primary px-4 py-2 rounded-[2px] outline-none focus:border-app-accent"
                   >
                     {((entityData as any).brands || []).map((b: any) => (
                       <option key={b.id} value={b.id}>{b.name}</option>
@@ -2327,7 +2327,7 @@ export default function UnifiedProfileShell() {
                     setProdStatusFilter(status);
                     showToast(`✓ Switched product filter: ${status}`);
                   }}
-                  className={`text-xs font-bold px-4 py-2 rounded-[2px] transition-all cursor-pointer whitespace-nowrap ${
+                  className={`text-xs font-bold px-4 py-2 rounded-[2px] transition-all cursor-pointer whitespace-nowrap${
                     prodStatusFilter === status
                       ? 'bg-app-accent text-white shadow font-sans'
                       : 'text-slate-400 hover:text-white hover:bg-white/5 font-sans'
@@ -2353,17 +2353,17 @@ export default function UnifiedProfileShell() {
               ]
                 .filter(p => prodStatusFilter === 'All' || p.status === prodStatusFilter)
                 .map(prod => (
-                  <div key={prod.id} className="grid grid-cols-12 gap-4 py-3.5 items-center hover:bg-white/5 transition-all border-b border-white/5 px-2 font-sans">
+                  <div key={prod.id} className="grid grid-cols-12 gap-4 py-3.5 items-center hover:bg-white/5 transition-all border-b border-app-border px-2 font-sans">
                     <div className="col-span-2 text-xs font-mono text-app-text-secondary">{prod.id}</div>
-                    <div className="col-span-4 text-xs font-bold text-white">
+                    <div className="col-span-4 text-xs font-bold text-app-text-primary">
                       <Link to={`/products/${getMockProductId(prod.title)}`} className="hover:underline hover:text-app-accent transition-colors">
                         {prod.title}
                       </Link>
                     </div>
-                    <div className="col-span-2 text-xs font-bold text-white font-mono">{prod.price}</div>
+                    <div className="col-span-2 text-xs font-bold text-app-text-primary font-mono">{prod.price}</div>
                     <div className="col-span-2 text-xs text-app-text-secondary font-mono">{prod.stock}</div>
                     <div className="col-span-2 text-right">
-                      <span className={`inline-block px-1.5 py-0.5 rounded-[2px] text-[9px] font-bold font-mono border ${
+                      <span className={`inline-block px-1.5 py-0.5 rounded-[2px] text-[9px] font-bold font-mono border${
                         prod.status === 'Active' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
                         prod.status === 'Draft' ? 'bg-slate-500/10 text-slate-400 border-slate-500/20' :
                         prod.status === 'Pending Review' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
@@ -2390,7 +2390,7 @@ export default function UnifiedProfileShell() {
                     setOrderStatusFilter(status);
                     showToast(`✓ Switched order filter: ${status}`);
                   }}
-                  className={`text-xs font-bold px-4 py-2 rounded-[2px] transition-all cursor-pointer whitespace-nowrap ${
+                  className={`text-xs font-bold px-4 py-2 rounded-[2px] transition-all cursor-pointer whitespace-nowrap${
                     orderStatusFilter === status
                       ? 'bg-app-accent text-white shadow font-sans'
                       : 'text-slate-400 hover:text-white hover:bg-white/5 font-sans'
@@ -2422,23 +2422,23 @@ export default function UnifiedProfileShell() {
                   return o.status === orderStatusFilter;
                 })
                 .map((ord: any) => (
-                  <div key={ord.id} className="grid grid-cols-12 gap-4 py-3 items-center hover:bg-white/5 transition-colors border-b border-white/5 px-2">
+                  <div key={ord.id} className="grid grid-cols-12 gap-4 py-3 items-center hover:bg-white/5 transition-colors border-b border-app-border px-2">
                     <div className="col-span-6 md:col-span-2">
                       <Link to={`/upe/order/${ord.id}`} className="text-xs font-bold text-[#F4631E] hover:underline font-mono">
                         #{ord.id}
                       </Link>
                     </div>
                     <div className="col-span-6 md:col-span-4">
-                      <Link to={`/products/${getMockProductId(ord.product.name)}`} className="text-xs text-white font-bold block truncate hover:underline hover:text-app-accent transition-colors">
+                      <Link to={`/products/${getMockProductId(ord.product.name)}`} className="text-xs text-app-text-primary font-bold block truncate hover:underline hover:text-app-accent transition-colors">
                         {ord.product.name}
                       </Link>
                       <span className="text-[10px] text-app-text-secondary font-semibold font-mono block">Brand: {ord.product.brand}</span>
                     </div>
                     <div className="col-span-4 md:col-span-2">
-                      <span className="text-xs text-white font-semibold block">{ord.quantity} items</span>
+                      <span className="text-xs text-app-text-primary font-semibold block">{ord.quantity} items</span>
                     </div>
                     <div className="col-span-4 md:col-span-2">
-                      <span className={`px-2 py-0.5 rounded-[2px] text-[9px] font-bold uppercase tracking-widest border font-mono inline-block ${
+                      <span className={`px-2 py-0.5 rounded-[2px] text-[9px] font-bold uppercase tracking-widest border font-mono inline-block${
                         ord.paymentStatus === 'Paid' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
                         ord.paymentStatus === 'Unpaid' ? 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20' :
                         'bg-rose-500/10 text-rose-400 border-rose-500/20'
@@ -2447,7 +2447,7 @@ export default function UnifiedProfileShell() {
                       </span>
                     </div>
                     <div className="col-span-4 md:col-span-2 text-right">
-                      <span className="text-xs text-white font-bold block font-mono">৳{(ord.price * ord.quantity).toLocaleString()}</span>
+                      <span className="text-xs text-app-text-primary font-bold block font-mono">৳{(ord.price * ord.quantity).toLocaleString()}</span>
                     </div>
                   </div>
                 ))}
@@ -2462,16 +2462,16 @@ export default function UnifiedProfileShell() {
               
               <div className="lg:col-span-2 bg-app-card border border-[#202030] rounded-3xl p-6 shadow-xl space-y-6">
                 <div className="border-b border-[#202030] pb-3 flex justify-between items-center">
-                  <h3 className="text-xs font-black uppercase text-white tracking-widest">Seller Reputation & Ratings Distribution</h3>
+                  <h3 className="text-xs font-black uppercase text-app-text-primary tracking-widest">Seller Reputation & Ratings Distribution</h3>
                   <div className="flex items-center gap-1">
                     <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-                    <span className="text-sm font-black text-white font-mono">{(entityData as any).trustScore ? ((entityData as any).trustScore / 20).toFixed(1) : "4.9"}</span>
+                    <span className="text-sm font-black text-app-text-primary font-mono">{(entityData as any).trustScore ? ((entityData as any).trustScore / 20).toFixed(1) : "4.9"}</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-center">
-                  <div className="sm:col-span-4 flex flex-col items-center justify-center p-4 bg-white/5 border border-white/5 rounded-2xl text-center">
-                    <span className="text-3xl font-black text-white font-mono">{(entityData as any).trustScore ? ((entityData as any).trustScore / 20).toFixed(1) : "4.9"}</span>
+                  <div className="sm:col-span-4 flex flex-col items-center justify-center p-4 bg-white/5 border border-app-border rounded-2xl text-center">
+                    <span className="text-3xl font-black text-app-text-primary font-mono">{(entityData as any).trustScore ? ((entityData as any).trustScore / 20).toFixed(1) : "4.9"}</span>
                     <div className="flex gap-1 mt-2">
                       {[1, 2, 3, 4, 5].map((s) => (
                         <Star key={s} className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
@@ -2489,11 +2489,11 @@ export default function UnifiedProfileShell() {
                       { star: 1, pct: '0%' }
                     ].map((row) => (
                       <div key={row.star} className="flex items-center gap-3">
-                        <span className="text-[11px] text-slate-400 whitespace-nowrap font-mono">{row.star} Star</span>
+                        <span className="text-[11px] text-app-text-secondary whitespace-nowrap font-mono">{row.star} Star</span>
                         <div className="flex-grow bg-white/5 h-1.5 rounded-full overflow-hidden">
                           <div className="bg-amber-400 h-full" style={{ width: row.pct }} />
                         </div>
-                        <span className="text-[10px] text-slate-400 font-mono w-8 text-right">{row.pct}</span>
+                        <span className="text-[10px] text-app-text-secondary font-mono w-8 text-right">{row.pct}</span>
                       </div>
                     ))}
                   </div>
@@ -2502,19 +2502,19 @@ export default function UnifiedProfileShell() {
 
               <div className="bg-app-card border border-[#202030] rounded-3xl p-6 shadow-xl flex flex-col justify-between">
                 <div className="border-b border-[#202030] pb-2">
-                  <h3 className="text-xs font-black uppercase text-white tracking-widest">Operational Risk & Compliance</h3>
+                  <h3 className="text-xs font-black uppercase text-app-text-primary tracking-widest">Operational Risk & Compliance</h3>
                 </div>
                 <div className="space-y-4 py-4 text-xs">
                   <div className="flex justify-between items-center bg-white/5 p-3 rounded">
-                    <span className="text-slate-400">Merchant Trust Index</span>
+                    <span className="text-app-text-secondary">Merchant Trust Index</span>
                     <span className="text-emerald-400 font-black font-mono">{(entityData as any).trustScore || 98}% Excellent</span>
                   </div>
                   <div className="flex justify-between items-center bg-white/5 p-3 rounded">
-                    <span className="text-slate-400">Risk Assessment Tier</span>
+                    <span className="text-app-text-secondary">Risk Assessment Tier</span>
                     <span className="px-2.5 py-0.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-xl text-[10px] font-black uppercase">Low Risk</span>
                   </div>
                   <div className="flex justify-between items-center bg-white/5 p-3 rounded">
-                    <span className="text-slate-400">Compliance Audit Status</span>
+                    <span className="text-app-text-secondary">Compliance Audit Status</span>
                     <span className="px-2.5 py-0.5 bg-[#00D4B2]/15 border border-[#00D4B2]/30 text-[#00D4B2] rounded-xl text-[10px] font-black uppercase">COMPLIANT</span>
                   </div>
                 </div>
@@ -2526,7 +2526,7 @@ export default function UnifiedProfileShell() {
 
             <div className="bg-app-card border border-[#202030] rounded-3xl p-6 shadow-xl space-y-5 text-left">
               <div className="border-b border-[#202030] pb-3">
-                <h3 className="text-xs font-black uppercase text-white tracking-wider flex items-center gap-1.5">
+                <h3 className="text-xs font-black uppercase text-app-text-primary tracking-wider flex items-center gap-1.5">
                   🛡️ Operational Metrics, Escrow & Performance Ratios
                 </h3>
               </div>
@@ -2534,7 +2534,7 @@ export default function UnifiedProfileShell() {
               <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl flex flex-col justify-between">
                   <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Fulfillment Rate</div>
-                  <div className="text-2xl font-black text-white mt-1.5 font-mono">{(entityData as any).fulfillmentRate || '99.2%'}</div>
+                  <div className="text-2xl font-black text-app-text-primary mt-1.5 font-mono">{(entityData as any).fulfillmentRate || '99.2%'}</div>
                   <div className="w-full bg-white/5 h-1 rounded-full mt-2 overflow-hidden">
                     <div className="bg-emerald-500 h-full w-[99.2%]" style={{ width: '99.2%' }} />
                   </div>
@@ -2558,7 +2558,7 @@ export default function UnifiedProfileShell() {
 
                 <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl text-left">
                   <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Complaint Rate</div>
-                  <div className="text-xs font-bold text-slate-100 mt-2 font-mono">0.1%</div>
+                  <div className="text-xs font-bold text-app-text-primary mt-2 font-mono">0.1%</div>
                   <p className="text-[8px] text-slate-500 uppercase font-black font-mono mt-1">Excellent SLA Score</p>
                 </div>
 
@@ -2570,14 +2570,14 @@ export default function UnifiedProfileShell() {
 
                 <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl text-left">
                   <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Overall Trust Score</div>
-                  <div className="text-xs font-bold text-white mt-2 font-mono">{(entityData as any).trustScore || 98} Rating</div>
+                  <div className="text-xs font-bold text-app-text-primary mt-2 font-mono">{(entityData as any).trustScore || 98} Rating</div>
                   <p className="text-[8px] text-slate-500 uppercase font-black font-mono mt-1">Elite Merchant Medal</p>
                 </div>
               </div>
             </div>
 
             <div className="bg-app-card border border-[#202030] rounded-3xl p-6 shadow-xl space-y-4">
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider">Historical Trust Performance Analytics</h3>
+              <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Historical Trust Performance Analytics</h3>
               <div className="h-44 pt-2 font-sans">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={[
@@ -2599,8 +2599,8 @@ export default function UnifiedProfileShell() {
             </div>
 
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">Customer Feedback & Reviews</h3>
+              <div className="border-b border-app-border pb-3">
+                <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider font-sans">Customer Feedback & Reviews</h3>
                 <p className="text-[11px] text-app-text-secondary mt-1">Direct feedback from verified end consumer orders.</p>
               </div>
               <div className="space-y-4 text-xs font-sans">
@@ -2609,17 +2609,17 @@ export default function UnifiedProfileShell() {
                   { name: 'Tanvir Rahman', rating: 5, date: 'June 10, 2026', comment: 'Very responsive support team. Saree delivered within 24 hours via Paperfly.' },
                   { name: 'Mahrin Islam', rating: 4, date: 'June 05, 2026', comment: 'Beautiful traditional Tangail handloom. Loved the packaging design.' }
                 ].map((fb, idx) => (
-                  <div key={idx} className="p-4 bg-white/5 border border-white/5 rounded space-y-2 text-slate-200">
+                  <div key={idx} className="p-4 bg-white/5 border border-app-border rounded space-y-2 text-app-text-secondary">
                     <div className="flex justify-between items-center">
-                      <span className="font-bold text-white">{fb.name}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">{fb.date}</span>
+                      <span className="font-bold text-app-text-primary">{fb.name}</span>
+                      <span className="text-[10px] text-app-text-secondary font-mono">{fb.date}</span>
                     </div>
                     <div className="flex gap-1">
                       {Array.from({ length: fb.rating }).map((_, i) => (
                         <Star key={i} className="w-3 h-3 text-amber-400 fill-amber-400" />
                       ))}
                     </div>
-                    <p className="text-xs text-slate-300 leading-relaxed font-sans font-medium">"{fb.comment}"</p>
+                    <p className="text-xs text-app-text-secondary leading-relaxed font-sans font-medium">"{fb.comment}"</p>
                   </div>
                 ))}
               </div>
@@ -2633,17 +2633,17 @@ export default function UnifiedProfileShell() {
             <div className="grid grid-cols-2 md:grid-cols-6 gap-4 font-sans">
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-xl text-left">
                 <span className="text-[9px] text-app-text-secondary uppercase block font-mono font-bold">Impressions</span>
-                <span className="text-lg font-black text-white block mt-1 font-mono">1.2M</span>
+                <span className="text-lg font-black text-app-text-primary block mt-1 font-mono">1.2M</span>
                 <span className="text-[9px] text-emerald-400 font-mono font-bold">+18.4% MTD</span>
               </div>
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-xl text-left">
                 <span className="text-[9px] text-app-text-secondary uppercase block font-mono font-bold">Clicks</span>
-                <span className="text-lg font-black text-white block mt-1 font-mono">42.5K</span>
+                <span className="text-lg font-black text-app-text-primary block mt-1 font-mono">42.5K</span>
                 <span className="text-[9px] text-emerald-400 font-mono font-bold">3.54% CTR</span>
               </div>
               <div className="bg-[#050512] border border-app-border p-4 rounded-[4px] shadow-xl text-left">
                 <span className="text-[9px] text-app-text-secondary uppercase block font-mono font-bold">Overall Budget</span>
-                <span className="text-lg font-black text-white block mt-1 font-mono">৳ 50,000</span>
+                <span className="text-lg font-black text-app-text-primary block mt-1 font-mono">৳ 50,000</span>
                 <span className="text-[9px] text-slate-500 font-mono font-bold">Allocated</span>
               </div>
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-xl text-left">
@@ -2665,11 +2665,11 @@ export default function UnifiedProfileShell() {
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans">
               <div className="lg:col-span-2 bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-                <div className="border-b border-white/[0.04] pb-3">
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">Promotion Campaigns (Sponsored Ads)</h3>
+                <div className="border-b border-app-border pb-3">
+                  <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Promotion Campaigns (Sponsored Ads)</h3>
                   <p className="text-[11px] text-app-text-secondary mt-1">Scheduled visibility caps, budget allocations, and conversion margins.</p>
                 </div>
-                <div className="overflow-x-auto rounded border border-white/5 bg-app-bg/50 text-xs font-mono">
+                <div className="overflow-x-auto rounded border border-app-border bg-app-bg/50 text-xs font-mono">
                   <table className="min-w-full divide-y divide-[#CBD5E1]/5 font-sans">
                     <thead>
                       <tr className="bg-app-bg text-[10px] text-app-text-secondary uppercase text-left font-sans">
@@ -2679,7 +2679,7 @@ export default function UnifiedProfileShell() {
                         <th className="px-4 py-3 text-center">Status</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-white/[0.01] text-slate-200 font-sans">
+                    <tbody className="divide-y divide-white/[0.01] text-app-text-secondary font-sans">
                       {[
                         { name: 'Traditional Monsoon Festival Mega Boost', budget: '৳ 35,000', spend: '৳ 32,400', status: 'Active' },
                         { name: 'Eid Fashion Premium Spot', budget: '৳ 15,000', spend: '৳ 9,800', status: 'Scheduled' },
@@ -2687,11 +2687,11 @@ export default function UnifiedProfileShell() {
                         { name: 'Mid-Season Jamdani Clearance Bump', budget: '৳ 10,000', spend: '৳ 0', status: 'Paused' }
                       ].map((ad, idx) => (
                         <tr key={idx} className="hover:bg-white/[0.01]">
-                          <td className="px-4 py-3 font-bold text-white">{ad.name}</td>
-                          <td className="px-4 py-3 text-slate-400">{ad.budget}</td>
+                          <td className="px-4 py-3 font-bold text-app-text-primary">{ad.name}</td>
+                          <td className="px-4 py-3 text-app-text-secondary">{ad.budget}</td>
                           <td className="px-4 py-3 text-right text-[#F4631E]">{ad.spend}</td>
                           <td className="px-4 py-3 text-center">
-                            <span className={`px-2 py-0.5 rounded-[2px] text-[9px] font-bold border uppercase font-mono ${
+                            <span className={`px-2 py-0.5 rounded-[2px] text-[9px] font-bold border uppercase font-mono${
                               ad.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
                               ad.status === 'Scheduled' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
                               ad.status === 'Paused' ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20' :
@@ -2708,7 +2708,7 @@ export default function UnifiedProfileShell() {
               </div>
 
               <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-4">
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Historical ROI Conversions Chart</h3>
+                <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Historical ROI Conversions Chart</h3>
                 <div className="h-44 pt-2">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={[
@@ -2731,9 +2731,9 @@ export default function UnifiedProfileShell() {
             </div>
 
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-3 flex justify-between items-center">
+              <div className="border-b border-app-border pb-3 flex justify-between items-center">
                 <div>
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">Storefront Sales Campaigns, Deals & Coupons</h3>
+                  <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider font-sans">Storefront Sales Campaigns, Deals & Coupons</h3>
                   <p className="text-[11px] text-app-text-secondary mt-1">Configure active buyer discounting incentives, limited countdown offers, and affiliate coupons.</p>
                 </div>
                 <button onClick={() => showToast('✓ Initiated creator affiliate discounting coupon form.')} className="px-3.5 py-1.5 bg-[#F4631E] hover:bg-orange-500 text-white rounded-[2px] text-xs font-bold transition-colors cursor-pointer">Create Deal</button>
@@ -2747,10 +2747,10 @@ export default function UnifiedProfileShell() {
                   { name: 'Eid Ul Adha Pre-Order Campaign', type: 'Discount Campaigns', value: 'Flat 10% cashback on Card settlement', status: 'Active SLA', detail: 'Applicable for all verified card partners' },
                   { name: 'Exclusive Muslin Limited Spot Deal', type: 'Limited Offers', value: 'Only 5 stock items reserved', status: 'Active SLA', detail: 'Exclusive velvet jewelry storage pouch included' }
                 ].map((deal, idx) => (
-                  <div key={idx} className="p-4 bg-white/5 border border-white/5 hover:border-white/10 rounded flex justify-between items-start gap-4 transition-colors">
+                  <div key={idx} className="p-4 bg-white/5 border border-app-border hover:border-white/10 rounded flex justify-between items-start gap-4 transition-colors">
                     <div className="space-y-1">
                       <span className="px-2 py-0.5 bg-indigo-500/10 text-indigo-400 rounded-[2px] text-[9px] font-bold uppercase tracking-widest font-mono inline-block">{deal.type}</span>
-                      <h4 className="font-bold text-white block text-xs pt-1">{deal.name}</h4>
+                      <h4 className="font-bold text-app-text-primary block text-xs pt-1">{deal.name}</h4>
                       <p className="text-[11px] text-emerald-400 font-semibold">{deal.value}</p>
                       <span className="text-[10px] text-app-text-secondary block font-sans">{deal.detail}</span>
                     </div>
@@ -2766,18 +2766,18 @@ export default function UnifiedProfileShell() {
         {activeTab === 'overview' && typeKey === 'order' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans">
             <div className="lg:col-span-2 bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">SLA Order Cargo Details</h3>
+              <div className="border-b border-app-border pb-3">
+                <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">SLA Order Cargo Details</h3>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div className="p-4 bg-white/5 border border-white/5 rounded space-y-1">
+                <div className="p-4 bg-white/5 border border-app-border rounded space-y-1">
                   <span className="text-[10px] text-app-text-secondary uppercase">Product Segment</span>
-                  <span className="text-white block font-bold">{entityData.product.name}</span>
+                  <span className="text-app-text-primary block font-bold">{entityData.product.name}</span>
                   <span className="text-[11px] text-app-accent-light">Brand: {entityData.product.brand}</span>
                 </div>
-                <div className="p-4 bg-white/5 border border-white/5 rounded space-y-1">
+                <div className="p-4 bg-white/5 border border-app-border rounded space-y-1">
                   <span className="text-[10px] text-app-text-secondary uppercase">Quantity & pricing</span>
-                  <span className="text-white block font-bold">{entityData.quantity} Units</span>
+                  <span className="text-app-text-primary block font-bold">{entityData.quantity} Units</span>
                   <span className="text-[11px] text-emerald-400 font-mono">Retail: ৳ {entityData.product.price.toLocaleString()}</span>
                 </div>
               </div>
@@ -2785,7 +2785,7 @@ export default function UnifiedProfileShell() {
 
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl flex flex-col justify-between">
               <div className="space-y-4">
-                <h3 className="text-sm font-bold text-white uppercase border-b border-white/5 pb-2">Administrative SLA Actions</h3>
+                <h3 className="text-sm font-bold text-app-text-primary uppercase border-b border-app-border pb-2">Administrative SLA Actions</h3>
                 <button onClick={handleOrderDispatchSLA} className="w-full py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 font-bold text-xs border border-emerald-500/30 rounded cursor-pointer transition-all">
                   Set Cargo In-Transit
                 </button>
@@ -2800,16 +2800,16 @@ export default function UnifiedProfileShell() {
         {/* Module K: Order Billing Settlements Finance */}
         {activeTab === 'finance' && typeKey === 'order' && (
           <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6 font-mono text-xs">
-            <div className="border-b border-white/[0.04] pb-3 font-sans">
-              <h3 className="text-sm font-bold text-white uppercase tracking-wider">Settlement Financial ledger</h3>
+            <div className="border-b border-app-border pb-3 font-sans">
+              <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Settlement Financial ledger</h3>
               <p className="text-[11px] text-app-text-secondary mt-1">Approved Platform Commission percentages and payout receipts.</p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="p-4 bg-white/5 border border-white/5 rounded">
+              <div className="p-4 bg-white/5 border border-app-border rounded">
                 <span className="text-[9px] text-app-text-secondary uppercase">Subtotal Revenue</span>
-                <span className="text-sm font-bold text-white block mt-1">৳ {entityData.financials.revenue.toLocaleString()}</span>
+                <span className="text-sm font-bold text-app-text-primary block mt-1">৳ {entityData.financials.revenue.toLocaleString()}</span>
               </div>
-              <div className="p-4 bg-white/5 border border-white/5 rounded">
+              <div className="p-4 bg-white/5 border border-app-border rounded">
                 <span className="text-[9px] text-app-text-secondary uppercase">Platform Fee Cut ({entityData.financials.commPercent}%)</span>
                 <span className="text-sm font-bold text-rose-400 block mt-1">৳ {entityData.financials.commissionCut.toLocaleString()}</span>
               </div>
@@ -2830,8 +2830,8 @@ export default function UnifiedProfileShell() {
           <div className="space-y-6 text-left">
             {/* Notification Preferences & Password Security Section */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Account Settings & Communication Preferences</h3>
+              <div className="border-b border-app-border pb-3">
+                <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Account Settings & Communication Preferences</h3>
                 <p className="text-[11px] text-app-text-secondary mt-1">Manage passwords, notifications sound, message alerts, and security properties.</p>
               </div>
 
@@ -2839,24 +2839,24 @@ export default function UnifiedProfileShell() {
                 <div className="space-y-4">
                   <h4 className="text-xs font-bold text-[#F4631E] uppercase tracking-wider">Notification Preferences</h4>
                   <div className="space-y-3">
-                    <label className="flex items-center gap-3 bg-white/5 border border-white/5 p-3 rounded cursor-pointer hover:bg-white/[0.08] transition-colors">
-                      <input type="checkbox" defaultChecked className="rounded border-white/10 text-app-accent focus:ring-0" />
+                    <label className="flex items-center gap-3 bg-white/5 border border-app-border p-3 rounded cursor-pointer hover:bg-white/[0.08] transition-colors">
+                      <input type="checkbox" defaultChecked className="rounded border-app-border text-app-accent focus:ring-0" />
                       <div>
-                        <span className="text-xs font-bold text-white block">Email Dispatch Alerts</span>
+                        <span className="text-xs font-bold text-app-text-primary block">Email Dispatch Alerts</span>
                         <span className="text-[10px] text-app-text-secondary block">Receive reports when buying guides are approved.</span>
                       </div>
                     </label>
-                    <label className="flex items-center gap-3 bg-white/5 border border-white/5 p-3 rounded cursor-pointer hover:bg-white/[0.08] transition-colors">
-                      <input type="checkbox" defaultChecked className="rounded border-white/10 text-app-accent focus:ring-0" />
+                    <label className="flex items-center gap-3 bg-white/5 border border-app-border p-3 rounded cursor-pointer hover:bg-white/[0.08] transition-colors">
+                      <input type="checkbox" defaultChecked className="rounded border-app-border text-app-accent focus:ring-0" />
                       <div>
-                        <span className="text-xs font-bold text-white block">SMS Campaign Sync Alerts</span>
+                        <span className="text-xs font-bold text-app-text-primary block">SMS Campaign Sync Alerts</span>
                         <span className="text-[10px] text-app-text-secondary block">Notify phone regarding high-value affiliate contract opportunities.</span>
                       </div>
                     </label>
-                    <label className="flex items-center gap-3 bg-white/5 border border-white/5 p-3 rounded cursor-pointer hover:bg-white/[0.08] transition-colors">
-                      <input type="checkbox" className="rounded border-white/10 text-app-accent focus:ring-0" />
+                    <label className="flex items-center gap-3 bg-white/5 border border-app-border p-3 rounded cursor-pointer hover:bg-white/[0.08] transition-colors">
+                      <input type="checkbox" className="rounded border-app-border text-app-accent focus:ring-0" />
                       <div>
-                        <span className="text-xs font-bold text-white block">Privacy Settings: Incognito Views</span>
+                        <span className="text-xs font-bold text-app-text-primary block">Privacy Settings: Incognito Views</span>
                         <span className="text-[10px] text-app-text-secondary block">Keep metrics telemetry private from competitive models.</span>
                       </div>
                     </label>
@@ -2866,25 +2866,25 @@ export default function UnifiedProfileShell() {
                 <div className="space-y-4">
                   <h4 className="text-xs font-bold text-app-accent-light uppercase tracking-wider">Authentication & Connected Socials</h4>
                   <div className="space-y-3 text-xs font-sans">
-                    <div className="p-3 bg-white/5 border border-white/5 rounded space-y-2">
+                    <div className="p-3 bg-white/5 border border-app-border rounded space-y-2">
                       <div className="flex justify-between items-center">
-                        <span className="font-bold text-white block">Password & Security</span>
+                        <span className="font-bold text-app-text-primary block">Password & Security</span>
                         <span className="text-[10px] text-app-text-secondary">Updated 24 days ago</span>
                       </div>
                       <div className="flex gap-2">
-                        <input type="password" value="••••••••••••" readOnly className="flex-1 bg-black/25 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white outline-none font-mono" />
-                        <button onClick={() => showToast('✓ Reset instruction secure link dispatched.', 'success')} className="px-3 py-1.5 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded font-bold cursor-pointer transition-colors text-xs font-sans">Reset</button>
+                        <input type="password" value="••••••••••••" readOnly className="flex-1 bg-app-card/20 border border-app-border rounded px-2.5 py-1.5 text-xs text-app-text-primary outline-none font-mono" />
+                        <button onClick={() => showToast('✓ Reset instruction secure link dispatched.', 'success')} className="px-3 py-1.5 bg-white/5 border border-app-border hover:bg-white/10 text-app-text-primary rounded font-bold cursor-pointer transition-colors text-xs font-sans">Reset</button>
                       </div>
                     </div>
-                    <div className="p-3 bg-white/5 border border-white/5 rounded flex justify-between items-center">
+                    <div className="p-3 bg-white/5 border border-app-border rounded flex justify-between items-center">
                       <div>
-                        <span className="font-bold text-white block">Two-Factor Authentication (2FA)</span>
+                        <span className="font-bold text-app-text-primary block">Two-Factor Authentication (2FA)</span>
                         <span className="text-[10px] text-emerald-400 font-semibold block mt-0.5">✓ Secured with Google Authenticator</span>
                       </div>
                       <span className="px-2 py-0.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded text-[9px] uppercase font-bold font-mono">ACTIVE</span>
                     </div>
-                    <div className="p-3 bg-white/5 border border-white/5 rounded space-y-1.5">
-                      <span className="font-bold text-white block">Connected Accounts</span>
+                    <div className="p-3 bg-white/5 border border-app-border rounded space-y-1.5">
+                      <span className="font-bold text-app-text-primary block">Connected Accounts</span>
                       <div className="flex gap-2">
                         <span className="px-2 py-0.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded text-[9.5px] font-mono">Google Synced</span>
                         <span className="px-2 py-0.5 bg-pink-500/10 border border-pink-500/20 text-pink-400 rounded text-[9.5px] font-mono">Instagram Active</span>
@@ -2901,8 +2901,8 @@ export default function UnifiedProfileShell() {
         {activeTab === 'verification' && typeKey === 'creator' && (
           <div className="space-y-6 text-left">
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6 font-sans">
-              <div className="border-b border-white/[0.04] pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">🧾 Verification Center</h3>
+              <div className="border-b border-app-border pb-3">
+                <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">🧾 Verification Center</h3>
                 <p className="text-[11px] text-app-text-secondary mt-1">Audit status, ID checking, Face authentication, Tax and Bank settlements validation.</p>
               </div>
 
@@ -2910,7 +2910,7 @@ export default function UnifiedProfileShell() {
                 <ShieldCheck className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" />
                 <div>
                   <span className="text-xs font-bold text-emerald-400 block tracking-wider uppercase font-sans">IDENTITY VERIFICATION PASSED</span>
-                  <p className="text-xs text-slate-300 leading-normal mt-1">
+                  <p className="text-xs text-app-text-secondary leading-normal mt-1">
                     Your governmental registered National ID, face biometric matches, and physical address parameters have been successfully authorized.
                   </p>
                 </div>
@@ -2921,19 +2921,19 @@ export default function UnifiedProfileShell() {
                   <h4 className="text-xs font-bold text-app-accent-light uppercase tracking-wider">KYC Verification Checklist</h4>
                   <div className="divide-y divide-white/5 text-xs font-sans">
                     <div className="py-2.5 flex justify-between items-center">
-                      <span className="text-white">National ID / Passport Check</span>
+                      <span className="text-app-text-primary">National ID / Passport Check</span>
                       <span className="text-emerald-400 font-bold flex items-center gap-1">✓ Verified (Bangladesh NID)</span>
                     </div>
                     <div className="py-2.5 flex justify-between items-center">
-                      <span className="text-white">Face Biometric Match</span>
+                      <span className="text-app-text-primary">Face Biometric Match</span>
                       <span className="text-emerald-400 font-bold flex items-center gap-1">✓ Match Ratio 99.4%</span>
                     </div>
                     <div className="py-2.5 flex justify-between items-center">
-                      <span className="text-white">Living Address Proof</span>
+                      <span className="text-app-text-primary">Living Address Proof</span>
                       <span className="text-emerald-400 font-bold flex items-center gap-1">✓ Utility Bill Authenticated</span>
                     </div>
                     <div className="py-2.5 flex justify-between items-center">
-                      <span className="text-white">Platform Trust Status</span>
+                      <span className="text-app-text-primary">Platform Trust Status</span>
                       <span className="text-emerald-400 font-bold flex items-center gap-1">✓ Exemplary standing</span>
                     </div>
                   </div>
@@ -2943,43 +2943,43 @@ export default function UnifiedProfileShell() {
                   <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">Tax & Settlement Verification</h4>
                   <div className="divide-y divide-white/5 text-xs font-sans">
                     <div className="py-2.5 flex justify-between items-center">
-                      <span className="text-white">Tax Identification Number (TIN)</span>
+                      <span className="text-app-text-primary">Tax Identification Number (TIN)</span>
                       <span className="text-indigo-400 font-mono">TIN-5561049281-BD</span>
                     </div>
                     <div className="py-2.5 flex justify-between items-center">
-                      <span className="text-white">TIN Document Proof</span>
+                      <span className="text-app-text-primary">TIN Document Proof</span>
                       <span className="text-emerald-400 font-bold flex items-center gap-1">✓ Verified Legal Taxpayer</span>
                     </div>
                     <div className="py-2.5 flex justify-between items-center">
-                      <span className="text-white">Bank Settling Account</span>
-                      <span className="text-slate-300 font-mono">City Bank Ltd, Dhaka (AcCT 4402•••89)</span>
+                      <span className="text-app-text-primary">Bank Settling Account</span>
+                      <span className="text-app-text-secondary font-mono">City Bank Ltd, Dhaka (AcCT 4402•••89)</span>
                     </div>
                     <div className="py-2.5 flex justify-between items-center">
-                      <span className="text-white">Payment Gateway Connectivity</span>
+                      <span className="text-app-text-primary">Payment Gateway Connectivity</span>
                       <span className="text-emerald-400 font-bold">✓ Active Direct Escrow</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-white/[0.04] space-y-3 font-sans">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider">Uploaded Legal KYC Documents List</h4>
+              <div className="pt-4 border-t border-app-border space-y-3 font-sans">
+                <h4 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Uploaded Legal KYC Documents List</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                  <div className="p-3 bg-white/5 border border-white/5 rounded flex justify-between items-center">
+                  <div className="p-3 bg-white/5 border border-app-border rounded flex justify-between items-center">
                     <div className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-app-accent-light" />
                       <div>
-                        <span className="font-bold text-white block">govt_national_id_front.jpg</span>
+                        <span className="font-bold text-app-text-primary block">govt_national_id_front.jpg</span>
                         <span className="text-[10px] text-app-text-secondary">Uploaded: 12 January, 2024</span>
                       </div>
                     </div>
                     <span className="text-emerald-400 font-bold font-mono text-[10px]">PASSED</span>
                   </div>
-                  <div className="p-3 bg-white/5 border border-white/5 rounded flex justify-between items-center">
+                  <div className="p-3 bg-white/5 border border-app-border rounded flex justify-between items-center">
                     <div className="flex items-center gap-2">
                       <FileText className="w-4 h-4 text-app-accent-light" />
                       <div>
-                        <span className="font-bold text-white block">tin_clearance_certificate.pdf</span>
+                        <span className="font-bold text-app-text-primary block">tin_clearance_certificate.pdf</span>
                         <span className="text-[10px] text-app-text-secondary">Uploaded: 14 January, 2024</span>
                       </div>
                     </div>
@@ -2988,18 +2988,18 @@ export default function UnifiedProfileShell() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-white/[0.04] font-sans">
-                <h4 className="text-xs font-bold text-white uppercase tracking-wider mb-2">Verification History Timeline Log</h4>
-                <div className="space-y-4 pl-3.5 border-l border-white/10 text-xs">
+              <div className="pt-4 border-t border-app-border font-sans">
+                <h4 className="text-xs font-bold text-app-text-primary uppercase tracking-wider mb-2">Verification History Timeline Log</h4>
+                <div className="space-y-4 pl-3.5 border-l border-app-border text-xs">
                   <div className="relative">
                     <div className="absolute w-2 h-2 rounded-full bg-emerald-400 -left-[19px] top-1" />
                     <span className="text-emerald-400 font-bold font-mono">15 January, 2024</span>
-                    <p className="text-slate-300 mt-1">Admin checked TIN registration and updated bank status to APPROVED.</p>
+                    <p className="text-app-text-secondary mt-1">Admin checked TIN registration and updated bank status to APPROVED.</p>
                   </div>
                   <div className="relative">
                     <div className="absolute w-2 h-2 rounded-full bg-emerald-400 -left-[19px] top-1" />
                     <span className="text-emerald-400 font-bold font-mono">12 January, 2024</span>
-                    <p className="text-slate-300 mt-1">Identity authenticity NID verified automatically via National Registry gateway API.</p>
+                    <p className="text-app-text-secondary mt-1">Identity authenticity NID verified automatically via National Registry gateway API.</p>
                   </div>
                 </div>
               </div>
@@ -3012,37 +3012,37 @@ export default function UnifiedProfileShell() {
           <div className="space-y-6 text-left">
             {/* Creator Profile Overview Section */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6 font-sans">
-              <div className="border-b border-white/[0.04] pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">🏬 Creator Portfolio</h3>
+              <div className="border-b border-app-border pb-3">
+                <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">🏬 Creator Portfolio</h3>
                 <p className="text-[11px] text-app-text-secondary mt-1">View the primary portfolio workspace representing reviews, guides, categories, and reach statistics.</p>
               </div>
 
               {/* Creator Banner Visual Block */}
-              <div className="relative rounded overflow-hidden h-36 bg-gradient-to-r from-[#F4631E]/20 to-indigo-600/20 border border-white/5 flex items-center justify-between p-6">
+              <div className="relative rounded overflow-hidden h-36 bg-gradient-to-r from-[#F4631E]/20 to-indigo-600/20 border border-app-border flex items-center justify-between p-6">
                 <div className="space-y-2">
                   <span className="text-[10px] uppercase font-bold font-mono text-[#F4631E] px-2 py-0.5 bg-[#F4631E]/10 border border-[#F4631E]/20 rounded-sm">Verified Creator Space</span>
-                  <h4 className="text-lg font-black text-white">{entityData.name} Showcase Banner</h4>
-                  <p className="text-xs text-slate-300">Curating the highest quality heritage fashion & weaves recommendations.</p>
+                  <h4 className="text-lg font-black text-app-text-primary">{entityData.name} Showcase Banner</h4>
+                  <p className="text-xs text-app-text-secondary">Curating the highest quality heritage fashion & weaves recommendations.</p>
                 </div>
                 <div className="shrink-0 space-y-1 text-right">
                   <span className="text-xs text-app-text-secondary block font-mono">Total Reach Metrics</span>
-                  <span className="text-sm font-black text-white block">{entityData.totalViews || '45.2K views'}</span>
+                  <span className="text-sm font-black text-app-text-primary block">{entityData.totalViews || '45.2K views'}</span>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-sans">
                 <div className="space-y-2 text-xs">
                   <span className="text-[10px] text-[#F4631E] uppercase block font-bold font-mono">Biography Pitch</span>
-                  <p className="text-slate-300 leading-relaxed">
+                  <p className="text-app-text-secondary leading-relaxed">
                     {entityData.persona || 'Bespoke review writer and lifestyle creator based in Dhaka, Bangladesh. Curates the finest Traditional Jamdani and Boutique dresses since 2022.'}
                   </p>
                 </div>
                 <div className="space-y-2 text-xs">
                   <span className="text-[10px] text-indigo-400 uppercase block font-bold font-mono">Connected Social Networks</span>
                   <div className="flex flex-wrap gap-2 pt-1">
-                    <span className="px-2.5 py-1 bg-white/5 border border-white/10 rounded text-slate-200">Instagram: @rifat_reviews</span>
-                    <span className="px-2.5 py-1 bg-white/5 border border-white/10 rounded text-slate-200">TikTok: @rifat_curates</span>
-                    <span className="px-2.5 py-1 bg-white/5 border border-white/10 rounded text-slate-200">YouTube: Rifat Weaves</span>
+                    <span className="px-2.5 py-1 bg-white/5 border border-app-border rounded text-app-text-secondary">Instagram: @rifat_reviews</span>
+                    <span className="px-2.5 py-1 bg-white/5 border border-app-border rounded text-app-text-secondary">TikTok: @rifat_curates</span>
+                    <span className="px-2.5 py-1 bg-white/5 border border-app-border rounded text-app-text-secondary">YouTube: Rifat Weaves</span>
                   </div>
                 </div>
               </div>
@@ -3052,7 +3052,7 @@ export default function UnifiedProfileShell() {
             <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-md text-left font-sans">
                 <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Total Guides</span>
-                <span className="text-base font-black text-white block mt-1">{creatorGuides.length} Items</span>
+                <span className="text-base font-black text-app-text-primary block mt-1">{creatorGuides.length} Items</span>
               </div>
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-md text-left font-sans">
                 <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Total Views</span>
@@ -3068,7 +3068,7 @@ export default function UnifiedProfileShell() {
               </div>
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-md text-left font-sans col-span-2 md:col-span-1">
                 <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Featured Products</span>
-                <span className="text-base font-black text-white block mt-1">18 Items</span>
+                <span className="text-base font-black text-app-text-primary block mt-1">18 Items</span>
               </div>
             </div>
 
@@ -3096,7 +3096,7 @@ export default function UnifiedProfileShell() {
                     setRecProductStatusFilter(status);
                     showToast(`✓ Switched product filter: ${status}`);
                   }}
-                  className={`text-xs font-bold px-4 py-2 rounded-[2px] transition-all cursor-pointer whitespace-nowrap ${
+                  className={`text-xs font-bold px-4 py-2 rounded-[2px] transition-all cursor-pointer whitespace-nowrap${
                     recProductStatusFilter === status
                       ? 'bg-app-accent text-white shadow font-sans'
                       : 'text-slate-400 hover:text-white hover:bg-white/5 font-sans'
@@ -3114,23 +3114,23 @@ export default function UnifiedProfileShell() {
               {creatorRecommendedProducts
                 .filter(p => recProductStatusFilter === 'All' || p.status === recProductStatusFilter)
                 .map((prod) => (
-                  <div key={prod.id} className="grid grid-cols-12 gap-4 py-4 items-center hover:bg-white/5 transition-all border-b border-white/5 px-2 font-sans text-xs text-left">
+                  <div key={prod.id} className="grid grid-cols-12 gap-4 py-4 items-center hover:bg-white/5 transition-all border-b border-app-border px-2 font-sans text-xs text-left">
                     <div className="col-span-12 md:col-span-3 flex items-center gap-2.5">
-                      <div className="w-10 h-10 border border-white/5 rounded overflow-hidden shrink-0">
+                      <div className="w-10 h-10 border border-app-border rounded overflow-hidden shrink-0">
                         <img src={prod.image} alt="" className="w-full h-full object-cover animate-fade-in" />
                       </div>
                       <div>
                         <span className="text-[10px] text-app-text-secondary uppercase block font-mono">{prod.id}</span>
-                        <h4 className="text-white font-bold leading-tight">{prod.title}</h4>
+                        <h4 className="text-app-text-primary font-bold leading-tight">{prod.title}</h4>
                       </div>
                     </div>
 
                     <div className="col-span-12 md:col-span-2">
-                      <span className="text-white block font-bold">{prod.brand}</span>
+                      <span className="text-app-text-primary block font-bold">{prod.brand}</span>
                       <span className="text-[10px] text-app-text-secondary block mt-0.5">{prod.category}</span>
                     </div>
 
-                    <div className="col-span-6 md:col-span-1 font-mono text-white font-bold">
+                    <div className="col-span-6 md:col-span-1 font-mono text-app-text-primary font-bold">
                       ৳ {prod.price.toLocaleString()}
                     </div>
 
@@ -3147,7 +3147,7 @@ export default function UnifiedProfileShell() {
                     <div className="col-span-6 md:col-span-2 flex justify-end gap-1.5">
                       <button 
                         onClick={() => navigate(`/products/${getMockProductId(prod.title)}`)} 
-                        className="p-1 px-2 bg-white/5 hover:bg-white/10 text-white rounded flex items-center justify-center text-[10px] font-bold cursor-pointer transition-colors font-sans whitespace-nowrap"
+                        className="p-1 px-2 bg-white/5 hover:bg-white/10 text-app-text-primary rounded flex items-center justify-center text-[10px] font-bold cursor-pointer transition-colors font-sans whitespace-nowrap"
                       >
                         View Product
                       </button>
@@ -3185,7 +3185,7 @@ export default function UnifiedProfileShell() {
                     setContentListingsStatusFilter(status);
                     showToast(`✓ Switched content list filter: ${status}`);
                   }}
-                  className={`text-xs font-bold px-4 py-2 rounded-[2px] transition-all cursor-pointer whitespace-nowrap ${
+                  className={`text-xs font-bold px-4 py-2 rounded-[2px] transition-all cursor-pointer whitespace-nowrap${
                     contentListingsStatusFilter === status
                       ? 'bg-app-accent text-white shadow font-sans'
                       : 'text-slate-400 hover:text-white hover:bg-white/5 font-sans'
@@ -3203,14 +3203,14 @@ export default function UnifiedProfileShell() {
               {creatorContentListings
                 .filter(c => contentListingsStatusFilter === 'All' || c.status === contentListingsStatusFilter)
                 .map((cont) => (
-                  <div key={cont.id} className="grid grid-cols-12 gap-4 py-4 items-center hover:bg-white/5 transition-all border-b border-white/5 px-2 font-sans text-xs text-left">
+                  <div key={cont.id} className="grid grid-cols-12 gap-4 py-4 items-center hover:bg-white/5 transition-all border-b border-app-border px-2 font-sans text-xs text-left">
                     <div className="col-span-12 md:col-span-3 flex items-center gap-2.5">
-                      <div className="w-10 h-10 border border-white/5 rounded overflow-hidden shrink-0">
+                      <div className="w-10 h-10 border border-app-border rounded overflow-hidden shrink-0">
                         <img src={cont.thumbnail} alt="" className="w-full h-full object-cover" />
                       </div>
                       <div>
                         <span className="text-[10px] text-app-text-secondary uppercase block font-mono">{cont.id}</span>
-                        <h4 className="text-white font-bold leading-tight">{cont.title}</h4>
+                        <h4 className="text-app-text-primary font-bold leading-tight">{cont.title}</h4>
                       </div>
                     </div>
 
@@ -3220,14 +3220,14 @@ export default function UnifiedProfileShell() {
                       </span>
                     </div>
 
-                    <div className="col-span-6 md:col-span-2 font-mono text-white text-[11px]">
+                    <div className="col-span-6 md:col-span-2 font-mono text-app-text-primary text-[11px]">
                       {cont.publishDate}
                     </div>
 
                     <div className="col-span-12 md:col-span-2 font-mono space-y-0.5 text-[10.5px]">
                       <div className="flex justify-between max-w-[120px]">
                         <span className="text-app-text-secondary font-sans">Views:</span>
-                        <span className="text-white font-bold">{cont.views}</span>
+                        <span className="text-app-text-primary font-bold">{cont.views}</span>
                       </div>
                       <div className="flex justify-between max-w-[120px]">
                         <span className="text-app-text-secondary font-sans">Likes:</span>
@@ -3240,7 +3240,7 @@ export default function UnifiedProfileShell() {
                     </div>
 
                     <div className="col-span-6 md:col-span-1.5 text-center">
-                      <span className={`inline-block px-1.5 py-0.5 rounded-[2px] text-[9px] font-bold font-mono border ${
+                      <span className={`inline-block px-1.5 py-0.5 rounded-[2px] text-[9px] font-bold font-mono border${
                         cont.status === 'Published' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
                         cont.status === 'Draft' ? 'bg-slate-500/10 text-slate-400 border-slate-500/20' :
                         cont.status === 'Scheduled' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
@@ -3254,7 +3254,7 @@ export default function UnifiedProfileShell() {
                     <div className="col-span-6 md:col-span-1.5 flex justify-end gap-1">
                       <button 
                         onClick={() => showToast(`✓ Redirecting to inspect digital layout for '${cont.title}'`)} 
-                        className="p-1 px-2 bg-white/5 hover:bg-white/10 text-white rounded text-[10px] font-bold cursor-pointer transition-colors font-sans"
+                        className="p-1 px-2 bg-white/5 hover:bg-white/10 text-app-text-primary rounded text-[10px] font-bold cursor-pointer transition-colors font-sans"
                       >
                         Inspect
                       </button>
@@ -3271,13 +3271,13 @@ export default function UnifiedProfileShell() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Community Rating */}
               <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-6">
-                <div className="border-b border-white/5 pb-2">
+                <div className="border-b border-app-border pb-2">
                   <h3 className="text-xs font-bold uppercase tracking-widest text-[#F4631E]">Community Rating Feedback</h3>
                 </div>
 
                 <div className="flex items-center gap-6">
                   <div className="text-center shrink-0">
-                    <span className="text-3xl font-black text-white block">4.9</span>
+                    <span className="text-3xl font-black text-app-text-primary block">4.9</span>
                     <div className="flex gap-0.5 text-amber-400 justify-center mt-1">
                       <Star className="w-3.5 h-3.5 fill-current" />
                       <Star className="w-3.5 h-3.5 fill-current" />
@@ -3316,34 +3316,34 @@ export default function UnifiedProfileShell() {
 
               {/* Engagement Metrics */}
               <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-6">
-                <div className="border-b border-white/5 pb-2">
+                <div className="border-b border-app-border pb-2">
                   <h3 className="text-xs font-bold uppercase tracking-widest text-[#F4631E]">Engagement Metrics</h3>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 text-xs text-center font-sans">
-                  <div className="p-3.5 bg-white/5 border border-white/5 rounded">
+                  <div className="p-3.5 bg-white/5 border border-app-border rounded">
                     <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Followers</span>
-                    <span className="text-sm font-black text-white block mt-1.5">{entityData.followers || '42.5k'}</span>
+                    <span className="text-sm font-black text-app-text-primary block mt-1.5">{entityData.followers || '42.5k'}</span>
                   </div>
-                  <div className="p-3.5 bg-white/5 border border-white/5 rounded">
+                  <div className="p-3.5 bg-white/5 border border-app-border rounded">
                     <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Total Views</span>
-                    <span className="text-sm font-black text-white block mt-1.5">{entityData.totalViews || '45.2K'}</span>
+                    <span className="text-sm font-black text-app-text-primary block mt-1.5">{entityData.totalViews || '45.2K'}</span>
                   </div>
-                  <div className="p-3.5 bg-white/5 border border-white/5 rounded">
+                  <div className="p-3.5 bg-white/5 border border-app-border rounded">
                     <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Total Likes</span>
-                    <span className="text-sm font-black text-white block mt-1.5">9.4K</span>
+                    <span className="text-sm font-black text-app-text-primary block mt-1.5">9.4K</span>
                   </div>
-                  <div className="p-3.5 bg-white/5 border border-white/5 rounded">
+                  <div className="p-3.5 bg-white/5 border border-app-border rounded">
                     <span className="text-[10px] text-app-text-secondary uppercase block font-mono">saves</span>
-                    <span className="text-sm font-black text-white block mt-1.5">3.8K</span>
+                    <span className="text-sm font-black text-app-text-primary block mt-1.5">3.8K</span>
                   </div>
-                  <div className="p-3.5 bg-white/5 border border-white/5 rounded">
+                  <div className="p-3.5 bg-white/5 border border-app-border rounded">
                     <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Shares</span>
-                    <span className="text-sm font-black text-white block mt-1.5">1.2K</span>
+                    <span className="text-sm font-black text-app-text-primary block mt-1.5">1.2K</span>
                   </div>
-                  <div className="p-3.5 bg-white/5 border border-white/5 rounded">
+                  <div className="p-3.5 bg-white/5 border border-app-border rounded">
                     <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Comments</span>
-                    <span className="text-sm font-black text-white block mt-1.5">640</span>
+                    <span className="text-sm font-black text-app-text-primary block mt-1.5">640</span>
                   </div>
                 </div>
               </div>
@@ -3351,21 +3351,21 @@ export default function UnifiedProfileShell() {
 
             {/* Commerce Performance */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Commerce Performance</h3>
+              <div className="border-b border-app-border pb-3">
+                <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Commerce Performance</h3>
                 <p className="text-[11px] text-app-text-secondary mt-1">SLA conversion rate, referential revenue generated, and affiliate balance.</p>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-sans">
-                <div className="p-4 bg-white/5 border border-white/5 rounded">
+                <div className="p-4 bg-white/5 border border-app-border rounded">
                   <span className="text-[10px] text-app-text-secondary uppercase block">Products Recommended</span>
-                  <span className="text-base font-black text-white block mt-1">{creatorRecommendedProducts.length} Items</span>
+                  <span className="text-base font-black text-app-text-primary block mt-1">{creatorRecommendedProducts.length} Items</span>
                 </div>
-                <div className="p-4 bg-white/5 border border-white/5 rounded">
+                <div className="p-4 bg-white/5 border border-app-border rounded">
                   <span className="text-[10px] text-app-text-secondary uppercase block">Conversion Rate</span>
                   <span className="text-base font-black text-[#F4631E] block mt-1">{entityData.conversionRate || '5.8%'} avg</span>
                 </div>
-                <div className="p-4 bg-white/5 border border-white/5 rounded">
+                <div className="p-4 bg-white/5 border border-app-border rounded">
                   <span className="text-[10px] text-app-text-secondary uppercase block">Revenue Generated</span>
                   <span className="text-base font-black text-indigo-400 block mt-1">{entityData.revenueGenerated || '৳ 382,200'}</span>
                 </div>
@@ -3378,8 +3378,8 @@ export default function UnifiedProfileShell() {
 
             {/* Platform Health and Policy Audits */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
-              <div className="border-b border-white/[0.04] pb-3">
-                <h3 className="text-sm font-bold text-white uppercase tracking-wider">Platform Health & Policy Compliance Registries</h3>
+              <div className="border-b border-app-border pb-3">
+                <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Platform Health & Policy Compliance Registries</h3>
                 <p className="text-[11px] text-app-text-secondary mt-1">Ecosystem risk analysis, warned history logs, and quality scores.</p>
               </div>
 
@@ -3388,7 +3388,7 @@ export default function UnifiedProfileShell() {
                   <ShieldCheck className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" />
                   <div>
                     <span className="text-xs font-bold text-emerald-400 block tracking-widest font-mono">CREATOR QUALITY STANDING: A+ EXCELLENT</span>
-                    <p className="text-xs text-slate-300 leading-normal mt-1">
+                    <p className="text-xs text-app-text-secondary leading-normal mt-1">
                       Account has 100% adherence to community guides. Content accuracy, consumer helpfulness scores, and click metrics are exemplary.
                     </p>
                   </div>
@@ -3398,7 +3398,7 @@ export default function UnifiedProfileShell() {
                   <ShieldCheck className="w-5 h-5 text-emerald-400 mt-0.5 shrink-0" />
                   <div>
                     <span className="text-xs font-bold text-emerald-400 block tracking-widest font-mono">TRUST SCORE: 99 / 100</span>
-                    <p className="text-xs text-slate-300 leading-normal mt-1">
+                    <p className="text-xs text-app-text-secondary leading-normal mt-1">
                       Trust score is near perfect. Fast response to comments, consistent publications, authentic and verified recommendations.
                     </p>
                   </div>
@@ -3407,20 +3407,20 @@ export default function UnifiedProfileShell() {
 
               <div className="divide-y divide-white/5 text-xs">
                 <div className="py-3 flex justify-between items-center">
-                  <span className="text-white">Active Policy Violations</span>
+                  <span className="text-app-text-primary">Active Policy Violations</span>
                   <span className="text-emerald-400 font-bold font-mono text-[11px]">0 Violations Match</span>
                 </div>
                 <div className="py-3 flex justify-between items-center">
-                  <span className="text-white">Flagged Content Reports</span>
+                  <span className="text-app-text-primary">Flagged Content Reports</span>
                   <span className="text-emerald-400 font-bold font-mono text-[11px]">0 Reports Flagged</span>
                 </div>
                 <div className="py-3 flex justify-between items-center">
-                  <span className="text-white">Warning History Archive</span>
-                  <span className="text-slate-400 font-mono text-[11px]">Clean Logs Profile</span>
+                  <span className="text-app-text-primary">Warning History Archive</span>
+                  <span className="text-app-text-secondary font-mono text-[11px]">Clean Logs Profile</span>
                 </div>
                 <div className="py-3 flex justify-between items-center">
-                  <span className="text-white">Historical Suspensions / Restricting Orders</span>
-                  <span className="text-slate-400 font-mono text-[11px]">None</span>
+                  <span className="text-app-text-primary">Historical Suspensions / Restricting Orders</span>
+                  <span className="text-app-text-secondary font-mono text-[11px]">None</span>
                 </div>
               </div>
             </div>

@@ -62,5 +62,3 @@ export interface CategoryType {
   enabled: boolean;
 }
 
-export * from './types/catalog';
-

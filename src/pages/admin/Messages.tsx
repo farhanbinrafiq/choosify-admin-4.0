@@ -754,23 +754,23 @@ export default function MessagesPage() {
             <MessageCircle className="w-5 h-5 text-app-accent" />
           </div>
           <div>
-            <h1 className="text-sm font-black uppercase tracking-widest text-white leading-none">Choosify Workspace</h1>
-            <span className="text-[10px] text-slate-400 font-bold mt-1 block">Unified Channels Routing Hub</span>
+            <h1 className="text-sm font-black uppercase tracking-widest text-app-text-primary leading-none">Choosify Workspace</h1>
+            <span className="text-[10px] text-app-text-secondary font-bold mt-1 block">Unified Channels Routing Hub</span>
           </div>
         </div>
 
         <div className="flex items-center gap-3 shrink-0 flex-wrap">
           <button
             onClick={() => setIsManualModalOpen(true)}
-            className="px-4 py-2 bg-[#ef3c23] hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-2 bg-[#ef3c23] hover:bg-orange-600 text-app-text-primary font-extrabold uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg flex items-center gap-1.5 cursor-pointer"
           >
             <span>➕ Create Manual Order</span>
           </button>
 
-          <div className="flex bg-slate-950 border border-white/5 rounded-xl p-1 shrink-0">
+          <div className="flex bg-app-bg border border-app-border rounded-xl p-1 shrink-0">
             <button
               onClick={() => setActiveInboxType("platform")}
-              className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+              className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer${
                 activeInboxType === "platform"
                   ? "bg-app-accent text-white shadow-md"
                   : "text-slate-400 hover:text-white"
@@ -779,7 +779,7 @@ export default function MessagesPage() {
               <Activity className="w-3.5 h-3.5" />
               Platform Inbox
               {getUnreadPlatformCount() > 0 && (
-                <span className="bg-rose-500 text-white rounded-md px-1.5 py-0.5 text-[8px] font-black animate-pulse leading-none shrink-0 border border-slate-900/40">
+                <span className="bg-rose-500 text-white rounded-md px-1.5 py-0.5 text-[8px] font-black animate-pulse leading-none shrink-0 border border-app-border">
                   {getUnreadPlatformCount()}
                 </span>
               )}
@@ -787,7 +787,7 @@ export default function MessagesPage() {
 
             <button
               onClick={() => setActiveInboxType("customer")}
-              className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer ${
+              className={`px-4 py-2 rounded-lg text-[11px] font-black uppercase tracking-wider flex items-center gap-2 transition-all cursor-pointer${
                 activeInboxType === "customer"
                   ? "bg-app-accent text-white shadow-md"
                   : "text-slate-400 hover:text-white"
@@ -796,7 +796,7 @@ export default function MessagesPage() {
               <Radio className="w-3.5 h-3.5" />
               Unified Inbox
               {conversations.filter(c => c.status === "open").length > 0 && (
-                <span className="bg-rose-500 text-white rounded-md px-1.5 py-0.5 text-[8px] font-black animate-pulse leading-none shrink-0 border border-slate-900/40">
+                <span className="bg-rose-500 text-white rounded-md px-1.5 py-0.5 text-[8px] font-black animate-pulse leading-none shrink-0 border border-app-border">
                   {conversations.filter(c => c.status === "open").length}
                 </span>
               )}
@@ -811,11 +811,11 @@ export default function MessagesPage() {
         // =============================================================
         // CUSTOMER CHATS METAFRAME DESIGN (ONLY HANDLES WHATSAPP, MESSENGER, INSTAGRAM)
         // =============================================================
-        <SplitLayout layoutId="messages-customer-studio" panes={messagesCustomerPanes} className="flex-1 min-h-0 bg-slate-950">
+        <SplitLayout layoutId="messages-customer-studio" panes={messagesCustomerPanes} className="flex-1 min-h-0 bg-app-bg">
           
           {/* A. LEFT BAR: META PLATFORM CHANNELS */}
           <div className="w-full h-full bg-app-bg border-r border-app-border flex flex-col shrink-0">
-            <div className="p-4 border-b border-app-border bg-slate-900/30">
+            <div className="p-4 border-b border-app-border bg-app-bg/10">
               <div className="grid grid-cols-3 gap-1.5">
                 {(["whatsapp", "messenger", "instagram"] as const).map((p) => {
                   const brand = PLATFORMS[p];
@@ -852,7 +852,7 @@ export default function MessagesPage() {
                     placeholder={`Search ${PLATFORMS[activePlatform].name} chats...`}
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-9 pr-4 py-2 bg-app-card border border-app-border rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-app-accent/40 transition-all font-medium"
+                    className="w-full pl-9 pr-4 py-2 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary placeholder-slate-500 focus:outline-none focus:border-app-accent/40 transition-all font-medium"
                   />
                 </div>
 
@@ -860,7 +860,7 @@ export default function MessagesPage() {
                   <select
                     value={statusFilter}
                     onChange={(e: any) => setStatusFilter(e.target.value)}
-                    className="w-full bg-app-card text-[9px] text-slate-400 font-bold uppercase tracking-wider px-2 py-1.5 border border-app-border rounded-lg focus:outline-none focus:border-app-accent/40"
+                    className="w-full bg-app-card text-[9px] text-app-text-secondary font-bold uppercase tracking-wider px-2 py-1.5 border border-app-border rounded-lg focus:outline-none focus:border-app-accent/40"
                   >
                     <option value="all">⚡ All Status</option>
                     <option value="open">🟢 Open / Active</option>
@@ -870,7 +870,7 @@ export default function MessagesPage() {
                   
                   <button 
                     onClick={() => fetchConversations(false)} 
-                    className="px-2 bg-app-card border border-app-border rounded-lg hover:bg-slate-800 text-slate-400 transition-all cursor-pointer"
+                    className="px-2 bg-app-card border border-app-border rounded-lg hover:bg-slate-800 text-app-text-secondary transition-all cursor-pointer"
                     title="Force refresh"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
@@ -902,7 +902,7 @@ export default function MessagesPage() {
                     <div
                       key={c.conversationId}
                       onClick={() => setSelectedConvId(c.conversationId)}
-                      className={`px-4 py-4 cursor-pointer relative transition-all group ${
+                      className={`px-4 py-4 cursor-pointer relative transition-all group${
                         isSelected 
                           ? "bg-app-accent/15 border-l-4 border-l-app-accent" 
                           : "hover:bg-slate-800/10"
@@ -910,29 +910,29 @@ export default function MessagesPage() {
                     >
                       <div className="flex gap-3">
                         <div className="relative shrink-0">
-                          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black bg-indigo-950 border border-white/5 text-white shadow-sm uppercase">
+                          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-black bg-indigo-950 border border-app-border text-white shadow-sm uppercase">
                             {c.senderAvatar || c.senderName[0]}
                           </div>
-                          <div className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] text-white font-bold ${branding.logoColorClass} ring-2 ring-app-bg`}>
+                          <div className={`absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[8px] text-app-text-primary font-bold${branding.logoColorClass}ring-2 ring-app-bg`}>
                             {branding.name[0]}
                           </div>
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start">
-                            <h4 className="text-xs font-black text-white group-hover:text-app-accent transition-colors truncate">
+                            <h4 className="text-xs font-black text-app-text-primary group-hover:text-app-accent transition-colors truncate">
                               {c.senderName}
                             </h4>
                             <span className="text-[9px] text-slate-500 font-bold ml-1 shrink-0">
                               {new Date(c.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                             </span>
                           </div>
-                          <p className="text-[10px] text-slate-400 mt-1 line-clamp-1 italic text-ellipsis">
+                          <p className="text-[10px] text-app-text-secondary mt-1 line-clamp-1 italic text-ellipsis">
                             {c.lastMessage || "No messages..."}
                           </p>
 
-                          <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-white/[0.03]">
-                            <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded leading-none ${
+                          <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-app-border">
+                            <span className={`text-[8px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded leading-none${
                               c.status === "open" ? "bg-emerald-500/10 text-emerald-400" :
                               c.status === "pending" ? "bg-amber-500/10 text-amber-400" :
                               "bg-slate-500/10 text-slate-400"
@@ -956,17 +956,17 @@ export default function MessagesPage() {
           </div>
 
           {/* B. CENTER CHAT LOG WITH rich product attachment integrations */}
-          <div className="flex-1 flex flex-col bg-slate-950/20 h-full">
+          <div className="flex-1 flex flex-col bg-app-bg/10 h-full">
             {selectedConv ? (
               <>
                 {/* Header info */}
-                <div className="h-16 border-b border-app-border px-6 flex items-center justify-between bg-slate-900/10">
+                <div className="h-16 border-b border-app-border px-6 flex items-center justify-between bg-app-bg/10">
                   <div className="flex items-center gap-3">
-                    <div className={`w-3.5 h-3.5 rounded-full ${PLATFORMS[selectedConv.platform].logoColorClass}`} />
+                    <div className={`w-3.5 h-3.5 rounded-full${PLATFORMS[selectedConv.platform].logoColorClass}`} />
                     <div>
-                      <h3 className="text-xs font-black text-white tracking-wide uppercase flex items-center gap-2">
+                      <h3 className="text-xs font-black text-app-text-primary tracking-wide uppercase flex items-center gap-2">
                         {selectedConv.senderName} 
-                        <span className="text-[9px] bg-slate-800 text-slate-400 font-bold px-1.5 py-0.5 rounded uppercase">
+                        <span className="text-[9px] bg-app-bg text-app-text-secondary font-bold px-1.5 py-0.5 rounded uppercase">
                           {PLATFORMS[selectedConv.platform].name}
                         </span>
                       </h3>
@@ -979,7 +979,7 @@ export default function MessagesPage() {
                   {activeAgent && (
                     <div className="flex items-center gap-2 px-3 py-1 bg-app-bg border border-app-border rounded-xl">
                       <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                      <span className="text-[9px] text-white font-black uppercase tracking-widest">
+                      <span className="text-[9px] text-app-text-primary font-black uppercase tracking-widest">
                         Support Staff: {activeAgent.name}
                       </span>
                     </div>
@@ -987,7 +987,7 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Messages stream */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-slate-950/5">
+                <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-app-bg/10">
                   {messages.map((m) => {
                     const isOurAgent = m.direction === "outbound";
                     const branding = PLATFORMS[m.platform] || { name: "Agent" };
@@ -995,8 +995,8 @@ export default function MessagesPage() {
                     const hasProductMention = !!parsedCommerce.linkedProduct;
 
                     return (
-                      <div key={m.id} className={`flex ${isOurAgent ? "justify-end" : "justify-start"} animate-fade-in`}>
-                        <div className={`max-w-[75%] rounded-2xl p-4 shadow-md ${
+                      <div key={m.id} className={`flex${isOurAgent ? "justify-end" : "justify-start"}animate-fade-in`}>
+                        <div className={`max-w-[75%] rounded-2xl p-4 shadow-md${
                           isOurAgent 
                             ? "bg-app-accent text-white rounded-br-none" 
                             : "bg-app-card border border-app-border text-white rounded-bl-none"
@@ -1008,7 +1008,7 @@ export default function MessagesPage() {
                           
                           {/* Rich attachment rendering support */}
                           {m.content.type === "image" && m.content.mediaUrl && (
-                            <div className="mb-2 rounded-lg overflow-hidden max-h-48 bg-black/40 border border-white/5">
+                            <div className="mb-2 rounded-lg overflow-hidden max-h-48 bg-app-card/20 border border-app-border">
                               <img src={m.content.mediaUrl} className="w-full h-full object-cover" alt="attachment" referrerPolicy="no-referrer" />
                             </div>
                           )}
@@ -1019,19 +1019,19 @@ export default function MessagesPage() {
 
                           {/* RICH PRODUCT MESSAGE ATTACHMENT CARD (RULE #3) */}
                           {hasProductMention && (
-                            <div className="mt-3.5 bg-slate-900 border border-white/10 rounded-xl p-3.5 shadow-lg max-w-[280px] text-white text-left">
+                            <div className="mt-3.5 bg-app-card border border-app-border rounded-xl p-3.5 shadow-lg max-w-[280px] text-app-text-primary text-left">
                               <span className="text-[8px] text-app-accent font-black uppercase tracking-widest block mb-2">🛒 Product Attachment</span>
                               
                               <div className="flex gap-3">
                                 <img 
                                   src={parsedCommerce.linkedProduct.image} 
-                                  className="w-14 h-14 rounded-lg object-cover border border-white/5 shrink-0 bg-slate-800" 
+                                  className="w-14 h-14 rounded-lg object-cover border border-app-border shrink-0 bg-app-bg" 
                                   alt={parsedCommerce.linkedProduct.name} 
                                   referrerPolicy="no-referrer" 
                                 />
                                 <div className="min-w-0">
-                                  <h5 className="text-[11px] font-black text-white leading-tight truncate uppercase tracking-tight">{parsedCommerce.linkedProduct.name}</h5>
-                                  <span className="text-[9px] text-slate-400 block font-semibold mt-0.5">By {parsedCommerce.linkedProduct.brand}</span>
+                                  <h5 className="text-[11px] font-black text-app-text-primary leading-tight truncate uppercase tracking-tight">{parsedCommerce.linkedProduct.name}</h5>
+                                  <span className="text-[9px] text-app-text-secondary block font-semibold mt-0.5">By {parsedCommerce.linkedProduct.brand}</span>
                                   <span className="text-[11px] text-app-accent font-bold block mt-1">৳ {parsedCommerce.linkedProduct.price.toLocaleString()}</span>
                                 </div>
                               </div>
@@ -1039,12 +1039,12 @@ export default function MessagesPage() {
                               {parsedCommerce.linkedProduct.sku && (
                                 <div className="mt-2.5 flex justify-between text-[9px] font-mono text-slate-500 uppercase">
                                   <span>Sku Identifier:</span>
-                                  <span className="font-bold text-slate-300">{parsedCommerce.linkedProduct.sku}</span>
+                                  <span className="font-bold text-app-text-secondary">{parsedCommerce.linkedProduct.sku}</span>
                                 </div>
                               )}
 
                               {parsedCommerce.linkedOrder && (
-                                <div className="mt-2 pt-2 border-t border-white/[0.03] flex items-center justify-between text-[9px] text-slate-400 font-bold uppercase">
+                                <div className="mt-2 pt-2 border-t border-app-border flex items-center justify-between text-[9px] text-app-text-secondary font-bold uppercase">
                                   <span>Order ID Match:</span>
                                   <span className="bg-[#f97316]/20 text-app-accent px-1.5 py-0.5 rounded font-black">{parsedCommerce.linkedOrder.id}</span>
                                 </div>
@@ -1060,14 +1060,14 @@ export default function MessagesPage() {
                                     }
                                   }}
                                   disabled={!parsedCommerce.linkedOrder}
-                                  className="py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-lg text-[9px] font-black text-center transition-all cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
+                                  className="py-1.5 bg-white/5 hover:bg-white/10 border border-app-border text-app-text-primary rounded-lg text-[9px] font-black text-center transition-all cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
                                 >
                                   View Order
                                 </button>
                                 
                                 <button 
                                   onClick={() => alert(`Redirecting simulation portal to Product Page: ${parsedCommerce.linkedProduct.name}`)}
-                                  className="py-1.5 bg-[#f97316] hover:bg-orange-500 text-white rounded-lg text-[9px] font-black text-center transition-all cursor-pointer"
+                                  className="py-1.5 bg-[#f97316] hover:bg-orange-500 text-app-text-primary rounded-lg text-[9px] font-black text-center transition-all cursor-pointer"
                                 >
                                   Open Product Page
                                 </button>
@@ -1092,7 +1092,7 @@ export default function MessagesPage() {
                   
                   {isTyping && (
                     <div className="flex justify-start">
-                      <div className="bg-app-card border border-app-border text-slate-400 rounded-2xl rounded-bl-none p-3 max-w-[60%] flex items-center gap-2">
+                      <div className="bg-app-card border border-app-border text-app-text-secondary rounded-2xl rounded-bl-none p-3 max-w-[60%] flex items-center gap-2">
                         <span className="text-[10px] font-mono tracking-wider italic">
                           {typingAgent || "Customer"} is typing
                         </span>
@@ -1124,7 +1124,7 @@ export default function MessagesPage() {
                         onChange={(e) => setReplyText(e.target.value)}
                         placeholder={`Reply to ${selectedConv.senderName}...`}
                         rows={1}
-                        className="flex-1 bg-transparent text-xs text-white outline-none resize-none px-2 py-1 placeholder-slate-500"
+                        className="flex-1 bg-transparent text-xs text-app-text-primary outline-none resize-none px-2 py-1 placeholder-slate-500"
                         onKeyDown={(e) => {
                           if (e.key === "Enter" && !e.shiftKey) {
                             e.preventDefault();
@@ -1140,7 +1140,7 @@ export default function MessagesPage() {
                             const url = prompt("Enter complete image attachment link (Url):");
                             if (url) setCustomMediaUrl(url);
                           }}
-                          className={`p-2 rounded-lg transition-all cursor-pointer ${customMediaUrl ? "bg-emerald-500/15 text-emerald-400" : "text-slate-500 hover:text-white"}`}
+                          className={`p-2 rounded-lg transition-all cursor-pointer${customMediaUrl ? "bg-emerald-500/15 text-emerald-400" : "text-slate-500 hover:text-white"}`}
                           title="Attach Image Link"
                         >
                           <Camera className="w-4 h-4" />
@@ -1149,7 +1149,7 @@ export default function MessagesPage() {
                         <button 
                           type="submit"
                           disabled={!replyText.trim() && !customMediaUrl.trim()}
-                          className="p-2.5 bg-app-accent hover:bg-orange-500 text-white rounded-lg disabled:opacity-25 disabled:cursor-not-allowed transition-all cursor-pointer shadow"
+                          className="p-2.5 bg-app-accent hover:bg-orange-500 text-app-text-primary rounded-lg disabled:opacity-25 disabled:cursor-not-allowed transition-all cursor-pointer shadow"
                         >
                           <Send className="w-4 h-4" />
                         </button>
@@ -1159,7 +1159,7 @@ export default function MessagesPage() {
                     {customMediaUrl && (
                       <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/25 rounded-lg text-[10px] text-emerald-400 font-bold self-start animate-fade-in">
                         <CheckCheck className="w-3.5 h-3.5" /> Media attachment uploaded
-                        <button type="button" onClick={() => setCustomMediaUrl("")} className="text-slate-400 hover:text-white"><Trash2 className="w-3 h-3" /></button>
+                        <button type="button" onClick={() => setCustomMediaUrl("")} className="text-app-text-secondary hover:text-white"><Trash2 className="w-3 h-3" /></button>
                       </div>
                     )}
                   </div>
@@ -1168,7 +1168,7 @@ export default function MessagesPage() {
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
                 <Radio className="w-14 h-14 text-slate-700 animate-pulse mb-3" />
-                <h3 className="text-sm font-black text-white uppercase tracking-widest">No Meta Lead Selected</h3>
+                <h3 className="text-sm font-black text-app-text-primary uppercase tracking-widest">No Meta Lead Selected</h3>
                 <p className="text-[10px] text-slate-500 max-w-xs mt-2 leading-relaxed">
                   Select a live active customer chat workspace on the left, or use the high fidelity webhook simulation console!
                 </p>
@@ -1177,7 +1177,7 @@ export default function MessagesPage() {
           </div>
 
           {/* C. RIGHT ACTIONS SIDEBAR WITH DYNAMIC ORDER LIFECYCLE (RULE #4) */}
-          <div className="w-full h-full border-l border-app-border bg-slate-900/10 overflow-y-auto custom-scrollbar">
+          <div className="w-full h-full border-l border-app-border bg-app-bg/10 overflow-y-auto custom-scrollbar">
             
             {/* 1. Dynamic Order Context Panel if Auto-Linked */}
             {selectedConv && currentCommerce.linkedOrder ? (
@@ -1193,12 +1193,12 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Horizontal Step Progress Bar Tracker */}
-                <div className="bg-slate-950 p-3.5 border border-white/[0.05] rounded-xl">
+                <div className="bg-app-bg p-3.5 border border-app-border rounded-xl">
                   <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block mb-3.5">Fulfillment Lifecycle Status</span>
                   
                   <div className="flex items-center justify-between relative mt-2 mb-1 px-1">
                     {/* Connecting line */}
-                    <div className="absolute top-[7px] left-0 right-0 h-[2px] bg-slate-800 z-0" />
+                    <div className="absolute top-[7px] left-0 right-0 h-[2px] bg-app-bg z-0" />
                     
                     {/* Activated line */}
                     <div className={`absolute top-[7px] left-0 h-[2px] bg-emerald-500 z-0 transition-all`} style={{
@@ -1226,24 +1226,24 @@ export default function MessagesPage() {
 
                       return (
                         <div key={step} className="flex flex-col items-center relative z-10">
-                          <div className={`w-4 h-4 rounded-full flex items-center justify-center border font-black text-[8px] transition-all ${
+                          <div className={`w-4 h-4 rounded-full flex items-center justify-center border font-black text-[8px] transition-all${
                             isPassed 
                               ? "bg-emerald-500 text-white border-transparent" 
                               : isCurrent 
                                 ? "bg-amber-500 text-slate-950 border-transparent animate-pulse" 
-                                : "bg-slate-900 text-slate-600 border-white/5"
+                                : "bg-app-card text-slate-600 border-white/5"
                           }`}>
                             {isPassed ? "✓" : idx + 1}
                           </div>
-                          <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 mt-1">{step}</span>
+                          <span className="text-[7.5px] font-black uppercase tracking-wider text-app-text-secondary mt-1">{step}</span>
                         </div>
                       );
                     })}
                   </div>
 
-                  <div className="mt-4 pt-3.5 border-t border-white/[0.04] text-[10px] text-slate-400 flex items-center justify-between">
+                  <div className="mt-4 pt-3.5 border-t border-app-border text-[10px] text-app-text-secondary flex items-center justify-between">
                     <span>Status:</span>
-                    <span className={`font-black uppercase tracking-wide px-1.5 py-0.5 rounded text-[9px] ${
+                    <span className={`font-black uppercase tracking-wide px-1.5 py-0.5 rounded text-[9px]${
                       currentCommerce.linkedOrder.status === 'DELIVERED' ? 'bg-green-500/10 text-emerald-400' :
                       currentCommerce.linkedOrder.status === 'PENDING' ? 'bg-amber-500/10 text-amber-400' :
                       currentCommerce.linkedOrder.status === 'CONFIRMED' ? 'bg-sky-500/10 text-sky-400' :
@@ -1280,25 +1280,25 @@ export default function MessagesPage() {
 
                       {/* Approval inputs */}
                       {showApproveForm && (
-                        <div className="bg-slate-950 p-3 border border-emerald-500/25 rounded-xl space-y-2.5 animate-fade-in">
+                        <div className="bg-app-bg p-3 border border-emerald-500/25 rounded-xl space-y-2.5 animate-fade-in">
                           <span className="text-[8px] font-black text-emerald-400 uppercase tracking-widest block">Configure Delivery Approve</span>
                           <div className="space-y-1">
-                            <label className="text-[8.5px] text-slate-400 font-bold">Delivery Charge (৳)</label>
+                            <label className="text-[8.5px] text-app-text-secondary font-bold">Delivery Charge (৳)</label>
                             <input 
                               type="number" 
                               value={tempDeliveryCharge}
                               onChange={(e) => setTempDeliveryCharge(Number(e.target.value))}
-                              className="w-full bg-slate-900 border border-white/10 px-2.5 py-1 text-xs text-white rounded font-bold focus:outline-none"
+                              className="w-full bg-app-card border border-app-border px-2.5 py-1 text-xs text-app-text-primary rounded font-bold focus:outline-none"
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-[8.5px] text-slate-400 font-bold">Internal Dispatch Instructions</label>
+                            <label className="text-[8.5px] text-app-text-secondary font-bold">Internal Dispatch Instructions</label>
                             <input 
                               type="text" 
                               value={tempSellerNote}
                               placeholder="e.g. Call client before dispatching package"
                               onChange={(e) => setTempSellerNote(e.target.value)}
-                              className="w-full bg-slate-900 border border-white/10 px-2.5 py-1 text-xs text-white rounded focus:outline-none"
+                              className="w-full bg-app-card border border-app-border px-2.5 py-1 text-xs text-app-text-primary rounded focus:outline-none"
                             />
                           </div>
                           <div className="flex gap-1.5 pt-1">
@@ -1310,7 +1310,7 @@ export default function MessagesPage() {
                             </button>
                             <button 
                               onClick={() => setShowApproveForm(false)}
-                              className="bg-slate-850 hover:bg-slate-800 text-slate-400 border border-white/5 text-[9px] py-1 px-2 rounded cursor-pointer"
+                              className="bg-app-bg hover:bg-slate-800 text-app-text-secondary border border-app-border text-[9px] py-1 px-2 rounded cursor-pointer"
                             >
                               Cancel
                             </button>
@@ -1320,16 +1320,16 @@ export default function MessagesPage() {
 
                       {/* Decline input */}
                       {showDeclineForm && (
-                        <div className="bg-slate-950 p-3 border border-rose-500/25 rounded-xl space-y-2.5 animate-fade-in">
+                        <div className="bg-app-bg p-3 border border-rose-500/25 rounded-xl space-y-2.5 animate-fade-in">
                           <span className="text-[8px] font-black text-rose-400 uppercase tracking-widest block">Cancel Order Authorization</span>
                           <div className="space-y-1">
-                            <label className="text-[8.5px] text-slate-400 font-bold">Reason for declines</label>
+                            <label className="text-[8.5px] text-app-text-secondary font-bold">Reason for declines</label>
                             <input 
                               type="text" 
                               value={tempDeclineReason}
                               placeholder="e.g. Out of stock / Delivery service unavailable"
                               onChange={(e) => setTempDeclineReason(e.target.value)}
-                              className="w-full bg-slate-900 border border-white/10 px-2.5 py-1 text-xs text-white rounded focus:outline-none"
+                              className="w-full bg-app-card border border-app-border px-2.5 py-1 text-xs text-app-text-primary rounded focus:outline-none"
                             />
                           </div>
                           <div className="flex gap-1.5 pt-1">
@@ -1341,7 +1341,7 @@ export default function MessagesPage() {
                             </button>
                             <button 
                               onClick={() => setShowDeclineForm(false)}
-                              className="bg-slate-850 hover:bg-slate-800 text-slate-400 border border-white/5 text-[9px] py-1 px-2 rounded cursor-pointer"
+                              className="bg-app-bg hover:bg-slate-800 text-app-text-secondary border border-app-border text-[9px] py-1 px-2 rounded cursor-pointer"
                             >
                               Back
                             </button>
@@ -1359,41 +1359,41 @@ export default function MessagesPage() {
                             setTempTrackingUrl(`https://pathao.com/track/CSS-${currentCommerce.linkedOrder!.id}`);
                             setShowDispatchForm(true);
                           }}
-                          className="w-full bg-[#f97316] hover:bg-orange-600 text-white font-extrabold uppercase py-2 px-3 rounded-lg text-[9px] tracking-wider transition-all cursor-pointer shadow flex items-center justify-center gap-1"
+                          className="w-full bg-[#f97316] hover:bg-orange-600 text-app-text-primary font-extrabold uppercase py-2 px-3 rounded-lg text-[9px] tracking-wider transition-all cursor-pointer shadow flex items-center justify-center gap-1"
                         >
                           <Truck className="w-3.5 h-3.5" /> Dispatch Courier
                         </button>
                       ) : (
-                        <div className="bg-slate-950 p-3 border border-app-accent/20 rounded-xl space-y-2.5 animate-fade-in">
+                        <div className="bg-app-bg p-3 border border-app-accent/20 rounded-xl space-y-2.5 animate-fade-in">
                           <span className="text-[8px] font-black text-app-accent uppercase tracking-widest block">Courier Dispatch Configuration</span>
                           <div className="space-y-1">
-                            <label className="text-[8.5px] text-slate-400 font-bold">Delivery Partner</label>
+                            <label className="text-[8.5px] text-app-text-secondary font-bold">Delivery Partner</label>
                             <input 
                               type="text" 
                               value={tempDeliveryPartner}
                               onChange={(e) => setTempDeliveryPartner(e.target.value)}
-                              className="w-full bg-slate-900 border border-white/10 px-2.5 py-1 text-xs text-white rounded font-bold focus:outline-none"
+                              className="w-full bg-app-card border border-app-border px-2.5 py-1 text-xs text-app-text-primary rounded font-bold focus:outline-none"
                             />
                           </div>
                           <div className="space-y-1">
-                            <label className="text-[8.5px] text-slate-400 font-bold">Tracking URL Link</label>
+                            <label className="text-[8.5px] text-app-text-secondary font-bold">Tracking URL Link</label>
                             <input 
                               type="text" 
                               value={tempTrackingUrl}
                               onChange={(e) => setTempTrackingUrl(e.target.value)}
-                              className="w-full bg-slate-900 border border-white/10 px-2.5 py-1 text-xs text-white rounded focus:outline-none font-mono text-[9px]"
+                              className="w-full bg-app-card border border-app-border px-2.5 py-1 text-xs text-app-text-primary rounded focus:outline-none font-mono text-[9px]"
                             />
                           </div>
                           <div className="flex gap-1.5 pt-1">
                             <button 
                               onClick={() => triggerDispatchOrder(currentCommerce.linkedOrder!.id)}
-                              className="flex-1 bg-app-accent hover:bg-orange-500 font-bold text-white text-[9px] uppercase py-1 px-2 rounded cursor-pointer"
+                              className="flex-1 bg-app-accent hover:bg-orange-500 font-bold text-app-text-primary text-[9px] uppercase py-1 px-2 rounded cursor-pointer"
                             >
                               Mark Dispatched
                             </button>
                             <button 
                               onClick={() => setShowDispatchForm(false)}
-                              className="bg-slate-850 hover:bg-slate-800 text-slate-400 border border-white/5 text-[9px] py-1 px-2 rounded cursor-pointer"
+                              className="bg-app-bg hover:bg-slate-800 text-app-text-secondary border border-app-border text-[9px] py-1 px-2 rounded cursor-pointer"
                             >
                               Cancel
                             </button>
@@ -1417,7 +1417,7 @@ export default function MessagesPage() {
                           href={currentCommerce.linkedOrder.trackingUrl}
                           target="_blank"
                           rel="noreferrer"
-                          className="w-full bg-slate-900 hover:bg-slate-800 text-slate-300 font-extrabold uppercase py-2 px-3 rounded-lg text-[9px] tracking-wider border border-white/5 transition-all text-center block"
+                          className="w-full bg-app-card hover:bg-slate-800 text-app-text-secondary font-extrabold uppercase py-2 px-3 rounded-lg text-[9px] tracking-wider border border-app-border transition-all text-center block"
                         >
                           🔗 Track Shipment Realtime
                         </a>
@@ -1427,12 +1427,12 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Internal notes collection */}
-                <div className="space-y-2 pt-2 border-t border-white/[0.04]">
+                <div className="space-y-2 pt-2 border-t border-app-border">
                   <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block">Internal ERP Admin Notes</span>
                   <div className="space-y-1.5 max-h-24 overflow-y-auto custom-scrollbar">
                     {currentCommerce.linkedOrder.sellerNotes && currentCommerce.linkedOrder.sellerNotes.length > 0 ? (
                       currentCommerce.linkedOrder.sellerNotes.map((note, nIdx) => (
-                        <div key={nIdx} className="bg-slate-950 p-2 rounded text-[10px] text-amber-300/90 font-mono leading-tight border-l-2 border-l-amber-500/70">
+                        <div key={nIdx} className="bg-app-bg p-2 rounded text-[10px] text-amber-300/90 font-mono leading-tight border-l-2 border-l-amber-500/70">
                           {note}
                         </div>
                       ))
@@ -1447,11 +1447,11 @@ export default function MessagesPage() {
                       value={newInternalNote}
                       placeholder="Add administrative dispatch note..."
                       onChange={(e) => setNewInternalNote(e.target.value)}
-                      className="flex-1 bg-slate-950 border border-white/5 px-2.5 py-1 text-[10px] text-white rounded focus:outline-none"
+                      className="flex-1 bg-app-bg border border-app-border px-2.5 py-1 text-[10px] text-app-text-primary rounded focus:outline-none"
                     />
                     <button 
                       onClick={() => triggerAddInternalNote(currentCommerce.linkedOrder!.id)}
-                      className="bg-app-accent hover:bg-orange-500 p-1 rounded text-white text-[10px] font-black shrink-0 px-2 cursor-pointer"
+                      className="bg-app-accent hover:bg-orange-500 p-1 rounded text-app-text-primary text-[10px] font-black shrink-0 px-2 cursor-pointer"
                     >
                       +
                     </button>
@@ -1467,13 +1467,13 @@ export default function MessagesPage() {
                 <div className="space-y-3.5">
                   <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block">Customer Identity Details</span>
                   
-                  <div className="bg-slate-950 p-3 border border-white/5 rounded-xl flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-lg bg-indigo-950 font-black text-white text-[10px] flex items-center justify-center border border-white/5">
+                  <div className="bg-app-bg p-3 border border-app-border rounded-xl flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-indigo-950 font-black text-white text-[10px] flex items-center justify-center border border-app-border">
                       {selectedConv.senderName[0]}
                     </div>
                     <div className="min-w-0">
-                      <h4 className="text-xs font-black text-white truncate uppercase">{selectedConv.senderName}</h4>
-                      <div className="text-[9px] text-slate-400 flex items-center gap-1 mt-0.5 font-semibold">
+                      <h4 className="text-xs font-black text-app-text-primary truncate uppercase">{selectedConv.senderName}</h4>
+                      <div className="text-[9px] text-app-text-secondary flex items-center gap-1 mt-0.5 font-semibold">
                         <MapPin className="w-2.5 h-2.5 text-app-accent" fill="currentColor" /> Dhaka, Bangladesh
                       </div>
                     </div>
@@ -1487,10 +1487,10 @@ export default function MessagesPage() {
                         <button
                           key={st}
                           onClick={() => handleUpdateStatus(st)}
-                          className={`py-1 rounded text-[8px] font-black uppercase tracking-wide border transition-all cursor-pointer ${
+                          className={`py-1 rounded text-[8px] font-black uppercase tracking-wide border transition-all cursor-pointer${
                             selectedConv.status === st 
                               ? "bg-app-accent text-white border-transparent" 
-                              : "bg-slate-950 text-slate-500 border-white/5 hover:text-white"
+                              : "bg-app-bg text-slate-500 border-white/5 hover:text-white"
                           }`}
                         >
                           {st}
@@ -1505,7 +1505,7 @@ export default function MessagesPage() {
                     <select
                       value={selectedConv.assignedAgent || ""}
                       onChange={(e) => handleAssignAgent(e.target.value)}
-                      className="w-full bg-slate-950 text-[10px] text-white font-bold px-2.5 py-2 border border-white/10 rounded-lg focus:outline-none"
+                      className="w-full bg-app-bg text-[10px] text-app-text-primary font-bold px-2.5 py-2 border border-app-border rounded-lg focus:outline-none"
                     >
                       <option value="" disabled>-- Assign Agent --</option>
                       {agents.map((ag) => (
@@ -1525,29 +1525,29 @@ export default function MessagesPage() {
                   <span className="text-[9px] font-black uppercase tracking-widest">Meta Channels Simulator</span>
                 </div>
 
-                <div className="bg-slate-950/60 p-3.5 border border-white/[0.04] rounded-xl space-y-3">
+                <div className="bg-app-bg/10 p-3.5 border border-app-border rounded-xl space-y-3">
                   <p className="text-[9.5px] text-slate-500 leading-normal font-semibold">
                     Simulate real-time Meta Messenger or WhatsApp payloads entering our webhook pipeline!
                   </p>
 
                   <div className="space-y-2.5">
                     <div className="space-y-1">
-                      <label className="text-[7.5px] font-black text-slate-400 uppercase">Customer Number / WaId</label>
+                      <label className="text-[7.5px] font-black text-app-text-secondary uppercase">Customer Number / WaId</label>
                       <input 
                         type="text" 
                         value={simSenderPhone}
                         onChange={(e) => setSimSenderPhone(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-xs text-white placeholder-slate-600 focus:outline-none"
+                        className="w-full px-2.5 py-1.5 bg-app-card border border-app-border rounded text-xs text-app-text-primary placeholder-slate-600 focus:outline-none"
                       />
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[7.5px] font-black text-slate-400 uppercase">Profile Identifier Name</label>
+                      <label className="text-[7.5px] font-black text-app-text-secondary uppercase">Profile Identifier Name</label>
                       <input 
                         type="text" 
                         value={simSenderName}
                         onChange={(e) => setSimSenderName(e.target.value)}
-                        className="w-full px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-xs text-white placeholder-slate-600 focus:outline-none"
+                        className="w-full px-2.5 py-1.5 bg-app-card border border-app-border rounded text-xs text-app-text-primary placeholder-slate-600 focus:outline-none"
                       />
                     </div>
 
@@ -1555,14 +1555,14 @@ export default function MessagesPage() {
                       <button
                         type="button"
                         onClick={() => setSimMsgType("text")}
-                        className={`flex-1 py-1 rounded text-[8px] font-bold uppercase cursor-pointer ${simMsgType === "text" ? "bg-slate-800 text-white" : "bg-slate-950 text-slate-500 border border-white/5"}`}
+                        className={`flex-1 py-1 rounded text-[8px] font-bold uppercase cursor-pointer${simMsgType === "text" ? "bg-slate-800 text-white" : "bg-app-bg text-slate-500 border border-white/5"}`}
                       >
                         📝 Text
                       </button>
                       <button
                         type="button"
                         onClick={() => setSimMsgType("image")}
-                        className={`flex-1 py-1 rounded text-[8px] font-bold uppercase cursor-pointer ${simMsgType === "image" ? "bg-slate-800 text-white" : "bg-slate-950 text-slate-500 border border-white/5"}`}
+                        className={`flex-1 py-1 rounded text-[8px] font-bold uppercase cursor-pointer${simMsgType === "image" ? "bg-slate-800 text-white" : "bg-app-bg text-slate-500 border border-white/5"}`}
                       >
                         🖼️ Image
                       </button>
@@ -1570,21 +1570,21 @@ export default function MessagesPage() {
 
                     {simMsgType === "text" ? (
                       <div className="space-y-1">
-                        <label className="text-[7.5px] font-black text-slate-400 uppercase">Message Text Body</label>
+                        <label className="text-[7.5px] font-black text-app-text-secondary uppercase">Message Text Body</label>
                         <textarea 
                           value={simMessageBody}
                           onChange={(e) => setSimMessageBody(e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-xs text-white placeholder-slate-600 focus:outline-none resize-none h-14"
+                          className="w-full px-2.5 py-1.5 bg-app-card border border-app-border rounded text-xs text-app-text-primary placeholder-slate-600 focus:outline-none resize-none h-14"
                         />
                       </div>
                     ) : (
                       <div className="space-y-1">
-                        <label className="text-[7.5px] font-black text-slate-400 uppercase">Public Image Url Sourcing</label>
+                        <label className="text-[7.5px] font-black text-app-text-secondary uppercase">Public Image Url Sourcing</label>
                         <input 
                           type="text" 
                           value={simImageUrl}
                           onChange={(e) => setSimImageUrl(e.target.value)}
-                          className="w-full px-2.5 py-1.5 bg-slate-900 border border-white/5 rounded text-[10px] text-white focus:outline-none font-mono"
+                          className="w-full px-2.5 py-1.5 bg-app-card border border-app-border rounded text-[10px] text-app-text-primary focus:outline-none font-mono"
                         />
                       </div>
                     )}
@@ -1593,10 +1593,10 @@ export default function MessagesPage() {
                       type="button"
                       onClick={executeSimulation}
                       disabled={simProcessing}
-                      className="w-full py-2 bg-app-accent hover:bg-orange-500 font-extrabold uppercase text-[10px] text-white tracking-widest rounded-lg transition-all shadow cursor-pointer flex items-center justify-center gap-1.5"
+                      className="w-full py-2 bg-app-accent hover:bg-orange-500 font-extrabold uppercase text-[10px] text-app-text-primary tracking-widest rounded-lg transition-all shadow cursor-pointer flex items-center justify-center gap-1.5"
                     >
                       {simProcessing ? (
-                        <span className="animate-spin rounded-full h-3 w-3 border-2 border-white/20 border-t-white" />
+                        <span className="animate-spin rounded-full h-3 w-3 border-2 border-app-border border-t-white" />
                       ) : (
                         <>🚀 Fire Meta Webhook</>
                       )}
@@ -1605,8 +1605,8 @@ export default function MessagesPage() {
                 </div>
 
                 {simResult && (
-                  <div className="bg-slate-950 rounded-xl p-3 border border-white/5 font-mono text-[8px] text-slate-400 space-y-1.5 overflow-x-auto max-h-44 custom-scrollbar">
-                    <div className="flex justify-between items-center text-white border-b border-white/[0.05] pb-1 uppercase font-bold text-[7.5px]">
+                  <div className="bg-app-bg rounded-xl p-3 border border-app-border font-mono text-[8px] text-app-text-secondary space-y-1.5 overflow-x-auto max-h-44 custom-scrollbar">
+                    <div className="flex justify-between items-center text-app-text-primary border-b border-app-border pb-1 uppercase font-bold text-[7.5px]">
                       <span>Hook Result Log</span>
                       <span className={simResult.statusCode === 200 ? "text-emerald-400" : "text-rose-400"}>
                         Code {simResult.statusCode}
@@ -1628,15 +1628,15 @@ export default function MessagesPage() {
         // =============================================================
         // PLATFORM INBOX DESIGN SEPARATED TAB (SYSTEM LAYER / ERP ALERTS) (RULE #1, #2)
         // =============================================================
-        <SplitLayout layoutId="messages-platform-studio" panes={messagesPlatformPanes} className="flex-1 min-h-0 bg-slate-950">
+        <SplitLayout layoutId="messages-platform-studio" panes={messagesPlatformPanes} className="flex-1 min-h-0 bg-app-bg">
           
           {/* A. LEFT BAR: PLATFORM THREADS INBOX (DRIVEN BY ERP MESSAGE THREADS) */}
           <div className="w-full h-full bg-app-bg border-r border-app-border flex flex-col shrink-0">
-            <div className="p-4 border-b border-app-border bg-slate-900/30 space-y-3">
+            <div className="p-4 border-b border-app-border bg-app-bg/10 space-y-3">
               <div className="flex justify-between items-center">
                 <div>
-                  <h3 className="text-xs font-black text-white uppercase tracking-wider">Platform Inbox</h3>
-                  <span className="text-[9px] text-slate-400 font-bold block mt-0.5">{filteredPlatformThreads.length} Sync Threads</span>
+                  <h3 className="text-xs font-black text-app-text-primary uppercase tracking-wider">Platform Inbox</h3>
+                  <span className="text-[9px] text-app-text-secondary font-bold block mt-0.5">{filteredPlatformThreads.length} Sync Threads</span>
                 </div>
                 
                 <button
@@ -1658,7 +1658,7 @@ export default function MessagesPage() {
                   placeholder="Search conversations..."
                   value={platformSearchTerm}
                   onChange={(e) => setPlatformSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-1.5 bg-app-card border border-app-border rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-app-accent/40"
+                  className="w-full pl-9 pr-4 py-1.5 bg-app-card border border-app-border rounded-lg text-xs text-app-text-primary placeholder-slate-500 focus:outline-none focus:border-app-accent/40"
                 />
               </div>
             </div>
@@ -1680,23 +1680,23 @@ export default function MessagesPage() {
                     <div
                       key={t.id}
                       onClick={() => setSelectedThreadId(t.id)}
-                      className={`px-4 py-3.5 cursor-pointer relative transition-all group ${
+                      className={`px-4 py-3.5 cursor-pointer relative transition-all group${
                         isSelected 
-                          ? "bg-slate-900 border-l-4 border-l-app-accent" 
+                          ? "bg-app-card border-l-4 border-l-app-accent" 
                           : "hover:bg-slate-800/10"
                       }`}
                     >
                       <div className="flex gap-3">
-                        <div className="w-9 h-9 rounded-full bg-slate-800 border border-white/5 flex items-center justify-center font-black text-slate-300 text-xs shrink-0 relative uppercase">
+                        <div className="w-9 h-9 rounded-full bg-app-bg border border-app-border flex items-center justify-center font-black text-app-text-secondary text-xs shrink-0 relative uppercase">
                           {avatarLetter}
                           {hasUnread && (
-                            <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-rose-500 rounded-full border border-slate-900" />
+                            <span className="absolute top-0 right-0 w-2.5 h-2.5 bg-rose-500 rounded-full border border-app-border" />
                           )}
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-start">
-                            <h4 className="text-xs font-black text-white truncate group-hover:text-app-accent transition-colors">
+                            <h4 className="text-xs font-black text-app-text-primary truncate group-hover:text-app-accent transition-colors">
                               {t.customer.name}
                             </h4>
                             <span className="text-[9px] text-[#f97316] font-bold font-mono">
@@ -1704,7 +1704,7 @@ export default function MessagesPage() {
                             </span>
                           </div>
                           
-                          <p className="text-[10.5px] font-black text-slate-300 mt-0.5 truncate leading-tight uppercase tracking-tight">
+                          <p className="text-[10.5px] font-black text-app-text-secondary mt-0.5 truncate leading-tight uppercase tracking-tight">
                             {t.subject}
                           </p>
                           
@@ -1721,18 +1721,18 @@ export default function MessagesPage() {
           </div>
 
           {/* B. CENTER MESSAGE CHAT AREA FOR PLATFORM SUPPORT TERMINAL */}
-          <div className="flex-1 flex flex-col bg-slate-950/20 h-full">
+          <div className="flex-1 flex flex-col bg-app-bg/10 h-full">
             {selectedThread ? (
               <>
-                <div className="h-16 border-b border-app-border px-6 flex items-center justify-between bg-slate-900/10">
+                <div className="h-16 border-b border-app-border px-6 flex items-center justify-between bg-app-bg/10">
                   <div className="flex items-center gap-3">
                     <div className="p-1.5 bg-yellow-500/15 rounded-lg">
                       <Activity className="w-4 h-4 text-amber-500" />
                     </div>
                     <div>
-                      <h3 className="text-xs font-black text-white tracking-wide uppercase flex items-center gap-2">
+                      <h3 className="text-xs font-black text-app-text-primary tracking-wide uppercase flex items-center gap-2">
                         {selectedThread.customer.name} 
-                        <span className="text-[9px] bg-slate-950 text-amber-500 font-bold px-1.5 py-0.5 rounded font-mono border border-white/5">
+                        <span className="text-[9px] bg-app-bg text-amber-500 font-bold px-1.5 py-0.5 rounded font-mono border border-app-border">
                           SYSTEM ALERTS
                         </span>
                       </h3>
@@ -1743,15 +1743,15 @@ export default function MessagesPage() {
                   </div>
                 </div>
 
-                <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-slate-950/5">
+                <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar bg-app-bg/10">
                   {selectedThread.messages.map((m) => {
                     const isOurAgent = m.senderRole === "seller" || m.senderRole === "admin";
                     
                     return (
-                      <div key={m.id} className={`flex ${isOurAgent ? "justify-end" : "justify-start"} animate-fade-in`}>
-                        <div className={`max-w-[75%] rounded-2xl p-4 shadow-md ${
+                      <div key={m.id} className={`flex${isOurAgent ? "justify-end" : "justify-start"}animate-fade-in`}>
+                        <div className={`max-w-[75%] rounded-2xl p-4 shadow-md${
                           isOurAgent 
-                            ? "bg-slate-900 border border-white/5 text-white rounded-br-none" 
+                            ? "bg-app-card border border-white/5 text-white rounded-br-none" 
                             : "bg-indigo-950 border border-white/5 text-white rounded-bl-none animate-pulse-subtle"
                         }`}>
                           <div className="text-[8px] font-black tracking-widest uppercase mb-1 opacity-60 flex items-center justify-between gap-4">
@@ -1759,7 +1759,7 @@ export default function MessagesPage() {
                             <span className="text-app-accent">{m.senderRole}</span>
                           </div>
                           
-                          <p className="text-[12px] leading-relaxed font-semibold text-slate-100">
+                          <p className="text-[12px] leading-relaxed font-semibold text-app-text-primary">
                             {m.text}
                           </p>
 
@@ -1781,13 +1781,13 @@ export default function MessagesPage() {
                       value={platformReplyText}
                       onChange={(e) => setPlatformReplyText(e.target.value)}
                       placeholder={`Send internal system response to ${selectedThread.customer.name}...`}
-                      className="flex-1 bg-transparent text-xs text-white outline-none px-2 py-1 placeholder-slate-500"
+                      className="flex-1 bg-transparent text-xs text-app-text-primary outline-none px-2 py-1 placeholder-slate-500"
                     />
                     
                     <button 
                       type="submit"
                       disabled={!platformReplyText.trim()}
-                      className="p-2.5 bg-app-accent hover:bg-orange-500 text-white rounded-lg disabled:opacity-25 disabled:cursor-not-allowed transition-all cursor-pointer"
+                      className="p-2.5 bg-app-accent hover:bg-orange-500 text-app-text-primary rounded-lg disabled:opacity-25 disabled:cursor-not-allowed transition-all cursor-pointer"
                     >
                       <Send className="w-4 h-4" />
                     </button>
@@ -1797,7 +1797,7 @@ export default function MessagesPage() {
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
                 <Activity className="w-14 h-14 text-slate-700 animate-pulse mb-3" />
-                <h3 className="text-sm font-black text-white uppercase tracking-widest">No Platform Thread Active</h3>
+                <h3 className="text-sm font-black text-app-text-primary uppercase tracking-widest">No Platform Thread Active</h3>
                 <p className="text-[10px] text-slate-500 max-w-xs mt-2 leading-relaxed text-center">
                   Select an administrative system/order logs thread on the left pane to authorize actions.
                 </p>
@@ -1806,31 +1806,31 @@ export default function MessagesPage() {
           </div>
 
           {/* C. RIGHT ACTIONS SIDEBAR WITH CORE ORDER DETAILS INTEGRATION (RULE #1) */}
-          <div className="w-full h-full border-l border-app-border bg-slate-900/10 overflow-y-auto custom-scrollbar font-sans">
+          <div className="w-full h-full border-l border-app-border bg-app-bg/10 overflow-y-auto custom-scrollbar font-sans">
             {selectedThread && currentCommerce.linkedOrder ? (
               <div className="p-4 space-y-5">
                 
                 {/* Visual Card Sourcing */}
                 <div className="space-y-1">
                   <span className="text-[9px] font-black text-[#F4631E] uppercase tracking-widest block">Associated ERP Transaction Detail</span>
-                  <div className="bg-slate-950 p-4 border border-white/5 rounded-2xl space-y-3 text-white">
+                  <div className="bg-app-bg p-4 border border-app-border rounded-2xl space-y-3 text-app-text-primary">
                     <div className="flex gap-3">
                       <img 
                         src={currentCommerce.linkedProduct?.image || "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80"} 
-                        className="w-12 h-12 rounded-xl object-cover border border-white/5 shrink-0 bg-slate-800" 
+                        className="w-12 h-12 rounded-xl object-cover border border-app-border shrink-0 bg-app-bg" 
                         alt="Product"
                         referrerPolicy="no-referrer" 
                       />
                       <div className="min-w-0">
-                        <h4 className="text-xs font-black text-white truncate leading-tight uppercase font-mono">{currentCommerce.linkedProduct?.name}</h4>
+                        <h4 className="text-xs font-black text-app-text-primary truncate leading-tight uppercase font-mono">{currentCommerce.linkedProduct?.name}</h4>
                         <span className="text-[8px] text-slate-500 block mt-0.5">Brand: {currentCommerce.linkedProduct?.brand}</span>
                         <span className="text-[10px] text-app-accent font-bold mt-1 block">Value: ৳ {currentCommerce.linkedProduct?.price.toLocaleString()}</span>
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-white/[0.04] grid grid-cols-2 gap-2 text-[9px] font-mono uppercase text-slate-400">
+                    <div className="pt-2 border-t border-app-border grid grid-cols-2 gap-2 text-[9px] font-mono uppercase text-app-text-secondary">
                       <div>Order RefID:</div>
-                      <div className="text-right font-black text-white">{currentCommerce.linkedOrder.id}</div>
+                      <div className="text-right font-black text-app-text-primary">{currentCommerce.linkedOrder.id}</div>
 
                       <div>Source origin:</div>
                       <div className="text-right font-black text-amber-500">{currentCommerce.linkedOrder.platformSource || 'WhatsApp'}</div>
@@ -1845,11 +1845,11 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Milestone fulfillment tracker */}
-                <div className="bg-slate-950 p-4 border border-white/[0.04] rounded-2xl space-y-3">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Fulfillment Tracks (Interactive)</span>
+                <div className="bg-app-bg p-4 border border-app-border rounded-2xl space-y-3">
+                  <span className="text-[9px] font-black text-app-text-secondary uppercase tracking-widest block">Fulfillment Tracks (Interactive)</span>
                   
                   <div className="flex items-center justify-between relative mt-2 mb-1 px-1">
-                    <div className="absolute top-[7px] left-0 right-0 h-[2px] bg-slate-800 z-0" />
+                    <div className="absolute top-[7px] left-0 right-0 h-[2px] bg-app-bg z-0" />
                     <div className={`absolute top-[7px] left-0 h-[2px] bg-emerald-500 z-0 transition-all`} style={{
                       width: currentCommerce.linkedOrder.status === 'Pending' ? '0%' :
                              currentCommerce.linkedOrder.status === 'Cancelled' ? '0%' :
@@ -1884,16 +1884,16 @@ export default function MessagesPage() {
                           }}
                           className="flex flex-col items-center relative z-10 focus:outline-none cursor-pointer group"
                         >
-                          <div className={`w-4 h-4 rounded-full flex items-center justify-center border font-black text-[8px] transition-all ${
+                          <div className={`w-4 h-4 rounded-full flex items-center justify-center border font-black text-[8px] transition-all${
                             isPassed 
                               ? "bg-emerald-500 text-white border-transparent" 
                               : isCurrent 
                                 ? "bg-amber-500 text-slate-950 border-transparent animate-pulse" 
-                                : "bg-slate-900 text-slate-600 border-white/5 group-hover:border-white/30"
+                                : "bg-app-card text-slate-600 border-white/5 group-hover:border-white/30"
                           }`}>
                             {isPassed ? "✓" : idx + 1}
                           </div>
-                          <span className="text-[7.5px] font-black uppercase tracking-wider text-slate-400 mt-1">{step}</span>
+                          <span className="text-[7.5px] font-black uppercase tracking-wider text-app-text-secondary mt-1">{step}</span>
                         </button>
                       );
                     })}
@@ -1901,8 +1901,8 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Delivery Tracking Control Module */}
-                <div className="bg-slate-950 p-4 border border-white/[0.04] rounded-2xl space-y-3">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Delivery Tracking Control</span>
+                <div className="bg-app-bg p-4 border border-app-border rounded-2xl space-y-3">
+                  <span className="text-[9px] font-black text-app-text-secondary uppercase tracking-widest block">Delivery Tracking Control</span>
                   
                   <div className="space-y-2">
                     <div>
@@ -1912,7 +1912,7 @@ export default function MessagesPage() {
                         value={courierField}
                         onChange={(e) => setCourierField(e.target.value)}
                         placeholder="Pathao, RedX, Steadfast..."
-                        className="w-full bg-slate-900 text-white px-3 py-1.5 rounded-lg border border-white/5 text-[10px] outline-none focus:border-[#F4631E]/40"
+                        className="w-full bg-app-card text-app-text-primary px-3 py-1.5 rounded-lg border border-app-border text-[10px] outline-none focus:border-[#F4631E]/40"
                       />
                     </div>
 
@@ -1923,7 +1923,7 @@ export default function MessagesPage() {
                         value={trackingIdField}
                         onChange={(e) => setTrackingIdField(e.target.value)}
                         placeholder="e.g. TRK-PATHAO-12938"
-                        className="w-full bg-slate-900 text-white px-3 py-1.5 rounded-lg border border-white/5 text-[10px] outline-none focus:border-[#F4631E]/40"
+                        className="w-full bg-app-card text-app-text-primary px-3 py-1.5 rounded-lg border border-app-border text-[10px] outline-none focus:border-[#F4631E]/40"
                       />
                     </div>
 
@@ -1932,7 +1932,7 @@ export default function MessagesPage() {
                       <select
                         value={currentCommerce.linkedOrder.status}
                         onChange={(e) => updateOrderStatus(currentCommerce.linkedOrder!.id, e.target.value as any)}
-                        className="w-full bg-slate-900 text-white px-3 py-1.5 rounded-lg border border-white/5 text-[10px] outline-none focus:border-[#F4631E]/40 cursor-pointer"
+                        className="w-full bg-app-card text-app-text-primary px-3 py-1.5 rounded-lg border border-app-border text-[10px] outline-none focus:border-[#F4631E]/40 cursor-pointer"
                       >
                         <option value="Pending">Pending</option>
                         <option value="Confirmed">Confirmed / Approved</option>
@@ -1960,8 +1960,8 @@ export default function MessagesPage() {
                 </div>
 
                 {/* Customer Communication Notes (Rule constraints) */}
-                <div className="bg-slate-950 p-4 border border-white/[0.04] rounded-2xl space-y-4">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Customer Communication Notes</span>
+                <div className="bg-app-bg p-4 border border-app-border rounded-2xl space-y-4">
+                  <span className="text-[9px] font-black text-app-text-secondary uppercase tracking-widest block">Customer Communication Notes</span>
                   
                   {/* Private Internal Note */}
                   <div className="space-y-1.5">
@@ -1972,7 +1972,7 @@ export default function MessagesPage() {
                         value={localPrivateNote}
                         onChange={(e) => setLocalPrivateNote(e.target.value)}
                         placeholder="Private operational override notes..."
-                        className="flex-1 bg-slate-900 text-white px-2.5 py-1.5 rounded-lg border border-white/5 text-[9px] outline-none focus:border-[#F4631E]/40"
+                        className="flex-1 bg-app-card text-app-text-primary px-2.5 py-1.5 rounded-lg border border-app-border text-[9px] outline-none focus:border-[#F4631E]/40"
                       />
                       <button
                         type="button"
@@ -1981,7 +1981,7 @@ export default function MessagesPage() {
                           addSellerNotes(currentCommerce.linkedOrder!.id, localPrivateNote);
                           setLocalPrivateNote("");
                         }}
-                        className="bg-slate-800 hover:bg-slate-700 text-white text-[9px] font-bold px-2 rounded-lg transition-all"
+                        className="bg-app-bg hover:bg-slate-700 text-app-text-primary text-[9px] font-bold px-2 rounded-lg transition-all"
                       >
                         Add
                       </button>
@@ -1997,7 +1997,7 @@ export default function MessagesPage() {
                         value={localCustomerNote}
                         onChange={(e) => setLocalCustomerNote(e.target.value)}
                         placeholder="Visible to customer on invoice receipt..."
-                        className="flex-1 bg-slate-900 text-white px-2.5 py-1.5 rounded-lg border border-white/5 text-[9px] outline-none focus:border-[#F4631E]/40"
+                        className="flex-1 bg-app-card text-app-text-primary px-2.5 py-1.5 rounded-lg border border-app-border text-[9px] outline-none focus:border-[#F4631E]/40"
                       />
                       <button
                         type="button"
@@ -2014,13 +2014,13 @@ export default function MessagesPage() {
                   </div>
 
                   {/* Render listing of both logs */}
-                  <div className="pt-2 border-t border-white/[0.04] space-y-2">
+                  <div className="pt-2 border-t border-app-border space-y-2">
                     {currentCommerce.linkedOrder.sellerNotes && currentCommerce.linkedOrder.sellerNotes.length > 0 && (
                       <div>
                         <span className="text-[7.5px] font-extrabold text-slate-500 uppercase tracking-widest">Logged Seller Notes ({currentCommerce.linkedOrder.sellerNotes.length})</span>
                         <div className="space-y-1 mt-1 max-h-24 overflow-y-auto">
                           {currentCommerce.linkedOrder.sellerNotes.map((note, nIdx) => (
-                            <div key={nIdx} className="bg-slate-900/50 p-2 rounded text-[9px] text-[#F3631E] font-mono leading-relaxed border-l border-orange-500">
+                            <div key={nIdx} className="bg-app-bg/10 p-2 rounded text-[9px] text-[#F3631E] font-mono leading-relaxed border-l border-orange-500">
                               {note}
                             </div>
                           ))}
@@ -2045,11 +2045,11 @@ export default function MessagesPage() {
 
                 {/* ERP Order action buttons */}
                 <div className="space-y-2">
-                  <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Operational Controls</span>
+                  <span className="text-[9px] font-black text-app-text-secondary uppercase tracking-widest block">Operational Controls</span>
                   <div className="grid grid-cols-2 gap-2">
                     <Link
                       to={`/admin/invoice/${currentCommerce.linkedOrder.id}`}
-                      className="bg-slate-950 font-sans hover:bg-slate-900 border border-white/5 text-slate-300 font-bold py-2 rounded-xl text-[9px] uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="bg-app-bg font-sans hover:bg-app-card border border-app-border text-app-text-secondary font-bold py-2 rounded-xl text-[9px] uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <Printer className="w-3 h-3 text-emerald-400" />
                       <span>View Invoice</span>
@@ -2061,7 +2061,7 @@ export default function MessagesPage() {
                         approveOrder(currentCommerce.linkedOrder!.id, 120, "Authorized manually from internal ERP panel");
                         alert('✓ Order approved successfully');
                       }}
-                      className="bg-[#241A35] font-sans hover:bg-slate-900 border border-purple-500/10 text-purple-300 font-bold py-2 rounded-xl text-[9px] uppercase tracking-wider transition-all cursor-pointer"
+                      className="bg-[#241A35] font-sans hover:bg-app-card border border-purple-500/10 text-purple-300 font-bold py-2 rounded-xl text-[9px] uppercase tracking-wider transition-all cursor-pointer"
                     >
                       Approve Order
                     </button>
@@ -2082,61 +2082,61 @@ export default function MessagesPage() {
           CORE DIALOG INTERACTIVE INVOICE MODAL BACKDROP (RULE #3, #4)
           ============================================================= */}
       {selectedOrderDetails && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fade-in">
-          <div className="bg-slate-950 border border-white/10 rounded-2xl w-full max-w-md p-6 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+        <div className="fixed inset-0 bg-app-card/20 flex items-center justify-center p-4 z-50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-app-bg border border-app-border rounded-2xl w-full max-w-md p-6 relative max-h-[90vh] overflow-y-auto custom-scrollbar">
             
             <button 
               onClick={() => setSelectedOrderDetails(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white p-2 rounded-xl bg-white/5 cursor-pointer text-xs font-bold"
+              className="absolute top-4 right-4 text-app-text-secondary hover:text-white p-2 rounded-xl bg-white/5 cursor-pointer text-xs font-bold"
             >
               ✕ Close
             </button>
 
             <span className="text-[8px] font-black text-app-accent uppercase tracking-widest block mb-1">Choosify Authorized Invoice</span>
-            <h3 className="text-sm font-black text-white uppercase tracking-wider">Fulfillment Docket: #{selectedOrderDetails.id}</h3>
+            <h3 className="text-sm font-black text-app-text-primary uppercase tracking-wider">Fulfillment Docket: #{selectedOrderDetails.id}</h3>
             
             {/* Invoice Meta */}
-            <div className="mt-4 pt-3.5 border-t border-white/[0.05] grid grid-cols-2 gap-2 text-[10px] text-slate-400 font-mono relative uppercase">
+            <div className="mt-4 pt-3.5 border-t border-app-border grid grid-cols-2 gap-2 text-[10px] text-app-text-secondary font-mono relative uppercase">
               <div>Invoice Status:</div>
               <div className="text-right text-emerald-400 font-black">{selectedOrderDetails.invoice_status || "Unpaid"}</div>
 
               <div>Creation Time:</div>
-              <div className="text-right text-slate-300">{new Date(selectedOrderDetails.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</div>
+              <div className="text-right text-app-text-secondary">{new Date(selectedOrderDetails.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}</div>
 
               <div>Invoice Slit Id:</div>
               <div className="text-right text-slate-500 font-bold">{selectedOrderDetails.invoice_id || "IV-CSS-1129-9"}</div>
             </div>
 
             {/* Product description card */}
-            <div className="mt-4 bg-app-card border border-app-border/40 p-3.5 rounded-xl flex gap-3 text-white">
-              <img src={selectedOrderDetails.product.image} className="w-12 h-12 rounded object-cover border border-white/5" alt="Order product" referrerPolicy="no-referrer" />
+            <div className="mt-4 bg-app-card border border-app-border/40 p-3.5 rounded-xl flex gap-3 text-app-text-primary">
+              <img src={selectedOrderDetails.product.image} className="w-12 h-12 rounded object-cover border border-app-border" alt="Order product" referrerPolicy="no-referrer" />
               <div className="min-w-0 flex-1">
-                <h5 className="text-[11px] font-black text-slate-100 uppercase truncate leading-tight">{selectedOrderDetails.product.name}</h5>
+                <h5 className="text-[11px] font-black text-app-text-primary uppercase truncate leading-tight">{selectedOrderDetails.product.name}</h5>
                 <span className="text-[8px] text-slate-500 block mt-0.5">Seller: {selectedOrderDetails.product.sellerName}</span>
                 <span className="text-[11px] font-bold text-app-accent block mt-1">৳ {selectedOrderDetails.product.price.toLocaleString()}</span>
               </div>
             </div>
 
             {/* Price breaks calculation stack */}
-            <div className="mt-4 pt-3.5 border-t border-white/[0.05] space-y-2.5 text-[11px] text-slate-400 font-mono">
+            <div className="mt-4 pt-3.5 border-t border-app-border space-y-2.5 text-[11px] text-app-text-secondary font-mono">
               <div className="flex justify-between">
                 <span>Value Sourcing Subtotal:</span>
-                <span className="text-white font-bold">৳ {selectedOrderDetails.product.price.toLocaleString()}</span>
+                <span className="text-app-text-primary font-bold">৳ {selectedOrderDetails.product.price.toLocaleString()}</span>
               </div>
               <div className="flex justify-between">
                 <span>Authorized First-Mile Cargo:</span>
-                <span className="text-white">৳ {selectedOrderDetails.delivery_charge || "120"}</span>
+                <span className="text-app-text-primary">৳ {selectedOrderDetails.delivery_charge || "120"}</span>
               </div>
-              <div className="flex justify-between border-t border-white/[0.05] pt-2 text-white font-black">
+              <div className="flex justify-between border-t border-app-border pt-2 text-app-text-primary font-black">
                 <span>Total Payable (৳):</span>
                 <span className="text-app-accent font-black">৳ {((selectedOrderDetails.total_payable || selectedOrderDetails.product.price) + (selectedOrderDetails.delivery_charge || 120)).toLocaleString()}</span>
               </div>
             </div>
 
             {/* Shipping detail */}
-            <div className="mt-4 pt-3.5 border-t border-white/[0.05] space-y-1.5 text-[10px] text-slate-400">
+            <div className="mt-4 pt-3.5 border-t border-app-border space-y-1.5 text-[10px] text-app-text-secondary">
               <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block">Recipient Delivery Sourcing</span>
-              <div className="bg-slate-900 border border-white/5 rounded-xl p-3 space-y-1 text-slate-300 font-mono text-[9px] uppercase">
+              <div className="bg-app-card border border-app-border rounded-xl p-3 space-y-1 text-app-text-secondary font-mono text-[9px] uppercase">
                 <div>Client ID: {selectedOrderDetails.customer.id.toUpperCase()}</div>
                 <div>Name: {selectedOrderDetails.customer.name}</div>
                 <div>Status Flag: {selectedOrderDetails.customer.flagged ? "🔴 Flagged" : "🟢 Cleared"}</div>
@@ -2145,7 +2145,7 @@ export default function MessagesPage() {
 
             <button 
               onClick={() => setSelectedOrderDetails(null)}
-              className="mt-5 w-full py-2 bg-gradient-to-r from-slate-900 to-indigo-950 hover:from-slate-850 border border-white/10 hover:to-indigo-900 text-white font-bold uppercase text-[10px] tracking-wider rounded-xl transition-all cursor-pointer"
+              className="mt-5 w-full py-2 bg-gradient-to-r from-slate-900 to-indigo-950 hover:from-slate-850 border border-app-border hover:to-indigo-900 text-white font-bold uppercase text-[10px] tracking-wider rounded-xl transition-all cursor-pointer"
             >
               Authorization Finished / Understood
             </button>
@@ -2158,24 +2158,24 @@ export default function MessagesPage() {
           WIZARD MODAL: CREATE MANUAL / OFFLINE / SOURCED ORDER (RULE #4, #5)
           ============================================================= */}
       {isManualModalOpen && (
-        <div className="fixed inset-0 bg-black/85 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-in fade-in duration-200">
-          <div className="bg-slate-950 border border-white/10 rounded-[2.5rem] w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+        <div className="fixed inset-0 bg-app-card/20 flex items-center justify-center p-4 z-50 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-app-bg border border-app-border rounded-[2.5rem] w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
             
             {/* Modal Header */}
-            <div className="px-8 py-5 border-b border-white/[0.06] bg-gradient-to-r from-slate-900 to-indigo-950 flex items-center justify-between">
+            <div className="px-8 py-5 border-b border-app-border bg-gradient-to-r from-slate-900 to-indigo-950 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-xl">
                   <Package className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-white uppercase tracking-wider">Initialize Sourced Trade</h3>
-                  <span className="text-[10px] text-slate-400 font-bold block mt-0.5">Real-time ERP Manual Order Generation Engine</span>
+                  <h3 className="text-sm font-black text-app-text-primary uppercase tracking-wider">Initialize Sourced Trade</h3>
+                  <span className="text-[10px] text-app-text-secondary font-bold block mt-0.5">Real-time ERP Manual Order Generation Engine</span>
                 </div>
               </div>
               <button 
                 type="button"
                 onClick={handleResetManualForm}
-                className="text-slate-400 hover:text-white p-2 rounded-xl bg-white/5 cursor-pointer text-xs font-black"
+                className="text-app-text-secondary hover:text-white p-2 rounded-xl bg-white/5 cursor-pointer text-xs font-black"
               >
                 ✕ Close
               </button>
@@ -2189,25 +2189,25 @@ export default function MessagesPage() {
                 </div>
                 
                 <div className="space-y-2 max-w-sm">
-                  <h4 className="text-base font-black text-white uppercase font-sans tracking-wide">Manual Trade Sourced Successfully!</h4>
-                  <p className="text-xs text-slate-400 leading-relaxed font-sans">
+                  <h4 className="text-base font-black text-app-text-primary uppercase font-sans tracking-wide">Manual Trade Sourced Successfully!</h4>
+                  <p className="text-xs text-app-text-secondary leading-relaxed font-sans">
                     Every manual or external order is tracked instantly via our ERP control hub and has generated authenticated invoices.
                   </p>
                 </div>
 
                 {/* Sourced metadata receipt */}
-                <div className="bg-slate-900 border border-white/5 rounded-2xl p-6 w-full max-w-md space-y-3 text-left font-mono text-xs uppercase text-slate-300">
-                  <div className="flex justify-between pb-2 border-b border-white/[0.04]">
+                <div className="bg-app-card border border-app-border rounded-2xl p-6 w-full max-w-md space-y-3 text-left font-mono text-xs uppercase text-app-text-secondary">
+                  <div className="flex justify-between pb-2 border-b border-app-border">
                     <span>Fulfillment Reference ID:</span>
-                    <span className="text-white font-black">{manualSuccessOrderInfo.orderId}</span>
+                    <span className="text-app-text-primary font-black">{manualSuccessOrderInfo.orderId}</span>
                   </div>
-                  <div className="flex justify-between pb-2 border-b border-white/[0.04]">
+                  <div className="flex justify-between pb-2 border-b border-app-border">
                     <span>Invoice Bill Slit ID:</span>
                     <span className="text-pink-400 font-black">{manualSuccessOrderInfo.invoiceId}</span>
                   </div>
-                  <div className="flex justify-between pb-2 border-b border-white/[0.04]">
+                  <div className="flex justify-between pb-2 border-b border-app-border">
                     <span>Sourced User Profile:</span>
-                    <span className="text-white font-sans font-bold">{manualCustomerName}</span>
+                    <span className="text-app-text-primary font-sans font-bold">{manualCustomerName}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Invoice Authorization:</span>
@@ -2244,7 +2244,7 @@ export default function MessagesPage() {
                       }
                       setIsManualModalOpen(false);
                     }}
-                    className="flex-1 py-3 bg-[#ef3c23] hover:bg-orange-600 text-white font-black uppercase text-[10px] tracking-widest rounded-xl text-center shadow transition-all cursor-pointer"
+                    className="flex-1 py-3 bg-[#ef3c23] hover:bg-orange-600 text-app-text-primary font-black uppercase text-[10px] tracking-widest rounded-xl text-center shadow transition-all cursor-pointer"
                   >
                     View / Print Invoice
                   </button>
@@ -2259,21 +2259,21 @@ export default function MessagesPage() {
                       setManualChatRefId("");
                       setManualNotes("");
                     }}
-                    className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 border border-white/5 text-slate-300 font-black uppercase text-[10px] tracking-widest rounded-xl transition-all cursor-pointer"
+                    className="flex-1 py-3 bg-app-card hover:bg-slate-800 border border-app-border text-app-text-secondary font-black uppercase text-[10px] tracking-widest rounded-xl transition-all cursor-pointer"
                   >
                     Add Another Trade
                   </button>
                   <button
                     type="button"
                     onClick={handleResetManualForm}
-                    className="flex-1 py-3 bg-slate-950 hover:bg-slate-900 border border-white/10 text-slate-500 font-semibold uppercase text-[10px] tracking-widest rounded-xl transition-all cursor-pointer"
+                    className="flex-1 py-3 bg-app-bg hover:bg-app-card border border-app-border text-slate-500 font-semibold uppercase text-[10px] tracking-widest rounded-xl transition-all cursor-pointer"
                   >
                     Dismiss Workspace
                   </button>
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleSubmitManualOrder} className="flex-1 flex flex-col min-h-0 bg-slate-950">
+              <form onSubmit={handleSubmitManualOrder} className="flex-1 flex flex-col min-h-0 bg-app-bg">
                 <div className="p-8 space-y-6 overflow-y-auto shrink-0 custom-scrollbar flex-1">
                   
                   {/* Grid split columns */}
@@ -2281,67 +2281,67 @@ export default function MessagesPage() {
                     
                     {/* Left Column: Customer details */}
                     <div className="space-y-4">
-                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2">Step 1: Recipient Identity Profile</span>
+                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">Step 1: Recipient Identity Profile</span>
                       
                       <div>
-                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Customer Name (Required)</label>
+                        <label className="text-[8px] font-black text-app-text-secondary uppercase block mb-1">Customer Name (Required)</label>
                         <input 
                           type="text" 
                           required
                           value={manualCustomerName}
                           onChange={(e) => setManualCustomerName(e.target.value)}
                           placeholder="e.g. Farhan Bin Rafiq"
-                          className="w-full bg-slate-900 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
+                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
                         />
                       </div>
 
                       <div>
-                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Customer Phone Number (Required)</label>
+                        <label className="text-[8px] font-black text-app-text-secondary uppercase block mb-1">Customer Phone Number (Required)</label>
                         <input 
                           type="text" 
                           required
                           value={manualCustomerPhone}
                           onChange={(e) => setManualCustomerPhone(e.target.value)}
                           placeholder="e.g. +8801712345678"
-                          className="w-full bg-slate-900 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
+                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
                         />
                       </div>
 
                       <div>
-                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Customer Email Address (Optional)</label>
+                        <label className="text-[8px] font-black text-app-text-secondary uppercase block mb-1">Customer Email Address (Optional)</label>
                         <input 
                           type="email" 
                           value={manualCustomerEmail}
                           onChange={(e) => setManualCustomerEmail(e.target.value)}
                           placeholder="e.g. farhan@domain.com"
-                          className="w-full bg-slate-900 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
+                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
                         />
                       </div>
 
                       <div>
-                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Fulfillment Home Address (Required)</label>
+                        <label className="text-[8px] font-black text-app-text-secondary uppercase block mb-1">Fulfillment Home Address (Required)</label>
                         <textarea 
                           required
                           value={manualCustomerAddress}
                           onChange={(e) => setManualCustomerAddress(e.target.value)}
                           placeholder="Provide detailed supply delivery landmark location in Bangladesh..."
                           rows={3}
-                          className="w-full bg-slate-900 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans resize-none"
+                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans resize-none"
                         />
                       </div>
                     </div>
 
                     {/* Right Column: Sourced Product & overrides */}
                     <div className="space-y-4">
-                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2">Step 2: Cart Items & Channels Sourcing</span>
+                      <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">Step 2: Cart Items & Channels Sourcing</span>
                       
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Sourcing Channel</label>
+                          <label className="text-[8px] font-black text-app-text-secondary uppercase block mb-1">Sourcing Channel</label>
                           <select
                             value={manualPlatformSource}
                             onChange={(e) => setManualPlatformSource(e.target.value as any)}
-                            className="w-full bg-slate-900 border border-white/5 rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-[#F4631E]/40 cursor-pointer font-sans"
+                            className="w-full bg-app-card border border-app-border rounded-xl px-3 py-2.5 text-xs text-app-text-primary outline-none focus:border-[#F4631E]/40 cursor-pointer font-sans"
                           >
                             <option value="WhatsApp">💬 WhatsApp DM</option>
                             <option value="Facebook">📬 Facebook Chat</option>
@@ -2351,23 +2351,23 @@ export default function MessagesPage() {
                         </div>
 
                         <div>
-                          <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Chat Ref ID (Optional)</label>
+                          <label className="text-[8px] font-black text-app-text-secondary uppercase block mb-1">Chat Ref ID (Optional)</label>
                           <input 
                             type="text" 
                             value={manualChatRefId}
                             onChange={(e) => setManualChatRefId(e.target.value)}
                             placeholder="e.g. MSG-99120"
-                            className="w-full bg-slate-900 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
+                            className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Select Sourced Product Item</label>
+                        <label className="text-[8px] font-black text-app-text-secondary uppercase block mb-1">Select Sourced Product Item</label>
                         <select
                           value={manualProductSelection}
                           onChange={(e) => setManualProductSelection(e.target.value)}
-                          className="w-full bg-slate-900 border border-white/5 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-[#F4631E]/40 cursor-pointer font-sans"
+                          className="w-full bg-app-card border border-app-border rounded-xl px-3 py-2 text-xs text-app-text-primary outline-none focus:border-[#F4631E]/40 cursor-pointer font-sans"
                         >
                           <option value="101">Aarong Silk Panjabi — ৳ 4,200</option>
                           <option value="102">Apex Mens Formal Leather — ৳ 3,500</option>
@@ -2378,37 +2378,37 @@ export default function MessagesPage() {
 
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Qty Ordered</label>
+                          <label className="text-[8px] font-black text-app-text-secondary uppercase block mb-1">Qty Ordered</label>
                           <input 
                             type="number" 
                             min={1}
                             required
                             value={manualQuantity}
                             onChange={(e) => setManualQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-full bg-slate-900 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white outline-none focus:border-[#F4631E]/40 transition-all font-mono"
+                            className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary outline-none focus:border-[#F4631E]/40 transition-all font-mono"
                           />
                         </div>
 
                         <div>
-                          <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Price Overwrite BDT (Optional)</label>
+                          <label className="text-[8px] font-black text-app-text-secondary uppercase block mb-1">Price Overwrite BDT (Optional)</label>
                           <input 
                             type="number" 
                             value={manualPriceOverride}
                             onChange={(e) => setManualPriceOverride(e.target.value)}
                             placeholder="Overwrite normal BDT..."
-                            className="w-full bg-slate-900 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-700 outline-none focus:border-[#F4631E]/40 transition-all font-mono"
+                            className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-700 outline-none focus:border-[#F4631E]/40 transition-all font-mono"
                           />
                         </div>
                       </div>
 
                       <div>
-                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">Internal Comments Log Notes</label>
+                        <label className="text-[8px] font-black text-app-text-secondary uppercase block mb-1">Internal Comments Log Notes</label>
                         <input 
                           type="text" 
                           value={manualNotes}
                           onChange={(e) => setManualNotes(e.target.value)}
                           placeholder="Comments: e.g. Customer requested gift wrapping."
-                          className="w-full bg-slate-900 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-white placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
+                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
                         />
                       </div>
                     </div>
@@ -2416,10 +2416,10 @@ export default function MessagesPage() {
                   </div>
 
                   {/* Operational Dynamic Subtotal Calculator block */}
-                  <div className="mt-4 bg-slate-900/60 border border-white/[0.04] p-5 rounded-2xl flex justify-between items-center flex-wrap gap-4 select-none font-sans">
+                  <div className="mt-4 bg-app-bg/10 border border-app-border p-5 rounded-2xl flex justify-between items-center flex-wrap gap-4 select-none font-sans">
                     <div className="space-y-0.5">
                       <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block">Live Calculated Sourced Bill Quote</span>
-                      <div className="text-xs text-slate-400 font-mono">
+                      <div className="text-xs text-app-text-secondary font-mono">
                         Base: ৳ {
                           (manualPriceOverride ? parseFloat(manualPriceOverride) || 0 : (manualProductSelection === '101' ? 4200 : manualProductSelection === '102' ? 3500 : manualProductSelection === '103' ? 139999 : 29990))
                         } · Qty: {manualQuantity} · Courier Base Carriage: ৳ 120
@@ -2437,15 +2437,15 @@ export default function MessagesPage() {
 
                 </div>
 
-                <div className="px-8 py-5 border-t border-white/[0.06] bg-slate-900/40 flex items-center justify-between shrink-0 gap-4">
-                  <div className="text-[9px] text-slate-400 leading-tight block max-w-xs font-sans">
+                <div className="px-8 py-5 border-t border-app-border bg-app-bg/10 flex items-center justify-between shrink-0 gap-4">
+                  <div className="text-[9px] text-app-text-secondary leading-tight block max-w-xs font-sans">
                     By submitting, this transaction is marked Approved. An invoice slit will compile, enabling print, logs, tracking, and courier dispatch.
                   </div>
                   <div className="flex gap-2">
                     <button
                       type="button"
                       onClick={handleResetManualForm}
-                      className="px-5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-[10px] font-black uppercase tracking-wider transition-all border border-white/5 cursor-pointer"
+                      className="px-5 py-2.5 rounded-xl bg-app-card hover:bg-slate-800 text-app-text-secondary text-[10px] font-black uppercase tracking-wider transition-all border border-app-border cursor-pointer"
                     >
                       Cancel
                     </button>

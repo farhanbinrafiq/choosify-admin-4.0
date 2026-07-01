@@ -322,12 +322,12 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
   ];
 
   return (
-    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-5xl bg-slate-950 border-l border-white/10 shadow-2xl flex flex-col font-sans text-white animate-in slide-in-from-right duration-300">
+    <div className="fixed inset-y-0 right-0 z-50 w-full max-w-5xl bg-app-bg border-l border-app-border shadow-2xl flex flex-col font-sans text-app-text-primary animate-in slide-in-from-right duration-300">
       
       {/* 1. STICKY ACTION HEADER & STATUS BAR */}
-      <div className="bg-slate-900 border-b border-white/10 p-5 flex justify-between items-center shrink-0">
+      <div className="bg-app-card border-b border-app-border p-5 flex justify-between items-center shrink-0">
         <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-slate-950 border border-white/20 rounded-xl flex items-center justify-center overflow-hidden">
+          <div className="w-12 h-12 bg-app-bg border border-app-border rounded-xl flex items-center justify-center overflow-hidden">
             {matchedProfile?.logo ? (
               <img src={matchedProfile.logo} alt="" className="w-full h-full object-cover" />
             ) : (
@@ -337,7 +337,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-black tracking-tight">{brandName}</h2>
-              <span className={`px-2.5 py-0.5 rounded text-[9px] font-black tracking-wider uppercase font-mono ${
+              <span className={`px-2.5 py-0.5 rounded text-[9px] font-black tracking-wider uppercase font-mono${
                 currentStatus === 'VERIFIED_OWNER' 
                   ? 'bg-green-500/10 text-emerald-400 border border-green-500/20' 
                   : currentStatus === 'OWNERSHIP_PENDING' 
@@ -353,7 +353,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                 {currentStatus === 'UNCLAIMED' ? 'TIER 3 STANDBY' : 'TIER 1 PARTNER'}
               </span>
             </div>
-            <p className="text-xs text-slate-400 font-semibold">{matchedProfile?.companyName || `Unregistered Brand Identity Entity`}</p>
+            <p className="text-xs text-app-text-secondary font-semibold">{matchedProfile?.companyName || `Unregistered Brand Identity Entity`}</p>
           </div>
         </div>
 
@@ -389,7 +389,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
 
           <button 
             onClick={onClose} 
-            className="flex items-center gap-1 p-2 bg-white/5 hover:bg-white/10 hover:text-[#F4631E] border border-white/5 rounded-xl text-xs font-black transition-all cursor-pointer"
+            className="flex items-center gap-1 p-2 bg-white/5 hover:bg-white/10 hover:text-[#F4631E] border border-app-border rounded-xl text-xs font-black transition-all cursor-pointer"
           >
             <X className="w-4 h-4" />
             <span>CLOSE</span>
@@ -398,7 +398,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
       </div>
 
       {/* 2. DOCK NAVIGATION HEADER (13 specification categories) */}
-      <div className="bg-slate-900/45 border-b border-white/10 px-6 py-1 flex overflow-x-auto scrollbar-hide gap-1 bg-black/40 shrink-0">
+      <div className="bg-app-bg/10 border-b border-app-border px-6 py-1 flex overflow-x-auto scrollbar-hide gap-1 bg-app-card/20 shrink-0">
         {[
           { id: 'overview', label: '📊 Corporate Profile & Health', icon: Info },
           { id: 'identity', label: '✔️ ID Registries & Verification', icon: ShieldCheck },
@@ -414,11 +414,11 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
             <button
               key={sh.id}
               onClick={() => setCurrentTab(sh.id as SubTabType)}
-              className={`py-3.5 px-4 text-[10.5px] font-bold uppercase tracking-wider shrink-0 flex items-center gap-1.5 transition-all border-b-2 hover:text-white ${
+              className={`py-3.5 px-4 text-[10.5px] font-bold uppercase tracking-wider shrink-0 flex items-center gap-1.5 transition-all border-b-2 hover:text-white${
                 isActive 
                   ? 'border-[#F4631E] text-[#F4631E] bg-white/[0.01]' 
                   : 'border-transparent text-slate-400 hover:border-white/10'
-              } cursor-pointer`}
+              }cursor-pointer`}
             >
               <Icon className="w-3.5 h-3.5" />
               {sh.label}
@@ -428,7 +428,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
       </div>
 
       {/* 3. CORE SCROLL CONSOLE */}
-      <div className="flex-1 overflow-y-auto p-6 bg-slate-950 space-y-6">
+      <div className="flex-1 overflow-y-auto p-6 bg-app-bg space-y-6">
 
         {/* ========================================= OVERVIEW TAB ========================================= */}
         {currentTab === 'overview' && (
@@ -438,9 +438,9 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               
               {/* Trust gauge */}
-              <div className="bg-slate-900 border border-white/5 p-4.5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
+              <div className="bg-app-card border border-app-border p-4.5 rounded-2xl relative overflow-hidden flex flex-col justify-between">
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block">Executive Trust Score</span>
+                  <span className="text-[10px] text-app-text-secondary uppercase font-black tracking-widest block">Executive Trust Score</span>
                   <Award className="w-4 h-4 text-emerald-400 animate-pulse" />
                 </div>
                 <div className="py-4 flex items-center gap-4">
@@ -448,7 +448,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                     {currentStatus === 'UNCLAIMED' ? 'N/A' : `${bp.trustScore}%`}
                   </div>
                   <div>
-                    <span className={`text-[11px] font-bold block uppercase ${currentStatus === 'UNCLAIMED' ? 'text-slate-400' : 'text-emerald-400'}`}>
+                    <span className={`text-[11px] font-bold block uppercase${currentStatus === 'UNCLAIMED' ? 'text-slate-400' : 'text-emerald-400'}`}>
                       {currentStatus === 'UNCLAIMED' ? 'No Registered Merchant' : bp.riskStatus}
                     </span>
                     <span className="text-[10px] text-slate-500 block leading-normal mt-0.5">
@@ -462,36 +462,36 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
               </div>
 
               {/* Settlement Strategy */}
-              <div className="bg-slate-900 border border-white/5 p-4.5 rounded-2xl flex flex-col justify-between">
+              <div className="bg-app-card border border-app-border p-4.5 rounded-2xl flex flex-col justify-between">
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block">Settlement Strategy</span>
+                  <span className="text-[10px] text-app-text-secondary uppercase font-black tracking-widest block">Settlement Strategy</span>
                   <Receipt className="w-4 h-4 text-blue-400" />
                 </div>
                 <div className="py-2.5">
-                  <span className="text-md font-extrabold text-white font-mono block tracking-tight">
+                  <span className="text-md font-extrabold text-app-text-primary font-mono block tracking-tight">
                     {currentStatus === 'UNCLAIMED' ? 'Pre-Merchant Escrow' : bp.settlementStrategy}
                   </span>
                   <span className="text-[10px] text-slate-500 block mt-1">Automatic financial clearance tier.</span>
                 </div>
-                <div className="flex justify-between text-[10px] text-slate-400 border-t border-white/5 pt-2 font-semibold">
+                <div className="flex justify-between text-[10px] text-app-text-secondary border-t border-app-border pt-2 font-semibold">
                   <span>SLA Period: 24h-3D</span>
                   <span className="text-emerald-400">Approved Gateway</span>
                 </div>
               </div>
 
               {/* Compliance & Grade */}
-              <div className="bg-slate-900 border border-white/5 p-4.5 rounded-2xl flex flex-col justify-between">
+              <div className="bg-app-card border border-app-border p-4.5 rounded-2xl flex flex-col justify-between">
                 <div className="flex justify-between items-center">
-                  <span className="text-[10px] text-slate-400 uppercase font-black tracking-widest block">Compliance & Grade</span>
+                  <span className="text-[10px] text-app-text-secondary uppercase font-black tracking-widest block">Compliance & Grade</span>
                   <ShieldCheck className="w-4 h-4 text-[#F4631E]" />
                 </div>
                 <div className="py-2.5">
-                  <span className="text-md font-extrabold text-white block tracking-tight">
+                  <span className="text-md font-extrabold text-app-text-primary block tracking-tight">
                     {currentStatus === 'SUSPENDED' ? '🔒 SUSPENDED' : 'Grade A+ Fully Compliant'}
                   </span>
                   <span className="text-[10px] text-slate-500 block mt-1">Regular warehouse audits passed successfully.</span>
                 </div>
-                <div className="flex justify-between text-[10px] text-slate-400 border-t border-white/5 pt-2 font-semibold font-mono">
+                <div className="flex justify-between text-[10px] text-app-text-secondary border-t border-app-border pt-2 font-semibold font-mono">
                   <span>Incident Rate: {incidentsCount}</span>
                   <span className="text-yellow-400">Regular Monitor</span>
                 </div>
@@ -499,26 +499,26 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
             </div>
 
             {/* Biography & Key attributes */}
-            <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 space-y-4">
-              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2">Business Registry Biography</span>
-              <p className="text-xs text-slate-300 leading-relaxed">
+            <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">Business Registry Biography</span>
+              <p className="text-xs text-app-text-secondary leading-relaxed">
                 {matchedProfile?.description || `${brandName} is a premium market leader curated on-demand. This intelligence system allows monitoring corporate footprint parameters, licensing verification states, and pre- merchant search metadata.`}
               </p>
 
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 pt-2 text-xs">
-                <div className="p-3 bg-black/40 rounded-xl border border-white/5">
+                <div className="p-3 bg-app-card/20 rounded-xl border border-app-border">
                   <span className="text-[9px] text-slate-500 font-bold block uppercase mb-1">Entity Owner</span>
-                  <span className="font-bold text-white block">{matchedProfile?.ownerSellerId ? `Merchant Account Associated` : 'Pre-boarding Agent Managed'}</span>
+                  <span className="font-bold text-app-text-primary block">{matchedProfile?.ownerSellerId ? `Merchant Account Associated` : 'Pre-boarding Agent Managed'}</span>
                 </div>
-                <div className="p-3 bg-black/40 rounded-xl border border-white/5">
+                <div className="p-3 bg-app-card/20 rounded-xl border border-app-border">
                   <span className="text-[9px] text-slate-500 font-bold block uppercase mb-1">Primary Market Group</span>
-                  <span className="font-bold text-white block">{bp.category}</span>
+                  <span className="font-bold text-app-text-primary block">{bp.category}</span>
                 </div>
-                <div className="p-3 bg-black/40 rounded-xl border border-white/5">
+                <div className="p-3 bg-app-card/20 rounded-xl border border-app-border">
                   <span className="text-[9px] text-slate-500 font-bold block uppercase mb-1">Corporate Registry Country</span>
-                  <span className="font-bold text-white block">{matchedProfile?.country || 'Bangladesh'}</span>
+                  <span className="font-bold text-app-text-primary block">{matchedProfile?.country || 'Bangladesh'}</span>
                 </div>
-                <div className="p-3 bg-black/40 rounded-xl border border-white/5">
+                <div className="p-3 bg-app-card/20 rounded-xl border border-app-border">
                   <span className="text-[9px] text-slate-500 font-bold block uppercase mb-1">System Audit Level</span>
                   <span className="font-bold text-emerald-400 block font-mono">L3 Enterprise Certified</span>
                 </div>
@@ -526,48 +526,48 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
             </div>
 
             {/* Profile SLA Matrix */}
-            <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 space-y-4">
-              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2">Operational SLA Delivery Health Tracker</span>
+            <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">Operational SLA Delivery Health Tracker</span>
               
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div className="bg-black/30 p-3.5 rounded-xl">
-                  <span className="text-lg font-black text-white font-mono block">{bp.fulfillmentRate}</span>
+                <div className="bg-app-card/20 p-3.5 rounded-xl">
+                  <span className="text-lg font-black text-app-text-primary font-mono block">{bp.fulfillmentRate}</span>
                   <span className="text-[9px] text-slate-500 font-bold uppercase block mt-1">Fulfillment Rate</span>
                 </div>
-                <div className="bg-black/30 p-3.5 rounded-xl">
+                <div className="bg-app-card/20 p-3.5 rounded-xl">
                   <span className="text-lg font-black text-emerald-400 font-mono block">{bp.returnRate}</span>
                   <span className="text-[9px] text-slate-500 font-bold uppercase block mt-1">Customer Returns</span>
                 </div>
-                <div className="bg-black/30 p-3.5 rounded-xl">
+                <div className="bg-app-card/20 p-3.5 rounded-xl">
                   <span className="text-lg font-black text-emerald-400 font-mono block">{bp.cancellationRate}</span>
                   <span className="text-[9px] text-slate-500 font-bold uppercase block mt-1">Merchant Cancellations</span>
                 </div>
-                <div className="bg-black/30 p-3.5 rounded-xl">
-                  <span className="text-lg font-black text-white font-mono block">{bp.complaintRatio}</span>
+                <div className="bg-app-card/20 p-3.5 rounded-xl">
+                  <span className="text-lg font-black text-app-text-primary font-mono block">{bp.complaintRatio}</span>
                   <span className="text-[9px] text-slate-500 font-bold uppercase block mt-1">Complaint Rate</span>
                 </div>
               </div>
             </div>
 
             {/* Brand Portfolio mapping */}
-            <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 space-y-4">
-              <div className="flex justify-between items-center border-b border-white/5 pb-2">
+            <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+              <div className="flex justify-between items-center border-b border-app-border pb-2">
                 <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">Portfolio and Corporate Hierarchy</span>
                 <span className="text-[9px] bg-[#F4631E]/10 border border-[#F4631E]/20 text-[#F4631E] px-2.5 py-0.5 rounded font-black font-mono">Auto Associated</span>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
-                <div className="p-3 bg-black/40 rounded-xl space-y-1">
+                <div className="p-3 bg-app-card/20 rounded-xl space-y-1">
                   <span className="text-[9px] text-[#F4631E] uppercase font-bold block">Parent Holding</span>
-                  <span className="font-extrabold text-white block">{brandName} Group Holdings Ltd.</span>
+                  <span className="font-extrabold text-app-text-primary block">{brandName} Group Holdings Ltd.</span>
                 </div>
-                <div className="p-3 bg-black/40 rounded-xl space-y-1">
+                <div className="p-3 bg-app-card/20 rounded-xl space-y-1">
                   <span className="text-[9px] text-emerald-400 uppercase font-bold block">Sub-brand catalog</span>
-                  <span className="font-extrabold text-white block">{brandName} Casuals, {brandName} Essential Group</span>
+                  <span className="font-extrabold text-app-text-primary block">{brandName} Casuals, {brandName} Essential Group</span>
                 </div>
-                <div className="p-3 bg-black/40 rounded-xl space-y-1">
+                <div className="p-3 bg-app-card/20 rounded-xl space-y-1">
                   <span className="text-[9px] text-slate-500 uppercase font-bold block">Storefront URL mapping</span>
-                  <span className="font-extrabold text-white block font-mono">/brand/{brandName.toLowerCase().replace(/\s+/g, '-')}</span>
+                  <span className="font-extrabold text-app-text-primary block font-mono">/brand/{brandName.toLowerCase().replace(/\s+/g, '-')}</span>
                 </div>
               </div>
             </div>
@@ -580,45 +580,45 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
           <div className="space-y-6 animate-in fade-in duration-300">
             
             {/* Government identity entries */}
-            <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 space-y-4">
-              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2">National Licensing & Corporate Identity registers</span>
+            <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">National Licensing & Corporate Identity registers</span>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 bg-slate-950 rounded-xl border border-white/10 relative">
+                <div className="p-4 bg-app-bg rounded-xl border border-app-border relative">
                   <FileText className="w-4 h-4 text-orange-500 absolute top-4 right-4" />
                   <span className="text-[9px] text-slate-500 uppercase font-black tracking-widest block">Trade License</span>
-                  <span className="text-sm font-extrabold text-white block mt-1 font-mono">{bp.licenseNum}</span>
+                  <span className="text-sm font-extrabold text-app-text-primary block mt-1 font-mono">{bp.licenseNum}</span>
                   <span className="text-[10px] text-emerald-400 mt-2 block font-semibold">✓ Active & Match Certified</span>
                 </div>
 
-                <div className="p-4 bg-slate-950 rounded-xl border border-white/10 relative">
+                <div className="p-4 bg-app-bg rounded-xl border border-app-border relative">
                   <FileText className="w-4 h-4 text-emerald-500 absolute top-4 right-4" />
                   <span className="text-[9px] text-slate-500 uppercase font-black tracking-widest block">VAT Registration</span>
-                  <span className="text-sm font-extrabold text-white block mt-1 font-mono">{bp.vatNum}</span>
+                  <span className="text-sm font-extrabold text-app-text-primary block mt-1 font-mono">{bp.vatNum}</span>
                   <span className="text-[10px] text-emerald-400 mt-2 block font-semibold">✓ verified fully (NBR Gate)</span>
                 </div>
 
-                <div className="p-4 bg-slate-950 rounded-xl border border-white/10 relative">
+                <div className="p-4 bg-app-bg rounded-xl border border-app-border relative">
                   <FileText className="w-4 h-4 text-blue-500 absolute top-4 right-4" />
                   <span className="text-[9px] text-slate-500 uppercase font-black tracking-widest block">Corporate Tax ID (TIN)</span>
-                  <span className="text-sm font-extrabold text-white block mt-1 font-mono">{bp.tinNum}</span>
+                  <span className="text-sm font-extrabold text-app-text-primary block mt-1 font-mono">{bp.tinNum}</span>
                   <span className="text-[10px] text-emerald-400 mt-2 block font-semibold">✓ Active & Income Cleared</span>
                 </div>
               </div>
             </div>
 
             {/* Claims & Verification Hub */}
-            <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 space-y-4">
-              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2">Ownership claim workflow desk</span>
+            <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">Ownership claim workflow desk</span>
 
               {/* Status block checker */}
               {currentStatus === 'UNCLAIMED' && (
                 <div className="p-5 bg-orange-500/5 border border-orange-500/15 rounded-xl space-y-3">
                   <div className="flex items-center gap-2">
                     <Sparkles className="w-5 h-5 text-orange-400 animate-pulse" />
-                    <h4 className="text-xs font-black uppercase text-white tracking-wider">Unclaimed pre-merchant acquisition funnel</h4>
+                    <h4 className="text-xs font-black uppercase text-app-text-primary tracking-wider">Unclaimed pre-merchant acquisition funnel</h4>
                   </div>
-                  <p className="text-xs text-slate-400 leading-normal">
+                  <p className="text-xs text-app-text-secondary leading-normal">
                     This brand directory record is currently unclaimed. You can associate an active seller registration request, verify corporate trademark credentials, or submit an official claim representing a real merchant.
                   </p>
 
@@ -638,45 +638,45 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                   <div className="flex justify-between items-center">
                     <div className="flex items-center gap-2">
                       <Clock className="w-5 h-5 text-yellow-400 animate-pulse" />
-                      <h4 className="text-xs font-black uppercase text-white tracking-wider">Ownership Verification SLA Under Way</h4>
+                      <h4 className="text-xs font-black uppercase text-app-text-primary tracking-wider">Ownership Verification SLA Under Way</h4>
                     </div>
                     <span className="text-[8.5px] bg-yellow-500/10 text-yellow-500 font-extrabold font-mono border border-yellow-500/20 px-2.5 py-0.5 rounded uppercase">Pending Review Desk</span>
                   </div>
 
                   {activeClaim ? (
-                    <div className="bg-black/30 p-4 rounded-xl border border-white/5 text-xs grid grid-cols-2 gap-3">
+                    <div className="bg-app-card/20 p-4 rounded-xl border border-app-border text-xs grid grid-cols-2 gap-3">
                       <div>
                         <span className="text-[9px] text-slate-500 uppercase font-black block">Claim Applicant</span>
-                        <strong className="text-white block mt-0.5">{activeClaim.applicantName}</strong>
+                        <strong className="text-app-text-primary block mt-0.5">{activeClaim.applicantName}</strong>
                       </div>
                       <div>
                         <span className="text-[9px] text-slate-500 uppercase font-black block">Applicant Corporate Email</span>
-                        <strong className="text-white block mt-0.5 font-mono">{activeClaim.businessEmail}</strong>
+                        <strong className="text-app-text-primary block mt-0.5 font-mono">{activeClaim.businessEmail}</strong>
                       </div>
-                      <div className="col-span-2 pt-2 border-t border-white/5">
+                      <div className="col-span-2 pt-2 border-t border-app-border">
                         <span className="text-[9px] text-slate-500 uppercase font-black block">Uploaded Claim Certificate ID</span>
-                        <strong className="text-white block mt-0.5 font-mono text-[10px] text-amber-500">{activeClaim.tradeLicense} (Matched Certificate)</strong>
+                        <strong className="text-app-text-primary block mt-0.5 font-mono text-[10px] text-amber-500">{activeClaim.tradeLicense} (Matched Certificate)</strong>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400">Simulating applicant credentials for pre-merchant request analysis.</p>
+                    <p className="text-xs text-app-text-secondary">Simulating applicant credentials for pre-merchant request analysis.</p>
                   )}
 
                   <div className="space-y-2">
-                    <label className="text-[9px] text-slate-400 font-black uppercase">Oversight reason input (Required to execute choice)</label>
+                    <label className="text-[9px] text-app-text-secondary font-black uppercase">Oversight reason input (Required to execute choice)</label>
                     <input 
                       type="text" 
                       placeholder="e.g. Approved. Corporate tax registries match fully, registry DNS txt token identified."
                       value={reviewReasonInput}
                       onChange={(e) => setReviewReasonInput(e.target.value)}
-                      className="w-full bg-slate-950 border border-white/10 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-yellow-500"
+                      className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-yellow-500"
                     />
                   </div>
 
                   <div className="flex gap-2">
                     <button 
                       onClick={() => activeClaim ? triggerClaimApproval(activeClaim.id) : adjustBrandStatus('VERIFIED_OWNER', 'Corporate claim manual approval.')}
-                      className="px-4 py-2 bg-green-500 hover:bg-green-600 text-white text-[10px] font-black uppercase rounded-lg tracking-wider cursor-pointer"
+                      className="px-4 py-2 bg-green-500 hover:bg-green-600 text-app-text-primary text-[10px] font-black uppercase rounded-lg tracking-wider cursor-pointer"
                     >
                       Approve Ownership Claim
                     </button>
@@ -694,16 +694,16 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                 <div className="p-5 bg-green-500/5 border border-green-500/15 rounded-xl space-y-3">
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-5 h-5 text-green-400" />
-                    <h4 className="text-xs font-black uppercase text-white tracking-wider">Corporate entity ownership verified</h4>
+                    <h4 className="text-xs font-black uppercase text-app-text-primary tracking-wider">Corporate entity ownership verified</h4>
                   </div>
-                  <p className="text-xs text-slate-400 leading-normal">
+                  <p className="text-xs text-app-text-secondary leading-normal">
                     This profile represents an authorized corporate merchant fully verified against national Trademark registry databases. All future catalog listings bypass generic moderation delays.
                   </p>
 
                   <div className="pt-2 flex gap-3 text-xs">
                     <button 
                       onClick={() => adjustBrandStatus('SUSPENDED', 'Regulatory suspension triggered manually.')}
-                      className="px-3 py-1.5 bg-black/40 hover:bg-red-500/15 text-red-500 border border-white/10 hover:border-red-500/20 rounded font-bold uppercase transition"
+                      className="px-3 py-1.5 bg-app-card/20 hover:bg-red-500/15 text-red-500 border border-app-border hover:border-red-500/20 rounded font-bold uppercase transition"
                     >
                       Revoke Claim & Suspend
                     </button>
@@ -722,27 +722,27 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
               {/* Official Contact Panel */}
-              <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 space-y-4">
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2">Official Contacts Register</span>
+              <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">Official Contacts Register</span>
                 
                 <div className="space-y-3 text-xs">
-                  <div className="flex items-center gap-3 bg-black/30 p-3 rounded-xl border border-white/5">
+                  <div className="flex items-center gap-3 bg-app-card/20 p-3 rounded-xl border border-app-border">
                     <Mail className="w-4 h-4 text-amber-500" />
                     <div>
                       <span className="text-[9px] text-slate-500 font-bold block uppercase">Primary Business Email</span>
-                      <strong className="text-white block mt-0.5 font-mono">{matchedProfile?.websiteUrl ? `${matchedProfile.name.toLowerCase().replace(/\s+/g, '')}@corp-domain.com` : bp.email}</strong>
+                      <strong className="text-app-text-primary block mt-0.5 font-mono">{matchedProfile?.websiteUrl ? `${matchedProfile.name.toLowerCase().replace(/\s+/g, '')}@corp-domain.com` : bp.email}</strong>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 bg-black/30 p-3 rounded-xl border border-white/5">
+                  <div className="flex items-center gap-3 bg-app-card/20 p-3 rounded-xl border border-app-border">
                     <Phone className="w-4 h-4 text-emerald-500" />
                     <div>
                       <span className="text-[9px] text-slate-500 font-bold block uppercase">Representative Tel line</span>
-                      <strong className="text-white block mt-0.5 font-mono">{bp.phone}</strong>
+                      <strong className="text-app-text-primary block mt-0.5 font-mono">{bp.phone}</strong>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3 bg-black/30 p-3 rounded-xl border border-white/5">
+                  <div className="flex items-center gap-3 bg-app-card/20 p-3 rounded-xl border border-app-border">
                     <Globe className="w-4 h-4 text-blue-400" />
                     <div>
                       <span className="text-[9px] text-slate-500 font-bold block uppercase">Corporate website domain</span>
@@ -755,28 +755,28 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
               </div>
 
               {/* Logistics and Distribution hubs */}
-              <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 space-y-4">
-                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2">Warehouses & Logistics Mapping</span>
+              <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+                <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">Warehouses & Logistics Mapping</span>
                 
                 <div className="space-y-3 text-xs">
-                  <div className="flex items-start gap-3 bg-black/30 p-3 rounded-xl border border-white/5">
+                  <div className="flex items-start gap-3 bg-app-card/20 p-3 rounded-xl border border-app-border">
                     <MapPin className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
                     <div>
                       <span className="text-[9px] text-slate-500 font-bold block uppercase">Registered Corporate HQ Address</span>
-                      <p className="text-white mt-1 leading-normal">{bp.address}</p>
+                      <p className="text-app-text-primary mt-1 leading-normal">{bp.address}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-3 bg-black/30 p-3 rounded-xl border border-white/5">
+                  <div className="flex items-start gap-3 bg-app-card/20 p-3 rounded-xl border border-app-border">
                     <Truck className="w-4 h-4 text-purple-400 shrink-0 mt-0.5" />
                     <div>
                       <span className="text-[9px] text-slate-500 font-bold block uppercase">Operational Warehouse Location</span>
-                      <p className="text-white mt-1 leading-normal">{bp.warehouseAddress}</p>
+                      <p className="text-app-text-primary mt-1 leading-normal">{bp.warehouseAddress}</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 justify-between bg-black/40 p-2 px-3 rounded-lg border border-white/5 text-[10.5px]">
-                    <span className="text-slate-400">Integrated Fulfilled Partner:</span>
+                  <div className="flex items-center gap-2 justify-between bg-app-card/20 p-2 px-3 rounded-lg border border-app-border text-[10.5px]">
+                    <span className="text-app-text-secondary">Integrated Fulfilled Partner:</span>
                     <strong className="text-emerald-400 font-bold uppercase">Choosify Express Prime</strong>
                   </div>
                 </div>
@@ -784,17 +784,17 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
             </div>
 
             {/* Outreach Communication Log Thread */}
-            <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 space-y-4">
-              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2">Administrative Outreach Notes</span>
+            <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">Administrative Outreach Notes</span>
               
               <div className="space-y-3">
                 {chatTimeline.map(ch => (
-                  <div key={ch.id} className="p-3 bg-slate-950 border border-white/5 rounded-xl text-xs space-y-1">
-                    <div className="flex justify-between items-center border-b border-white/5 pb-1 mb-1">
-                      <span className="text-[9px] bg-slate-800 text-slate-300 font-bold px-2 py-0.5 rounded uppercase font-mono">{ch.type}</span>
+                  <div key={ch.id} className="p-3 bg-app-bg border border-app-border rounded-xl text-xs space-y-1">
+                    <div className="flex justify-between items-center border-b border-app-border pb-1 mb-1">
+                      <span className="text-[9px] bg-app-bg text-app-text-secondary font-bold px-2 py-0.5 rounded uppercase font-mono">{ch.type}</span>
                       <span className="text-[10px] text-slate-500 font-mono">{ch.date}</span>
                     </div>
-                    <p className="text-slate-300 leading-normal">{ch.message}</p>
+                    <p className="text-app-text-secondary leading-normal">{ch.message}</p>
                   </div>
                 ))}
               </div>
@@ -806,7 +806,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                   value={outreachMsg}
                   onChange={(e) => setOutreachMsg(e.target.value)}
                   placeholder="Record note in permanent audit log (e.g. Spoke to Director. Approved trade certificates)..."
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl p-3 text-xs focus:outline-none focus:border-orange-500"
+                  className="w-full bg-app-bg border border-app-border rounded-xl p-3 text-xs focus:outline-none focus:border-orange-500"
                 />
                 <button 
                   type="submit"
@@ -826,7 +826,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
             
             {/* Commerce top panel */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
-              <div className="p-4 bg-slate-900 border border-white/5 rounded-2xl space-y-2">
+              <div className="p-4 bg-app-card border border-app-border rounded-2xl space-y-2">
                 <span className="text-slate-500 font-bold uppercase tracking-wider block text-[9.5px]">Est. Monthly GMV</span>
                 <span className="text-xl font-black text-emerald-400 font-mono">৳ {(bp.monthlyRevenue * 1.25).toLocaleString([], {maximumFractionDigits:0})}</span>
                 <span className="text-[#F4631E] flex items-center gap-1 font-bold text-[10px] mt-1">
@@ -835,28 +835,28 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                 </span>
               </div>
 
-              <div className="p-4 bg-slate-900 border border-white/5 rounded-2xl space-y-2">
+              <div className="p-4 bg-app-card border border-app-border rounded-2xl space-y-2">
                 <span className="text-slate-500 font-bold uppercase tracking-wider block text-[9.5px]">Average Basket Size</span>
-                <span className="text-xl font-black text-white font-mono">৳ 3,450</span>
-                <span className="text-slate-400 font-semibold block text-[10px] sm:mt-1">Based on category averages</span>
+                <span className="text-xl font-black text-app-text-primary font-mono">৳ 3,450</span>
+                <span className="text-app-text-secondary font-semibold block text-[10px] sm:mt-1">Based on category averages</span>
               </div>
 
-              <div className="p-4 bg-slate-900 border border-white/5 rounded-2xl space-y-2">
+              <div className="p-4 bg-app-card border border-app-border rounded-2xl space-y-2">
                 <span className="text-slate-500 font-bold uppercase tracking-wider block text-[9.5px]">Traffic Unique Reach</span>
-                <span className="text-xl font-black text-white font-mono">34,190 / mo</span>
+                <span className="text-xl font-black text-app-text-primary font-mono">34,190 / mo</span>
                 <span className="text-emerald-400 font-bold block text-[10px] mt-1">High SEO Index Priority</span>
               </div>
 
-              <div className="p-4 bg-slate-900 border border-white/5 rounded-2xl space-y-2">
+              <div className="p-4 bg-app-card border border-app-border rounded-2xl space-y-2">
                 <span className="text-slate-500 font-bold uppercase tracking-wider block text-[9.5px]">Catalog Conversion Ratio</span>
-                <span className="text-xl font-black text-white font-mono">3.4%</span>
-                <span className="text-slate-400 block text-[10px] mt-1">Stable pipeline checkout SLA</span>
+                <span className="text-xl font-black text-app-text-primary font-mono">3.4%</span>
+                <span className="text-app-text-secondary block text-[10px] mt-1">Stable pipeline checkout SLA</span>
               </div>
             </div>
 
             {/* Area Chart visualization using Recharts */}
-            <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 space-y-4">
-              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2">Commercial Velocity Projection (6-Months Ledger)</span>
+            <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">Commercial Velocity Projection (6-Months Ledger)</span>
               
               <div className="h-64 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -888,31 +888,31 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
           <div className="space-y-6 animate-in fade-in duration-300">
             
             {/* Inline Product Creator form */}
-            <div className="bg-slate-900 border border-white/5 rounded-2xl p-5">
-              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2 mb-4">Quick Publish Item (Direct Listing)</span>
+            <div className="bg-app-card border border-app-border rounded-2xl p-5">
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2 mb-4">Quick Publish Item (Direct Listing)</span>
               
               <form onSubmit={publishProductInline} className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
                 <div className="space-y-1.5">
-                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Product Display Name</label>
+                  <label className="text-[10px] text-app-text-secondary font-bold uppercase tracking-wider block">Product Display Name</label>
                   <input 
                     type="text" 
                     required
                     placeholder="e.g. Apex Extreme Comfort Loafers"
                     value={productUploadForm.name}
                     onChange={(e) => setProductUploadForm({ ...productUploadForm, name: e.target.value })}
-                    className="w-full bg-slate-950 border border-white/10 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500 font-bold"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500 font-bold"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Unit Price (BDT)</label>
+                  <label className="text-[10px] text-app-text-secondary font-bold uppercase tracking-wider block">Unit Price (BDT)</label>
                   <input 
                     type="text" 
                     required
                     placeholder="e.g. 4,500"
                     value={productUploadForm.price}
                     onChange={(e) => setProductUploadForm({ ...productUploadForm, price: e.target.value })}
-                    className="w-full bg-slate-950 border border-white/10 rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500 font-bold"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500 font-bold"
                   />
                 </div>
 
@@ -926,13 +926,13 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
             </div>
 
             {/* Products Table list specifically filtered for this brand */}
-            <div className="bg-slate-900 border border-white/5 rounded-2xl p-5">
-              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2.5 mb-3">Brand Catalog Listing Desk</span>
+            <div className="bg-app-card border border-app-border rounded-2xl p-5">
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2.5 mb-3">Brand Catalog Listing Desk</span>
               
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
                   <thead>
-                    <tr className="border-b border-white/5 text-slate-500 font-bold uppercase text-[9px] tracking-wide">
+                    <tr className="border-b border-app-border text-slate-500 font-bold uppercase text-[9px] tracking-wide">
                       <th className="py-2.5">ID</th>
                       <th className="py-2.5">Product Name</th>
                       <th className="py-2.5">Category Area</th>
@@ -950,13 +950,13 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                     ) : (
                       brandProducts.map(p => (
                         <tr key={p.id} className="hover:bg-white/[0.01]">
-                          <td className="py-3 font-mono text-[10px] text-slate-400">{p.id}</td>
-                          <td className="py-3 font-bold text-white">{p.name}</td>
-                          <td className="py-3 text-[11px] text-slate-300">{p.category}</td>
+                          <td className="py-3 font-mono text-[10px] text-app-text-secondary">{p.id}</td>
+                          <td className="py-3 font-bold text-app-text-primary">{p.name}</td>
+                          <td className="py-3 text-[11px] text-app-text-secondary">{p.category}</td>
                           <td className="py-3 text-[11px] text-emerald-400 font-mono">100% SLA Green</td>
-                          <td className="py-3 font-mono font-bold text-slate-200">{p.price}</td>
+                          <td className="py-3 font-mono font-bold text-app-text-secondary">{p.price}</td>
                           <td className="py-3">
-                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase${
                               p.status === 'Live' ? 'bg-green-500/10 border border-green-500/25 text-green-400' :
                               p.status === 'Pending' ? 'bg-orange-500/10 border border-orange-500/25 text-orange-400 animate-pulse' :
                               'bg-red-500/10 border border-red-500/25 text-red-500'
@@ -972,7 +972,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                                     setOuterProducts(prev => prev.map(item => item.id === p.id ? { ...item, status: 'Live' } : item));
                                     showToast(`✓ Active moderation bypassed fully. "${p.name}" is now live!`);
                                   }}
-                                  className="px-2 py-0.5 bg-green-500 text-white font-bold text-[10px] rounded hover:scale-102 cursor-pointer uppercase"
+                                  className="px-2 py-0.5 bg-green-500 text-app-text-primary font-bold text-[10px] rounded hover:scale-102 cursor-pointer uppercase"
                                 >
                                   Approve Live
                                 </button>
@@ -982,7 +982,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                                   setOuterProducts(prev => prev.filter(item => item.id !== p.id));
                                   showToast(`✓ Listing deleted: "${p.name}"`);
                                 }}
-                                className="px-2 py-0.5 bg-white/5 border border-white/5 text-slate-400 hover:text-red-500 rounded text-[10px] cursor-pointer"
+                                className="px-2 py-0.5 bg-white/5 border border-app-border text-app-text-secondary hover:text-red-500 rounded text-[10px] cursor-pointer"
                               >
                                 Delete
                               </button>
@@ -1003,13 +1003,13 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
         {currentTab === 'orders' && (
           <div className="space-y-6 animate-in fade-in duration-300">
             
-            <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 space-y-4">
-              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2">Corporate Orders & Shipment dispatch ledger</span>
+            <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">Corporate Orders & Shipment dispatch ledger</span>
               
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs pb-4">
                   <thead>
-                    <tr className="border-b border-white/5 text-slate-500 font-bold uppercase text-[9px] tracking-wide">
+                    <tr className="border-b border-app-border text-slate-500 font-bold uppercase text-[9px] tracking-wide">
                       <th className="py-2.5">Order ID</th>
                       <th className="py-2.5">Purchaser</th>
                       <th className="py-2.5">Items / Configuration</th>
@@ -1023,12 +1023,12 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                     {simulatedOrders.map(ord => (
                       <tr key={ord.id} className="hover:bg-white/[0.01]">
                         <td className="py-3 font-mono text-[10px] font-bold text-[#F4631E]">{ord.id}</td>
-                        <td className="py-3 font-medium text-slate-200">{ord.customer}</td>
-                        <td className="py-3 text-slate-300 font-bold truncate max-w-[180px]">{ord.items}</td>
-                        <td className="py-3 font-mono text-slate-400">{ord.date}</td>
+                        <td className="py-3 font-medium text-app-text-secondary">{ord.customer}</td>
+                        <td className="py-3 text-app-text-secondary font-bold truncate max-w-[180px]">{ord.items}</td>
+                        <td className="py-3 font-mono text-app-text-secondary">{ord.date}</td>
                         <td className="py-3 font-mono text-emerald-400 font-bold">{ord.amount}</td>
                         <td className="py-3">
-                          <span className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase ${
+                          <span className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase${
                             ord.status === 'Delivered' ? 'bg-green-500/10 text-emerald-400 border border-green-500/20' :
                             ord.status === 'Processing' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' :
                             'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
@@ -1044,7 +1044,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                                   setSimulatedOrders(prev => prev.map(o => o.id === ord.id ? { ...o, status: 'Delivered' } : o));
                                   showToast('✓ Shipment status marked as "Delivered" successfully.');
                                 }}
-                                className="px-2 py-0.5 bg-green-500 text-white font-bold text-[9px] uppercase tracking-wider rounded cursor-pointer"
+                                className="px-2 py-0.5 bg-green-500 text-app-text-primary font-bold text-[9px] uppercase tracking-wider rounded cursor-pointer"
                               >
                                 Delivered
                               </button>
@@ -1054,7 +1054,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                                 setSimulatedOrders(prev => prev.map(o => o.id === ord.id ? { ...o, status: 'Refund Pending' } : o));
                                 showToast('⚠️ Refund dispute requested dynamically.');
                               }}
-                              className="px-2 py-0.5 bg-white/5 border border-white/5 hover:text-red-400 rounded text-[9.5px] cursor-pointer"
+                              className="px-2 py-0.5 bg-white/5 border border-app-border hover:text-red-400 rounded text-[9.5px] cursor-pointer"
                             >
                               Refund
                             </button>
@@ -1075,9 +1075,9 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
           <div className="space-y-6 animate-in fade-in duration-300">
             
             {/* Direct Penalize Actions */}
-            <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 space-y-4">
-              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2">Manual administration escalation actions</span>
-              <p className="text-xs text-slate-400">
+            <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">Manual administration escalation actions</span>
+              <p className="text-xs text-app-text-secondary">
                 Execute corporate warnings, place catalogs under strict escrows, or trigger full account suspensions due to intellectual property violations or duplicate listings detections.
               </p>
 
@@ -1114,10 +1114,10 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
             </div>
 
             {/* Audit log trail specific to this brand */}
-            <div className="bg-slate-900 border border-white/5 rounded-2xl p-5 space-y-4">
-              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-white/5 pb-2_ timeline">Immutable Brand Intelligence Security Timeline</span>
+            <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
+              <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2_ timeline">Immutable Brand Intelligence Security Timeline</span>
               
-              <div className="space-y-4.5 pl-3.5 relative border-l border-white/10 ml-1 pb-2">
+              <div className="space-y-4.5 pl-3.5 relative border-l border-app-border ml-1 pb-2">
                 {logs.filter(lg => lg.brandName.toLowerCase() === brandName.toLowerCase()).length === 0 ? (
                   <div className="text-xs text-slate-500 italic pt-1">
                     No timeline actions recorded.
@@ -1128,10 +1128,10 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                       {/* circle */}
                       <span className="w-2.5 h-2.5 bg-[#F4631E] rounded-full border border-slate-950 absolute -left-[20px] top-[4px]" />
                       <div className="flex justify-between items-baseline text-xs">
-                        <strong className="text-white text-[11px] tracking-tight">{lg.action}</strong>
+                        <strong className="text-app-text-primary text-[11px] tracking-tight">{lg.action}</strong>
                         <span className="text-[9.5px] text-slate-500 font-mono">{new Date(lg.timestamp).toLocaleString()}</span>
                       </div>
-                      <p className="text-[10.5px] text-slate-400 leading-normal">{lg.reason}</p>
+                      <p className="text-[10.5px] text-app-text-secondary leading-normal">{lg.reason}</p>
                       <span className="text-[9.5px] text-slate-600 block font-mono">Operations: {lg.adminUser}</span>
                     </div>
                   ))
@@ -1141,7 +1141,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                 <div className="relative space-y-1">
                   <span className="w-2.5 h-2.5 bg-slate-500 rounded-full border border-slate-950 absolute -left-[20px] top-[4px]" />
                   <div className="flex justify-between items-baseline text-xs">
-                    <strong className="text-slate-400 text-[11px]">System Bootstrap Profile</strong>
+                    <strong className="text-app-text-secondary text-[11px]">System Bootstrap Profile</strong>
                     <span className="text-[9.5px] text-slate-500 font-mono">2026-06-15 00:00</span>
                   </div>
                   <p className="text-[10.5px] text-slate-500 leading-normal">Initial registry metadata created via onboarding system database.</p>
