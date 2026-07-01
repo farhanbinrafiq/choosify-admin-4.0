@@ -1,14 +1,3 @@
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  limit,
-  query,
-  setDoc,
-  type Firestore,
-} from 'firebase/firestore';
 import type {
   CatalogBrand,
   CatalogCategory,
@@ -16,6 +5,18 @@ import type {
   CatalogProduct,
   HomepageConfig,
 } from '../src/types/catalog';
+
+type Firestore = import('firebase/firestore').Firestore;
+type FirestoreModule = typeof import('firebase/firestore');
+
+let firestoreModule: FirestoreModule | null = null;
+
+async function getFirestoreModule(): Promise<FirestoreModule> {
+  if (!firestoreModule) {
+    firestoreModule = await import('firebase/firestore');
+  }
+  return firestoreModule;
+}
 
 const PRODUCTS_COLLECTION = 'catalog_products';
 const CATEGORIES_COLLECTION = 'catalog_categories';
@@ -340,6 +341,7 @@ async function listCollection<T>(collectionName: string): Promise<T[]> {
   try {
     const db = await resolveDb();
     if (!db) return [...(collectionMemoryRef(collectionName) as T[])];
+    const { collection, getDocs } = await getFirestoreModule();
     const snapshot = await getDocs(collection(db, collectionName));
     return snapshot.docs.map((item) => item.data() as T);
   } catch (error) {
@@ -359,6 +361,7 @@ async function getById<T>(collectionName: string, id: string): Promise<T | null>
       const found = (collectionMemoryRef(collectionName) as Array<{ id: string }>).find((item) => item.id === id);
       return (found as T) || null;
     }
+    const { doc, getDoc } = await getFirestoreModule();
     const snapshot = await getDoc(doc(db, collectionName, id));
     return snapshot.exists() ? (snapshot.data() as T) : null;
   } catch (error) {
@@ -381,6 +384,7 @@ async function upsert<T extends { id: string }>(collectionName: string, data: T)
     try {
       const db = await resolveDb();
       if (db) {
+        const { collection, doc, setDoc } = await getFirestoreModule();
         await setDoc(doc(db, collectionName, data.id), data, { merge: true });
       }
     } catch (error) {
@@ -399,6 +403,7 @@ async function remove(collectionName: string, id: string): Promise<void> {
     try {
       const db = await resolveDb();
       if (db) {
+        const { doc, deleteDoc } = await getFirestoreModule();
         await deleteDoc(doc(db, collectionName, id));
       }
     } catch (error) {
@@ -433,6 +438,7 @@ export const catalogStore = {
     try {
       const db = await resolveDb();
       if (!db) return memoryState.homepage;
+      const { doc, getDoc } = await getFirestoreModule();
       const snapshot = await getDoc(doc(db, ...HOMEPAGE_DOC));
       if (!snapshot.exists()) return memoryState.homepage;
       return snapshot.data() as HomepageConfig;
@@ -448,6 +454,7 @@ export const catalogStore = {
       try {
         const db = await resolveDb();
         if (db) {
+          const { doc, setDoc } = await getFirestoreModule();
           await setDoc(doc(db, ...HOMEPAGE_DOC), homepage, { merge: true });
         }
       } catch (error) {
@@ -463,6 +470,7 @@ export async function ensureCatalogSeedData(): Promise<void> {
     if (!memoryMode) {
       const db = await resolveDb();
       if (db) {
+        const { collection, getDocs, limit, query } = await getFirestoreModule();
         const existingProducts = await getDocs(query(collection(db, PRODUCTS_COLLECTION), limit(1)));
         if (!existingProducts.empty) {
           return;
