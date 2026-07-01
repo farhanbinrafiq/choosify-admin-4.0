@@ -17,6 +17,19 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use(async (_req, _res, next) => {
+  if (!seeded) {
+    try {
+      await ensureCatalogSeedData();
+    } catch (error) {
+      console.warn('[Vercel API] Seed attempt failed; continuing with runtime fallback.', error);
+    } finally {
+      seeded = true;
+    }
+  }
+  next();
+});
+
 app.use('/api/v1', catalogRouter);
 
 app.get('/api/admin/stats', (_req, res) => {
@@ -59,16 +72,4 @@ app.patch('/api/products/:id', (req, res) => {
   });
 });
 
-export default async function handler(req: any, res: any) {
-  if (!seeded) {
-    try {
-      await ensureCatalogSeedData();
-    } catch (error) {
-      console.warn('[Vercel API] Seed attempt failed; continuing with runtime fallback.', error);
-    } finally {
-      seeded = true;
-    }
-  }
-
-  return app(req, res);
-}
+export default app;
