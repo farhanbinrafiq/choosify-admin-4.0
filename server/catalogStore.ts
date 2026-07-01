@@ -7,8 +7,8 @@ import {
   limit,
   query,
   setDoc,
+  type Firestore,
 } from 'firebase/firestore';
-import { db } from '../src/lib/firebase';
 import type {
   CatalogBrand,
   CatalogCategory,
@@ -281,7 +281,31 @@ export const defaultHomepage = (): HomepageConfig => {
   };
 };
 
-let memoryMode = false;
+let memoryMode = process.env.CATALOG_USE_FIRESTORE !== 'true';
+let firestoreDb: Firestore | null = null;
+let firestoreLoadAttempted = false;
+
+const enableMemoryMode = (reason: unknown) => {
+  if (!memoryMode) {
+    memoryMode = true;
+    console.warn('[Catalog Store] Falling back to in-memory persistence.', reason);
+  }
+};
+
+async function resolveDb(): Promise<Firestore | null> {
+  if (memoryMode) return null;
+  if (firestoreDb) return firestoreDb;
+  if (firestoreLoadAttempted) return null;
+  firestoreLoadAttempted = true;
+  try {
+    const firebaseModule = await import('../src/lib/firebase');
+    firestoreDb = firebaseModule.db;
+    return firestoreDb;
+  } catch (error) {
+    enableMemoryMode(error);
+    return null;
+  }
+}
 const memoryState: {
   products: CatalogProduct[];
   categories: CatalogCategory[];
@@ -294,13 +318,6 @@ const memoryState: {
   brands: defaultBrands(),
   deals: defaultDeals(),
   homepage: defaultHomepage(),
-};
-
-const enableMemoryMode = (reason: unknown) => {
-  if (!memoryMode) {
-    memoryMode = true;
-    console.warn('[Catalog Store] Falling back to in-memory persistence.', reason);
-  }
 };
 
 const collectionMemoryRef = (collectionName: string): unknown[] => {
@@ -321,6 +338,8 @@ const collectionMemoryRef = (collectionName: string): unknown[] => {
 async function listCollection<T>(collectionName: string): Promise<T[]> {
   if (memoryMode) return [...(collectionMemoryRef(collectionName) as T[])];
   try {
+    const db = await resolveDb();
+    if (!db) return [...(collectionMemoryRef(collectionName) as T[])];
     const snapshot = await getDocs(collection(db, collectionName));
     return snapshot.docs.map((item) => item.data() as T);
   } catch (error) {
@@ -335,7 +354,12 @@ async function getById<T>(collectionName: string, id: string): Promise<T | null>
     return (found as T) || null;
   }
   try {
-    const snapshot = await getDoc(doc(collection(db, collectionName), id));
+    const db = await resolveDb();
+    if (!db) {
+      const found = (collectionMemoryRef(collectionName) as Array<{ id: string }>).find((item) => item.id === id);
+      return (found as T) || null;
+    }
+    const snapshot = await getDoc(doc(db, collectionName, id));
     return snapshot.exists() ? (snapshot.data() as T) : null;
   } catch (error) {
     enableMemoryMode(error);
@@ -355,7 +379,10 @@ async function upsert<T extends { id: string }>(collectionName: string, data: T)
 
   if (!memoryMode) {
     try {
-      await setDoc(doc(collection(db, collectionName), data.id), data, { merge: true });
+      const db = await resolveDb();
+      if (db) {
+        await setDoc(doc(db, collectionName, data.id), data, { merge: true });
+      }
     } catch (error) {
       enableMemoryMode(error);
     }
@@ -370,7 +397,10 @@ async function remove(collectionName: string, id: string): Promise<void> {
 
   if (!memoryMode) {
     try {
-      await deleteDoc(doc(collection(db, collectionName), id));
+      const db = await resolveDb();
+      if (db) {
+        await deleteDoc(doc(db, collectionName, id));
+      }
     } catch (error) {
       enableMemoryMode(error);
     }
@@ -401,6 +431,8 @@ export const catalogStore = {
   async getHomepage(): Promise<HomepageConfig> {
     if (memoryMode) return memoryState.homepage;
     try {
+      const db = await resolveDb();
+      if (!db) return memoryState.homepage;
       const snapshot = await getDoc(doc(db, ...HOMEPAGE_DOC));
       if (!snapshot.exists()) return memoryState.homepage;
       return snapshot.data() as HomepageConfig;
@@ -414,7 +446,10 @@ export const catalogStore = {
     memoryState.homepage = homepage;
     if (!memoryMode) {
       try {
-        await setDoc(doc(db, ...HOMEPAGE_DOC), homepage, { merge: true });
+        const db = await resolveDb();
+        if (db) {
+          await setDoc(doc(db, ...HOMEPAGE_DOC), homepage, { merge: true });
+        }
       } catch (error) {
         enableMemoryMode(error);
       }
@@ -426,9 +461,12 @@ export const catalogStore = {
 export async function ensureCatalogSeedData(): Promise<void> {
   try {
     if (!memoryMode) {
-      const existingProducts = await getDocs(query(collection(db, PRODUCTS_COLLECTION), limit(1)));
-      if (!existingProducts.empty) {
-        return;
+      const db = await resolveDb();
+      if (db) {
+        const existingProducts = await getDocs(query(collection(db, PRODUCTS_COLLECTION), limit(1)));
+        if (!existingProducts.empty) {
+          return;
+        }
       }
     }
   } catch (error) {
