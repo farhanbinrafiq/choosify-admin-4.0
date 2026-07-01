@@ -73,7 +73,17 @@ async function remove2(collectionName, id) {
   const db = await dbOrThrow();
   await db.collection(collectionName).doc(id).delete();
 }
-var PRODUCTS_COLLECTION2, CATEGORIES_COLLECTION2, BRANDS_COLLECTION2, DEALS_COLLECTION2, HOMEPAGE_DOC, SITE_DOC, firestoreAdminStore;
+async function getProductDetailById(productId) {
+  const db = await dbOrThrow();
+  const snapshot = await db.collection(PRODUCT_DETAILS_COLLECTION2).doc(productId).get();
+  return snapshot.exists ? snapshot.data() : null;
+}
+async function upsertProductDetailDoc(payload) {
+  const db = await dbOrThrow();
+  await db.collection(PRODUCT_DETAILS_COLLECTION2).doc(payload.productId).set(payload, { merge: true });
+  return payload;
+}
+var PRODUCTS_COLLECTION2, CATEGORIES_COLLECTION2, BRANDS_COLLECTION2, DEALS_COLLECTION2, CREATORS_COLLECTION2, GUIDES_COLLECTION2, PLACEMENTS_COLLECTION2, PRODUCT_DETAILS_COLLECTION2, HOMEPAGE_DOC, SITE_DOC, firestoreAdminStore;
 var init_catalogFirestoreAdmin = __esm({
   "lib/vercel-catalog/catalogFirestoreAdmin.ts"() {
     init_firebaseAdmin();
@@ -81,6 +91,10 @@ var init_catalogFirestoreAdmin = __esm({
     CATEGORIES_COLLECTION2 = "catalog_categories";
     BRANDS_COLLECTION2 = "catalog_brands";
     DEALS_COLLECTION2 = "catalog_deals";
+    CREATORS_COLLECTION2 = "catalog_creators";
+    GUIDES_COLLECTION2 = "catalog_guides";
+    PLACEMENTS_COLLECTION2 = "catalog_placements";
+    PRODUCT_DETAILS_COLLECTION2 = "catalog_product_details";
     HOMEPAGE_DOC = { collection: "settings", id: "catalog_homepage" };
     SITE_DOC = { collection: "settings", id: "catalog_site" };
     firestoreAdminStore = {
@@ -100,6 +114,22 @@ var init_catalogFirestoreAdmin = __esm({
       getDeal: (id) => getById2(DEALS_COLLECTION2, id),
       upsertDeal: (payload) => upsert2(DEALS_COLLECTION2, payload),
       deleteDeal: (id) => remove2(DEALS_COLLECTION2, id),
+      listCreators: () => listCollection2(CREATORS_COLLECTION2),
+      getCreator: (id) => getById2(CREATORS_COLLECTION2, id),
+      upsertCreator: (payload) => upsert2(CREATORS_COLLECTION2, payload),
+      deleteCreator: (id) => remove2(CREATORS_COLLECTION2, id),
+      listGuides: () => listCollection2(GUIDES_COLLECTION2),
+      getGuide: (id) => getById2(GUIDES_COLLECTION2, id),
+      upsertGuide: (payload) => upsert2(GUIDES_COLLECTION2, payload),
+      deleteGuide: (id) => remove2(GUIDES_COLLECTION2, id),
+      listPlacements: () => listCollection2(PLACEMENTS_COLLECTION2),
+      getPlacement: (id) => getById2(PLACEMENTS_COLLECTION2, id),
+      upsertPlacement: (payload) => upsert2(PLACEMENTS_COLLECTION2, payload),
+      deletePlacement: (id) => remove2(PLACEMENTS_COLLECTION2, id),
+      listProductDetails: () => listCollection2(PRODUCT_DETAILS_COLLECTION2),
+      getProductDetail: (productId) => getProductDetailById(productId),
+      upsertProductDetail: (payload) => upsertProductDetailDoc(payload),
+      deleteProductDetail: (productId) => remove2(PRODUCT_DETAILS_COLLECTION2, productId),
       async getHomepage() {
         const db = await dbOrThrow();
         const snapshot = await db.collection(HOMEPAGE_DOC.collection).doc(HOMEPAGE_DOC.id).get();
@@ -374,13 +404,15 @@ var defaultHomepage = () => {
       { id: "trending", label: "Trending Products", isVisible: true, order: 2, itemIds: ["prod-s24-ultra", "prod-macbook-air-m3"] },
       { id: "featured-brands", label: "Featured Brands", isVisible: true, order: 3, itemIds: ["brand-samsung", "brand-apple"] },
       { id: "deals", label: "Flash Deals", isVisible: true, order: 4, itemIds: ["deal-s24-flash"] },
-      { id: "creators", label: "Featured Creators", isVisible: true, order: 5, itemIds: [] },
-      { id: "recommended", label: "Recommended For You", isVisible: false, order: 6, itemIds: [] },
+      { id: "creators", label: "Featured Creators", isVisible: true, order: 5, itemIds: ["creator-farhan", "creator-sarah"] },
+      { id: "recommended", label: "Recommended For You", isVisible: true, order: 6, itemIds: ["guide-top-smartphones-2026"] },
       { id: "newsletter", label: "Newsletter Banner", isVisible: true, order: 7, itemIds: [] }
     ],
     featuredProductIds: ["prod-s24-ultra", "prod-macbook-air-m3"],
     featuredBrandIds: ["brand-samsung", "brand-apple"],
     featuredDealIds: ["deal-s24-flash"],
+    featuredCreatorIds: ["creator-farhan", "creator-sarah"],
+    featuredGuideIds: ["guide-top-smartphones-2026", "guide-s24-ultra-review"],
     updatedAt: ts
   };
 };
@@ -446,10 +478,206 @@ var defaultSiteConfig = () => {
       { id: "ps-aarong", term: "Aarong", order: 2, isActive: true },
       { id: "ps-sailor", term: "Sailor", order: 3, isActive: true }
     ],
+    seoEntries: [
+      {
+        pageId: "home",
+        pageLabel: "Homepage",
+        title: "Choosify Bangladesh \u2014 Smart Product Discovery",
+        metaDescription: "Bangladesh's most trusted product discovery platform. Compare prices, read guides, and shop with confidence.",
+        keywords: "choosify, bangladesh, product discovery, compare prices",
+        ogImage: "",
+        canonicalUrl: "https://www.choosify.bd/"
+      },
+      {
+        pageId: "guides",
+        pageLabel: "Recommendations",
+        title: "Buying Guides & Recommendations | Choosify",
+        metaDescription: "Expert buying guides, reviews, and recommendations for Bangladesh shoppers.",
+        keywords: "buying guides, reviews, recommendations",
+        ogImage: "",
+        canonicalUrl: "https://www.choosify.bd/guides"
+      },
+      {
+        pageId: "creators",
+        pageLabel: "Creators",
+        title: "Verified Creators | Choosify",
+        metaDescription: "Discover verified creators producing trusted reviews and buying insights.",
+        keywords: "creators, influencers, tech reviews",
+        ogImage: "",
+        canonicalUrl: "https://www.choosify.bd/creators"
+      }
+    ],
     announcementBarText: "",
     announcementBarEnabled: false,
     updatedAt: ts
   };
+};
+
+// lib/vercel-catalog/catalogEditorialDefaults.ts
+var nowIso2 = () => (/* @__PURE__ */ new Date()).toISOString();
+var defaultCreators = () => {
+  const ts = nowIso2();
+  return [
+    {
+      id: "creator-farhan",
+      slug: "farhan-bin-rafiq",
+      name: "Farhan Bin Rafiq",
+      handle: "@farhan_tech",
+      avatar: "https://res.cloudinary.com/djdyqr8yd/image/upload/v1781880900/FBR_n3eycm.png",
+      score: 96,
+      bestFor: "Tech",
+      bestForTags: ["Smartphones", "Laptops", "Gadget Guides"],
+      platforms: ["YouTube", "Facebook"],
+      bio: "Senior Tech Analyst & Digital Product Researcher covering electronics in Bangladesh.",
+      followers: { YouTube: "450K", Facebook: "120K" },
+      email: "farhan.outreach@choosify.bd",
+      phone: "+880 1712-345678",
+      category: "Tech",
+      verifiedStatus: true,
+      featuredFlag: true,
+      videos: [],
+      reels: [],
+      blogs: [],
+      status: "live",
+      createdAt: ts,
+      updatedAt: ts
+    },
+    {
+      id: "creator-sarah",
+      slug: "sarah-jenkins",
+      name: "Sarah Jenkins",
+      handle: "@sarah_style",
+      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop",
+      score: 92,
+      bestFor: "Fashion",
+      bestForTags: ["Fashion", "Beauty", "Lifestyle"],
+      platforms: ["Instagram", "YouTube"],
+      bio: "Fashion and lifestyle reviewer focused on Bangladesh brands.",
+      followers: { Instagram: "210K", YouTube: "85K" },
+      category: "Fashion",
+      verifiedStatus: true,
+      featuredFlag: true,
+      videos: [],
+      reels: [],
+      blogs: [],
+      status: "live",
+      createdAt: ts,
+      updatedAt: ts
+    }
+  ];
+};
+var defaultGuides = () => {
+  const ts = nowIso2();
+  return [
+    {
+      id: "guide-top-smartphones-2026",
+      slug: "top-10-smartphones-2026",
+      title: "Top 10 Smartphones to Buy in 2026",
+      author: "Farhan Rafiq",
+      authorAvatar: "https://res.cloudinary.com/djdyqr8yd/image/upload/v1781880900/FBR_n3eycm.png",
+      category: "MOBILE",
+      excerpt: "The best options available right now, from titanium flagships to budget-friendly powerhouses.",
+      image: "https://images.unsplash.com/photo-1556656793-062ff9f1b74b?w=1200&h=800&fit=crop",
+      type: "article",
+      readTime: "15 MIN READ",
+      views: "125K",
+      shares: "12K",
+      tags: ["smartphones", "flagship", "budget"],
+      creatorId: "creator-farhan",
+      productIds: ["prod-s24-ultra"],
+      whatWeLike: ["Excellent camera", "Long battery life"],
+      whatToConsider: ["Premium pricing"],
+      status: "live",
+      publishedAt: ts,
+      updatedAt: ts
+    },
+    {
+      id: "guide-s24-ultra-review",
+      slug: "s24-ultra-still-worth-it",
+      title: "Is the S24 Ultra Still Worth It in Late 2026?",
+      author: "Sarah Jenkins",
+      category: "MOBILE",
+      excerpt: "We revisit Samsung's titanium giant after 6 months of heavy usage.",
+      image: "https://images.unsplash.com/photo-1707251759491-18d48607ea0c?w=1200&h=675&fit=crop",
+      videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-taking-photos-with-a-smartphone-34356-large.mp4",
+      duration: "12:45",
+      type: "video",
+      readTime: "12 MIN VIDEO",
+      views: "540K",
+      shares: "45K",
+      tags: ["samsung", "review"],
+      creatorId: "creator-sarah",
+      productIds: ["prod-s24-ultra"],
+      whatWeLike: ["Display quality", "Build"],
+      whatToConsider: ["Weight"],
+      status: "live",
+      publishedAt: ts,
+      updatedAt: ts
+    }
+  ];
+};
+var defaultPlacements = () => {
+  const ts = nowIso2();
+  const end = new Date(Date.now() + 14 * 24 * 60 * 60 * 1e3).toISOString();
+  return [
+    {
+      id: "placement-samsung-spotlight",
+      entityType: "brand",
+      entityId: "brand-samsung",
+      sponsorType: "spotlight_brand",
+      placement: "spotlight_section",
+      startDate: ts,
+      endDate: end,
+      hasCountdown: false,
+      priority: 10,
+      isActive: true,
+      createdAt: ts,
+      updatedAt: ts
+    },
+    {
+      id: "placement-s24-deal",
+      entityType: "product",
+      entityId: "prod-s24-ultra",
+      sponsorType: "sponsored_deal",
+      placement: "deals_section",
+      startDate: ts,
+      endDate: end,
+      hasCountdown: true,
+      dealPrice: 145e3,
+      originalPrice: 155e3,
+      priority: 20,
+      isActive: true,
+      createdAt: ts,
+      updatedAt: ts
+    }
+  ];
+};
+var defaultProductDetails = () => {
+  const ts = nowIso2();
+  return [
+    {
+      productId: "prod-s24-ultra",
+      about: "Flagship Samsung phone with advanced camera features and titanium frame.",
+      specs: [
+        { key: "Display", value: '6.8" Dynamic AMOLED 2X' },
+        { key: "Storage", value: "256GB" },
+        { key: "Camera", value: "200MP main sensor" }
+      ],
+      pros: ["Excellent camera", "Premium build", "Long software support"],
+      cons: ["Heavy", "High price"],
+      bestForTags: ["Photography", "Power users", "Premium buyers"],
+      storeComparisonList: [],
+      physicalStores: [],
+      overviewBlocks: [],
+      optionGroups: [],
+      productVariants: [],
+      creatorContent: [],
+      seoTitle: "Samsung Galaxy S24 Ultra Price in Bangladesh",
+      seoDescription: "Compare Samsung Galaxy S24 Ultra prices and verified sellers on Choosify.",
+      seoKeywords: "s24 ultra, samsung bangladesh, smartphone",
+      updatedAt: ts
+    }
+  ];
 };
 
 // lib/vercel-catalog/catalogMemoryStore.ts
@@ -457,11 +685,19 @@ var PRODUCTS_COLLECTION = "catalog_products";
 var CATEGORIES_COLLECTION = "catalog_categories";
 var BRANDS_COLLECTION = "catalog_brands";
 var DEALS_COLLECTION = "catalog_deals";
+var CREATORS_COLLECTION = "catalog_creators";
+var GUIDES_COLLECTION = "catalog_guides";
+var PLACEMENTS_COLLECTION = "catalog_placements";
+var PRODUCT_DETAILS_COLLECTION = "catalog_product_details";
 var memoryState = {
   products: defaultProducts(),
   categories: defaultCategories(),
   brands: defaultBrands(),
   deals: defaultDeals(),
+  creators: defaultCreators(),
+  guides: defaultGuides(),
+  placements: defaultPlacements(),
+  productDetails: defaultProductDetails(),
   homepage: defaultHomepage(),
   site: defaultSiteConfig()
 };
@@ -475,6 +711,14 @@ var collectionMemoryRef = (collectionName) => {
       return memoryState.brands;
     case DEALS_COLLECTION:
       return memoryState.deals;
+    case CREATORS_COLLECTION:
+      return memoryState.creators;
+    case GUIDES_COLLECTION:
+      return memoryState.guides;
+    case PLACEMENTS_COLLECTION:
+      return memoryState.placements;
+    case PRODUCT_DETAILS_COLLECTION:
+      return memoryState.productDetails;
     default:
       return [];
   }
@@ -483,10 +727,24 @@ async function listCollection(collectionName) {
   return [...collectionMemoryRef(collectionName)];
 }
 async function getById(collectionName, id) {
+  if (collectionName === PRODUCT_DETAILS_COLLECTION) {
+    const found2 = memoryState.productDetails.find((item) => item.productId === id);
+    return found2 || null;
+  }
   const found = collectionMemoryRef(collectionName).find((item) => item.id === id);
   return found || null;
 }
 async function upsert(collectionName, data) {
+  if (collectionName === PRODUCT_DETAILS_COLLECTION) {
+    const detail = data;
+    const existingIdx2 = memoryState.productDetails.findIndex((item) => item.productId === detail.productId);
+    if (existingIdx2 >= 0) {
+      memoryState.productDetails[existingIdx2] = { ...memoryState.productDetails[existingIdx2], ...detail };
+    } else {
+      memoryState.productDetails.push(detail);
+    }
+    return data;
+  }
   const memoryCollection = collectionMemoryRef(collectionName);
   const existingIdx = memoryCollection.findIndex((item) => item.id === data.id);
   if (existingIdx >= 0) {
@@ -497,6 +755,10 @@ async function upsert(collectionName, data) {
   return data;
 }
 async function remove(collectionName, id) {
+  if (collectionName === PRODUCT_DETAILS_COLLECTION) {
+    memoryState.productDetails = memoryState.productDetails.filter((item) => item.productId !== id);
+    return;
+  }
   const memoryCollection = collectionMemoryRef(collectionName);
   const filtered = memoryCollection.filter((item) => item.id !== id);
   memoryCollection.splice(0, memoryCollection.length, ...filtered);
@@ -518,6 +780,22 @@ var catalogStore = {
   getDeal: (id) => getById(DEALS_COLLECTION, id),
   upsertDeal: (payload) => upsert(DEALS_COLLECTION, payload),
   deleteDeal: (id) => remove(DEALS_COLLECTION, id),
+  listCreators: () => listCollection(CREATORS_COLLECTION),
+  getCreator: (id) => getById(CREATORS_COLLECTION, id),
+  upsertCreator: (payload) => upsert(CREATORS_COLLECTION, payload),
+  deleteCreator: (id) => remove(CREATORS_COLLECTION, id),
+  listGuides: () => listCollection(GUIDES_COLLECTION),
+  getGuide: (id) => getById(GUIDES_COLLECTION, id),
+  upsertGuide: (payload) => upsert(GUIDES_COLLECTION, payload),
+  deleteGuide: (id) => remove(GUIDES_COLLECTION, id),
+  listPlacements: () => listCollection(PLACEMENTS_COLLECTION),
+  getPlacement: (id) => getById(PLACEMENTS_COLLECTION, id),
+  upsertPlacement: (payload) => upsert(PLACEMENTS_COLLECTION, payload),
+  deletePlacement: (id) => remove(PLACEMENTS_COLLECTION, id),
+  listProductDetails: () => listCollection(PRODUCT_DETAILS_COLLECTION),
+  getProductDetail: (productId) => getById(PRODUCT_DETAILS_COLLECTION, productId),
+  upsertProductDetail: (payload) => upsert(PRODUCT_DETAILS_COLLECTION, payload),
+  deleteProductDetail: (productId) => remove(PRODUCT_DETAILS_COLLECTION, productId),
   async getHomepage() {
     return memoryState.homepage;
   },
@@ -540,6 +818,10 @@ var PRODUCTS_COLLECTION3 = "catalog_products";
 var CATEGORIES_COLLECTION3 = "catalog_categories";
 var BRANDS_COLLECTION3 = "catalog_brands";
 var DEALS_COLLECTION3 = "catalog_deals";
+var CREATORS_COLLECTION3 = "catalog_creators";
+var GUIDES_COLLECTION3 = "catalog_guides";
+var PLACEMENTS_COLLECTION3 = "catalog_placements";
+var PRODUCT_DETAILS_COLLECTION3 = "catalog_product_details";
 var useAdminFirestore = process.env.CATALOG_USE_FIRESTORE === "true" && hasFirebaseAdminCredentials();
 var adminStorePromise = null;
 async function getAdminStore() {
@@ -560,6 +842,14 @@ async function listCollection3(collectionName) {
         return admin.listBrands();
       case DEALS_COLLECTION3:
         return admin.listDeals();
+      case CREATORS_COLLECTION3:
+        return admin.listCreators();
+      case GUIDES_COLLECTION3:
+        return admin.listGuides();
+      case PLACEMENTS_COLLECTION3:
+        return admin.listPlacements();
+      case PRODUCT_DETAILS_COLLECTION3:
+        return admin.listProductDetails();
       default:
         return [];
     }
@@ -576,6 +866,14 @@ function listFromMemory(collectionName) {
       return catalogStore.listBrands();
     case DEALS_COLLECTION3:
       return catalogStore.listDeals();
+    case CREATORS_COLLECTION3:
+      return catalogStore.listCreators();
+    case GUIDES_COLLECTION3:
+      return catalogStore.listGuides();
+    case PLACEMENTS_COLLECTION3:
+      return catalogStore.listPlacements();
+    case PRODUCT_DETAILS_COLLECTION3:
+      return catalogStore.listProductDetails();
     default:
       return Promise.resolve([]);
   }
@@ -590,6 +888,14 @@ function getFromMemory(collectionName, id) {
       return catalogStore.getBrand(id);
     case DEALS_COLLECTION3:
       return catalogStore.getDeal(id);
+    case CREATORS_COLLECTION3:
+      return catalogStore.getCreator(id);
+    case GUIDES_COLLECTION3:
+      return catalogStore.getGuide(id);
+    case PLACEMENTS_COLLECTION3:
+      return catalogStore.getPlacement(id);
+    case PRODUCT_DETAILS_COLLECTION3:
+      return catalogStore.getProductDetail(id);
     default:
       return Promise.resolve(null);
   }
@@ -604,6 +910,14 @@ function upsertToMemory(collectionName, data) {
       return catalogStore.upsertBrand(data);
     case DEALS_COLLECTION3:
       return catalogStore.upsertDeal(data);
+    case CREATORS_COLLECTION3:
+      return catalogStore.upsertCreator(data);
+    case GUIDES_COLLECTION3:
+      return catalogStore.upsertGuide(data);
+    case PLACEMENTS_COLLECTION3:
+      return catalogStore.upsertPlacement(data);
+    case PRODUCT_DETAILS_COLLECTION3:
+      return catalogStore.upsertProductDetail(data);
     default:
       return Promise.resolve(data);
   }
@@ -618,6 +932,14 @@ function removeFromMemory(collectionName, id) {
       return catalogStore.deleteBrand(id);
     case DEALS_COLLECTION3:
       return catalogStore.deleteDeal(id);
+    case CREATORS_COLLECTION3:
+      return catalogStore.deleteCreator(id);
+    case GUIDES_COLLECTION3:
+      return catalogStore.deleteGuide(id);
+    case PLACEMENTS_COLLECTION3:
+      return catalogStore.deletePlacement(id);
+    case PRODUCT_DETAILS_COLLECTION3:
+      return catalogStore.deleteProductDetail(id);
     default:
       return Promise.resolve();
   }
@@ -634,6 +956,14 @@ async function getById3(collectionName, id) {
         return admin.getBrand(id);
       case DEALS_COLLECTION3:
         return admin.getDeal(id);
+      case CREATORS_COLLECTION3:
+        return admin.getCreator(id);
+      case GUIDES_COLLECTION3:
+        return admin.getGuide(id);
+      case PLACEMENTS_COLLECTION3:
+        return admin.getPlacement(id);
+      case PRODUCT_DETAILS_COLLECTION3:
+        return admin.getProductDetail(id);
       default:
         return null;
     }
@@ -652,6 +982,14 @@ async function upsert3(collectionName, data) {
         return admin.upsertBrand(data);
       case DEALS_COLLECTION3:
         return admin.upsertDeal(data);
+      case CREATORS_COLLECTION3:
+        return admin.upsertCreator(data);
+      case GUIDES_COLLECTION3:
+        return admin.upsertGuide(data);
+      case PLACEMENTS_COLLECTION3:
+        return admin.upsertPlacement(data);
+      case PRODUCT_DETAILS_COLLECTION3:
+        return admin.upsertProductDetail(data);
       default:
         return data;
     }
@@ -670,6 +1008,14 @@ async function remove3(collectionName, id) {
         return admin.deleteBrand(id);
       case DEALS_COLLECTION3:
         return admin.deleteDeal(id);
+      case CREATORS_COLLECTION3:
+        return admin.deleteCreator(id);
+      case GUIDES_COLLECTION3:
+        return admin.deleteGuide(id);
+      case PLACEMENTS_COLLECTION3:
+        return admin.deletePlacement(id);
+      case PRODUCT_DETAILS_COLLECTION3:
+        return admin.deleteProductDetail(id);
       default:
         return;
     }
@@ -693,6 +1039,22 @@ var catalogStore2 = {
   getDeal: (id) => getById3(DEALS_COLLECTION3, id),
   upsertDeal: (payload) => upsert3(DEALS_COLLECTION3, payload),
   deleteDeal: (id) => remove3(DEALS_COLLECTION3, id),
+  listCreators: () => listCollection3(CREATORS_COLLECTION3),
+  getCreator: (id) => getById3(CREATORS_COLLECTION3, id),
+  upsertCreator: (payload) => upsert3(CREATORS_COLLECTION3, payload),
+  deleteCreator: (id) => remove3(CREATORS_COLLECTION3, id),
+  listGuides: () => listCollection3(GUIDES_COLLECTION3),
+  getGuide: (id) => getById3(GUIDES_COLLECTION3, id),
+  upsertGuide: (payload) => upsert3(GUIDES_COLLECTION3, payload),
+  deleteGuide: (id) => remove3(GUIDES_COLLECTION3, id),
+  listPlacements: () => listCollection3(PLACEMENTS_COLLECTION3),
+  getPlacement: (id) => getById3(PLACEMENTS_COLLECTION3, id),
+  upsertPlacement: (payload) => upsert3(PLACEMENTS_COLLECTION3, payload),
+  deletePlacement: (id) => remove3(PLACEMENTS_COLLECTION3, id),
+  listProductDetails: () => listCollection3(PRODUCT_DETAILS_COLLECTION3),
+  getProductDetail: (productId) => getById3(PRODUCT_DETAILS_COLLECTION3, productId),
+  upsertProductDetail: (payload) => upsert3(PRODUCT_DETAILS_COLLECTION3, { ...payload, id: payload.productId }),
+  deleteProductDetail: (productId) => remove3(PRODUCT_DETAILS_COLLECTION3, productId),
   async getHomepage() {
     if (useAdminFirestore) {
       const admin = await getAdminStore();
@@ -742,6 +1104,10 @@ async function ensureCatalogSeedData() {
     ...defaultBrands().map((item) => catalogStore2.upsertBrand(item)),
     ...defaultProducts().map((item) => catalogStore2.upsertProduct(item)),
     ...defaultDeals().map((item) => catalogStore2.upsertDeal(item)),
+    ...defaultCreators().map((item) => catalogStore2.upsertCreator(item)),
+    ...defaultGuides().map((item) => catalogStore2.upsertGuide(item)),
+    ...defaultPlacements().map((item) => catalogStore2.upsertPlacement(item)),
+    ...defaultProductDetails().map((item) => catalogStore2.upsertProductDetail(item)),
     catalogStore2.upsertHomepage(defaultHomepage()),
     catalogStore2.upsertSiteConfig(defaultSiteConfig())
   ]);
@@ -15266,13 +15632,152 @@ function date4(params) {
 // node_modules/zod/v4/classic/external.js
 config(en_default());
 
+// lib/vercel-catalog/catalogEditorialContract.ts
+var nowIso3 = () => (/* @__PURE__ */ new Date()).toISOString();
+var toString = (value, fallback = "") => typeof value === "string" ? value : fallback;
+var toNumber = (value, fallback = 0) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const n = Number(value.replace(/[^0-9.-]/g, ""));
+    if (Number.isFinite(n)) return n;
+  }
+  return fallback;
+};
+var toBoolean = (value, fallback = false) => typeof value === "boolean" ? value : fallback;
+var toStringArray = (value) => Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+var slugify2 = (value) => value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-");
+var normalizeCreatorInput = (payload, existing) => {
+  const raw = payload ?? {};
+  const name = toString(raw.name, existing?.name ?? "Untitled Creator");
+  const id = toString(raw.id, existing?.id ?? `creator-${Date.now()}`);
+  const statusRaw = toString(raw.status, existing?.status ?? "live").toLowerCase();
+  return {
+    id,
+    slug: toString(raw.slug, existing?.slug ?? slugify2(name || id)),
+    name,
+    handle: toString(raw.handle, existing?.handle ?? `@${slugify2(name)}`),
+    avatar: toString(raw.avatar, existing?.avatar ?? ""),
+    score: toNumber(raw.score, existing?.score ?? 0),
+    bestFor: toString(raw.bestFor, existing?.bestFor ?? "General"),
+    bestForTags: toStringArray(raw.bestForTags).length ? toStringArray(raw.bestForTags) : existing?.bestForTags ?? [],
+    platforms: toStringArray(raw.platforms).length ? toStringArray(raw.platforms) : existing?.platforms ?? [],
+    bio: toString(raw.bio, existing?.bio ?? ""),
+    followers: raw.followers && typeof raw.followers === "object" ? raw.followers : existing?.followers ?? {},
+    email: toString(raw.email, existing?.email),
+    phone: toString(raw.phone, existing?.phone),
+    category: toString(raw.category, existing?.category),
+    verifiedStatus: toBoolean(raw.verifiedStatus, existing?.verifiedStatus ?? false),
+    featuredFlag: toBoolean(raw.featuredFlag, existing?.featuredFlag ?? false),
+    videos: Array.isArray(raw.videos) ? raw.videos : existing?.videos ?? [],
+    reels: Array.isArray(raw.reels) ? raw.reels : existing?.reels ?? [],
+    blogs: Array.isArray(raw.blogs) ? raw.blogs : existing?.blogs ?? [],
+    status: statusRaw === "draft" || statusRaw === "archived" ? statusRaw : "live",
+    createdAt: existing?.createdAt ?? nowIso3(),
+    updatedAt: nowIso3()
+  };
+};
+var normalizeGuideInput = (payload, existing) => {
+  const raw = payload ?? {};
+  const title = toString(raw.title, existing?.title ?? "Untitled Guide");
+  const id = toString(raw.id, existing?.id ?? `guide-${Date.now()}`);
+  const typeRaw = toString(raw.type, existing?.type ?? "article").toLowerCase();
+  const statusRaw = toString(raw.status, existing?.status ?? "live").toLowerCase();
+  return {
+    id,
+    slug: toString(raw.slug, existing?.slug ?? slugify2(title || id)),
+    title,
+    author: toString(raw.author, existing?.author ?? "Choosify Editorial"),
+    authorAvatar: toString(raw.authorAvatar, existing?.authorAvatar),
+    category: toString(raw.category, existing?.category ?? "General"),
+    excerpt: toString(raw.excerpt, existing?.excerpt),
+    image: toString(raw.image, existing?.image ?? ""),
+    videoUrl: toString(raw.videoUrl, existing?.videoUrl),
+    duration: toString(raw.duration, existing?.duration),
+    type: typeRaw === "reels" || typeRaw === "video" || typeRaw === "shorts" ? typeRaw : "article",
+    readTime: toString(raw.readTime, existing?.readTime ?? "5 MIN READ"),
+    views: toString(raw.views, existing?.views ?? "0"),
+    shares: toString(raw.shares, existing?.shares),
+    tags: toStringArray(raw.tags).length ? toStringArray(raw.tags) : existing?.tags ?? [],
+    creatorId: toString(raw.creatorId, existing?.creatorId),
+    productIds: toStringArray(raw.productIds).length ? toStringArray(raw.productIds) : existing?.productIds ?? [],
+    verdict: toString(raw.verdict, existing?.verdict),
+    whatWeLike: toStringArray(raw.whatWeLike).length ? toStringArray(raw.whatWeLike) : existing?.whatWeLike ?? [],
+    whatToConsider: toStringArray(raw.whatToConsider).length ? toStringArray(raw.whatToConsider) : existing?.whatToConsider ?? [],
+    seoTitle: toString(raw.seoTitle, existing?.seoTitle),
+    seoDescription: toString(raw.seoDescription, existing?.seoDescription),
+    seoKeywords: toString(raw.seoKeywords, existing?.seoKeywords),
+    seoOgImage: toString(raw.seoOgImage, existing?.seoOgImage),
+    seoCanonicalUrl: toString(raw.seoCanonicalUrl, existing?.seoCanonicalUrl),
+    status: statusRaw === "draft" || statusRaw === "archived" ? statusRaw : "live",
+    publishedAt: toString(raw.publishedAt, existing?.publishedAt ?? nowIso3()),
+    updatedAt: nowIso3()
+  };
+};
+var normalizePlacementInput = (payload, existing) => {
+  const raw = payload ?? {};
+  const id = toString(raw.id, existing?.id ?? `placement-${Date.now()}`);
+  const entityTypeRaw = toString(raw.entityType, existing?.entityType ?? "product").toLowerCase();
+  const sponsorTypeRaw = toString(raw.sponsorType, existing?.sponsorType ?? "sponsored_product");
+  return {
+    id,
+    entityType: entityTypeRaw === "brand" || entityTypeRaw === "deal" || entityTypeRaw === "guide" || entityTypeRaw === "creator" ? entityTypeRaw : "product",
+    entityId: toString(raw.entityId, existing?.entityId ?? ""),
+    sponsorType: sponsorTypeRaw === "sponsored_brand" || sponsorTypeRaw === "spotlight_brand" || sponsorTypeRaw === "sponsored_deal" || sponsorTypeRaw === "sponsored_recommendation" ? sponsorTypeRaw : "sponsored_product",
+    placement: toString(raw.placement, existing?.placement ?? "homepage_sponsored_ads"),
+    title: toString(raw.title, existing?.title),
+    image: toString(raw.image, existing?.image),
+    startDate: toString(raw.startDate, existing?.startDate ?? nowIso3()),
+    endDate: toString(raw.endDate, existing?.endDate ?? nowIso3()),
+    hasCountdown: toBoolean(raw.hasCountdown, existing?.hasCountdown ?? false),
+    dealPrice: raw.dealPrice !== void 0 ? toNumber(raw.dealPrice) : existing?.dealPrice,
+    originalPrice: raw.originalPrice !== void 0 ? toNumber(raw.originalPrice) : existing?.originalPrice,
+    priority: Math.floor(toNumber(raw.priority, existing?.priority ?? 0)),
+    isActive: toBoolean(raw.isActive, existing?.isActive ?? true),
+    createdAt: existing?.createdAt ?? nowIso3(),
+    updatedAt: nowIso3()
+  };
+};
+var normalizeProductDetailInput = (payload, productId, existing) => {
+  const raw = payload ?? {};
+  return {
+    productId,
+    about: toString(raw.about, existing?.about),
+    specs: Array.isArray(raw.specs) ? raw.specs : existing?.specs ?? [],
+    pros: toStringArray(raw.pros).length ? toStringArray(raw.pros) : existing?.pros ?? [],
+    cons: toStringArray(raw.cons).length ? toStringArray(raw.cons) : existing?.cons ?? [],
+    bestForTags: toStringArray(raw.bestForTags).length ? toStringArray(raw.bestForTags) : existing?.bestForTags ?? [],
+    storeComparisonList: Array.isArray(raw.storeComparisonList) ? raw.storeComparisonList : existing?.storeComparisonList ?? [],
+    physicalStores: Array.isArray(raw.physicalStores) ? raw.physicalStores : existing?.physicalStores ?? [],
+    overviewBlocks: Array.isArray(raw.overviewBlocks) ? raw.overviewBlocks : existing?.overviewBlocks ?? [],
+    optionGroups: Array.isArray(raw.optionGroups) ? raw.optionGroups : existing?.optionGroups ?? [],
+    productVariants: Array.isArray(raw.productVariants) ? raw.productVariants : existing?.productVariants ?? [],
+    creatorContent: Array.isArray(raw.creatorContent) ? raw.creatorContent : existing?.creatorContent ?? [],
+    seoTitle: toString(raw.seoTitle, existing?.seoTitle),
+    seoDescription: toString(raw.seoDescription, existing?.seoDescription),
+    seoKeywords: toString(raw.seoKeywords, existing?.seoKeywords),
+    updatedAt: nowIso3()
+  };
+};
+var normalizeSeoEntryInput = (payload, idx) => {
+  const raw = payload ?? {};
+  return {
+    pageId: toString(raw.pageId, `page-${idx + 1}`),
+    pageLabel: toString(raw.pageLabel, "Page"),
+    title: toString(raw.title),
+    metaDescription: toString(raw.metaDescription),
+    keywords: toString(raw.keywords),
+    ogImage: toString(raw.ogImage),
+    canonicalUrl: toString(raw.canonicalUrl)
+  };
+};
+
 // lib/vercel-catalog/catalogContract.ts
 var nonEmpty = external_exports.string().trim().min(1);
 var isoDate = external_exports.string().datetime();
-var nowIso2 = () => (/* @__PURE__ */ new Date()).toISOString();
-var slugify2 = (value) => value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-");
-var toString = (value, fallback) => typeof value === "string" ? value : fallback ?? "";
-var toNumber = (value, fallback = 0) => {
+var nowIso4 = () => (/* @__PURE__ */ new Date()).toISOString();
+var slugify3 = (value) => value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-");
+var toString2 = (value, fallback) => typeof value === "string" ? value : fallback ?? "";
+var toNumber2 = (value, fallback = 0) => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
     const normalized = Number(value.replace(/[^0-9.-]/g, ""));
@@ -15280,8 +15785,8 @@ var toNumber = (value, fallback = 0) => {
   }
   return fallback;
 };
-var toBoolean = (value, fallback = false) => typeof value === "boolean" ? value : fallback;
-var toStringArray = (value) => {
+var toBoolean2 = (value, fallback = false) => typeof value === "boolean" ? value : fallback;
+var toStringArray2 = (value) => {
   if (!Array.isArray(value)) return [];
   return value.filter((item) => typeof item === "string" && item.length > 0);
 };
@@ -15384,138 +15889,140 @@ var homepageSchema = external_exports.object({
   featuredProductIds: external_exports.array(external_exports.string()),
   featuredBrandIds: external_exports.array(external_exports.string()),
   featuredDealIds: external_exports.array(external_exports.string()),
+  featuredCreatorIds: external_exports.array(external_exports.string()),
+  featuredGuideIds: external_exports.array(external_exports.string()),
   updatedAt: isoDate
 });
-var existingOrNow = (existingDate) => existingDate ? existingDate : nowIso2();
+var existingOrNow = (existingDate) => existingDate ? existingDate : nowIso4();
 var normalizeCategoryInput = (payload, existing) => {
   const raw = payload ?? {};
-  const name = toString(raw.name, existing?.name ?? "Untitled Category");
-  const id = toString(raw.id, existing?.id ?? `cat-${Date.now()}`);
+  const name = toString2(raw.name, existing?.name ?? "Untitled Category");
+  const id = toString2(raw.id, existing?.id ?? `cat-${Date.now()}`);
   const normalized = {
     id,
-    slug: toString(raw.slug, existing?.slug ?? slugify2(name || id)),
+    slug: toString2(raw.slug, existing?.slug ?? slugify3(name || id)),
     name,
-    description: toString(raw.description, existing?.description ?? ""),
-    icon: toString(raw.icon, existing?.icon ?? "Folder"),
-    parentId: raw.parentId === null ? null : toString(raw.parentId, existing?.parentId ?? "") || null,
-    enabled: toBoolean(raw.enabled, existing?.enabled ?? true),
-    displayOrder: Math.floor(toNumber(raw.displayOrder, existing?.displayOrder ?? 0)),
+    description: toString2(raw.description, existing?.description ?? ""),
+    icon: toString2(raw.icon, existing?.icon ?? "Folder"),
+    parentId: raw.parentId === null ? null : toString2(raw.parentId, existing?.parentId ?? "") || null,
+    enabled: toBoolean2(raw.enabled, existing?.enabled ?? true),
+    displayOrder: Math.floor(toNumber2(raw.displayOrder, existing?.displayOrder ?? 0)),
     createdAt: existingOrNow(existing?.createdAt),
-    updatedAt: nowIso2()
+    updatedAt: nowIso4()
   };
   return categorySchema.parse(normalized);
 };
 var normalizeBrandInput = (payload, existing) => {
   const raw = payload ?? {};
-  const name = toString(raw.name, existing?.name ?? "Untitled Brand");
-  const id = toString(raw.id, existing?.id ?? `brand-${Date.now()}`);
-  const claimStatusRaw = toString(raw.claimStatus, existing?.claimStatus ?? "community");
+  const name = toString2(raw.name, existing?.name ?? "Untitled Brand");
+  const id = toString2(raw.id, existing?.id ?? `brand-${Date.now()}`);
+  const claimStatusRaw = toString2(raw.claimStatus, existing?.claimStatus ?? "community");
   const normalized = {
     id,
-    slug: toString(raw.slug, existing?.slug ?? slugify2(name || id)),
+    slug: toString2(raw.slug, existing?.slug ?? slugify3(name || id)),
     name,
-    category: toString(raw.category, existing?.category ?? "General"),
-    description: toString(raw.description, existing?.description ?? ""),
-    logo: toString(raw.logo, existing?.logo ?? ""),
-    verifiedStatus: toBoolean(raw.verifiedStatus, existing?.verifiedStatus ?? false),
+    category: toString2(raw.category, existing?.category ?? "General"),
+    description: toString2(raw.description, existing?.description ?? ""),
+    logo: toString2(raw.logo, existing?.logo ?? ""),
+    verifiedStatus: toBoolean2(raw.verifiedStatus, existing?.verifiedStatus ?? false),
     claimStatus: claimStatusRaw === "verified" || claimStatusRaw === "pending" ? claimStatusRaw : "community",
-    followers: toNumber(raw.followers, existing?.followers ?? 0),
-    ratings: Math.max(0, Math.min(5, toNumber(raw.ratings, existing?.ratings ?? 0))),
-    featuredFlag: toBoolean(raw.featuredFlag, existing?.featuredFlag ?? false),
-    sponsoredFlag: toBoolean(raw.sponsoredFlag, existing?.sponsoredFlag ?? false),
+    followers: toNumber2(raw.followers, existing?.followers ?? 0),
+    ratings: Math.max(0, Math.min(5, toNumber2(raw.ratings, existing?.ratings ?? 0))),
+    featuredFlag: toBoolean2(raw.featuredFlag, existing?.featuredFlag ?? false),
+    sponsoredFlag: toBoolean2(raw.sponsoredFlag, existing?.sponsoredFlag ?? false),
     createdAt: existingOrNow(existing?.createdAt),
-    updatedAt: nowIso2()
+    updatedAt: nowIso4()
   };
   return brandSchema.parse(normalized);
 };
 var normalizeProductInput = (payload, existing) => {
   const raw = payload ?? {};
-  const title = toString(raw.title, toString(raw.name, existing?.title ?? "Untitled Product"));
-  const id = toString(raw.id, existing?.id ?? `prod-${Date.now()}`);
-  const statusRaw = toString(raw.status, existing?.status ?? "draft").toLowerCase();
-  const modeRaw = toString(raw.modeType, toString(raw.mode_type, existing?.modeType ?? "retail")).toLowerCase();
+  const title = toString2(raw.title, toString2(raw.name, existing?.title ?? "Untitled Product"));
+  const id = toString2(raw.id, existing?.id ?? `prod-${Date.now()}`);
+  const statusRaw = toString2(raw.status, existing?.status ?? "draft").toLowerCase();
+  const modeRaw = toString2(raw.modeType, toString2(raw.mode_type, existing?.modeType ?? "retail")).toLowerCase();
   const normalized = {
     id,
-    slug: toString(raw.slug, existing?.slug ?? slugify2(title || id)),
+    slug: toString2(raw.slug, existing?.slug ?? slugify3(title || id)),
     title,
-    description: toString(raw.description, existing?.description ?? ""),
-    brandId: toString(raw.brandId, existing?.brandId ?? "brand-generic"),
-    brandName: toString(raw.brandName, toString(raw.brand, existing?.brandName ?? "Generic")),
-    categoryId: toString(raw.categoryId, existing?.categoryId ?? "cat-general"),
-    categoryName: toString(raw.categoryName, toString(raw.category, existing?.categoryName ?? "General")),
-    image: toString(raw.image, existing?.image ?? ""),
-    gallery: toStringArray(raw.gallery).length > 0 ? toStringArray(raw.gallery) : existing?.gallery ?? [],
+    description: toString2(raw.description, existing?.description ?? ""),
+    brandId: toString2(raw.brandId, existing?.brandId ?? "brand-generic"),
+    brandName: toString2(raw.brandName, toString2(raw.brand, existing?.brandName ?? "Generic")),
+    categoryId: toString2(raw.categoryId, existing?.categoryId ?? "cat-general"),
+    categoryName: toString2(raw.categoryName, toString2(raw.category, existing?.categoryName ?? "General")),
+    image: toString2(raw.image, existing?.image ?? ""),
+    gallery: toStringArray2(raw.gallery).length > 0 ? toStringArray2(raw.gallery) : existing?.gallery ?? [],
     modeType: modeRaw === "wholesale" ? "wholesale" : "retail",
-    price: toNumber(raw.price, existing?.price ?? 0),
-    originalPrice: raw.originalPrice !== void 0 ? toNumber(raw.originalPrice) : existing?.originalPrice,
-    stock: Math.floor(toNumber(raw.stock, existing?.stock ?? 0)),
+    price: toNumber2(raw.price, existing?.price ?? 0),
+    originalPrice: raw.originalPrice !== void 0 ? toNumber2(raw.originalPrice) : existing?.originalPrice,
+    stock: Math.floor(toNumber2(raw.stock, existing?.stock ?? 0)),
     status: statusRaw === "live" || statusRaw === "archived" ? statusRaw : "draft",
-    tags: toStringArray(raw.tags).length > 0 ? toStringArray(raw.tags) : existing?.tags ?? [],
-    isDeal: toBoolean(raw.isDeal, existing?.isDeal ?? false),
-    dealType: toString(raw.dealType, existing?.dealType),
-    discountPercent: raw.discountPercent !== void 0 ? toNumber(raw.discountPercent) : existing?.discountPercent,
-    promoCode: toString(raw.promoCode, existing?.promoCode),
-    dealValidUntil: toString(raw.dealValidUntil, existing?.dealValidUntil),
-    featuredFlag: toBoolean(raw.featuredFlag, existing?.featuredFlag ?? false),
-    isNewArrival: toBoolean(raw.isNewArrival, existing?.isNewArrival ?? false),
-    isBestseller: toBoolean(raw.isBestseller, existing?.isBestseller ?? false),
+    tags: toStringArray2(raw.tags).length > 0 ? toStringArray2(raw.tags) : existing?.tags ?? [],
+    isDeal: toBoolean2(raw.isDeal, existing?.isDeal ?? false),
+    dealType: toString2(raw.dealType, existing?.dealType),
+    discountPercent: raw.discountPercent !== void 0 ? toNumber2(raw.discountPercent) : existing?.discountPercent,
+    promoCode: toString2(raw.promoCode, existing?.promoCode),
+    dealValidUntil: toString2(raw.dealValidUntil, existing?.dealValidUntil),
+    featuredFlag: toBoolean2(raw.featuredFlag, existing?.featuredFlag ?? false),
+    isNewArrival: toBoolean2(raw.isNewArrival, existing?.isNewArrival ?? false),
+    isBestseller: toBoolean2(raw.isBestseller, existing?.isBestseller ?? false),
     createdAt: existingOrNow(existing?.createdAt),
-    updatedAt: nowIso2()
+    updatedAt: nowIso4()
   };
   return productSchema.parse(normalized);
 };
 var normalizeDealInput = (payload, existing) => {
   const raw = payload ?? {};
-  const name = toString(raw.name, existing?.name ?? "Untitled Deal");
-  const id = toString(raw.id, existing?.id ?? `deal-${Date.now()}`);
-  const statusRaw = toString(raw.status, existing?.status ?? "draft").toLowerCase();
-  const discountTypeRaw = toString(raw.discountType, existing?.discountType ?? "percentage").toLowerCase();
-  const typeRaw = toString(raw.type, existing?.type ?? "retail").toLowerCase();
-  const validUntil = toString(raw.validUntil, toString(raw.expiry, existing?.validUntil ?? nowIso2()));
+  const name = toString2(raw.name, existing?.name ?? "Untitled Deal");
+  const id = toString2(raw.id, existing?.id ?? `deal-${Date.now()}`);
+  const statusRaw = toString2(raw.status, existing?.status ?? "draft").toLowerCase();
+  const discountTypeRaw = toString2(raw.discountType, existing?.discountType ?? "percentage").toLowerCase();
+  const typeRaw = toString2(raw.type, existing?.type ?? "retail").toLowerCase();
+  const validUntil = toString2(raw.validUntil, toString2(raw.expiry, existing?.validUntil ?? nowIso4()));
   const normalized = {
     id,
-    slug: toString(raw.slug, existing?.slug ?? slugify2(name || id)),
+    slug: toString2(raw.slug, existing?.slug ?? slugify3(name || id)),
     name,
-    seller: toString(raw.seller, existing?.seller ?? "Platform"),
-    category: toString(raw.category, existing?.category ?? "General"),
+    seller: toString2(raw.seller, existing?.seller ?? "Platform"),
+    category: toString2(raw.category, existing?.category ?? "General"),
     status: statusRaw === "live" || statusRaw === "pending" || statusRaw === "expiring" || statusRaw === "expired" || statusRaw === "rejected" ? statusRaw : "draft",
     type: typeRaw === "wholesale" ? "wholesale" : "retail",
     discountType: discountTypeRaw === "flat" ? "flat" : "percentage",
-    discountValue: toNumber(raw.discountValue, toNumber(raw.discount, existing?.discountValue ?? 0)),
-    promoCode: toString(raw.promoCode, existing?.promoCode),
-    productId: toString(raw.productId, existing?.productId),
-    brandId: toString(raw.brandId, existing?.brandId),
-    clicks: toNumber(raw.clicks, existing?.clicks ?? 0),
-    validFrom: toString(raw.validFrom, existing?.validFrom ?? nowIso2()),
+    discountValue: toNumber2(raw.discountValue, toNumber2(raw.discount, existing?.discountValue ?? 0)),
+    promoCode: toString2(raw.promoCode, existing?.promoCode),
+    productId: toString2(raw.productId, existing?.productId),
+    brandId: toString2(raw.brandId, existing?.brandId),
+    clicks: toNumber2(raw.clicks, existing?.clicks ?? 0),
+    validFrom: toString2(raw.validFrom, existing?.validFrom ?? nowIso4()),
     validUntil,
     createdAt: existingOrNow(existing?.createdAt),
-    updatedAt: nowIso2()
+    updatedAt: nowIso4()
   };
   return dealSchema.parse(normalized);
 };
 var normalizeHeroBannerInput = (payload, idx) => {
   const raw = payload ?? {};
-  const id = toString(raw.id, `hero-${idx + 1}`);
+  const id = toString2(raw.id, `hero-${idx + 1}`);
   return heroBannerSchema.parse({
     id,
-    headline: toString(raw.headline),
-    subtitle: toString(raw.subtitle),
-    ctaText: toString(raw.ctaText),
-    ctaUrl: toString(raw.ctaUrl, "/products"),
-    backgroundImage: toString(raw.backgroundImage),
-    isActive: toBoolean(raw.isActive, true),
-    order: Math.floor(toNumber(raw.order, idx))
+    headline: toString2(raw.headline),
+    subtitle: toString2(raw.subtitle),
+    ctaText: toString2(raw.ctaText),
+    ctaUrl: toString2(raw.ctaUrl, "/products"),
+    backgroundImage: toString2(raw.backgroundImage),
+    isActive: toBoolean2(raw.isActive, true),
+    order: Math.floor(toNumber2(raw.order, idx))
   });
 };
 var normalizeSectionInput = (payload, idx) => {
   const raw = payload ?? {};
-  const id = toString(raw.id, `section-${idx + 1}`);
+  const id = toString2(raw.id, `section-${idx + 1}`);
   return sectionSchema.parse({
     id,
-    label: toString(raw.label, id),
-    isVisible: toBoolean(raw.isVisible, true),
-    order: Math.floor(toNumber(raw.order, idx)),
-    itemIds: toStringArray(raw.itemIds)
+    label: toString2(raw.label, id),
+    isVisible: toBoolean2(raw.isVisible, true),
+    order: Math.floor(toNumber2(raw.order, idx)),
+    itemIds: toStringArray2(raw.itemIds)
   });
 };
 var normalizeHomepageInput = (payload, existing) => {
@@ -15526,34 +16033,36 @@ var normalizeHomepageInput = (payload, existing) => {
     id: "default",
     heroBanners: heroBannersInput.map(normalizeHeroBannerInput),
     sections: sectionsInput.map(normalizeSectionInput),
-    featuredProductIds: toStringArray(raw.featuredProductIds).length > 0 ? toStringArray(raw.featuredProductIds) : existing?.featuredProductIds ?? [],
-    featuredBrandIds: toStringArray(raw.featuredBrandIds).length > 0 ? toStringArray(raw.featuredBrandIds) : existing?.featuredBrandIds ?? [],
-    featuredDealIds: toStringArray(raw.featuredDealIds).length > 0 ? toStringArray(raw.featuredDealIds) : existing?.featuredDealIds ?? [],
-    updatedAt: nowIso2()
+    featuredProductIds: toStringArray2(raw.featuredProductIds).length > 0 ? toStringArray2(raw.featuredProductIds) : existing?.featuredProductIds ?? [],
+    featuredBrandIds: toStringArray2(raw.featuredBrandIds).length > 0 ? toStringArray2(raw.featuredBrandIds) : existing?.featuredBrandIds ?? [],
+    featuredDealIds: toStringArray2(raw.featuredDealIds).length > 0 ? toStringArray2(raw.featuredDealIds) : existing?.featuredDealIds ?? [],
+    featuredCreatorIds: toStringArray2(raw.featuredCreatorIds).length > 0 ? toStringArray2(raw.featuredCreatorIds) : existing?.featuredCreatorIds ?? [],
+    featuredGuideIds: toStringArray2(raw.featuredGuideIds).length > 0 ? toStringArray2(raw.featuredGuideIds) : existing?.featuredGuideIds ?? [],
+    updatedAt: nowIso4()
   };
   return homepageSchema.parse(normalized);
 };
 var normalizeNavItem = (payload, idx) => {
   const raw = payload ?? {};
-  const id = toString(raw.id, `nav-${idx + 1}`);
+  const id = toString2(raw.id, `nav-${idx + 1}`);
   return {
     id,
-    label: toString(raw.label, "Link"),
-    path: toString(raw.path, "/"),
-    order: Math.floor(toNumber(raw.order, idx))
+    label: toString2(raw.label, "Link"),
+    path: toString2(raw.path, "/"),
+    order: Math.floor(toNumber2(raw.order, idx))
   };
 };
 var normalizeFooterColumn = (payload, idx) => {
   const raw = payload ?? {};
   const links = Array.isArray(raw.links) ? raw.links : [];
   return {
-    id: toString(raw.id, `footer-col-${idx + 1}`),
-    title: toString(raw.title, "Links"),
+    id: toString2(raw.id, `footer-col-${idx + 1}`),
+    title: toString2(raw.title, "Links"),
     links: links.map((link) => {
       const item = link ?? {};
       return {
-        label: toString(item.label),
-        url: toString(item.url, "/")
+        label: toString2(item.label),
+        url: toString2(item.url, "/")
       };
     }).filter((link) => link.label.length > 0)
   };
@@ -15561,20 +16070,20 @@ var normalizeFooterColumn = (payload, idx) => {
 var normalizeSocialLink = (payload, idx) => {
   const raw = payload ?? {};
   return {
-    id: toString(raw.id, `social-${idx + 1}`),
-    platform: toString(raw.platform, "Facebook"),
-    url: toString(raw.url, "#"),
-    isVisible: toBoolean(raw.isVisible, true),
-    order: Math.floor(toNumber(raw.order, idx))
+    id: toString2(raw.id, `social-${idx + 1}`),
+    platform: toString2(raw.platform, "Facebook"),
+    url: toString2(raw.url, "#"),
+    isVisible: toBoolean2(raw.isVisible, true),
+    order: Math.floor(toNumber2(raw.order, idx))
   };
 };
 var normalizePopularSearch = (payload, idx) => {
   const raw = payload ?? {};
   return {
-    id: toString(raw.id, `search-${idx + 1}`),
-    term: toString(raw.term, ""),
-    order: Math.floor(toNumber(raw.order, idx)),
-    isActive: toBoolean(raw.isActive, true)
+    id: toString2(raw.id, `search-${idx + 1}`),
+    term: toString2(raw.term, ""),
+    order: Math.floor(toNumber2(raw.order, idx)),
+    isActive: toBoolean2(raw.isActive, true)
   };
 };
 var normalizeSiteInput = (payload, existing) => {
@@ -15585,10 +16094,10 @@ var normalizeSiteInput = (payload, existing) => {
     id: "default",
     navigation: (Array.isArray(raw.navigation) ? raw.navigation : existing?.navigation ?? []).map(normalizeNavItem),
     footer: {
-      description: toString(footerRaw.description, existing?.footer.description ?? ""),
-      copyrightText: toString(footerRaw.copyrightText, existing?.footer.copyrightText ?? ""),
+      description: toString2(footerRaw.description, existing?.footer.description ?? ""),
+      copyrightText: toString2(footerRaw.copyrightText, existing?.footer.copyrightText ?? ""),
       columns: columnsInput.map(normalizeFooterColumn),
-      newsletterEnabled: toBoolean(footerRaw.newsletterEnabled, existing?.footer.newsletterEnabled ?? true)
+      newsletterEnabled: toBoolean2(footerRaw.newsletterEnabled, existing?.footer.newsletterEnabled ?? true)
     },
     socialLinks: (Array.isArray(raw.socialLinks) ? raw.socialLinks : existing?.socialLinks ?? []).map(
       normalizeSocialLink
@@ -15596,9 +16105,10 @@ var normalizeSiteInput = (payload, existing) => {
     popularSearches: (Array.isArray(raw.popularSearches) ? raw.popularSearches : existing?.popularSearches ?? []).map(
       normalizePopularSearch
     ),
-    announcementBarText: toString(raw.announcementBarText, existing?.announcementBarText ?? ""),
-    announcementBarEnabled: toBoolean(raw.announcementBarEnabled, existing?.announcementBarEnabled ?? false),
-    updatedAt: nowIso2()
+    seoEntries: (Array.isArray(raw.seoEntries) ? raw.seoEntries : existing?.seoEntries ?? []).map(normalizeSeoEntryInput),
+    announcementBarText: toString2(raw.announcementBarText, existing?.announcementBarText ?? ""),
+    announcementBarEnabled: toBoolean2(raw.announcementBarEnabled, existing?.announcementBarEnabled ?? false),
+    updatedAt: nowIso4()
   };
 };
 
@@ -15812,17 +16322,21 @@ async function handleDeals(req, res, id) {
 }
 async function handleHome(req, res) {
   if (req.method === "GET") {
-    const [homepage, products, brands, deals] = await Promise.all([
+    const [homepage, products, brands, deals, creators, guides] = await Promise.all([
       catalogStore2.getHomepage(),
       catalogStore2.listProducts(),
       catalogStore2.listBrands(),
-      catalogStore2.listDeals()
+      catalogStore2.listDeals(),
+      catalogStore2.listCreators(),
+      catalogStore2.listGuides()
     ]);
     res.status(200).json({
       homepage,
       featuredProducts: products.filter((item) => homepage.featuredProductIds.includes(item.id)),
       featuredBrands: brands.filter((item) => homepage.featuredBrandIds.includes(item.id)),
-      featuredDeals: deals.filter((item) => homepage.featuredDealIds.includes(item.id))
+      featuredDeals: deals.filter((item) => homepage.featuredDealIds.includes(item.id)),
+      featuredCreators: creators.filter((item) => homepage.featuredCreatorIds.includes(item.id)),
+      featuredGuides: guides.filter((item) => homepage.featuredGuideIds.includes(item.id))
     });
     return;
   }
@@ -15848,15 +16362,183 @@ async function handleSite(req, res) {
   sendError(res, 405, "Method not allowed");
 }
 async function handleSnapshot(_req, res) {
-  const [products, categories, brands, deals, homepage, site] = await Promise.all([
+  const [products, categories, brands, deals, homepage, site, creators, guides, placements, productDetails] = await Promise.all([
     catalogStore2.listProducts(),
     catalogStore2.listCategories(),
     catalogStore2.listBrands(),
     catalogStore2.listDeals(),
     catalogStore2.getHomepage(),
-    catalogStore2.getSiteConfig()
+    catalogStore2.getSiteConfig(),
+    catalogStore2.listCreators(),
+    catalogStore2.listGuides(),
+    catalogStore2.listPlacements(),
+    catalogStore2.listProductDetails()
   ]);
-  res.status(200).json({ products, categories, brands, deals, homepage, site });
+  res.status(200).json({ products, categories, brands, deals, homepage, site, creators, guides, placements, productDetails });
+}
+var filterLiveGuides = (guides, query) => {
+  const status = typeof query.status === "string" ? query.status : "live";
+  const slug = typeof query.slug === "string" ? query.slug.trim() : "";
+  return guides.filter((guide) => {
+    if (status && guide.status !== status) return false;
+    if (slug && guide.slug !== slug) return false;
+    return true;
+  });
+};
+async function handleCreators(req, res, id) {
+  if (!id && req.method === "GET") {
+    const creators = await catalogStore2.listCreators();
+    const status = typeof req.query?.status === "string" ? req.query.status : "";
+    const filtered = status ? creators.filter((c) => c.status === status) : creators;
+    res.status(200).json({ data: filtered });
+    return;
+  }
+  if (!id && req.method === "POST") {
+    const saved = await catalogStore2.upsertCreator(normalizeCreatorInput(await readJsonBody(req)));
+    res.status(201).json({ success: true, data: saved });
+    return;
+  }
+  if (id && req.method === "GET") {
+    const creator = await catalogStore2.getCreator(id);
+    if (!creator) {
+      sendError(res, 404, "Creator not found");
+      return;
+    }
+    res.status(200).json(creator);
+    return;
+  }
+  if (id && (req.method === "PUT" || req.method === "PATCH")) {
+    const existing = await catalogStore2.getCreator(id);
+    if (!existing) {
+      sendError(res, 404, "Creator not found");
+      return;
+    }
+    const body = await readJsonBody(req);
+    const saved = await catalogStore2.upsertCreator(
+      normalizeCreatorInput(req.method === "PATCH" ? { ...existing, ...body, id } : { ...body, id }, existing)
+    );
+    res.status(200).json({ success: true, data: saved });
+    return;
+  }
+  if (id && req.method === "DELETE") {
+    await catalogStore2.deleteCreator(id);
+    res.status(200).json({ success: true });
+    return;
+  }
+  sendError(res, 405, "Method not allowed");
+}
+async function handleGuides(req, res, id) {
+  if (!id && req.method === "GET") {
+    const guides = filterLiveGuides(await catalogStore2.listGuides(), queryWithoutCatalogPath(req));
+    res.status(200).json({ data: guides });
+    return;
+  }
+  if (!id && req.method === "POST") {
+    const saved = await catalogStore2.upsertGuide(normalizeGuideInput(await readJsonBody(req)));
+    res.status(201).json({ success: true, data: saved });
+    return;
+  }
+  if (id && req.method === "GET") {
+    const guide = await catalogStore2.getGuide(id);
+    if (!guide) {
+      sendError(res, 404, "Guide not found");
+      return;
+    }
+    res.status(200).json(guide);
+    return;
+  }
+  if (id && (req.method === "PUT" || req.method === "PATCH")) {
+    const existing = await catalogStore2.getGuide(id);
+    if (!existing) {
+      sendError(res, 404, "Guide not found");
+      return;
+    }
+    const body = await readJsonBody(req);
+    const saved = await catalogStore2.upsertGuide(
+      normalizeGuideInput(req.method === "PATCH" ? { ...existing, ...body, id } : { ...body, id }, existing)
+    );
+    res.status(200).json({ success: true, data: saved });
+    return;
+  }
+  if (id && req.method === "DELETE") {
+    await catalogStore2.deleteGuide(id);
+    res.status(200).json({ success: true });
+    return;
+  }
+  sendError(res, 405, "Method not allowed");
+}
+async function handlePlacements(req, res, id) {
+  if (!id && req.method === "GET") {
+    const placements = await catalogStore2.listPlacements();
+    const query = queryWithoutCatalogPath(req);
+    const placement = typeof query.placement === "string" ? query.placement : "";
+    const activeOnly = query.active === "true";
+    const filtered = placements.filter((item) => {
+      if (placement && item.placement !== placement) return false;
+      if (activeOnly && !item.isActive) return false;
+      return true;
+    });
+    res.status(200).json({ data: filtered });
+    return;
+  }
+  if (!id && req.method === "POST") {
+    const saved = await catalogStore2.upsertPlacement(normalizePlacementInput(await readJsonBody(req)));
+    res.status(201).json({ success: true, data: saved });
+    return;
+  }
+  if (id && (req.method === "PUT" || req.method === "PATCH")) {
+    const existing = await catalogStore2.getPlacement(id);
+    if (!existing) {
+      sendError(res, 404, "Placement not found");
+      return;
+    }
+    const body = await readJsonBody(req);
+    const saved = await catalogStore2.upsertPlacement(
+      normalizePlacementInput(req.method === "PATCH" ? { ...existing, ...body, id } : { ...body, id }, existing)
+    );
+    res.status(200).json({ success: true, data: saved });
+    return;
+  }
+  if (id && req.method === "DELETE") {
+    await catalogStore2.deletePlacement(id);
+    res.status(200).json({ success: true });
+    return;
+  }
+  sendError(res, 405, "Method not allowed");
+}
+async function handleProductDetails(req, res, productId) {
+  if (!productId && req.method === "GET") {
+    res.status(200).json({ data: await catalogStore2.listProductDetails() });
+    return;
+  }
+  if (productId && req.method === "GET") {
+    const detail = await catalogStore2.getProductDetail(productId);
+    if (!detail) {
+      sendError(res, 404, "Product detail not found");
+      return;
+    }
+    res.status(200).json(detail);
+    return;
+  }
+  if (productId && (req.method === "PUT" || req.method === "PATCH")) {
+    const existing = await catalogStore2.getProductDetail(productId);
+    const body = await readJsonBody(req);
+    const saved = await catalogStore2.upsertProductDetail(
+      normalizeProductDetailInput(
+        req.method === "PATCH" ? { ...existing, ...body, productId } : { ...body, productId },
+        productId,
+        existing ?? void 0
+      )
+    );
+    res.status(200).json({ success: true, data: saved });
+    return;
+  }
+  if (productId && req.method === "DELETE") {
+    await catalogStore2.deleteProductDetail(productId);
+    res.status(200).json({ success: true });
+    return;
+  }
+  sendError(res, 405, "Method not allowed");
 }
 async function handleVercelCatalogRequest(req, res) {
   setCorsHeaders(res);
@@ -15894,6 +16576,18 @@ async function handleVercelCatalogRequest(req, res) {
         return;
       case "site":
         await handleSite(req, res);
+        return;
+      case "creators":
+        await handleCreators(req, res, id);
+        return;
+      case "guides":
+        await handleGuides(req, res, id);
+        return;
+      case "placements":
+        await handlePlacements(req, res, id);
+        return;
+      case "product-details":
+        await handleProductDetails(req, res, id);
         return;
       case "snapshot":
         if (req.method === "GET") {

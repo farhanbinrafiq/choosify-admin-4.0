@@ -1,8 +1,12 @@
 import type {
   CatalogBrand,
   CatalogCategory,
+  CatalogCreator,
   CatalogDeal,
+  CatalogGuide,
+  CatalogPlacement,
   CatalogProduct,
+  CatalogProductDetail,
   HomepageConfig,
   SiteConfig,
 } from '../types/catalog';
@@ -109,5 +113,52 @@ export const catalogApi = {
   updateSiteConfig: async (payload: SiteConfig): Promise<SiteConfig> => {
     const result = await request<{ site: SiteConfig }>('/catalog/site', 'PUT', payload);
     return result.site;
+  },
+
+  listCreators: async (): Promise<CatalogCreator[]> => {
+    const result = await request<{ data: CatalogCreator[] }>('/catalog/creators');
+    return result.data;
+  },
+  upsertCreator: async (id: string, payload: Partial<CatalogCreator>): Promise<CatalogCreator> => {
+    const result = await request<{ data: CatalogCreator }>(`/catalog/creators/${id}`, 'PUT', payload);
+    return result.data;
+  },
+
+  listGuides: async (params?: { status?: string; slug?: string }): Promise<CatalogGuide[]> => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.slug) query.set('slug', params.slug);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const result = await request<{ data: CatalogGuide[] }>(`/catalog/guides${suffix}`);
+    return result.data;
+  },
+  upsertGuide: async (id: string, payload: Partial<CatalogGuide>): Promise<CatalogGuide> => {
+    const result = await request<{ data: CatalogGuide }>(`/catalog/guides/${id}`, 'PUT', payload);
+    return result.data;
+  },
+
+  listPlacements: async (params?: { placement?: string; active?: boolean }): Promise<CatalogPlacement[]> => {
+    const query = new URLSearchParams();
+    if (params?.placement) query.set('placement', params.placement);
+    if (params?.active) query.set('active', 'true');
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const result = await request<{ data: CatalogPlacement[] }>(`/catalog/placements${suffix}`);
+    return result.data;
+  },
+  upsertPlacement: async (id: string, payload: Partial<CatalogPlacement>): Promise<CatalogPlacement> => {
+    const result = await request<{ data: CatalogPlacement }>(`/catalog/placements/${id}`, 'PUT', payload);
+    return result.data;
+  },
+
+  getProductDetail: async (productId: string): Promise<CatalogProductDetail | null> => {
+    try {
+      return await request<CatalogProductDetail>(`/catalog/product-details/${productId}`);
+    } catch {
+      return null;
+    }
+  },
+  upsertProductDetail: async (productId: string, payload: Partial<CatalogProductDetail>): Promise<CatalogProductDetail> => {
+    const result = await request<{ data: CatalogProductDetail }>(`/catalog/product-details/${productId}`, 'PUT', payload);
+    return result.data;
   },
 };

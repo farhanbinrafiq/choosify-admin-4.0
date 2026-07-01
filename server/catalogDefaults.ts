@@ -260,6 +260,8 @@ export const defaultHomepage = (): HomepageConfig => {
     featuredProductIds: ['prod-s24-ultra', 'prod-macbook-air-m3'],
     featuredBrandIds: ['brand-samsung', 'brand-apple'],
     featuredDealIds: ['deal-s24-flash'],
+    featuredCreatorIds: ['creator-farhan', 'creator-sarah'],
+    featuredGuideIds: ['guide-top-smartphones-2026', 'guide-s24-ultra-review'],
     updatedAt: ts,
   };
 };

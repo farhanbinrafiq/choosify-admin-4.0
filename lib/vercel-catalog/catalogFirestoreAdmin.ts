@@ -1,8 +1,12 @@
 import type {
   CatalogBrand,
   CatalogCategory,
+  CatalogCreator,
   CatalogDeal,
+  CatalogGuide,
+  CatalogPlacement,
   CatalogProduct,
+  CatalogProductDetail,
   HomepageConfig,
   SiteConfig,
 } from './catalogTypes';
@@ -12,6 +16,10 @@ const PRODUCTS_COLLECTION = 'catalog_products';
 const CATEGORIES_COLLECTION = 'catalog_categories';
 const BRANDS_COLLECTION = 'catalog_brands';
 const DEALS_COLLECTION = 'catalog_deals';
+const CREATORS_COLLECTION = 'catalog_creators';
+const GUIDES_COLLECTION = 'catalog_guides';
+const PLACEMENTS_COLLECTION = 'catalog_placements';
+const PRODUCT_DETAILS_COLLECTION = 'catalog_product_details';
 const HOMEPAGE_DOC = { collection: 'settings', id: 'catalog_homepage' } as const;
 const SITE_DOC = { collection: 'settings', id: 'catalog_site' } as const;
 
@@ -46,6 +54,18 @@ async function remove(collectionName: string, id: string): Promise<void> {
   await db.collection(collectionName).doc(id).delete();
 }
 
+async function getProductDetailById(productId: string): Promise<CatalogProductDetail | null> {
+  const db = await dbOrThrow();
+  const snapshot = await db.collection(PRODUCT_DETAILS_COLLECTION).doc(productId).get();
+  return snapshot.exists ? (snapshot.data() as CatalogProductDetail) : null;
+}
+
+async function upsertProductDetailDoc(payload: CatalogProductDetail): Promise<CatalogProductDetail> {
+  const db = await dbOrThrow();
+  await db.collection(PRODUCT_DETAILS_COLLECTION).doc(payload.productId).set(payload, { merge: true });
+  return payload;
+}
+
 export const firestoreAdminStore = {
   listProducts: () => listCollection<CatalogProduct>(PRODUCTS_COLLECTION),
   getProduct: (id: string) => getById<CatalogProduct>(PRODUCTS_COLLECTION, id),
@@ -66,6 +86,26 @@ export const firestoreAdminStore = {
   getDeal: (id: string) => getById<CatalogDeal>(DEALS_COLLECTION, id),
   upsertDeal: (payload: CatalogDeal) => upsert(DEALS_COLLECTION, payload),
   deleteDeal: (id: string) => remove(DEALS_COLLECTION, id),
+
+  listCreators: () => listCollection<CatalogCreator>(CREATORS_COLLECTION),
+  getCreator: (id: string) => getById<CatalogCreator>(CREATORS_COLLECTION, id),
+  upsertCreator: (payload: CatalogCreator) => upsert(CREATORS_COLLECTION, payload),
+  deleteCreator: (id: string) => remove(CREATORS_COLLECTION, id),
+
+  listGuides: () => listCollection<CatalogGuide>(GUIDES_COLLECTION),
+  getGuide: (id: string) => getById<CatalogGuide>(GUIDES_COLLECTION, id),
+  upsertGuide: (payload: CatalogGuide) => upsert(GUIDES_COLLECTION, payload),
+  deleteGuide: (id: string) => remove(GUIDES_COLLECTION, id),
+
+  listPlacements: () => listCollection<CatalogPlacement>(PLACEMENTS_COLLECTION),
+  getPlacement: (id: string) => getById<CatalogPlacement>(PLACEMENTS_COLLECTION, id),
+  upsertPlacement: (payload: CatalogPlacement) => upsert(PLACEMENTS_COLLECTION, payload),
+  deletePlacement: (id: string) => remove(PLACEMENTS_COLLECTION, id),
+
+  listProductDetails: () => listCollection<CatalogProductDetail>(PRODUCT_DETAILS_COLLECTION),
+  getProductDetail: (productId: string) => getProductDetailById(productId),
+  upsertProductDetail: (payload: CatalogProductDetail) => upsertProductDetailDoc(payload),
+  deleteProductDetail: (productId: string) => remove(PRODUCT_DETAILS_COLLECTION, productId),
 
   async getHomepage(): Promise<HomepageConfig | null> {
     const db = await dbOrThrow();

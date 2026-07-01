@@ -8,7 +8,13 @@ import {
   normalizeProductInput,
   normalizeSiteInput,
 } from './catalogContract';
-import type { CatalogProduct } from './catalogTypes';
+import {
+  normalizeCreatorInput,
+  normalizeGuideInput,
+  normalizePlacementInput,
+  normalizeProductDetailInput,
+} from './catalogEditorialContract';
+import type { CatalogGuide, CatalogProduct } from './catalogTypes';
 import { readJsonBody, sendError, setCorsHeaders } from './catalogApiUtils';
 
 let seeded = false;
@@ -214,17 +220,21 @@ async function handleDeals(req: VercelRequest, res: VercelResponse, id: string) 
 
 async function handleHome(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
-    const [homepage, products, brands, deals] = await Promise.all([
+    const [homepage, products, brands, deals, creators, guides] = await Promise.all([
       catalogStore.getHomepage(),
       catalogStore.listProducts(),
       catalogStore.listBrands(),
       catalogStore.listDeals(),
+      catalogStore.listCreators(),
+      catalogStore.listGuides(),
     ]);
     res.status(200).json({
       homepage,
       featuredProducts: products.filter((item) => homepage.featuredProductIds.includes(item.id)),
       featuredBrands: brands.filter((item) => homepage.featuredBrandIds.includes(item.id)),
       featuredDeals: deals.filter((item) => homepage.featuredDealIds.includes(item.id)),
+      featuredCreators: creators.filter((item) => homepage.featuredCreatorIds.includes(item.id)),
+      featuredGuides: guides.filter((item) => homepage.featuredGuideIds.includes(item.id)),
     });
     return;
   }
@@ -252,15 +262,189 @@ async function handleSite(req: VercelRequest, res: VercelResponse) {
 }
 
 async function handleSnapshot(_req: VercelRequest, res: VercelResponse) {
-  const [products, categories, brands, deals, homepage, site] = await Promise.all([
+  const [products, categories, brands, deals, homepage, site, creators, guides, placements, productDetails] =
+    await Promise.all([
     catalogStore.listProducts(),
     catalogStore.listCategories(),
     catalogStore.listBrands(),
     catalogStore.listDeals(),
     catalogStore.getHomepage(),
     catalogStore.getSiteConfig(),
+    catalogStore.listCreators(),
+    catalogStore.listGuides(),
+    catalogStore.listPlacements(),
+    catalogStore.listProductDetails(),
   ]);
-  res.status(200).json({ products, categories, brands, deals, homepage, site });
+  res.status(200).json({ products, categories, brands, deals, homepage, site, creators, guides, placements, productDetails });
+}
+
+const filterLiveGuides = (guides: CatalogGuide[], query: Record<string, unknown>) => {
+  const status = typeof query.status === 'string' ? query.status : 'live';
+  const slug = typeof query.slug === 'string' ? query.slug.trim() : '';
+  return guides.filter((guide) => {
+    if (status && guide.status !== status) return false;
+    if (slug && guide.slug !== slug) return false;
+    return true;
+  });
+};
+
+async function handleCreators(req: VercelRequest, res: VercelResponse, id: string) {
+  if (!id && req.method === 'GET') {
+    const creators = await catalogStore.listCreators();
+    const status = typeof req.query?.status === 'string' ? req.query.status : '';
+    const filtered = status ? creators.filter((c) => c.status === status) : creators;
+    res.status(200).json({ data: filtered });
+    return;
+  }
+  if (!id && req.method === 'POST') {
+    const saved = await catalogStore.upsertCreator(normalizeCreatorInput(await readJsonBody(req)));
+    res.status(201).json({ success: true, data: saved });
+    return;
+  }
+  if (id && req.method === 'GET') {
+    const creator = await catalogStore.getCreator(id);
+    if (!creator) {
+      sendError(res, 404, 'Creator not found');
+      return;
+    }
+    res.status(200).json(creator);
+    return;
+  }
+  if (id && (req.method === 'PUT' || req.method === 'PATCH')) {
+    const existing = await catalogStore.getCreator(id);
+    if (!existing) {
+      sendError(res, 404, 'Creator not found');
+      return;
+    }
+    const body = await readJsonBody<Record<string, unknown>>(req);
+    const saved = await catalogStore.upsertCreator(
+      normalizeCreatorInput(req.method === 'PATCH' ? { ...existing, ...body, id } : { ...body, id }, existing),
+    );
+    res.status(200).json({ success: true, data: saved });
+    return;
+  }
+  if (id && req.method === 'DELETE') {
+    await catalogStore.deleteCreator(id);
+    res.status(200).json({ success: true });
+    return;
+  }
+  sendError(res, 405, 'Method not allowed');
+}
+
+async function handleGuides(req: VercelRequest, res: VercelResponse, id: string) {
+  if (!id && req.method === 'GET') {
+    const guides = filterLiveGuides(await catalogStore.listGuides(), queryWithoutCatalogPath(req));
+    res.status(200).json({ data: guides });
+    return;
+  }
+  if (!id && req.method === 'POST') {
+    const saved = await catalogStore.upsertGuide(normalizeGuideInput(await readJsonBody(req)));
+    res.status(201).json({ success: true, data: saved });
+    return;
+  }
+  if (id && req.method === 'GET') {
+    const guide = await catalogStore.getGuide(id);
+    if (!guide) {
+      sendError(res, 404, 'Guide not found');
+      return;
+    }
+    res.status(200).json(guide);
+    return;
+  }
+  if (id && (req.method === 'PUT' || req.method === 'PATCH')) {
+    const existing = await catalogStore.getGuide(id);
+    if (!existing) {
+      sendError(res, 404, 'Guide not found');
+      return;
+    }
+    const body = await readJsonBody<Record<string, unknown>>(req);
+    const saved = await catalogStore.upsertGuide(
+      normalizeGuideInput(req.method === 'PATCH' ? { ...existing, ...body, id } : { ...body, id }, existing),
+    );
+    res.status(200).json({ success: true, data: saved });
+    return;
+  }
+  if (id && req.method === 'DELETE') {
+    await catalogStore.deleteGuide(id);
+    res.status(200).json({ success: true });
+    return;
+  }
+  sendError(res, 405, 'Method not allowed');
+}
+
+async function handlePlacements(req: VercelRequest, res: VercelResponse, id: string) {
+  if (!id && req.method === 'GET') {
+    const placements = await catalogStore.listPlacements();
+    const query = queryWithoutCatalogPath(req);
+    const placement = typeof query.placement === 'string' ? query.placement : '';
+    const activeOnly = query.active === 'true';
+    const filtered = placements.filter((item) => {
+      if (placement && item.placement !== placement) return false;
+      if (activeOnly && !item.isActive) return false;
+      return true;
+    });
+    res.status(200).json({ data: filtered });
+    return;
+  }
+  if (!id && req.method === 'POST') {
+    const saved = await catalogStore.upsertPlacement(normalizePlacementInput(await readJsonBody(req)));
+    res.status(201).json({ success: true, data: saved });
+    return;
+  }
+  if (id && (req.method === 'PUT' || req.method === 'PATCH')) {
+    const existing = await catalogStore.getPlacement(id);
+    if (!existing) {
+      sendError(res, 404, 'Placement not found');
+      return;
+    }
+    const body = await readJsonBody<Record<string, unknown>>(req);
+    const saved = await catalogStore.upsertPlacement(
+      normalizePlacementInput(req.method === 'PATCH' ? { ...existing, ...body, id } : { ...body, id }, existing),
+    );
+    res.status(200).json({ success: true, data: saved });
+    return;
+  }
+  if (id && req.method === 'DELETE') {
+    await catalogStore.deletePlacement(id);
+    res.status(200).json({ success: true });
+    return;
+  }
+  sendError(res, 405, 'Method not allowed');
+}
+
+async function handleProductDetails(req: VercelRequest, res: VercelResponse, productId: string) {
+  if (!productId && req.method === 'GET') {
+    res.status(200).json({ data: await catalogStore.listProductDetails() });
+    return;
+  }
+  if (productId && req.method === 'GET') {
+    const detail = await catalogStore.getProductDetail(productId);
+    if (!detail) {
+      sendError(res, 404, 'Product detail not found');
+      return;
+    }
+    res.status(200).json(detail);
+    return;
+  }
+  if (productId && (req.method === 'PUT' || req.method === 'PATCH')) {
+    const existing = await catalogStore.getProductDetail(productId);
+    const body = await readJsonBody<Record<string, unknown>>(req);
+    const saved = await catalogStore.upsertProductDetail(
+      normalizeProductDetailInput(
+        req.method === 'PATCH' ? { ...existing, ...body, productId } : { ...body, productId },
+        productId,
+        existing ?? undefined,
+      ),
+    );
+    res.status(200).json({ success: true, data: saved });
+    return;
+  }
+  if (productId && req.method === 'DELETE') {
+    await catalogStore.deleteProductDetail(productId);
+    res.status(200).json({ success: true });
+    return;
+  }
+  sendError(res, 405, 'Method not allowed');
 }
 
 export async function handleVercelCatalogRequest(req: VercelRequest, res: VercelResponse) {
@@ -302,6 +486,18 @@ export async function handleVercelCatalogRequest(req: VercelRequest, res: Vercel
         return;
       case 'site':
         await handleSite(req, res);
+        return;
+      case 'creators':
+        await handleCreators(req, res, id);
+        return;
+      case 'guides':
+        await handleGuides(req, res, id);
+        return;
+      case 'placements':
+        await handlePlacements(req, res, id);
+        return;
+      case 'product-details':
+        await handleProductDetails(req, res, id);
         return;
       case 'snapshot':
         if (req.method === 'GET') {

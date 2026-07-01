@@ -13,6 +13,7 @@ import type {
   SitePopularSearch,
   SiteSocialLink,
 } from './catalogTypes';
+import { normalizeSeoEntryInput } from './catalogEditorialContract';
 
 const nonEmpty = z.string().trim().min(1);
 const isoDate = z.string().datetime();
@@ -152,6 +153,8 @@ const homepageSchema = z.object({
   featuredProductIds: z.array(z.string()),
   featuredBrandIds: z.array(z.string()),
   featuredDealIds: z.array(z.string()),
+  featuredCreatorIds: z.array(z.string()),
+  featuredGuideIds: z.array(z.string()),
   updatedAt: isoDate,
 });
 
@@ -340,6 +343,14 @@ export const normalizeHomepageInput = (
       toStringArray(raw.featuredDealIds).length > 0
         ? toStringArray(raw.featuredDealIds)
         : existing?.featuredDealIds ?? [],
+    featuredCreatorIds:
+      toStringArray(raw.featuredCreatorIds).length > 0
+        ? toStringArray(raw.featuredCreatorIds)
+        : existing?.featuredCreatorIds ?? [],
+    featuredGuideIds:
+      toStringArray(raw.featuredGuideIds).length > 0
+        ? toStringArray(raw.featuredGuideIds)
+        : existing?.featuredGuideIds ?? [],
     updatedAt: nowIso(),
   };
 
@@ -416,6 +427,7 @@ export const normalizeSiteInput = (payload: unknown, existing?: SiteConfig): Sit
     popularSearches: (Array.isArray(raw.popularSearches) ? raw.popularSearches : existing?.popularSearches ?? []).map(
       normalizePopularSearch,
     ),
+    seoEntries: (Array.isArray(raw.seoEntries) ? raw.seoEntries : existing?.seoEntries ?? []).map(normalizeSeoEntryInput),
     announcementBarText: toString(raw.announcementBarText, existing?.announcementBarText ?? ''),
     announcementBarEnabled: toBoolean(raw.announcementBarEnabled, existing?.announcementBarEnabled ?? false),
     updatedAt: nowIso(),

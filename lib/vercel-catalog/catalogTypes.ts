@@ -105,6 +105,8 @@ export interface HomepageConfig {
   featuredProductIds: string[];
   featuredBrandIds: string[];
   featuredDealIds: string[];
+  featuredCreatorIds: string[];
+  featuredGuideIds: string[];
   updatedAt: string;
 }
 
@@ -152,7 +154,18 @@ export interface SiteConfig {
   };
   socialLinks: SiteSocialLink[];
   popularSearches: SitePopularSearch[];
+  seoEntries: import('./catalogEditorialTypes').SiteSeoEntry[];
   announcementBarText: string;
   announcementBarEnabled: boolean;
   updatedAt: string;
 }
+
+export type {
+  CatalogCreator,
+  CatalogGuide,
+  CatalogPlacement,
+  CatalogProductDetail,
+  CatalogMediaItem,
+  SiteSeoEntry,
+  CatalogPlacementSponsorType,
+} from './catalogEditorialTypes';
