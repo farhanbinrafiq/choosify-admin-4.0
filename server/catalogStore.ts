@@ -13,6 +13,8 @@ import {
   defaultProducts,
 } from './catalogDefaults';
 import { catalogStore as memoryStore } from './catalogMemoryStore';
+import { firestoreAdminStore } from './catalogFirestoreAdmin';
+import { hasFirebaseAdminCredentials } from './firebaseAdmin';
 
 export { defaultHomepage } from './catalogDefaults';
 
@@ -34,19 +36,22 @@ const BRANDS_COLLECTION = 'catalog_brands';
 const DEALS_COLLECTION = 'catalog_deals';
 const HOMEPAGE_DOC = ['settings', 'catalog_homepage'] as const;
 
-let memoryMode = process.env.CATALOG_USE_FIRESTORE !== 'true';
+const useAdminFirestore =
+  process.env.CATALOG_USE_FIRESTORE === 'true' && hasFirebaseAdminCredentials();
+
+let memoryMode = process.env.CATALOG_USE_FIRESTORE !== 'true' && !useAdminFirestore;
 let firestoreDb: Firestore | null = null;
 let firestoreLoadAttempted = false;
 
 const enableMemoryMode = (reason: unknown) => {
-  if (!memoryMode) {
+  if (!memoryMode && !useAdminFirestore) {
     memoryMode = true;
     console.warn('[Catalog Store] Falling back to in-memory persistence.', reason);
   }
 };
 
 async function resolveDb(): Promise<Firestore | null> {
-  if (memoryMode) return null;
+  if (memoryMode || useAdminFirestore) return null;
   if (firestoreDb) return firestoreDb;
   if (firestoreLoadAttempted) return null;
   firestoreLoadAttempted = true;
@@ -61,12 +66,24 @@ async function resolveDb(): Promise<Firestore | null> {
 }
 
 async function listCollection<T>(collectionName: string): Promise<T[]> {
+  if (useAdminFirestore) {
+    switch (collectionName) {
+      case PRODUCTS_COLLECTION:
+        return firestoreAdminStore.listProducts() as Promise<T[]>;
+      case CATEGORIES_COLLECTION:
+        return firestoreAdminStore.listCategories() as Promise<T[]>;
+      case BRANDS_COLLECTION:
+        return firestoreAdminStore.listBrands() as Promise<T[]>;
+      case DEALS_COLLECTION:
+        return firestoreAdminStore.listDeals() as Promise<T[]>;
+      default:
+        return [];
+    }
+  }
   if (memoryMode) return listFromMemory<T>(collectionName);
   try {
     const db = await resolveDb();
-    if (!db) {
-      return listFromMemory<T>(collectionName);
-    }
+    if (!db) return listFromMemory<T>(collectionName);
     const { collection, getDocs } = await getFirestoreModule();
     const snapshot = await getDocs(collection(db, collectionName));
     return snapshot.docs.map((item) => item.data() as T);
@@ -137,6 +154,20 @@ function removeFromMemory(collectionName: string, id: string): Promise<void> {
 }
 
 async function getById<T>(collectionName: string, id: string): Promise<T | null> {
+  if (useAdminFirestore) {
+    switch (collectionName) {
+      case PRODUCTS_COLLECTION:
+        return firestoreAdminStore.getProduct(id) as Promise<T | null>;
+      case CATEGORIES_COLLECTION:
+        return firestoreAdminStore.getCategory(id) as Promise<T | null>;
+      case BRANDS_COLLECTION:
+        return firestoreAdminStore.getBrand(id) as Promise<T | null>;
+      case DEALS_COLLECTION:
+        return firestoreAdminStore.getDeal(id) as Promise<T | null>;
+      default:
+        return null;
+    }
+  }
   if (memoryMode) return getFromMemory<T>(collectionName, id);
   try {
     const db = await resolveDb();
@@ -151,6 +182,21 @@ async function getById<T>(collectionName: string, id: string): Promise<T | null>
 }
 
 async function upsert<T extends { id: string }>(collectionName: string, data: T): Promise<T> {
+  if (useAdminFirestore) {
+    switch (collectionName) {
+      case PRODUCTS_COLLECTION:
+        return firestoreAdminStore.upsertProduct(data as unknown as CatalogProduct) as unknown as Promise<T>;
+      case CATEGORIES_COLLECTION:
+        return firestoreAdminStore.upsertCategory(data as unknown as CatalogCategory) as unknown as Promise<T>;
+      case BRANDS_COLLECTION:
+        return firestoreAdminStore.upsertBrand(data as unknown as CatalogBrand) as unknown as Promise<T>;
+      case DEALS_COLLECTION:
+        return firestoreAdminStore.upsertDeal(data as unknown as CatalogDeal) as unknown as Promise<T>;
+      default:
+        return data;
+    }
+  }
+
   await upsertToMemory(collectionName, data);
 
   if (!memoryMode) {
@@ -168,6 +214,21 @@ async function upsert<T extends { id: string }>(collectionName: string, data: T)
 }
 
 async function remove(collectionName: string, id: string): Promise<void> {
+  if (useAdminFirestore) {
+    switch (collectionName) {
+      case PRODUCTS_COLLECTION:
+        return firestoreAdminStore.deleteProduct(id);
+      case CATEGORIES_COLLECTION:
+        return firestoreAdminStore.deleteCategory(id);
+      case BRANDS_COLLECTION:
+        return firestoreAdminStore.deleteBrand(id);
+      case DEALS_COLLECTION:
+        return firestoreAdminStore.deleteDeal(id);
+      default:
+        return;
+    }
+  }
+
   await removeFromMemory(collectionName, id);
 
   if (!memoryMode) {
@@ -205,6 +266,10 @@ export const catalogStore = {
   deleteDeal: (id: string) => remove(DEALS_COLLECTION, id),
 
   async getHomepage(): Promise<HomepageConfig> {
+    if (useAdminFirestore) {
+      const homepage = await firestoreAdminStore.getHomepage();
+      return homepage ?? memoryStore.getHomepage();
+    }
     if (memoryMode) return memoryStore.getHomepage();
     try {
       const db = await resolveDb();
@@ -220,6 +285,9 @@ export const catalogStore = {
   },
 
   async upsertHomepage(homepage: HomepageConfig): Promise<HomepageConfig> {
+    if (useAdminFirestore) {
+      return firestoreAdminStore.upsertHomepage(homepage);
+    }
     await memoryStore.upsertHomepage(homepage);
     if (!memoryMode) {
       try {
@@ -238,15 +306,19 @@ export const catalogStore = {
 
 export async function ensureCatalogSeedData(): Promise<void> {
   try {
-    if (!memoryMode) {
+    if (useAdminFirestore) {
+      const hasProducts = await firestoreAdminStore.hasAnyProducts();
+      if (hasProducts) return;
+    } else if (!memoryMode) {
       const db = await resolveDb();
       if (db) {
         const { collection, getDocs, limit, query } = await getFirestoreModule();
         const existingProducts = await getDocs(query(collection(db, PRODUCTS_COLLECTION), limit(1)));
-        if (!existingProducts.empty) {
-          return;
-        }
+        if (!existingProducts.empty) return;
       }
+    } else {
+      const existing = await memoryStore.listProducts();
+      if (existing.length > 0) return;
     }
   } catch (error) {
     enableMemoryMode(error);
@@ -260,5 +332,12 @@ export async function ensureCatalogSeedData(): Promise<void> {
     catalogStore.upsertHomepage(defaultHomepage()),
   ]);
 
-  console.log(`[Catalog Seed] Seeded default catalog snapshot (${memoryMode ? 'memory' : 'firestore'} mode).`);
+  const mode = useAdminFirestore ? 'firestore-admin' : memoryMode ? 'memory' : 'firestore-client';
+  console.log(`[Catalog Seed] Seeded default catalog snapshot (${mode}).`);
+}
+
+export function getCatalogPersistenceMode(): 'firestore-admin' | 'firestore-client' | 'memory' {
+  if (useAdminFirestore) return 'firestore-admin';
+  if (memoryMode) return 'memory';
+  return 'firestore-client';
 }
