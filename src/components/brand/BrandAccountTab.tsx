@@ -51,7 +51,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
     <div className="space-y-6" id="account_information_panel">
       {/* Profile Identity Card */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5 text-left">
-        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Merchant Contact & Identity Settings</h3>
+        <h3 className="text-xs font-black text-app-text-secondary uppercase tracking-widest">Merchant Contact & Identity Settings</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-medium">
           <div className="space-y-1.5">
@@ -100,7 +100,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
         <div className="flex justify-end pt-2">
           <button 
             onClick={saveIdentity}
-            className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all"
+            className="px-5 py-2 bg-app-card hover:bg-slate-800 text-app-text-primary rounded-xl text-xs font-bold transition-all"
           >
             Save Profile Identity
           </button>
@@ -109,7 +109,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
 
       {/* Communications Channels settings */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5 text-left">
-        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Merchant Communications & Alert Channels</h3>
+        <h3 className="text-xs font-black text-app-text-secondary uppercase tracking-widest">Merchant Communications & Alert Channels</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-medium">
           {[
@@ -127,7 +127,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
               />
               <div className="text-left">
                 <span className="font-bold text-slate-800 block">{item.title}</span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">{item.desc}</span>
+                <span className="text-[10px] text-app-text-secondary block mt-0.5">{item.desc}</span>
               </div>
             </label>
           ))}
@@ -136,7 +136,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
         <div className="flex justify-end">
           <button 
             onClick={saveAlerts}
-            className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all"
+            className="px-5 py-2 bg-app-card hover:bg-slate-800 text-app-text-primary rounded-xl text-xs font-bold transition-all"
           >
             Save Communication Settings
           </button>
@@ -147,7 +147,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5 text-left">
         <div className="flex items-center gap-2">
           <Lock className="w-4 h-4 text-[#F4631E]" />
-          <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Platform Access Controls (Administrative Only)</h3>
+          <h3 className="text-xs font-black text-app-text-secondary uppercase tracking-widest">Platform Access Controls (Administrative Only)</h3>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
@@ -213,7 +213,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
 
       {/* Security settings */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5 text-left">
-        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest font-bold">Authorized Access Controls</h3>
+        <h3 className="text-xs font-black text-app-text-secondary uppercase tracking-widest font-bold">Authorized Access Controls</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-left">
           <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -226,7 +226,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
               />
               <div className="text-left">
                 <span className="font-bold text-slate-800 block">Two Factor Authentication (MFA)</span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">Enforce SMS/OTP verification code upon sign in</span>
+                <span className="text-[10px] text-app-text-secondary block mt-0.5">Enforce SMS/OTP verification code upon sign in</span>
               </div>
             </label>
 
@@ -239,13 +239,13 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
               />
               <div className="text-left">
                 <span className="font-bold text-slate-800 block">Enforce Inactive Session Timeout</span>
-                <span className="text-[10px] text-slate-400 block mt-0.5">Automatically lock console after 15 mins inactivity</span>
+                <span className="text-[10px] text-app-text-secondary block mt-0.5">Automatically lock console after 15 mins inactivity</span>
               </div>
             </label>
           </div>
 
           <div className="md:col-span-2 border-t border-slate-150 pt-4 space-y-3">
-            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-wider">Password Credentials Management</h4>
+            <h4 className="text-[10px] font-black text-app-text-secondary uppercase tracking-wider">Password Credentials Management</h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1">
                 <label className="text-slate-500 font-bold">Current Password</label>
@@ -284,7 +284,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
         <div className="flex justify-end pt-2">
           <button 
             onClick={saveAuthCreds}
-            className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all"
+            className="px-5 py-2 bg-app-card hover:bg-slate-800 text-app-text-primary rounded-xl text-xs font-bold transition-all"
           >
             Save Password Credentials
           </button>
@@ -293,7 +293,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
 
       {/* Interactive Audit Logs Journal Legder */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 text-left">
-        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest">Administrative Audit Ledger Logs</h3>
+        <h3 className="text-xs font-black text-app-text-secondary uppercase tracking-widest">Administrative Audit Ledger Logs</h3>
         
         <div className="space-y-3">
           <div className="max-h-60 overflow-y-auto border border-slate-205 rounded-xl divide-y divide-slate-100 bg-slate-50">
@@ -305,7 +305,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
                   <div className="space-y-0.5">
                     <span className="font-bold font-mono text-indigo-600 block">{log.action}</span>
                     <span className="text-slate-600 font-medium block">{log.notes}</span>
-                    <span className="text-[10px] text-slate-400 block">{log.timestamp}</span>
+                    <span className="text-[10px] text-app-text-secondary block">{log.timestamp}</span>
                   </div>
                   <span className="text-[10px] font-mono text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md h-fit">
                     {log.user}

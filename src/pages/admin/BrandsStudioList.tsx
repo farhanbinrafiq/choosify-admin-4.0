@@ -159,7 +159,7 @@ export default function BrandsStudioList() {
   });
 
   return (
-    <div className="space-y-6 pb-12 text-left text-slate-100">
+    <div className="space-y-6 pb-12 text-left text-app-text-primary">
       
       {/* Toast Alert */}
       <AnimatePresence>
@@ -168,10 +168,10 @@ export default function BrandsStudioList() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed top-8 right-8 z-[300] bg-slate-900 border border-app-accent/30 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3"
+            className="fixed top-8 right-8 z-[300] bg-app-card border border-app-accent/30 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3"
           >
             <span className="w-2.5 h-2.5 bg-app-accent rounded-full animate-ping" />
-            <span className="text-xs font-semibold text-white uppercase tracking-wider">{toastMessage}</span>
+            <span className="text-xs font-semibold text-app-text-primary uppercase tracking-wider">{toastMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -183,7 +183,7 @@ export default function BrandsStudioList() {
             <span className="bg-app-accent/15 text-app-accent p-1.5 rounded-lg border border-app-accent/20">
               <Globe className="w-5 h-5 text-app-accent" />
             </span>
-            <h1 className="text-xl font-bold text-white tracking-tight">
+            <h1 className="text-xl font-bold text-app-text-primary tracking-tight">
               My Brand Studio (Visual Brand Profile CMS)
             </h1>
           </div>
@@ -211,7 +211,7 @@ export default function BrandsStudioList() {
                       value={newBrandName}
                       onChange={e => setNewBrandName(e.target.value)}
                       placeholder="Enter brand name..."
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-medium text-white outline-none focus:border-app-accent"
+                      className="w-full px-3 py-2 bg-white/5 border border-app-border rounded-lg text-[11px] font-medium text-app-text-primary outline-none focus:border-app-accent"
                     />
                   </div>
 
@@ -221,7 +221,7 @@ export default function BrandsStudioList() {
                       value={newBrandCategory}
                       onChange={e => setNewBrandCategory(e.target.value)}
                       placeholder="e.g. Fashion, Electronics"
-                      className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-[11px] font-medium text-white outline-none focus:border-app-accent"
+                      className="w-full px-3 py-2 bg-white/5 border border-app-border rounded-lg text-[11px] font-medium text-app-text-primary outline-none focus:border-app-accent"
                     />
                   </div>
 
@@ -266,11 +266,11 @@ export default function BrandsStudioList() {
                         setNewBrandCategory('Retail & Lifestyle');
                       }}
                       disabled={!newBrandName.trim()}
-                      className="px-3 py-1.5 bg-app-accent text-white text-[10px] font-black uppercase rounded-lg hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="px-3 py-1.5 bg-app-accent text-app-text-primary text-[10px] font-black uppercase rounded-lg hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                     >Create</button>
                     <button
                       onClick={() => { setShowCreateForm(false); setNewBrandName(''); }}
-                      className="px-3 py-1.5 bg-white/5 text-slate-300 text-[10px] font-black uppercase rounded-lg hover:bg-white/10 transition-colors"
+                      className="px-3 py-1.5 bg-white/5 text-app-text-secondary text-[10px] font-black uppercase rounded-lg hover:bg-white/10 transition-colors"
                     >Cancel</button>
                   </div>
                 </div>
@@ -292,7 +292,7 @@ export default function BrandsStudioList() {
         <div className="bg-app-card border border-app-border rounded-[2rem] p-2 shadow-xl flex gap-1.5 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => setActiveSubTab("storefronts")}
-            className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shrink-0 ${
+            className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shrink-0${
               activeSubTab === "storefronts"
                 ? "bg-app-accent text-white shadow-lg shadow-app-accent/20"
                 : "text-slate-400 hover:text-white hover:bg-white/5"
@@ -310,18 +310,18 @@ export default function BrandsStudioList() {
             {allBrands.filter(b => sellerBrands.filter(r => r.seller_user_id === profile?.id).map(r => r.brand_id).includes(b.id)).length > 1 && (
               <div className="bg-app-card border border-app-border p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="text-left space-y-1">
-                  <h3 className="text-sm font-bold text-white">Active Brand Content Editor</h3>
-                  <p className="text-[11px] text-slate-400">Select which brand store you are currently designing with the Visual Builder.</p>
+                  <h3 className="text-sm font-bold text-app-text-primary">Active Brand Content Editor</h3>
+                  <p className="text-[11px] text-app-text-secondary">Select which brand store you are currently designing with the Visual Builder.</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-slate-400 font-medium">Select Brand:</span>
+                  <span className="text-xs text-app-text-secondary font-medium">Select Brand:</span>
                   <select
                     value={activeBrandId || ""}
                     onChange={(e) => {
                       setActiveBrandId(e.target.value || null);
                       triggerToast(`✓ Switched brand editor context.`);
                     }}
-                    className="bg-[#05055C] border border-orange-500/20 text-xs font-bold text-white px-4 py-2 rounded-xl outline-none focus:border-orange-500/50"
+                    className="bg-[#05055C] border border-orange-500/20 text-xs font-bold text-app-text-primary px-4 py-2 rounded-xl outline-none focus:border-orange-500/50"
                   >
                     {allBrands.filter(b => sellerBrands.filter(r => r.seller_user_id === profile?.id).map(r => r.brand_id).includes(b.id)).map(b => (
                       <option key={b.id} value={b.id}>{b.name}</option>
@@ -338,7 +338,7 @@ export default function BrandsStudioList() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-app-card border border-app-border p-4 rounded-2xl">
           <div className="text-xs text-app-text-secondary uppercase tracking-widest font-semibold">Registered Experiences</div>
-          <div className="text-2xl font-black text-white mt-1.5">{brands.length} Brands</div>
+          <div className="text-2xl font-black text-app-text-primary mt-1.5">{brands.length} Brands</div>
           <p className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1 font-mono">
             ● {brands.filter(b => b.status === "Live").length} LIVE AT CHOOSIFY.BD
           </p>
@@ -347,12 +347,12 @@ export default function BrandsStudioList() {
         <div className="bg-app-card border border-app-border p-4 rounded-2xl">
           <div className="text-xs text-app-text-secondary uppercase tracking-widest font-semibold">Total Followers Pool</div>
           <div className="text-2xl font-black text-[#00D4B2] mt-1.5">39.6K</div>
-          <p className="text-[10px] text-slate-400 mt-1 font-mono">Organic brand fans linked</p>
+          <p className="text-[10px] text-app-text-secondary mt-1 font-mono">Organic brand fans linked</p>
         </div>
 
         <div className="bg-app-card border border-app-border p-4 rounded-2xl">
           <div className="text-xs text-app-text-secondary uppercase tracking-widest font-semibold">Reputation Rating Pool</div>
-          <div className="text-2xl font-black text-slate-100 mt-1.5 flex items-center gap-1.5">
+          <div className="text-2xl font-black text-app-text-primary mt-1.5 flex items-center gap-1.5">
             4.82 <Star className="w-5 h-5 fill-amber-400 text-amber-400 shrink-0" />
           </div>
           <p className="text-[10px] text-[#00D4B2] mt-1 font-mono">Passed enterprise standard</p>
@@ -360,8 +360,8 @@ export default function BrandsStudioList() {
 
         <div className="bg-app-card border border-app-border p-4 rounded-2xl">
           <div className="text-xs text-app-text-secondary uppercase tracking-widest font-semibold">Sandbox Schema Version</div>
-          <div className="text-2xl font-black text-white mt-1.5 font-mono text-app-accent">v2.10.4</div>
-          <p className="text-[10px] text-slate-400 mt-1 font-mono">Production Engine Synced</p>
+          <div className="text-2xl font-black text-app-text-primary mt-1.5 font-mono text-app-accent">v2.10.4</div>
+          <p className="text-[10px] text-app-text-secondary mt-1 font-mono">Production Engine Synced</p>
         </div>
       </div>
 
@@ -375,7 +375,7 @@ export default function BrandsStudioList() {
             placeholder="Search CMS brands by name or segment..." 
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="flex-1 py-2.5 text-xs bg-transparent outline-none text-white placeholder:text-slate-500" 
+            className="flex-1 py-2.5 text-xs bg-transparent outline-none text-app-text-primary placeholder:text-slate-500" 
           />
         </div>
 
@@ -386,7 +386,7 @@ export default function BrandsStudioList() {
               <button
                 key={st}
                 onClick={() => setStatusFilter(st)}
-                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all${
                   statusFilter === st 
                     ? "bg-app-accent text-white" 
                     : "text-slate-400 hover:text-white"
@@ -402,14 +402,14 @@ export default function BrandsStudioList() {
           <div className="flex p-1 bg-[#05050C] border border-[#202030] rounded-xl gap-0.5">
             <button 
               onClick={() => setViewLayout("grid")}
-              className={`p-1.5 rounded-lg transition-colors ${viewLayout === "grid" ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"}`}
+              className={`p-1.5 rounded-lg transition-colors${viewLayout === "grid" ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"}`}
               title="Grid View"
             >
               <LayoutGrid className="w-3.5 h-3.5" />
             </button>
             <button 
               onClick={() => setViewLayout("list")}
-              className={`p-1.5 rounded-lg transition-colors ${viewLayout === "list" ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"}`}
+              className={`p-1.5 rounded-lg transition-colors${viewLayout === "list" ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"}`}
               title="List View"
             >
               <List className="w-3.5 h-3.5" />
@@ -424,11 +424,11 @@ export default function BrandsStudioList() {
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="bg-app-card border border-app-border rounded-3xl p-16 text-center text-slate-400 flex flex-col items-center justify-center gap-4"
+            className="bg-app-card border border-app-border rounded-3xl p-16 text-center text-app-text-secondary flex flex-col items-center justify-center gap-4"
           >
             <Globe className="w-12 h-12 text-slate-600 animate-pulse" />
             <div className="space-y-1">
-              <h4 className="text-sm font-bold text-white uppercase tracking-wider">No brand experiences registered</h4>
+              <h4 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">No brand experiences registered</h4>
               <p className="text-[11px] text-slate-500 max-w-sm">No items match your active search terms or category parameters. Try resetting your filter state or create a visual blueprint from template.</p>
             </div>
           </motion.div>
@@ -445,7 +445,7 @@ export default function BrandsStudioList() {
               >
                 {/* Ribbon decoration */}
                 <div className="absolute top-4 right-4 flex items-center gap-2">
-                  <span className={`text-[8px] px-2.5 py-0.5 rounded-full font-black tracking-widest uppercase border ${
+                  <span className={`text-[8px] px-2.5 py-0.5 rounded-full font-black tracking-widest uppercase border${
                     brand.status === "Live"
                       ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                       : brand.status === "Draft"
@@ -457,17 +457,17 @@ export default function BrandsStudioList() {
                 </div>
 
                 <div className="flex gap-4 items-start">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-base uppercase shrink-0 border border-slate-700 ${brand.color}`}>
+                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-black text-base uppercase shrink-0 border border-app-border${brand.color}`}>
                     {brand.initials}
                   </div>
                   <div className="space-y-1 text-left">
                     <Link to={`/admin/brands/${brand.id}`} className="group/title block">
-                      <h3 className="font-bold text-sm text-white group-hover/title:text-app-accent transition-colors flex items-center gap-1.5 pr-12">
+                      <h3 className="font-bold text-sm text-app-text-primary group-hover/title:text-app-accent transition-colors flex items-center gap-1.5 pr-12">
                         {brand.brandName}
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                       </h3>
                     </Link>
-                    <p className="text-[10px] text-slate-400">{brand.category}</p>
+                    <p className="text-[10px] text-app-text-secondary">{brand.category}</p>
                     <p className="text-[9px] font-mono text-slate-500">Updated: {brand.lastUpdated}</p>
                   </div>
                 </div>
@@ -475,19 +475,19 @@ export default function BrandsStudioList() {
                 {/* Stat Grid */}
                 <div className="grid grid-cols-3 gap-2 my-4 bg-[#05050C] border border-[#202030] rounded-xl p-2 font-mono text-center">
                   <div>
-                    <div className="text-[11px] font-bold text-white flex items-center justify-center gap-0.5">
-                      <Users className="w-3 h-3 text-slate-400" /> {brand.followersCount}
+                    <div className="text-[11px] font-bold text-app-text-primary flex items-center justify-center gap-0.5">
+                      <Users className="w-3 h-3 text-app-text-secondary" /> {brand.followersCount}
                     </div>
                     <div className="text-[8px] text-slate-500 uppercase font-black">Followers</div>
                   </div>
                   <div>
-                    <div className="text-[11px] font-bold text-white flex items-center justify-center gap-0.5">
+                    <div className="text-[11px] font-bold text-app-text-primary flex items-center justify-center gap-0.5">
                       <Heart className="w-3 h-3 text-red-500" /> {brand.loveCount}
                     </div>
                     <div className="text-[8px] text-slate-500 uppercase font-black">Loves</div>
                   </div>
                   <div>
-                    <div className="text-[11px] font-bold text-white flex items-center justify-center gap-0.5">
+                    <div className="text-[11px] font-bold text-app-text-primary flex items-center justify-center gap-0.5">
                       <Star className="w-3 h-3 text-amber-400 fill-amber-400" /> {brand.trustScore}
                     </div>
                     <div className="text-[8px] text-slate-500 uppercase font-black">Score</div>
@@ -507,7 +507,7 @@ export default function BrandsStudioList() {
                           setActiveBrandId(brand.id);
                           triggerToast(`✓ Active Brand context switched to '${brand.brandName}'.`);
                         }}
-                        className="w-full py-2 bg-[#05050C] hover:bg-emerald-500/10 border border-[#202030] hover:border-emerald-500/30 text-slate-400 hover:text-emerald-400 rounded-xl text-[10px] font-black uppercase tracking-widest text-center flex items-center justify-center gap-1.5 transition-all shadow-inner"
+                        className="w-full py-2 bg-[#05050C] hover:bg-emerald-500/10 border border-[#202030] hover:border-emerald-500/30 text-app-text-secondary hover:text-emerald-400 rounded-xl text-[10px] font-black uppercase tracking-widest text-center flex items-center justify-center gap-1.5 transition-all shadow-inner"
                       >
                         Set Active Context
                       </button>
@@ -519,13 +519,13 @@ export default function BrandsStudioList() {
                 <div className="flex gap-2 border-t border-[#202030] pt-4.5 mt-2">
                   <Link 
                     to={`/dashboard/content-studio/brands/${brand.id}/edit`}
-                    className="flex-1 py-2.5 bg-app-accent hover:bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest text-center flex items-center justify-center gap-1.5 transition-colors"
+                    className="flex-1 py-2.5 bg-app-accent hover:bg-orange-500 text-app-text-primary rounded-xl text-[10px] font-black uppercase tracking-widest text-center flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Edit3 className="w-3.5 h-3.5" /> Visual Builder
                   </Link>
                   <button 
                     onClick={() => setConfirmingId(brand.id)}
-                    className="p-2.5 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/20 text-slate-400 hover:text-red-400 rounded-xl transition-colors"
+                    className="p-2.5 bg-white/5 hover:bg-red-500/10 border border-app-border hover:border-red-500/20 text-app-text-secondary hover:text-red-400 rounded-xl transition-colors"
                     title="Delete Brand Configuration"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -542,7 +542,7 @@ export default function BrandsStudioList() {
                       >Confirm</button>
                       <button
                         onClick={() => setConfirmingId(null)}
-                        className="px-3 py-1.5 bg-white/5 text-slate-300 text-[9px] font-black uppercase rounded-lg hover:bg-white/10 transition-colors border border-transparent"
+                        className="px-3 py-1.5 bg-white/5 text-app-text-secondary text-[9px] font-black uppercase rounded-lg hover:bg-white/10 transition-colors border border-transparent"
                       >Cancel</button>
                     </div>
                   </div>
@@ -559,36 +559,36 @@ export default function BrandsStudioList() {
             <table className="w-full text-left">
               <thead>
                 <tr className="border-b border-[#202030] bg-[#05050C]">
-                  <th className="p-4.5 text-[9px] font-black uppercase text-slate-400 tracking-wider">Brand visual detail</th>
-                  <th className="p-4.5 text-[9px] font-black uppercase text-slate-400 tracking-wider">Followers</th>
-                  <th className="p-4.5 text-[9px] font-black uppercase text-slate-400 tracking-wider">Loves count</th>
-                  <th className="p-4.5 text-[9px] font-black uppercase text-slate-400 tracking-wider">Trust Score</th>
-                  <th className="p-4.5 text-[9px] font-black uppercase text-slate-400 tracking-wider">Content Status</th>
-                  <th className="p-4.5 text-[9px] font-black uppercase text-slate-400 tracking-wider text-right">Actions</th>
+                  <th className="p-4.5 text-[9px] font-black uppercase text-app-text-secondary tracking-wider">Brand visual detail</th>
+                  <th className="p-4.5 text-[9px] font-black uppercase text-app-text-secondary tracking-wider">Followers</th>
+                  <th className="p-4.5 text-[9px] font-black uppercase text-app-text-secondary tracking-wider">Loves count</th>
+                  <th className="p-4.5 text-[9px] font-black uppercase text-app-text-secondary tracking-wider">Trust Score</th>
+                  <th className="p-4.5 text-[9px] font-black uppercase text-app-text-secondary tracking-wider">Content Status</th>
+                  <th className="p-4.5 text-[9px] font-black uppercase text-app-text-secondary tracking-wider text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#202030]/60">
                 {filteredBrands.map((brand) => (
                   <tr key={brand.id} className="hover:bg-white/5 transition-colors">
                     <td className="p-4.5 flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-xs uppercase border border-slate-700 shrink-0 ${brand.color}`}>
+                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-xs uppercase border border-app-border shrink-0${brand.color}`}>
                         {brand.initials}
                       </div>
                       <div>
-                        <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <div className="text-xs font-bold text-app-text-primary flex items-center gap-1.5">
                           <Link to={`/admin/brands/${brand.id}`} className="hover:text-app-accent hover:underline flex items-center gap-1">
                             {brand.brandName}
                           </Link>
                           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
                         </div>
-                        <div className="text-[10px] text-slate-400">{brand.category}</div>
+                        <div className="text-[10px] text-app-text-secondary">{brand.category}</div>
                       </div>
                     </td>
                     <td className="p-4.5 font-mono text-xs">{brand.followersCount}</td>
                     <td className="p-4.5 font-mono text-xs text-red-400">{brand.loveCount}</td>
                     <td className="p-4.5 font-mono text-xs text-amber-400">{brand.trustScore} / 5.0</td>
                     <td className="p-4.5">
-                      <span className={`px-2 py-0.5 text-[8px] font-black tracking-widest uppercase rounded border ${
+                      <span className={`px-2 py-0.5 text-[8px] font-black tracking-widest uppercase rounded border${
                         brand.status === "Live" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-app-accent/10 text-app-accent border-app-accent/20"
                       }`}>
                         {brand.status}
@@ -607,7 +607,7 @@ export default function BrandsStudioList() {
                                 setActiveBrandId(brand.id);
                                 triggerToast(`✓ Active Brand context switched.`);
                               }}
-                              className="px-3 py-1 bg-[#05050C] hover:bg-emerald-500/10 border border-[#202030] hover:border-emerald-500/30 text-slate-400 hover:text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
+                              className="px-3 py-1 bg-[#05050C] hover:bg-emerald-500/10 border border-[#202030] hover:border-emerald-500/30 text-app-text-secondary hover:text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
                             >
                               Select
                             </button>
@@ -624,7 +624,7 @@ export default function BrandsStudioList() {
                             </Link>
                             <button 
                               onClick={() => setConfirmingId(brand.id)}
-                              className="p-1.5 bg-white/5 hover:bg-red-500/10 text-slate-400 hover:text-red-400 rounded-lg transition-colors border border-white/10 hover:border-red-500/20"
+                              className="p-1.5 bg-white/5 hover:bg-red-500/10 text-app-text-secondary hover:text-red-400 rounded-lg transition-colors border border-app-border hover:border-red-500/20"
                               title="Delete"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -640,7 +640,7 @@ export default function BrandsStudioList() {
                                 >Confirm</button>
                                 <button
                                   onClick={() => setConfirmingId(null)}
-                                  className="px-2 py-1 bg-white/5 text-slate-300 text-[8px] font-black uppercase rounded hover:bg-white/10 transition-colors border border-transparent"
+                                  className="px-2 py-1 bg-white/5 text-app-text-secondary text-[8px] font-black uppercase rounded hover:bg-white/10 transition-colors border border-transparent"
                                 >Cancel</button>
                               </div>
                             </div>
@@ -669,21 +669,21 @@ export default function BrandsStudioList() {
                 {(profile?.displayName || 'RU').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase()}
               </div>
               <div className="space-y-1">
-                <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                <h2 className="text-lg font-bold text-app-text-primary tracking-tight flex items-center gap-2">
                   {profile?.displayName || 'Rahim Uddin'} 
                   <span className="text-[9px] bg-app-accent/15 border border-app-accent/20 text-app-accent px-2 py-0.5 rounded-full font-black uppercase tracking-widest">
                     Verified Merchant
                   </span>
                 </h2>
-                <p className="text-[11px] text-slate-400 font-mono">
+                <p className="text-[11px] text-app-text-secondary font-mono">
                   Registered Seller Node: <span className="text-blue-400">{profile?.id || 'seller_001'}</span> | Security Credentials Synced
                 </p>
               </div>
             </div>
             
             {/* Live active context display */}
-            <div className="text-right space-y-1 bg-white/5 px-4.5 py-3 rounded-2xl border border-white/10 self-stretch md:self-auto flex flex-col justify-center">
-              <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">Selected Active Context</div>
+            <div className="text-right space-y-1 bg-white/5 px-4.5 py-3 rounded-2xl border border-app-border self-stretch md:self-auto flex flex-col justify-center">
+              <div className="text-[9px] font-black uppercase tracking-widest text-app-text-secondary">Selected Active Context</div>
               <div className="text-sm font-bold text-[#F4631E] flex items-center gap-1.5 justify-end">
                 <VerifiedIcon className="w-4 h-4 text-emerald-400" />
                 {allBrands.find(b => b.id === activeBrandId)?.name || 'All Brands'}
@@ -698,13 +698,13 @@ export default function BrandsStudioList() {
               {/* OPERATIONAL STATUS & CRITICAL KPI METRICS */}
               <div className="bg-app-card border border-[#202030] rounded-3xl p-6 shadow-xl space-y-5 text-left">
                 <div className="border-b border-[#202030] pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <h3 className="text-xs font-black uppercase text-white tracking-wider flex items-center gap-2">
+                  <h3 className="text-xs font-black uppercase text-app-text-primary tracking-wider flex items-center gap-2">
                     <Activity className="w-4.5 h-4.5 text-app-accent" /> Operational Compliance & Audit Scores
                   </h3>
                   
                   {/* Operational Risk Health Badge */}
                   <div className="flex items-center gap-2 self-start sm:self-auto">
-                    <span className="text-[9px] text-slate-400 uppercase font-bold tracking-widest font-mono">Risk Status:</span>
+                    <span className="text-[9px] text-app-text-secondary uppercase font-bold tracking-widest font-mono">Risk Status:</span>
                     <span className="px-3 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-xl text-[10px] font-black uppercase tracking-wider">
                       COMPLIANT
                     </span>
@@ -716,7 +716,7 @@ export default function BrandsStudioList() {
                   {/* KPI card 1 */}
                   <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl flex flex-col justify-between">
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Fulfillment Rate</div>
-                    <div className="text-2xl font-black text-white mt-1.5 font-mono">98.4%</div>
+                    <div className="text-2xl font-black text-app-text-primary mt-1.5 font-mono">98.4%</div>
                     <div className="w-full bg-white/5 h-1 rounded-full mt-2 overflow-hidden">
                       <div className="bg-emerald-500 h-full w-[98.4%]" />
                     </div>
@@ -745,7 +745,7 @@ export default function BrandsStudioList() {
                   {/* KPI card 4 */}
                   <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl text-left">
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Settlement Code</div>
-                    <div className="text-xs font-bold text-slate-100 mt-2">T+3 Clearing Cycle</div>
+                    <div className="text-xs font-bold text-app-text-primary mt-2">T+3 Clearing Cycle</div>
                     <p className="text-[8px] text-slate-500 uppercase font-black font-mono mt-1">Bi-Weekly Automated</p>
                   </div>
 
@@ -759,7 +759,7 @@ export default function BrandsStudioList() {
                   {/* KPI card 6 */}
                   <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl text-left">
                     <div className="text-[9px] font-black uppercase tracking-widest text-slate-500">Active Catalog States</div>
-                    <div className="text-xs font-bold text-white mt-2">32 SKUs Listed</div>
+                    <div className="text-xs font-bold text-app-text-primary mt-2">32 SKUs Listed</div>
                     <p className="text-[8px] text-slate-500 uppercase font-black font-mono mt-1">4.2% Conv Ratio</p>
                   </div>
 
@@ -769,43 +769,43 @@ export default function BrandsStudioList() {
               {/* RECENT AUDIT TRAIL LOGS */}
               <div className="bg-app-card border border-[#202030] rounded-3xl p-6 shadow-xl space-y-4 text-left">
                 <div className="border-b border-[#202030] pb-2">
-                  <h3 className="text-xs font-black uppercase text-white tracking-wider flex items-center gap-1.5">
+                  <h3 className="text-xs font-black uppercase text-app-text-primary tracking-wider flex items-center gap-1.5">
                     <Database className="w-4 h-4 text-app-accent" /> Recent Activity Trail & Audit Records
                   </h3>
                   <p className="text-[10px] text-slate-500">Verified activities completed by brand employees and automated system jobs.</p>
                 </div>
 
                 <div className="space-y-3.5 font-mono text-xs">
-                  <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-xl flex items-start gap-3">
+                  <div className="p-3 bg-white/[0.01] border border-app-border rounded-xl flex items-start gap-3">
                     <span className="w-2 h-2 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
                     <div className="space-y-1 flex-1">
                       <div className="flex justify-between flex-wrap gap-2">
-                        <span className="font-bold text-white uppercase text-[10px]">Updated store representations</span>
+                        <span className="font-bold text-app-text-primary uppercase text-[10px]">Updated store representations</span>
                         <span className="text-[9px] text-slate-500">Today, 05:30 AM</span>
                       </div>
-                      <p className="text-[11px] text-slate-400">Edited secondary visual panels, ambassador slider widgets, and verified rating meters.</p>
+                      <p className="text-[11px] text-app-text-secondary">Edited secondary visual panels, ambassador slider widgets, and verified rating meters.</p>
                     </div>
                   </div>
 
-                  <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-xl flex items-start gap-3">
+                  <div className="p-3 bg-white/[0.01] border border-app-border rounded-xl flex items-start gap-3">
                     <span className="w-2 h-2 rounded-full bg-[#F4631E] mt-1.5 shrink-0" />
                     <div className="space-y-1 flex-1">
                       <div className="flex justify-between flex-wrap gap-2">
-                        <span className="font-bold text-white uppercase text-[10px]">Dual fulfillment dispatch checks</span>
+                        <span className="font-bold text-app-text-primary uppercase text-[10px]">Dual fulfillment dispatch checks</span>
                         <span className="text-[9px] text-slate-500">Yesterday, 04:12 PM</span>
                       </div>
-                      <p className="text-[11px] text-slate-400">Pushed bulk stock batch standard metrics to B2C logistics container #102.</p>
+                      <p className="text-[11px] text-app-text-secondary">Pushed bulk stock batch standard metrics to B2C logistics container #102.</p>
                     </div>
                   </div>
 
-                  <div className="p-3 bg-white/[0.01] border border-white/[0.03] rounded-xl flex items-start gap-3">
+                  <div className="p-3 bg-white/[0.01] border border-app-border rounded-xl flex items-start gap-3">
                     <span className="w-2 h-2 rounded-full bg-blue-500 mt-1.5 shrink-0" />
                     <div className="space-y-1 flex-1">
                       <div className="flex justify-between flex-wrap gap-2">
-                        <span className="font-bold text-white uppercase text-[10px]">BIN-VAT Certificate Updated</span>
+                        <span className="font-bold text-app-text-primary uppercase text-[10px]">BIN-VAT Certificate Updated</span>
                         <span className="text-[9px] text-slate-500">June 11, 2026</span>
                       </div>
-                      <p className="text-[11px] text-slate-400">Lodged certified trade and NBR BIN validation document into corporate audit registry.</p>
+                      <p className="text-[11px] text-app-text-secondary">Lodged certified trade and NBR BIN validation document into corporate audit registry.</p>
                     </div>
                   </div>
                 </div>
@@ -817,7 +817,7 @@ export default function BrandsStudioList() {
             <div className="lg:col-span-4">
               <form onSubmit={handleSaveContactDetails} className="bg-app-card border border-[#202030] rounded-3xl p-6 shadow-xl space-y-5 text-left">
                 <div className="border-b border-[#202030] pb-2">
-                  <h3 className="text-xs font-black uppercase text-white tracking-wider flex items-center gap-1.5">
+                  <h3 className="text-xs font-black uppercase text-app-text-primary tracking-wider flex items-center gap-1.5">
                     <Settings className="w-4 h-4 text-app-accent" /> Merchant Registry Editor
                   </h3>
                   <p className="text-[10px] text-slate-500 leading-relaxed">Modify your contact details safely. These fields sync instantly with platform customer assistance teams.</p>
@@ -834,7 +834,7 @@ export default function BrandsStudioList() {
                       required
                       value={contactEmail}
                       onChange={(e) => setContactEmail(e.target.value)}
-                      className="w-full bg-[#05050C] border border-[#202030] focus:border-app-accent/40 rounded-xl px-4 py-3 text-xs text-white outline-none transition-all placeholder:text-slate-600"
+                      className="w-full bg-[#05050C] border border-[#202030] focus:border-app-accent/40 rounded-xl px-4 py-3 text-xs text-app-text-primary outline-none transition-all placeholder:text-slate-600"
                     />
                   </div>
 
@@ -848,7 +848,7 @@ export default function BrandsStudioList() {
                       required
                       value={contactPhone}
                       onChange={(e) => setContactPhone(e.target.value)}
-                      className="w-full bg-[#05050C] border border-[#202030] focus:border-app-accent/40 rounded-xl px-4 py-3 text-xs text-white outline-none transition-all placeholder:text-slate-600"
+                      className="w-full bg-[#05050C] border border-[#202030] focus:border-app-accent/40 rounded-xl px-4 py-3 text-xs text-app-text-primary outline-none transition-all placeholder:text-slate-600"
                     />
                   </div>
 
@@ -862,7 +862,7 @@ export default function BrandsStudioList() {
                       required
                       value={contactAddress}
                       onChange={(e) => setContactAddress(e.target.value)}
-                      className="w-full bg-[#05050C] border border-[#202030] focus:border-app-accent/40 rounded-xl p-4 text-xs text-white outline-none transition-all placeholder:text-slate-600 resize-none animate-none"
+                      className="w-full bg-[#05050C] border border-[#202030] focus:border-app-accent/40 rounded-xl p-4 text-xs text-app-text-primary outline-none transition-all placeholder:text-slate-600 resize-none animate-none"
                     />
                   </div>
                 </div>
@@ -898,7 +898,7 @@ export default function BrandsStudioList() {
                 </div>
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Verification Request Code</div>
-                  <div className="text-sm font-black text-white mt-1 font-mono uppercase">
+                  <div className="text-sm font-black text-app-text-primary mt-1 font-mono uppercase">
                     {matchedRequest ? `APP-2026-${matchedRequest.id.toUpperCase()}` : 'APP-2026-VR_002'}
                   </div>
                   <p className="text-[9px] text-[#00D4B2] font-mono mt-0.5">Application active in system registry</p>
@@ -907,26 +907,26 @@ export default function BrandsStudioList() {
 
               {/* Approval Progress Status */}
               <div className="bg-app-card border border-[#202030] rounded-3xl p-5 shadow-xl flex items-center gap-4 text-left">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0${
                   matchedRequest?.status === 'Approved' ? 'bg-emerald-500/15 border border-emerald-500/25' :
                   matchedRequest?.status === 'Rejected' ? 'bg-red-500/15 border border-red-500/25' :
                   'bg-yellow-500/15 border border-yellow-500/25 animate-pulse'
                 }`}>
-                  <Clock className={`w-6 h-6 ${
+                  <Clock className={`w-6 h-6${
                     matchedRequest?.status === 'Approved' ? 'text-emerald-400' :
                     matchedRequest?.status === 'Rejected' ? 'text-red-400' : 'text-yellow-500'
                   }`} />
                 </div>
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Pipeline Validation Status</div>
-                  <div className="text-sm font-black text-white mt-1 uppercase flex items-center gap-1.5">
-                    <span className={`w-2 h-2 rounded-full ${
+                  <div className="text-sm font-black text-app-text-primary mt-1 uppercase flex items-center gap-1.5">
+                    <span className={`w-2 h-2 rounded-full${
                       matchedRequest?.status === 'Approved' ? 'bg-emerald-400' :
                       matchedRequest?.status === 'Rejected' ? 'bg-red-400' : 'bg-yellow-400'
                     }`} />
                     {matchedRequest?.status || 'Under Review'}
                   </div>
-                  <p className="text-[9px] text-slate-400 font-mono mt-0.5">Last updated: {matchedRequest ? new Date(matchedRequest.updated_at).toLocaleDateString() : 'June 14, 2026'}</p>
+                  <p className="text-[9px] text-app-text-secondary font-mono mt-0.5">Last updated: {matchedRequest ? new Date(matchedRequest.updated_at).toLocaleDateString() : 'June 14, 2026'}</p>
                 </div>
               </div>
 
@@ -937,10 +937,10 @@ export default function BrandsStudioList() {
                 </div>
                 <div>
                   <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Compliance Validity</div>
-                  <div className="text-sm font-black text-white mt-1 uppercase">
+                  <div className="text-sm font-black text-app-text-primary mt-1 uppercase">
                     {(matchedRequest?.status === 'Approved') ? 'Fully Verified' : 'Under Assessment'}
                   </div>
-                  <p className="text-[9px] text-slate-400 font-mono mt-0.5">Annual corporate audit is active</p>
+                  <p className="text-[9px] text-app-text-secondary font-mono mt-0.5">Annual corporate audit is active</p>
                 </div>
               </div>
 
@@ -953,7 +953,7 @@ export default function BrandsStudioList() {
                 {/* APPLICANT INFO PANEL */}
                 <div className="bg-app-card border border-[#202030] rounded-3xl p-6 shadow-xl space-y-4 text-left">
                   <div className="border-b border-[#202030] pb-2 text-left">
-                    <h3 className="text-xs font-black uppercase text-white tracking-wider flex items-center gap-1.5">
+                    <h3 className="text-xs font-black uppercase text-app-text-primary tracking-wider flex items-center gap-1.5">
                       <Building2 className="w-4 h-4 text-app-accent" /> Applicant Organization Information
                     </h3>
                     <p className="text-[10px] text-slate-500">Formal corporate registry parameters stored in secured system database.</p>
@@ -962,7 +962,7 @@ export default function BrandsStudioList() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono text-left font-sans">
                     <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl space-y-1">
                       <div className="text-[9px] uppercase font-mono font-black text-slate-500">Legal Representative</div>
-                      <div className="text-white font-bold">{profile?.displayName || 'Rahim Uddin'}</div>
+                      <div className="text-app-text-primary font-bold">{profile?.displayName || 'Rahim Uddin'}</div>
                     </div>
 
                     <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl space-y-1">
@@ -974,27 +974,27 @@ export default function BrandsStudioList() {
 
                     <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl space-y-1">
                       <div className="text-[9px] uppercase font-mono font-black text-slate-500">Corporate Hotline Telephone</div>
-                      <div className="text-slate-300 font-mono">{contactPhone}</div>
+                      <div className="text-app-text-secondary font-mono">{contactPhone}</div>
                     </div>
 
                     <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl space-y-1">
                       <div className="text-[9px] uppercase font-mono font-black text-slate-500">Registry Email Node</div>
-                      <div className="text-slate-300 font-mono">{contactEmail}</div>
+                      <div className="text-app-text-secondary font-mono">{contactEmail}</div>
                     </div>
 
                     <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl md:col-span-2 space-y-1 font-sans">
                       <div className="text-[9px] uppercase font-mono font-black text-slate-500">Physical Business Address</div>
-                      <div className="text-slate-300 leading-relaxed">{contactAddress}</div>
+                      <div className="text-app-text-secondary leading-relaxed">{contactAddress}</div>
                     </div>
 
                     <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl space-y-1 font-sans">
                       <div className="text-[9px] uppercase font-mono font-black text-slate-500">NID / Business Registration Code</div>
-                      <div className="text-white font-mono font-extrabold">NID-1992088219012</div>
+                      <div className="text-app-text-primary font-mono font-extrabold">NID-1992088219012</div>
                     </div>
 
                     <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl space-y-1 font-sans">
                       <div className="text-[9px] uppercase font-mono font-black text-slate-500">Audit Dossier Sub Date</div>
-                      <div className="text-white font-mono">
+                      <div className="text-app-text-primary font-mono">
                         {matchedRequest ? new Date(matchedRequest.created_at).toLocaleString() : 'June 01, 2026 09:12 AM'}
                       </div>
                     </div>
@@ -1004,7 +1004,7 @@ export default function BrandsStudioList() {
                 {/* DOCUMENTS PANEL */}
                 <div className="bg-app-card border border-[#202030] rounded-3xl p-6 shadow-xl space-y-4 text-left">
                   <div className="border-b border-[#202030] pb-2 text-left">
-                    <h3 className="text-xs font-black uppercase text-white tracking-wider flex items-center gap-1.5">
+                    <h3 className="text-xs font-black uppercase text-app-text-primary tracking-wider flex items-center gap-1.5">
                       <FileCheck className="w-4 h-4 text-[#00D4B2]" /> Audited Compliance Document Dossier
                     </h3>
                     <p className="text-[10px] text-slate-500">View regulatory documents submitted for validation. Status corresponds to direct admin approval checks.</p>
@@ -1020,26 +1020,26 @@ export default function BrandsStudioList() {
                     ].map((doc, i) => (
                       <div 
                         key={i} 
-                        className={`p-4 bg-white/[0.01] rounded-2xl border shadow-md flex flex-col justify-between space-y-3.5 transition-all ${
+                        className={`p-4 bg-white/[0.01] rounded-2xl border shadow-md flex flex-col justify-between space-y-3.5 transition-all${
                           doc.status === 'approved' ? 'border-emerald-500/15 bg-emerald-500/[0.01]' :
                           doc.status === 'rejected' ? 'border-red-500/15 bg-red-500/[0.01]' : 'border-[#202030]'
                         }`}
                       >
                         <div className="space-y-1.5 font-sans">
                           <div className="flex items-center justify-between gap-1.5 font-sans">
-                            <span className="font-extrabold text-white text-[10px] uppercase tracking-wide truncate">{doc.type}</span>
-                            <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-mono font-black uppercase tracking-widest border ${
+                            <span className="font-extrabold text-app-text-primary text-[10px] uppercase tracking-wide truncate">{doc.type}</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-mono font-black uppercase tracking-widest border${
                               doc.status === 'approved' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/15' :
                               doc.status === 'rejected' ? 'bg-red-500/10 text-red-400 border-red-500/15' : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/15'
                             }`}>
                               {doc.status}
                             </span>
                           </div>
-                          <p className="text-[10.5px] text-slate-400 font-sans truncate">{doc.name}</p>
+                          <p className="text-[10.5px] text-app-text-secondary font-sans truncate">{doc.name}</p>
                         </div>
 
                         {doc.notes && (
-                          <div className="p-3 bg-slate-900/40 rounded-xl text-[10px] text-slate-400 leading-relaxed border border-white/[0.02]">
+                          <div className="p-3 bg-app-bg/10 rounded-xl text-[10px] text-app-text-secondary leading-relaxed border border-app-border">
                             <strong>Review note:</strong> {doc.notes}
                           </div>
                         )}
@@ -1056,7 +1056,7 @@ export default function BrandsStudioList() {
                 {/* REVIEW STATUS LABELS */}
                 <div className="bg-app-card border border-[#202030] rounded-3xl p-5 shadow-xl space-y-4">
                   <div className="border-b border-[#202030] pb-2">
-                    <h3 className="text-xs font-black uppercase text-white tracking-wider flex items-center gap-1.5">
+                    <h3 className="text-xs font-black uppercase text-app-text-primary tracking-wider flex items-center gap-1.5">
                       <FileSignature className="w-4 h-4 text-emerald-400" /> Compliance Checklist
                     </h3>
                     <p className="text-[10px] text-slate-500">Verification criteria evaluation state.</p>
@@ -1064,22 +1064,22 @@ export default function BrandsStudioList() {
 
                   <div className="space-y-3 text-xs text-left font-sans">
                     <div className="flex items-center justify-between p-2.5 bg-white/5 rounded-xl">
-                      <span className="text-slate-300 font-medium">1. Identity Verified</span>
+                      <span className="text-app-text-secondary font-medium">1. Identity Verified</span>
                       <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 uppercase tracking-wider font-mono">
                         <Check className="w-4 h-4 text-emerald-400" /> Confirmed
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between p-2.5 bg-white/5 rounded-xl font-sans">
-                      <span className="text-slate-300 font-medium font-sans">2. Trade License Valid</span>
+                      <span className="text-app-text-secondary font-medium font-sans">2. Trade License Valid</span>
                       <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 uppercase tracking-wider font-mono">
                         <Check className="w-4 h-4 text-emerald-400" /> Confirmed
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between p-2.5 bg-white/5 rounded-xl font-sans">
-                      <span className="text-slate-300 font-medium">3. Bank Info Confirmed</span>
-                      <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider font-mono ${
+                      <span className="text-app-text-secondary font-medium">3. Bank Info Confirmed</span>
+                      <span className={`flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider font-mono${
                         matchedRequest?.status === 'Approved' ? 'text-emerald-400' : 'text-yellow-500'
                       }`}>
                         {matchedRequest?.status === 'Approved' ? (
@@ -1095,7 +1095,7 @@ export default function BrandsStudioList() {
                     </div>
 
                     <div className="flex items-center justify-between p-2.5 bg-white/5 rounded-xl font-sans">
-                      <span className="text-slate-300 font-medium">4. Contact Verified</span>
+                      <span className="text-app-text-secondary font-medium">4. Contact Verified</span>
                       <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 uppercase tracking-wider font-mono">
                         <Check className="w-4 h-4 text-emerald-400" /> Confirmed
                       </span>
@@ -1103,9 +1103,9 @@ export default function BrandsStudioList() {
                   </div>
 
                   {matchedRequest?.reviews && matchedRequest.reviews.length > 0 && (
-                    <div className="mt-4 p-3.5 bg-slate-900/60 rounded-xl border border-white/[0.03] space-y-1 text-xs text-left">
-                      <div className="text-[9px] uppercase font-black text-slate-400">Official Admin Action Message</div>
-                      <p className="text-slate-300 leading-relaxed italic">"{matchedRequest.reviews[0].feedback}"</p>
+                    <div className="mt-4 p-3.5 bg-app-bg/10 rounded-xl border border-app-border space-y-1 text-xs text-left">
+                      <div className="text-[9px] uppercase font-black text-app-text-secondary">Official Admin Action Message</div>
+                      <p className="text-app-text-secondary leading-relaxed italic">"{matchedRequest.reviews[0].feedback}"</p>
                       <div className="text-[8px] text-[#00D4B2] font-mono text-right">- reviewed by {matchedRequest.reviews[0].reviewer_name}</div>
                     </div>
                   )}
@@ -1114,22 +1114,22 @@ export default function BrandsStudioList() {
                 {/* DYNAMIC TIMELINE / AUDIT TRAIL REPLICATION */}
                 <div className="bg-app-card border border-[#202030] rounded-3xl p-5 shadow-xl space-y-4">
                   <div className="border-b border-[#202030] pb-2">
-                    <h3 className="text-xs font-black uppercase text-white tracking-wider flex items-center gap-1.5">
+                    <h3 className="text-xs font-black uppercase text-app-text-primary tracking-wider flex items-center gap-1.5">
                       <Database className="w-4 h-4 text-app-accent" /> Timeline & Audits Logs
                     </h3>
                     <p className="text-[10px] text-slate-500">System generated events ledger chronologically ordered.</p>
                   </div>
 
-                  <div className="relative border-l border-white/[0.06] pl-4 ml-2 space-y-5 py-1 text-left">
+                  <div className="relative border-l border-app-border pl-4 ml-2 space-y-5 py-1 text-left">
                     {matchedRequest ? (
                       matchedRequest.audit_trail.map((trail: any, idx: number) => (
                         <div key={idx} className="relative text-xs font-mono">
                           <div className="absolute -left-[22.5px] top-1 w-2.5 h-2.5 bg-app-accent border border-app-card rounded-full" />
                           <div className="flex items-center gap-1 flex-wrap mb-0.5">
-                            <span className="text-white font-bold text-[11px]">{trail.action}</span>
+                            <span className="text-app-text-primary font-bold text-[11px]">{trail.action}</span>
                             <span className="text-[11px] text-slate-500">({trail.actor})</span>
                           </div>
-                          <p className="text-slate-400 text-[10.5px] leading-relaxed mb-0.5">{trail.details}</p>
+                          <p className="text-app-text-secondary text-[10.5px] leading-relaxed mb-0.5">{trail.details}</p>
                           <span className="text-[9px] text-slate-500 block font-sans">
                             {new Date(trail.timestamp).toLocaleString()}
                           </span>
@@ -1139,14 +1139,14 @@ export default function BrandsStudioList() {
                       <>
                         <div className="relative text-xs font-mono">
                           <div className="absolute -left-[22.5px] top-1 w-2.5 h-2.5 bg-emerald-500 border border-app-card rounded-full" />
-                          <div className="text-white font-bold">Dossier Completed</div>
-                          <p className="text-slate-400 text-[11px]">Submission details logged and verified.</p>
+                          <div className="text-app-text-primary font-bold">Dossier Completed</div>
+                          <p className="text-app-text-secondary text-[11px]">Submission details logged and verified.</p>
                           <span className="text-[9px] text-slate-500 block">June 01, 2026</span>
                         </div>
                         <div className="relative text-xs font-mono">
                           <div className="absolute -left-[22.5px] top-1 w-2.5 h-2.5 bg-yellow-500 border border-app-card rounded-full animate-pulse" />
-                          <div className="text-white font-bold">In Compliance Queue</div>
-                          <p className="text-slate-400 text-[11px]">Audit pipeline review under validation.</p>
+                          <div className="text-app-text-primary font-bold">In Compliance Queue</div>
+                          <p className="text-app-text-secondary text-[11px]">Audit pipeline review under validation.</p>
                           <span className="text-[9px] text-slate-500 block">June 01, 2026</span>
                         </div>
                       </>
@@ -1154,11 +1154,11 @@ export default function BrandsStudioList() {
                   </div>
 
                   {/* Seller Resubmission is blocked as requested by permission rule */}
-                  <div className="pt-2 border-t border-white/[0.04]">
+                  <div className="pt-2 border-t border-app-border">
                     <button
                       type="button"
                       disabled
-                      className="w-full py-2.5 bg-white/5 border border-white/10 text-slate-500 text-[9px] font-black uppercase tracking-widest rounded-xl text-center cursor-not-allowed"
+                      className="w-full py-2.5 bg-white/5 border border-app-border text-slate-500 text-[9px] font-black uppercase tracking-widest rounded-xl text-center cursor-not-allowed"
                       title="Active applications are locked in assessment state"
                     >
                       Resubmission Locked In Review State
@@ -1177,8 +1177,8 @@ export default function BrandsStudioList() {
       <div className="bg-app-card border border-app-border p-5 rounded-2xl flex items-center gap-4 text-left">
         <HelpCircle className="w-10 h-10 text-app-accent shrink-0 opacity-75" />
         <div className="space-y-1">
-          <h4 className="text-[13px] font-black text-white uppercase tracking-wider">How to manage brand storefront templates</h4>
-          <p className="text-[11px] text-slate-400 leading-relaxed max-w-4xl">
+          <h4 className="text-[13px] font-black text-app-text-primary uppercase tracking-wider">How to manage brand storefront templates</h4>
+          <p className="text-[11px] text-app-text-secondary leading-relaxed max-w-4xl">
             In our <strong>Visual Content Studio</strong>, brands are modeled with active reputational trust cards, integrated video review matrices, and complete retail services breakdowns. Sellers can adjust score bars and layout presets, then publish directly to trigger automatic customer-facing storefront rendering.
           </p>
         </div>

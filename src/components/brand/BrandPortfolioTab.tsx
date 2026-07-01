@@ -35,7 +35,7 @@ export const BrandPortfolioTab: React.FC<BrandPortfolioTabProps> = ({
 
       {/* Brand Studio details form */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest block">My Brand Studio Customizer</h3>
+        <h3 className="text-xs font-black text-app-text-secondary uppercase tracking-widest block">My Brand Studio Customizer</h3>
         
         <div className="space-y-4 text-xs">
           <div className="space-y-1">
@@ -82,7 +82,7 @@ export const BrandPortfolioTab: React.FC<BrandPortfolioTabProps> = ({
         <div className="flex justify-end pt-2">
           <button
             onClick={saveStudioInfo}
-            className="px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-sm"
+            className="px-5 py-2.5 bg-app-card hover:bg-slate-800 text-app-text-primary rounded-xl text-xs font-bold transition-all shadow-sm"
           >
             Save Brand Details
           </button>
@@ -91,7 +91,7 @@ export const BrandPortfolioTab: React.FC<BrandPortfolioTabProps> = ({
 
       {/* Associated catalog brands */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest block">Associated Sub-Brands & Labels</h3>
+        <h3 className="text-xs font-black text-app-text-secondary uppercase tracking-widest block">Associated Sub-Brands & Labels</h3>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-slate-50/50 border border-slate-200 rounded-2xl p-5 flex gap-4 hover:border-slate-350 transition-all text-left">
@@ -110,9 +110,9 @@ export const BrandPortfolioTab: React.FC<BrandPortfolioTabProps> = ({
           </div>
 
           <div className="bg-slate-50/50 border border-slate-250 border-dashed rounded-2xl p-5 flex flex-col items-center justify-center text-center">
-            <Award className="w-8 h-8 text-slate-400 stroke-[1.5] mb-1.5" />
+            <Award className="w-8 h-8 text-app-text-secondary stroke-[1.5] mb-1.5" />
             <span className="text-xs font-bold text-slate-700">Add Associated Trade Label</span>
-            <p className="text-[10px] text-slate-400 mt-0.5">Submit registration claim to list subsidiary trademarks.</p>
+            <p className="text-[10px] text-app-text-secondary mt-0.5">Submit registration claim to list subsidiary trademarks.</p>
           </div>
         </div>
       </div>

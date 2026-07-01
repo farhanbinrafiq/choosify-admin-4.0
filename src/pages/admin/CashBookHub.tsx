@@ -922,7 +922,7 @@ export default function CashBookHub() {
       
       {/* Toast Alert Banner */}
       {toast && (
-        <div className={`fixed top-8 right-8 z-[100] flex items-center gap-3 px-5 py-4 border rounded-[5px] shadow-2xl transition-all duration-300 animate-slide-in ${
+        <div className={`fixed top-8 right-8 z-[100] flex items-center gap-3 px-5 py-4 border rounded-[5px] shadow-2xl transition-all duration-300 animate-slide-in${
           toast.type === 'success' 
             ? 'bg-green-50 border-[#22C55E]/25 text-[#22C55E]' 
             : toast.type === 'danger' 
@@ -950,7 +950,7 @@ export default function CashBookHub() {
             <div className="flex flex-wrap gap-2 w-full md:w-auto">
               <button 
                 onClick={() => { setAdminAuditingUser('seller_001'); triggerToast('Switched to Rahim Uddin accounts and ledgers.', 'info'); }}
-                className={`px-4 py-2 text-[11px] font-bold border transition-all rounded-[5px] ${
+                className={`px-4 py-2 text-[11px] font-bold border transition-all rounded-[5px]${
                   adminAuditingUser === 'seller_001' 
                     ? 'bg-app-accent text-white border-app-accent' 
                     : 'bg-white border-app-border text-app-text-secondary hover:bg-slate-50'
@@ -960,7 +960,7 @@ export default function CashBookHub() {
               </button>
               <button 
                 onClick={() => { setAdminAuditingUser('creator_001'); triggerToast('Switched to Sumaiya Akter accounts and ledgers.', 'info'); }}
-                className={`px-4 py-2 text-[11px] font-bold border transition-all rounded-[5px] ${
+                className={`px-4 py-2 text-[11px] font-bold border transition-all rounded-[5px]${
                   adminAuditingUser === 'creator_001' 
                     ? 'bg-app-accent text-white border-app-accent' 
                     : 'bg-white border-app-border text-app-text-secondary hover:bg-slate-50'
@@ -970,7 +970,7 @@ export default function CashBookHub() {
               </button>
               <button 
                 onClick={() => { setAdminAuditingUser('admin_002'); triggerToast("Switched to Tanvir Hossain personal admin account's assets.", 'info'); }}
-                className={`px-4 py-2 text-[11px] font-bold border transition-all rounded-[5px] ${
+                className={`px-4 py-2 text-[11px] font-bold border transition-all rounded-[5px]${
                   adminAuditingUser === 'admin_002' 
                     ? 'bg-app-accent text-white border-app-accent' 
                     : 'bg-white border-app-border text-app-text-secondary hover:bg-slate-50'
@@ -1001,14 +1001,14 @@ export default function CashBookHub() {
                       // trigger refresh
                       setAdminAuditingUser(prev => prev === 'seller_001' ? 'seller_001' : prev === 'creator_001' ? 'creator_001' : 'admin_002');
                     }}
-                    className={`p-3 text-left border rounded-[5px] transition-all cursor-pointer ${
+                    className={`p-3 text-left border rounded-[5px] transition-all cursor-pointer${
                       isSelected 
                         ? 'bg-orange-50/50 border-app-accent ring-1 ring-app-accent' 
                         : 'bg-white border-app-border hover:bg-slate-50/50'
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center ${isSelected ? 'border-app-accent' : 'border-slate-300'}`}>
+                      <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center${isSelected ? 'border-app-accent' : 'border-slate-300'}`}>
                         {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-app-accent" />}
                       </div>
                       <span className="text-xs font-black text-app-text-primary">{roleObj.label}</span>
@@ -1033,7 +1033,7 @@ export default function CashBookHub() {
             <div>
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl font-black text-app-text-primary tracking-tight">My Cashbook</h1>
-                <span className={`text-[10px] uppercase font-black tracking-widest px-2.5 py-1 rounded-full ${
+                <span className={`text-[10px] uppercase font-black tracking-widest px-2.5 py-1 rounded-full${
                   roleToShow === 'admin' 
                     ? 'bg-purple-100 text-purple-700' 
                     : roleToShow === 'creator' 
@@ -1049,7 +1049,7 @@ export default function CashBookHub() {
             {/* Google Drive Status Section */}
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-2 px-3 py-2 bg-white border border-app-border rounded-[5px]">
-                <div className={`w-2.5 h-2.5 rounded-full ${isDriveConnected ? 'bg-[#22C55E]' : 'bg-[#EF4444]'}`}></div>
+                <div className={`w-2.5 h-2.5 rounded-full${isDriveConnected ? 'bg-[#22C55E]' : 'bg-[#EF4444]'}`}></div>
                 <div className="text-[11px] font-bold text-app-text-secondary">
                   {isDriveConnected ? 'Drive Connected' : 'Drive Disconnected'}
                 </div>
@@ -1066,7 +1066,7 @@ export default function CashBookHub() {
               {!isDriveConnected && (
                 <button 
                   onClick={() => setIsConsentModalOpen(true)}
-                  className="px-4 py-2 bg-app-accent text-white hover:bg-[#EA580C] text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-2 bg-app-accent text-app-text-primary hover:bg-[#EA580C] text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer"
                 >
                   <Share2 className="w-3.5 h-3.5" />
                   Connect Google Drive
@@ -1075,7 +1075,7 @@ export default function CashBookHub() {
 
               <button 
                 onClick={handleImportOrders}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer shadow-md border-0"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-app-text-primary text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer shadow-md border-0"
               >
                 <FileSpreadsheet className="w-3.5 h-3.5" />
                 Sync Orders
@@ -1083,7 +1083,7 @@ export default function CashBookHub() {
 
               <button 
                 onClick={() => setIsNewBookModalOpen(true)}
-                className="px-4 py-2 bg-app-accent text-white hover:bg-[#EA580C] text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
+                className="px-4 py-2 bg-app-accent text-app-text-primary hover:bg-[#EA580C] text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
               >
                 <Plus className="w-3.5 h-3.5" />
                 New Book
@@ -1132,7 +1132,7 @@ export default function CashBookHub() {
             <div className="bg-app-card border border-app-border rounded-[5px] p-5 shadow-sm transform hover:scale-[1.01] transition-all">
               <div className="flex justify-between items-center text-app-text-muted">
                 <span className="text-xs font-bold uppercase tracking-wider">Net Balance</span>
-                <div className={`p-1.5 rounded-[5px] ${aggregatedNet >= 0 ? 'bg-[#F0FDF4] text-[#22C55E]' : 'bg-red-100 text-[#EF4444]'}`}>
+                <div className={`p-1.5 rounded-[5px]${aggregatedNet >= 0 ? 'bg-[#F0FDF4] text-[#22C55E]' : 'bg-red-100 text-[#EF4444]'}`}>
                   <Wallet className="w-4 h-4" />
                 </div>
               </div>
@@ -1208,7 +1208,7 @@ export default function CashBookHub() {
                 <p className="text-xs text-app-text-muted mt-1.5 max-w-md mx-auto">Create separate individual cashbooks (e.g., Marketing, Outlet Cash, Sponsorship Recs) to classify and isolate transactional listings.</p>
                 <button 
                   onClick={() => setIsNewBookModalOpen(true)}
-                  className="mt-4 px-5 py-2 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EA580C] cursor-pointer"
+                  className="mt-4 px-5 py-2 bg-app-accent text-app-text-primary text-xs font-black rounded-[5px] hover:bg-[#EA580C] cursor-pointer"
                 >
                   + Create Your First Book
                 </button>
@@ -1242,7 +1242,7 @@ export default function CashBookHub() {
                                   setDeleteConfirmName('');
                                   setDeleteConfirmError('');
                                 }}
-                                className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded transition-all cursor-pointer border-0"
+                                className="p-1 text-app-text-secondary hover:text-red-500 hover:bg-red-50 rounded transition-all cursor-pointer border-0"
                                 title="Delete Book"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1297,7 +1297,7 @@ export default function CashBookHub() {
                             <button 
                               type="button" 
                               onClick={() => { setDeletingBookId(null); setDeleteConfirmName(''); }}
-                              className="text-slate-400 hover:text-slate-600 font-bold border-0 bg-transparent text-sm cursor-pointer"
+                              className="text-app-text-secondary hover:text-slate-600 font-bold border-0 bg-transparent text-sm cursor-pointer"
                             >
                               ✕ Cancel
                             </button>
@@ -1526,7 +1526,7 @@ export default function CashBookHub() {
                     setShowMovePanel(false);
                     setShowCopyPanel(false);
                   }}
-                  className={`px-4 py-2.5 text-xs font-black rounded-[5px] border transition-all cursor-pointer flex items-center gap-1.5 ${
+                  className={`px-4 py-2.5 text-xs font-black rounded-[5px] border transition-all cursor-pointer flex items-center gap-1.5${
                     bulkMode 
                       ? 'bg-orange-500 text-white border-orange-500' 
                       : 'bg-white text-app-text-secondary border-app-border hover:bg-slate-50'
@@ -1536,14 +1536,14 @@ export default function CashBookHub() {
                 </button>
                 <button 
                   onClick={() => handleOpenEntryModal('Cash In')}
-                  className="px-5 py-2.5 bg-[#22C55E] text-white hover:bg-[#1E9E47] text-xs font-black rounded-[5px] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  className="px-5 py-2.5 bg-[#22C55E] text-app-text-primary hover:bg-[#1E9E47] text-xs font-black rounded-[5px] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
                   <ArrowUpRight className="w-4 h-4 font-black" />
                   + CASH IN
                 </button>
                 <button 
                   onClick={() => handleOpenEntryModal('Cash Out')}
-                  className="px-5 py-2.5 bg-[#EF4444] text-white hover:bg-[#DC2626] text-xs font-black rounded-[5px] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  className="px-5 py-2.5 bg-[#EF4444] text-app-text-primary hover:bg-[#DC2626] text-xs font-black rounded-[5px] transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
                   <ArrowDownLeft className="w-4 h-4 font-black" />
                   − CASH OUT
@@ -1597,7 +1597,7 @@ export default function CashBookHub() {
                       setShowMovePanel(!showMovePanel);
                       setShowCopyPanel(false);
                     }}
-                    className={`px-3.5 py-2 border rounded-[5px] text-[10.5px] transition-all cursor-pointer flex items-center gap-1 ${
+                    className={`px-3.5 py-2 border rounded-[5px] text-[10.5px] transition-all cursor-pointer flex items-center gap-1${
                       showMovePanel
                         ? 'bg-orange-600 text-white border-orange-600'
                         : 'bg-white hover:bg-orange-100 border-orange-200 text-[#EA580C]'
@@ -1612,7 +1612,7 @@ export default function CashBookHub() {
                       setShowCopyPanel(!showCopyPanel);
                       setShowMovePanel(false);
                     }}
-                    className={`px-3.5 py-2 border rounded-[5px] text-[10.5px] transition-all cursor-pointer flex items-center gap-1 ${
+                    className={`px-3.5 py-2 border rounded-[5px] text-[10.5px] transition-all cursor-pointer flex items-center gap-1${
                       showCopyPanel
                         ? 'bg-orange-600 text-white border-orange-600'
                         : 'bg-white hover:bg-orange-100 border-orange-200 text-[#EA580C]'
@@ -1769,12 +1769,12 @@ export default function CashBookHub() {
                           {(item.createdBy || item.lastEditedBy) && (
                             <div className="flex items-center gap-2 mt-1.5 pt-1 border-t border-[#E5E7EB]/50">
                               {item.createdBy && (
-                                <span className="text-[9px] text-slate-400 font-medium">
+                                <span className="text-[9px] text-app-text-secondary font-medium">
                                   Entered by <span className="font-black text-slate-500">{item.createdBy.name}</span>
                                 </span>
                               )}
                               {item.lastEditedBy && (
-                                <span className="text-[9px] text-slate-400 font-medium">
+                                <span className="text-[9px] text-app-text-secondary font-medium">
                                   · Edited by <span className="font-black text-slate-500">{item.lastEditedBy.name}</span>
                                 </span>
                               )}
@@ -1789,7 +1789,7 @@ export default function CashBookHub() {
                         <td className="py-3.5 px-4 font-black text-blue-600">
                           {item.paymentMode}
                         </td>
-                        <td className={`py-3.5 px-4 text-right font-black text-sm select-none ${
+                        <td className={`py-3.5 px-4 text-right font-black text-sm select-none${
                           item.type === 'Cash In' ? 'text-blue-600' : 'text-red-500 font-black'
                         }`}>
                           {item.type === 'Cash In' ? '+' : '−'} ৳{item.amount.toLocaleString()}
@@ -1965,13 +1965,13 @@ export default function CashBookHub() {
                 ].map((l, i) => (
                   <div key={i} className="flex justify-between items-center text-xs p-2.5 border border-slate-100 rounded-[5px] hover:bg-slate-50">
                     <div className="flex items-center gap-3">
-                      <span className={`w-2.5 h-2.5 rounded-full ${l.type === 'Cash In' ? 'bg-[#22C55E]' : 'bg-[#EF4444]'}`}></span>
+                      <span className={`w-2.5 h-2.5 rounded-full${l.type === 'Cash In' ? 'bg-[#22C55E]' : 'bg-[#EF4444]'}`}></span>
                       <div>
                         <span className="font-bold text-app-text-primary block">{l.desc}</span>
                         <span className="text-[10px] text-app-text-muted block mt-0.5">{l.cat} — payment mode: {l.mode}</span>
                       </div>
                     </div>
-                    <span className={`font-black ${l.type === 'Cash In' ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
+                    <span className={`font-black${l.type === 'Cash In' ? 'text-[#22C55E]' : 'text-[#EF4444]'}`}>
                       {l.type === 'Cash In' ? '+' : '−'} ৳{l.val.toLocaleString()}
                     </span>
                   </div>
@@ -2036,7 +2036,7 @@ export default function CashBookHub() {
                       key={emo}
                       type="button"
                       onClick={() => setNewBookEmoji(emo)}
-                      className={`text-2xl p-1.5 rounded-[5px] transition-all hover:scale-115 text-center ${
+                      className={`text-2xl p-1.5 rounded-[5px] transition-all hover:scale-115 text-center${
                         newBookEmoji === emo ? 'bg-app-accent text-white scale-110 shadow-sm' : 'hover:bg-slate-200'
                       }`}
                     >
@@ -2059,7 +2059,7 @@ export default function CashBookHub() {
                       style={{ backgroundColor: col }}
                     >
                       {newBookColor === col && (
-                        <span className="absolute inset-0 flex items-center justify-center text-[10px] text-white font-black">✓</span>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] text-app-text-primary font-black">✓</span>
                       )}
                     </button>
                   ))}
@@ -2077,7 +2077,7 @@ export default function CashBookHub() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-app-accent text-white hover:bg-[#EA580C] text-xs font-black rounded-[5px]"
+                  className="px-5 py-2 bg-app-accent text-app-text-primary hover:bg-[#EA580C] text-xs font-black rounded-[5px]"
                 >
                   Create Book
                 </button>
@@ -2267,7 +2267,7 @@ export default function CashBookHub() {
                               setNewCategoryInput('');
                               triggerToast(`✓ Added custom category "${trimmed}"`, 'success');
                             }}
-                            className="px-3.5 py-1.5 bg-app-accent text-white font-black text-xs rounded-md cursor-pointer border-0"
+                            className="px-3.5 py-1.5 bg-app-accent text-app-text-primary font-black text-xs rounded-md cursor-pointer border-0"
                           >
                             Add
                           </button>
@@ -2295,7 +2295,7 @@ export default function CashBookHub() {
                           key={m}
                           type="button"
                           onClick={() => setFormPaymentMode(m as any)}
-                          className={`p-2.5 text-xs text-center border rounded-[5px] transition-all font-black ${
+                          className={`p-2.5 text-xs text-center border rounded-[5px] transition-all font-black${
                             formPaymentMode === m 
                               ? 'bg-app-accent text-white border-app-accent' 
                               : 'bg-white border-app-border text-app-text-secondary hover:bg-slate-50'
@@ -2376,7 +2376,7 @@ export default function CashBookHub() {
 
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-app-accent text-white hover:bg-[#EA580C] text-xs font-black rounded-[5px] shadow-sm cursor-pointer"
+                    className="px-6 py-2 bg-app-accent text-app-text-primary hover:bg-[#EA580C] text-xs font-black rounded-[5px] shadow-sm cursor-pointer"
                   >
                     Save Entry
                   </button>
@@ -2413,7 +2413,7 @@ export default function CashBookHub() {
               <div className="flex justify-between items-start pb-4 border-b border-slate-100">
                 <div>
                   <span className="text-[10px] text-app-text-muted font-black block uppercase tracking-wider">Classification</span>
-                  <span className={`px-2.5 py-0.5 rounded-[5px] text-[10px] uppercase font-black tracking-widest inline-block mt-1 ${
+                  <span className={`px-2.5 py-0.5 rounded-[5px] text-[10px] uppercase font-black tracking-widest inline-block mt-1${
                     selectedEntry.type === 'Cash In' ? 'bg-[#F0FDF4] text-[#22C55E]' : 'bg-red-50 text-[#EF4444]'
                   }`}>
                     {selectedEntry.type}
@@ -2421,7 +2421,7 @@ export default function CashBookHub() {
                 </div>
                 <div className="text-right">
                   <span className="text-[10px] text-app-text-muted font-black block uppercase tracking-wider">Amount BDT</span>
-                  <span className={`text-2xl font-black block mt-0.5 ${
+                  <span className={`text-2xl font-black block mt-0.5${
                     selectedEntry.type === 'Cash In' ? 'text-[#22C55E]' : 'text-[#EF4444]'
                   }`}>
                     {selectedEntry.type === 'Cash In' ? '+' : '−'} ৳{selectedEntry.amount.toLocaleString()}
@@ -2509,7 +2509,7 @@ export default function CashBookHub() {
               )}
               <button 
                 onClick={() => { setSelectedEntry(null); setConfirmingDelete(false); }}
-                className="px-5 py-2 bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold rounded-[5px] cursor-pointer"
+                className="px-5 py-2 bg-app-card text-app-text-primary hover:bg-slate-800 text-xs font-bold rounded-[5px] cursor-pointer"
               >
                 Close Audit
               </button>

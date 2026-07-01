@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Bolt, LayoutDashboard, Building2, Award, Users, ChevronRight, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
+import { ChoosifyLogo } from '../components/common/ChoosifyLogo';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -14,37 +15,36 @@ export default function LoginPage() {
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
     login(selectedRole);
-    const redirectPath = localStorage.getItem('redirect_after_login');
-    if (redirectPath) {
-      localStorage.removeItem('redirect_after_login');
-      navigate(redirectPath);
-    } else {
-      navigate('/admin/dashboard');
+    
+    let redirectPath = '/admin/dashboard';
+    if (selectedRole === 'seller') {
+      redirectPath = '/seller/products';
+    } else if (selectedRole === 'creator') {
+      redirectPath = '/dashboard/content-studio/guides';
     }
+    
+    navigate(redirectPath);
   };
 
   const roles: { role: UserRole; label: string; icon: any; color: string; desc: string }[] = [
-    { role: 'super_admin', label: 'Super Admin', icon: LayoutDashboard, color: 'from-purple-500 to-indigo-600', desc: 'Platform control & monitoring' },
-    { role: 'admin', label: 'Admin', icon: ShieldCheck, color: 'from-teal-500 to-emerald-600', desc: 'Platform operations' },
+    { role: 'super_admin', label: 'Admin', icon: ShieldCheck, color: 'from-purple-500 to-indigo-600', desc: 'Platform control & monitoring' },
     { role: 'seller', label: 'Seller', icon: Building2, color: 'from-orange-500 to-red-600', desc: 'Manage products & orders' },
     { role: 'creator', label: 'Creator', icon: Award, color: 'from-blue-500 to-cyan-600', desc: 'Campaigns & engagement' },
+    { role: 'moderator', label: 'Staff (optional)', icon: Users, color: 'from-teal-500 to-emerald-600', desc: 'Platform operations & support' },
   ];
 
   return (
     <div className="min-h-screen bg-app-bg flex items-center justify-center p-6 font-sans relative">
-      <Link to="/" className="absolute top-8 left-8 flex items-center gap-2 text-app-text-secondary hover:text-white transition-colors text-sm font-bold">
+      <Link to="/marketplace" className="absolute top-8 left-8 flex items-center gap-2 text-app-text-secondary hover:text-white transition-colors text-sm font-bold">
         <ChevronRight className="w-4 h-4 rotate-180" />
-        Back to Home
+        🌐 Visit Marketplace
       </Link>
       <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 bg-app-card rounded-[2.5rem] overflow-hidden shadow-2xl border border-app-border">
          {/* Left Side: Illustration / Info */}
          <div className="hidden lg:flex flex-col justify-between p-12 bg-app-sidebar relative overflow-hidden group">
             <div className="relative z-10">
                <div className="flex items-center gap-3 mb-10">
-                  <div className="w-10 h-10 bg-app-accent rounded-xl flex items-center justify-center">
-                     <Bolt className="text-white w-6 h-6" />
-                  </div>
-                  <h1 className="text-2xl font-black text-white tracking-tight">Choosify</h1>
+                  <ChoosifyLogo variant="full" theme="dark" className="h-9 w-auto select-none" />
                </div>
                <h2 className="text-4xl font-extrabold text-white tracking-tight mb-6 leading-tight">
                   Discover <br/> Bangladesh's <br/> finest products.

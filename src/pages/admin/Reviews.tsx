@@ -226,15 +226,15 @@ export default function ReviewsPage() {
               exit={{ opacity: 0, scale: 0.9, y: -20 }}
               className="pointer-events-auto flex items-start gap-3 bg-app-card border border-app-border rounded-xl p-4 shadow-2xl"
             >
-              <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${
+              <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5${
                 t.type === 'success' ? 'bg-green-500' :
                 t.type === 'error' ? 'bg-red-500' :
                 t.type === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
               }`} />
               <div className="flex-1">
-                <p className="text-xs font-bold text-white leading-tight">{t.message}</p>
+                <p className="text-xs font-bold text-app-text-primary leading-tight">{t.message}</p>
               </div>
-              <button onClick={() => removeToast(t.id)} className="text-slate-400 hover:text-white shrink-0">
+              <button onClick={() => removeToast(t.id)} className="text-app-text-secondary hover:text-white shrink-0">
                 <X className="w-3.5 h-3.5" />
               </button>
             </motion.div>
@@ -246,7 +246,7 @@ export default function ReviewsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <span className="text-[9.5px] font-black uppercase tracking-widest text-[#F4631E] block">Unified Trust & Review Moderation</span>
-          <h1 className="text-xl font-bold text-white tracking-tight">{roleDisplayLabel}</h1>
+          <h1 className="text-xl font-bold text-app-text-primary tracking-tight">{roleDisplayLabel}</h1>
           <p className="text-app-text-secondary text-[11.5px]">Manage client reviews, verify content authenticity, detect fake feedback, and lock spam agents.</p>
         </div>
 
@@ -255,13 +255,13 @@ export default function ReviewsPage() {
           <button
             onClick={triggerBatchScan}
             disabled={isScanning}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-md cursor-pointer ${
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-md cursor-pointer${
               isScanning 
                 ? 'bg-slate-800 text-slate-400 border border-slate-700' 
                 : 'bg-gradient-to-r from-[#F4631E] to-[#EB4501] text-white hover:opacity-90 active:scale-95 shadow-[#F4631E]/20'
             }`}
           >
-            <RefreshCw className={`w-4 h-4 ${isScanning ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-4 h-4${isScanning ? 'animate-spin' : ''}`} />
             {isScanning ? `Spam scan progress: ${scanProgress}%` : 'Run Batch Spam Scan'}
           </button>
         )}
@@ -280,11 +280,11 @@ export default function ReviewsPage() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Activity className="w-4 h-4 text-[#F4631E] animate-pulse" />
-                  <span className="text-xs font-bold uppercase tracking-widest text-white">Review Corpus Spam Auditing Engine Active...</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-app-text-primary">Review Corpus Spam Auditing Engine Active...</span>
                 </div>
                 <span className="text-xs font-mono font-bold text-[#F4631E]">{scanProgress}%</span>
               </div>
-              <div className="w-full bg-slate-950 h-2.5 rounded-full overflow-hidden border border-white/5">
+              <div className="w-full bg-app-bg h-2.5 rounded-full overflow-hidden border border-app-border">
                 <motion.div 
                   className="h-full bg-gradient-to-r from-[#F4631E] to-amber-500 rounded-full"
                   initial={{ width: '0%' }}
@@ -292,7 +292,7 @@ export default function ReviewsPage() {
                   transition={{ ease: 'easeInOut' }}
                 />
               </div>
-              <p className="text-[10px] text-slate-400 font-mono italic">Auditing syntactic features, repetitive burst signatures, cross-IP duplicate submissions, and commercial outbound click redirections.</p>
+              <p className="text-[10px] text-app-text-secondary font-mono italic">Auditing syntactic features, repetitive burst signatures, cross-IP duplicate submissions, and commercial outbound click redirections.</p>
             </div>
           </motion.div>
         )}
@@ -304,9 +304,9 @@ export default function ReviewsPage() {
           <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowShortcutsHUD(!showShortcutsHUD)}>
             <div className="flex items-center gap-2">
               <Keyboard className="w-4 h-4 text-[#F4631E]" />
-              <span className="text-xs font-bold text-white uppercase tracking-wider">Keyboard Interactive Terminal Shortcuts</span>
+              <span className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Keyboard Interactive Terminal Shortcuts</span>
             </div>
-            <span className="text-[10px] text-slate-400 hover:text-white uppercase font-bold tracking-widest">{showShortcutsHUD ? '[Collapse HUD]' : '[Expand HUD]'}</span>
+            <span className="text-[10px] text-app-text-secondary hover:text-white uppercase font-bold tracking-widest">{showShortcutsHUD ? '[Collapse HUD]' : '[Expand HUD]'}</span>
           </div>
 
           <AnimatePresence>
@@ -317,25 +317,25 @@ export default function ReviewsPage() {
                 exit={{ opacity: 0, height: 0 }}
                 className="overflow-hidden mt-3"
               >
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 text-[11px] font-mono border-t border-white/[0.04]">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 text-[11px] font-mono border-t border-app-border">
                   <div className="flex items-center gap-2">
-                    <kbd className="px-2 py-0.5 bg-slate-900 border border-white/10 rounded text-[#F4631E]">Tab</kbd>
-                    <span className="text-slate-400">Cycle focused review</span>
+                    <kbd className="px-2 py-0.5 bg-app-card border border-app-border rounded text-[#F4631E]">Tab</kbd>
+                    <span className="text-app-text-secondary">Cycle focused review</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <kbd className="px-2 py-0.5 bg-slate-900 border border-white/10 rounded text-[#F4631E]">Q</kbd>
-                    <span className="text-slate-400">Approve & Publish review</span>
+                    <kbd className="px-2 py-0.5 bg-app-card border border-app-border rounded text-[#F4631E]">Q</kbd>
+                    <span className="text-app-text-secondary">Approve & Publish review</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <kbd className="px-2 py-0.5 bg-slate-900 border border-white/10 rounded text-[#F4631E]">R</kbd>
-                    <span className="text-slate-400">Reject & Archive review</span>
+                    <kbd className="px-2 py-0.5 bg-app-card border border-app-border rounded text-[#F4631E]">R</kbd>
+                    <span className="text-app-text-secondary">Reject & Archive review</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <kbd className="px-2 py-0.5 bg-slate-900 border border-white/10 rounded text-[#F4631E]">F</kbd>
-                    <span className="text-slate-400">Flag as Deceptive Spam</span>
+                    <kbd className="px-2 py-0.5 bg-app-card border border-app-border rounded text-[#F4631E]">F</kbd>
+                    <span className="text-app-text-secondary">Flag as Deceptive Spam</span>
                   </div>
                   <div className="flex items-center gap-2 col-span-full text-[10px] text-amber-500 italic">
-                    <Info className="w-3.5 h-3.5" /> Navigate using <kbd className="px-1.5 py-0.2 bg-slate-950 rounded text-white">ArrowUp / ArrowDown</kbd> or <kbd className="px-1.5 py-0.2 bg-slate-950 rounded text-white">J / K</kbd> to change focus. Focused review glows gold.
+                    <Info className="w-3.5 h-3.5" /> Navigate using <kbd className="px-1.5 py-0.2 bg-app-bg rounded text-app-text-primary">ArrowUp / ArrowDown</kbd> or <kbd className="px-1.5 py-0.2 bg-app-bg rounded text-app-text-primary">J / K</kbd> to change focus. Focused review glows gold.
                   </div>
                 </div>
               </motion.div>
@@ -354,8 +354,8 @@ export default function ReviewsPage() {
           { label: 'Deleted Archive', val: reviews.filter(r => r.status.toLowerCase() === 'deleted').length, color: 'border-l-gray-500' },
           { label: 'Hidden from Public', val: reviews.filter(r => r.status.toLowerCase() === 'hidden').length, color: 'border-l-amber-500' },
         ].map(s => (
-          <div key={s.label} className={`bg-app-card p-4 rounded-[4px] border border-app-border border-l-[3px] shadow-lg ${s.color}`}>
-             <div className="text-[20px] font-bold text-white font-mono">{s.val}</div>
+          <div key={s.label} className={`bg-app-card p-4 rounded-[4px] border border-app-border border-l-[3px] shadow-lg${s.color}`}>
+             <div className="text-[20px] font-bold text-app-text-primary font-mono">{s.val}</div>
              <div className="text-[9px] text-app-text-secondary tracking-widest font-extrabold uppercase mt-1 opacity-75">{s.label}</div>
           </div>
         ))}
@@ -366,14 +366,14 @@ export default function ReviewsPage() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           
           {/* Main Tab Selectors */}
-          <div className="flex overflow-x-auto scrollbar-hide gap-1 p-0.5 bg-slate-950 rounded-[4px] border border-white/5">
+          <div className="flex overflow-x-auto scrollbar-hide gap-1 p-0.5 bg-app-bg rounded-[4px] border border-app-border">
             {(['All', 'pending', 'Flagged', 'Published', 'Deleted', 'Hidden'] as const).map(tab => {
               const count = tab === 'All' ? reviews.length : reviews.filter(r => r.status.toLowerCase() === tab.toLowerCase()).length;
               return (
                 <button 
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-3 py-1.5 text-[9.5px] uppercase font-bold tracking-widest cursor-pointer transition-all rounded-[3px] whitespace-nowrap ${
+                  className={`px-3 py-1.5 text-[9.5px] uppercase font-bold tracking-widest cursor-pointer transition-all rounded-[3px] whitespace-nowrap${
                     activeTab === tab 
                       ? 'bg-[#F4631E]/10 text-[#F4631E] border border-[#F4631E]/20' 
                       : 'text-slate-400 hover:text-white'
@@ -387,33 +387,33 @@ export default function ReviewsPage() {
 
           {/* Search Query */}
           <div className="relative group w-full md:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 group-focus-within:text-[#F4631E]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-app-text-secondary group-focus-within:text-[#F4631E]" />
             <input 
               type="text" 
               placeholder="Search reviewer, SKU, comment..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 bg-slate-950 border border-white/5 rounded-[4px] text-xs w-full focus:outline-none focus:border-[#F4631E]/40 text-white placeholder-slate-500 font-medium"
+              className="pl-9 pr-4 py-2 bg-app-bg border border-app-border rounded-[4px] text-xs w-full focus:outline-none focus:border-[#F4631E]/40 text-app-text-primary placeholder-slate-500 font-medium"
             />
           </div>
         </div>
 
         {/* Detailed Filters (Rating and Authenticity) */}
-        <div className="flex flex-wrap items-center gap-4 pt-3 border-t border-white/[0.03] text-xs">
+        <div className="flex flex-wrap items-center gap-4 pt-3 border-t border-app-border text-xs">
           <div className="flex items-center gap-2">
-            <Filter className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Refinement Filters:</span>
+            <Filter className="w-3.5 h-3.5 text-app-text-secondary" />
+            <span className="text-[10px] text-app-text-secondary uppercase font-bold tracking-wider">Refinement Filters:</span>
           </div>
 
           {/* Rating filter */}
           <div className="flex items-center gap-1">
-            <span className="text-[10px] text-slate-400">Rating:</span>
-            <div className="flex gap-1 bg-slate-950 px-2 py-1 rounded border border-white/5">
+            <span className="text-[10px] text-app-text-secondary">Rating:</span>
+            <div className="flex gap-1 bg-app-bg px-2 py-1 rounded border border-app-border">
               {(['All', 1, 2, 3, 4, 5] as const).map(rate => (
                 <button
                   key={rate}
                   onClick={() => setFilterRating(rate)}
-                  className={`px-2 py-0.5 text-[9px] font-mono font-bold rounded ${
+                  className={`px-2 py-0.5 text-[9px] font-mono font-bold rounded${
                     filterRating === rate ? 'bg-[#F4631E]/20 text-[#F4631E]' : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -425,13 +425,13 @@ export default function ReviewsPage() {
 
           {/* Authenticity Index filter */}
           <div className="flex items-center gap-1">
-            <span className="text-[10px] text-slate-400">AI Trust Score:</span>
-            <div className="flex gap-1 bg-slate-950 px-2 py-1 rounded border border-white/5">
+            <span className="text-[10px] text-app-text-secondary">AI Trust Score:</span>
+            <div className="flex gap-1 bg-app-bg px-2 py-1 rounded border border-app-border">
               {(['All', 'Authentic Only', 'Flagged/Spam Only'] as const).map(auth => (
                 <button
                   key={auth}
                   onClick={() => setFilterAuthenticity(auth)}
-                  className={`px-2 py-0.5 text-[9px] font-bold rounded ${
+                  className={`px-2 py-0.5 text-[9px] font-bold rounded${
                     filterAuthenticity === auth ? 'bg-[#F4631E]/20 text-[#F4631E]' : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -445,7 +445,7 @@ export default function ReviewsPage() {
 
       {/* Bulk actions bar */}
       {selectedIds.size > 0 && (
-        <div className="bg-[#1A1A2E] text-white px-4 py-3 rounded-xl flex items-center justify-between gap-3 text-[12px] font-bold border border-white/10 shadow-lg animate-fade-in">
+        <div className="bg-app-card text-app-text-primary px-4 py-3 rounded-xl flex items-center justify-between gap-3 text-[12px] font-bold border border-app-border shadow-lg animate-fade-in">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="bg-app-accent/20 text-app-accent-light px-2.5 py-1 rounded-lg font-mono text-[11px]">
               {selectedIds.size} reviews selected
@@ -494,7 +494,7 @@ export default function ReviewsPage() {
           </div>
           <button
             onClick={() => setSelectedIds(new Set())}
-            className="text-slate-400 hover:text-white px-3 py-1 cursor-pointer transition-colors uppercase text-[10px]"
+            className="text-app-text-secondary hover:text-white px-3 py-1 cursor-pointer transition-colors uppercase text-[10px]"
           >
             ✕ Clear selection
           </button>
@@ -506,7 +506,7 @@ export default function ReviewsPage() {
         <input 
           type="checkbox" 
           id="select-all-reviews"
-          className="rounded border-white/10 bg-white/5 text-app-accent focus:ring-app-accent cursor-pointer"
+          className="rounded border-app-border bg-white/5 text-app-accent focus:ring-app-accent cursor-pointer"
           checked={filteredReviews.length > 0 && filteredReviews.every(r => selectedIds.has(r.id))}
           onChange={(e) => {
             if (e.target.checked) {
@@ -518,7 +518,7 @@ export default function ReviewsPage() {
             }
           }}
         />
-        <label htmlFor="select-all-reviews" className="text-[11px] text-slate-400 font-bold uppercase tracking-wider cursor-pointer select-none">
+        <label htmlFor="select-all-reviews" className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider cursor-pointer select-none">
           Select All visible ({filteredReviews.length} reviews matching filters)
         </label>
       </div>
@@ -541,7 +541,7 @@ export default function ReviewsPage() {
                 <div 
                   key={rev.id} 
                   onClick={() => setFocusedReviewId(rev.id)}
-                  className={`bg-app-card border rounded-xl p-5 shadow-xl transition-all relative ${
+                  className={`bg-app-card border rounded-xl p-5 shadow-xl transition-all relative${
                     isFocused 
                       ? 'border-amber-500 ring-1 ring-amber-500 shadow-amber-500/5' 
                       : rev.status.toLowerCase() === 'flagged' 
@@ -564,7 +564,7 @@ export default function ReviewsPage() {
                     <div className="flex gap-3 items-center">
                       <input 
                         type="checkbox"
-                        className="rounded border-white/10 bg-white/5 text-app-accent focus:ring-app-accent cursor-pointer"
+                        className="rounded border-app-border bg-white/5 text-app-accent focus:ring-app-accent cursor-pointer"
                         checked={selectedIds.has(rev.id)}
                         onClick={(e) => e.stopPropagation()}
                         onChange={(e) => {
@@ -577,13 +577,13 @@ export default function ReviewsPage() {
                           setSelectedIds(newSelected);
                         }}
                       />
-                      <div className="w-9 h-9 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                      <div className="w-9 h-9 rounded-full bg-app-bg text-app-text-primary flex items-center justify-center font-bold text-xs shrink-0">
                         {rev.user.split(' ').map(n => n[0]).join('')}
                       </div>
                       <div>
-                        <h4 className="text-xs font-black text-white">{rev.user}</h4>
+                        <h4 className="text-xs font-black text-app-text-primary">{rev.user}</h4>
                         <p className="text-[10px] text-app-text-secondary mt-0.5">
-                          SKU: <span className="text-slate-300 font-semibold">{rev.product}</span> · Merchant: <span className="font-bold text-[#F4631E]">{rev.store}</span>
+                          SKU: <span className="text-app-text-secondary font-semibold">{rev.product}</span> · Merchant: <span className="font-bold text-[#F4631E]">{rev.store}</span>
                         </p>
                       </div>
                     </div>
@@ -591,10 +591,10 @@ export default function ReviewsPage() {
                     <div className="flex items-center gap-3">
                       <div className="flex gap-0.5 text-amber-500">
                         {Array.from({ length: 5 }).map((_, i) => (
-                          <Star key={i} className={`w-3 h-3 ${i < rev.rating ? 'fill-current text-amber-400' : 'opacity-25'}`} />
+                          <Star key={i} className={`w-3 h-3${i < rev.rating ? 'fill-current text-amber-400' : 'opacity-25'}`} />
                         ))}
                       </div>
-                      <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider border ${
+                      <span className={`text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider border${
                         rev.status.toLowerCase() === 'flagged' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
                         rev.status.toLowerCase() === 'published' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
                         rev.status.toLowerCase() === 'hidden' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
@@ -608,38 +608,38 @@ export default function ReviewsPage() {
 
                   {/* Review Text Area */}
                   {editingReviewId === rev.id ? (
-                    <div className="space-y-2 mb-4 bg-slate-950 p-3 rounded-lg border border-app-border" onClick={(e) => e.stopPropagation()}>
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Modify Vulgar/Spam expressions</label>
+                    <div className="space-y-2 mb-4 bg-app-bg p-3 rounded-lg border border-app-border" onClick={(e) => e.stopPropagation()}>
+                      <label className="text-[10px] font-bold text-app-text-secondary uppercase tracking-wider block">Modify Vulgar/Spam expressions</label>
                       <textarea 
                         value={editCommentText}
                         onChange={(e) => setEditCommentText(e.target.value)}
-                        className="w-full bg-slate-900 border border-app-border rounded p-2 text-xs text-white focus:outline-none focus:border-[#F4631E]"
+                        className="w-full bg-app-card border border-app-border rounded p-2 text-xs text-app-text-primary focus:outline-none focus:border-[#F4631E]"
                         rows={2}
                       />
                       <div className="flex justify-end gap-1.5">
                         <button 
                           onClick={() => setEditingReviewId(null)}
-                          className="px-3 py-1 bg-slate-800 text-slate-300 text-[10px] uppercase font-bold rounded"
+                          className="px-3 py-1 bg-app-bg text-app-text-secondary text-[10px] uppercase font-bold rounded"
                         >
                           Cancel
                         </button>
                         <button 
                           onClick={() => saveEditValue(rev.id)}
-                          className="px-3 py-1 bg-green-600 hover:bg-green-500 text-white text-[10px] uppercase font-bold rounded"
+                          className="px-3 py-1 bg-green-600 hover:bg-green-500 text-app-text-primary text-[10px] uppercase font-bold rounded"
                         >
                           Save
                         </button>
                       </div>
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-200 leading-relaxed italic mb-4 font-normal bg-white/[0.01] p-3 rounded border border-white/[0.01]">{rev.comment}</p>
+                    <p className="text-xs text-app-text-secondary leading-relaxed italic mb-4 font-normal bg-white/[0.01] p-3 rounded border border-app-border">{rev.comment}</p>
                   )}
 
                   {/* Authenticity Detail Panel */}
                   {rev.authenticityScore !== undefined && (
-                    <div className="bg-slate-950/40 p-3 rounded-lg border border-white/[0.03] space-y-2 mb-4">
+                    <div className="bg-app-bg/10 p-3 rounded-lg border border-app-border space-y-2 mb-4">
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1.5 text-[9.5px] uppercase font-extrabold tracking-wider text-slate-400">
+                        <div className="flex items-center gap-1.5 text-[9.5px] uppercase font-extrabold tracking-wider text-app-text-secondary">
                           {hasLowScore ? (
                             <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
                           ) : (
@@ -647,7 +647,7 @@ export default function ReviewsPage() {
                           )}
                           AI Authenticity Analysis
                         </div>
-                        <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded ${
+                        <span className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded${
                           rev.authenticityScore >= 75 ? 'text-green-400 bg-green-500/10' :
                           rev.authenticityScore >= 50 ? 'text-yellow-400 bg-yellow-500/10' : 'text-red-400 bg-red-500/10'
                         }`}>
@@ -656,16 +656,16 @@ export default function ReviewsPage() {
                       </div>
                       
                       {/* Authenticity Meter */}
-                      <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-white/5">
+                      <div className="w-full bg-app-card h-1.5 rounded-full overflow-hidden border border-app-border">
                         <div 
-                          className={`h-full rounded-full ${
+                          className={`h-full rounded-full${
                             rev.authenticityScore >= 75 ? 'bg-green-500' :
                             rev.authenticityScore >= 50 ? 'bg-yellow-500' : 'bg-red-500'
                           }`}
                           style={{ width: `${rev.authenticityScore}%` }}
                         />
                       </div>
-                      <p className="text-[10px] text-slate-400 leading-relaxed">{rev.authenticityReason}</p>
+                      <p className="text-[10px] text-app-text-secondary leading-relaxed">{rev.authenticityReason}</p>
                     </div>
                   )}
 
@@ -681,29 +681,29 @@ export default function ReviewsPage() {
                   )}
 
                   {/* Merchant Response thread block */}
-                  <div className="space-y-3 pt-3 border-t border-white/[0.03]" onClick={(e) => e.stopPropagation()}>
+                  <div className="space-y-3 pt-3 border-t border-app-border" onClick={(e) => e.stopPropagation()}>
                     {rev.response ? (
                       <div className="flex gap-2 items-start text-xs border-l-2 border-[#F4631E] pl-3.5 py-1">
                         <CornerDownRight className="w-3.5 h-3.5 text-[#F4631E] shrink-0 mt-0.5" />
                         <div className="flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-extrabold text-white text-[11px]">{rev.response.author}</span>
+                            <span className="font-extrabold text-app-text-primary text-[11px]">{rev.response.author}</span>
                             <span className="bg-[#F4631E]/15 text-[#F4631E] px-1.5 py-0.2 text-[7px] font-black rounded uppercase tracking-wider">Official Response</span>
                             <span className="text-[9px] text-slate-500 font-mono italic">{rev.response.timestamp}</span>
                           </div>
-                          <p className="text-slate-300 italic mt-1 font-medium bg-black/20 p-2.5 rounded border border-white/5 text-[11.5px]">{rev.response.comment}</p>
+                          <p className="text-app-text-secondary italic mt-1 font-medium bg-app-card/20 p-2.5 rounded border border-app-border text-[11.5px]">{rev.response.comment}</p>
                         </div>
                       </div>
                     ) : (
                       (isSeller || isAdmin) && (
                         <div className="space-y-2">
-                          <div className="relative flex items-center bg-slate-950 p-1.5 rounded-lg border border-white/5 focus-within:border-[#F4631E]/30">
+                          <div className="relative flex items-center bg-app-bg p-1.5 rounded-lg border border-app-border focus-within:border-[#F4631E]/30">
                             <input 
                               type="text"
                               placeholder="Submit merchant reply official statement..."
                               value={sellerReplyText[rev.id] || ''}
                               onChange={(e) => setSellerReplyText(prev => ({ ...prev, [rev.id]: e.target.value }))}
-                              className="bg-transparent text-xs text-white outline-none placeholder-slate-500 flex-1 px-2 py-1 font-medium"
+                              className="bg-transparent text-xs text-app-text-primary outline-none placeholder-slate-500 flex-1 px-2 py-1 font-medium"
                             />
                             <button 
                               onClick={() => handleSellerReply(rev.id)}
@@ -720,7 +720,7 @@ export default function ReviewsPage() {
 
                   {/* Actions buttons panel */}
                   {isAdmin && (
-                    <div className="flex items-center justify-between pt-4 mt-3 border-t border-white/[0.02] flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between pt-4 mt-3 border-t border-app-border flex-wrap gap-2" onClick={(e) => e.stopPropagation()}>
                       <span className="text-[9px] text-slate-500 font-mono">Platform ID: {rev.id}</span>
                       
                       <div className="flex flex-wrap gap-1.5">
@@ -763,7 +763,7 @@ export default function ReviewsPage() {
                         )}
                         <button 
                           onClick={() => handleRestrictCustomer(rev.user)}
-                          className="flex items-center gap-1 px-2 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-[9.5px] font-black uppercase tracking-wider cursor-pointer"
+                          className="flex items-center gap-1 px-2 py-1 rounded bg-app-bg text-app-text-secondary hover:bg-slate-700 text-[9.5px] font-black uppercase tracking-wider cursor-pointer"
                         >
                           <UserX className="w-3 h-3" /> Lock Privileges
                         </button>
@@ -782,49 +782,49 @@ export default function ReviewsPage() {
           
           {/* Active focus detail box */}
           <div className="bg-app-card p-5 rounded-xl border border-app-border space-y-4">
-            <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+            <h3 className="text-xs font-black text-app-text-primary uppercase tracking-wider flex items-center gap-2">
               <Sliders className="w-4 h-4 text-[#F4631E]" />
               Interactive Audit Inspector
             </h3>
 
             {focusedReviewId ? (() => {
               const r = reviews.find(item => item.id === focusedReviewId);
-              if (!r) return <p className="text-xs text-slate-400 italic">No focused review context.</p>;
+              if (!r) return <p className="text-xs text-app-text-secondary italic">No focused review context.</p>;
 
               return (
                 <div className="space-y-4">
-                  <div className="p-3 bg-slate-950 rounded-lg space-y-2 border border-white/5">
-                    <div className="text-[10px] text-slate-400 font-mono">ACTIVE TARGET PROFILE</div>
-                    <div className="text-xs font-extrabold text-white">{r.user}</div>
-                    <div className="text-[10px] text-slate-400 leading-relaxed font-mono mt-1">
+                  <div className="p-3 bg-app-bg rounded-lg space-y-2 border border-app-border">
+                    <div className="text-[10px] text-app-text-secondary font-mono">ACTIVE TARGET PROFILE</div>
+                    <div className="text-xs font-extrabold text-app-text-primary">{r.user}</div>
+                    <div className="text-[10px] text-app-text-secondary leading-relaxed font-mono mt-1">
                       Posted via Web Ingress Node · Verified Client Purchase ID: <span className="text-[#F4631E]">ORD-9283-REK</span>
                     </div>
                   </div>
 
                   <div className="space-y-2">
-                    <label className="text-[10px] text-slate-400 uppercase font-black tracking-widest block">Internal Moderation Notes (Private)</label>
+                    <label className="text-[10px] text-app-text-secondary uppercase font-black tracking-widest block">Internal Moderation Notes (Private)</label>
                     <textarea
                       placeholder="Write custom administrative logs or dispute notes regarding this client action..."
                       value={reviewNotes[r.id] || ''}
                       onChange={(e) => handleSaveNote(r.id, e.target.value)}
-                      className="w-full bg-slate-950 border border-white/5 rounded-lg p-3 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#F4631E] min-h-[90px] font-medium"
+                      className="w-full bg-app-bg border border-app-border rounded-lg p-3 text-xs text-app-text-primary placeholder-slate-600 focus:outline-none focus:border-[#F4631E] min-h-[90px] font-medium"
                     />
                     <div className="flex justify-end">
                       <span className="text-[9px] text-[#F4631E] font-mono font-bold uppercase tracking-wider">Auto-Saved to Local Node Logs</span>
                     </div>
                   </div>
 
-                  <div className="p-3.5 bg-slate-950 rounded-lg space-y-3 border border-white/5">
-                    <div className="text-[10px] text-slate-400 font-mono uppercase tracking-widest">TrustCenter Sync Score</div>
+                  <div className="p-3.5 bg-app-bg rounded-lg space-y-3 border border-app-border">
+                    <div className="text-[10px] text-app-text-secondary font-mono uppercase tracking-widest">TrustCenter Sync Score</div>
                     <div className="flex items-center justify-between">
-                      <span className="text-xs text-slate-300">Brand reputation impact:</span>
-                      <span className={`text-xs font-mono font-bold ${
+                      <span className="text-xs text-app-text-secondary">Brand reputation impact:</span>
+                      <span className={`text-xs font-mono font-bold${
                         r.status.toLowerCase() === 'published' ? 'text-green-400' : 'text-red-400'
                       }`}>
                         {r.status.toLowerCase() === 'published' ? '+5 points' : '-10 points'}
                       </span>
                     </div>
-                    <p className="text-[10px] text-slate-400 leading-normal">Reputation ledger logs actions in real-time. Approved posts improve merchant overall score index; flagged and deleted spams deduct standing points.</p>
+                    <p className="text-[10px] text-app-text-secondary leading-normal">Reputation ledger logs actions in real-time. Approved posts improve merchant overall score index; flagged and deleted spams deduct standing points.</p>
                   </div>
                 </div>
               );
@@ -838,14 +838,14 @@ export default function ReviewsPage() {
 
           {/* Quick Stats Summary */}
           <div className="bg-app-card p-5 rounded-xl border border-app-border space-y-4">
-            <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+            <h3 className="text-xs font-black text-app-text-primary uppercase tracking-wider flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-[#F4631E]" />
               Policy Summary
             </h3>
-            <ul className="space-y-2.5 text-xs text-slate-300 leading-relaxed">
+            <ul className="space-y-2.5 text-xs text-app-text-secondary leading-relaxed">
               <li className="flex items-start gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#F4631E] shrink-0 mt-1.5" />
-                <span>Any review flagged with score under <strong className="text-white">50</strong> is automatically quarantined and hidden.</span>
+                <span>Any review flagged with score under <strong className="text-app-text-primary">50</strong> is automatically quarantined and hidden.</span>
               </li>
               <li className="flex items-start gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-[#F4631E] shrink-0 mt-1.5" />

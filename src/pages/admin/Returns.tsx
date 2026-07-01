@@ -268,7 +268,7 @@ export default function ReturnsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0d0e1a] text-slate-100 p-4 sm:p-6 font-sans">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 p-4 sm:p-6 font-sans">
       
       {/* Toast alert notice */}
       <AnimatePresence>
@@ -277,39 +277,39 @@ export default function ReturnsPage() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className={`fixed top-6 right-6 z-50 flex items-center space-x-2.5 px-4 py-3 rounded-md shadow-2xl border text-sm font-semibold max-w-sm ${
+            className={`fixed top-6 right-6 z-50 flex items-center space-x-2.5 px-4 py-3 rounded-md shadow-2xl border text-sm font-semibold max-w-sm${
               toast.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border-emerald-800/50' :
               toast.type === 'error' ? 'bg-rose-950/90 text-rose-300 border-rose-800/50' :
               'bg-[#1a1a2e]/95 text-sky-300 border-[#FF6A00]/30'
             }`}
           >
-            <div className={`w-2 h-2 rounded-full ${toast.type === 'success' ? 'bg-emerald-400' : toast.type === 'error' ? 'bg-rose-400' : 'bg-[#FF6A00]'} animate-pulse`} />
+            <div className={`w-2 h-2 rounded-full${toast.type === 'success' ? 'bg-emerald-400' : toast.type === 'error' ? 'bg-rose-400' : 'bg-[#FF6A00]'}animate-pulse`} />
             <span>{toast.message}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* HEADER SECTION WITH FILTER SLIDER */}
-      <div className="mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-slate-800 pb-5">
+      <div className="mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black uppercase tracking-wider text-white flex items-center space-x-2">
+          <h1 className="text-xl sm:text-2xl font-black uppercase tracking-wider text-slate-900 flex items-center space-x-2">
             <Package className="w-6 h-6 text-[#FF6A00]" />
             <span>Returns & Refunds Control Desk</span>
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Audit customer return complaints, process reverse logistics, and handle payment ledger refunds
           </p>
         </div>
 
         {/* Global Toolbar Controls */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center space-x-1.5 bg-[#121424] border border-slate-800 rounded p-1">
-            <Calendar className="w-3.5 h-3.5 text-slate-400 ml-1.5" />
+          <div className="flex items-center space-x-1.5 bg-[#121424] border border-app-border rounded p-1">
+            <Calendar className="w-3.5 h-3.5 text-app-text-secondary ml-1.5" />
             {(['7d', '30d', '90d'] as const).map(range => (
               <button
                 key={range}
                 onClick={() => setDateRange(range)}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded uppercase tracking-wider transition-all ${
+                className={`px-2.5 py-1 text-[10px] font-bold rounded uppercase tracking-wider transition-all${
                   dateRange === range ? 'bg-[#FF6A00] text-white' : 'text-slate-400 hover:text-white'
                 }`}
               >
@@ -322,61 +322,61 @@ export default function ReturnsPage() {
 
       {/* STATS COUNT GRID SECTION */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <div className="bg-[#121424] border border-slate-850 p-4 rounded-lg shadow-md flex items-center space-x-3.5">
+        <div className="bg-[#121424] border border-app-border p-4 rounded-lg shadow-md flex items-center space-x-3.5">
           <div className="p-2.5 rounded bg-orange-950/40 text-[#FF6A00] border border-orange-900/30">
             <Package className="w-5 h-5" />
           </div>
           <div>
             <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Initiated</div>
-            <div className="text-lg font-black font-mono text-white mt-0.5">
+            <div className="text-lg font-black font-mono text-app-text-primary mt-0.5">
               {returnRequests.filter(r => r.status === 'initiated').length}
             </div>
           </div>
         </div>
 
-        <div className="bg-[#121424] border border-slate-850 p-4 rounded-lg shadow-md flex items-center space-x-3.5">
+        <div className="bg-[#121424] border border-app-border p-4 rounded-lg shadow-md flex items-center space-x-3.5">
           <div className="p-2.5 rounded bg-indigo-950/40 text-indigo-400 border border-indigo-900/30">
             <CheckCircle className="w-5 h-5" />
           </div>
           <div>
             <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Approved</div>
-            <div className="text-lg font-black font-mono text-white mt-0.5">{approvedCount}</div>
+            <div className="text-lg font-black font-mono text-app-text-primary mt-0.5">{approvedCount}</div>
           </div>
         </div>
 
-        <div className="bg-[#121424] border border-slate-850 p-4 rounded-lg shadow-md flex items-center space-x-3.5">
+        <div className="bg-[#121424] border border-app-border p-4 rounded-lg shadow-md flex items-center space-x-3.5">
           <div className="p-2.5 rounded bg-blue-950/40 text-blue-400 border border-blue-900/30">
             <Truck className="w-5 h-5" />
           </div>
           <div>
             <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">In Transit</div>
-            <div className="text-lg font-black font-mono text-white mt-0.5">{transitCount}</div>
+            <div className="text-lg font-black font-mono text-app-text-primary mt-0.5">{transitCount}</div>
           </div>
         </div>
 
-        <div className="bg-[#121424] border border-slate-850 p-4 rounded-lg shadow-md flex items-center space-x-3.5">
+        <div className="bg-[#121424] border border-app-border p-4 rounded-lg shadow-md flex items-center space-x-3.5">
           <div className="p-2.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-900/30">
             <DollarSign className="w-5 h-5" />
           </div>
           <div>
             <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Refunded</div>
-            <div className="text-lg font-black font-mono text-white mt-0.5">{refundedCount}</div>
+            <div className="text-lg font-black font-mono text-app-text-primary mt-0.5">{refundedCount}</div>
           </div>
         </div>
 
-        <div className="bg-[#121424] border border-slate-850 p-4 rounded-lg shadow-md col-span-2 md:col-span-1 flex items-center space-x-3.5">
+        <div className="bg-[#121424] border border-app-border p-4 rounded-lg shadow-md col-span-2 md:col-span-1 flex items-center space-x-3.5">
           <div className="p-2.5 rounded bg-rose-950/40 text-rose-400 border border-rose-900/30">
             <AlertTriangle className="w-5 h-5" />
           </div>
           <div>
             <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Disputes</div>
-            <div className="text-lg font-black font-mono text-white mt-0.5">{activeDisputesCount}</div>
+            <div className="text-lg font-black font-mono text-app-text-primary mt-0.5">{activeDisputesCount}</div>
           </div>
         </div>
       </div>
 
       {/* SEARCH AND FILTERS TOOLBAR */}
-      <div className="bg-[#121424] border border-slate-850 p-3.5 rounded-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-[#121424] border border-app-border p-3.5 rounded-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         
         {/* Search Input */}
         <div className="relative flex-1">
@@ -386,7 +386,7 @@ export default function ReturnsPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search return by Request ID, Order code, or customer name..."
-            className="w-full pl-9 pr-4 py-2 text-xs bg-[#090a12] border border-slate-800 rounded text-slate-200 placeholder-slate-500 focus:outline-none focus:border-[#FF6A00] transition-colors"
+            className="w-full pl-9 pr-4 py-2 text-xs bg-[#090a12] border border-app-border rounded text-app-text-secondary placeholder-slate-500 focus:outline-none focus:border-[#FF6A00] transition-colors"
           />
           {searchTerm && (
             <button onClick={() => setSearchTerm('')} className="absolute right-3 top-2.5 p-0.5 rounded text-slate-500 hover:text-slate-300">
@@ -399,12 +399,12 @@ export default function ReturnsPage() {
         <div className="flex flex-wrap items-center gap-3">
           
           {/* Reason filter */}
-          <div className="flex items-center space-x-1 bg-[#090a12] border border-slate-800 rounded px-2 py-1.5">
+          <div className="flex items-center space-x-1 bg-[#090a12] border border-app-border rounded px-2 py-1.5">
             <Filter className="w-3.5 h-3.5 text-slate-500" />
             <select
               value={reasonFilter}
               onChange={(e) => setReasonFilter(e.target.value)}
-              className="bg-transparent border-none text-slate-300 text-xs focus:outline-none pr-1"
+              className="bg-transparent border-none text-app-text-secondary text-xs focus:outline-none pr-1"
             >
               <option value="All">All Reasons</option>
               <option value="defective">Defective</option>
@@ -416,12 +416,12 @@ export default function ReturnsPage() {
           </div>
 
           {/* Status filter */}
-          <div className="flex items-center space-x-1 bg-[#090a12] border border-slate-800 rounded px-2 py-1.5">
+          <div className="flex items-center space-x-1 bg-[#090a12] border border-app-border rounded px-2 py-1.5">
             <Clock className="w-3.5 h-3.5 text-slate-500" />
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-transparent border-none text-slate-300 text-xs focus:outline-none pr-1"
+              className="bg-transparent border-none text-app-text-secondary text-xs focus:outline-none pr-1"
             >
               <option value="All">All Statuses</option>
               <option value="initiated">Initiated</option>
@@ -437,11 +437,11 @@ export default function ReturnsPage() {
       </div>
 
       {/* CORE WORKFLOW TABS VIEW */}
-      <div className="border-b border-slate-800 mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="border-b border-app-border mb-5 flex flex-wrap items-center justify-between gap-3">
         <div className="flex space-x-2">
           <button
             onClick={() => setActiveTab('queue')}
-            className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all px-4 ${
+            className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all px-4${
               activeTab === 'queue' ? 'border-[#FF6A00] text-white' : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
@@ -450,7 +450,7 @@ export default function ReturnsPage() {
           
           <button
             onClick={() => setActiveTab('transit')}
-            className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all px-4 ${
+            className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all px-4${
               activeTab === 'transit' ? 'border-[#FF6A00] text-white' : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
@@ -459,7 +459,7 @@ export default function ReturnsPage() {
 
           <button
             onClick={() => setActiveTab('refunds')}
-            className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all px-4 ${
+            className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all px-4${
               activeTab === 'refunds' ? 'border-[#FF6A00] text-white' : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
@@ -468,7 +468,7 @@ export default function ReturnsPage() {
 
           <button
             onClick={() => setActiveTab('analytics')}
-            className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all px-4 ${
+            className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all px-4${
               activeTab === 'analytics' ? 'border-[#FF6A00] text-white' : 'border-transparent text-slate-400 hover:text-white'
             }`}
           >
@@ -490,14 +490,14 @@ export default function ReturnsPage() {
       </div>
 
       {/* MAIN CONTAINER PANELS */}
-      <div className="bg-[#121424] border border-slate-850 rounded-lg shadow-xl overflow-hidden">
+      <div className="bg-[#121424] border border-app-border rounded-lg shadow-xl overflow-hidden">
         
         {/* TAB 1: RETURN QUEUE */}
         {activeTab === 'queue' && (
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-white/[0.02] border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-widest font-black">
+                <tr className="bg-white/[0.02] border-b border-app-border text-[10px] text-app-text-secondary uppercase tracking-widest font-black">
                   <th className="p-4">Return ID</th>
                   <th className="p-4">Order ID</th>
                   <th className="p-4">Customer Info</th>
@@ -520,24 +520,24 @@ export default function ReturnsPage() {
                       return (
                         <tr key={ret.id} className="hover:bg-white/[0.01] transition-colors">
                           <td className="p-4 font-bold font-mono text-[#FF6A00]">{ret.id}</td>
-                          <td className="p-4 font-mono text-slate-300">{ret.orderId}</td>
+                          <td className="p-4 font-mono text-app-text-secondary">{ret.orderId}</td>
                           <td className="p-4">
-                            <div className="font-semibold text-white">{customerName}</div>
+                            <div className="font-semibold text-app-text-primary">{customerName}</div>
                             <div className="text-[10px] text-slate-500 font-mono">{customerEmail}</div>
                           </td>
                           <td className="p-4">
-                            <span className="capitalize font-bold text-slate-300">
+                            <span className="capitalize font-bold text-app-text-secondary">
                               {ret.reason.replace(/_/g, ' ')}
                             </span>
                             <p className="text-[10px] text-slate-500 truncate max-w-[200px]" title={ret.description}>
                               {ret.description}
                             </p>
                           </td>
-                          <td className="p-4 font-black font-mono text-white">
+                          <td className="p-4 font-black font-mono text-app-text-primary">
                             ৳{productPrice.toLocaleString()}
                           </td>
                           <td className="p-4">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider${
                               ret.status === 'initiated' ? 'bg-orange-950 text-orange-400 border border-orange-800/40' :
                               ret.status === 'dispute' ? 'bg-rose-950 text-rose-400 border border-rose-800/40' :
                               'bg-slate-800 text-slate-400'
@@ -548,7 +548,7 @@ export default function ReturnsPage() {
                           <td className="p-4 text-right">
                             <button
                               onClick={() => setSelectedReturnId(ret.id)}
-                              className="px-3 py-1.5 text-xs font-bold text-slate-300 bg-slate-800 hover:bg-[#FF6A00] hover:text-white rounded transition-all"
+                              className="px-3 py-1.5 text-xs font-bold text-app-text-secondary bg-app-bg hover:bg-[#FF6A00] hover:text-white rounded transition-all"
                             >
                               Process Return
                             </button>
@@ -573,7 +573,7 @@ export default function ReturnsPage() {
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-white/[0.02] border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-widest font-black">
+                <tr className="bg-white/[0.02] border-b border-app-border text-[10px] text-app-text-secondary uppercase tracking-widest font-black">
                   <th className="p-4">Return ID</th>
                   <th className="p-4">Order ID</th>
                   <th className="p-4">Courier Partner</th>
@@ -591,24 +591,24 @@ export default function ReturnsPage() {
                       return (
                         <tr key={ret.id} className="hover:bg-white/[0.01] transition-colors">
                           <td className="p-4 font-bold font-mono text-[#FF6A00]">{ret.id}</td>
-                          <td className="p-4 font-mono text-slate-300">{ret.orderId}</td>
-                          <td className="p-4 font-semibold text-white">
+                          <td className="p-4 font-mono text-app-text-secondary">{ret.orderId}</td>
+                          <td className="p-4 font-semibold text-app-text-primary">
                             {ret.returnCourier || '[Courier Unassigned]'}
                           </td>
                           <td className="p-4 font-mono">
                             {ret.returnTrackingId ? (
-                              <span className="bg-[#090a12] border border-slate-800 px-2 py-1 rounded text-slate-300 select-all">
+                              <span className="bg-[#090a12] border border-app-border px-2 py-1 rounded text-app-text-secondary select-all">
                                 {ret.returnTrackingId}
                               </span>
                             ) : (
                               <span className="text-slate-500 font-bold lowercase italic">waiting generation</span>
                             )}
                           </td>
-                          <td className="p-4 font-black font-mono text-white">
+                          <td className="p-4 font-black font-mono text-app-text-primary">
                             ৳{(ret.refundAmount || 0).toLocaleString()}
                           </td>
                           <td className="p-4">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider${
                               ret.status === 'approved' ? 'bg-indigo-950 text-indigo-400 border border-indigo-800/40' :
                               ret.status === 'returned_in_transit' ? 'bg-blue-950 text-blue-400 border border-blue-800/40' :
                               'bg-slate-850 text-slate-400'
@@ -622,7 +622,7 @@ export default function ReturnsPage() {
                                 href={`https://track.pathao.com/ret/${ret.returnTrackingId}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex items-center space-x-1 px-2.5 py-1.5 text-xs bg-slate-800 text-slate-300 hover:bg-slate-750 rounded transition-all"
+                                className="inline-flex items-center space-x-1 px-2.5 py-1.5 text-xs bg-app-bg text-app-text-secondary hover:bg-slate-750 rounded transition-all"
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
                                 <span>Track</span>
@@ -630,7 +630,7 @@ export default function ReturnsPage() {
                             )}
                             <button
                               onClick={() => setSelectedReturnId(ret.id)}
-                              className="px-3 py-1.5 text-xs font-bold text-slate-100 bg-slate-800 hover:bg-[#FF6A00] hover:text-white rounded transition-all"
+                              className="px-3 py-1.5 text-xs font-bold text-app-text-primary bg-app-bg hover:bg-[#FF6A00] hover:text-white rounded transition-all"
                             >
                               Dispatch Logistics
                             </button>
@@ -655,7 +655,7 @@ export default function ReturnsPage() {
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-white/[0.02] border-b border-slate-800 text-[10px] text-slate-400 uppercase tracking-widest font-black">
+                <tr className="bg-white/[0.02] border-b border-app-border text-[10px] text-app-text-secondary uppercase tracking-widest font-black">
                   <th className="p-4">Return ID</th>
                   <th className="p-4">Customer Info</th>
                   <th className="p-4">Refund Amount</th>
@@ -677,14 +677,14 @@ export default function ReturnsPage() {
                         <tr key={ret.id} className="hover:bg-white/[0.01] transition-colors">
                           <td className="p-4 font-bold font-mono text-[#FF6A00]">{ret.id}</td>
                           <td className="p-4">
-                            <div className="font-semibold text-white">{customerName}</div>
+                            <div className="font-semibold text-app-text-primary">{customerName}</div>
                             <div className="text-[10px] text-slate-500 font-mono">{customerEmail}</div>
                           </td>
                           <td className="p-4 font-black font-mono text-[#FF9E2C]">
                             ৳{(ret.refundAmount || 0).toLocaleString()}
                           </td>
                           <td className="p-4">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider${
                               ret.refundStatus === 'processed' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/40' :
                               ret.refundStatus === 'failed' ? 'bg-rose-950 text-rose-400 border border-rose-800/40' :
                               'bg-amber-950 text-amber-400 border border-amber-800/40'
@@ -692,13 +692,13 @@ export default function ReturnsPage() {
                               {ret.refundStatus}
                             </span>
                           </td>
-                          <td className="p-4 text-slate-400 font-mono">
+                          <td className="p-4 text-app-text-secondary font-mono">
                             {new Date(ret.updatedAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
                           </td>
                           <td className="p-4 text-right">
                             <button
                               onClick={() => setSelectedReturnId(ret.id)}
-                              className="px-3 py-1.5 text-xs font-bold text-slate-100 bg-slate-800 hover:bg-[#FF6A00] hover:text-white rounded transition-all"
+                              className="px-3 py-1.5 text-xs font-bold text-app-text-primary bg-app-bg hover:bg-[#FF6A00] hover:text-white rounded transition-all"
                             >
                               Manage Refund
                             </button>
@@ -724,8 +724,8 @@ export default function ReturnsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               
               {/* Chart 1: Return rate by reason */}
-              <div className="bg-[#090a12] border border-slate-850 p-4 rounded-lg">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">
+              <div className="bg-[#090a12] border border-app-border p-4 rounded-lg">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-app-text-secondary mb-4">
                   Returns Share by Customer Reason
                 </h3>
                 <div className="h-64">
@@ -752,8 +752,8 @@ export default function ReturnsPage() {
               </div>
 
               {/* Chart 2: Returns 7 Day Trend */}
-              <div className="bg-[#090a12] border border-slate-850 p-4 rounded-lg">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">
+              <div className="bg-[#090a12] border border-app-border p-4 rounded-lg">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-app-text-secondary mb-4">
                   Daily Reverse Logistics Pipeline Trend (7 Days)
                 </h3>
                 <div className="h-64">
@@ -781,24 +781,24 @@ export default function ReturnsPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               
               {/* Merchant return rates */}
-              <div className="bg-[#090a12] border border-slate-850 p-4 rounded-lg lg:col-span-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-4">
+              <div className="bg-[#090a12] border border-app-border p-4 rounded-lg lg:col-span-2">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-app-text-secondary mb-4">
                   Returns Rate Breakdown by Seller Store
                 </h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="border-b border-slate-800 font-extrabold uppercase text-[10px] text-slate-500">
+                      <tr className="border-b border-app-border font-extrabold uppercase text-[10px] text-slate-500">
                         <th className="pb-2">Merchant Partner Name</th>
                         <th className="pb-2 text-center">Fulfillments</th>
                         <th className="pb-2 text-center">Returns Checked</th>
                         <th className="pb-2 text-right">Returns Rate %</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-850 text-slate-300">
+                    <tbody className="divide-y divide-slate-850 text-app-text-secondary">
                       {getSellerPerformanceData().map((s, idx) => (
                         <tr key={idx} className="hover:bg-white/[0.01]">
-                          <td className="py-2.5 font-semibold text-white">{s.name}</td>
+                          <td className="py-2.5 font-semibold text-app-text-primary">{s.name}</td>
                           <td className="py-2.5 text-center font-mono">{s.total}</td>
                           <td className="py-2.5 text-center font-mono text-orange-400">{s.returned}</td>
                           <td className="py-2.5 text-right font-mono font-black text-rose-400">
@@ -812,19 +812,19 @@ export default function ReturnsPage() {
               </div>
 
               {/* Quick advice/audit center info */}
-              <div className="bg-[#090a12] border border-slate-850 p-4 rounded-lg flex flex-col justify-between">
+              <div className="bg-[#090a12] border border-app-border p-4 rounded-lg flex flex-col justify-between">
                 <div>
                   <h4 className="text-xs font-bold uppercase text-[#FF6A00] tracking-wider mb-2">
                     Logistics Health Summary
                   </h4>
-                  <p className="text-[11px] text-slate-400 leading-relaxed mb-3">
+                  <p className="text-[11px] text-app-text-secondary leading-relaxed mb-3">
                     Defective merchandise represents <strong>42% of total logged returns</strong> this period. Sizing miscalculations account for the rest.
                   </p>
                   <p className="text-[11px] text-slate-500 leading-relaxed">
                     Check size charts on sellers catalogs. Flag merchant profiles experiencing return rates above 15% immediately to prevent bad customer satisfaction.
                   </p>
                 </div>
-                <div className="border-t border-slate-800 pt-3 mt-4 text-[10px] font-bold font-mono text-slate-500 flex items-center justify-between">
+                <div className="border-t border-app-border pt-3 mt-4 text-[10px] font-bold font-mono text-slate-500 flex items-center justify-between">
                   <span>Audit Desk Checked:</span>
                   <span className="text-[#FF6A00]">2026-06-27</span>
                 </div>
@@ -839,19 +839,19 @@ export default function ReturnsPage() {
       {/* DETAIL AUDIT & PROCESS MODAL */}
       <AnimatePresence>
         {selectedReturnId && selectedReturn && (
-          <div className="fixed inset-0 bg-black/80 flex items-center justify-center p-4 z-40 backdrop-blur-sm overflow-y-auto">
+          <div className="fixed inset-0 bg-app-card/20 flex items-center justify-center p-4 z-40 backdrop-blur-sm overflow-y-auto">
             <motion.div 
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-[#121424] border border-slate-800 rounded-lg max-w-4xl w-full shadow-2xl overflow-hidden my-8"
+              className="bg-[#121424] border border-app-border rounded-lg max-w-4xl w-full shadow-2xl overflow-hidden my-8"
             >
               
               {/* Modal Title bar */}
-              <div className="bg-white/[0.02] border-b border-slate-800 px-5 py-4 flex items-center justify-between">
+              <div className="bg-white/[0.02] border-b border-app-border px-5 py-4 flex items-center justify-between">
                 <div className="flex items-center space-x-2.5">
                   <div className="w-2.5 h-2.5 rounded-full bg-[#FF6A00] animate-ping" />
-                  <h3 className="text-sm font-black uppercase tracking-wider text-white">
+                  <h3 className="text-sm font-black uppercase tracking-wider text-app-text-primary">
                     Audit Return: <span className="text-[#FF6A00] font-mono">{selectedReturn.id}</span>
                   </h3>
                 </div>
@@ -877,14 +877,14 @@ export default function ReturnsPage() {
                     {(() => {
                       const order = orders.find(o => o.id === selectedReturn.orderId);
                       return (
-                        <div className="bg-[#090a12] border border-slate-850 p-3 rounded flex items-center justify-between">
+                        <div className="bg-[#090a12] border border-app-border p-3 rounded flex items-center justify-between">
                           <div>
-                            <div className="font-bold text-white text-xs">{order?.customer.name || 'Unknown'}</div>
+                            <div className="font-bold text-app-text-primary text-xs">{order?.customer.name || 'Unknown'}</div>
                             <div className="text-[10px] text-slate-500 font-mono">{order?.customer.email || 'N/A'}</div>
                           </div>
                           <div className="text-right">
                             <div className="text-[9px] uppercase font-bold text-slate-500">Total Purchase</div>
-                            <div className="text-xs font-black font-mono text-white mt-0.5">
+                            <div className="text-xs font-black font-mono text-app-text-primary mt-0.5">
                               ৳{(order?.total_payable || order?.product.price || 0).toLocaleString()}
                             </div>
                           </div>
@@ -899,12 +899,12 @@ export default function ReturnsPage() {
                       <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
                         Return Reason:
                       </span>
-                      <span className="capitalize text-xs font-black text-white bg-slate-800 px-2 py-0.5 rounded">
+                      <span className="capitalize text-xs font-black text-app-text-primary bg-app-bg px-2 py-0.5 rounded">
                         {selectedReturn.reason.replace(/_/g, ' ')}
                       </span>
                     </div>
 
-                    <div className="bg-[#090a12] border border-slate-850 p-3 rounded text-xs text-slate-300 min-h-[60px] leading-relaxed">
+                    <div className="bg-[#090a12] border border-app-border p-3 rounded text-xs text-app-text-secondary min-h-[60px] leading-relaxed">
                       {selectedReturn.description}
                     </div>
                   </div>
@@ -920,17 +920,17 @@ export default function ReturnsPage() {
                           <div 
                             key={i} 
                             onClick={() => setZoomImg(img)}
-                            className="relative group aspect-square rounded overflow-hidden bg-slate-900 border border-slate-800 cursor-zoom-in"
+                            className="relative group aspect-square rounded overflow-hidden bg-app-card border border-app-border cursor-zoom-in"
                           >
                             <img src={img} alt="evidence" className="w-full h-full object-cover group-hover:scale-105 transition-all" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                              <ZoomIn className="w-4 h-4 text-white" />
+                            <div className="absolute inset-0 bg-app-card/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                              <ZoomIn className="w-4 h-4 text-app-text-primary" />
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="bg-[#090a12] border border-slate-850 p-4 rounded text-center text-slate-600 font-mono text-[11px]">
+                      <div className="bg-[#090a12] border border-app-border p-4 rounded text-center text-slate-600 font-mono text-[11px]">
                         No evidence photographs uploaded with request.
                       </div>
                     )}
@@ -940,7 +940,7 @@ export default function ReturnsPage() {
                   <div className="pt-2">
                     <button
                       onClick={handlePrintLabel}
-                      className="w-full flex items-center justify-center space-x-1.5 px-4 py-2.5 bg-slate-800 hover:bg-slate-750 text-slate-200 hover:text-white border border-slate-700 rounded text-xs font-bold transition-all shadow-md"
+                      className="w-full flex items-center justify-center space-x-1.5 px-4 py-2.5 bg-app-bg hover:bg-slate-750 text-app-text-secondary hover:text-white border border-app-border rounded text-xs font-bold transition-all shadow-md"
                     >
                       <Printer className="w-4 h-4 text-[#FF6A00]" />
                       <span>Print Prepaid Shipping Return Label</span>
@@ -952,21 +952,21 @@ export default function ReturnsPage() {
                     <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-3">
                       Logistics Pipeline Status
                     </h4>
-                    <div className="relative pl-5 border-l-2 border-slate-800 space-y-4 text-[11px]">
+                    <div className="relative pl-5 border-l-2 border-app-border space-y-4 text-[11px]">
                       
                       <div className="relative">
                         <span className="absolute -left-[27px] top-0.5 w-3 h-3 rounded-full bg-[#FF6A00] border-2 border-[#121424]" />
-                        <div className="font-bold text-slate-300">Complaint Initiated</div>
+                        <div className="font-bold text-app-text-secondary">Complaint Initiated</div>
                         <div className="text-[9px] text-slate-500 font-mono">
                           {new Date(selectedReturn.createdAt).toLocaleString()}
                         </div>
                       </div>
 
                       <div className="relative">
-                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-[#121424] ${
+                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-[#121424]${
                           selectedReturn.status !== 'initiated' ? 'bg-[#FF9E2C]' : 'bg-slate-800'
                         }`} />
-                        <div className="font-bold text-slate-300">Review & Approved</div>
+                        <div className="font-bold text-app-text-secondary">Review & Approved</div>
                         {selectedReturn.approvedAt && (
                           <div className="text-[9px] text-slate-500 font-mono">
                             {new Date(selectedReturn.approvedAt).toLocaleString()}
@@ -975,17 +975,17 @@ export default function ReturnsPage() {
                       </div>
 
                       <div className="relative">
-                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-[#121424] ${
+                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-[#121424]${
                           selectedReturn.status === 'returned_in_transit' || selectedReturn.status === 'received' || selectedReturn.status === 'refunded' ? 'bg-sky-400' : 'bg-slate-800'
                         }`} />
-                        <div className="font-bold text-slate-300">Transit & Logistics Pickup</div>
+                        <div className="font-bold text-app-text-secondary">Transit & Logistics Pickup</div>
                       </div>
 
                       <div className="relative">
-                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-[#121424] ${
+                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-[#121424]${
                           selectedReturn.status === 'received' || selectedReturn.status === 'refunded' ? 'bg-emerald-400' : 'bg-slate-800'
                         }`} />
-                        <div className="font-bold text-slate-300">Item Received & Verified</div>
+                        <div className="font-bold text-app-text-secondary">Item Received & Verified</div>
                       </div>
 
                     </div>
@@ -1004,8 +1004,8 @@ export default function ReturnsPage() {
 
                     {/* Pending review approvals */}
                     {selectedReturn.status === 'initiated' && (
-                      <div className="bg-[#090a12] border border-slate-850 p-4 rounded-lg space-y-3">
-                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                      <div className="bg-[#090a12] border border-app-border p-4 rounded-lg space-y-3">
+                        <p className="text-[11px] text-app-text-secondary leading-relaxed">
                           Analyze complaint details. To approve, specify correct refund ledger value (cannot exceed order total).
                         </p>
 
@@ -1016,12 +1016,12 @@ export default function ReturnsPage() {
                                 Lock Refund Ledger (BDT)
                               </label>
                               <div className="relative">
-                                <span className="absolute left-2.5 top-2 text-xs font-bold text-slate-400">৳</span>
+                                <span className="absolute left-2.5 top-2 text-xs font-bold text-app-text-secondary">৳</span>
                                 <input
                                   type="number"
                                   value={refundInput}
                                   onChange={(e) => setRefundInput(parseFloat(e.target.value) || 0)}
-                                  className="w-full pl-6 pr-3 py-1.5 bg-[#121424] border border-slate-800 rounded text-xs font-bold font-mono text-[#FF6A00]"
+                                  className="w-full pl-6 pr-3 py-1.5 bg-[#121424] border border-app-border rounded text-xs font-bold font-mono text-[#FF6A00]"
                                 />
                               </div>
                             </div>
@@ -1035,7 +1035,7 @@ export default function ReturnsPage() {
                               </button>
                               <button
                                 onClick={handleApprove}
-                                className="px-4 py-2 bg-[#FF6A00] hover:bg-[#FF9E2C] text-white text-xs font-black uppercase tracking-wider rounded transition-all shadow-md"
+                                className="px-4 py-2 bg-[#FF6A00] hover:bg-[#FF9E2C] text-app-text-primary text-xs font-black uppercase tracking-wider rounded transition-all shadow-md"
                               >
                                 Approve Return
                               </button>
@@ -1051,14 +1051,14 @@ export default function ReturnsPage() {
                                 value={rejectReasonInput}
                                 onChange={(e) => setRejectReasonInput(e.target.value)}
                                 placeholder="Describe why this complaint is rejected (e.g. item worn/missing box)..."
-                                className="w-full px-3 py-1.5 bg-[#121424] border border-slate-800 rounded text-xs text-slate-200 placeholder-slate-600 focus:outline-none"
+                                className="w-full px-3 py-1.5 bg-[#121424] border border-app-border rounded text-xs text-app-text-secondary placeholder-slate-600 focus:outline-none"
                                 rows={2}
                               />
                             </div>
                             <div className="flex justify-end space-x-2">
                               <button
                                 onClick={() => setIsRejecting(false)}
-                                className="px-3 py-1.5 text-xs text-slate-400 hover:text-white transition-colors"
+                                className="px-3 py-1.5 text-xs text-app-text-secondary hover:text-white transition-colors"
                               >
                                 Cancel
                               </button>
@@ -1076,8 +1076,8 @@ export default function ReturnsPage() {
 
                     {/* Logistics Courier assignment controls */}
                     {selectedReturn.status === 'approved' && (
-                      <div className="bg-[#090a12] border border-slate-850 p-4 rounded-lg space-y-3">
-                        <div className="text-[11px] font-bold text-slate-300">
+                      <div className="bg-[#090a12] border border-app-border p-4 rounded-lg space-y-3">
+                        <div className="text-[11px] font-bold text-app-text-secondary">
                           Configure Reverse Shipment Courier
                         </div>
                         <p className="text-[10px] text-slate-500 leading-relaxed">
@@ -1092,7 +1092,7 @@ export default function ReturnsPage() {
                             <select
                               value={courierInput}
                               onChange={(e) => setCourierInput(e.target.value)}
-                              className="w-full px-2 py-1.5 bg-[#121424] border border-slate-800 rounded text-xs text-slate-300 focus:outline-none"
+                              className="w-full px-2 py-1.5 bg-[#121424] border border-app-border rounded text-xs text-app-text-secondary focus:outline-none"
                             >
                               <option value="Pathao Delivery">Pathao Delivery</option>
                               <option value="Steadfast Courier">Steadfast Courier</option>
@@ -1109,7 +1109,7 @@ export default function ReturnsPage() {
                               value={trackingIdInput}
                               onChange={(e) => setTrackingIdInput(e.target.value)}
                               placeholder="e.g. TRACK-91283"
-                              className="w-full px-2 py-1.5 bg-[#121424] border border-slate-800 rounded text-xs text-slate-200 focus:outline-none"
+                              className="w-full px-2 py-1.5 bg-[#121424] border border-app-border rounded text-xs text-app-text-secondary focus:outline-none"
                             />
                           </div>
                         </div>
@@ -1123,7 +1123,7 @@ export default function ReturnsPage() {
                             updateReturnStatus(selectedReturn.id, 'returned_in_transit');
                             showToast('Logistics configured & transit started', 'success');
                           }}
-                          className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded transition-all"
+                          className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-app-text-primary text-xs font-bold rounded transition-all"
                         >
                           Mark as Shipped/In Transit
                         </button>
@@ -1132,8 +1132,8 @@ export default function ReturnsPage() {
 
                     {/* Item receipt verification */}
                     {selectedReturn.status === 'returned_in_transit' && (
-                      <div className="bg-[#090a12] border border-slate-850 p-4 rounded-lg space-y-3">
-                        <div className="text-[11px] font-bold text-slate-300">
+                      <div className="bg-[#090a12] border border-app-border p-4 rounded-lg space-y-3">
+                        <div className="text-[11px] font-bold text-app-text-secondary">
                           Inspect & Verify Returned Goods
                         </div>
                         <p className="text-[10px] text-slate-500 leading-relaxed">
@@ -1153,8 +1153,8 @@ export default function ReturnsPage() {
 
                     {/* Process Refund to Gateway */}
                     {selectedReturn.status === 'received' && (
-                      <div className="bg-[#090a12] border border-slate-850 p-4 rounded-lg space-y-3">
-                        <div className="text-[11px] font-bold text-slate-300">
+                      <div className="bg-[#090a12] border border-app-border p-4 rounded-lg space-y-3">
+                        <div className="text-[11px] font-bold text-app-text-secondary">
                           Ready for Payment Refund Channels
                         </div>
                         <p className="text-[10px] text-slate-500 leading-relaxed">
@@ -1171,9 +1171,9 @@ export default function ReturnsPage() {
 
                     {/* Resolved view */}
                     {(selectedReturn.status === 'refunded' || selectedReturn.status === 'rejected') && (
-                      <div className="bg-[#090a12] border border-slate-850 p-4 rounded-lg text-center space-y-2">
+                      <div className="bg-[#090a12] border border-app-border p-4 rounded-lg text-center space-y-2">
                         <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-                        <div className="text-xs font-bold text-white uppercase tracking-wider">
+                        <div className="text-xs font-bold text-app-text-primary uppercase tracking-wider">
                           Taxonomy Rule Closed
                         </div>
                         <p className="text-[11px] text-slate-500 leading-relaxed">
@@ -1184,7 +1184,7 @@ export default function ReturnsPage() {
 
                     {/* Dispute escalation tool */}
                     {selectedReturn.status !== 'dispute' && selectedReturn.status !== 'refunded' && selectedReturn.status !== 'rejected' && (
-                      <div className="border-t border-slate-850 pt-3 flex justify-between items-center text-xs">
+                      <div className="border-t border-app-border pt-3 flex justify-between items-center text-xs">
                         <span className="text-slate-500 font-medium">Logistics conflict?</span>
                         <button
                           type="button"
@@ -1202,15 +1202,15 @@ export default function ReturnsPage() {
                   </div>
 
                   {/* NOTE KEEPER LOG */}
-                  <div className="flex-1 flex flex-col min-h-[160px] bg-[#090a12] border border-slate-850 p-3 rounded-lg">
-                    <h5 className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider mb-2 flex items-center space-x-1">
+                  <div className="flex-1 flex flex-col min-h-[160px] bg-[#090a12] border border-app-border p-3 rounded-lg">
+                    <h5 className="text-[9px] font-extrabold text-app-text-secondary uppercase tracking-wider mb-2 flex items-center space-x-1">
                       <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
                       <span>Internal Admin Notes Log</span>
                     </h5>
                     
-                    <div className="flex-1 overflow-y-auto max-h-[120px] custom-scrollbar space-y-2 pr-1 text-[10px] text-slate-400 mb-3">
+                    <div className="flex-1 overflow-y-auto max-h-[120px] custom-scrollbar space-y-2 pr-1 text-[10px] text-app-text-secondary mb-3">
                       {selectedReturn.notes.map((n, i) => (
-                        <div key={i} className="bg-[#121424] p-2 rounded border border-slate-850 leading-relaxed">
+                        <div key={i} className="bg-[#121424] p-2 rounded border border-app-border leading-relaxed">
                           {n}
                         </div>
                       ))}
@@ -1222,11 +1222,11 @@ export default function ReturnsPage() {
                         value={noteInput}
                         onChange={(e) => setNoteInput(e.target.value)}
                         placeholder="Write auditor logs (Press Enter to submit)..."
-                        className="flex-1 px-2.5 py-1.5 bg-[#121424] border border-slate-800 rounded text-xs text-slate-200 placeholder-slate-600 focus:outline-none"
+                        className="flex-1 px-2.5 py-1.5 bg-[#121424] border border-app-border rounded text-xs text-app-text-secondary placeholder-slate-600 focus:outline-none"
                       />
                       <button
                         type="submit"
-                        className="px-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded text-xs transition-colors"
+                        className="px-3 bg-app-bg hover:bg-slate-700 text-app-text-secondary font-bold rounded text-xs transition-colors"
                       >
                         Add
                       </button>
@@ -1246,7 +1246,7 @@ export default function ReturnsPage() {
       <AnimatePresence>
         {zoomImg && (
           <div 
-            className="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50 cursor-zoom-out"
+            className="fixed inset-0 bg-app-card/20 flex items-center justify-center p-4 z-50 cursor-zoom-out"
             onClick={() => setZoomImg(null)}
           >
             <motion.div 
@@ -1255,10 +1255,10 @@ export default function ReturnsPage() {
               exit={{ scale: 0.95, opacity: 0 }}
               className="relative max-w-3xl w-full"
             >
-              <img src={zoomImg} alt="Evidence high-res view" className="w-full h-auto rounded border border-slate-800 shadow-2xl" />
+              <img src={zoomImg} alt="Evidence high-res view" className="w-full h-auto rounded border border-app-border shadow-2xl" />
               <button 
                 onClick={() => setZoomImg(null)}
-                className="absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white hover:bg-black/80 transition-colors"
+                className="absolute top-4 right-4 p-2 rounded-full bg-app-card/20 text-app-text-primary hover:bg-app-card/80 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>

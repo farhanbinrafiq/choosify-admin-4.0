@@ -396,11 +396,11 @@ export default function OrdersOverview() {
   };
 
   return (
-    <div className="space-y-8 pb-20 text-sans text-white">
+    <div className="space-y-8 pb-20 text-sans text-app-text-primary">
       
       {/* Toast Alert Banner */}
       {activeLogMsg && (
-        <div className="fixed bottom-6 right-6 z-50 bg-slate-900 border border-emerald-500/30 text-emerald-400 px-6 py-4.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-bounce">
+        <div className="fixed bottom-6 right-6 z-50 bg-app-card border border-emerald-500/30 text-emerald-400 px-6 py-4.5 rounded-2xl shadow-2xl flex items-center gap-3 animate-bounce">
           <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
           <span className="text-xs font-bold leading-none">{activeLogMsg}</span>
         </div>
@@ -408,12 +408,12 @@ export default function OrdersOverview() {
 
       {/* Exporter Block Overlay */}
       {exportingType && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-app-card/20 backdrop-blur-xs">
           <div className="bg-app-card border border-app-border rounded-3xl p-8 w-full max-w-sm text-center space-y-4">
             <RefreshCw className="w-8 h-8 text-app-accent animate-spin mx-auto" />
-            <h4 className="text-sm font-black uppercase tracking-wider text-white">Generating Financial Report</h4>
-            <p className="text-xs text-slate-400">Packaging and formatting "{exportingType}" for encrypted administrator export. Please hold...</p>
-            <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+            <h4 className="text-sm font-black uppercase tracking-wider text-app-text-primary">Generating Financial Report</h4>
+            <p className="text-xs text-app-text-secondary">Packaging and formatting "{exportingType}" for encrypted administrator export. Please hold...</p>
+            <div className="w-full bg-app-bg h-2 rounded-full overflow-hidden">
               <div className="bg-gradient-to-r from-orange-500 to-app-accent h-full transition-all duration-300" style={{ width: `${exportProgress}%` }} />
             </div>
             <span className="text-[10px] text-slate-500 block font-mono">{exportProgress}% Completed</span>
@@ -428,7 +428,7 @@ export default function OrdersOverview() {
             <Sparkles className="w-3.5 h-3.5 text-app-accent animate-pulse" />
             <span className="text-[10px] font-black tracking-widest text-[#F4631E] uppercase">Marketplace Order Intelligence</span>
           </div>
-          <h1 className="text-2xl font-black text-white tracking-tight flex items-center gap-3">
+          <h1 className="text-2xl font-black text-app-text-primary tracking-tight flex items-center gap-3">
             📊 Marketplace Order Intelligence Center
           </h1>
           <p className="text-xs text-app-text-secondary max-w-3xl leading-relaxed">
@@ -440,14 +440,14 @@ export default function OrdersOverview() {
           {/* Compare dropdown selection */}
           <div className="flex items-center gap-2 bg-app-bg px-3 py-2 rounded-xl border border-app-border">
             <Clock className="w-3.5 h-3.5 text-slate-500" />
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Compare:</span>
+            <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Compare:</span>
             <select
               value={selectedComparison}
               onChange={(e) => {
                 setSelectedComparison(e.target.value as any);
                 showInlineToast(`Comparison timeline matched with ${e.target.value}`);
               }}
-              className="bg-transparent border-none text-xs text-white font-bold outline-none cursor-pointer focus:ring-0"
+              className="bg-transparent border-none text-xs text-app-text-primary font-bold outline-none cursor-pointer focus:ring-0"
             >
               <option value="Previous Period">Prev. Period</option>
               <option value="Last Month">Last Month</option>
@@ -463,7 +463,7 @@ export default function OrdersOverview() {
                   setTimeframe(t);
                   showInlineToast(`Timeline updated to ${t} based interval charts`);
                 }}
-                className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${timeframe === t ? 'bg-[#F4631E] text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all${timeframe === t ? 'bg-[#F4631E] text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
               >
                 {t}
               </button>
@@ -475,7 +475,7 @@ export default function OrdersOverview() {
       {/* SECTION 1 — EXECUTIVE KPI OVERVIEW */}
       <section id="sec-kpi-overview" className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+          <h2 className="text-xs font-black uppercase tracking-widest text-app-text-secondary flex items-center gap-2">
             <Sliders className="w-4 h-4 text-app-accent" /> SECTION 1 — Executive Key Performance Indicators
           </h2>
           <span className="text-[10px] text-slate-500">Live feed updated in real-time</span>
@@ -486,13 +486,13 @@ export default function OrdersOverview() {
           {/* KPI 1: Gross Marketplace Revenue */}
           <div className="bg-app-card border border-app-border rounded-[2rem] p-5.5 space-y-3 shadow-lg hover:border-app-accent/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Gross Marketplace Revenue</span>
+              <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Gross Marketplace Revenue</span>
               <div className="p-2.5 bg-white/5 border border-app-border rounded-xl">
                 <DollarSign className="w-4 h-4 text-emerald-400" />
               </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-black text-white">৳ {calculatedGrossRevenue.toLocaleString()}</div>
+              <div className="text-xl font-black text-app-text-primary">৳ {calculatedGrossRevenue.toLocaleString()}</div>
               <div className="flex items-center gap-1.5 text-[9.5px]">
                 <span className="text-emerald-500 font-extrabold flex items-center gap-0.5"><TrendingUp className="w-3 h-3" /> +16.4%</span>
                 <span className="text-slate-500">vs {selectedComparison}</span>
@@ -504,7 +504,7 @@ export default function OrdersOverview() {
           <div className="bg-app-card border border-app-border rounded-[2rem] p-5.5 space-y-3 shadow-lg hover:border-app-accent/40 transition-all">
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Net Marketplace (Fees)</span>
+                <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest block">Net Marketplace (Fees)</span>
                 <span className="text-[8px] text-slate-500">Deducted platform earnings</span>
               </div>
               <div className="p-2.5 bg-white/5 border border-app-border rounded-xl">
@@ -523,15 +523,15 @@ export default function OrdersOverview() {
           {/* KPI 3: Total Orders */}
           <div className="bg-app-card border border-app-border rounded-[2rem] p-5.5 space-y-3 shadow-lg hover:border-app-accent/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total Sourced Orders</span>
+              <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Total Sourced Orders</span>
               <div className="p-2.5 bg-white/5 border border-app-border rounded-xl">
                 <ShoppingBag className="w-4 h-4 text-blue-400" />
               </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-black text-white">{totalOrdersCount} <span className="text-xs text-slate-500 font-normal">items</span></div>
+              <div className="text-xl font-black text-app-text-primary">{totalOrdersCount} <span className="text-xs text-slate-500 font-normal">items</span></div>
               <div className="flex items-center gap-1.5 text-[9.5px]">
-                <span className="text-slate-400 font-bold">Accumulated platform transactions</span>
+                <span className="text-app-text-secondary font-bold">Accumulated platform transactions</span>
               </div>
             </div>
           </div>
@@ -539,7 +539,7 @@ export default function OrdersOverview() {
           {/* KPI 4: Active Volume */}
           <div className="bg-app-card border border-app-border rounded-[2rem] p-5.5 space-y-3 shadow-lg hover:border-app-accent/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Active Orders Processing</span>
+              <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Active Orders Processing</span>
               <div className="p-2.5 bg-white/5 border border-app-border rounded-xl">
                 <Clock className="w-4 h-4 text-amber-400 animate-pulse" />
               </div>
@@ -556,11 +556,11 @@ export default function OrdersOverview() {
           {/* KPI 5: Pending Orders Count */}
           <div className="bg-app-card border border-app-border rounded-[2rem] p-5.5 space-y-3 shadow-lg hover:border-app-accent/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Awaiting Approval</span>
+              <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Awaiting Approval</span>
               <span className="text-[9px] bg-amber-500/10 text-amber-500 px-2 py-0.5 rounded font-black">PENDING</span>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-black text-white">{pendingOrdersCount}</div>
+              <div className="text-xl font-black text-app-text-primary">{pendingOrdersCount}</div>
               <span className="text-[9px] text-[#F4631E] block font-bold">Needs Immediate Action</span>
             </div>
           </div>
@@ -568,7 +568,7 @@ export default function OrdersOverview() {
           {/* KPI 6: Delivered Orders */}
           <div className="bg-app-card border border-app-border rounded-[2rem] p-5.5 space-y-3 shadow-lg hover:border-app-accent/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Delivered and Closed</span>
+              <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Delivered and Closed</span>
               <span className="text-[9px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded font-black">SUCCESS</span>
             </div>
             <div className="space-y-1">
@@ -580,7 +580,7 @@ export default function OrdersOverview() {
           {/* KPI 7: Cancellations & Returns */}
           <div className="bg-app-card border border-app-border rounded-[2rem] p-5.5 space-y-3 shadow-lg hover:border-app-accent/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Cancelled & Returns</span>
+              <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Cancelled & Returns</span>
               <span className="text-[9px] bg-rose-500/10 text-rose-500 px-2 py-0.5 rounded font-black">LOSS</span>
             </div>
             <div className="space-y-1">
@@ -594,7 +594,7 @@ export default function OrdersOverview() {
           {/* KPI 8: Exchange & Other Orders */}
           <div className="bg-app-card border border-app-border rounded-[2rem] p-5.5 space-y-3 shadow-lg hover:border-app-accent/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Exchange / Other Orders</span>
+              <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Exchange / Other Orders</span>
               <span className="text-[9px] bg-purple-500/10 text-purple-400 px-2 py-0.5 rounded font-black">EXC</span>
             </div>
             <div className="space-y-1">
@@ -609,27 +609,27 @@ export default function OrdersOverview() {
           {/* KPI 9: Manual Orders (created from Unified Inbox) */}
           <div className="bg-app-card border border-app-border rounded-[2rem] p-5.5 space-y-3 shadow-lg hover:border-app-accent/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Manual Orders Inbox</span>
+              <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Manual Orders Inbox</span>
               <div className="p-2.5 bg-white/5 border border-app-border rounded-xl">
                 <MessageSquare className="w-4 h-4 text-emerald-400 animate-bounce" />
               </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-black text-white">{manualOrdersCount}</div>
-              <span className="text-[9.5px] text-slate-400 block font-bold">Created via Unified Chat Inboxes</span>
+              <div className="text-xl font-black text-app-text-primary">{manualOrdersCount}</div>
+              <span className="text-[9.5px] text-app-text-secondary block font-bold">Created via Unified Chat Inboxes</span>
             </div>
           </div>
 
           {/* KPI 10: Average Order Value (AOV) */}
           <div className="bg-app-card border border-app-border rounded-[2rem] p-5.5 space-y-3 shadow-lg hover:border-app-accent/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Average Order Value (AOV)</span>
+              <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Average Order Value (AOV)</span>
               <div className="p-2.5 bg-white/5 border border-app-border rounded-xl">
                 <Sliders className="w-4 h-4 text-purple-400" />
               </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-black text-white">৳ {averageOrderValue.toFixed(0)}</div>
+              <div className="text-xl font-black text-app-text-primary">৳ {averageOrderValue.toFixed(0)}</div>
               <span className="text-[9.5px] text-emerald-400 flex items-center gap-0.5 leading-none font-bold">
                 <TrendingUp className="w-3 h-3" /> +4.2% higher basket size
               </span>
@@ -639,21 +639,21 @@ export default function OrdersOverview() {
           {/* KPI 11: Average Delivery & Fulfillment Time */}
           <div className="bg-app-card border border-app-border rounded-[2rem] p-5.5 space-y-3 shadow-lg hover:border-app-accent/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Avg Delivery & Fulfillment</span>
+              <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Avg Delivery & Fulfillment</span>
               <div className="p-2.5 bg-white/5 border border-app-border rounded-xl">
                 <Truck className="w-4 h-4 text-sky-400" />
               </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-black text-white">32.4 <span className="text-xs uppercase font-black text-[#F4631E]">Hrs</span></div>
-              <span className="text-[9.5px] text-slate-400 block font-bold">Processing dispatch: 14.2 Hours</span>
+              <div className="text-xl font-black text-app-text-primary">32.4 <span className="text-xs uppercase font-black text-[#F4631E]">Hrs</span></div>
+              <span className="text-[9.5px] text-app-text-secondary block font-bold">Processing dispatch: 14.2 Hours</span>
             </div>
           </div>
 
           {/* KPI 12: Pending Seller Settlements */}
           <div className="bg-app-card border border-app-border rounded-[2rem] p-5.5 space-y-3 shadow-lg hover:border-app-accent/40 transition-all">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Pending Merchant Settlements</span>
+              <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Pending Merchant Settlements</span>
               <div className="p-2.5 bg-white/5 border border-app-border rounded-xl">
                 <Landmark className="w-4 h-4 text-[#F4631E]" />
               </div>
@@ -671,10 +671,10 @@ export default function OrdersOverview() {
       <section id="sec-lifecycle" className="bg-app-card border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-app-border/40">
           <div>
-            <h3 className="text-md font-black text-white flex items-center gap-2">
+            <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
               <Activity className="w-5 h-5 text-indigo-400 animate-pulse" /> SECTION 2 — Complete Marketplace Order Lifecycle
             </h3>
-            <p className="text-xs text-slate-400">Visual mapping of active customer orders, stage-by-stage conversions, and operational dispatch bottlenecks.</p>
+            <p className="text-xs text-app-text-secondary">Visual mapping of active customer orders, stage-by-stage conversions, and operational dispatch bottlenecks.</p>
           </div>
           <Link
             to="/admin/orders"
@@ -701,7 +701,7 @@ export default function OrdersOverview() {
             { tag: 'Manual O.', count: manualOrdersCount, t: '3.5 hrs', conv: '100%', color: 'border-teal-500/20 text-teal-400 bg-teal-500/5', status: 'Direct' },
             { tag: 'Other O.', count: otherOrdersCount, t: '1.2 hrs', conv: '100%', color: 'border-slate-500/20 text-slate-400 bg-slate-500/5', status: 'Organic' },
           ].map((stage, sIdx) => (
-            <div key={sIdx} className={`border rounded-2xl p-3 text-center ${stage.color} space-y-1 relative`}>
+            <div key={sIdx} className={`border rounded-2xl p-3 text-center${stage.color}space-y-1 relative`}>
               {stage.alert && (
                 <span className="absolute -top-1 -right-1 flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
@@ -711,7 +711,7 @@ export default function OrdersOverview() {
               <div className="text-[9px] font-black uppercase tracking-wider truncate">{stage.tag}</div>
               <div className="text-lg font-black">{stage.count}</div>
               <div className="text-[8px] opacity-70">Avg: {stage.t}</div>
-              <div className="text-[8px] font-mono opacity-80 border-t border-white/5 pt-1 uppercase">
+              <div className="text-[8px] font-mono opacity-80 border-t border-app-border pt-1 uppercase">
                 {stage.alert ? '⚠️ STUCK' : stage.status}
               </div>
             </div>
@@ -727,7 +727,7 @@ export default function OrdersOverview() {
             </div>
             <div>
               <span className="text-[9px] text-[#F4631E] font-black uppercase block">Operational Alert: Bottleneck Identified</span>
-              <p className="text-[11px] text-slate-400 mt-0.5">There are currently 2 orders stuck in "In Transit" status for more than 48 hours. SteatFast logistics has flagged delays at outer districts.</p>
+              <p className="text-[11px] text-app-text-secondary mt-0.5">There are currently 2 orders stuck in "In Transit" status for more than 48 hours. SteatFast logistics has flagged delays at outer districts.</p>
             </div>
           </div>
           <Link 
@@ -743,10 +743,10 @@ export default function OrdersOverview() {
       <section id="sec-revenue" className="bg-app-card border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-app-border/40">
           <div>
-            <h3 className="text-md font-black text-white flex items-center gap-2">
+            <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
               <BarChart3 className="w-5 h-5 text-emerald-400" /> SECTION 3 — Revenue Analytics & Dynamic Forecast Progression
             </h3>
-            <p className="text-xs text-slate-400">Detailed transaction analysis split between Gross revenue, Platform commissions, and Seller settlements over selected period.</p>
+            <p className="text-xs text-app-text-secondary">Detailed transaction analysis split between Gross revenue, Platform commissions, and Seller settlements over selected period.</p>
           </div>
 
           {/* Toggle buttons for chart styles */}
@@ -755,7 +755,7 @@ export default function OrdersOverview() {
               <button
                 key={style}
                 onClick={() => setActiveRevenueChart(style)}
-                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${activeRevenueChart === style ? 'bg-app-accent text-white' : 'text-slate-400 hover:text-white'}`}
+                className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all${activeRevenueChart === style ? 'bg-app-accent text-white' : 'text-slate-400 hover:text-white'}`}
               >
                 {style} Chart
               </button>
@@ -765,30 +765,30 @@ export default function OrdersOverview() {
 
         {/* Revenue Metrics Breakdown cards */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3.5 pt-2">
-          <div className="bg-white/[0.01] border border-white/5 rounded-xl p-3.5 text-center">
-            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest block">Gross Volume</span>
-            <span className="text-sm font-black text-white">৳ {calculatedGrossRevenue.toLocaleString()}</span>
+          <div className="bg-white/[0.01] border border-app-border rounded-xl p-3.5 text-center">
+            <span className="text-[8.5px] font-bold text-app-text-secondary uppercase tracking-widest block">Gross Volume</span>
+            <span className="text-sm font-black text-app-text-primary">৳ {calculatedGrossRevenue.toLocaleString()}</span>
           </div>
-          <div className="bg-white/[0.01] border border-white/5 rounded-xl p-3.5 text-center">
-            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest block">Seller Payouts</span>
+          <div className="bg-white/[0.01] border border-app-border rounded-xl p-3.5 text-center">
+            <span className="text-[8.5px] font-bold text-app-text-secondary uppercase tracking-widest block">Seller Payouts</span>
             <span className="text-sm font-black text-blue-400">৳ {sellerPayoutsLedgerVal.toLocaleString()}</span>
           </div>
-          <div className="bg-white/[0.01] border border-white/5 rounded-xl p-3.5 text-center">
-            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest block">Commission Received</span>
+          <div className="bg-white/[0.01] border border-app-border rounded-xl p-3.5 text-center">
+            <span className="text-[8.5px] font-bold text-app-text-secondary uppercase tracking-widest block">Commission Received</span>
             <span className="text-sm font-black text-emerald-400">৳ {totalCommissionRevenue.toLocaleString()}</span>
           </div>
-          <div className="bg-white/[0.01] border border-white/5 rounded-xl p-3.5 text-center">
-            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest block">Refund Amount (Est)</span>
+          <div className="bg-white/[0.01] border border-app-border rounded-xl p-3.5 text-center">
+            <span className="text-[8.5px] font-bold text-app-text-secondary uppercase tracking-widest block">Refund Amount (Est)</span>
             <span className="text-sm font-black text-rose-400">৳ {(orders.filter(o => o.status === 'Cancelled').length * 2100).toLocaleString()}</span>
           </div>
-          <div className="bg-white/[0.01] border border-white/5 rounded-xl p-3.5 text-center">
-            <span className="text-[8.5px] font-bold text-slate-400 uppercase tracking-widest block">Exchange Cost (Est)</span>
+          <div className="bg-white/[0.01] border border-app-border rounded-xl p-3.5 text-center">
+            <span className="text-[8.5px] font-bold text-app-text-secondary uppercase tracking-widest block">Exchange Cost (Est)</span>
             <span className="text-sm font-black text-purple-400">৳ {(exchangeOrdersCount * 800).toLocaleString()}</span>
           </div>
         </div>
 
         {/* Recharts Chart Plotting Area */}
-        <div className="h-80 w-full bg-slate-950/20 rounded-3xl p-4 border border-app-border/40">
+        <div className="h-80 w-full bg-app-bg/10 rounded-3xl p-4 border border-app-border/40">
           <ResponsiveContainer width="100%" height="100%">
             {activeRevenueChart === 'Area' ? (
               <AreaChart data={getChartDataset()} margin={{ top: 15, right: 10, left: -10, bottom: 0 }}>
@@ -839,12 +839,12 @@ export default function OrdersOverview() {
 
       {/* SECTION 4 — COMMISSION & SETTLEMENT CENTER */}
       <section id="sec-commission" className="bg-gradient-to-r from-slate-900 to-slate-950 border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-white/5">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-app-border">
           <div className="space-y-1">
-            <h3 className="text-base font-black text-white flex items-center gap-2">
+            <h3 className="text-base font-black text-app-text-primary flex items-center gap-2">
               <Landmark className="w-5 h-5 text-[#F4631E]" /> SECTION 4 — Commission Split & Settlement Dispatch Center
             </h3>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-app-text-secondary">
               Manage default platform commission, view upcoming dispatch schedule, override frozen payouts, and authorize direct clearances.
             </p>
           </div>
@@ -860,51 +860,51 @@ export default function OrdersOverview() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           
           {/* Default commission and split summary card */}
-          <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 space-y-3">
+          <div className="bg-white/[0.02] border border-app-border rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <Percent className="w-4 h-4 text-emerald-400" />
-              <span className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Commission Settings</span>
+              <span className="text-[10px] font-black text-app-text-secondary uppercase tracking-wider">Commission Settings</span>
             </div>
             <div className="space-y-1">
               <span className="text-[8.5px] text-slate-500 uppercase block">Flat Default Platform Fee</span>
-              <div className="text-lg font-black text-white">10% per Settlement</div>
+              <div className="text-lg font-black text-app-text-primary">10% per Settlement</div>
               <span className="text-[9px] text-[#F4631E] block font-bold mt-2">Active Rules: Premium Brand override active for selected VIP sellers (12%)</span>
             </div>
           </div>
 
-          <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 space-y-3">
+          <div className="bg-white/[0.02] border border-app-border rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <DollarSign className="w-4 h-4 text-sky-400" />
-              <span className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Settlement dispatch Summary</span>
+              <span className="text-[10px] font-black text-app-text-secondary uppercase tracking-wider">Settlement dispatch Summary</span>
             </div>
             <div className="space-y-1">
               <span className="text-[8.5px] text-slate-500 uppercase block">Next Disbursement Run</span>
-              <div className="text-lg font-black text-white">June 25, 2026</div>
+              <div className="text-lg font-black text-app-text-primary">June 25, 2026</div>
               <span className="text-[10px] text-emerald-400 block font-bold">Status: Ready, All Exceptions Validated</span>
             </div>
           </div>
 
-          <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 space-y-3">
+          <div className="bg-white/[0.02] border border-app-border rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-400 animate-pulse" />
-              <span className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Frozen / Exceptions</span>
+              <span className="text-[10px] font-black text-app-text-secondary uppercase tracking-wider">Frozen / Exceptions</span>
             </div>
             <div className="space-y-1">
               <span className="text-[8.5px] text-slate-500 uppercase block">Withheld / Blocked Settlements</span>
               <div className="text-lg font-black text-rose-500">৳ 12,400</div>
-              <span className="text-[9.5px] text-slate-400 block font-bold">1 Merchant flagged under open claim dispute</span>
+              <span className="text-[9.5px] text-app-text-secondary block font-bold">1 Merchant flagged under open claim dispute</span>
             </div>
           </div>
 
-          <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 space-y-3">
+          <div className="bg-white/[0.02] border border-app-border rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span className="text-[10px] font-black text-slate-300 uppercase tracking-wider">Authorized cleared payouts</span>
+              <span className="text-[10px] font-black text-app-text-secondary uppercase tracking-wider">Authorized cleared payouts</span>
             </div>
             <div className="space-y-1">
               <span className="text-[8.5px] text-slate-500 uppercase block">Commission Transferred cleared</span>
               <div className="text-lg font-black text-emerald-400">৳ {(totalCommissionRevenue * 0.8).toFixed(0).toLocaleString()}</div>
-              <span className="text-[10px] text-slate-400 block">Bank cleared and reconciliation audited</span>
+              <span className="text-[10px] text-app-text-secondary block">Bank cleared and reconciliation audited</span>
             </div>
           </div>
 
@@ -915,15 +915,15 @@ export default function OrdersOverview() {
       <section id="sec-seller-intelligence" className="bg-app-card border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h3 className="text-md font-black text-white flex items-center gap-2">
+            <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
               <Users className="w-5 h-5 text-indigo-400" /> SECTION 5 — Merchant Brand Performance Rankings
             </h3>
-            <p className="text-xs text-slate-400">Marketplace-wide rankings of seller actions, cancellation ratios, return percentages, and net commission split values.</p>
+            <p className="text-xs text-app-text-secondary">Marketplace-wide rankings of seller actions, cancellation ratios, return percentages, and net commission split values.</p>
           </div>
           
           <button 
             onClick={() => handleTriggerExport('Merchant Performance Rankings')}
-            className="px-3.5 py-1.5 bg-white/5 border border-app-border hover:bg-[#F4631E] hover:text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all text-slate-300 cursor-pointer"
+            className="px-3.5 py-1.5 bg-white/5 border border-app-border hover:bg-[#F4631E] hover:text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all text-app-text-secondary cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" /> Export Seller Rankings
           </button>
@@ -932,7 +932,7 @@ export default function OrdersOverview() {
         <div className="overflow-x-auto border border-app-border rounded-2xl custom-scrollbar">
           <table className="w-full text-left text-xs min-w-[1200px]">
             <thead>
-              <tr className="bg-app-bg border-b border-app-border text-slate-400 text-[9.5px] font-black uppercase tracking-widest">
+              <tr className="bg-app-bg border-b border-app-border text-app-text-secondary text-[9.5px] font-black uppercase tracking-widest">
                 <th className="p-4">Seller Merchant</th>
                 <th className="p-4">Associated Brand</th>
                 <th className="p-4 text-center">Placed Orders</th>
@@ -953,7 +953,7 @@ export default function OrdersOverview() {
               {sellerRankings.map((s, idx) => (
                 <tr key={idx} className="hover:bg-white/[0.01]">
                   <td className="p-4">
-                    <span className="font-extrabold text-white text-[11px] block">{s.name}</span>
+                    <span className="font-extrabold text-app-text-primary text-[11px] block">{s.name}</span>
                     <span className="text-[8.5px] text-slate-500 uppercase tracking-widest font-mono">UID: SEL-{1024 + idx}</span>
                   </td>
                   <td className="p-4">
@@ -964,10 +964,10 @@ export default function OrdersOverview() {
                       🏷️ {s.brand} <ArrowUpRight className="w-3 h-3" />
                     </Link>
                   </td>
-                  <td className="p-4 text-center font-mono font-bold text-white">{s.orders}</td>
-                  <td className="p-4 text-right font-bold text-white">৳ {s.revenue.toLocaleString()}</td>
+                  <td className="p-4 text-center font-mono font-bold text-app-text-primary">{s.orders}</td>
+                  <td className="p-4 text-right font-bold text-app-text-primary">৳ {s.revenue.toLocaleString()}</td>
                   <td className="p-4 text-center">
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded ${
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded${
                       s.fulfillmentRate >= 80 ? 'text-emerald-500 bg-emerald-500/10' : 'text-amber-500 bg-amber-500/10'
                     }`}>
                       {s.fulfillmentRate.toFixed(0)}%
@@ -975,12 +975,12 @@ export default function OrdersOverview() {
                   </td>
                   <td className="p-4 text-center font-semibold text-rose-500">{s.cancellationRate.toFixed(0)}%</td>
                   <td className="p-4 text-center font-semibold text-purple-400">{s.returnRate.toFixed(0)}%</td>
-                  <td className="p-4 text-center text-slate-400">{s.exchangeRate.toFixed(0)}%</td>
-                  <td className="p-4 text-center text-slate-300 font-medium">{s.avgDeliveryTime}</td>
+                  <td className="p-4 text-center text-app-text-secondary">{s.exchangeRate.toFixed(0)}%</td>
+                  <td className="p-4 text-center text-app-text-secondary font-medium">{s.avgDeliveryTime}</td>
                   <td className="p-4 text-center text-amber-400 font-bold">⭐ {s.avgRating}</td>
-                  <td className="p-4 text-center font-mono text-white font-bold">{s.trustScore}%</td>
+                  <td className="p-4 text-center font-mono text-app-text-primary font-bold">{s.trustScore}%</td>
                   <td className="p-4 text-center">
-                    <span className={`text-[9.5px] font-extrabold px-2 py-0.5 rounded ${
+                    <span className={`text-[9.5px] font-extrabold px-2 py-0.5 rounded${
                       s.trustScore > 90 ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'
                     }`}>
                       {s.riskGrade}
@@ -1006,10 +1006,10 @@ export default function OrdersOverview() {
         <div className="xl:col-span-2 bg-app-card border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-app-border/40">
             <div>
-              <h3 className="text-md font-black text-white flex items-center gap-2">
+              <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
                 <ShoppingBag className="w-5 h-5 text-emerald-400" /> SECTION 6 — Marketplace Product Performance Analytics
               </h3>
-              <p className="text-xs text-slate-400">Evaluate top selling SKUs, products receiving cancellation complaints, and returned inventory item details.</p>
+              <p className="text-xs text-app-text-secondary">Evaluate top selling SKUs, products receiving cancellation complaints, and returned inventory item details.</p>
             </div>
 
             {/* Sub filter tabs */}
@@ -1018,7 +1018,7 @@ export default function OrdersOverview() {
                 <button
                   key={tabKey}
                   onClick={() => setProductFilterTab(tabKey)}
-                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${productFilterTab === tabKey ? 'bg-app-accent text-white' : 'text-slate-400 hover:text-white'}`}
+                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all${productFilterTab === tabKey ? 'bg-app-accent text-white' : 'text-slate-400 hover:text-white'}`}
                 >
                   {tabKey === 'Revenue' ? '🏆 Top Revenue' : tabKey === 'Units' ? '📦 Top Units' : tabKey === 'Returns' ? '↩️ Returned' : '🚨 Complained'}
                 </button>
@@ -1030,7 +1030,7 @@ export default function OrdersOverview() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-app-bg border-b border-app-border text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                <tr className="bg-app-bg border-b border-app-border text-app-text-secondary text-[10px] font-bold uppercase tracking-widest">
                   <th className="p-3">Product Name & Identifier</th>
                   <th className="p-3 text-center">Brand / Label</th>
                   <th className="p-3 text-center">Units Sold</th>
@@ -1043,18 +1043,18 @@ export default function OrdersOverview() {
                 {productPerformanceList.map((prod, idx) => (
                   <tr key={idx} className="hover:bg-white/[0.01]">
                     <td className="p-3">
-                      <div className="font-extrabold text-white text-[11px] truncate max-w-[280px]" title={prod.name}>
+                      <div className="font-extrabold text-app-text-primary text-[11px] truncate max-w-[280px]" title={prod.name}>
                         {prod.name}
                       </div>
                       <div className="text-[9px] text-slate-500 font-mono">SKU-{prod.id.slice(0, 10).toUpperCase()}</div>
                     </td>
-                    <td className="p-3 text-center font-bold text-slate-300">
+                    <td className="p-3 text-center font-bold text-app-text-secondary">
                       🏷️ {prod.brand}
                     </td>
-                    <td className="p-3 text-center font-bold text-white pr-4">{prod.unitsSold} units</td>
+                    <td className="p-3 text-center font-bold text-app-text-primary pr-4">{prod.unitsSold} units</td>
                     <td className="p-3 text-right font-semibold text-emerald-400">৳ {prod.commission.toLocaleString()}</td>
                     <td className="p-3 text-center">
-                      <span className="text-[9px] px-2 py-0.5 rounded bg-white/5 border border-app-border text-slate-300 uppercase font-black tracking-wider">
+                      <span className="text-[9px] px-2 py-0.5 rounded bg-white/5 border border-app-border text-app-text-secondary uppercase font-black tracking-wider">
                         {prod.category}
                       </span>
                     </td>
@@ -1070,15 +1070,15 @@ export default function OrdersOverview() {
         <div className="bg-app-card border border-app-border rounded-[2.5rem] p-8 shadow-2xl flex flex-col justify-between">
           <div className="space-y-6">
             <div>
-              <h3 className="text-md font-black text-white">Marketplace Quality Monitor</h3>
+              <h3 className="text-md font-black text-app-text-primary">Marketplace Quality Monitor</h3>
               <p className="text-xs text-slate-500">Live summary of lowest performing listings and defective cargo returns.</p>
             </div>
 
             <div className="space-y-4">
               <div className="bg-rose-500/5 border border-rose-500/20 rounded-2xl p-4 space-y-2">
                 <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest block">Highest Return Ratio SKU</span>
-                <p className="text-xs font-bold text-white">Classic Comfort Oxford Shoes</p>
-                <div className="flex justify-between text-[10px] text-slate-400 border-t border-rose-500/10 pt-2 mt-1">
+                <p className="text-xs font-bold text-app-text-primary">Classic Comfort Oxford Shoes</p>
+                <div className="flex justify-between text-[10px] text-app-text-secondary border-t border-rose-500/10 pt-2 mt-1">
                   <span>Defect Claim: Size mismatch</span>
                   <span className="text-rose-400 font-bold">18.4% Return Rate</span>
                 </div>
@@ -1086,8 +1086,8 @@ export default function OrdersOverview() {
 
               <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-4 space-y-2">
                 <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest block">Highest Complaint SKU</span>
-                <p className="text-xs font-bold text-white">Premium Leather Card Holder</p>
-                <div className="flex justify-between text-[10px] text-slate-400 border-t border-amber-500/10 pt-2 mt-1">
+                <p className="text-xs font-bold text-app-text-primary">Premium Leather Card Holder</p>
+                <div className="flex justify-between text-[10px] text-app-text-secondary border-t border-amber-500/10 pt-2 mt-1">
                   <span>Complaint Type: Stitching finish</span>
                   <span className="text-amber-400 font-bold">2 major reports</span>
                 </div>
@@ -1098,7 +1098,7 @@ export default function OrdersOverview() {
           <div className="pt-6 border-t border-app-border mt-6">
             <button 
               onClick={() => handleTriggerExport('Product Conversion & Integrity Ledger')}
-              className="w-full text-center py-3 bg-white/5 border border-app-border hover:bg-white/10 rounded-xl text-xs font-bold text-white flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              className="w-full text-center py-3 bg-white/5 border border-app-border hover:bg-white/10 rounded-xl text-xs font-bold text-app-text-primary flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
               <FileSpreadsheet className="w-4 h-4 text-emerald-400" /> Export Inventory Performance Report
             </button>
@@ -1110,7 +1110,7 @@ export default function OrdersOverview() {
       <section id="sec-customer-intelligence" className="bg-app-card border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h3 className="text-md font-black text-white flex items-center gap-2">
+            <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
               <UserCheck className="w-5 h-5 text-emerald-400" /> SECTION 7 — Customer Intelligence & Behavior Center
             </h3>
             <p className="text-xs text-[#8E9BAE]">
@@ -1127,7 +1127,7 @@ export default function OrdersOverview() {
                 placeholder="Search customers..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 pr-4 py-2 bg-app-bg border border-app-border rounded-xl text-xs text-white outline-none placeholder:text-slate-500 font-medium"
+                className="pl-9 pr-4 py-2 bg-app-bg border border-app-border rounded-xl text-xs text-app-text-primary outline-none placeholder:text-slate-500 font-medium"
               />
             </div>
 
@@ -1136,7 +1136,7 @@ export default function OrdersOverview() {
                 <button
                   key={tabKey}
                   onClick={() => setCustomerFilterTab(tabKey)}
-                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${customerFilterTab === tabKey ? 'bg-app-accent text-white' : 'text-slate-400 hover:text-white'}`}
+                  className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all${customerFilterTab === tabKey ? 'bg-app-accent text-white' : 'text-slate-400 hover:text-white'}`}
                 >
                   {tabKey === 'All' ? '👥 All Users' : tabKey === 'VIP' ? '💎 VIPs' : tabKey === 'Repeat' ? '🔄 Repeat' : tabKey === 'New' ? '✨ New' : '🚩 High-Risk'}
                 </button>
@@ -1149,7 +1149,7 @@ export default function OrdersOverview() {
         <div className="overflow-x-auto border border-app-border rounded-2xl custom-scrollbar">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="bg-app-bg border-b border-app-border text-slate-400 text-[10px] font-black uppercase tracking-widest">
+              <tr className="bg-app-bg border-b border-app-border text-app-text-secondary text-[10px] font-black uppercase tracking-widest">
                 <th className="p-4">Customer Identity</th>
                 <th className="p-4 text-center">Orders Placed</th>
                 <th className="p-4 text-center">Delivered Successful</th>
@@ -1166,7 +1166,7 @@ export default function OrdersOverview() {
               {filteredCustomerIntelligence.map((c, idx) => (
                 <tr key={idx} className="hover:bg-white/[0.01]">
                   <td className="p-4 gap-3 flex items-center">
-                    <div className="w-8 h-8 rounded-full bg-slate-900 border border-white/10 flex items-center justify-center text-[10px] font-bold text-white shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-app-card border border-app-border flex items-center justify-center text-[10px] font-bold text-app-text-primary shrink-0">
                       {c.avatar}
                     </div>
                     <div>
@@ -1177,18 +1177,18 @@ export default function OrdersOverview() {
                           </Link>
                         </div>
                       ) : (
-                        <div className="font-bold text-white text-[11px]">{c.name}</div>
+                        <div className="font-bold text-app-text-primary text-[11px]">{c.name}</div>
                       )}
                       <div className="text-[9px] text-slate-500">{c.email}</div>
                     </div>
                   </td>
-                  <td className="p-4 text-center font-mono font-bold text-white">{c.stats.placed}</td>
+                  <td className="p-4 text-center font-mono font-bold text-app-text-primary">{c.stats.placed}</td>
                   <td className="p-4 text-center font-mono font-bold text-emerald-400">{c.stats.completed}</td>
                   <td className="p-4 text-center font-mono font-bold text-rose-400">{c.stats.cancelled}</td>
-                  <td className="p-4 text-right font-extrabold text-white font-mono">৳ {c.stats.totalSpent.toLocaleString()}</td>
-                  <td className="p-4 text-center font-medium text-slate-300">Bi-weekly</td>
+                  <td className="p-4 text-right font-extrabold text-app-text-primary font-mono">৳ {c.stats.totalSpent.toLocaleString()}</td>
+                  <td className="p-4 text-center font-medium text-app-text-secondary">Bi-weekly</td>
                   <td className="p-4 text-center">
-                    <span className={`text-[9.5px] font-black px-2 py-0.5 rounded border ${
+                    <span className={`text-[9.5px] font-black px-2 py-0.5 rounded border${
                       c.computedBehavior === 'Good' 
                         ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' 
                         : c.computedBehavior === 'Risk' 
@@ -1202,7 +1202,7 @@ export default function OrdersOverview() {
                     🟢 OTP Verified
                   </td>
                   <td className="p-4 text-center">
-                    <span className={`text-[8.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded inline-flex items-center gap-1 ${
+                    <span className={`text-[8.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded inline-flex items-center gap-1${
                       c.flagged ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
                     }`}>
                       {c.flagged ? '🚩 restricted' : '🟢 unrestricted'}
@@ -1212,7 +1212,7 @@ export default function OrdersOverview() {
                     <div className="flex justify-center gap-1.5">
                       <button
                         onClick={() => startFlagging(c)}
-                        className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-lg transition-all ${
+                        className={`text-[9px] font-black uppercase tracking-wider px-2.5 py-1.5 rounded-lg transition-all${
                           c.flagged 
                             ? 'bg-white/5 border border-slate-700 text-slate-300 hover:bg-white/10' 
                             : 'bg-rose-600/20 border border-rose-500 text-rose-400 hover:bg-rose-500 hover:text-white cursor-pointer'
@@ -1232,10 +1232,10 @@ export default function OrdersOverview() {
       {/* SECTION 8 — ORDER SOURCE ANALYTICS */}
       <section id="sec-source-analytics" className="bg-app-card border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
         <div>
-          <h3 className="text-md font-black text-white flex items-center gap-2">
+          <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
             <Sliders className="w-5 h-5 text-cyan-400" /> SECTION 8 — Order Source Gateway Analytics
           </h3>
-          <p className="text-xs text-slate-400">Breakdown of orders processed through direct Web checkout vs manual administrator recordings across inboxes.</p>
+          <p className="text-xs text-app-text-secondary">Breakdown of orders processed through direct Web checkout vs manual administrator recordings across inboxes.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -1244,12 +1244,12 @@ export default function OrdersOverview() {
             return (
               <div key={sIdx} className="bg-white/[0.01] border border-app-border rounded-2xl p-5 space-y-3 relative group hover:border-[#F4631E]/40 transition-all">
                 <span className="text-[8.5px] font-black text-slate-500 uppercase tracking-widest block">{src.code} GATEWAY</span>
-                <h4 className="text-xs font-black text-white truncate">{src.name}</h4>
+                <h4 className="text-xs font-black text-app-text-primary truncate">{src.name}</h4>
                 <div className="space-y-1">
-                  <div className="text-lg font-black text-white">{src.count} <span className="text-xs font-normal text-slate-500">Orders</span></div>
+                  <div className="text-lg font-black text-app-text-primary">{src.count} <span className="text-xs font-normal text-slate-500">Orders</span></div>
                   <div className="text-xs text-emerald-400 font-bold">৳ {src.revenue.toLocaleString()}</div>
                 </div>
-                <div className="border-t border-white/5 pt-2 text-[9px] text-slate-500 flex justify-between">
+                <div className="border-t border-app-border pt-2 text-[9px] text-slate-500 flex justify-between">
                   <span>Conversion: {src.conversion}</span>
                   <span className="text-app-accent-light font-bold">Share: {countRate.toFixed(0)}%</span>
                 </div>
@@ -1263,22 +1263,22 @@ export default function OrdersOverview() {
       <section id="sec-logistics" className="bg-app-card border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h3 className="text-md font-black text-white flex items-center gap-2">
+            <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
               <Truck className="w-5 h-5 text-sky-400 animate-bounce" /> SECTION 9 — Logistics & Delivery Performance Hub
             </h3>
-            <p className="text-xs text-slate-400">Monitor selected third party regional couriers, dispatch success rates, and customer fulfillment quality rankings.</p>
+            <p className="text-xs text-app-text-secondary">Monitor selected third party regional couriers, dispatch success rates, and customer fulfillment quality rankings.</p>
           </div>
 
           <div className="flex bg-app-bg p-1 rounded-xl border border-app-border gap-1 self-start">
             <button
               onClick={() => setLogisticsViewMode('Summary')}
-              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${logisticsViewMode === 'Summary' ? 'bg-[#F4631E] text-white' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all${logisticsViewMode === 'Summary' ? 'bg-[#F4631E] text-white' : 'text-slate-400 hover:text-white'}`}
             >
               Logistics Overview
             </button>
             <button
               onClick={() => setLogisticsViewMode('CourierComparison')}
-              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${logisticsViewMode === 'CourierComparison' ? 'bg-[#F4631E] text-white' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all${logisticsViewMode === 'CourierComparison' ? 'bg-[#F4631E] text-white' : 'text-slate-400 hover:text-white'}`}
             >
               Compare Couriers
             </button>
@@ -1288,17 +1288,17 @@ export default function OrdersOverview() {
         {logisticsViewMode === 'Summary' ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="bg-white/[0.01] border border-app-border rounded-2xl p-5 space-y-3">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Average Shipment Speed</span>
+              <span className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Average Shipment Speed</span>
               <div className="text-2xl font-black text-emerald-400">32.4 Hours</div>
               <p className="text-[10px] text-slate-500">From payment clearance and seller packaging handover to real physical handover.</p>
             </div>
             <div className="bg-white/[0.01] border border-app-border rounded-2xl p-5 space-y-3">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Success Delivery fulfillment</span>
-              <div className="text-2xl font-black text-white">96.2% Rate</div>
+              <span className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Success Delivery fulfillment</span>
+              <div className="text-2xl font-black text-app-text-primary">96.2% Rate</div>
               <p className="text-[10px] text-slate-500">Only 4 orders returned due to region inaccessible/customer unreachable.</p>
             </div>
             <div className="bg-white/[0.01] border border-app-border rounded-2xl p-5 space-y-3">
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Dispatched Outwards Queue</span>
+              <span className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Dispatched Outwards Queue</span>
               <div className="text-2xl font-black text-[#F4631E]">{dispatchOrdersCount} En-route</div>
               <p className="text-[10px] text-slate-500">Actively logged under API transit codes in Pathao or SteadFast panels.</p>
             </div>
@@ -1307,7 +1307,7 @@ export default function OrdersOverview() {
           <div className="overflow-x-auto border border-app-border rounded-2xl">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="bg-app-bg border-b border-app-border text-slate-400 text-[10px] font-black uppercase tracking-widest">
+                <tr className="bg-app-bg border-b border-app-border text-app-text-secondary text-[10px] font-black uppercase tracking-widest">
                   <th className="p-4">Courier Name</th>
                   <th className="p-4 text-center">Handled Orders</th>
                   <th className="p-4 text-center">Avg Delivery Speed</th>
@@ -1321,11 +1321,11 @@ export default function OrdersOverview() {
               <tbody className="divide-y divide-app-border/40">
                 {courierPerformanceList.map((cor, idx) => (
                   <tr key={idx} className="hover:bg-white/[0.01]">
-                    <td className="p-4 font-extrabold text-white flex items-center gap-2">
+                    <td className="p-4 font-extrabold text-app-text-primary flex items-center gap-2">
                        🚀 {cor.name}
                     </td>
-                    <td className="p-4 text-center font-bold text-white">{cor.orders}</td>
-                    <td className="p-4 text-center text-slate-300">{cor.avgTime}</td>
+                    <td className="p-4 text-center font-bold text-app-text-primary">{cor.orders}</td>
+                    <td className="p-4 text-center text-app-text-secondary">{cor.avgTime}</td>
                     <td className="p-4 text-center font-semibold text-rose-400">{cor.late}</td>
                     <td className="p-4 text-center text-rose-500 font-bold">{cor.failed}</td>
                     <td className="p-4 text-center text-purple-400 font-mono">{cor.returns}%</td>
@@ -1342,16 +1342,16 @@ export default function OrdersOverview() {
       {/* SECTION 10 — DISPUTES & COMPLAINT ANALYTICS */}
       <section id="sec-disputes" className="bg-app-card border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
         <div>
-          <h3 className="text-md font-black text-white flex items-center gap-2">
+          <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
             <Scale className="w-5 h-5 text-rose-500" /> SECTION 10 — Disputes, Chargebacks & Complaints Analytics
           </h3>
-          <p className="text-xs text-slate-400">Track outstanding complaint logs, unresolved chargeback cases, and refund clearance actions from customers.</p>
+          <p className="text-xs text-app-text-secondary">Track outstanding complaint logs, unresolved chargeback cases, and refund clearance actions from customers.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-rose-950/10 border border-rose-500/30 rounded-2xl p-5 space-y-2">
             <span className="text-[9px] font-black text-rose-400 uppercase tracking-widest block">Open Dispute Cases</span>
-            <div className="text-2xl font-black text-white">2 Active Claims</div>
+            <div className="text-2xl font-black text-app-text-primary">2 Active Claims</div>
             <Link to="/admin/orders" className="text-[10px] text-rose-400 hover:underline block pt-2 mt-1 font-bold">
               Resolve Disputes inside Console &rarr;
             </Link>
@@ -1365,7 +1365,7 @@ export default function OrdersOverview() {
 
           <div className="bg-white/[0.01] border border-app-border rounded-2xl p-5 space-y-1">
             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest block">Chargebacks Reported</span>
-            <div className="text-xl font-black text-white">0 Accounts</div>
+            <div className="text-xl font-black text-app-text-primary">0 Accounts</div>
             <span className="text-[10px] text-slate-500 block">No fraudulent payment claims logged</span>
           </div>
 
@@ -1380,10 +1380,10 @@ export default function OrdersOverview() {
       {/* SECTION 11 — ORDER HEALTH MONITOR */}
       <section id="sec-health-monitor" className="bg-gradient-to-r from-slate-900 via-slate-950 to-slate-900 border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
         <div>
-          <h3 className="text-md font-black text-white flex items-center gap-2">
+          <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
             <HelpCircle className="w-5 h-5 text-teal-400 animate-spin" style={{ animationDuration: '6s' }} /> SECTION 11 — Marketplace Operational Health Monitor
           </h3>
-          <p className="text-xs text-slate-400">Critical review of orders requiring immediate actions. Quickly inspect and click to drill down inside the Order Console.</p>
+          <p className="text-xs text-app-text-secondary">Critical review of orders requiring immediate actions. Quickly inspect and click to drill down inside the Order Console.</p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -1400,11 +1400,11 @@ export default function OrdersOverview() {
             <Link
               to={wid.link}
               key={wIdx}
-              className={`border rounded-2xl p-4 flex flex-col justify-between hover:scale-[1.02] hover:bg-white/5 transition-all space-y-3 ${wid.color}`}
+              className={`border rounded-2xl p-4 flex flex-col justify-between hover:scale-[1.02] hover:bg-white/5 transition-all space-y-3${wid.color}`}
             >
               <div className="text-[10px] font-black uppercase tracking-wider leading-relaxed">{wid.title}</div>
               <div className="flex items-baseline justify-between pt-2">
-                <span className="text-2xl font-black text-white">{wid.count}</span>
+                <span className="text-2xl font-black text-app-text-primary">{wid.count}</span>
                 <span className="text-[8px] font-bold uppercase py-0.5 px-2 bg-white/5 rounded block">{wid.status} &rarr;</span>
               </div>
             </Link>
@@ -1415,38 +1415,38 @@ export default function OrdersOverview() {
       {/* SECTION 12 — MARKETPLACE RISK MONITOR */}
       <section id="sec-risk-monitor" className="bg-app-card border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
         <div>
-          <h3 className="text-md font-black text-white flex items-center gap-2">
+          <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-[#F4631E]" /> SECTION 12 — Threat Vectors & Marketplace Risk Monitor
           </h3>
-          <p className="text-xs text-slate-400 font-medium">Automatic system scans detecting chargeback risks, fake manual invoice generation, or abnormal purchase cancellation rates.</p>
+          <p className="text-xs text-app-text-secondary font-medium">Automatic system scans detecting chargeback risks, fake manual invoice generation, or abnormal purchase cancellation rates.</p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-rose-500/5 border border-rose-500/20 rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <span className="p-1 px-2.5 rounded bg-rose-500/10 text-rose-400 text-[9px] font-black uppercase">SEVERITY: HIGH</span>
-              <span className="text-[10px] text-slate-400">Suspicious Ordering Pattern</span>
+              <span className="text-[10px] text-app-text-secondary">Suspicious Ordering Pattern</span>
             </div>
-            <h4 className="text-xs font-bold text-white">Multiple Orders to exact same address</h4>
-            <p className="text-[11px] text-slate-400">Three distinct customer logins registered checkout to identical Mirpur Sub-zone location in under 1 Hour.</p>
+            <h4 className="text-xs font-bold text-app-text-primary">Multiple Orders to exact same address</h4>
+            <p className="text-[11px] text-app-text-secondary">Three distinct customer logins registered checkout to identical Mirpur Sub-zone location in under 1 Hour.</p>
           </div>
 
           <div className="bg-amber-500/5 border border-amber-500/20 rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2">
               <span className="p-1 px-2.5 rounded bg-amber-500/10 text-amber-500 text-[9px] font-black uppercase">SEVERITY: MEDIUM</span>
-              <span className="text-[10px] text-slate-400">Repeated Returned Rates</span>
+              <span className="text-[10px] text-app-text-secondary">Repeated Returned Rates</span>
             </div>
-            <h4 className="text-xs font-bold text-white">Merchant return volume exceeded safety threshold</h4>
-            <p className="text-[11px] text-slate-400">Seller brand "Draped" exceeded 15% return rate on outerwear jacket line this month. Inspection ordered.</p>
+            <h4 className="text-xs font-bold text-app-text-primary">Merchant return volume exceeded safety threshold</h4>
+            <p className="text-[11px] text-app-text-secondary">Seller brand "Draped" exceeded 15% return rate on outerwear jacket line this month. Inspection ordered.</p>
           </div>
 
           <div className="bg-slate-500/5 border border-app-border rounded-2xl p-5 space-y-3">
             <div className="flex items-center gap-2">
-              <span className="p-1 px-2.5 rounded bg-white/10 text-slate-300 text-[9px] font-black uppercase">SEVERITY: MINIMAL</span>
-              <span className="text-[10px] text-slate-400">Unverified Manual Leads</span>
+              <span className="p-1 px-2.5 rounded bg-white/10 text-app-text-secondary text-[9px] font-black uppercase">SEVERITY: MINIMAL</span>
+              <span className="text-[10px] text-app-text-secondary">Unverified Manual Leads</span>
             </div>
-            <h4 className="text-xs font-bold text-white">WhatsApp Manual order unconfirmed OTP</h4>
-            <p className="text-[11px] text-slate-400">An admin processed order directly without OTP. System auto-flagged order for supervisor verify check.</p>
+            <h4 className="text-xs font-bold text-app-text-primary">WhatsApp Manual order unconfirmed OTP</h4>
+            <p className="text-[11px] text-app-text-secondary">An admin processed order directly without OTP. System auto-flagged order for supervisor verify check.</p>
           </div>
         </div>
       </section>
@@ -1455,17 +1455,17 @@ export default function OrdersOverview() {
       <section id="sec-live-activity" className="bg-app-card border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
         <div className="flex items-center justify-between pb-4 border-b border-app-border/40">
           <div>
-            <h3 className="text-md font-black text-white flex items-center gap-2">
+            <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
               <Activity className="w-5 h-5 text-emerald-400 animate-pulse" /> SECTION 13 — Live Operational Activity Feed
             </h3>
-            <p className="text-xs text-slate-400">Real-time update streams capturing admin processes, manual orders created, and logistics deliveries platform-wide.</p>
+            <p className="text-xs text-app-text-secondary">Real-time update streams capturing admin processes, manual orders created, and logistics deliveries platform-wide.</p>
           </div>
           <button 
             type="button" 
             onClick={() => showInlineToast('✓ Checked server logs. Live activity ticker is fully synchronized.')}
-            className="p-2 bg-white/5 hover:bg-white/10 text-white rounded-xl border border-app-border cursor-pointer transition-colors"
+            className="p-2 bg-white/5 hover:bg-white/10 text-app-text-primary rounded-xl border border-app-border cursor-pointer transition-colors"
           >
-            <RefreshCw className="w-4 h-4 text-slate-400" />
+            <RefreshCw className="w-4 h-4 text-app-text-secondary" />
           </button>
         </div>
 
@@ -1474,10 +1474,10 @@ export default function OrdersOverview() {
           {liveLogEntries.map((log) => (
             <div key={log.id} className="flex items-center justify-between p-3.5 bg-white/[0.01] border border-app-border/40 rounded-xl hover:border-app-accent/30 transition-all">
               <div className="flex items-center gap-3">
-                <span className="text-lg bg-slate-900 border border-white/5 w-8 h-8 rounded-lg flex items-center justify-center">{log.icon}</span>
+                <span className="text-lg bg-app-card border border-app-border w-8 h-8 rounded-lg flex items-center justify-center">{log.icon}</span>
                 <div>
                   <span className="text-[9.5px] font-black uppercase text-slate-500 mr-2">[{log.type}]</span>
-                  <p className="text-xs font-semibold text-white mt-0.5">{log.text}</p>
+                  <p className="text-xs font-semibold text-app-text-primary mt-0.5">{log.text}</p>
                 </div>
               </div>
               <div className="text-right">
@@ -1492,10 +1492,10 @@ export default function OrdersOverview() {
       {/* SECTION 14 — EXPORT & REPORTING CENTER */}
       <section id="sec-exporter-reporting" className="bg-app-card border border-app-border rounded-[2.5rem] p-8 shadow-2xl space-y-6">
         <div>
-          <h3 className="text-md font-black text-white flex items-center gap-2">
+          <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
             <Download className="w-5 h-5 text-indigo-400" /> SECTION 14 — Operational Report Export Hub
           </h3>
-          <p className="text-xs text-slate-400">Request formal encrypted documents containing detailed statistics for auditing, legal taxes, or seller communications.</p>
+          <p className="text-xs text-app-text-secondary">Request formal encrypted documents containing detailed statistics for auditing, legal taxes, or seller communications.</p>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 pt-2">
@@ -1515,19 +1515,19 @@ export default function OrdersOverview() {
             <div key={rIdx} className="bg-white/[0.01] border border-app-border rounded-xl p-4.5 flex flex-col justify-between hover:border-indigo-400/30 transition-all group">
               <div className="space-y-1">
                 <FileSpreadsheet className="w-5 h-5 text-emerald-400" />
-                <h5 className="text-[11px] font-black text-white leading-relaxed pt-1.5">{rep.title}</h5>
+                <h5 className="text-[11px] font-black text-app-text-primary leading-relaxed pt-1.5">{rep.title}</h5>
                 <span className="text-[9px] text-slate-500 font-mono block">{rep.value}</span>
               </div>
               <div className="pt-4 flex items-center gap-2">
                 <button
                   onClick={() => handleTriggerExport(rep.title)}
-                  className="px-2.5 py-1.5 text-[8.5px] bg-slate-800 hover:bg-emerald-600 text-white font-black uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
+                  className="px-2.5 py-1.5 text-[8.5px] bg-app-bg hover:bg-emerald-600 text-app-text-primary font-black uppercase tracking-wider rounded-lg transition-colors cursor-pointer"
                 >
                   Download .XLSX
                 </button>
                 <button
                   onClick={() => showInlineToast(`✓ Printable view prepared for "${rep.title}"`)}
-                  className="p-1.5 bg-white/5 text-slate-400 hover:text-white rounded-lg hover:bg-white/10"
+                  className="p-1.5 bg-white/5 text-app-text-secondary hover:text-white rounded-lg hover:bg-white/10"
                 >
                   <Printer className="w-3.5 h-3.5" />
                 </button>
@@ -1541,35 +1541,35 @@ export default function OrdersOverview() {
       {/* Flag / Note Overlay Dialog */}
       {flaggingCustomer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/85 backdrop-blur-xs" onClick={() => setFlaggingCustomer(null)} />
+          <div className="absolute inset-0 bg-app-card/20 backdrop-blur-xs" onClick={() => setFlaggingCustomer(null)} />
           <div className="bg-app-card border border-app-border rounded-[2.5rem] p-8 w-full max-w-md relative z-10 shadow-2xl space-y-6">
             <div>
-              <h3 className="text-md font-black text-white flex items-center gap-2">
+              <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
                 <Flag className="w-5 h-5 text-rose-500" /> {flaggingCustomer.flagged ? 'Lift Checkout Restriction' : 'Checkout Restriction & Flagging'}
               </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Regulating activity for customer: <span className="text-white font-bold">{flaggingCustomer.name}</span>
+              <p className="text-xs text-app-text-secondary mt-1">
+                Regulating activity for customer: <span className="text-app-text-primary font-bold">{flaggingCustomer.name}</span>
               </p>
             </div>
 
             <form onSubmit={handleFlagSubmit} className="space-y-4">
               <div className="space-y-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-mono">Reason for Checkout Restriction</label>
+                <label className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest block font-mono">Reason for Checkout Restriction</label>
                 <textarea 
                   required
                   rows={4}
                   value={flagReasonText}
                   onChange={(e) => setFlagReasonText(e.target.value)}
                   placeholder="Describe exact pattern of behavior (e.g. fraudulent card reports, systematic order rejects upon courier delivery...)"
-                  className="w-full bg-app-bg border border-app-border rounded-xl p-4 text-xs text-white outline-none focus:border-rose-500"
+                  className="w-full bg-app-bg border border-app-border rounded-xl p-4 text-xs text-app-text-primary outline-none focus:border-rose-500"
                 />
               </div>
 
               {flaggingCustomer.history && flaggingCustomer.history.length > 0 && (
-                <div className="space-y-1 bg-white/[0.02] border border-white/5 rounded-xl p-4">
+                <div className="space-y-1 bg-white/[0.02] border border-app-border rounded-xl p-4">
                   <span className="text-[8px] font-bold text-slate-500 uppercase tracking-widest block mb-2 font-mono">Restriction History Logs</span>
                   {flaggingCustomer.history.map((h: any, i: number) => (
-                    <div key={i} className="text-[10px] text-slate-300 leading-normal mb-1">
+                    <div key={i} className="text-[10px] text-app-text-secondary leading-normal mb-1">
                       <span className="text-rose-400 font-bold">[{h.action}]</span> {h.note}
                     </div>
                   ))}
@@ -1580,13 +1580,13 @@ export default function OrdersOverview() {
                 <button
                   type="button"
                   onClick={() => setFlaggingCustomer(null)}
-                  className="px-4 py-2.5 text-[10px] font-bold uppercase text-slate-400 hover:text-white"
+                  className="px-4 py-2.5 text-[10px] font-bold uppercase text-app-text-secondary hover:text-white"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className={`px-5 py-2.5 text-[10px] font-black uppercase text-white rounded-xl ${
+                  className={`px-5 py-2.5 text-[10px] font-black uppercase text-app-text-primary rounded-xl${
                     flaggingCustomer.flagged ? 'bg-emerald-600 hover:bg-emerald-500 shadow-md active:scale-95' : 'bg-rose-600 hover:bg-rose-500 shadow-md active:scale-95'
                   }`}
                 >

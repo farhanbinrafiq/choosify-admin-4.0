@@ -295,17 +295,17 @@ export default function Coupons() {
     }));
 
   return (
-    <div className="p-6 md:p-8 space-y-8 bg-slate-950 text-slate-100 min-h-screen antialiased">
+    <div className="p-6 md:p-8 space-y-8 bg-app-bg text-app-text-primary min-h-screen antialiased">
       {/* Header Container */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2.5 text-orange-500 font-mono text-[10px] uppercase tracking-[4px]">
             <Tag className="w-3.5 h-3.5 animate-pulse" /> Campaigns & Marketing
           </div>
-          <h1 className="text-3xl font-black text-white tracking-tight mt-1.5 uppercase font-sans">
+          <h1 className="text-3xl font-black text-app-text-primary tracking-tight mt-1.5 uppercase font-sans">
             Promo Vouchers <span className="text-orange-500">Engine</span>
           </h1>
-          <p className="text-slate-400 text-xs mt-1.5 max-w-xl">
+          <p className="text-app-text-secondary text-xs mt-1.5 max-w-xl">
             Configure dynamic checkout coupon codes, specify cart spend rules, track campaign redemptions, and monitor marketing conversion analytics.
           </p>
         </div>
@@ -314,7 +314,7 @@ export default function Coupons() {
           {/* Global CSV Download */}
           <button
             onClick={() => exportCouponCodes()}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-xl text-slate-300 hover:text-white text-[11px] font-black uppercase tracking-wider transition-all"
+            className="flex items-center gap-2 px-4 py-2.5 bg-app-card hover:bg-slate-800 border border-app-border rounded-xl text-app-text-secondary hover:text-white text-[11px] font-black uppercase tracking-wider transition-all"
           >
             <Download className="w-3.5 h-3.5" /> Export Registry
           </button>
@@ -338,8 +338,8 @@ export default function Coupons() {
           className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-start gap-3.5"
         >
           <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-          <div className="text-xs text-slate-300">
-            <span className="font-bold text-white block mb-0.5">Campaign Vouchers Expiring Soon</span>
+          <div className="text-xs text-app-text-secondary">
+            <span className="font-bold text-app-text-primary block mb-0.5">Campaign Vouchers Expiring Soon</span>
             The following active promo codes are expiring within the next 5 days: {' '}
             {expiringSoonList.map((c, idx) => (
               <span key={c.id} className="font-mono bg-amber-500/20 px-1.5 py-0.5 rounded text-amber-300 font-bold mr-1.5 text-[10px]">
@@ -353,9 +353,9 @@ export default function Coupons() {
       {/* Quick Insights Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Total Created */}
-        <div className="bg-slate-900 border border-slate-800/60 p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
-          <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 font-mono">Total Registry</div>
-          <div className="text-2xl font-black text-white font-mono mt-2.5">{totalCreated}</div>
+        <div className="bg-app-card border border-app-border p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
+          <div className="text-[10px] uppercase font-black tracking-widest text-app-text-secondary font-mono">Total Registry</div>
+          <div className="text-2xl font-black text-app-text-primary font-mono mt-2.5">{totalCreated}</div>
           <div className="text-[9px] text-slate-500 mt-2 flex items-center gap-1.5">
             <Layers className="w-3 h-3 text-slate-500" /> Across entire platform
           </div>
@@ -363,8 +363,8 @@ export default function Coupons() {
         </div>
 
         {/* Total Active */}
-        <div className="bg-slate-900 border border-slate-800/60 p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
-          <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 font-mono">Active Promos</div>
+        <div className="bg-app-card border border-app-border p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
+          <div className="text-[10px] uppercase font-black tracking-widest text-app-text-secondary font-mono">Active Promos</div>
           <div className="text-2xl font-black text-emerald-400 font-mono mt-2.5">{activeCount}</div>
           <div className="text-[9px] text-slate-500 mt-2 flex items-center gap-1.5">
             <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" /> Currently ready at checkout
@@ -373,8 +373,8 @@ export default function Coupons() {
         </div>
 
         {/* Total Usage Count */}
-        <div className="bg-slate-900 border border-slate-800/60 p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
-          <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 font-mono">Total Redemptions</div>
+        <div className="bg-app-card border border-app-border p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
+          <div className="text-[10px] uppercase font-black tracking-widest text-app-text-secondary font-mono">Total Redemptions</div>
           <div className="text-2xl font-black text-orange-400 font-mono mt-2.5">{totalUses}</div>
           <div className="text-[9px] text-slate-500 mt-2 flex items-center gap-1.5">
             <TrendingUp className="w-3 h-3 text-orange-400" /> Successful order payables
@@ -383,8 +383,8 @@ export default function Coupons() {
         </div>
 
         {/* Total Discount Given */}
-        <div className="bg-slate-900 border border-slate-800/60 p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
-          <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 font-mono">Discount Savings</div>
+        <div className="bg-app-card border border-app-border p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
+          <div className="text-[10px] uppercase font-black tracking-widest text-app-text-secondary font-mono">Discount Savings</div>
           <div className="text-2xl font-black text-purple-400 font-mono mt-2.5">৳ {totalSavings.toLocaleString()}</div>
           <div className="text-[9px] text-slate-500 mt-2 flex items-center gap-1.5">
             <DollarSign className="w-3 h-3 text-purple-400" /> BDT Deducted from orders
@@ -393,8 +393,8 @@ export default function Coupons() {
         </div>
 
         {/* Average Order Value (AOV) with Coupon */}
-        <div className="bg-slate-900 border border-slate-800/60 p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
-          <div className="text-[10px] uppercase font-black tracking-widest text-slate-400 font-mono">AOV with Promo</div>
+        <div className="bg-app-card border border-app-border p-5 rounded-2xl flex flex-col justify-between relative overflow-hidden">
+          <div className="text-[10px] uppercase font-black tracking-widest text-app-text-secondary font-mono">AOV with Promo</div>
           <div className="text-2xl font-black text-blue-400 font-mono mt-2.5">৳ {overallAvgOrderValue.toLocaleString()}</div>
           <div className="text-[9px] text-slate-500 mt-2 flex items-center gap-1.5">
             <BarChart4 className="w-3 h-3 text-blue-400" /> High customer spend index
@@ -409,7 +409,7 @@ export default function Coupons() {
         <div className="lg:col-span-3 space-y-4">
           
           {/* Action Filter Bar */}
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+          <div className="bg-app-card border border-app-border p-4 rounded-2xl flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
             
             {/* Search Input */}
             <div className="relative flex-1">
@@ -419,7 +419,7 @@ export default function Coupons() {
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search codes or descriptions..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-orange-500/45 transition-colors"
+                className="w-full bg-app-bg border border-app-border rounded-xl pl-10 pr-4 py-2 text-xs text-app-text-primary placeholder-slate-500 outline-none focus:border-orange-500/45 transition-colors"
               />
             </div>
 
@@ -431,7 +431,7 @@ export default function Coupons() {
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value as any)}
-                  className="bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-300 font-semibold px-2.5 py-1.5 outline-none focus:border-orange-500/40"
+                  className="bg-app-bg border border-app-border rounded-lg text-[11px] text-app-text-secondary font-semibold px-2.5 py-1.5 outline-none focus:border-orange-500/40"
                 >
                   <option value="all">All Vouchers</option>
                   <option value="active">Active Only</option>
@@ -447,7 +447,7 @@ export default function Coupons() {
                 <select
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
-                  className="bg-slate-950 border border-slate-800 rounded-lg text-[11px] text-slate-300 font-semibold px-2.5 py-1.5 outline-none focus:border-orange-500/40"
+                  className="bg-app-bg border border-app-border rounded-lg text-[11px] text-app-text-secondary font-semibold px-2.5 py-1.5 outline-none focus:border-orange-500/40"
                 >
                   <option value="all">All Types</option>
                   <option value="percentage">Percentage (%)</option>
@@ -460,7 +460,7 @@ export default function Coupons() {
               {/* Sorter */}
               <button
                 onClick={() => setSortOrder(p => p === 'asc' ? 'desc' : 'asc')}
-                className="p-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                className="p-1.5 bg-app-bg hover:bg-slate-800 border border-app-border rounded-lg text-app-text-secondary hover:text-white transition-colors"
                 title="Toggle Sort Order"
               >
                 <ArrowUpDown className="w-3.5 h-3.5" />
@@ -472,9 +472,9 @@ export default function Coupons() {
           {/* Vouchers Registry List */}
           <div className="space-y-3">
             {filteredAndSortedCoupons.length === 0 ? (
-              <div className="bg-slate-900 border border-slate-800/80 p-12 text-center rounded-2xl flex flex-col items-center justify-center space-y-3">
+              <div className="bg-app-card border border-app-border p-12 text-center rounded-2xl flex flex-col items-center justify-center space-y-3">
                 <Tag className="w-10 h-10 text-slate-700" />
-                <p className="text-slate-400 text-xs">No promotion vouchers match your current filters.</p>
+                <p className="text-app-text-secondary text-xs">No promotion vouchers match your current filters.</p>
                 {searchTerm && (
                   <button 
                     onClick={() => setSearchTerm('')} 
@@ -517,7 +517,7 @@ export default function Coupons() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, scale: 0.95 }}
                       key={coupon.id}
-                      className={`bg-slate-900 border ${isExpanded ? 'border-orange-500/25 ring-1 ring-orange-500/10' : 'border-slate-850'} rounded-2xl overflow-hidden transition-all`}
+                      className={`bg-app-card border${isExpanded ? 'border-orange-500/25 ring-1 ring-orange-500/10' : 'border-slate-850'}rounded-2xl overflow-hidden transition-all`}
                     >
                       {/* Main Summary Bar */}
                       <div className="p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -525,19 +525,19 @@ export default function Coupons() {
                         {/* Info Column */}
                         <div className="flex items-start gap-3.5">
                           {/* Circle Avatar badge */}
-                          <div className={`p-3 rounded-xl shrink-0 ${coupon.active && !isExpired ? 'bg-slate-950 border border-slate-800' : 'bg-slate-950/40 border border-slate-900'} flex items-center justify-center`}>
+                          <div className={`p-3 rounded-xl shrink-0${coupon.active && !isExpired ? 'bg-app-bg border border-app-border' : 'bg-app-bg/40 border border-app-border'}flex items-center justify-center`}>
                             {renderTypeIcon(coupon.type)}
                           </div>
 
                           <div className="min-w-0">
                             <div className="flex flex-wrap items-center gap-2">
-                              <span className="font-mono text-xs font-black text-white bg-slate-950 px-2.5 py-1 border border-slate-800 rounded-lg tracking-wider">
+                              <span className="font-mono text-xs font-black text-app-text-primary bg-app-bg px-2.5 py-1 border border-app-border rounded-lg tracking-wider">
                                 {coupon.code}
                               </span>
                               
                               {/* Status badges */}
                               {coupon.deleted ? (
-                                <span className="bg-slate-800 text-slate-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-slate-700/50">Archived</span>
+                                <span className="bg-app-bg text-app-text-secondary text-[9px] font-bold px-2 py-0.5 rounded-full border border-app-border">Archived</span>
                               ) : isExpired ? (
                                 <span className="bg-rose-500/10 text-rose-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-rose-500/15">Expired</span>
                               ) : coupon.active ? (
@@ -546,12 +546,12 @@ export default function Coupons() {
                                 <span className="bg-amber-500/10 text-amber-400 text-[9px] font-bold px-2 py-0.5 rounded-full border border-amber-500/15">Paused</span>
                               )}
 
-                              <span className="text-[10px] text-slate-500 capitalize bg-slate-950/50 border border-slate-800/30 px-2 py-0.5 rounded">
+                              <span className="text-[10px] text-slate-500 capitalize bg-app-bg/10 border border-app-border px-2 py-0.5 rounded">
                                 {coupon.type.replace(/_/g, ' ')}
                               </span>
                             </div>
 
-                            <p className="text-slate-400 text-[11px] font-medium mt-2 leading-relaxed truncate max-w-sm sm:max-w-md">
+                            <p className="text-app-text-secondary text-[11px] font-medium mt-2 leading-relaxed truncate max-w-sm sm:max-w-md">
                               {coupon.description}
                             </p>
 
@@ -567,7 +567,7 @@ export default function Coupons() {
                         <div className="flex items-center gap-6 sm:gap-10 pr-2">
                           <div className="text-right">
                             <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider font-mono">Usages</div>
-                            <div className="text-sm font-black text-white font-mono mt-0.5">
+                            <div className="text-sm font-black text-app-text-primary font-mono mt-0.5">
                               {coupon.totalRedemptions}
                               {coupon.rules.maxUsages && (
                                 <span className="text-[9px] text-slate-500 font-normal"> / {coupon.rules.maxUsages}</span>
@@ -583,7 +583,7 @@ export default function Coupons() {
                           {/* Expansion toggler */}
                           <button
                             onClick={() => setExpandedCouponId(isExpanded ? null : coupon.id)}
-                            className="p-1.5 bg-slate-950 hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors cursor-pointer border-0"
+                            className="p-1.5 bg-app-bg hover:bg-slate-800 rounded-lg text-slate-500 hover:text-white transition-colors cursor-pointer border-0"
                             title="Expand Details"
                           >
                             {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -594,37 +594,37 @@ export default function Coupons() {
 
                       {/* Expanded Section */}
                       {isExpanded && (
-                        <div className="px-5 pb-5 pt-3 bg-slate-950/60 border-t border-slate-850/60 text-xs text-slate-300 space-y-4">
+                        <div className="px-5 pb-5 pt-3 bg-app-bg/10 border-t border-app-border text-xs text-app-text-secondary space-y-4">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             
                             {/* Rules Card */}
-                            <div className="bg-slate-900 border border-slate-850/60 p-3.5 rounded-xl space-y-2">
-                              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-mono border-b border-slate-800 pb-1.5">Eligibility Rules</h4>
+                            <div className="bg-app-card border border-app-border p-3.5 rounded-xl space-y-2">
+                              <h4 className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest block font-mono border-b border-app-border pb-1.5">Eligibility Rules</h4>
                               <div className="space-y-1 text-[11px]">
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Min Order Spend:</span>
-                                  <span className="font-bold text-white font-mono">৳ {coupon.rules.minPurchaseAmount || 0}</span>
+                                  <span className="font-bold text-app-text-primary font-mono">৳ {coupon.rules.minPurchaseAmount || 0}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Max Discount Limit:</span>
-                                  <span className="font-bold text-white font-mono">
+                                  <span className="font-bold text-app-text-primary font-mono">
                                     {coupon.rules.maxDiscountAmount ? `৳ ${coupon.rules.maxDiscountAmount}` : 'Unlimited'}
                                   </span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Per User Cap:</span>
-                                  <span className="font-bold text-slate-300">{coupon.rules.maxUsagesPerUser || 'No Limit'} use(s)</span>
+                                  <span className="font-bold text-app-text-secondary">{coupon.rules.maxUsagesPerUser || 'No Limit'} use(s)</span>
                                 </div>
                               </div>
                             </div>
 
                             {/* Targets Card */}
-                            <div className="bg-slate-900 border border-slate-850/60 p-3.5 rounded-xl space-y-2">
-                              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-mono border-b border-slate-800 pb-1.5">Promotion Target</h4>
+                            <div className="bg-app-card border border-app-border p-3.5 rounded-xl space-y-2">
+                              <h4 className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest block font-mono border-b border-app-border pb-1.5">Promotion Target</h4>
                               <div className="space-y-1 text-[11px]">
                                 <div className="flex justify-between capitalize">
                                   <span className="text-slate-500">Catalog target:</span>
-                                  <span className="font-bold text-white">{coupon.discountTarget.replace(/_/g, ' ')}</span>
+                                  <span className="font-bold text-app-text-primary">{coupon.discountTarget.replace(/_/g, ' ')}</span>
                                 </div>
                                 {coupon.rules.applicableCategories && (
                                   <div className="flex justify-between">
@@ -648,8 +648,8 @@ export default function Coupons() {
                             </div>
 
                             {/* Metrics Card */}
-                            <div className="bg-slate-900 border border-slate-850/60 p-3.5 rounded-xl space-y-2">
-                              <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-mono border-b border-slate-800 pb-1.5">Redemption Stats</h4>
+                            <div className="bg-app-card border border-app-border p-3.5 rounded-xl space-y-2">
+                              <h4 className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest block font-mono border-b border-app-border pb-1.5">Redemption Stats</h4>
                               <div className="space-y-1 text-[11px]">
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Success Conversions:</span>
@@ -659,11 +659,11 @@ export default function Coupons() {
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Avg Ticket size:</span>
-                                  <span className="font-bold text-white font-mono">৳ {coupon.avgOrderValue || 0}</span>
+                                  <span className="font-bold text-app-text-primary font-mono">৳ {coupon.avgOrderValue || 0}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span className="text-slate-500">Total Views:</span>
-                                  <span className="font-bold text-slate-300 font-mono">
+                                  <span className="font-bold text-app-text-secondary font-mono">
                                     {coupon.totalRedemptions * 6 || 12}
                                   </span>
                                 </div>
@@ -674,8 +674,8 @@ export default function Coupons() {
 
                           {/* Quick Sparkline Redemptions list */}
                           {coupon.usageByDate && coupon.usageByDate.length > 0 && (
-                            <div className="p-3.5 bg-slate-900 border border-slate-850/60 rounded-xl">
-                              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-mono mb-2">Usage Activity Over Time</div>
+                            <div className="p-3.5 bg-app-card border border-app-border rounded-xl">
+                              <div className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest block font-mono mb-2">Usage Activity Over Time</div>
                               <div className="h-16 w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                   <AreaChart data={coupon.usageByDate}>
@@ -688,7 +688,7 @@ export default function Coupons() {
                           )}
 
                           {/* Action Bar */}
-                          <div className="flex items-center justify-between pt-2 border-t border-slate-850">
+                          <div className="flex items-center justify-between pt-2 border-t border-app-border">
                             <span className="text-[10px] text-slate-500">
                               Created by {coupon.createdBy || 'Administrator'} on {new Date(coupon.createdAt).toLocaleString()}
                             </span>
@@ -703,7 +703,7 @@ export default function Coupons() {
                                     reactivateCoupon(coupon.id);
                                   }
                                 }}
-                                className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-[10px] font-bold text-slate-300 hover:text-white"
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-app-card hover:bg-slate-800 border border-app-border rounded-lg text-[10px] font-bold text-app-text-secondary hover:text-white"
                               >
                                 {coupon.active ? (
                                   <>
@@ -719,7 +719,7 @@ export default function Coupons() {
                               {/* Single CSV export */}
                               <button
                                 onClick={() => exportCouponCodes(coupon.id)}
-                                className="p-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-850 rounded-lg text-slate-400 hover:text-white"
+                                className="p-1.5 bg-app-card hover:bg-slate-800 border border-app-border rounded-lg text-app-text-secondary hover:text-white"
                                 title="Export single code CSV"
                               >
                                 <Download className="w-3.5 h-3.5" />
@@ -729,7 +729,7 @@ export default function Coupons() {
                               {!coupon.deleted && (
                                 <button
                                   onClick={() => deleteCoupon(coupon.id)}
-                                  className="p-1.5 bg-slate-900 hover:bg-rose-950/20 border border-slate-850 hover:border-rose-500/30 rounded-lg text-slate-400 hover:text-rose-400 transition-colors cursor-pointer border-0"
+                                  className="p-1.5 bg-app-card hover:bg-rose-950/20 border border-app-border hover:border-rose-500/30 rounded-lg text-app-text-secondary hover:text-rose-400 transition-colors cursor-pointer border-0"
                                   title="Archive Coupon"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
@@ -753,9 +753,9 @@ export default function Coupons() {
         <div className="space-y-6">
           
           {/* Daily Redemption Area Chart */}
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+          <div className="bg-app-card border border-app-border p-5 rounded-2xl space-y-4">
             <div>
-              <h3 className="text-xs font-black text-white uppercase tracking-wider">Redemption Trends</h3>
+              <h3 className="text-xs font-black text-app-text-primary uppercase tracking-wider">Redemption Trends</h3>
               <p className="text-[10px] text-slate-500 mt-1">Daily promotional usage count over the past week.</p>
             </div>
             
@@ -779,9 +779,9 @@ export default function Coupons() {
 
           {/* Top Vouchers Chart */}
           {categoryPerformance.length > 0 && (
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+            <div className="bg-app-card border border-app-border p-5 rounded-2xl space-y-4">
               <div>
-                <h3 className="text-xs font-black text-white uppercase tracking-wider">Top Performing Codes</h3>
+                <h3 className="text-xs font-black text-app-text-primary uppercase tracking-wider">Top Performing Codes</h3>
                 <p className="text-[10px] text-slate-500 mt-1">Total revenue savings generated per campaign.</p>
               </div>
 
@@ -803,9 +803,9 @@ export default function Coupons() {
           )}
 
           {/* Recent Usage Logs */}
-          <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-4">
+          <div className="bg-app-card border border-app-border p-5 rounded-2xl space-y-4">
             <div>
-              <h3 className="text-xs font-black text-white uppercase tracking-wider">Recent Redemptions Log</h3>
+              <h3 className="text-xs font-black text-app-text-primary uppercase tracking-wider">Recent Redemptions Log</h3>
               <p className="text-[10px] text-slate-500 mt-1">Live customer transactions applying promotions.</p>
             </div>
 
@@ -814,12 +814,12 @@ export default function Coupons() {
                 <div className="text-center py-4 text-slate-600 text-[10px]">No redemptions logged yet.</div>
               ) : (
                 couponUsage.slice(0, 10).map((u) => (
-                  <div key={u.id} className="p-2.5 bg-slate-950 border border-slate-850 rounded-xl flex items-start justify-between gap-2">
+                  <div key={u.id} className="p-2.5 bg-app-bg border border-app-border rounded-xl flex items-start justify-between gap-2">
                     <div>
-                      <span className="font-mono text-[9px] font-bold text-slate-300 bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded">
+                      <span className="font-mono text-[9px] font-bold text-app-text-secondary bg-app-card border border-app-border px-1.5 py-0.5 rounded">
                         {u.couponCode}
                       </span>
-                      <div className="text-[10px] font-bold text-white mt-1">Order: {u.orderId}</div>
+                      <div className="text-[10px] font-bold text-app-text-primary mt-1">Order: {u.orderId}</div>
                       <div className="text-[9px] text-slate-500 mt-0.5">User ID: {u.userId} • {new Date(u.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                     </div>
                     <div className="text-right shrink-0">
@@ -838,34 +838,34 @@ export default function Coupons() {
       {/* Creation and Bulk Modal Backdrop */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 antialiased">
-          <div className="absolute inset-0 bg-slate-950/85 backdrop-blur-sm" onClick={() => setShowCreateModal(false)} />
+          <div className="absolute inset-0 bg-app-bg/10 backdrop-blur-sm" onClick={() => setShowCreateModal(false)} />
           
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 md:p-8 w-full max-w-2xl relative z-10 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-app-card border border-app-border rounded-3xl p-6 md:p-8 w-full max-w-2xl relative z-10 shadow-2xl max-h-[90vh] overflow-y-auto">
             
             <div className="flex justify-between items-start mb-6">
               <div>
                 <span className="text-[9px] font-extrabold uppercase tracking-[3px] text-orange-500 bg-orange-500/10 px-2.5 py-1 border border-orange-500/15 rounded-full">Campaign Architect</span>
-                <h3 className="text-xl font-black text-white mt-2.5 uppercase tracking-tight">Configure New Promotions</h3>
+                <h3 className="text-xl font-black text-app-text-primary mt-2.5 uppercase tracking-tight">Configure New Promotions</h3>
               </div>
               <button 
                 onClick={() => setShowCreateModal(false)} 
-                className="p-1.5 bg-slate-950 hover:bg-slate-850 rounded-xl text-slate-500 hover:text-white cursor-pointer border-0"
+                className="p-1.5 bg-app-bg hover:bg-slate-850 rounded-xl text-slate-500 hover:text-white cursor-pointer border-0"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Modal Tabs */}
-            <div className="flex border-b border-slate-800 mb-6">
+            <div className="flex border-b border-app-border mb-6">
               <button
                 onClick={() => setModalTab('single')}
-                className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${modalTab === 'single' ? 'border-orange-500 text-orange-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer${modalTab === 'single' ? 'border-orange-500 text-orange-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
               >
                 Single Coupon
               </button>
               <button
                 onClick={() => setModalTab('bulk')}
-                className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer ${modalTab === 'bulk' ? 'border-orange-500 text-orange-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
+                className={`px-4 py-2 text-xs font-black uppercase tracking-wider border-b-2 transition-all cursor-pointer${modalTab === 'bulk' ? 'border-orange-500 text-orange-400' : 'border-transparent text-slate-500 hover:text-slate-300'}`}
               >
                 Bulk Generator
               </button>
@@ -877,25 +877,25 @@ export default function Coupons() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Coupon Code */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Voucher Code (Unique)</label>
+                    <label className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Voucher Code (Unique)</label>
                     <input
                       type="text"
                       required
                       placeholder="e.g. MONSOON2026"
                       value={formCode}
                       onChange={(e) => setFormCode(e.target.value.toUpperCase())}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-orange-500/40"
+                      className="w-full bg-app-bg border border-app-border rounded-xl p-3 text-xs text-app-text-primary outline-none focus:border-orange-500/40"
                     />
                     <span className="text-[9px] text-slate-500 block font-mono">Uppercase alphanumeric, 3-20 characters.</span>
                   </div>
 
                   {/* Coupon Type */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Discount Type</label>
+                    <label className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Discount Type</label>
                     <select
                       value={formType}
                       onChange={(e) => setFormType(e.target.value as CouponType)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-orange-500/40"
+                      className="w-full bg-app-bg border border-app-border rounded-xl p-3 text-xs text-app-text-primary outline-none focus:border-orange-500/40"
                     >
                       <option value="percentage">Percentage Discount (%)</option>
                       <option value="fixed_amount">Fixed Amount BDT (৳)</option>
@@ -909,7 +909,7 @@ export default function Coupons() {
                   {/* Discount Value */}
                   {formType !== 'free_shipping' && (
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">
+                      <label className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">
                         {formType === 'percentage' ? 'Percentage Off (%)' : formType === 'buy_x_get_y' ? 'Free Quantity (Y)' : 'Discount Value (৳ BDT)'}
                       </label>
                       <input
@@ -919,18 +919,18 @@ export default function Coupons() {
                         max={formType === 'percentage' ? 100 : 999999}
                         value={formDiscountValue}
                         onChange={(e) => setFormDiscountValue(parseFloat(e.target.value) || 0)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-orange-500/40"
+                        className="w-full bg-app-bg border border-app-border rounded-xl p-3 text-xs text-app-text-primary outline-none focus:border-orange-500/40"
                       />
                     </div>
                   )}
 
                   {/* Target Eligibility */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Apply Constraints To</label>
+                    <label className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Apply Constraints To</label>
                     <select
                       value={formTarget}
                       onChange={(e) => setFormTarget(e.target.value as DiscountTarget)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-orange-500/40"
+                      className="w-full bg-app-bg border border-app-border rounded-xl p-3 text-xs text-app-text-primary outline-none focus:border-orange-500/40"
                     >
                       <option value="all_products">All Products</option>
                       <option value="specific_category">Specific Category Taxonomy</option>
@@ -942,25 +942,25 @@ export default function Coupons() {
 
                 {/* BOGO Rules inputs */}
                 {formType === 'buy_x_get_y' && (
-                  <div className="p-4 bg-slate-950/50 border border-slate-800 rounded-2xl grid grid-cols-2 gap-4">
+                  <div className="p-4 bg-app-bg/10 border border-app-border rounded-2xl grid grid-cols-2 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Required Buy Qty (X)</label>
+                      <label className="text-[9px] font-black text-app-text-secondary uppercase tracking-wider block">Required Buy Qty (X)</label>
                       <input 
                         type="number"
                         min={1}
                         value={buyQty}
                         onChange={(e) => setBuyQty(parseInt(e.target.value) || 1)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white outline-none"
+                        className="w-full bg-app-bg border border-app-border rounded-xl p-2.5 text-xs text-app-text-primary outline-none"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Get Free Qty (Y)</label>
+                      <label className="text-[9px] font-black text-app-text-secondary uppercase tracking-wider block">Get Free Qty (Y)</label>
                       <input 
                         type="number"
                         min={1}
                         value={getQty}
                         onChange={(e) => setGetQty(parseInt(e.target.value) || 1)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white outline-none"
+                        className="w-full bg-app-bg border border-app-border rounded-xl p-2.5 text-xs text-app-text-primary outline-none"
                       />
                     </div>
                   </div>
@@ -968,40 +968,40 @@ export default function Coupons() {
 
                 {/* Target Whitelist helper depending on formTarget */}
                 {formTarget !== 'all_products' && (
-                  <div className="p-4 bg-slate-950/50 border border-slate-800 rounded-2xl space-y-3">
+                  <div className="p-4 bg-app-bg/10 border border-app-border rounded-2xl space-y-3">
                     {formTarget === 'specific_category' && (
                       <div className="space-y-1.5">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Applicable Categories (comma separated)</label>
+                        <label className="text-[9px] font-black text-app-text-secondary uppercase tracking-widest block">Applicable Categories (comma separated)</label>
                         <input
                           type="text"
                           placeholder="e.g. Fashion, Lifestyle"
                           value={ruleCategories}
                           onChange={(e) => setRuleCategories(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                          className="w-full bg-app-bg border border-app-border rounded-xl p-2.5 text-xs text-app-text-primary"
                         />
                       </div>
                     )}
                     {formTarget === 'specific_product' && (
                       <div className="space-y-1.5">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Applicable Product IDs (comma separated)</label>
+                        <label className="text-[9px] font-black text-app-text-secondary uppercase tracking-widest block">Applicable Product IDs (comma separated)</label>
                         <input
                           type="text"
                           placeholder="e.g. 101, 102"
                           value={ruleProducts}
                           onChange={(e) => setRuleProducts(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                          className="w-full bg-app-bg border border-app-border rounded-xl p-2.5 text-xs text-app-text-primary"
                         />
                       </div>
                     )}
                     {formTarget === 'specific_brand' && (
                       <div className="space-y-1.5">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Applicable Brands (comma separated)</label>
+                        <label className="text-[9px] font-black text-app-text-secondary uppercase tracking-widest block">Applicable Brands (comma separated)</label>
                         <input
                           type="text"
                           placeholder="e.g. Aarong, Apex"
                           value={ruleBrands}
                           onChange={(e) => setRuleBrands(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                          className="w-full bg-app-bg border border-app-border rounded-xl p-2.5 text-xs text-app-text-primary"
                         />
                       </div>
                     )}
@@ -1011,43 +1011,43 @@ export default function Coupons() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Start Date */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Valid From</label>
+                    <label className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Valid From</label>
                     <input
                       type="date"
                       required
                       value={formValidFrom}
                       onChange={(e) => setFormValidFrom(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-orange-500/40"
+                      className="w-full bg-app-bg border border-app-border rounded-xl p-3 text-xs text-app-text-primary outline-none focus:border-orange-500/40"
                     />
                   </div>
 
                   {/* End Date */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Valid Until (Expiry)</label>
+                    <label className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Valid Until (Expiry)</label>
                     <input
                       type="date"
                       required
                       value={formValidUntil}
                       onChange={(e) => setFormValidUntil(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-orange-500/40"
+                      className="w-full bg-app-bg border border-app-border rounded-xl p-3 text-xs text-app-text-primary outline-none focus:border-orange-500/40"
                     />
                   </div>
                 </div>
 
                 {/* Description */}
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Campaign Description</label>
+                  <label className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Campaign Description</label>
                   <input
                     type="text"
                     placeholder="e.g. Save 15% on winter sweaters catalog checkout"
                     value={formDescription}
                     onChange={(e) => setFormDescription(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none focus:border-orange-500/40"
+                    className="w-full bg-app-bg border border-app-border rounded-xl p-3 text-xs text-app-text-primary outline-none focus:border-orange-500/40"
                   />
                 </div>
 
                 {/* Collapsible Advanced Rules Trigger */}
-                <div className="border-t border-slate-800 pt-3">
+                <div className="border-t border-app-border pt-3">
                   <button
                     type="button"
                     onClick={() => setShowAdvancedRules(p => !p)}
@@ -1061,54 +1061,54 @@ export default function Coupons() {
                     <motion.div 
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: 'auto' }}
-                      className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 p-4 bg-slate-950/40 border border-slate-850 rounded-2xl"
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4 p-4 bg-app-bg/10 border border-app-border rounded-2xl"
                     >
                       {/* Min spend */}
                       <div className="space-y-1.5">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Min Purchase Requirement (৳ BDT)</label>
+                        <label className="text-[9px] font-black text-app-text-secondary uppercase tracking-wider block">Min Purchase Requirement (৳ BDT)</label>
                         <input
                           type="number"
                           placeholder="e.g. 1000"
                           value={minPurchase}
                           onChange={(e) => setMinPurchase(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                          className="w-full bg-app-bg border border-app-border rounded-xl p-2.5 text-xs text-app-text-primary"
                         />
                       </div>
 
                       {/* Max discount */}
                       {formType === 'percentage' && (
                         <div className="space-y-1.5">
-                          <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Cap Max Discount Value (৳ BDT)</label>
+                          <label className="text-[9px] font-black text-app-text-secondary uppercase tracking-wider block">Cap Max Discount Value (৳ BDT)</label>
                           <input
                             type="number"
                             placeholder="e.g. 500"
                             value={maxDiscount}
                             onChange={(e) => setMaxDiscount(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                            className="w-full bg-app-bg border border-app-border rounded-xl p-2.5 text-xs text-app-text-primary"
                           />
                         </div>
                       )}
 
                       {/* Total Usages cap */}
                       <div className="space-y-1.5">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Max Total Usages limit (Global)</label>
+                        <label className="text-[9px] font-black text-app-text-secondary uppercase tracking-wider block">Max Total Usages limit (Global)</label>
                         <input
                           type="number"
                           placeholder="e.g. 100"
                           value={maxTotalUsages}
                           onChange={(e) => setMaxTotalUsages(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                          className="w-full bg-app-bg border border-app-border rounded-xl p-2.5 text-xs text-app-text-primary"
                         />
                       </div>
 
                       {/* Usages per user */}
                       <div className="space-y-1.5">
-                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-wider block">Max Usages Allowed Per User</label>
+                        <label className="text-[9px] font-black text-app-text-secondary uppercase tracking-wider block">Max Usages Allowed Per User</label>
                         <input
                           type="number"
                           value={maxUsagesUser}
                           onChange={(e) => setMaxUsagesUser(e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white"
+                          className="w-full bg-app-bg border border-app-border rounded-xl p-2.5 text-xs text-app-text-primary"
                         />
                       </div>
                     </motion.div>
@@ -1116,11 +1116,11 @@ export default function Coupons() {
                 </div>
 
                 {/* Footer submit */}
-                <div className="flex gap-3 justify-end pt-4 border-t border-slate-800">
+                <div className="flex gap-3 justify-end pt-4 border-t border-app-border">
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="px-5 py-3 text-[10px] font-black uppercase text-slate-400 hover:text-white transition-all"
+                    className="px-5 py-3 text-[10px] font-black uppercase text-app-text-secondary hover:text-white transition-all"
                   >
                     Cancel
                   </button>
@@ -1138,21 +1138,21 @@ export default function Coupons() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Base code */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Base Code Prefix</label>
+                    <label className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Base Code Prefix</label>
                     <input
                       type="text"
                       required
                       placeholder="e.g. SUMM"
                       value={bulkBaseCode}
                       onChange={(e) => setBulkBaseCode(e.target.value.toUpperCase())}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none"
+                      className="w-full bg-app-bg border border-app-border rounded-xl p-3 text-xs text-app-text-primary outline-none"
                     />
                     <span className="text-[9px] text-slate-500 block font-mono">Will generate e.g. SUMM-R8A2, SUMM-9X3B</span>
                   </div>
 
                   {/* Quantity to generate */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Generate Quantity (No. of Codes)</label>
+                    <label className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Generate Quantity (No. of Codes)</label>
                     <input
                       type="number"
                       required
@@ -1160,7 +1160,7 @@ export default function Coupons() {
                       max={50}
                       value={bulkQuantity}
                       onChange={(e) => setBulkQuantity(parseInt(e.target.value) || 1)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none"
+                      className="w-full bg-app-bg border border-app-border rounded-xl p-3 text-xs text-app-text-primary outline-none"
                     />
                   </div>
                 </div>
@@ -1168,11 +1168,11 @@ export default function Coupons() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Type */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Voucher Discount Type</label>
+                    <label className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Voucher Discount Type</label>
                     <select
                       value={bulkType}
                       onChange={(e) => setBulkType(e.target.value as CouponType)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none"
+                      className="w-full bg-app-bg border border-app-border rounded-xl p-3 text-xs text-app-text-primary outline-none"
                     >
                       <option value="percentage">Percentage Off (%)</option>
                       <option value="fixed_amount">Fixed Amount BDT (৳)</option>
@@ -1181,13 +1181,13 @@ export default function Coupons() {
 
                   {/* Value */}
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Discount Value</label>
+                    <label className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Discount Value</label>
                     <input
                       type="number"
                       required
                       value={bulkValue}
                       onChange={(e) => setBulkValue(parseFloat(e.target.value) || 0)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white outline-none"
+                      className="w-full bg-app-bg border border-app-border rounded-xl p-3 text-xs text-app-text-primary outline-none"
                     />
                   </div>
                 </div>
@@ -1195,18 +1195,18 @@ export default function Coupons() {
                 {/* Bulk explanation info */}
                 <div className="p-4 bg-orange-500/5 border border-orange-500/10 rounded-2xl flex items-start gap-3">
                   <Info className="w-5 h-5 text-orange-400 shrink-0 mt-0.5" />
-                  <div className="text-[10px] text-slate-400 leading-relaxed font-semibold">
-                    <span className="font-bold text-white block mb-0.5">Bulk Generation Protocol</span>
+                  <div className="text-[10px] text-app-text-secondary leading-relaxed font-semibold">
+                    <span className="font-bold text-app-text-primary block mb-0.5">Bulk Generation Protocol</span>
                     Bulk coupons are deployed with default 30-day durations and global target availability. Each suffix is cryptographically randomized to avoid code collision. Ideal for printing flyers, newsletter blasts, or affiliate distribution.
                   </div>
                 </div>
 
                 {/* Footer bulk */}
-                <div className="flex gap-3 justify-end pt-4 border-t border-slate-800">
+                <div className="flex gap-3 justify-end pt-4 border-t border-app-border">
                   <button
                     type="button"
                     onClick={() => setShowCreateModal(false)}
-                    className="px-5 py-3 text-[10px] font-black uppercase text-slate-400 hover:text-white"
+                    className="px-5 py-3 text-[10px] font-black uppercase text-app-text-secondary hover:text-white"
                   >
                     Cancel
                   </button>

@@ -95,6 +95,54 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+const RootRoute: React.FC = () => {
+  const { profile, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-app-bg flex items-center justify-center text-app-accent font-mono text-[10px] uppercase tracking-[4px] animate-pulse">
+        Authenticating Choosify Session...
+      </div>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <Suspense fallback={null}>
+        <LoginPage />
+      </Suspense>
+    );
+  }
+
+  if (profile.role === 'seller') {
+    return <Navigate to="/seller/products" replace />;
+  } else if (profile.role === 'creator') {
+    return <Navigate to="/dashboard/content-studio/guides" replace />;
+  } else {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+};
+
+const LoginRoute: React.FC = () => {
+  const { profile, loading } = useAuth();
+
+  if (loading) return null;
+  if (profile) {
+    if (profile.role === 'seller') {
+      return <Navigate to="/seller/products" replace />;
+    } else if (profile.role === 'creator') {
+      return <Navigate to="/dashboard/content-studio/guides" replace />;
+    } else {
+      return <Navigate to="/admin/dashboard" replace />;
+    }
+  }
+  return (
+    <Suspense fallback={null}>
+      <LoginPage />
+    </Suspense>
+  );
+};
+
 import { CMSProvider } from './contexts/CMSContext';
 import { CMSDataProvider } from './contexts/CMSDataContext';
 import { AdsProvider } from './contexts/AdsContext';
@@ -103,6 +151,10 @@ import { BrandProfilesProvider } from './contexts/BrandProfilesContext';
 import { CreatorProvider } from './contexts/CreatorContext';
 
 export default function App() {
+  React.useEffect(() => {
+    document.title = "Dashboard | Choosify";
+  }, []);
+
   return (
     <CMSProvider>
       <CMSDataProvider>
@@ -122,7 +174,7 @@ export default function App() {
               <ReviewModerationProvider>
               <DisputeProvider>
               <Routes>
-            <Route path="/login" element={<Suspense fallback={null}><LoginPage /></Suspense>} />
+            <Route path="/login" element={<LoginRoute />} />
             <Route path="/products/:id" element={<Suspense fallback={null}><ProductDetailPage /></Suspense>} />
             <Route path="/upe/:entityType/:entityId" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Unified Profile...</div>}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
             
@@ -133,7 +185,8 @@ export default function App() {
             <Route path="/order/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
             <Route path="/creator/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
             
-            <Route path="/" element={<Suspense fallback={null}><Home /></Suspense>} />
+            <Route path="/" element={<RootRoute />} />
+            <Route path="/marketplace" element={<Suspense fallback={null}><Home /></Suspense>} />
             
             <Route path="/admin/*" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Platform Interface...</div>}><Routes>
               <Route path="upe/:entityType/:entityId" element={<UnifiedProfileShell />} />

@@ -514,20 +514,20 @@ export default function GuideEditStudio() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed top-8 right-8 z-[300] bg-slate-900 border border-orange-500/30 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3"
+            className="fixed top-8 right-8 z-[300] bg-app-card border border-orange-500/30 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3"
           >
             <span className="w-2.5 h-2.5 bg-orange-500 rounded-full animate-ping" />
-            <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-200">{toastMessage}</span>
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-app-text-secondary">{toastMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* STICKY TOP ACTION BAR */}
-      <div className="sticky top-0 z-40 bg-[#0B1528] text-white px-6 py-3.5 rounded-2xl shadow-md flex items-center justify-between mb-8 border border-white/10">
+      <div className="sticky top-0 z-40 bg-[#0B1528] text-app-text-primary px-6 py-3.5 rounded-2xl shadow-md flex items-center justify-between mb-8 border border-app-border">
         <div className="flex items-center gap-4">
           <button 
             onClick={() => navigate("/dashboard/content-studio/guides")}
-            className="p-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition-all border border-white/10 text-white"
+            className="p-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition-all border border-app-border text-app-text-primary"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
@@ -536,11 +536,11 @@ export default function GuideEditStudio() {
               <span className="bg-orange-500/20 text-orange-400 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border border-orange-500/30">
                 Guide Studio V3
               </span>
-              <span className={`text-[10px] font-mono font-bold uppercase ${guide.status === "Published" ? "text-emerald-400" : "text-amber-400"}`}>
+              <span className={`text-[10px] font-mono font-bold uppercase${guide.status === "Published" ? "text-emerald-400" : "text-amber-400"}`}>
                 ● {guide.status} ({savingState})
               </span>
             </div>
-            <h2 className="text-sm font-black text-white truncate max-w-[150px] md:max-w-[450px]">
+            <h2 className="text-sm font-black text-app-text-primary truncate max-w-[150px] md:max-w-[450px]">
               {guide.guideTitle}
             </h2>
           </div>
@@ -549,16 +549,16 @@ export default function GuideEditStudio() {
         {/* Action button bar */}
         <div className="flex items-center gap-3">
           {/* Viewport swap */}
-          <div className="hidden lg:flex p-1 bg-white/10 border border-white/10 rounded-xl gap-1">
+          <div className="hidden lg:flex p-1 bg-white/10 border border-app-border rounded-xl gap-1">
             <button
               onClick={() => setViewportMode("desktop")}
-              className={`p-1.5 rounded-lg transition-colors flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider ${viewportMode === "desktop" ? "bg-white/20 text-orange-400" : "text-slate-300 hover:text-white"}`}
+              className={`p-1.5 rounded-lg transition-colors flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider${viewportMode === "desktop" ? "bg-white/20 text-orange-400" : "text-slate-300 hover:text-white"}`}
             >
               <Laptop className="w-3.5 h-3.5" /> Desktop
             </button>
             <button
               onClick={() => setViewportMode("mobile")}
-              className={`p-1.5 rounded-lg transition-colors flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider ${viewportMode === "mobile" ? "bg-white/20 text-orange-400" : "text-slate-300 hover:text-white"}`}
+              className={`p-1.5 rounded-lg transition-colors flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider${viewportMode === "mobile" ? "bg-white/20 text-orange-400" : "text-slate-300 hover:text-white"}`}
             >
               <Smartphone className="w-3.5 h-3.5" /> Mobile View
             </button>
@@ -584,7 +584,7 @@ export default function GuideEditStudio() {
               handleFieldChange("status", "Draft");
               triggerToast("✓ Guide saved to draft workspace.");
             }}
-            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold uppercase tracking-wider border border-white/10 transition-all"
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 text-app-text-primary rounded-xl text-xs font-bold uppercase tracking-wider border border-app-border transition-all"
           >
             Save Draft
           </button>
@@ -594,7 +594,7 @@ export default function GuideEditStudio() {
               setActiveDrawerSection("seo");
               triggerToast("Opening global settings drawer.");
             }}
-            className="p-2.5 bg-white/10 hover:bg-white/20 rounded-xl border border-white/10 text-white"
+            className="p-2.5 bg-white/10 hover:bg-white/20 rounded-xl border border-app-border text-app-text-primary"
             title="SEO Settings"
           >
             <Settings className="w-4 h-4" />
@@ -609,7 +609,7 @@ export default function GuideEditStudio() {
           <span>Last Saved revision: <strong className="text-slate-950">{guide.lastUpdated}</strong></span>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-[10px] text-slate-400 font-mono uppercase">Sync snapshots: {versions.length} available</span>
+          <span className="text-[10px] text-app-text-secondary font-mono uppercase">Sync snapshots: {versions.length} available</span>
           <button 
             onClick={() => setActiveDrawerSection("versions")}
             className="text-orange-600 hover:text-orange-700 hover:underline uppercase text-[9px] font-black"
@@ -621,7 +621,7 @@ export default function GuideEditStudio() {
 
       {/* THE ACTUAL WEB APP WORKSPACE CONTENT AREA */}
       {/* This adjusts fluidly with custom margins mimicking the chosen viewport mode */}
-      <div className={`transition-all duration-300 mx-auto ${viewportMode === "mobile" ? "max-w-[440px] border-x-4 border-slate-200 p-4 bg-white rounded-[2.5rem] shadow-2xl" : "w-full"}`}>
+      <div className={`transition-all duration-300 mx-auto${viewportMode === "mobile" ? "max-w-[440px] border-x-4 border-slate-200 p-4 bg-white rounded-[2.5rem] shadow-2xl" : "w-full"}`}>
         
         {/* ================= SECTION 1: GUIDE HERO ================= */}
         <div id="section-1-hero" className="bg-white rounded-3xl p-6 md:p-8 border border-slate-200 shadow-sm mb-6 text-left relative group overflow-hidden flex flex-col gap-6">
@@ -637,13 +637,13 @@ export default function GuideEditStudio() {
 
           {/* Submit Sample badge overlay */}
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="bg-[#0B1528] text-white font-mono font-black text-[9px] uppercase tracking-widest px-3 py-1 rounded-md shadow-sm">
+            <span className="bg-[#0B1528] text-app-text-primary font-mono font-black text-[9px] uppercase tracking-widest px-3 py-1 rounded-md shadow-sm">
               ● {guide.submitSampleBadge}
             </span>
             <span className="bg-slate-100 border border-slate-200 text-slate-700 font-bold text-[8px] uppercase tracking-wider px-2 py-1 rounded">
               {guide.category}
             </span>
-            <span className="text-slate-400 text-[10px] font-mono whitespace-nowrap">{guide.readTime}</span>
+            <span className="text-app-text-secondary text-[10px] font-mono whitespace-nowrap">{guide.readTime}</span>
           </div>
 
           {/* Hero title overlay body */}
@@ -657,7 +657,7 @@ export default function GuideEditStudio() {
           <div className="relative w-full h-[280px] md:h-[400px] rounded-2xl overflow-hidden border border-slate-100 shadow-inner bg-slate-50">
             <img src={guide.heroImage} className="w-full h-full object-cover" alt="Featured hero banner" />
             <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-4 flex items-center justify-between">
-              <span className="text-white/80 text-[10px] font-mono bg-black/30 px-2 py-1 rounded backdrop-blur-sm">Featured Representation Unit</span>
+              <span className="text-white/80 text-[10px] font-mono bg-app-card/20 px-2 py-1 rounded backdrop-blur-sm">Featured Representation Unit</span>
             </div>
           </div>
 
@@ -667,12 +667,12 @@ export default function GuideEditStudio() {
               <button
                 key={idx}
                 onClick={() => handleFieldChange("heroImage", img)}
-                className={`w-14 h-10 rounded-lg overflow-hidden border transition-all ${guide.heroImage === img ? "border-orange-500 ring-4 ring-orange-100" : "border-slate-200 opacity-70 hover:opacity-100"}`}
+                className={`w-14 h-10 rounded-lg overflow-hidden border transition-all${guide.heroImage === img ? "border-orange-500 ring-4 ring-orange-100" : "border-slate-200 opacity-70 hover:opacity-100"}`}
               >
                 <img src={img} className="w-full h-full object-cover" alt="Thumb" />
               </button>
             ))}
-            <span className="text-[9px] uppercase font-mono tracking-widest text-slate-400 ml-4 font-bold">Interactive Gallery Strip</span>
+            <span className="text-[9px] uppercase font-mono tracking-widest text-app-text-secondary ml-4 font-bold">Interactive Gallery Strip</span>
           </div>
 
           {/* Sub content: Creator preview info, love buttons */}
@@ -680,7 +680,7 @@ export default function GuideEditStudio() {
             <div className="flex items-center gap-3">
               <img src={guide.authorAvatar} className="w-10 h-10 rounded-full object-cover border border-slate-100 shadow-sm" alt="Author" />
               <div className="text-left">
-                <span className="text-slate-400 text-[9px] block font-mono uppercase font-bold tracking-wider">Vetted by Lead editor</span>
+                <span className="text-app-text-secondary text-[9px] block font-mono uppercase font-bold tracking-wider">Vetted by Lead editor</span>
                 <span className="text-slate-800 text-xs font-black font-sans flex items-center gap-1.5">
                   {guide.authorName} 
                   {guide.authorVerified && <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 fill-emerald-500/10" />}
@@ -692,9 +692,9 @@ export default function GuideEditStudio() {
             <div className="flex items-center gap-4 bg-slate-50 px-4 py-2.5 rounded-2xl border border-slate-150">
               <button 
                 onClick={() => handleFieldChange("myLoved", !guide.myLoved)}
-                className={`flex items-center gap-1.5 text-xs font-bold uppercase transition-all ${guide.myLoved ? "text-rose-650" : "text-slate-400 hover:text-slate-600"}`}
+                className={`flex items-center gap-1.5 text-xs font-bold uppercase transition-all${guide.myLoved ? "text-rose-650" : "text-slate-400 hover:text-slate-600"}`}
               >
-                <Heart className={`w-4 h-4 ${guide.myLoved ? "fill-rose-500 text-rose-600" : ""}`} /> 
+                <Heart className={`w-4 h-4${guide.myLoved ? "fill-rose-500 text-rose-600" : ""}`} /> 
                 <span>{guide.myLoved ? "Loved" : "Love Brand?"}</span>
               </button>
               <div className="w-[1px] h-4 bg-slate-200" />
@@ -714,31 +714,31 @@ export default function GuideEditStudio() {
         {/* ================= SECTION 2: GUIDE PERFORMANCE BAR ================= */}
         <div id="section-2-performance" className="bg-white border border-slate-200 rounded-2xl p-5 mb-6 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 text-left shadow-sm">
           <div>
-            <span className="text-[8px] font-mono text-slate-400 uppercase tracking-wider block font-bold">Est Views</span>
+            <span className="text-[8px] font-mono text-app-text-secondary uppercase tracking-wider block font-bold">Est Views</span>
             <span className="text-sm font-black text-slate-900">{guide.perfViews.toLocaleString()}</span>
           </div>
           <div>
-            <span className="text-[8px] font-mono text-slate-400 uppercase tracking-wider block font-bold">Loved Count</span>
+            <span className="text-[8px] font-mono text-app-text-secondary uppercase tracking-wider block font-bold">Loved Count</span>
             <span className="text-sm font-black text-rose-600">❤ {guide.perfLoved}</span>
           </div>
           <div>
-            <span className="text-[8px] font-mono text-slate-400 uppercase tracking-wider block font-bold">Helpful Votes</span>
+            <span className="text-[8px] font-mono text-app-text-secondary uppercase tracking-wider block font-bold">Helpful Votes</span>
             <span className="text-sm font-black text-emerald-600">✓ {guide.perfHelpful}</span>
           </div>
           <div>
-            <span className="text-[8px] font-mono text-slate-400 uppercase tracking-wider block font-bold">Purchases</span>
+            <span className="text-[8px] font-mono text-app-text-secondary uppercase tracking-wider block font-bold">Purchases</span>
             <span className="text-sm font-black text-slate-900">{guide.perfPurchases} Units</span>
           </div>
           <div>
-            <span className="text-[8px] font-mono text-slate-400 uppercase tracking-wider block font-bold">Click Through Rate</span>
+            <span className="text-[8px] font-mono text-app-text-secondary uppercase tracking-wider block font-bold">Click Through Rate</span>
             <span className="text-sm font-black text-orange-600">{guide.perfCtr}</span>
           </div>
           <div>
-            <span className="text-[8px] font-mono text-slate-400 uppercase tracking-wider block font-bold">Conv. Rate</span>
+            <span className="text-[8px] font-mono text-app-text-secondary uppercase tracking-wider block font-bold">Conv. Rate</span>
             <span className="text-sm font-black text-slate-900">{guide.perfConvRate}</span>
           </div>
           <div className="col-span-2 md:col-span-1">
-            <span className="text-[8px] font-mono text-slate-400 uppercase tracking-wider block font-bold">Revenue Influenced</span>
+            <span className="text-[8px] font-mono text-app-text-secondary uppercase tracking-wider block font-bold">Revenue Influenced</span>
             <span className="text-sm font-black text-emerald-600">{guide.perfRevInfluenced}</span>
           </div>
         </div>
@@ -794,7 +794,7 @@ export default function GuideEditStudio() {
           </div>
 
           {/* CENTER 45% COLUMN: WINNER PRODUCT (APPROVED EXCLUSIVE DARK SECTION) */}
-          <div className="lg:col-span-6 bg-[#1A1A2E] text-white rounded-2xl p-6 border border-slate-800 text-left relative group">
+          <div className="lg:col-span-6 bg-app-card text-app-text-primary rounded-2xl p-6 border border-app-border text-left relative group">
             
             <button 
               id="edit-trigger-winner"
@@ -810,35 +810,35 @@ export default function GuideEditStudio() {
 
             <div className="flex flex-col md:flex-row gap-6 mt-10">
               <div className="w-full md:w-36 shrink-0 text-center">
-                <div className="bg-slate-900 rounded-xl p-3 border border-slate-800 aspect-square flex items-center justify-center relative">
+                <div className="bg-app-card rounded-xl p-3 border border-app-border aspect-square flex items-center justify-center relative">
                   <img src={winnerProduct?.image} className="w-full h-full object-contain scale-105" alt="Winner product icon" />
                   <span className="absolute bottom-1 right-1 bg-orange-600 font-mono font-black text-[8px] px-1.5 rounded uppercase">{winnerProduct?.badge}</span>
                 </div>
                 
                 <div className="mt-4">
-                  <span className="text-[8px] font-mono text-slate-400 block">LOCAL RETAIL DEAL</span>
+                  <span className="text-[8px] font-mono text-app-text-secondary block">LOCAL RETAIL DEAL</span>
                   <span className="text-base font-black text-[#00D4B2]">{guide.winnerPriceOverride}</span>
                 </div>
               </div>
 
               {/* Info details and scoring benchmarks */}
               <div className="flex-1 space-y-3.5">
-                <h3 className="text-base md:text-lg font-black text-white leading-none tracking-tight">
+                <h3 className="text-base md:text-lg font-black text-app-text-primary leading-none tracking-tight">
                   {winnerProduct?.name}
                 </h3>
-                <p className="text-[11px] text-slate-300 leading-normal font-serif">
+                <p className="text-[11px] text-app-text-secondary leading-normal font-serif">
                   Our rigorous thermal stresses run within Bangladesh's extreme summer conditions confirm this unit holds exceptional high sustained benchmarks. Retains unmatched specifications retention.
                 </p>
 
                 {/* Score meters */}
-                <div className="space-y-1.5 bg-[#0F0F1D] border border-slate-800 p-3 rounded-xl mt-3">
+                <div className="space-y-1.5 bg-[#0F0F1D] border border-app-border p-3 rounded-xl mt-3">
                   {guide.winnerMetrics.map((met, idx) => (
                     <div key={idx} className="space-y-0.5 text-[10px]">
-                      <div className="flex justify-between font-bold text-slate-300">
+                      <div className="flex justify-between font-bold text-app-text-secondary">
                         <span>{met.label}</span>
                         <span className="text-orange-400 font-mono">{met.score.toFixed(1)} / 10</span>
                       </div>
-                      <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
+                      <div className="w-full h-1 bg-app-bg rounded-full overflow-hidden">
                         <div className="h-full bg-emerald-400 rounded-full" style={{ width: `${met.score * 10}%` }} />
                       </div>
                     </div>
@@ -941,7 +941,7 @@ export default function GuideEditStudio() {
           {/* Tags grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {guide.whyThisWonTags.map((tag, idx) => (
-              <div key={tag.id} className={`flex items-start gap-3 p-3 rounded-xl border ${getPillColorClasses(tag.colorType)}`}>
+              <div key={tag.id} className={`flex items-start gap-3 p-3 rounded-xl border${getPillColorClasses(tag.colorType)}`}>
                 <span className="w-5 h-5 rounded bg-white/60 shadow-sm flex items-center justify-center font-mono text-[9px] font-black text-slate-700 mt-0.5">{idx+1}</span>
                 <div className="text-left">
                   <span className="text-[11px] font-bold text-slate-900 block">{tag.label}</span>
@@ -1105,7 +1105,7 @@ export default function GuideEditStudio() {
                 <div key={pid} className="p-4 bg-slate-50 border border-slate-200 rounded-xl flex items-start gap-4">
                   <div className="w-16 h-16 bg-white p-2 rounded-lg border border-slate-200 flex items-center justify-center shrink-0 relative shadow-sm">
                     <img src={p.image} className="w-full h-full object-contain" alt="" />
-                    <span className="absolute -top-2.5 -left-2 bg-[#0B1528] text-orange-400 text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-slate-700 font-mono">
+                    <span className="absolute -top-2.5 -left-2 bg-[#0B1528] text-orange-400 text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border border-app-border font-mono">
                       #{displayRank}
                     </span>
                   </div>
@@ -1143,17 +1143,17 @@ export default function GuideEditStudio() {
           <div className="space-y-2.5 text-xs text-slate-800 bg-slate-50 p-4 rounded-xl border border-slate-200/60">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <span className="text-[9px] text-slate-400 font-mono uppercase block">Google SEO Title:</span>
+                <span className="text-[9px] text-app-text-secondary font-mono uppercase block">Google SEO Title:</span>
                 <span className="font-semibold text-slate-900">{guide.seoTitle}</span>
               </div>
               <div>
-                <span className="text-[9px] text-slate-400 font-mono uppercase block">Url Slug:</span>
+                <span className="text-[9px] text-app-text-secondary font-mono uppercase block">Url Slug:</span>
                 <span className="font-mono text-[#00D4B2] font-bold">/{guide.slug}</span>
               </div>
             </div>
             <div className="w-full h-[1px] bg-slate-200 my-2" />
             <div>
-              <span className="text-[9px] text-slate-400 font-mono uppercase block">Meta Description:</span>
+              <span className="text-[9px] text-app-text-secondary font-mono uppercase block">Meta Description:</span>
               <p className="text-[11px] text-slate-600 leading-relaxed font-sans">{guide.seoDescription}</p>
             </div>
           </div>
@@ -1175,25 +1175,25 @@ export default function GuideEditStudio() {
           </span>
 
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
-            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase ${guide.disclosureAffiliate ? "bg-orange-505/10 border-orange-200 text-orange-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
+            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase${guide.disclosureAffiliate ? "bg-orange-505/10 border-orange-200 text-orange-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
               Affiliate Links
             </div>
-            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase ${guide.disclosureSponsored ? "bg-[#d4b200]/10 border-[#d4b200]/20 text-yellow-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
+            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase${guide.disclosureSponsored ? "bg-[#d4b200]/10 border-[#d4b200]/20 text-yellow-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
               Sponsored content
             </div>
-            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase ${guide.disclosureSampleReceived ? "bg-indigo-50/10 border-indigo-200 text-indigo-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
+            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase${guide.disclosureSampleReceived ? "bg-indigo-50/10 border-indigo-200 text-indigo-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
               Sample Received
             </div>
-            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase ${guide.disclosureIndependentlyPurchased ? "bg-emerald-50/10 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
+            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase${guide.disclosureIndependentlyPurchased ? "bg-emerald-50/10 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
               Indep. Purchased
             </div>
-            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase ${guide.disclosureCreatorTested ? "bg-emerald-50/10 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
+            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase${guide.disclosureCreatorTested ? "bg-emerald-50/10 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
               Creator Tested
             </div>
-            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase ${guide.disclosureFactChecked ? "bg-emerald-50/10 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
+            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase${guide.disclosureFactChecked ? "bg-emerald-50/10 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
               Fact Checked
             </div>
-            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase text-ellipsis overflow-hidden ${guide.disclosureEditorReviewed ? "bg-emerald-50/10 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
+            <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase text-ellipsis overflow-hidden${guide.disclosureEditorReviewed ? "bg-emerald-50/10 border-emerald-200 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
               Editor Reviewed
             </div>
           </div>
@@ -1207,23 +1207,23 @@ export default function GuideEditStudio() {
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div className="bg-slate-50 p-4 border border-slate-200/60 rounded-xl">
-              <span className="text-[9px] text-slate-400 font-mono block">Clicks & views:</span>
+              <span className="text-[9px] text-app-text-secondary font-mono block">Clicks & views:</span>
               <span className="text-sm font-black text-slate-900">{guide.analyticsViews.toLocaleString()} Hits</span>
             </div>
             <div className="bg-slate-50 p-4 border border-slate-200/60 rounded-xl">
-              <span className="text-[9px] text-slate-400 font-mono block">Helpful ratio:</span>
+              <span className="text-[9px] text-app-text-secondary font-mono block">Helpful ratio:</span>
               <span className="text-sm font-black text-emerald-600">{guide.analyticsHelpfulVotes.toLocaleString()} Votes</span>
             </div>
             <span className="bg-slate-50 p-4 border border-slate-200/60 rounded-xl">
-              <span className="text-[9px] text-slate-400 font-mono block">Average Read Time:</span>
+              <span className="text-[9px] text-app-text-secondary font-mono block">Average Read Time:</span>
               <span className="text-sm font-black text-slate-900">{guide.analyticsAvgReadTime}</span>
             </span>
             <div className="bg-slate-50 p-4 border border-slate-200/60 rounded-xl">
-              <span className="text-[9px] text-slate-400 font-mono block">Total Purchases:</span>
+              <span className="text-[9px] text-app-text-secondary font-mono block">Total Purchases:</span>
               <span className="text-sm font-black text-slate-900">{guide.analyticsPurchasesCount} Sales</span>
             </div>
             <div className="bg-slate-50 p-4 border border-slate-200/60 rounded-xl col-span-2 lg:col-span-1">
-              <span className="text-[9px] text-slate-400 font-mono block">Revenue:</span>
+              <span className="text-[9px] text-app-text-secondary font-mono block">Revenue:</span>
               <span className="text-sm font-black text-slate-900">{guide.analyticsRevenue}</span>
             </div>
           </div>
@@ -1243,7 +1243,7 @@ export default function GuideEditStudio() {
               animate={{ opacity: 0.5 }}
               exit={{ opacity: 0 }}
               onClick={() => setActiveDrawerSection(null)}
-              className="fixed inset-0 bg-black z-50 cursor-pointer"
+              className="fixed inset-0 bg-app-card z-50 cursor-pointer"
             />
 
             {/* Slide over drawer panel */}
@@ -1252,22 +1252,22 @@ export default function GuideEditStudio() {
               animate={{ x: 0 }}
               exit={{ x: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 200 }}
-              className="fixed inset-y-0 right-0 w-[480px] bg-slate-900 border-l border-slate-800 text-left text-slate-200 z-50 shadow-2xl flex flex-col justify-between overflow-hidden"
+              className="fixed inset-y-0 right-0 w-[480px] bg-app-card border-l border-app-border text-left text-app-text-secondary z-50 shadow-2xl flex flex-col justify-between overflow-hidden"
             >
               
               {/* Drawer Header */}
-              <div className="p-6 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
+              <div className="p-6 border-b border-app-border bg-app-bg flex items-center justify-between">
                 <div>
                   <span className="bg-orange-500/10 text-orange-500 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded">
                     Independent Config Drawer
                   </span>
-                  <h3 className="text-sm font-black text-white uppercase tracking-wider mt-1">
+                  <h3 className="text-sm font-black text-app-text-primary uppercase tracking-wider mt-1">
                     Edit Scoped: {activeDrawerSection}
                   </h3>
                 </div>
                 <button
                   onClick={() => setActiveDrawerSection(null)}
-                  className="p-2 bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl transition-all"
+                  className="p-2 bg-app-card hover:bg-slate-800 text-app-text-secondary hover:text-white rounded-xl transition-all"
                 >
                   ✕
                 </button>
@@ -1280,33 +1280,33 @@ export default function GuideEditStudio() {
                 {activeDrawerSection === "hero" && (
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">GUIDE WORKSPACE TITLE</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">GUIDE WORKSPACE TITLE</label>
                       <input 
                         type="text"
                         value={guide.guideTitle}
                         onChange={(e) => handleFieldChange("guideTitle", e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-white outline-none"
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary outline-none"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">FEATURED HERO IMAGE URL</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">FEATURED HERO IMAGE URL</label>
                       <input 
                         type="text"
                         value={guide.heroImage}
                         onChange={(e) => handleFieldChange("heroImage", e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-white outline-none"
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary outline-none"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">SUBMIT SAMPLE BADGE TEXT</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">SUBMIT SAMPLE BADGE TEXT</label>
                       <input 
                         type="text"
                         value={guide.submitSampleBadge}
                         onChange={(e) => handleFieldChange("submitSampleBadge", e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-white outline-none"
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary outline-none"
                       />
                     </div>
-                    <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-1.5">
+                    <div className="p-3 bg-app-bg/10 rounded-xl border border-app-border space-y-1.5">
                       <span className="text-[9px] font-mono text-slate-500 uppercase block">Active Gallery Image Strips</span>
                       {guide.galleryImages.map((g, idx) => (
                         <input
@@ -1317,7 +1317,7 @@ export default function GuideEditStudio() {
                             copy[idx] = e.target.value;
                             handleFieldChange("galleryImages", copy);
                           }}
-                          className="w-full bg-slate-950 border border-slate-800 p-2 rounded text-[10px] text-slate-300 font-mono outline-none"
+                          className="w-full bg-app-bg border border-app-border p-2 rounded text-[10px] text-app-text-secondary font-mono outline-none"
                         />
                       ))}
                     </div>
@@ -1327,15 +1327,15 @@ export default function GuideEditStudio() {
                 {/* HISTORICAL VERSION SNAPSHOT ROLLBACK MODULE */}
                 {activeDrawerSection === "versions" && (
                   <div className="space-y-4">
-                    <span className="text-[10px] text-slate-400 font-mono block uppercase">Restore historical snapshot sandbox revisions</span>
+                    <span className="text-[10px] text-app-text-secondary font-mono block uppercase">Restore historical snapshot sandbox revisions</span>
                     {versions.length === 0 ? (
-                      <div className="p-4 text-center text-xs text-slate-500 italic bg-slate-950 rounded-xl border border-slate-800">No backup records. Revisions auto capture during sectional saves.</div>
+                      <div className="p-4 text-center text-xs text-slate-500 italic bg-app-bg rounded-xl border border-app-border">No backup records. Revisions auto capture during sectional saves.</div>
                     ) : (
                       <div className="space-y-2">
                         {versions.map((snap, idx) => (
-                          <div key={idx} className="p-3.5 bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-xl transition-all flex items-center justify-between">
+                          <div key={idx} className="p-3.5 bg-app-bg border border-app-border hover:border-slate-700 rounded-xl transition-all flex items-center justify-between">
                             <div className="text-left max-w-[280px]">
-                              <span className="text-xs font-black text-slate-200 block">{snap.label}</span>
+                              <span className="text-xs font-black text-app-text-secondary block">{snap.label}</span>
                               <span className="text-[9px] font-mono text-slate-500 block">{snap.timestamp}</span>
                             </div>
                             <button
@@ -1358,23 +1358,23 @@ export default function GuideEditStudio() {
                 {activeDrawerSection === "meta" && (
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">METHODOLOGY DESCRIPTION SUMMARY</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">METHODOLOGY DESCRIPTION SUMMARY</label>
                       <textarea 
                         value={guide.methodologyDescription}
                         onChange={(e) => handleFieldChange("methodologyDescription", e.target.value)}
-                        className="w-full h-24 bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-slate-200 outline-none resize-none"
+                        className="w-full h-24 bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none resize-none"
                       />
                     </div>
                     
-                    <div className="p-4 bg-slate-950/60 rounded-xl border border-slate-800 space-y-2.5">
+                    <div className="p-4 bg-app-bg/10 rounded-xl border border-app-border space-y-2.5">
                       <div className="flex justify-between items-center mb-1">
-                        <span className="text-[9px] text-slate-400 font-mono uppercase block">Diagnostic Vetting Checklist:</span>
+                        <span className="text-[9px] text-app-text-secondary font-mono uppercase block">Diagnostic Vetting Checklist:</span>
                         <button
                           onClick={() => {
                             const newCheck = { id: "mc_" + Date.now(), text: "New laboratory verification benchmark audit", checked: true };
                             handleFieldChange("methodologyChecklist", [...guide.methodologyChecklist, newCheck]);
                           }}
-                          className="text-[8px] bg-slate-900 border border-slate-800 hover:bg-slate-800 text-orange-500 px-2 py-0.5 rounded font-black uppercase font-mono"
+                          className="text-[8px] bg-app-card border border-app-border hover:bg-slate-800 text-orange-500 px-2 py-0.5 rounded font-black uppercase font-mono"
                         >
                           + Add checklist key
                         </button>
@@ -1388,7 +1388,7 @@ export default function GuideEditStudio() {
                               copy[index].text = e.target.value;
                               handleFieldChange("methodologyChecklist", copy);
                             }}
-                            className="flex-1 bg-slate-950 border border-slate-800 p-2 rounded text-xs text-slate-200 outline-none"
+                            className="flex-1 bg-app-bg border border-app-border p-2 rounded text-xs text-app-text-secondary outline-none"
                           />
                           <button
                             onClick={() => {
@@ -1409,11 +1409,11 @@ export default function GuideEditStudio() {
                 {activeDrawerSection === "winner" && (
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">SELECT EXPERT WINNER PRODUCT</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">SELECT EXPERT WINNER PRODUCT</label>
                       <select
                         value={guide.winnerProductId}
                         onChange={(e) => handleFieldChange("winnerProductId", e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-slate-200 outline-none"
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none"
                       >
                         {catalogProducts.map(cp => (
                           <option key={cp.id} value={cp.id}>{cp.name}</option>
@@ -1423,40 +1423,40 @@ export default function GuideEditStudio() {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10px] text-slate-400 font-mono block mb-1">PRICE OVERRIDE DISPLAY</label>
+                        <label className="text-[10px] text-app-text-secondary font-mono block mb-1">PRICE OVERRIDE DISPLAY</label>
                         <input 
                           type="text"
                           value={guide.winnerPriceOverride}
                           onChange={(e) => handleFieldChange("winnerPriceOverride", e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-white outline-none"
+                          className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary outline-none"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-slate-400 font-mono block mb-1">CTA ACCENT BUTTON LABEL</label>
+                        <label className="text-[10px] text-app-text-secondary font-mono block mb-1">CTA ACCENT BUTTON LABEL</label>
                         <input 
                           type="text"
                           value={guide.winnerCtaLabel}
                           onChange={(e) => handleFieldChange("winnerCtaLabel", e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-white outline-none"
+                          className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary outline-none"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">CTA URL ADDRESS</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">CTA URL ADDRESS</label>
                       <input 
                         type="text"
                         value={guide.winnerCtaUrl}
                         onChange={(e) => handleFieldChange("winnerCtaUrl", e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-slate-300 outline-none"
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none"
                       />
                     </div>
 
-                    <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 space-y-3">
-                      <span className="text-[9px] font-mono text-slate-400 uppercase tracking-wider block">Adjust Winner Score Card parameters:</span>
+                    <div className="p-3 bg-app-bg/10 rounded-xl border border-app-border space-y-3">
+                      <span className="text-[9px] font-mono text-app-text-secondary uppercase tracking-wider block">Adjust Winner Score Card parameters:</span>
                       {guide.winnerMetrics.map((met, idx) => (
                         <div key={idx} className="flex items-center justify-between gap-3 text-xs">
-                          <span className="w-28 text-slate-300 font-medium truncate">{met.label}</span>
+                          <span className="w-28 text-app-text-secondary font-medium truncate">{met.label}</span>
                           <input 
                             type="range"
                             min="0"
@@ -1468,7 +1468,7 @@ export default function GuideEditStudio() {
                               copy[idx].score = parseFloat(e.target.value);
                               handleFieldChange("winnerMetrics", copy);
                             }}
-                            className="flex-1 accent-orange-500 h-1 rounded bg-slate-800"
+                            className="flex-1 accent-orange-500 h-1 rounded bg-app-bg"
                           />
                           <span className="font-mono text-orange-500 font-bold w-12 text-right">{met.score.toFixed(1)}/10</span>
                         </div>
@@ -1482,50 +1482,50 @@ export default function GuideEditStudio() {
                   <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10px] text-slate-400 font-mono block mb-1">CREATOR PIC AVATAR</label>
+                        <label className="text-[10px] text-app-text-secondary font-mono block mb-1">CREATOR PIC AVATAR</label>
                         <input 
                           type="text"
                           value={guide.authorAvatar}
                           onChange={(e) => handleFieldChange("authorAvatar", e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-white outline-none"
+                          className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary outline-none"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-slate-400 font-mono block mb-1">CREATOR FULL NAME</label>
+                        <label className="text-[10px] text-app-text-secondary font-mono block mb-1">CREATOR FULL NAME</label>
                         <input 
                           type="text"
                           value={guide.authorName}
                           onChange={(e) => handleFieldChange("authorName", e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-white outline-none"
+                          className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary outline-none"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">ROLE / CREDENTIALS SUMMARY</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">ROLE / CREDENTIALS SUMMARY</label>
                       <input 
                         type="text"
                         value={guide.authorRole}
                         onChange={(e) => handleFieldChange("authorRole", e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-slate-200 outline-none"
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none"
                       />
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">CREATOR BIOGRAPHY STATEMENT</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">CREATOR BIOGRAPHY STATEMENT</label>
                       <textarea 
                         value={guide.authorBio}
                         onChange={(e) => handleFieldChange("authorBio", e.target.value)}
-                        className="w-full h-20 bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-slate-200 outline-none resize-none"
+                        className="w-full h-20 bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none resize-none"
                       />
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">CREATOR HOUSES QUICK TIP</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">CREATOR HOUSES QUICK TIP</label>
                       <textarea 
                         value={guide.quickTipText}
                         onChange={(e) => handleFieldChange("quickTipText", e.target.value)}
-                        className="w-full h-24 bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-slate-200 outline-none font-serif resize-none"
+                        className="w-full h-24 bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none font-serif resize-none"
                       />
                     </div>
                   </div>
@@ -1534,9 +1534,9 @@ export default function GuideEditStudio() {
                 {/* SECTION 4: WHY THIS WON REASON PILLS */}
                 {activeDrawerSection === "reasons" && (
                   <div className="space-y-4">
-                    <span className="text-[10px] text-slate-400 font-mono block uppercase">Vetting index Reasoning Pills Customizer</span>
+                    <span className="text-[10px] text-app-text-secondary font-mono block uppercase">Vetting index Reasoning Pills Customizer</span>
                     {guide.whyThisWonTags.map((tag, idx) => (
-                      <div key={tag.id} className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+                      <div key={tag.id} className="p-3 bg-app-bg border border-app-border rounded-xl space-y-2">
                         <div className="flex justify-between items-center text-[10px] font-mono">
                           <span className="text-slate-550">Reason Tag #{idx+1}</span>
                           <span className="text-orange-500">Pill color type</span>
@@ -1549,7 +1549,7 @@ export default function GuideEditStudio() {
                               copy[idx].label = e.target.value;
                               handleFieldChange("whyThisWonTags", copy);
                             }}
-                            className="flex-1 bg-slate-900 border border-slate-800 p-2 rounded text-xs text-white outline-none"
+                            className="flex-1 bg-app-card border border-app-border p-2 rounded text-xs text-app-text-primary outline-none"
                           />
                           <select
                             value={tag.colorType}
@@ -1558,7 +1558,7 @@ export default function GuideEditStudio() {
                               copy[idx].colorType = e.target.value as any;
                               handleFieldChange("whyThisWonTags", copy);
                             }}
-                            className="bg-slate-900 border border-slate-800 text-[10px] font-mono rounded text-slate-300"
+                            className="bg-app-card border border-app-border text-[10px] font-mono rounded text-app-text-secondary"
                           >
                             <option value="green">Green</option>
                             <option value="blue">Blue</option>
@@ -1576,19 +1576,19 @@ export default function GuideEditStudio() {
                 {activeDrawerSection === "verdict" && (
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">VALUE VERDICT SUMMARY STATEMENT</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">VALUE VERDICT SUMMARY STATEMENT</label>
                       <textarea 
                         value={guide.verdictValueBody}
                         onChange={(e) => handleFieldChange("verdictValueBody", e.target.value)}
-                        className="w-full h-20 bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-slate-200 outline-none resize-none"
+                        className="w-full h-20 bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none resize-none"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">CHIPS & SUSATAINED SPEED VERDICT BODY</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">CHIPS & SUSATAINED SPEED VERDICT BODY</label>
                       <textarea 
                         value={guide.verdictPerformanceBody}
                         onChange={(e) => handleFieldChange("verdictPerformanceBody", e.target.value)}
-                        className="w-full h-20 bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-slate-200 outline-none resize-none"
+                        className="w-full h-20 bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none resize-none"
                       />
                     </div>
 
@@ -1598,7 +1598,7 @@ export default function GuideEditStudio() {
                         <span className="text-emerald-400 uppercase font-black">Best For Bullet List</span>
                         <button 
                           onClick={() => handleFieldChange("verdictBestFor", [...guide.verdictBestFor, ""])}
-                          className="text-[9px] bg-slate-900 border border-slate-800 hover:bg-slate-800 text-orange-500 px-2 py-0.5 rounded"
+                          className="text-[9px] bg-app-card border border-app-border hover:bg-slate-800 text-orange-500 px-2 py-0.5 rounded"
                         >
                           + Row
                         </button>
@@ -1612,7 +1612,7 @@ export default function GuideEditStudio() {
                               copy[ri] = e.target.value;
                               handleFieldChange("verdictBestFor", copy);
                             }}
-                            className="flex-1 bg-slate-950 border border-slate-800 p-2 rounded text-xs text-slate-200 outline-none"
+                            className="flex-1 bg-app-bg border border-app-border p-2 rounded text-xs text-app-text-secondary outline-none"
                           />
                           <button
                             onClick={() => {
@@ -1633,7 +1633,7 @@ export default function GuideEditStudio() {
                         <span className="text-rose-400 uppercase font-black">Not Suitable Bullet List</span>
                         <button 
                           onClick={() => handleFieldChange("verdictNotFor", [...guide.verdictNotFor, ""])}
-                          className="text-[9px] bg-slate-900 border border-slate-800 hover:bg-slate-800 text-orange-500 px-2 py-0.5 rounded"
+                          className="text-[9px] bg-app-card border border-app-border hover:bg-slate-800 text-orange-500 px-2 py-0.5 rounded"
                         >
                           + Row
                         </button>
@@ -1647,7 +1647,7 @@ export default function GuideEditStudio() {
                               copy[ri] = e.target.value;
                               handleFieldChange("verdictNotFor", copy);
                             }}
-                            className="flex-1 bg-slate-950 border border-slate-800 p-2 rounded text-xs text-slate-200 outline-none"
+                            className="flex-1 bg-app-bg border border-app-border p-2 rounded text-xs text-app-text-secondary outline-none"
                           />
                           <button
                             onClick={() => {
@@ -1668,11 +1668,11 @@ export default function GuideEditStudio() {
                 {activeDrawerSection === "evaluation" && (
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1 font-black">EDITORIAL RICH BODY PARAGRAPHS</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1 font-black">EDITORIAL RICH BODY PARAGRAPHS</label>
                       <textarea 
                         value={guide.evalBody}
                         onChange={(e) => handleFieldChange("evalBody", e.target.value)}
-                        className="w-full h-80 bg-slate-950 border border-slate-800 focus:border-orange-500 p-3 rounded-xl text-xs text-slate-200 outline-none resize-none font-serif leading-relaxed"
+                        className="w-full h-80 bg-app-bg border border-app-border focus:border-orange-500 p-3 rounded-xl text-xs text-app-text-secondary outline-none resize-none font-serif leading-relaxed"
                       />
                     </div>
                   </div>
@@ -1682,20 +1682,20 @@ export default function GuideEditStudio() {
                 {activeDrawerSection === "takeaways" && (
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">TAKEAWAYS HEADER LINE</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">TAKEAWAYS HEADER LINE</label>
                       <input 
                         type="text"
                         value={guide.takeawayHeadline}
                         onChange={(e) => handleFieldChange("takeawayHeadline", e.target.value.toUpperCase())}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-white"
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary"
                       />
                     </div>
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">CONCISE TAKEAWAY SUMMARY STATEMENT</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">CONCISE TAKEAWAY SUMMARY STATEMENT</label>
                       <textarea 
                         value={guide.takeawayBody}
                         onChange={(e) => handleFieldChange("takeawayBody", e.target.value)}
-                        className="w-full h-28 bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-slate-200 resize-none font-serif"
+                        className="w-full h-28 bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary resize-none font-serif"
                       />
                     </div>
                   </div>
@@ -1704,14 +1704,14 @@ export default function GuideEditStudio() {
                 {/* SECTION 8: OTHER PRODUCTS MENTIONED PROPERTIES */}
                 {activeDrawerSection === "others" && (
                   <div className="space-y-4">
-                    <span className="text-[10px] text-slate-400 font-mono block uppercase">Alternate contender products linking</span>
+                    <span className="text-[10px] text-app-text-secondary font-mono block uppercase">Alternate contender products linking</span>
                     
                     {guide.otherMentionedIds.map((pid) => {
                       const p = getProductById(pid);
                       if (!p) return null;
                       return (
-                        <div key={pid} className="p-3.5 bg-slate-950 border border-slate-800 rounded-xl space-y-3">
-                          <div className="flex justify-between items-center text-xs font-bold text-white">
+                        <div key={pid} className="p-3.5 bg-app-bg border border-app-border rounded-xl space-y-3">
+                          <div className="flex justify-between items-center text-xs font-bold text-app-text-primary">
                             <span>{p.name}</span>
                             <span className="text-orange-500 font-mono text-[10px]">Rank display: #{guide.otherRanks[pid] || 2}</span>
                           </div>
@@ -1726,7 +1726,7 @@ export default function GuideEditStudio() {
                                   copy[pid] = e.target.value;
                                   handleFieldChange("otherPriceOverrides", copy);
                                 }}
-                                className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded text-[10px] text-slate-200 outline-none"
+                                className="w-full bg-app-card border border-app-border p-1.5 rounded text-[10px] text-app-text-secondary outline-none"
                               />
                             </div>
                             <div>
@@ -1739,7 +1739,7 @@ export default function GuideEditStudio() {
                                   copy[pid] = parseInt(e.target.value) || 2;
                                   handleFieldChange("otherRanks", copy);
                                 }}
-                                className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded text-[10px] text-slate-200 outline-none"
+                                className="w-full bg-app-card border border-app-border p-1.5 rounded text-[10px] text-app-text-secondary outline-none"
                               />
                             </div>
                           </div>
@@ -1753,7 +1753,7 @@ export default function GuideEditStudio() {
                                 copy[pid] = e.target.value;
                                 handleFieldChange("otherNotes", copy);
                               }}
-                              className="w-full bg-slate-900 border border-slate-800 p-1.5 rounded text-[10px] text-slate-200 outline-none"
+                              className="w-full bg-app-card border border-app-border p-1.5 rounded text-[10px] text-app-text-secondary outline-none"
                             />
                           </div>
                         </div>
@@ -1766,52 +1766,52 @@ export default function GuideEditStudio() {
                 {activeDrawerSection === "seo" && (
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">GOOGLE OUTLET TITLE TAG</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">GOOGLE OUTLET TITLE TAG</label>
                       <input 
                         type="text"
                         value={guide.seoTitle}
                         onChange={(e) => handleFieldChange("seoTitle", e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-white"
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-primary"
                       />
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">SEARCH META DESCRIPTION FIELD</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">SEARCH META DESCRIPTION FIELD</label>
                       <input 
                         type="text"
                         value={guide.seoDescription}
                         onChange={(e) => handleFieldChange("seoDescription", e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-slate-200"
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary"
                       />
                     </div>
 
                     <div>
-                      <label className="text-[10px] text-slate-400 font-mono block mb-1">SEARCH ENGINE RETRIEVAL KEYWORDS</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">SEARCH ENGINE RETRIEVAL KEYWORDS</label>
                       <input 
                         type="text"
                         value={guide.seoKeywords}
                         onChange={(e) => handleFieldChange("seoKeywords", e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-800 focus:border-orange-500 p-2.5 rounded-xl text-xs text-slate-200"
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary"
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="text-[10px] text-slate-400 font-mono block mb-1">URL SLUG LINK</label>
+                        <label className="text-[10px] text-app-text-secondary font-mono block mb-1">URL SLUG LINK</label>
                         <input 
                           type="text"
                           value={guide.slug}
                           onChange={(e) => handleFieldChange("slug", e.target.value.toLowerCase().replace(/ /g, "-"))}
-                          className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-xs text-white"
+                          className="w-full bg-app-bg border border-app-border p-2.5 rounded-xl text-xs text-app-text-primary"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-slate-400 font-mono block mb-1">GUIDE CATEGORY</label>
+                        <label className="text-[10px] text-app-text-secondary font-mono block mb-1">GUIDE CATEGORY</label>
                         <input 
                           type="text"
                           value={guide.category}
                           onChange={(e) => handleFieldChange("category", e.target.value)}
-                          className="w-full bg-slate-950 border border-slate-800 p-2.5 rounded-xl text-xs text-white"
+                          className="w-full bg-app-bg border border-app-border p-2.5 rounded-xl text-xs text-app-text-primary"
                         />
                       </div>
                     </div>
@@ -1821,10 +1821,10 @@ export default function GuideEditStudio() {
                 {/* SECTION 10: CONVICTION DISCLOSURE & PUBLIC TRUST BADGES */}
                 {activeDrawerSection === "disclosure" && (
                   <div className="space-y-4">
-                    <span className="text-[10px] text-slate-400 font-mono block uppercase">Disclosure Integrity Badges Checklist</span>
+                    <span className="text-[10px] text-app-text-secondary font-mono block uppercase">Disclosure Integrity Badges Checklist</span>
                     
-                    <div className="space-y-3 bg-slate-950/60 p-4 border border-slate-800 rounded-xl">
-                      <label className="flex items-center gap-3 text-xs text-slate-300 font-medium cursor-pointer py-1 block">
+                    <div className="space-y-3 bg-app-bg/10 p-4 border border-app-border rounded-xl">
+                      <label className="flex items-center gap-3 text-xs text-app-text-secondary font-medium cursor-pointer py-1 block">
                         <input 
                           type="checkbox"
                           checked={guide.disclosureAffiliate}
@@ -1834,7 +1834,7 @@ export default function GuideEditStudio() {
                         <span>Affiliate Link Commission tags</span>
                       </label>
 
-                      <label className="flex items-center gap-3 text-xs text-slate-300 font-medium cursor-pointer py-1 block">
+                      <label className="flex items-center gap-3 text-xs text-app-text-secondary font-medium cursor-pointer py-1 block">
                         <input 
                           type="checkbox"
                           checked={guide.disclosureSponsored}
@@ -1844,7 +1844,7 @@ export default function GuideEditStudio() {
                         <span>Brand Sponsored / Paid post</span>
                       </label>
 
-                      <label className="flex items-center gap-3 text-xs text-slate-300 font-medium cursor-pointer py-1 block">
+                      <label className="flex items-center gap-3 text-xs text-app-text-secondary font-medium cursor-pointer py-1 block">
                         <input 
                           type="checkbox"
                           checked={guide.disclosureSampleReceived}
@@ -1854,7 +1854,7 @@ export default function GuideEditStudio() {
                         <span>Diagnostic Vetting Unit Sample received</span>
                       </label>
 
-                      <label className="flex items-center gap-3 text-xs text-slate-300 font-medium cursor-pointer py-1 block">
+                      <label className="flex items-center gap-3 text-xs text-app-text-secondary font-medium cursor-pointer py-1 block">
                         <input 
                           type="checkbox"
                           checked={guide.disclosureIndependentlyPurchased}
@@ -1864,7 +1864,7 @@ export default function GuideEditStudio() {
                         <span>Independently Purchased directly</span>
                       </label>
 
-                      <label className="flex items-center gap-3 text-xs text-slate-300 font-medium cursor-pointer py-1 block">
+                      <label className="flex items-center gap-3 text-xs text-app-text-secondary font-medium cursor-pointer py-1 block">
                         <input 
                           type="checkbox"
                           checked={guide.disclosureCreatorTested}
@@ -1874,7 +1874,7 @@ export default function GuideEditStudio() {
                         <span>Tested completely by designated bio author</span>
                       </label>
 
-                      <label className="flex items-center gap-3 text-xs text-slate-300 font-medium cursor-pointer py-1 block">
+                      <label className="flex items-center gap-3 text-xs text-app-text-secondary font-medium cursor-pointer py-1 block">
                         <input 
                           type="checkbox"
                           checked={guide.disclosureFactChecked}
@@ -1884,7 +1884,7 @@ export default function GuideEditStudio() {
                         <span>Fact Checked / Lab data cross verified</span>
                       </label>
 
-                      <label className="flex items-center gap-3 text-xs text-slate-300 font-medium cursor-pointer py-1 block">
+                      <label className="flex items-center gap-3 text-xs text-app-text-secondary font-medium cursor-pointer py-1 block">
                         <input 
                           type="checkbox"
                           checked={guide.disclosureEditorReviewed}
@@ -1900,7 +1900,7 @@ export default function GuideEditStudio() {
               </div>
 
               {/* Drawer Sticky Save Footer */}
-              <div className="p-6 border-t border-slate-800/80 bg-slate-950 flex items-center justify-end">
+              <div className="p-6 border-t border-app-border bg-app-bg flex items-center justify-end">
                 <button
                   onClick={() => handleSaveSection(activeDrawerSection)}
                   className="px-6 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2"

@@ -17,9 +17,7 @@ async function testConnection() {
     }
   }
 }
-if (!process.env.VERCEL) {
-  testConnection();
-}
+testConnection();
 
 export enum OperationType {
   CREATE = 'create',

@@ -148,7 +148,7 @@ export default function CreatorEconomy() {
             <ChevronRight className="w-3.5 h-3.5 text-app-text-secondary/30" />
             <span className="text-app-accent-light">Creator economy & Attribution</span>
           </div>
-          <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+          <h1 className="text-xl font-bold text-app-text-primary tracking-tight flex items-center gap-2">
             <Award className="w-6 h-6 text-app-accent-light" /> Creator Economy & Recommendation Analytics
           </h1>
           <p className="text-app-text-secondary text-[12px]">
@@ -164,7 +164,7 @@ export default function CreatorEconomy() {
             <Wallet className="w-4 h-4 animate-pulse" /> Review Creator Earnings Console
           </Link>
 
-          <div className="flex items-center gap-2 bg-slate-900 border border-app-border rounded-[4px] px-3.5 py-1.5 text-xs text-white">
+          <div className="flex items-center gap-2 bg-app-card border border-app-border rounded-[4px] px-3.5 py-1.5 text-xs text-app-text-primary">
             <span className="w-2.5 h-2.5 bg-green-400 rounded-full animate-ping" />
             <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-[#8E9BAE]">Attribution Engine Live</span>
           </div>
@@ -176,7 +176,7 @@ export default function CreatorEconomy() {
         
         <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl space-y-1 relative group">
           <span className="text-[10px] text-app-text-secondary font-bold uppercase tracking-wider block">Total Tracked Revenue</span>
-          <div className="text-2xl font-extrabold text-white font-mono tracking-tight">৳{totalFinancials.totalRevenue.toLocaleString()}</div>
+          <div className="text-2xl font-extrabold text-app-text-primary font-mono tracking-tight">৳{totalFinancials.totalRevenue.toLocaleString()}</div>
           <p className="text-[10px] text-green-400 flex items-center gap-0.5">
             <TrendingUp className="w-3.5 h-3.5" /> 8.7% Attribution CTR standard
           </p>
@@ -192,25 +192,25 @@ export default function CreatorEconomy() {
 
         <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl space-y-1 relative group">
           <span className="text-[10px] text-app-text-secondary font-bold uppercase tracking-wider block">Clicks / Traffic conversions</span>
-          <div className="text-2xl font-extrabold text-white font-mono tracking-tight">{totalFinancials.totalClicks.toLocaleString()}</div>
-          <p className="text-[10px] text-slate-500">Avg CTR: <strong className="text-white">{totalFinancials.averageCTR}%</strong></p>
+          <div className="text-2xl font-extrabold text-app-text-primary font-mono tracking-tight">{totalFinancials.totalClicks.toLocaleString()}</div>
+          <p className="text-[10px] text-slate-500">Avg CTR: <strong className="text-app-text-primary">{totalFinancials.averageCTR}%</strong></p>
           <MousePointerClick className="absolute right-4 top-4 w-7 h-7 text-slate-500/10" />
         </div>
 
         <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl space-y-1 relative group">
           <span className="text-[10px] text-app-text-secondary font-bold uppercase tracking-wider block">Affiliate conversions</span>
-          <div className="text-2xl font-extrabold text-white font-mono tracking-tight">{totalFinancials.totalConversions.toLocaleString()} orders</div>
-          <p className="text-[10px] text-slate-500">Conversion Rate: <strong className="text-white">{totalFinancials.averageConvRate}%</strong></p>
+          <div className="text-2xl font-extrabold text-app-text-primary font-mono tracking-tight">{totalFinancials.totalConversions.toLocaleString()} orders</div>
+          <p className="text-[10px] text-slate-500">Conversion Rate: <strong className="text-app-text-primary">{totalFinancials.averageConvRate}%</strong></p>
           <Briefcase className="absolute right-4 top-4 w-7 h-7 text-slate-500/10" />
         </div>
 
       </div>
 
       {/* TAB CONTROL SWITCHER */}
-      <div className="flex border-b border-white/[0.04] gap-2 font-mono text-[11px] font-extrabold uppercase select-none">
+      <div className="flex border-b border-app-border gap-2 font-mono text-[11px] font-extrabold uppercase select-none">
         <button
           onClick={() => setActiveTab('analytics')}
-          className={`pb-3 px-4 border-b-2 cursor-pointer transition-colors ${
+          className={`pb-3 px-4 border-b-2 cursor-pointer transition-colors${
             activeTab === 'analytics' ? 'border-app-accent text-white' : 'border-transparent text-app-text-secondary hover:text-white'
           }`}
         >
@@ -218,7 +218,7 @@ export default function CreatorEconomy() {
         </button>
         <button
           onClick={() => setActiveTab('campaigns')}
-          className={`pb-3 px-4 border-b-2 cursor-pointer transition-colors ${
+          className={`pb-3 px-4 border-b-2 cursor-pointer transition-colors${
             activeTab === 'campaigns' ? 'border-app-accent text-white' : 'border-transparent text-app-text-secondary hover:text-white'
           }`}
         >
@@ -226,7 +226,7 @@ export default function CreatorEconomy() {
         </button>
         <button
           onClick={() => setActiveTab('partnerships')}
-          className={`pb-3 px-4 border-b-2 cursor-pointer transition-colors ${
+          className={`pb-3 px-4 border-b-2 cursor-pointer transition-colors${
             activeTab === 'partnerships' ? 'border-app-accent text-white' : 'border-transparent text-app-text-secondary hover:text-white'
           }`}
         >
@@ -234,7 +234,7 @@ export default function CreatorEconomy() {
         </button>
         <button
           onClick={() => setActiveTab('tiers')}
-          className={`pb-3 px-4 border-b-2 cursor-pointer transition-colors ${
+          className={`pb-3 px-4 border-b-2 cursor-pointer transition-colors${
             activeTab === 'tiers' ? 'border-app-accent text-white' : 'border-transparent text-app-text-secondary hover:text-white'
           }`}
         >
@@ -242,7 +242,7 @@ export default function CreatorEconomy() {
         </button>
         <button
           onClick={() => setActiveTab('payouts')}
-          className={`pb-3 px-4 border-b-2 cursor-pointer transition-colors ${
+          className={`pb-3 px-4 border-b-2 cursor-pointer transition-colors${
             activeTab === 'payouts' ? 'border-app-accent text-white' : 'border-transparent text-app-text-secondary hover:text-white'
           }`}
         >
@@ -260,7 +260,7 @@ export default function CreatorEconomy() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-2xl">
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-1">
+              <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider mb-4 flex items-center gap-1">
                 <MousePointerClick className="w-4 h-4 text-[#EB4501]" /> Curated Recommendation conversions (Revenue vs Payout)
               </h3>
               <div className="h-64 text-xs font-mono">
@@ -278,7 +278,7 @@ export default function CreatorEconomy() {
             </div>
 
             <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-2xl">
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-1">
+              <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider mb-4 flex items-center gap-1">
                 <Activity className="w-4 h-4 text-green-400" /> Daily Creator Telemetry aggregates (Phase 7 Warehouse data)
               </h3>
               <div className="h-64 text-xs font-mono">
@@ -300,12 +300,12 @@ export default function CreatorEconomy() {
 
           {/* ATTRIBUTION DATA LISTING TABLE */}
           <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-2xl space-y-4">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider">Attribution Analytics Trace</h3>
+            <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Attribution Analytics Trace</h3>
             
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-white/[0.04] text-[10px] text-[#8E9BAE] font-mono uppercase tracking-wider">
+                  <tr className="border-b border-app-border text-[10px] text-[#8E9BAE] font-mono uppercase tracking-wider">
                     <th className="py-2.5 pb-3">Curated Guide</th>
                     <th>Type</th>
                     <th>Owner / Creator</th>
@@ -320,19 +320,19 @@ export default function CreatorEconomy() {
                 <tbody className="divide-y divide-white/[0.02]">
                   {recommendationMetrics.map(r => (
                     <tr key={r.id} className="hover:bg-white/[0.01]">
-                      <td className="py-3 font-semibold text-white truncate max-w-xs">{r.title}</td>
+                      <td className="py-3 font-semibold text-app-text-primary truncate max-w-xs">{r.title}</td>
                       <td className="uppercase font-mono text-[9px]">
-                        <span className={`px-1.5 py-0.5 rounded-[2px] border ${
+                        <span className={`px-1.5 py-0.5 rounded-[2px] border${
                           r.type === 'creator' ? 'bg-purple-500/10 text-purple-400 border-purple-500/15' : 'bg-slate-500/10 text-slate-400 border-slate-500/15'
                         }`}>
                           {r.type}
                         </span>
                       </td>
                       <td className="font-medium text-slate-350">{r.owner_name}</td>
-                      <td className="font-mono text-slate-400">{r.views.toLocaleString()}</td>
-                      <td className="font-mono text-slate-400">{r.clicks.toLocaleString()}</td>
-                      <td className="font-mono text-white font-bold">{getCTR(r.clicks, r.views)}</td>
-                      <td className="font-mono text-slate-300 font-bold">{r.conversions}</td>
+                      <td className="font-mono text-app-text-secondary">{r.views.toLocaleString()}</td>
+                      <td className="font-mono text-app-text-secondary">{r.clicks.toLocaleString()}</td>
+                      <td className="font-mono text-app-text-primary font-bold">{getCTR(r.clicks, r.views)}</td>
+                      <td className="font-mono text-app-text-secondary font-bold">{r.conversions}</td>
                       <td className="font-mono text-emerald-400 font-bold">৳{r.revenue.toLocaleString()}</td>
                       <td className="font-mono text-[#EB4501] font-bold">
                         {r.creator_earnings > 0 ? `৳${r.creator_earnings.toLocaleString()}` : '—'}
@@ -346,8 +346,8 @@ export default function CreatorEconomy() {
 
           {/* INTERACTIVE CONVERSION SIMULATOR WORKBENCH */}
           <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-2xl space-y-4">
-            <div className="border-b border-white/[0.04] pb-2">
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+            <div className="border-b border-app-border pb-2">
+              <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider flex items-center gap-1.5">
                 <Play className="w-4 h-4 text-green-400" /> Curated Link Attribution click / conversion simulation tool
               </h3>
               <p className="text-[10px] text-app-text-secondary">Simulate a buyer clicking or checking out from a creator guide to audit financial conversions live.</p>
@@ -359,7 +359,7 @@ export default function CreatorEconomy() {
                 <select
                   value={selectedRecToSim}
                   onChange={(e) => setSelectedRecToSim(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-app-border rounded-[3px] p-2 text-white focus:outline-none"
+                  className="w-full bg-white/[0.02] border border-app-border rounded-[3px] p-2 text-app-text-primary focus:outline-none"
                 >
                   {recommendationMetrics.map(r => (
                     <option key={r.id} value={r.id}>{r.title} ({r.owner_name})</option>
@@ -373,7 +373,7 @@ export default function CreatorEconomy() {
                     logRecommendationActivity(selectedRecToSim, 'click');
                     alert('Attributed click registered! Clicks metric and click-through-ratio updated in table.');
                   }}
-                  className="flex-1 sm:flex-initial bg-white/5 hover:bg-white/10 text-slate-300 font-bold px-4 py-2 rounded-[3px] cursor-pointer"
+                  className="flex-1 sm:flex-initial bg-white/5 hover:bg-white/10 text-app-text-secondary font-bold px-4 py-2 rounded-[3px] cursor-pointer"
                 >
                   Register Click Link
                 </button>
@@ -382,7 +382,7 @@ export default function CreatorEconomy() {
                     logRecommendationActivity(selectedRecToSim, 'conversion');
                     alert('Buyer Checkout fully converted! Revenue generated, and affiliate payouts registered instantly.');
                   }}
-                  className="flex-1 sm:flex-initial bg-[#EB4501] hover:bg-app-accent-light text-white font-bold px-4 py-2 rounded-[3px] cursor-pointer"
+                  className="flex-1 sm:flex-initial bg-[#EB4501] hover:bg-app-accent-light text-app-text-primary font-bold px-4 py-2 rounded-[3px] cursor-pointer"
                 >
                   Register checkout conversion
                 </button>
@@ -396,15 +396,15 @@ export default function CreatorEconomy() {
       {/* 2. CAMPAGINS SUB-TAB */}
       {activeTab === 'campaigns' && (
         <div className="space-y-6">
-          <div className="flex justify-between items-center bg-white/[0.01] border border-white/[0.03] p-4 rounded-[4px]">
+          <div className="flex justify-between items-center bg-white/[0.01] border border-app-border p-4 rounded-[4px]">
             <div>
-              <h3 className="text-sm font-bold text-white uppercase tracking-wide">Brand campaign registry</h3>
+              <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wide">Brand campaign registry</h3>
               <p className="text-[10px] text-app-text-secondary">Track flat-fee budgets and commission payouts matching active retail brands.</p>
             </div>
             
             <button
               onClick={() => setShowCampaignForm(!showCampaignForm)}
-              className="bg-[#EB4501] hover:bg-app-accent-light text-white font-bold text-xs px-3 py-1.5 rounded-[2px] leading-none cursor-pointer flex items-center gap-1"
+              className="bg-[#EB4501] hover:bg-app-accent-light text-app-text-primary font-bold text-xs px-3 py-1.5 rounded-[2px] leading-none cursor-pointer flex items-center gap-1"
             >
               <Plus className="w-3.5 h-3.5" /> Assemble campaign
             </button>
@@ -420,7 +420,7 @@ export default function CreatorEconomy() {
                   value={campaignTitle}
                   onChange={(e) => setCampaignTitle(e.target.value)}
                   placeholder="e.g. Silk Panjabi Drive..."
-                  className="w-full bg-white/[0.02] border border-app-border p-2 text-white rounded-[3px]"
+                  className="w-full bg-white/[0.02] border border-app-border p-2 text-app-text-primary rounded-[3px]"
                   required
                 />
               </div>
@@ -434,7 +434,7 @@ export default function CreatorEconomy() {
                     setCampaignBrandId(id);
                     setCampaignBrandName(name);
                   }}
-                  className="w-full bg-slate-900 border border-app-border p-2 text-white rounded-[3px]"
+                  className="w-full bg-app-card border border-app-border p-2 text-app-text-primary rounded-[3px]"
                 >
                   <option value="brand_aarong:Aarong Handcrafts">Aarong Handcrafts</option>
                   <option value="brand_apex:Apex Footwear">Apex Footwear</option>
@@ -448,7 +448,7 @@ export default function CreatorEconomy() {
                   type="number"
                   value={campaignBudget}
                   onChange={(e) => setCampaignBudget(parseInt(e.target.value))}
-                  className="w-full bg-white/[0.02] border border-app-border p-2 text-white rounded-[3px]"
+                  className="w-full bg-white/[0.02] border border-app-border p-2 text-app-text-primary rounded-[3px]"
                 />
               </div>
 
@@ -458,14 +458,14 @@ export default function CreatorEconomy() {
                   type="number"
                   value={campaignRate}
                   onChange={(e) => setCampaignRate(parseInt(e.target.value))}
-                  className="w-full bg-white/[0.02] border border-app-border p-2 text-white rounded-[3px]"
+                  className="w-full bg-white/[0.02] border border-app-border p-2 text-app-text-primary rounded-[3px]"
                 />
               </div>
 
               <div className="md:col-span-2 flex items-end">
                 <button
                   type="submit"
-                  className="w-full bg-green-650 hover:bg-green-600 text-white font-extrabold uppercase py-2 tracking-wider rounded-[3px] cursor-pointer"
+                  className="w-full bg-green-650 hover:bg-green-600 text-app-text-primary font-extrabold uppercase py-2 tracking-wider rounded-[3px] cursor-pointer"
                 >
                   Dispatch Campaign
                 </button>
@@ -479,21 +479,21 @@ export default function CreatorEconomy() {
               <div key={cp.id} className="bg-app-card border border-app-border rounded-[4px] p-4.5 space-y-3 relative overflow-hidden shadow-2xl">
                 <div className="flex justify-between items-start gap-2">
                   <div>
-                    <h4 className="font-bold text-white text-sm">{cp.title}</h4>
+                    <h4 className="font-bold text-app-text-primary text-sm">{cp.title}</h4>
                     <span className="text-[10px] text-app-text-secondary font-mono">{cp.brand_name}</span>
                   </div>
 
-                  <span className={`px-2 py-0.5 rounded-[2px] text-[8px] font-bold uppercase tracking-wider border ${
+                  <span className={`px-2 py-0.5 rounded-[2px] text-[8px] font-bold uppercase tracking-wider border${
                     cp.active ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-slate-500/10 text-slate-400 border-slate-500/15'
                   }`}>
                     {cp.active ? 'Active live' : 'In sleep'}
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 border-y border-white/[0.03] py-2.5 font-mono text-[10px]">
+                <div className="grid grid-cols-2 gap-3 border-y border-app-border py-2.5 font-mono text-[10px]">
                   <div>
                     <span className="text-slate-500 block">BUDGET TOTAL:</span>
-                    <span className="text-white font-bold">৳{cp.budget.toLocaleString()}</span>
+                    <span className="text-app-text-primary font-bold">৳{cp.budget.toLocaleString()}</span>
                   </div>
                   <div>
                     <span className="text-slate-500 block">COMMISSION:</span>
@@ -504,7 +504,7 @@ export default function CreatorEconomy() {
                 </div>
 
                 <div className="flex justify-between items-center text-[10.5px] text-app-text-secondary">
-                  <span>Clicks: <strong className="text-white">{cp.clicks}</strong></span>
+                  <span>Clicks: <strong className="text-app-text-primary">{cp.clicks}</strong></span>
                   <span>Conversions: <strong className="text-green-400">৳{cp.revenue.toLocaleString()}</strong></span>
                 </div>
               </div>
@@ -519,24 +519,24 @@ export default function CreatorEconomy() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           <div className="lg:col-span-2 bg-app-card border border-app-border rounded-[4px] p-5 shadow-2xl space-y-4">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2">Active brand partnerships</h3>
+            <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider border-b border-app-border pb-2">Active brand partnerships</h3>
             
             <div className="space-y-4 max-h-[350px] overflow-y-auto custom-scrollbar">
               {partnerships.map(pt => (
-                <div key={pt.id} className="p-4 bg-white/[0.01] border border-white/[0.03] rounded-[4px] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div key={pt.id} className="p-4 bg-white/[0.01] border border-app-border rounded-[4px] flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex gap-3">
                     <div className="p-2 bg-purple-500/10 border border-purple-500/20 text-purple-400 rounded-full h-10 w-10 flex items-center justify-center">
                       <Users className="w-5 h-5" />
                     </div>
                     <div>
-                      <h4 className="font-sans font-bold text-white text-xs">{pt.creator_name}</h4>
-                      <p className="text-[10px] text-app-text-secondary font-mono">Matched Brand target: <strong className="text-white">{pt.brand_name}</strong></p>
+                      <h4 className="font-sans font-bold text-app-text-primary text-xs">{pt.creator_name}</h4>
+                      <p className="text-[10px] text-app-text-secondary font-mono">Matched Brand target: <strong className="text-app-text-primary">{pt.brand_name}</strong></p>
                       <span className="text-[9px] text-slate-500 block font-mono">Affiliate sales: ৳{pt.revenue_generated.toLocaleString()} BDT</span>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    <span className={`px-2 py-0.5 rounded-[2px] text-[8px] font-bold uppercase tracking-wider border ${
+                    <span className={`px-2 py-0.5 rounded-[2px] text-[8px] font-bold uppercase tracking-wider border${
                       pt.status === 'Active' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-yellow-500/10 text-yellow-505 border-yellow-500/20'
                     }`}>
                       {pt.status}
@@ -546,13 +546,13 @@ export default function CreatorEconomy() {
                       <div className="flex gap-1.5">
                         <button
                           onClick={() => updatePartnershipStatus(pt.id, 'Active')}
-                          className="px-2 py-1 bg-green-550 hover:bg-green-500 text-white font-bold font-mono text-[9px] rounded-[2px] cursor-pointer"
+                          className="px-2 py-1 bg-green-550 hover:bg-green-500 text-app-text-primary font-bold font-mono text-[9px] rounded-[2px] cursor-pointer"
                         >
                           Approve Terms
                         </button>
                         <button
                           onClick={() => updatePartnershipStatus(pt.id, 'Terminated')}
-                          className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold font-mono text-[9px] rounded-[2px] cursor-pointer"
+                          className="px-2 py-1 bg-app-bg hover:bg-slate-700 text-app-text-secondary font-bold font-mono text-[9px] rounded-[2px] cursor-pointer"
                         >
                           Dismiss
                         </button>
@@ -566,7 +566,7 @@ export default function CreatorEconomy() {
 
           {/* PROPOSE FORM COLUMN */}
           <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-2xl space-y-4">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2">Propose commercial partnership</h3>
+            <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider border-b border-app-border pb-2">Propose commercial partnership</h3>
             
             <form onSubmit={handleProposePartnershipSubmit} className="space-y-4 text-xs font-mono">
               <div className="space-y-1">
@@ -578,7 +578,7 @@ export default function CreatorEconomy() {
                     setCreatorPId(id);
                     setCreatorPName(name);
                   }}
-                  className="w-full bg-slate-900 border border-app-border p-2 text-white rounded-[3px]"
+                  className="w-full bg-app-card border border-app-border p-2 text-app-text-primary rounded-[3px]"
                 >
                   <option value="creator_rafsan:Rafsan The Chotobhai">Rafsan The Chotobhai</option>
                   <option value="creator_khalid:Khalid Farhan">Khalid Farhan</option>
@@ -595,7 +595,7 @@ export default function CreatorEconomy() {
                     setBrandPId(id);
                     setBrandPName(name);
                   }}
-                  className="w-full bg-slate-900 border border-app-border p-2 text-white rounded-[3px]"
+                  className="w-full bg-app-card border border-app-border p-2 text-app-text-primary rounded-[3px]"
                 >
                   <option value="brand_aarong:Aarong Handcrafts">Aarong Handcrafts</option>
                   <option value="brand_apex:Apex Footwear">Apex Footwear</option>
@@ -603,13 +603,13 @@ export default function CreatorEconomy() {
                 </select>
               </div>
 
-              <div className="p-3 bg-white/[0.01] border border-white/[0.03] text-[10.5px] text-[#8E9BAE] leading-normal rounded-[3px]">
+              <div className="p-3 bg-white/[0.01] border border-app-border text-[10.5px] text-[#8E9BAE] leading-normal rounded-[3px]">
                 Sends digital invitation to corporate brands in-app messenger threads instantly. Default agreement templates apply.
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-[#EB4501] hover:bg-app-accent-light text-white font-bold py-2 rounded-[3px] cursor-pointer"
+                className="w-full bg-[#EB4501] hover:bg-app-accent-light text-app-text-primary font-bold py-2 rounded-[3px] cursor-pointer"
               >
                 Send partnership invitation
               </button>
@@ -628,21 +628,21 @@ export default function CreatorEconomy() {
               <div className="space-y-3">
                 <div className="flex justify-between items-start">
                   <div>
-                    <h4 className="font-black text-white text-base">{tier.name}</h4>
+                    <h4 className="font-black text-app-text-primary text-base">{tier.name}</h4>
                     <span className="text-[10px] uppercase font-mono text-slate-500">Min. reputation events score: {tier.min_points} pt</span>
                   </div>
                   <Award className="w-6 h-6 text-yellow-400 rotate-12" />
                 </div>
 
-                <div className="p-3 bg-white/[0.01] rounded-[3px] border border-white/[0.02] text-xs font-mono text-slate-350">
+                <div className="p-3 bg-white/[0.01] rounded-[3px] border border-app-border text-xs font-mono text-slate-350">
                   <span className="text-[9px] text-[#8E9BAE] block uppercase font-extrabold">Attribution margin boost:</span>
-                  <span className="text-white font-extrabold text-sm font-sans flex items-center">
+                  <span className="text-app-text-primary font-extrabold text-sm font-sans flex items-center">
                     +{tier.commission_boost}% commission multipliers BDT
                   </span>
                 </div>
 
                 <div className="space-y-2">
-                  <span className="text-[10px] text-white font-bold uppercase tracking-wider block">Exclusive Perks:</span>
+                  <span className="text-[10px] text-app-text-primary font-bold uppercase tracking-wider block">Exclusive Perks:</span>
                   <ul className="space-y-1.5 text-xs text-app-text-secondary leading-relaxed">
                     {tier.perks.map((p, i) => (
                       <li key={i} className="flex items-center gap-1.5">
@@ -653,7 +653,7 @@ export default function CreatorEconomy() {
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-white/[0.03] mt-3 flex justify-between items-center text-[10px] font-mono text-slate-500">
+              <div className="pt-4 border-t border-app-border mt-3 flex justify-between items-center text-[10px] font-mono text-slate-500">
                 <span>Tier id: {tier.id}</span>
                 <span>Audit Verified lock</span>
               </div>
@@ -666,12 +666,12 @@ export default function CreatorEconomy() {
       {/* 5. PAYOUT REGISTERS */}
       {activeTab === 'payouts' && (
         <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-2xl space-y-4">
-          <h3 className="text-xs font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2">Digital affiliate payout registers</h3>
+          <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider border-b border-app-border pb-2">Digital affiliate payout registers</h3>
           
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-white/[0.04] text-[10px] text-[#8E9BAE] font-mono uppercase tracking-wider">
+                <tr className="border-b border-app-border text-[10px] text-[#8E9BAE] font-mono uppercase tracking-wider">
                   <th className="py-2.5 pb-3">Payee Creator</th>
                   <th>Amount Due</th>
                   <th>Payment Method channel</th>
@@ -683,12 +683,12 @@ export default function CreatorEconomy() {
               <tbody className="divide-y divide-white/[0.02] font-mono">
                 {creatorPayouts.map(po => (
                   <tr key={po.id} className="hover:bg-white/[0.01]">
-                    <td className="py-3 font-sans font-bold text-white">{po.creator_name}</td>
+                    <td className="py-3 font-sans font-bold text-app-text-primary">{po.creator_name}</td>
                     <td className="font-bold text-emerald-400">৳{po.amount.toLocaleString()}</td>
                     <td className="text-slate-350">{po.channel}</td>
                     <td className="text-slate-500">{new Date(po.created_at).toLocaleDateString()}</td>
                     <td>
-                      <span className={`px-1.5 py-0.5 rounded-[2px] text-[8.5px] uppercase border font-bold ${
+                      <span className={`px-1.5 py-0.5 rounded-[2px] text-[8.5px] uppercase border font-bold${
                         po.status === 'paid' ? 'bg-green-500/10 text-green-400 border-green-500/20' : 'bg-yellow-500/10 text-yellow-501 border-yellow-500/20'
                       }`}>
                         {po.status}
@@ -701,7 +701,7 @@ export default function CreatorEconomy() {
                             processCreatorPayout(po.id);
                             alert(`Affiliate funds has been cleared and dispatched via ${po.channel}!`);
                           }}
-                          className="px-2 py-1 bg-green-600 hover:bg-green-500 text-white text-[9px] font-bold uppercase rounded-[2px] cursor-pointer"
+                          className="px-2 py-1 bg-green-600 hover:bg-green-500 text-app-text-primary text-[9px] font-bold uppercase rounded-[2px] cursor-pointer"
                         >
                           Clear payment
                         </button>

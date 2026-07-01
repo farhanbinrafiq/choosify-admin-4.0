@@ -177,7 +177,7 @@ export default function CMSLivePreview({
       {/* Choosify Authentic Portal Branding Header */}
       <div className="flex items-center justify-between border-b border-slate-200/80 pb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#EF3C23] flex items-center justify-center font-black text-white text-lg shadow-md shadow-red-500/20 tracking-tighter">
+          <div className="w-10 h-10 rounded-xl bg-[#EF3C23] flex items-center justify-center font-black text-app-text-primary text-lg shadow-md shadow-red-500/20 tracking-tighter">
             C
           </div>
           <div>
@@ -192,7 +192,7 @@ export default function CMSLivePreview({
           </div>
         </div>
         <div className="text-right hidden sm:block">
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-wider">PREVIEW REGION</p>
+          <p className="text-[10px] font-black text-app-text-secondary uppercase tracking-wider">PREVIEW REGION</p>
           <p className="text-xs font-bold text-slate-700 mt-0.5">Desktop & Mobile Fluid Grid</p>
         </div>
       </div>
@@ -243,10 +243,10 @@ export default function CMSLivePreview({
 
               {/* Empty state handler */}
               {items.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-8 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl text-center text-slate-400">
-                  <Info className="w-6 h-6 text-slate-400 mb-2" />
+                <div className="flex flex-col items-center justify-center p-8 bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl text-center text-app-text-secondary">
+                  <Info className="w-6 h-6 text-app-text-secondary mb-2" />
                   <p className="text-xs font-bold text-slate-600">No items featured yet.</p>
-                  <p className="text-[11px] text-slate-400 mt-1">Add items from the catalog injector panel on the left.</p>
+                  <p className="text-[11px] text-app-text-secondary mt-1">Add items from the catalog injector panel on the left.</p>
                 </div>
               ) : (
                 /* Dynamic Custom Layouts per item types */
@@ -312,7 +312,7 @@ export default function CMSLivePreview({
 
                   {/* SPONSORED ADS: Horizontal banner carousel/slider */}
                   {section.id === 'sponsoredAds' && (
-                    <div className="relative rounded-3xl overflow-hidden bg-slate-950 border border-slate-800 aspect-[2.6/1] md:aspect-[3.5/1]">
+                    <div className="relative rounded-3xl overflow-hidden bg-app-bg border border-app-border aspect-[2.6/1] md:aspect-[3.5/1]">
                       <AnimatePresence mode="wait">
                         <motion.div 
                           key={adIndex}
@@ -332,14 +332,14 @@ export default function CMSLivePreview({
                             <span className="text-[9px] md:text-xs font-black text-[#EF3C23] tracking-widest mb-1 block uppercase">
                               ✦ {items[adIndex]?.badge || 'CAMPAIGN LAUNCH'}
                             </span>
-                            <h4 className="text-sm md:text-2xl font-black text-white leading-tight max-w-lg">
+                            <h4 className="text-sm md:text-2xl font-black text-app-text-primary leading-tight max-w-lg">
                               {items[adIndex]?.title}
                             </h4>
-                            <p className="text-[10px] md:text-xs text-slate-300 mt-1 font-semibold">
+                            <p className="text-[10px] md:text-xs text-app-text-secondary mt-1 font-semibold">
                               Sponsored partner: {items[adIndex]?.brand}
                             </p>
                             <div className="mt-4">
-                              <button className="px-5 py-2 bg-[#EF3C23] hover:bg-orange-500 text-white font-extrabold text-[10px] md:text-xs rounded-xl shadow-lg transition-all">
+                              <button className="px-5 py-2 bg-[#EF3C23] hover:bg-orange-500 text-app-text-primary font-extrabold text-[10px] md:text-xs rounded-xl shadow-lg transition-all">
                                 Shop Collection ↗
                               </button>
                             </div>
@@ -352,16 +352,16 @@ export default function CMSLivePreview({
                         <div className="absolute bottom-4 right-4 flex items-center gap-1.5 z-10">
                           <button 
                             onClick={() => setAdIndex(prev => (prev === 0 ? items.length - 1 : prev - 1))}
-                            className="p-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-white hover:bg-slate-800 transition-all"
+                            className="p-1.5 rounded-lg bg-app-bg/10 border border-app-border text-app-text-primary hover:bg-slate-800 transition-all"
                           >
                             <ChevronLeft className="w-3.5 h-3.5" />
                           </button>
-                          <span className="text-[9px] font-mono font-bold text-slate-300 bg-slate-900/80 px-2 py-1 rounded-lg">
+                          <span className="text-[9px] font-mono font-bold text-app-text-secondary bg-app-bg/10 px-2 py-1 rounded-lg">
                             {adIndex + 1}/{items.length}
                           </span>
                           <button 
                             onClick={() => setAdIndex(prev => (prev === items.length - 1 ? 0 : prev + 1))}
-                            className="p-1.5 rounded-lg bg-slate-900/80 border border-slate-800 text-white hover:bg-slate-800 transition-all"
+                            className="p-1.5 rounded-lg bg-app-bg/10 border border-app-border text-app-text-primary hover:bg-slate-800 transition-all"
                           >
                             <ChevronRight className="w-3.5 h-3.5" />
                           </button>
@@ -383,14 +383,14 @@ export default function CMSLivePreview({
                           <div className="relative aspect-square w-full rounded-xl overflow-hidden bg-slate-50 border border-slate-100 shrink-0">
                             <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300" referrerPolicy="no-referrer" />
                             {item.badge && section.id === 'recommendedProducts' && (
-                              <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-slate-900 text-white text-[7px] font-black uppercase tracking-wider shadow">
+                              <span className="absolute top-2 left-2 px-1.5 py-0.5 rounded bg-app-card text-app-text-primary text-[7px] font-black uppercase tracking-wider shadow">
                                 {item.badge}
                               </span>
                             )}
                           </div>
                           <div className="mt-3 flex-1 flex flex-col justify-between">
                             <div>
-                              <span className="text-[10px] text-slate-400 font-bold block truncate">{item.brand}</span>
+                              <span className="text-[10px] text-app-text-secondary font-bold block truncate">{item.brand}</span>
                               <h4 className="text-xs font-black text-slate-900 mt-0.5 line-clamp-2 leading-snug">{item.name}</h4>
                             </div>
                             <div className="mt-2.5 flex items-center justify-between border-t border-slate-50 pt-2">
@@ -412,9 +412,9 @@ export default function CMSLivePreview({
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       {items.map((item: any) => (
                         <div key={item.id} className="bg-white border border-slate-100 rounded-2xl overflow-hidden hover:shadow-md transition-all flex flex-col h-full">
-                          <div className="relative aspect-video w-full overflow-hidden bg-slate-900 shrink-0">
+                          <div className="relative aspect-video w-full overflow-hidden bg-app-card shrink-0">
                             <img src={item.image} alt={item.title} className="w-full h-full object-cover opacity-90" referrerPolicy="no-referrer" />
-                            <span className="absolute top-2.5 left-2.5 bg-slate-900/95 text-white border border-slate-800 px-2 py-0.5 rounded text-[8px] font-black tracking-wide">
+                            <span className="absolute top-2.5 left-2.5 bg-app-bg/10 text-app-text-primary border border-app-border px-2 py-0.5 rounded text-[8px] font-black tracking-wide">
                               {item.tag || 'GUIDE'}
                             </span>
                             {item.type === 'video' && (
@@ -457,7 +457,7 @@ export default function CMSLivePreview({
                             <div className="flex items-center gap-2 mt-1.5">
                               <span className="text-[10px] text-[#EF3C23] font-black">{item.followers}</span>
                               {item.engagement && (
-                                <span className="text-[9px] text-slate-400 font-semibold">ER: {item.engagement}</span>
+                                <span className="text-[9px] text-app-text-secondary font-semibold">ER: {item.engagement}</span>
                               )}
                             </div>
                           </div>
@@ -474,7 +474,7 @@ export default function CMSLivePreview({
       </div>
 
       {/* Footer Branding Showcase */}
-      <div className="border-t border-slate-200/80 pt-8 text-center text-xs text-slate-400">
+      <div className="border-t border-slate-200/80 pt-8 text-center text-xs text-app-text-secondary">
         <p className="font-black text-slate-700 tracking-wider">CHOOSIFY SPLIT-SCREEN VISUAL CMS</p>
         <p className="mt-1">Copyright © 2026 Choosify Bangladesh. Built with Antigravity Dev Studio v3.</p>
       </div>

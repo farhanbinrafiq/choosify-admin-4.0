@@ -532,7 +532,7 @@ export default function CategoriesPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#0d0e1a] text-slate-100 p-4 sm:p-6 font-sans">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 p-4 sm:p-6 font-sans">
       
       {/* Toast alert notice */}
       <AnimatePresence>
@@ -588,13 +588,13 @@ export default function CategoriesPage() {
       )}
 
       {/* HEADER SECTION WITH ACTION TOOLBARS */}
-      <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800 pb-5">
+      <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-gray-200 pb-5">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black uppercase tracking-wider text-white flex items-center space-x-2">
+          <h1 className="text-xl sm:text-2xl font-black uppercase tracking-wider text-slate-900 flex items-center space-x-2">
             <Layers className="w-6 h-6 text-[#FF6A00]" />
             <span>Category Taxonomy Studio</span>
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-xs text-slate-500 mt-1">
             Manage hierarchical taxonomy and product classification configurations for Choosify.bd
           </p>
         </div>

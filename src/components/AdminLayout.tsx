@@ -51,6 +51,7 @@ import { useContact } from '../contexts/ContactInteractionContext';
 import { useBrandProfiles } from '../contexts/BrandProfilesContext';
 import { ResizableSidebar } from './Layout/ResizableSidebar';
 import { useLayoutPreferences } from '../hooks/useLayoutPreferences';
+import { ChoosifyLogo } from './common/ChoosifyLogo';
 
 interface SidebarItem {
   label: string;
@@ -505,24 +506,9 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const renderSidebarContent = (isCollapsed = false, toggleCollapse = () => {}) => (
     <>
       <div className={`py-6 px-4 flex ${isCollapsed ? 'flex-col items-center justify-center' : 'items-center justify-between'} gap-3 border-b border-white/[0.03]`}>
-        {!isCollapsed && (
-          <div className="flex items-center gap-3 overflow-hidden">
-            {cmsData.logos.header ? (
-              <img src={cmsData.logos.header} alt="Choosify Logo" className="h-8 object-contain" />
-            ) : (
-              <>
-                <div className="w-8 h-8 bg-gradient-to-br from-app-accent to-app-bg rounded-lg flex items-center justify-center border border-app-accent/30 shadow-lg shadow-app-accent/20 shrink-0">
-                  <Bolt className="text-white w-5 h-5 fill-white" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-extrabold tracking-tighter text-white truncate">
-                    Choosify<span className="text-app-accent">.bd</span>
-                  </h1>
-                </div>
-              </>
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-3 overflow-hidden shrink-0">
+          <ChoosifyLogo variant={isCollapsed ? "icon" : "full"} theme="dark" className={isCollapsed ? "h-6 w-auto select-none" : "h-8 w-auto select-none"} />
+        </div>
 
         <button
           onClick={toggleCollapse}
@@ -534,6 +520,20 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 pt-2 pb-6 custom-scrollbar">
+        {/* Visit Marketplace Link */}
+        <div className="mb-4 mt-2 px-1">
+          <NavLink
+            to="/marketplace"
+            className={`w-full group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-2.5 text-[11px] font-bold rounded-xl border border-[#F97316]/20 bg-[#F97316]/5 hover:bg-[#F97316]/10 text-[#F97316] hover:text-white transition-all duration-200 cursor-pointer`}
+            title="Visit Marketplace"
+          >
+            <Globe className="w-4 h-4 shrink-0 text-[#F97316] group-hover:text-white transition-colors" />
+            {!isCollapsed && (
+              <span className="truncate whitespace-nowrap">🌐 Visit Marketplace</span>
+            )}
+          </NavLink>
+        </div>
+
         {sidebarItems.map((item, idx) => {
           if (item.type === 'label') {
             if (isCollapsed) return <div key={idx} className="h-px bg-white/[0.05] my-4 mx-2" />;
@@ -812,7 +812,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
-        <header className="h-[64px] px-8 flex items-center justify-between shrink-0 mb-2 border-b border-app-border bg-[#0d0e1a] sticky top-0 z-40">
+        <header className="h-[64px] px-8 flex items-center justify-between shrink-0 mb-2 border-b border-app-border bg-white sticky top-0 z-40">
           <button
             className="sm:hidden flex items-center justify-center w-9 h-9 rounded-lg bg-app-card border border-app-border text-app-text-secondary hover:text-app-accent transition-colors mr-3 flex-shrink-0"
             onClick={() => setIsSidebarOpen(true)}
@@ -902,7 +902,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
              </div>
              <button
                onClick={() => triggerOpenInbox()}
-               className="w-8 h-8 rounded-full bg-app-card border border-app-border flex items-center justify-center hover:bg-slate-800 hover:border-slate-450 active:scale-95 cursor-pointer relative shrink-0 transition-all text-app-text-primary"
+               className="w-8 h-8 rounded-full bg-app-card border border-app-border flex items-center justify-center hover:bg-slate-50 hover:border-slate-300 active:scale-95 cursor-pointer relative shrink-0 transition-all text-app-text-primary"
                title="Open Messenger"
              >
                <MessageCircle className="w-4 h-4 text-app-text-secondary" />

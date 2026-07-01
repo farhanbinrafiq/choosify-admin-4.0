@@ -357,12 +357,12 @@ export default function CreatorEarnings() {
       <div className="fixed bottom-6 right-6 z-50 space-y-2 pointer-events-none max-w-sm">
         {toasts.map(t => (
           <div key={t.id} className="pointer-events-auto flex items-start gap-3 bg-app-card border border-app-border rounded-xl p-4 shadow-2xl">
-            <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${
+            <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5${
               t.type === 'success' ? 'bg-green-500' :
               t.type === 'error' ? 'bg-red-500' :
               t.type === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
             }`} />
-            <p className="text-xs font-bold text-white leading-tight">{t.msg}</p>
+            <p className="text-xs font-bold text-app-text-primary leading-tight">{t.msg}</p>
           </div>
         ))}
       </div>
@@ -371,7 +371,7 @@ export default function CreatorEarnings() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <span className="text-[9.5px] font-black uppercase tracking-widest text-[#F4631E] block">FINANCIAL OVERVIEW ENGINE</span>
-          <h1 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+          <h1 className="text-xl font-bold text-app-text-primary tracking-tight flex items-center gap-2">
             <Wallet className="w-5 h-5 text-[#F4631E]" /> Creator Earnings & Payout Ledger
           </h1>
           <p className="text-app-text-secondary text-[11.5px]">Manage and audit payout approvals, track commission streams, upgrade milestones, and analyze overall influencer growth.</p>
@@ -380,7 +380,7 @@ export default function CreatorEarnings() {
         <div className="flex flex-wrap items-center gap-2.5">
           <button 
             onClick={downloadPayoutReport}
-            className="px-4 py-2 bg-[#1A1A2E]/60 border border-white/5 hover:border-white/10 hover:bg-[#1A1A2E]/90 text-xs font-black uppercase tracking-widest text-slate-350 rounded-[4px] shadow cursor-pointer transition-all flex items-center gap-1.5"
+            className="px-4 py-2 bg-[#1A1A2E]/60 border border-app-border hover:border-white/10 hover:bg-[#1A1A2E]/90 text-xs font-black uppercase tracking-widest text-slate-350 rounded-[4px] shadow cursor-pointer transition-all flex items-center gap-1.5"
           >
             <FileText className="w-4 h-4 text-[#F4631E]" /> Generate Payout Report
           </button>
@@ -402,34 +402,34 @@ export default function CreatorEarnings() {
         
         <div className="bg-app-card p-5 rounded-xl border border-app-border space-y-1 relative overflow-hidden">
           <span className="text-[10px] text-app-text-secondary font-extrabold uppercase tracking-widest block">Cycle Payouts (May)</span>
-          <div className="text-2xl font-extrabold text-white font-mono tracking-tight">৳{cycleSummaryStats.totalPayoutsCycle.toLocaleString()}</div>
-          <p className="text-[10px] text-slate-400">Total May cleared and pending payout ledger</p>
+          <div className="text-2xl font-extrabold text-app-text-primary font-mono tracking-tight">৳{cycleSummaryStats.totalPayoutsCycle.toLocaleString()}</div>
+          <p className="text-[10px] text-app-text-secondary">Total May cleared and pending payout ledger</p>
           <DollarSign className="absolute right-3.5 bottom-3 w-8 h-8 text-white/[0.03]" />
         </div>
 
         <div className="bg-app-card p-5 rounded-xl border border-app-border space-y-1 relative overflow-hidden">
           <span className="text-[10px] text-app-text-secondary font-extrabold uppercase tracking-widest block">Pending Approvals</span>
           <div className="text-2xl font-extrabold text-[#F4631E] font-mono tracking-tight">{cycleSummaryStats.pendingApprovalsCount} Queued</div>
-          <p className="text-[10px] text-slate-400">Pending verified payout batches</p>
+          <p className="text-[10px] text-app-text-secondary">Pending verified payout batches</p>
           <Clock className="absolute right-3.5 bottom-3 w-8 h-8 text-white/[0.03]" />
         </div>
 
         <div className="bg-app-card p-5 rounded-xl border border-app-border space-y-1 relative overflow-hidden">
           <span className="text-[10px] text-app-text-secondary font-extrabold uppercase tracking-widest block">Month-to-Date Accruals</span>
-          <div className="text-2xl font-extrabold text-white font-mono tracking-tight">৳{cycleSummaryStats.currentMonthEarnings.toLocaleString()}</div>
-          <p className="text-[10px] text-slate-400">Pending June settlement (month-end accrual)</p>
+          <div className="text-2xl font-extrabold text-app-text-primary font-mono tracking-tight">৳{cycleSummaryStats.currentMonthEarnings.toLocaleString()}</div>
+          <p className="text-[10px] text-app-text-secondary">Pending June settlement (month-end accrual)</p>
           <TrendingUp className="absolute right-3.5 bottom-3 w-8 h-8 text-white/[0.03]" />
         </div>
 
         <div className="bg-app-card p-5 rounded-xl border border-app-border space-y-1 relative overflow-hidden">
           <span className="text-[10px] text-app-text-secondary font-extrabold uppercase tracking-widest block">Monthly Growth Index</span>
-          <div className={`text-2xl font-extrabold font-mono tracking-tight flex items-center gap-1 ${
+          <div className={`text-2xl font-extrabold font-mono tracking-tight flex items-center gap-1${
             cycleSummaryStats.trendPercent >= 0 ? 'text-green-400' : 'text-red-400'
           }`}>
             {cycleSummaryStats.trendPercent >= 0 ? '+' : ''}{cycleSummaryStats.trendPercent.toFixed(1)}%
             {cycleSummaryStats.trendPercent >= 0 ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
           </div>
-          <p className="text-[10px] text-slate-400">Compared to last month's overall total</p>
+          <p className="text-[10px] text-app-text-secondary">Compared to last month's overall total</p>
         </div>
 
       </div>
@@ -447,10 +447,10 @@ export default function CreatorEarnings() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap ${
+              className={`flex-1 min-w-[120px] px-4 py-2.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap${
                 activeTab === tab.id 
-                  ? 'bg-slate-900 text-[#F4631E] border border-white/[0.04] font-black' 
-                  : 'text-slate-400 hover:text-white hover:bg-slate-900/50'
+                  ? 'bg-app-card text-[#F4631E] border border-white/[0.04] font-black' 
+                  : 'text-slate-400 hover:text-white hover:bg-app-card/50'
               }`}
             >
               {tab.label}
@@ -470,19 +470,19 @@ export default function CreatorEarnings() {
               placeholder="Search creator name..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 w-full bg-slate-950 border border-white/5 rounded-lg text-xs text-white outline-none focus:border-[#F4631E]"
+              className="pl-9 pr-4 py-2 w-full bg-app-bg border border-app-border rounded-lg text-xs text-app-text-primary outline-none focus:border-[#F4631E]"
             />
           </div>
 
           {/* Quick Filters based on Tabs */}
           {activeTab === 'overview' && (
             <div className="flex flex-wrap items-center gap-3 text-xs w-full md:w-auto md:justify-end">
-              <div className="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-lg border border-white/5">
-                <span className="text-[10px] text-slate-400">Tier:</span>
+              <div className="flex items-center gap-1.5 bg-app-bg px-3 py-1.5 rounded-lg border border-app-border">
+                <span className="text-[10px] text-app-text-secondary">Tier:</span>
                 <select 
                   value={tierFilter} 
                   onChange={(e) => setTierFilter(e.target.value as any)}
-                  className="bg-transparent text-white font-bold outline-none"
+                  className="bg-transparent text-app-text-primary font-bold outline-none"
                 >
                   <option value="All">All Tiers</option>
                   <option value="bronze">Bronze</option>
@@ -492,12 +492,12 @@ export default function CreatorEarnings() {
                 </select>
               </div>
 
-              <div className="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-lg border border-white/5">
-                <span className="text-[10px] text-slate-400">Payout:</span>
+              <div className="flex items-center gap-1.5 bg-app-bg px-3 py-1.5 rounded-lg border border-app-border">
+                <span className="text-[10px] text-app-text-secondary">Payout:</span>
                 <select 
                   value={payoutStatusFilter} 
                   onChange={(e) => setPayoutStatusFilter(e.target.value as any)}
-                  className="bg-transparent text-white font-bold outline-none"
+                  className="bg-transparent text-app-text-primary font-bold outline-none"
                 >
                   <option value="All">All Payout Status</option>
                   <option value="pending">Pending Only</option>
@@ -510,12 +510,12 @@ export default function CreatorEarnings() {
 
           {activeTab === 'ledger' && (
             <div className="flex flex-wrap items-center gap-3 text-xs w-full md:w-auto md:justify-end">
-              <div className="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-lg border border-white/5">
-                <span className="text-[10px] text-slate-400">Source:</span>
+              <div className="flex items-center gap-1.5 bg-app-bg px-3 py-1.5 rounded-lg border border-app-border">
+                <span className="text-[10px] text-app-text-secondary">Source:</span>
                 <select 
                   value={ledgerSourceFilter} 
                   onChange={(e) => setLedgerSourceFilter(e.target.value as any)}
-                  className="bg-transparent text-white font-bold outline-none"
+                  className="bg-transparent text-app-text-primary font-bold outline-none"
                 >
                   <option value="All">All Sources</option>
                   <option value="guide_performance">Guide Performance</option>
@@ -525,12 +525,12 @@ export default function CreatorEarnings() {
                 </select>
               </div>
 
-              <div className="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-lg border border-white/5">
-                <span className="text-[10px] text-slate-400">Month:</span>
+              <div className="flex items-center gap-1.5 bg-app-bg px-3 py-1.5 rounded-lg border border-app-border">
+                <span className="text-[10px] text-app-text-secondary">Month:</span>
                 <select 
                   value={ledgerMonthFilter} 
                   onChange={(e) => setLedgerMonthFilter(e.target.value as any)}
-                  className="bg-transparent text-white font-bold outline-none"
+                  className="bg-transparent text-app-text-primary font-bold outline-none"
                 >
                   <option value="All">All Months</option>
                   <option value="2026-06">2026-06 (Current)</option>
@@ -548,7 +548,7 @@ export default function CreatorEarnings() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-white/[0.04] bg-slate-950 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
+                <tr className="border-b border-app-border bg-app-bg text-[10px] text-app-text-secondary uppercase tracking-wider font-mono">
                   <th className="p-4">Creator / Joined</th>
                   <th>Status/Tier</th>
                   <th className="text-center">Guides</th>
@@ -564,19 +564,19 @@ export default function CreatorEarnings() {
                 {sortedAndFilteredCreators.map(c => {
                   const isSuspended = !!suspendedCreators[c.creatorId];
                   return (
-                    <tr key={c.creatorId} className={`hover:bg-white/[0.01] ${isSuspended ? 'opacity-50' : ''}`}>
+                    <tr key={c.creatorId} className={`hover:bg-white/[0.01]${isSuspended ? 'opacity-50' : ''}`}>
                       <td className="p-4 flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-full bg-slate-800 text-[#F4631E] font-black text-xs flex items-center justify-center font-mono">
+                        <div className="w-9 h-9 rounded-full bg-app-bg text-[#F4631E] font-black text-xs flex items-center justify-center font-mono">
                           {c.avatar || c.creatorName.split(' ').map(n => n[0]).join('')}
                         </div>
                         <div>
-                          <h4 className="font-bold text-white text-xs">{c.creatorName}</h4>
+                          <h4 className="font-bold text-app-text-primary text-xs">{c.creatorName}</h4>
                           <span className="text-[10px] text-slate-500 font-mono">Joined: {c.joinedAt}</span>
                         </div>
                       </td>
 
                       <td>
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[8.5px] uppercase font-bold tracking-wider rounded border ${
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[8.5px] uppercase font-bold tracking-wider rounded border${
                           c.tier === 'platinum' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
                           c.tier === 'gold' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
                           c.tier === 'silver' ? 'bg-slate-500/10 text-slate-300 border-slate-500/20' :
@@ -586,15 +586,15 @@ export default function CreatorEarnings() {
                         </span>
                       </td>
 
-                      <td className="text-center font-mono font-bold text-white">{c.guidesPublished}</td>
-                      <td className="text-center font-mono text-slate-300">{c.totalGuideViews.toLocaleString()}</td>
+                      <td className="text-center font-mono font-bold text-app-text-primary">{c.guidesPublished}</td>
+                      <td className="text-center font-mono text-app-text-secondary">{c.totalGuideViews.toLocaleString()}</td>
                       <td className="text-center font-mono text-slate-350">{c.followerCount.toLocaleString()}</td>
                       
-                      <td className="font-mono font-bold text-white">৳{c.currentMonthEarn.toLocaleString()}</td>
+                      <td className="font-mono font-bold text-app-text-primary">৳{c.currentMonthEarn.toLocaleString()}</td>
                       <td className="font-mono text-emerald-400 font-black">৳{c.totalYTDEarn.toLocaleString()}</td>
                       
                       <td>
-                        <span className={`px-2 py-0.5 text-[8px] uppercase tracking-wider font-black rounded border ${
+                        <span className={`px-2 py-0.5 text-[8px] uppercase tracking-wider font-black rounded border${
                           c.payoutStatus === 'pending' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
                           c.payoutStatus === 'paid' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
                           'bg-zinc-800 text-zinc-400 border-zinc-700'
@@ -607,14 +607,14 @@ export default function CreatorEarnings() {
                         <div className="flex justify-end gap-1.5">
                           <button 
                             onClick={() => setSelectedCreatorId(c.creatorId)}
-                            className="px-2 py-1 bg-slate-900 border border-white/5 hover:border-white/10 hover:bg-slate-800 text-[10px] uppercase font-black tracking-widest text-white rounded cursor-pointer transition-colors"
+                            className="px-2 py-1 bg-app-card border border-app-border hover:border-white/10 hover:bg-slate-800 text-[10px] uppercase font-black tracking-widest text-app-text-primary rounded cursor-pointer transition-colors"
                           >
                             Details
                           </button>
                           
                           <button 
                             onClick={() => toggleCreatorSuspension(c.creatorId)}
-                            className={`px-2 py-1 text-[10px] uppercase font-black tracking-widest rounded cursor-pointer transition-colors ${
+                            className={`px-2 py-1 text-[10px] uppercase font-black tracking-widest rounded cursor-pointer transition-colors${
                               isSuspended 
                                 ? 'bg-emerald-600 hover:bg-emerald-500 text-white' 
                                 : 'bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-600 hover:text-white'
@@ -636,15 +636,15 @@ export default function CreatorEarnings() {
       {/* TAB 2: EARNINGS LEDGER CONTENT */}
       {activeTab === 'ledger' && (
         <div className="bg-app-card rounded-xl border border-app-border overflow-hidden shadow-xl">
-          <div className="p-4 bg-slate-950 border-b border-app-border flex items-center justify-between flex-wrap gap-2 text-xs">
-            <span className="font-bold text-white">Consolidated Earnings Audit Ledger (Total BDT: <strong className="text-emerald-400">৳{ledgerTotal.toLocaleString()}</strong>)</span>
+          <div className="p-4 bg-app-bg border-b border-app-border flex items-center justify-between flex-wrap gap-2 text-xs">
+            <span className="font-bold text-app-text-primary">Consolidated Earnings Audit Ledger (Total BDT: <strong className="text-emerald-400">৳{ledgerTotal.toLocaleString()}</strong>)</span>
             <span className="text-[10px] font-mono text-slate-500">Traceable historical accruals logs</span>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-white/[0.04] bg-slate-950 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
+                <tr className="border-b border-app-border bg-app-bg text-[10px] text-app-text-secondary uppercase tracking-wider font-mono">
                   <th className="p-4">Transaction ID</th>
                   <th>Creator Name</th>
                   <th>Filing Source</th>
@@ -662,17 +662,17 @@ export default function CreatorEarnings() {
                     <React.Fragment key={e.id}>
                       <tr className="hover:bg-white/[0.01]">
                         <td className="p-4 font-mono font-bold text-[#F4631E]">{e.id}</td>
-                        <td className="font-semibold text-white">{e.creatorName}</td>
+                        <td className="font-semibold text-app-text-primary">{e.creatorName}</td>
                         <td className="uppercase font-mono text-[9px]">
-                          <span className="px-2 py-0.5 rounded bg-white/5 text-slate-300">
+                          <span className="px-2 py-0.5 rounded bg-white/5 text-app-text-secondary">
                             {e.source.replace('_', ' ')}
                           </span>
                         </td>
                         <td className="font-mono text-slate-350">{e.month}</td>
                         <td className="text-slate-450">{new Date(e.earnedAt).toLocaleDateString()}</td>
-                        <td className="font-mono font-extrabold text-white">৳{e.amount.toLocaleString()}</td>
+                        <td className="font-mono font-extrabold text-app-text-primary">৳{e.amount.toLocaleString()}</td>
                         <td>
-                          <span className={`px-2 py-0.5 text-[8px] uppercase tracking-wider font-black rounded border ${
+                          <span className={`px-2 py-0.5 text-[8px] uppercase tracking-wider font-black rounded border${
                             e.status === 'verified' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
                             e.status === 'paid' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
                             'bg-yellow-500/10 text-amber-400 border-amber-500/20'
@@ -682,7 +682,7 @@ export default function CreatorEarnings() {
                         </td>
                       </tr>
                       {hasDetails && (
-                        <tr className="bg-slate-950/40 text-[11px] text-slate-400">
+                        <tr className="bg-app-bg/10 text-[11px] text-app-text-secondary">
                           <td colSpan={7} className="px-4 py-2 border-l-2 border-[#F4631E] bg-white/[0.01] font-mono">
                             <span className="text-[#F4631E] font-black uppercase text-[9px] mr-2">Audit breakdown:</span>
                             {e.source === 'guide_performance' && (
@@ -712,14 +712,14 @@ export default function CreatorEarnings() {
           
           {/* Queue controllers and bulk tools */}
           <div className="bg-app-card p-4 rounded-xl border border-app-border flex items-center justify-between flex-wrap gap-4 text-xs font-mono">
-            <span className="font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+            <span className="font-bold text-app-text-primary uppercase tracking-wider flex items-center gap-1.5">
               <AlertCircle className="w-4 h-4 text-amber-500 animate-pulse" /> Active cycle payout approvals queue
             </span>
             
             <div className="flex flex-wrap gap-2">
               <button 
                 onClick={handleBulkApprovePayouts}
-                className="px-3.5 py-1.5 bg-green-650 hover:bg-green-600 text-white font-extrabold uppercase rounded cursor-pointer tracking-wider"
+                className="px-3.5 py-1.5 bg-green-650 hover:bg-green-600 text-app-text-primary font-extrabold uppercase rounded cursor-pointer tracking-wider"
               >
                 Approve All Pending
               </button>
@@ -737,7 +737,7 @@ export default function CreatorEarnings() {
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-white/[0.04] bg-slate-950 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
+                  <tr className="border-b border-app-border bg-app-bg text-[10px] text-app-text-secondary uppercase tracking-wider font-mono">
                     <th className="p-4">Payee Creator</th>
                     <th>Payment Account Details</th>
                     <th>Billing Cycle</th>
@@ -754,16 +754,16 @@ export default function CreatorEarnings() {
                     const isRejected = p.status === 'failed';
 
                     return (
-                      <tr key={p.id} className={`hover:bg-white/[0.01] ${isBelowMinimum || hasNoAccount ? 'bg-red-950/10' : ''}`}>
+                      <tr key={p.id} className={`hover:bg-white/[0.01]${isBelowMinimum || hasNoAccount ? 'bg-red-950/10' : ''}`}>
                         
                         <td className="p-4">
-                          <h4 className="font-bold text-white text-xs">{p.creatorName}</h4>
+                          <h4 className="font-bold text-app-text-primary text-xs">{p.creatorName}</h4>
                           <span className="text-[10px] text-slate-500 font-mono">ID: {p.id}</span>
                         </td>
 
                         <td>
                           {p.bankAccount ? (
-                            <span className="font-mono text-slate-300">{p.bankAccount}</span>
+                            <span className="font-mono text-app-text-secondary">{p.bankAccount}</span>
                           ) : (
                             <span className="font-mono text-red-400 font-bold uppercase text-[9.5px] flex items-center gap-1">
                               <AlertCircle className="w-3.5 h-3.5" /> Needs Account Verification
@@ -773,7 +773,7 @@ export default function CreatorEarnings() {
 
                         <td className="font-mono text-slate-350">{p.payoutCycle}</td>
                         
-                        <td className="font-mono font-black text-white">
+                        <td className="font-mono font-black text-app-text-primary">
                           ৳{p.totalEarnings.toLocaleString()}
                           {isBelowMinimum && (
                             <span className="text-[8px] bg-amber-500/10 text-amber-400 px-1 py-0.2 rounded border border-amber-500/20 ml-1">
@@ -783,7 +783,7 @@ export default function CreatorEarnings() {
                         </td>
 
                         <td>
-                          <span className={`px-2 py-0.5 text-[8.5px] uppercase tracking-wider font-black rounded border ${
+                          <span className={`px-2 py-0.5 text-[8.5px] uppercase tracking-wider font-black rounded border${
                             p.status === 'paid' ? 'bg-green-500/10 text-green-400 border-green-500/20' :
                             p.status === 'approved' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
                             p.status === 'failed' ? 'bg-red-500/10 text-red-400 border-red-500/20' :
@@ -793,7 +793,7 @@ export default function CreatorEarnings() {
                           </span>
                         </td>
 
-                        <td className="text-slate-400 text-[11px] italic max-w-xs truncate">{p.notes || '—'}</td>
+                        <td className="text-app-text-secondary text-[11px] italic max-w-xs truncate">{p.notes || '—'}</td>
 
                         <td className="p-4 text-right">
                           <div className="flex justify-end gap-1.5">
@@ -808,7 +808,7 @@ export default function CreatorEarnings() {
                                     approvePayout(p.id);
                                     addToast(`Payout of ৳${p.totalEarnings} to ${p.creatorName} approved.`, "success");
                                   }}
-                                  className="px-2 py-1 bg-green-650 hover:bg-green-600 text-white text-[10px] uppercase font-black tracking-wider rounded cursor-pointer"
+                                  className="px-2 py-1 bg-green-650 hover:bg-green-600 text-app-text-primary text-[10px] uppercase font-black tracking-wider rounded cursor-pointer"
                                 >
                                   Approve
                                 </button>
@@ -820,7 +820,7 @@ export default function CreatorEarnings() {
                                       placeholder="Reason..."
                                       value={rejectReason[p.id] || ''}
                                       onChange={(e) => setRejectReason(prev => ({ ...prev, [p.id]: e.target.value }))}
-                                      className="bg-slate-900 border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-white outline-none"
+                                      className="bg-app-card border border-app-border rounded px-1.5 py-0.5 text-[10px] text-app-text-primary outline-none"
                                     />
                                     <button
                                       onClick={() => {
@@ -835,7 +835,7 @@ export default function CreatorEarnings() {
                                     </button>
                                     <button
                                       onClick={() => setRejectingId(null)}
-                                      className="p-1 bg-slate-800 text-slate-300 rounded cursor-pointer"
+                                      className="p-1 bg-app-bg text-app-text-secondary rounded cursor-pointer"
                                     >
                                       <X className="w-3.5 h-3.5" />
                                     </button>
@@ -869,7 +869,7 @@ export default function CreatorEarnings() {
                                   undoPayoutRejection(p.id);
                                   addToast("Reverted payout rejection. Returned to queue.", "info");
                                 }}
-                                className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] uppercase font-black tracking-wider rounded cursor-pointer flex items-center gap-1"
+                                className="px-2 py-1 bg-app-bg hover:bg-slate-700 text-app-text-secondary text-[10px] uppercase font-black tracking-wider rounded cursor-pointer flex items-center gap-1"
                               >
                                 <Undo className="w-3.5 h-3.5" /> Undo
                               </button>
@@ -900,7 +900,7 @@ export default function CreatorEarnings() {
             
             {/* Top creators by YTD earnings bar chart */}
             <div className="bg-app-card p-5 rounded-xl border border-app-border space-y-4">
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+              <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider flex items-center gap-1.5">
                 <TrendingUp className="w-4 h-4 text-[#F4631E]" /> Top Creators by Cumulative Earnings (YTD BDT)
               </h3>
               <div className="h-64 font-mono text-[10.5px]">
@@ -917,7 +917,7 @@ export default function CreatorEarnings() {
 
             {/* Earnings by Source pie chart */}
             <div className="bg-app-card p-5 rounded-xl border border-app-border space-y-4">
-              <h3 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+              <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider flex items-center gap-1.5">
                 <Percent className="w-4 h-4 text-green-400" /> Attribution Volume share by Accrual Source
               </h3>
               <div className="h-64 flex flex-col md:flex-row items-center justify-between gap-4 font-mono text-[10.5px]">
@@ -944,12 +944,12 @@ export default function CreatorEarnings() {
                 
                 <div className="w-full md:w-1/2 space-y-2">
                   {performanceAnalytics.earningsBySource.map((s, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-xs border-b border-white/[0.02] pb-1">
+                    <div key={idx} className="flex items-center justify-between text-xs border-b border-app-border pb-1">
                       <div className="flex items-center gap-2">
                         <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                         <span className="text-slate-350 text-[10.5px] font-sans truncate max-w-[130px]">{s.name}</span>
                       </div>
-                      <span className="text-white font-bold">৳{s.value.toLocaleString()}</span>
+                      <span className="text-app-text-primary font-bold">৳{s.value.toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
@@ -960,13 +960,13 @@ export default function CreatorEarnings() {
 
           {/* Tier distribution breakdown */}
           <div className="bg-app-card p-5 rounded-xl border border-app-border space-y-4">
-            <h3 className="text-xs font-bold text-white uppercase tracking-wider">Influencer Tier Progression Metrics</h3>
+            <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Influencer Tier Progression Metrics</h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {performanceAnalytics.tierDistribution.map(td => (
-                <div key={td.tier} className="bg-slate-950/40 border border-white/5 p-4 rounded-lg space-y-1">
+                <div key={td.tier} className="bg-app-bg/10 border border-app-border p-4 rounded-lg space-y-1">
                   <span className="text-[10px] text-slate-500 font-mono tracking-wider block">{td.tier} TIERS</span>
-                  <div className="text-xl font-extrabold text-white font-mono">{td.count} Creators</div>
-                  <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden mt-2">
+                  <div className="text-xl font-extrabold text-app-text-primary font-mono">{td.count} Creators</div>
+                  <div className="w-full bg-app-card h-1.5 rounded-full overflow-hidden mt-2">
                     <div className="h-full bg-[#F4631E] rounded-full" style={{ width: `${td.percent}%` }} />
                   </div>
                   <span className="text-[9.5px] text-[#F4631E] font-mono mt-1 block font-bold">{td.percent}% of platform corpus</span>
@@ -980,8 +980,8 @@ export default function CreatorEarnings() {
       {/* TAB 5: TIER MANAGEMENT */}
       {activeTab === 'tiers' && (
         <div className="bg-app-card rounded-xl border border-app-border overflow-hidden shadow-xl">
-          <div className="p-4 bg-slate-950 border-b border-app-border text-xs flex justify-between items-center flex-wrap gap-2">
-            <span className="font-bold text-white uppercase tracking-wider">Creator tier advancement auditing desk</span>
+          <div className="p-4 bg-app-bg border-b border-app-border text-xs flex justify-between items-center flex-wrap gap-2">
+            <span className="font-bold text-app-text-primary uppercase tracking-wider">Creator tier advancement auditing desk</span>
             <span className="text-amber-500 font-bold uppercase text-[9.5px] flex items-center gap-1">
               <Shield className="w-3.5 h-3.5" /> Policy Enforced lock
             </span>
@@ -990,7 +990,7 @@ export default function CreatorEarnings() {
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-white/[0.04] bg-slate-950 text-[10px] text-slate-400 uppercase tracking-wider font-mono">
+                <tr className="border-b border-app-border bg-app-bg text-[10px] text-app-text-secondary uppercase tracking-wider font-mono">
                   <th className="p-4">Creator</th>
                   <th>Current Tier</th>
                   <th>Next Level Requirement</th>
@@ -1020,30 +1020,30 @@ export default function CreatorEarnings() {
                     <tr key={c.creatorId} className="hover:bg-white/[0.01]">
                       
                       <td className="p-4">
-                        <h4 className="font-bold text-white text-xs">{c.creatorName}</h4>
+                        <h4 className="font-bold text-app-text-primary text-xs">{c.creatorName}</h4>
                         <span className="text-[10px] text-slate-500 font-mono">ID: {c.creatorId}</span>
                       </td>
 
                       <td>
-                        <span className="text-white uppercase font-mono font-bold tracking-wider">{c.tier}</span>
+                        <span className="text-app-text-primary uppercase font-mono font-bold tracking-wider">{c.tier}</span>
                       </td>
 
                       <td>
                         {c.tier === 'platinum' ? (
                           <span className="text-green-400 font-bold uppercase text-[10px]">Peak Level Reached</span>
                         ) : (
-                          <span className="text-slate-300 font-semibold">{targetFollowers.toLocaleString()} Followers for <strong className="text-white uppercase">{nextTier}</strong></span>
+                          <span className="text-app-text-secondary font-semibold">{targetFollowers.toLocaleString()} Followers for <strong className="text-app-text-primary uppercase">{nextTier}</strong></span>
                         )}
                       </td>
 
                       <td className="py-4">
                         {c.tier !== 'platinum' ? (
                           <div className="space-y-1">
-                            <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                            <div className="flex justify-between text-[10px] text-app-text-secondary font-mono">
                               <span>Progress:</span>
                               <span>{c.followerCount}/{targetFollowers}</span>
                             </div>
-                            <div className="w-full bg-slate-950 h-1.5 rounded-full overflow-hidden border border-white/5">
+                            <div className="w-full bg-app-bg h-1.5 rounded-full overflow-hidden border border-app-border">
                               <div className="h-full bg-[#F4631E] rounded-full" style={{ width: `${percent}%` }} />
                             </div>
                           </div>
@@ -1077,24 +1077,24 @@ export default function CreatorEarnings() {
 
       {/* DETAILED CREATOR MODAL WINDOW */}
       {selectedCreatorId && selectedCreatorDetails && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-app-bg/10 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-[#12121A] border border-app-border rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl relative animate-in zoom-in-95 duration-150">
             
             {/* Modal Exit handle */}
             <button 
               onClick={() => setSelectedCreatorId(null)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-white cursor-pointer"
+              className="absolute top-4 right-4 text-app-text-secondary hover:text-white cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
             {/* Modal Header */}
-            <div className="p-6 bg-slate-950/60 border-b border-app-border flex items-center gap-4">
+            <div className="p-6 bg-app-bg/10 border-b border-app-border flex items-center gap-4">
               <div className="w-12 h-12 rounded-full bg-[#F4631E]/10 text-[#F4631E] font-black text-sm flex items-center justify-center font-mono border border-[#F4631E]/20 shadow">
                 {selectedCreatorDetails.creator.avatar || selectedCreatorDetails.creator.creatorName.split(' ').map(n => n[0]).join('')}
               </div>
               <div>
-                <h2 className="text-base font-black text-white">{selectedCreatorDetails.creator.creatorName}</h2>
+                <h2 className="text-base font-black text-app-text-primary">{selectedCreatorDetails.creator.creatorName}</h2>
                 <div className="flex flex-wrap items-center gap-2 mt-1">
                   <span className="text-[10px] uppercase tracking-widest text-[#F4631E] font-mono">Tier level: {selectedCreatorDetails.creator.tier}</span>
                   <span className="text-slate-500 font-mono text-[10px]">Joined: {selectedCreatorDetails.creator.joinedAt}</span>
@@ -1109,16 +1109,16 @@ export default function CreatorEarnings() {
               <div className="lg:col-span-7 space-y-6">
                 
                 {/* Recent Earnings box */}
-                <div className="bg-slate-950/40 p-4 rounded-xl border border-white/5 space-y-3">
+                <div className="bg-app-bg/10 p-4 rounded-xl border border-app-border space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10.5px] uppercase font-bold text-slate-400">Recent Accruals (30 days)</span>
-                    <span className={`text-[10px] font-mono font-bold ${
+                    <span className="text-[10.5px] uppercase font-bold text-app-text-secondary">Recent Accruals (30 days)</span>
+                    <span className={`text-[10px] font-mono font-bold${
                       selectedCreatorDetails.monthGrowth >= 0 ? 'text-green-400' : 'text-red-400'
                     }`}>
                       {selectedCreatorDetails.monthGrowth >= 0 ? '+' : ''}{selectedCreatorDetails.monthGrowth.toFixed(1)}% vs prev month
                     </span>
                   </div>
-                  <div className="text-3xl font-black text-white font-mono">৳{selectedCreatorDetails.monthEarnings.toLocaleString()} BDT</div>
+                  <div className="text-3xl font-black text-app-text-primary font-mono">৳{selectedCreatorDetails.monthEarnings.toLocaleString()} BDT</div>
                   
                   {/* Subtle static trend diagram bar */}
                   <div className="pt-2">
@@ -1144,19 +1144,19 @@ export default function CreatorEarnings() {
                     { label: 'Total Views', val: selectedCreatorDetails.creator.totalGuideViews.toLocaleString() },
                     { label: 'Engagement Rate', val: `${selectedCreatorDetails.creator.engagementRate}%` }
                   ].map(item => (
-                    <div key={item.label} className="bg-slate-950/40 p-3 rounded-lg border border-white/[0.03]">
+                    <div key={item.label} className="bg-app-bg/10 p-3 rounded-lg border border-app-border">
                       <span className="text-[9px] text-slate-500 font-mono uppercase tracking-wider block">{item.label}</span>
-                      <span className="text-sm font-black text-white font-mono block mt-1">{item.val}</span>
+                      <span className="text-sm font-black text-app-text-primary font-mono block mt-1">{item.val}</span>
                     </div>
                   ))}
                 </div>
 
                 {/* Recent Guides List */}
                 <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Top Performing Guides</h3>
+                  <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Top Performing Guides</h3>
                   <div className="space-y-2">
                     {selectedCreatorDetails.recentGuides.map(rg => (
-                      <div key={rg.id} className="p-3 bg-slate-950/30 rounded-lg border border-white/[0.02] flex items-center justify-between text-xs">
+                      <div key={rg.id} className="p-3 bg-app-bg/10 rounded-lg border border-app-border flex items-center justify-between text-xs">
                         <div className="space-y-0.5">
                           <h4 className="font-bold text-slate-250 truncate max-w-xs">{rg.title}</h4>
                           <span className="text-[9.5px] text-slate-500 font-mono">Published: {rg.date}</span>
@@ -1164,7 +1164,7 @@ export default function CreatorEarnings() {
                         <div className="flex items-center gap-4 text-right font-mono">
                           <div>
                             <span className="text-[9px] text-slate-500 block uppercase">Views</span>
-                            <span className="text-white font-bold">{rg.views.toLocaleString()}</span>
+                            <span className="text-app-text-primary font-bold">{rg.views.toLocaleString()}</span>
                           </div>
                           <div>
                             <span className="text-[9px] text-slate-500 block uppercase">Clicks</span>
@@ -1182,23 +1182,23 @@ export default function CreatorEarnings() {
               <div className="lg:col-span-5 space-y-6">
                 
                 {/* Financial Payout Summary panel */}
-                <div className="bg-slate-950/60 p-4 rounded-xl border border-white/5 space-y-3.5">
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2">Financial Settlements</h3>
+                <div className="bg-app-bg/10 p-4 rounded-xl border border-app-border space-y-3.5">
+                  <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider border-b border-app-border pb-2">Financial Settlements</h3>
                   
                   <div className="space-y-2 text-xs">
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Current Month Accrual:</span>
-                      <span className="text-white font-bold font-mono">৳{selectedCreatorDetails.monthEarnings.toLocaleString()}</span>
+                      <span className="text-app-text-secondary">Current Month Accrual:</span>
+                      <span className="text-app-text-primary font-bold font-mono">৳{selectedCreatorDetails.monthEarnings.toLocaleString()}</span>
                     </div>
                     
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Settled YTD Earnings:</span>
+                      <span className="text-app-text-secondary">Settled YTD Earnings:</span>
                       <span className="text-emerald-400 font-bold font-mono">৳{selectedCreatorDetails.ytdEarnings.toLocaleString()}</span>
                     </div>
 
                     <div className="flex justify-between">
-                      <span className="text-slate-400">Masked Settlement bank:</span>
-                      <span className="text-slate-300 font-mono font-bold">{selectedCreatorDetails.creator.creatorId === 'creator_rafsan' ? 'BRAC Bank Ltd' : selectedCreatorDetails.creator.creatorId === 'creator_khalid' ? 'City Bank Ltd' : selectedCreatorDetails.creator.creatorId === 'creator_tawhid' ? 'Dutch-Bangla Bank' : 'Unverified bank'}</span>
+                      <span className="text-app-text-secondary">Masked Settlement bank:</span>
+                      <span className="text-app-text-secondary font-mono font-bold">{selectedCreatorDetails.creator.creatorId === 'creator_rafsan' ? 'BRAC Bank Ltd' : selectedCreatorDetails.creator.creatorId === 'creator_khalid' ? 'City Bank Ltd' : selectedCreatorDetails.creator.creatorId === 'creator_tawhid' ? 'Dutch-Bangla Bank' : 'Unverified bank'}</span>
                     </div>
                   </div>
 
@@ -1222,19 +1222,19 @@ export default function CreatorEarnings() {
 
                 {/* Next Tier Progression */}
                 {selectedCreatorDetails.creator.tier !== 'platinum' && (
-                  <div className="bg-slate-950/40 p-4 rounded-xl border border-white/5 space-y-3">
-                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">Level Advancement</h3>
-                    <div className="text-xs text-slate-400 font-semibold leading-relaxed">
-                      Next Level Goal: <strong className="text-white uppercase font-mono">{selectedCreatorDetails.nextTierLabel}</strong>
+                  <div className="bg-app-bg/10 p-4 rounded-xl border border-app-border space-y-3">
+                    <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Level Advancement</h3>
+                    <div className="text-xs text-app-text-secondary font-semibold leading-relaxed">
+                      Next Level Goal: <strong className="text-app-text-primary uppercase font-mono">{selectedCreatorDetails.nextTierLabel}</strong>
                       <p className="text-[10px] text-slate-500 mt-1">Requires: {selectedCreatorDetails.requirementText}</p>
                     </div>
 
                     <div className="space-y-1">
-                      <div className="flex justify-between text-[10px] text-slate-400 font-mono">
+                      <div className="flex justify-between text-[10px] text-app-text-secondary font-mono">
                         <span>Advancement progress:</span>
                         <span>{selectedCreatorDetails.creator.followerCount} / {selectedCreatorDetails.targetVal} followers</span>
                       </div>
-                      <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden">
+                      <div className="w-full bg-app-card h-1.5 rounded-full overflow-hidden">
                         <div 
                           className="h-full bg-gradient-to-r from-amber-500 to-emerald-400 rounded-full"
                           style={{ width: `${Math.min(100, (selectedCreatorDetails.creator.followerCount / selectedCreatorDetails.targetVal) * 100)}%` }}
@@ -1246,13 +1246,13 @@ export default function CreatorEarnings() {
 
                 {/* Milestones achieved */}
                 <div className="space-y-3">
-                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Achievement Badges</h3>
+                  <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Achievement Badges</h3>
                   <div className="space-y-2">
                     {selectedCreatorDetails.milestones.map(m => (
-                      <div key={m.id} className="p-2.5 bg-slate-950/50 rounded-lg border border-white/[0.02] flex items-center gap-2.5 text-xs">
+                      <div key={m.id} className="p-2.5 bg-app-bg/10 rounded-lg border border-app-border flex items-center gap-2.5 text-xs">
                         <Award className="w-4 h-4 text-yellow-400 shrink-0" />
                         <div>
-                          <h4 className="font-bold text-slate-200 capitalize">{m.milestone.replace('_', ' ')}</h4>
+                          <h4 className="font-bold text-app-text-secondary capitalize">{m.milestone.replace('_', ' ')}</h4>
                           <span className="text-[10px] text-slate-500 font-mono">Unlocked: {m.achievedAt}</span>
                         </div>
                       </div>
@@ -1264,12 +1264,12 @@ export default function CreatorEarnings() {
                 </div>
 
                 {/* Quick actions box */}
-                <div className="flex flex-col gap-2 pt-2 border-t border-white/[0.04]">
+                <div className="flex flex-col gap-2 pt-2 border-t border-app-border">
                   <button 
                     onClick={() => {
                       alert(`Mock dispatched: Messenger dispatch code initialized targeting ${selectedCreatorDetails.creator.creatorName}`);
                     }}
-                    className="w-full py-1.5 border border-white/5 hover:border-white/10 bg-slate-900 text-white text-xs font-bold uppercase tracking-wider rounded cursor-pointer text-center"
+                    className="w-full py-1.5 border border-app-border hover:border-white/10 bg-app-card text-app-text-primary text-xs font-bold uppercase tracking-wider rounded cursor-pointer text-center"
                   >
                     Send Chat Notification
                   </button>
@@ -1277,7 +1277,7 @@ export default function CreatorEarnings() {
                     onClick={() => {
                       alert(`Mock profile edit: Opened designer editor panel for ${selectedCreatorDetails.creator.creatorName}`);
                     }}
-                    className="w-full py-1.5 border border-white/5 hover:border-white/10 bg-slate-900 text-white text-xs font-bold uppercase tracking-wider rounded cursor-pointer text-center"
+                    className="w-full py-1.5 border border-app-border hover:border-white/10 bg-app-card text-app-text-primary text-xs font-bold uppercase tracking-wider rounded cursor-pointer text-center"
                   >
                     Edit Profile Ledger
                   </button>

@@ -227,7 +227,7 @@ export default function GuideStudioCMS({
   };
 
   return (
-    <div className="space-y-6 text-left font-sans text-slate-200">
+    <div className="space-y-6 text-left font-sans text-app-text-secondary">
       
       {/* Toast Notification */}
       <AnimatePresence>
@@ -236,22 +236,22 @@ export default function GuideStudioCMS({
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="fixed top-8 right-8 z-[300] bg-zinc-900 border border-white/10 px-5 py-3 rounded-[4px] shadow-2xl flex items-center gap-3 font-sans"
+            className="fixed top-8 right-8 z-[300] bg-zinc-900 border border-app-border px-5 py-3 rounded-[4px] shadow-2xl flex items-center gap-3 font-sans"
           >
             <span className="w-2 h-2 bg-rose-500 rounded-full animate-pulse" />
-            <span className="text-[11px] font-mono font-bold text-white uppercase tracking-wider">{toastMessage}</span>
+            <span className="text-[11px] font-mono font-bold text-app-text-primary uppercase tracking-wider">{toastMessage}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* Embedded Title with Accent Border */}
-      <div className="border border-white/5 bg-white/[0.01] p-5 rounded-[4px] flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="border border-app-border bg-white/[0.01] p-5 rounded-[4px] flex flex-col sm:flex-row items-center justify-between gap-4">
         <div className="space-y-1 text-left">
           <div className="flex items-center gap-2">
             <span className="bg-[#F4631E]/10 text-[#F4631E] p-1.5 rounded-[2px] border border-[#F4631E]/20">
               <BookOpen className="w-4 h-4" />
             </span>
-            <h3 id="gds001" className="text-sm font-bold text-white uppercase tracking-wider">
+            <h3 id="gds001" className="text-sm font-bold text-app-text-primary uppercase tracking-wider">
               Guide Studio & Editorial CMS
             </h3>
           </div>
@@ -275,7 +275,7 @@ export default function GuideStudioCMS({
               setIsCreatingNew(false);
               setEditingGuide(null);
             }}
-            className="flex items-center gap-1.5 bg-white/5 border border-white/10 text-slate-300 hover:text-white hover:bg-white/10 px-4 py-2 rounded-[2px] text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer font-sans"
+            className="flex items-center gap-1.5 bg-white/5 border border-app-border text-app-text-secondary hover:text-white hover:bg-white/10 px-4 py-2 rounded-[2px] text-[10px] font-bold uppercase tracking-wider transition-all cursor-pointer font-sans"
           >
             <ArrowLeft className="w-3.5 h-3.5" /> Back to Catalog
           </button>
@@ -293,7 +293,7 @@ export default function GuideStudioCMS({
             className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl"
           >
             <form onSubmit={handleSave} className="space-y-6">
-              <div className="border-b border-white/[0.04] pb-3 flex items-center justify-between">
+              <div className="border-b border-app-border pb-3 flex items-center justify-between">
                 <div>
                   <h4 className="text-xs font-bold text-[#F4631E] uppercase tracking-wider">
                     {isCreatingNew ? "★ Publish New Buying Guide" : "✏ Edit Guide Metadata"}
@@ -316,7 +316,7 @@ export default function GuideStudioCMS({
                     value={formTitle}
                     onChange={(e) => setFormTitle(e.target.value)}
                     placeholder="E.G., THE ULTIMATE HANDLOOM SAREE BUYERS MARKET REPORT"
-                    className="w-full bg-[#0B1F3B]/30 border border-white/5 rounded-[2px] px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-[#F4631E]/40"
+                    className="w-full bg-[#0B1F3B]/30 border border-app-border rounded-[2px] px-3.5 py-2.5 text-xs font-bold text-app-text-primary outline-none focus:border-[#F4631E]/40"
                   />
                 </div>
 
@@ -326,10 +326,10 @@ export default function GuideStudioCMS({
                   <select
                     value={formCategory}
                     onChange={(e) => setFormCategory(e.target.value)}
-                    className="w-full bg-[#0B1F3B]/30 border border-white/5 tag-select rounded-[2px] px-3 py-2.5 text-xs font-bold text-white outline-none focus:border-[#F4631E]/40"
+                    className="w-full bg-[#0B1F3B]/30 border border-app-border tag-select rounded-[2px] px-3 py-2.5 text-xs font-bold text-app-text-primary outline-none focus:border-[#F4631E]/40"
                   >
                     {categories.map((cat) => (
-                      <option key={cat} value={cat} className="bg-slate-900 text-white">
+                      <option key={cat} value={cat} className="bg-app-card text-app-text-primary">
                         {cat}
                       </option>
                     ))}
@@ -342,11 +342,11 @@ export default function GuideStudioCMS({
                   <select
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value as any)}
-                    className="w-full bg-[#0B1F3B]/30 border border-white/5 tag-select rounded-[2px] px-3 py-2.5 text-xs font-bold text-white outline-none focus:border-[#F4631E]/40"
+                    className="w-full bg-[#0B1F3B]/30 border border-app-border tag-select rounded-[2px] px-3 py-2.5 text-xs font-bold text-app-text-primary outline-none focus:border-[#F4631E]/40"
                   >
-                    <option value="Draft" className="bg-slate-900 text-white">Draft (Internal Work-in-progress)</option>
-                    <option value="Live" className="bg-slate-900 text-white">Live (Published Publicly on Feed)</option>
-                    <option value="Archived" className="bg-slate-900 text-white">Archived (Withdrawn from Market)</option>
+                    <option value="Draft" className="bg-app-card text-app-text-primary">Draft (Internal Work-in-progress)</option>
+                    <option value="Live" className="bg-app-card text-app-text-primary">Live (Published Publicly on Feed)</option>
+                    <option value="Archived" className="bg-app-card text-app-text-primary">Archived (Withdrawn from Market)</option>
                   </select>
                 </div>
 
@@ -359,7 +359,7 @@ export default function GuideStudioCMS({
                     value={formAudience}
                     onChange={(e) => setFormAudience(e.target.value)}
                     placeholder="E.G., Traditional Brides & Heritage Aficionados"
-                    className="w-full bg-[#0B1F3B]/30 border border-white/5 rounded-[2px] px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-[#F4631E]/40"
+                    className="w-full bg-[#0B1F3B]/30 border border-app-border rounded-[2px] px-3.5 py-2.5 text-xs font-bold text-app-text-primary outline-none focus:border-[#F4631E]/40"
                   />
                 </div>
 
@@ -372,7 +372,7 @@ export default function GuideStudioCMS({
                     value={formReadTime}
                     onChange={(e) => setFormReadTime(e.target.value)}
                     placeholder="E.G., 6m read"
-                    className="w-full bg-[#0B1F3B]/30 border border-white/5 rounded-[2px] px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-[#F4631E]/40"
+                    className="w-full bg-[#0B1F3B]/30 border border-app-border rounded-[2px] px-3.5 py-2.5 text-xs font-bold text-app-text-primary outline-none focus:border-[#F4631E]/40"
                   />
                 </div>
 
@@ -385,7 +385,7 @@ export default function GuideStudioCMS({
                     value={formWinner}
                     onChange={(e) => setFormWinner(e.target.value)}
                     placeholder="E.G., Aarong Premium Silk Cotton Blend"
-                    className="w-full bg-[#0B1F3B]/30 border border-white/5 rounded-[2px] px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-[#F4631E]/40"
+                    className="w-full bg-[#0B1F3B]/30 border border-app-border rounded-[2px] px-3.5 py-2.5 text-xs font-bold text-app-text-primary outline-none focus:border-[#F4631E]/40"
                   />
                 </div>
 
@@ -398,7 +398,7 @@ export default function GuideStudioCMS({
                     value={formBudget}
                     onChange={(e) => setFormBudget(e.target.value)}
                     placeholder="E.G., Rajshahi Loom Saree Outlet Pick"
-                    className="w-full bg-[#0B1F3B]/30 border border-white/5 rounded-[2px] px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-[#F4631E]/40"
+                    className="w-full bg-[#0B1F3B]/30 border border-app-border rounded-[2px] px-3.5 py-2.5 text-xs font-bold text-app-text-primary outline-none focus:border-[#F4631E]/40"
                   />
                 </div>
 
@@ -411,21 +411,21 @@ export default function GuideStudioCMS({
                     required
                     value={formProductsReviewed}
                     onChange={(e) => setFormProductsReviewed(parseInt(e.target.value) || 5)}
-                    className="w-full bg-[#0B1F3B]/30 border border-white/5 rounded-[2px] px-3.5 py-2.5 text-xs font-bold text-white outline-none focus:border-[#F4631E]/40"
+                    className="w-full bg-[#0B1F3B]/30 border border-app-border rounded-[2px] px-3.5 py-2.5 text-xs font-bold text-app-text-primary outline-none focus:border-[#F4631E]/40"
                   />
                 </div>
 
               </div>
 
               {/* Action Rows */}
-              <div className="border-t border-white/[0.04] pt-4.5 flex gap-3 justify-end">
+              <div className="border-t border-app-border pt-4.5 flex gap-3 justify-end">
                 <button
                   type="button"
                   onClick={() => {
                     setIsCreatingNew(false);
                     setEditingGuide(null);
                   }}
-                  className="px-4 py-2 border border-white/10 rounded-[2px] text-xs font-bold text-slate-300 hover:text-white hover:bg-white/5 cursor-pointer"
+                  className="px-4 py-2 border border-app-border rounded-[2px] text-xs font-bold text-app-text-secondary hover:text-white hover:bg-white/5 cursor-pointer"
                 >
                   Discard Changes
                 </button>
@@ -450,7 +450,7 @@ export default function GuideStudioCMS({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-md text-left font-sans flex flex-col justify-between">
                 <span className="text-[9px] text-app-text-secondary uppercase block font-mono font-bold">Total Creator Guides</span>
-                <span className="text-xl font-black text-white block mt-1.5">{creatorGuides.length} Items</span>
+                <span className="text-xl font-black text-app-text-primary block mt-1.5">{creatorGuides.length} Items</span>
               </div>
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-md text-left font-sans flex flex-col justify-between">
                 <span className="text-[9px] text-app-text-secondary uppercase block font-mono font-bold">Live Guides</span>
@@ -475,13 +475,13 @@ export default function GuideStudioCMS({
             {/* Filter controls */}
             <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
               {/* Query bar */}
-              <div className="w-full md:w-80 bg-white/[0.01] border border-white/5 rounded-[2px] flex items-center px-3 gap-2">
+              <div className="w-full md:w-80 bg-white/[0.01] border border-app-border rounded-[2px] flex items-center px-3 gap-2">
                 <Search className="w-3.5 h-3.5 text-app-text-secondary shrink-0" />
                 <input 
                   placeholder="Filter guides by title or Category..." 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="flex-1 py-2 text-[11px] bg-transparent outline-none text-white placeholder-slate-500 font-sans" 
+                  className="flex-1 py-2 text-[11px] bg-transparent outline-none text-app-text-primary placeholder-slate-500 font-sans" 
                 />
               </div>
 
@@ -491,7 +491,7 @@ export default function GuideStudioCMS({
                   <button
                     key={st}
                     onClick={() => setStatusFilter(st)}
-                    className={`px-3 py-1 rounded-[2px] text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    className={`px-3 py-1 rounded-[2px] text-[9px] font-black uppercase tracking-wider transition-all cursor-pointer${
                       statusFilter === st 
                         ? "bg-[#F4631E] text-white" 
                         : "bg-white/5 text-slate-300 hover:text-white hover:bg-white/10"
@@ -507,14 +507,14 @@ export default function GuideStudioCMS({
                 <div className="flex bg-white/5 rounded-[2px] p-0.5">
                   <button
                     onClick={() => setViewLayout("list")}
-                    className={`p-1 rounded-[2px] transition-colors ${viewLayout === "list" ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"}`}
+                    className={`p-1 rounded-[2px] transition-colors${viewLayout === "list" ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"}`}
                     title="Compact Row Layout"
                   >
                     <List className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => setViewLayout("grid")}
-                    className={`p-1 rounded-[2px] transition-colors ${viewLayout === "grid" ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"}`}
+                    className={`p-1 rounded-[2px] transition-colors${viewLayout === "grid" ? "bg-white/10 text-white" : "text-slate-400 hover:text-white"}`}
                     title="Card Grid Layout"
                   >
                     <LayoutGrid className="w-3.5 h-3.5" />
@@ -525,9 +525,9 @@ export default function GuideStudioCMS({
 
             {/* List / Grid Render */}
             {filteredGuides.length === 0 ? (
-              <div className="bg-app-card border border-app-border rounded-[4px] p-12 text-center text-slate-400">
+              <div className="bg-app-card border border-app-border rounded-[4px] p-12 text-center text-app-text-secondary">
                 <BookOpen className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-                <p className="text-xs font-bold text-white uppercase tracking-wider">No Guides Found</p>
+                <p className="text-xs font-bold text-app-text-primary uppercase tracking-wider">No Guides Found</p>
                 <p className="text-[10px] text-app-text-secondary mt-1">There are no buying guides for the current credentials match.</p>
               </div>
             ) : viewLayout === "grid" ? (
@@ -537,7 +537,7 @@ export default function GuideStudioCMS({
                     key={guide.id}
                     className="bg-app-card border border-app-border rounded-[4px] p-5 hover:border-white/10 transition-all flex flex-col justify-between group text-left relative"
                   >
-                    <span className={`absolute top-4 right-4 text-[8px] font-mono px-2 py-0.5 rounded-[2px] border font-black uppercase ${
+                    <span className={`absolute top-4 right-4 text-[8px] font-mono px-2 py-0.5 rounded-[2px] border font-black uppercase${
                       guide.status === "Live" 
                         ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
                         : guide.status === "Draft" 
@@ -552,36 +552,36 @@ export default function GuideStudioCMS({
                         <span className="text-[9px] font-mono text-[#F4631E] font-bold uppercase tracking-wider block">
                           {guide.category} • {guide.readTime}
                         </span>
-                        <h4 className="text-xs font-bold text-white group-hover:text-[#F4631E] transition-colors leading-snug tracking-tight pr-12 line-clamp-2">
+                        <h4 className="text-xs font-bold text-app-text-primary group-hover:text-[#F4631E] transition-colors leading-snug tracking-tight pr-12 line-clamp-2">
                           {guide.guideTitle}
                         </h4>
                         <span className="text-[10px] text-app-text-secondary block">Ideal for: {guide.audienceType}</span>
                       </div>
 
                       {/* Best pick values */}
-                      <div className="space-y-1.5 p-3 bg-white/[0.01] border border-white/5 rounded-[2px] font-sans text-xs">
+                      <div className="space-y-1.5 p-3 bg-white/[0.01] border border-app-border rounded-[2px] font-sans text-xs">
                         <div className="flex justify-between items-center text-[11px]">
-                          <span className="text-slate-400 font-semibold">🏆 Overall #1 Pick:</span>
-                          <span className="font-bold text-white truncate max-w-[150px]">{guide.winnerProduct}</span>
+                          <span className="text-app-text-secondary font-semibold">🏆 Overall #1 Pick:</span>
+                          <span className="font-bold text-app-text-primary truncate max-w-[150px]">{guide.winnerProduct}</span>
                         </div>
-                        <div className="flex justify-between items-center text-[10px] border-t border-white/5 pt-1.5 mt-1.5">
-                          <span className="text-slate-400 font-semibold">💼 Best Budget Pick:</span>
-                          <span className="font-semibold text-white truncate max-w-[150px]">{guide.bestBudgetPick}</span>
+                        <div className="flex justify-between items-center text-[10px] border-t border-app-border pt-1.5 mt-1.5">
+                          <span className="text-app-text-secondary font-semibold">💼 Best Budget Pick:</span>
+                          <span className="font-semibold text-app-text-primary truncate max-w-[150px]">{guide.bestBudgetPick}</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Footer edit controls */}
-                    <div className="mt-4 pt-4 border-t border-white/5 flex gap-2">
+                    <div className="mt-4 pt-4 border-t border-app-border flex gap-2">
                       <button
                         onClick={() => handleOpenEdit(guide)}
-                        className="flex-1 py-1.5 bg-[#0B1F3B]/40 hover:bg-[#0B1F3B]/80 text-white rounded-[2px] text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-colors border border-white/5"
+                        className="flex-1 py-1.5 bg-[#0B1F3B]/40 hover:bg-[#0B1F3B]/80 text-app-text-primary rounded-[2px] text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-1 cursor-pointer transition-colors border border-app-border"
                       >
                         <Edit3 className="w-3.5 h-3.5" /> Editorial Editor
                       </button>
                       <button
                         onClick={() => handleDeleteGuide(guide.id, guide.guideTitle)}
-                        className="p-1.5 bg-white/5 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 border border-white/10 hover:border-rose-500/20 rounded-[2px] cursor-pointer transition-all"
+                        className="p-1.5 bg-white/5 hover:bg-rose-500/10 text-app-text-secondary hover:text-rose-400 border border-app-border hover:border-rose-500/20 rounded-[2px] cursor-pointer transition-all"
                         title="Delete Guide Draft"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -594,7 +594,7 @@ export default function GuideStudioCMS({
               <div className="bg-app-card border border-app-border rounded-[4px] overflow-hidden shadow-xl">
                 <table className="w-full text-left font-sans">
                   <thead>
-                    <tr className="border-b border-white/[0.04] bg-white/[0.02]">
+                    <tr className="border-b border-app-border bg-white/[0.02]">
                       <th className="p-4 text-[9px] font-bold uppercase text-app-text-secondary tracking-wider">Guide title & category</th>
                       <th className="p-4 text-[9px] font-bold uppercase text-app-text-secondary tracking-wider">🏆 Overall #1 Winner</th>
                       <th className="p-4 text-[9px] font-bold uppercase text-app-text-secondary tracking-wider">Reviewed items</th>
@@ -608,7 +608,7 @@ export default function GuideStudioCMS({
                       <tr key={guide.id} className="hover:bg-white/[0.01] transition-colors">
                         <td className="p-4">
                           <span className="text-[10px] uppercase font-bold text-app-text-secondary block font-mono">ID: {guide.id}</span>
-                          <span className="text-xs font-bold text-white leading-snug block mt-0.5 max-w-sm">
+                          <span className="text-xs font-bold text-app-text-primary leading-snug block mt-0.5 max-w-sm">
                             {guide.guideTitle}
                           </span>
                           <span className="text-[9px] font-bold text-[#F4631E] block mt-1 font-mono tracking-wider uppercase">
@@ -616,17 +616,17 @@ export default function GuideStudioCMS({
                           </span>
                         </td>
                         <td className="p-4">
-                          <span className="text-xs font-semibold text-white block">{guide.winnerProduct}</span>
+                          <span className="text-xs font-semibold text-app-text-primary block">{guide.winnerProduct}</span>
                           <span className="text-[10px] text-indigo-400 block mt-0.5">Budget: {guide.bestBudgetPick}</span>
                         </td>
-                        <td className="p-4 text-xs font-mono font-bold text-white">
+                        <td className="p-4 text-xs font-mono font-bold text-app-text-primary">
                           {guide.productsReviewed} Picks
                         </td>
                         <td className="p-4 text-xs text-app-text-secondary">
                           {guide.audienceType}
                         </td>
                         <td className="p-4">
-                          <span className={`px-2 py-0.5 text-[8px] font-mono font-black uppercase rounded-[2px] border ${
+                          <span className={`px-2 py-0.5 text-[8px] font-mono font-black uppercase rounded-[2px] border${
                             guide.status === "Live" 
                               ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
                               : "bg-amber-500/10 text-amber-500 border-amber-500/20"
@@ -638,14 +638,14 @@ export default function GuideStudioCMS({
                           <div className="flex justify-end gap-1.5">
                             <button 
                               onClick={() => handleOpenEdit(guide)}
-                              className="p-1.5 bg-[#0B1F3B]/30 hover:bg-[#0B1F3B]/80 text-[#F4631E] border border-white/5 hover:border-[#F4631E]/20 rounded-[2px] transition-colors cursor-pointer"
+                              className="p-1.5 bg-[#0B1F3B]/30 hover:bg-[#0B1F3B]/80 text-[#F4631E] border border-app-border hover:border-[#F4631E]/20 rounded-[2px] transition-colors cursor-pointer"
                               title="Edit Guide"
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
                             <button 
                               onClick={() => handleDeleteGuide(guide.id, guide.guideTitle)}
-                              className="p-1.5 bg-white/5 hover:bg-rose-500/10 text-slate-400 hover:text-rose-400 border border-white/10 hover:border-rose-500/20 rounded-[2px] transition-colors cursor-pointer"
+                              className="p-1.5 bg-white/5 hover:bg-rose-500/10 text-app-text-secondary hover:text-rose-400 border border-app-border hover:border-rose-500/20 rounded-[2px] transition-colors cursor-pointer"
                               title="Delete Guide"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
@@ -666,7 +666,7 @@ export default function GuideStudioCMS({
       <div className="bg-app-card border border-app-border p-5 rounded-[4px] flex items-center gap-4 text-left shadow-md">
         <HelpCircle className="w-8 h-8 text-[#F4631E] shrink-0" />
         <div className="space-y-1">
-          <h4 className="text-[12px] font-bold text-white uppercase tracking-wider">Expert Buying Guide Sourcing Standards</h4>
+          <h4 className="text-[12px] font-bold text-app-text-primary uppercase tracking-wider">Expert Buying Guide Sourcing Standards</h4>
           <p className="text-[11px] text-app-text-secondary leading-relaxed max-w-4xl">
             Verified Shopping Guides published on Choosify must be built using real, non-mock hands-on benchmarking. Your recommended winner and budget picks will sync live inside the public Expert Guides feed tab, establishing extreme conviction scores with patrons.
           </p>

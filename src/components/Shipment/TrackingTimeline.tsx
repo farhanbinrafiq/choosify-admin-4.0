@@ -18,7 +18,7 @@ const getStatusIcon = (status: string) => {
     case 'delivered':
       return (
         <div className="w-8 h-8 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
-          <Check size={16} className="text-emerald-400" />
+          <Check size={16} className="text-emerald-600" />
         </div>
       );
     case 'failed_delivery':
@@ -26,7 +26,7 @@ const getStatusIcon = (status: string) => {
     case 'failed':
       return (
         <div className="w-8 h-8 rounded-full bg-rose-500/10 border border-rose-500/30 flex items-center justify-center">
-          <AlertCircle size={16} className="text-rose-400" />
+          <AlertCircle size={16} className="text-rose-600" />
         </div>
       );
     default:
@@ -41,7 +41,7 @@ const getStatusIcon = (status: string) => {
 export const TrackingTimeline: React.FC<TrackingTimelineProps> = ({ events }) => {
   if (!events || events.length === 0) {
     return (
-      <div className="text-center text-slate-500 py-6 text-xs font-semibold">
+      <div className="text-center text-app-text-secondary py-6 text-xs font-semibold">
         No tracking events recorded yet.
       </div>
     );
@@ -75,10 +75,10 @@ export const TrackingTimeline: React.FC<TrackingTimelineProps> = ({ events }) =>
 
             <div className="pb-2 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <div className="font-bold text-white text-xs uppercase tracking-wider">
+                <div className="font-bold text-app-text-primary text-xs uppercase tracking-wider">
                   {event.status.replace(/_/g, ' ')}
                 </div>
-                <div className="text-[10px] text-slate-500 font-mono">
+                <div className="text-[10px] text-app-text-secondary font-mono">
                   {new Date(event.timestamp).toLocaleString('en-BD', {
                     day: 'numeric',
                     month: 'short',
@@ -88,19 +88,19 @@ export const TrackingTimeline: React.FC<TrackingTimelineProps> = ({ events }) =>
                 </div>
               </div>
               
-              <div className="text-xs text-slate-300 mt-1 font-medium leading-relaxed">
+              <div className="text-xs text-app-text-secondary mt-1 font-medium leading-relaxed">
                 {event.description}
               </div>
 
               {locationStr && (
-                <div className="flex items-center gap-1 text-[10px] text-slate-400 mt-1.5 font-semibold">
-                  <MapPin size={12} className="text-slate-500" />
+                <div className="flex items-center gap-1 text-[10px] text-app-text-secondary mt-1.5 font-semibold">
+                  <MapPin size={12} className="text-app-text-secondary" />
                   <span>{locationStr}</span>
                 </div>
               )}
 
               {event.remarks && (
-                <div className="bg-slate-950/40 text-[10px] text-amber-400 border border-amber-500/10 px-2 py-1 rounded-md mt-2 italic">
+                <div className="bg-amber-500/10 text-[10px] text-amber-600 border border-amber-500/20 px-2 py-1 rounded-md mt-2 italic">
                   Remarks: {event.remarks}
                 </div>
               )}

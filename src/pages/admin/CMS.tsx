@@ -322,7 +322,7 @@ export default function CMSPage() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-6 right-6 z-50 flex items-center gap-3 bg-slate-900 text-white px-5 py-3.5 rounded-xl shadow-2xl border border-white/10"
+            className="fixed top-6 right-6 z-50 flex items-center gap-3 bg-app-card text-app-text-primary px-5 py-3.5 rounded-xl shadow-2xl border border-app-border"
           >
             <Sparkles className="w-4 h-4 text-orange-500 animate-pulse" />
             <span className="text-xs font-semibold">{toast}</span>
@@ -331,13 +331,13 @@ export default function CMSPage() {
       </AnimatePresence>
 
       {/* Main Admin Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 border border-slate-800 p-6 rounded-3xl shadow-xl">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-app-card border border-app-border p-6 rounded-3xl shadow-xl">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="px-2 py-0.5 rounded bg-orange-600 text-white text-[9px] font-black uppercase tracking-widest">PRO STUDIO v3</span>
-            <h1 className="text-xl font-bold text-white tracking-tight">Homepage Visual CMS</h1>
+            <h1 className="text-xl font-bold text-app-text-primary tracking-tight">Homepage Visual CMS</h1>
           </div>
-          <p className="text-[12px] text-slate-400">
+          <p className="text-[12px] text-app-text-secondary">
             Design the live split-screen content experience. Reorder widgets, inject ads, curate recommended creators, and deploy.
           </p>
         </div>
@@ -347,7 +347,7 @@ export default function CMSPage() {
               resetToDefault();
               showToast('CMS restored to seed preloads! 🌀');
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-slate-300 hover:text-white hover:bg-slate-700/80 transition-all text-xs font-bold"
+            className="flex items-center gap-2 px-4 py-2.5 bg-app-bg border border-app-border rounded-xl text-app-text-secondary hover:text-white hover:bg-slate-700/80 transition-all text-xs font-bold"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Reset Defaults
@@ -358,7 +358,7 @@ export default function CMSPage() {
             className="flex items-center gap-2 bg-orange-600 hover:bg-orange-500 text-white px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-orange-600/20 active:scale-95 disabled:opacity-50"
           >
             {isSaving ? (
-              <div className="w-3.5 h-3.5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+              <div className="w-3.5 h-3.5 border-2 border-app-border border-t-white rounded-full animate-spin" />
             ) : (
               <Save className="w-3.5 h-3.5" />
             )}
@@ -393,7 +393,7 @@ export default function CMSPage() {
                 return (
                   <div 
                     key={sec.id}
-                    className={`group flex items-center justify-between p-3 rounded-2xl border transition-all ${
+                    className={`group flex items-center justify-between p-3 rounded-2xl border transition-all${
                       isSelected 
                         ? 'bg-orange-500/5 border-orange-500 shadow-sm' 
                         : 'bg-slate-50/50 border-slate-100 hover:bg-slate-100/50 hover:border-slate-200'
@@ -408,7 +408,7 @@ export default function CMSPage() {
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <h4 className={`text-xs font-bold truncate ${isSelected ? 'text-orange-600' : 'text-slate-900'}`}>
+                          <h4 className={`text-xs font-bold truncate${isSelected ? 'text-orange-600' : 'text-slate-900'}`}>
                             {sec.title}
                           </h4>
                           {!sec.isActive && (
@@ -428,7 +428,7 @@ export default function CMSPage() {
                       <button
                         onClick={() => handleMoveSectionOrder(sec.id as keyof CMSData, 'up')}
                         disabled={idx === 0}
-                        className="p-1 text-slate-400 hover:text-slate-800 disabled:opacity-20 hover:bg-slate-100 rounded transition-all"
+                        className="p-1 text-app-text-secondary hover:text-slate-800 disabled:opacity-20 hover:bg-slate-100 rounded transition-all"
                         title="Move Section Up"
                       >
                         <ArrowUp className="w-3.5 h-3.5" />
@@ -436,7 +436,7 @@ export default function CMSPage() {
                       <button
                         onClick={() => handleMoveSectionOrder(sec.id as keyof CMSData, 'down')}
                         disabled={idx === sortedSectionsList.length - 1}
-                        className="p-1 text-slate-400 hover:text-slate-800 disabled:opacity-20 hover:bg-slate-100 rounded transition-all"
+                        className="p-1 text-app-text-secondary hover:text-slate-800 disabled:opacity-20 hover:bg-slate-100 rounded transition-all"
                         title="Move Section Down"
                       >
                         <ArrowDown className="w-3.5 h-3.5" />
@@ -448,7 +448,7 @@ export default function CMSPage() {
                           toggleSectionActive(sec.id, !sec.isActive);
                           showToast(`${sec.title} is now ${!sec.isActive ? 'Visible' : 'Hidden'}`);
                         }}
-                        className={`ml-1 p-1.5 rounded-lg transition-all ${
+                        className={`ml-1 p-1.5 rounded-lg transition-all${
                           sec.isActive 
                             ? 'text-green-600 bg-green-50 hover:bg-green-100' 
                             : 'text-slate-400 bg-slate-100 hover:bg-slate-200'
@@ -472,7 +472,7 @@ export default function CMSPage() {
                 <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-600 text-[9px] font-bold uppercase tracking-wider">
                   Active Editor View
                 </span>
-                <span className="text-[10px] text-slate-400 font-mono">
+                <span className="text-[10px] text-app-text-secondary font-mono">
                   Order: #{activeSection.order}
                 </span>
               </div>
@@ -533,13 +533,13 @@ export default function CMSPage() {
                 </label>
                 <button 
                   onClick={() => toggleSectionActive(selectedSectionId, !activeSection.isActive)}
-                  className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border transition-all ${
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold border transition-all${
                     activeSection.isActive 
                       ? 'bg-green-500/5 border-green-200 text-green-700 hover:bg-green-100/50' 
                       : 'bg-red-500/5 border-red-200 text-red-600 hover:bg-red-100/50'
                   }`}
                 >
-                  <span className={`w-1.5 h-1.5 rounded-full ${activeSection.isActive ? 'bg-green-500 animate-ping' : 'bg-red-500'}`} />
+                  <span className={`w-1.5 h-1.5 rounded-full${activeSection.isActive ? 'bg-green-500 animate-ping' : 'bg-red-500'}`} />
                   {activeSection.isActive ? 'Active on Homepage' : 'Hidden from View'}
                 </button>
               </div>
@@ -621,7 +621,7 @@ export default function CMSPage() {
                         <button
                           onClick={() => handleMoveItemOrder(idx, 'up')}
                           disabled={idx === 0}
-                          className="p-1 text-slate-400 hover:text-slate-800 disabled:opacity-20 transition-all"
+                          className="p-1 text-app-text-secondary hover:text-slate-800 disabled:opacity-20 transition-all"
                           title="Move Up"
                         >
                           <ArrowUp className="w-3.5 h-3.5" />
@@ -629,14 +629,14 @@ export default function CMSPage() {
                         <button
                           onClick={() => handleMoveItemOrder(idx, 'down')}
                           disabled={idx === activeSection.itemIds.length - 1}
-                          className="p-1 text-slate-400 hover:text-slate-800 disabled:opacity-20 transition-all"
+                          className="p-1 text-app-text-secondary hover:text-slate-800 disabled:opacity-20 transition-all"
                           title="Move Down"
                         >
                           <ArrowDown className="w-3.5 h-3.5" />
                         </button>
                         <button 
                           onClick={() => handleRemoveItem(itemId)}
-                          className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                          className="p-1.5 text-app-text-secondary hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                           title="Remove from Section"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
@@ -647,7 +647,7 @@ export default function CMSPage() {
                 })}
 
                 {activeSection.itemIds.length === 0 && (
-                  <div className="p-8 text-center border-2 border-dashed border-slate-100 bg-slate-50/50 rounded-2xl text-slate-400 text-xs italic">
+                  <div className="p-8 text-center border-2 border-dashed border-slate-100 bg-slate-50/50 rounded-2xl text-app-text-secondary text-xs italic">
                     No items selected. Click [+ Add Item] below to populate.
                   </div>
                 )}
@@ -657,7 +657,7 @@ export default function CMSPage() {
               <div className="relative">
                 <button 
                   onClick={() => setIsAddModalOpen(true)}
-                  className="w-full flex items-center justify-center gap-2 py-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 animate-pulse-subtle hover:scale-[1.01]"
+                  className="w-full flex items-center justify-center gap-2 py-3 bg-app-card hover:bg-slate-800 text-app-text-primary text-xs font-bold rounded-xl transition-all shadow-md active:scale-95 animate-pulse-subtle hover:scale-[1.01]"
                 >
                   <Plus className="w-4 h-4 text-orange-500 animate-bounce" />
                   Add Content Item
@@ -679,21 +679,21 @@ export default function CMSPage() {
             RIGHT PANEL: LIVE INTERACTIVE PREVIEW
             ============================================== */}
         <div className="sticky top-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-2xl space-y-4">
+          <div className="bg-app-card border border-app-border rounded-3xl p-6 shadow-2xl space-y-4">
             
             {/* Viewport Control Head */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-green-500 animate-ping" />
-                <h3 className="text-xs font-black text-white uppercase tracking-widest">
+                <h3 className="text-xs font-black text-app-text-primary uppercase tracking-widest">
                   Live Preview Stream
                 </h3>
               </div>
               
-              <div className="flex bg-slate-800 border border-slate-700 rounded-xl p-0.5 text-[10px] font-black">
+              <div className="flex bg-app-bg border border-app-border rounded-xl p-0.5 text-[10px] font-black">
                 <button 
                   onClick={() => setPreviewMode('mobile')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                  className={`px-3 py-1.5 rounded-lg transition-all${
                     previewMode === 'mobile' 
                       ? 'bg-orange-600 text-white shadow' 
                       : 'text-slate-400 hover:text-white'
@@ -703,7 +703,7 @@ export default function CMSPage() {
                 </button>
                 <button 
                   onClick={() => setPreviewMode('desktop')}
-                  className={`px-3 py-1.5 rounded-lg transition-all ${
+                  className={`px-3 py-1.5 rounded-lg transition-all${
                     previewMode === 'desktop' 
                       ? 'bg-orange-600 text-white shadow' 
                       : 'text-slate-400 hover:text-white'
@@ -715,23 +715,23 @@ export default function CMSPage() {
             </div>
 
             {/* PREVIEW CONTAINER WRAPPER */}
-            <div className={`mx-auto bg-slate-950 border-4 border-slate-800 rounded-[2.5rem] shadow-2xl overflow-hidden transition-all duration-300 ${
+            <div className={`mx-auto bg-app-bg border-4 border-app-border rounded-[2.5rem] shadow-2xl overflow-hidden transition-all duration-300${
               previewMode === 'mobile' ? 'max-w-[375px]' : 'w-full'
             }`}>
               
               {/* Smartphone Top Notch Notch Screen Bar */}
-              <div className="bg-slate-900 text-[10px] font-mono text-slate-400 px-6 py-2.5 flex justify-between items-center border-b border-slate-800 select-none">
-                <span className="font-bold text-white">Choosify Live</span>
+              <div className="bg-app-card text-[10px] font-mono text-app-text-secondary px-6 py-2.5 flex justify-between items-center border-b border-app-border select-none">
+                <span className="font-bold text-app-text-primary">Choosify Live</span>
                 <div className="flex items-center gap-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                  <span className="text-[8px] bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded uppercase font-black tracking-wider">
+                  <span className="text-[8px] bg-app-bg text-app-text-secondary px-1.5 py-0.5 rounded uppercase font-black tracking-wider">
                     UTC 07:00
                   </span>
                 </div>
               </div>
 
               {/* LIVE HOMEPAGE SCROLLABLE REGION - rendered using CMSLivePreview */}
-              <div className="bg-slate-950 overflow-y-auto max-h-[550px] custom-scrollbar">
+              <div className="bg-app-bg overflow-y-auto max-h-[550px] custom-scrollbar">
                 <CMSLivePreview
                   cmsData={cmsData}
                   products={productsArray}

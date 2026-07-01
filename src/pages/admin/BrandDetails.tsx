@@ -363,7 +363,7 @@ export default function BrandDetails() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95, y: -20 }}
-            className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] bg-slate-900 text-white px-6 py-3.5 rounded-xl shadow-2xl text-xs font-bold tracking-wide border border-slate-700 flex items-center gap-2"
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] bg-app-card text-app-text-primary px-6 py-3.5 rounded-xl shadow-2xl text-xs font-bold tracking-wide border border-app-border flex items-center gap-2"
           >
             <Info className="w-4.5 h-4.5 text-app-accent" />
             <span>{toastMessage}</span>
@@ -389,7 +389,7 @@ export default function BrandDetails() {
               <div>
                 <div className="flex items-center flex-wrap gap-2">
                   <h1 className="text-2xl font-black text-slate-900 tracking-tight">{brandProfile.name}</h1>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
+                  <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border${
                     brandProfile.status === 'VERIFIED_OWNER' 
                       ? 'bg-green-50 text-green-600 border-green-200' 
                       : brandProfile.status === 'SUSPENDED'
@@ -403,7 +403,7 @@ export default function BrandDetails() {
                   </span>
                 </div>
                 <p className="text-slate-500 text-xs mt-1.5 font-medium flex items-center gap-2">
-                   <Building2 className="w-3.5 h-3.5 text-slate-400" /> {brandProfile.industry} &middot; {brandProfile.category}
+                   <Building2 className="w-3.5 h-3.5 text-app-text-secondary" /> {brandProfile.industry} &middot; {brandProfile.category}
                 </p>
               </div>
             </div>
@@ -416,7 +416,7 @@ export default function BrandDetails() {
                rel="noopener noreferrer" 
                className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 text-slate-600 hover:text-slate-900 bg-white rounded-lg text-xs font-bold shadow-sm transition-all"
              >
-                <Globe className="w-4 h-4 text-slate-400" /> Visit Storefront <ExternalLink className="w-3 h-3" />
+                <Globe className="w-4 h-4 text-app-text-secondary" /> Visit Storefront <ExternalLink className="w-3 h-3" />
              </a>
              <button 
                onClick={() => {
@@ -438,7 +438,7 @@ export default function BrandDetails() {
           {/* Left Side Sub-Navigation Drawer / Tabs Sidebar */}
           <div className="space-y-4 p-6 bg-slate-50/50 h-full border-r border-slate-100 flex flex-col justify-between">
           <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-1">
-             <div className="px-3 py-2 text-[10px] font-black uppercase tracking-wider text-slate-400">STUDIO SECTIONS</div>
+             <div className="px-3 py-2 text-[10px] font-black uppercase tracking-wider text-app-text-secondary">STUDIO SECTIONS</div>
              
              {[
                { id: 'account', label: '⚙️ Account Information' },
@@ -452,7 +452,7 @@ export default function BrandDetails() {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as TabId)}
-                  className={`w-full text-left px-4 py-3.5 rounded-xl text-xs font-bold tracking-wide transition-all flex items-center justify-between ${
+                  className={`w-full text-left px-4 py-3.5 rounded-xl text-xs font-bold tracking-wide transition-all flex items-center justify-between${
                     activeTab === tab.id 
                       ? 'bg-orange-50 text-[#F4631E] border border-orange-100 shadow-sm shadow-orange-500/5' 
                       : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
@@ -480,7 +480,7 @@ export default function BrandDetails() {
                 </div>
 
                 <div>
-                   <span className="text-[10px] text-slate-400 uppercase font-bold tracking-wider block">Onboard Representative</span>
+                   <span className="text-[10px] text-app-text-secondary uppercase font-bold tracking-wider block">Onboard Representative</span>
                    <span className="font-bold text-slate-800 block mt-0.5">{merchantContact.repName}</span>
                    <span className="text-slate-500 font-mono text-[11px] block mt-0.5">{merchantContact.busEmail}</span>
                 </div>

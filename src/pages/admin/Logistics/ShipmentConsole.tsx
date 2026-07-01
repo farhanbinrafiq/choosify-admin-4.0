@@ -264,7 +264,7 @@ export default function ShipmentConsole() {
       <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
         {/* Search */}
         <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-1 max-w-md">
-          <Search className="h-4 w-4 text-gray-400 mr-2" />
+          <Search className="h-4 w-4 text-app-text-secondary mr-2" />
           <input
             type="text"
             placeholder="Search by Tracking, Order ID, Customer, or Brand..."
@@ -277,7 +277,7 @@ export default function ShipmentConsole() {
         {/* Dropdowns */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5">
-            <Filter className="h-3.5 w-3.5 text-gray-400" />
+            <Filter className="h-3.5 w-3.5 text-app-text-secondary" />
             <span className="text-xs text-gray-500 font-medium uppercase">Status:</span>
           </div>
           <select
@@ -341,9 +341,9 @@ export default function ShipmentConsole() {
         </div>
       ) : filteredShipments.length === 0 ? (
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
-          <Package className="h-10 w-10 text-gray-400 mx-auto mb-3" />
+          <Package className="h-10 w-10 text-app-text-secondary mx-auto mb-3" />
           <p className="text-gray-900 font-medium">No shipments match your current criteria.</p>
-          <p className="text-sm text-gray-400 mt-1">Try adjusting the search query or status filter parameters.</p>
+          <p className="text-sm text-app-text-secondary mt-1">Try adjusting the search query or status filter parameters.</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -359,7 +359,7 @@ export default function ShipmentConsole() {
                 key={s.id}
                 initial={{ opacity: 0, y: 5 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all ${
+                className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all${
                   isSelected ? 'border-indigo-500 ring-1 ring-indigo-500/30' : 'border-gray-200 hover:border-gray-300'
                 }`}
               >
@@ -382,7 +382,7 @@ export default function ShipmentConsole() {
                       <span className="font-mono text-xs text-indigo-600 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 font-semibold uppercase">
                         {s.courier.name}
                       </span>
-                      <span className="text-xs text-gray-400 font-mono">#{s.id}</span>
+                      <span className="text-xs text-app-text-secondary font-mono">#{s.id}</span>
                     </div>
                     <div>
                       <span className="text-xs text-gray-500 block uppercase font-medium">Tracking Code</span>
@@ -405,11 +405,11 @@ export default function ShipmentConsole() {
                   <div className="md:col-span-3 space-y-1">
                     <span className="text-xs text-gray-500 block uppercase font-medium">Delivery Consignee</span>
                     <p className="text-sm font-semibold text-gray-900 flex items-center gap-1">
-                      <User className="h-3.5 w-3.5 text-gray-400" />
+                      <User className="h-3.5 w-3.5 text-app-text-secondary" />
                       {s.customerContact.name}
                     </p>
                     <span className="text-xs text-gray-500 flex items-center gap-1">
-                      <MapPin className="h-3 w-3 text-gray-400" />
+                      <MapPin className="h-3 w-3 text-app-text-secondary" />
                       {s.deliveryAddress.city}, {s.deliveryAddress.district}
                     </span>
                   </div>
@@ -418,12 +418,12 @@ export default function ShipmentConsole() {
                   <div className="md:col-span-1.5 space-y-1 text-left md:text-right">
                     <span className="text-xs text-gray-500 block uppercase font-medium">COD Amount</span>
                     <p className="text-sm font-bold text-indigo-700 font-mono">BDT {s.codAmount}</p>
-                    <span className="text-[10px] text-gray-400 block uppercase font-mono">{s.weight} kg • {s.packageType}</span>
+                    <span className="text-[10px] text-app-text-secondary block uppercase font-mono">{s.weight} kg • {s.packageType}</span>
                   </div>
 
                   {/* Status Indicator */}
                   <div className="md:col-span-1.5 flex flex-col items-start md:items-end gap-2">
-                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border ${
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold border${
                       isDelivered 
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
                         : isInTransit 
@@ -436,7 +436,7 @@ export default function ShipmentConsole() {
                     }`}>
                       {s.status.toUpperCase().replace('_', ' ')}
                     </span>
-                    <span className="text-[10px] text-gray-400 block">
+                    <span className="text-[10px] text-app-text-secondary block">
                       {new Date(s.createdAt).toLocaleDateString()}
                     </span>
                   </div>
@@ -457,7 +457,7 @@ export default function ShipmentConsole() {
                       disabled={syncingId === s.id}
                       className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 disabled:opacity-50 flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-100 transition-colors"
                     >
-                      <RefreshCw className={`h-3 w-3 ${syncingId === s.id ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-3 w-3${syncingId === s.id ? 'animate-spin' : ''}`} />
                       Sync Courier
                     </button>
 
@@ -465,7 +465,7 @@ export default function ShipmentConsole() {
                       onClick={() => handleDownloadLabel(s.id)}
                       className="text-xs font-semibold text-gray-700 hover:text-gray-900 flex items-center gap-1 px-3 py-1.5 bg-white hover:bg-gray-50 rounded-lg border border-gray-200 shadow-sm transition-colors"
                     >
-                      <Download className="h-3 w-3 text-gray-400" />
+                      <Download className="h-3 w-3 text-app-text-secondary" />
                       Waybill PDF
                     </button>
                   </div>
@@ -485,14 +485,14 @@ export default function ShipmentConsole() {
             exit={{ opacity: 0, y: 50, scale: 0.95 }}
             className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 max-w-2xl w-full px-4"
           >
-            <div className="bg-slate-900 border border-slate-800 text-white rounded-2xl shadow-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="bg-app-card border border-app-border text-app-text-primary rounded-2xl shadow-2xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="h-9 w-9 rounded-lg bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center font-bold text-indigo-400 text-sm">
                   {selectedShipmentIds.length}
                 </div>
                 <div>
                   <h4 className="text-sm font-semibold">Consignments Selected</h4>
-                  <p className="text-xs text-slate-400">Apply operation to all checked items</p>
+                  <p className="text-xs text-app-text-secondary">Apply operation to all checked items</p>
                 </div>
               </div>
 
@@ -521,7 +521,7 @@ export default function ShipmentConsole() {
                 <button
                   onClick={handleBatchSyncTracking}
                   disabled={batchActionRunning}
-                  className="flex items-center gap-1 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1 px-3 py-2 bg-app-bg hover:bg-slate-700 text-app-text-primary rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                   title="Ping carrier servers"
                 >
                   <RefreshCw className="h-3.5 w-3.5 text-indigo-400" />
@@ -546,7 +546,7 @@ export default function ShipmentConsole() {
       {/* Batch Action Status / Progress overlay */}
       <AnimatePresence>
         {batchStatusMsg && (
-          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="fixed inset-0 z-50 bg-app-card/20 backdrop-blur-sm flex items-center justify-center p-4">
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}

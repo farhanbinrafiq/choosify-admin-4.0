@@ -17,8 +17,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSearchParams } from 'react-router-dom';
-import { catalogApi } from '../../services/catalogApi';
-import type { CatalogDeal } from '../../types/catalog';
 
 // Deal Interface Definitions requested
 export interface Deal {
@@ -50,54 +48,6 @@ export interface PromoCode {
   active: boolean;
 }
 
-const mapDealStatusToUi = (status: CatalogDeal['status']): Deal['status'] => {
-  switch (status) {
-    case 'live':
-      return 'Live';
-    case 'pending':
-      return 'Pending';
-    case 'expiring':
-      return 'Expiring';
-    case 'expired':
-      return 'Expired';
-    case 'rejected':
-      return 'Rejected';
-    default:
-      return 'Pending';
-  }
-};
-
-const mapUiStatusToDeal = (status: Deal['status']): CatalogDeal['status'] => {
-  switch (status) {
-    case 'Live':
-      return 'live';
-    case 'Pending':
-      return 'pending';
-    case 'Expiring':
-      return 'expiring';
-    case 'Expired':
-      return 'expired';
-    case 'Rejected':
-      return 'rejected';
-    default:
-      return 'pending';
-  }
-};
-
-const mapCatalogDealToUi = (deal: CatalogDeal): Deal => ({
-  id: deal.id,
-  name: deal.name,
-  seller: deal.seller,
-  discount: deal.discountValue,
-  category: deal.category,
-  expiry: deal.validUntil,
-  clicks: deal.clicks,
-  status: mapDealStatusToUi(deal.status),
-  type: deal.type,
-  promoCode: deal.promoCode,
-  linkedProductId: deal.productId,
-});
-
 export default function DealsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') === 'promocodes' ? 'promo_codes' : 'deals';
@@ -108,26 +58,6 @@ export default function DealsPage() {
     if (urlTab === 'promocodes' && activeTab !== 'promo_codes') setActiveTab('promo_codes');
     if (urlTab !== 'promocodes' && activeTab !== 'deals') setActiveTab('deals');
   }, [searchParams]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadDeals() {
-      try {
-        const remoteDeals = await catalogApi.listDeals();
-        if (!cancelled && remoteDeals.length > 0) {
-          setDeals(remoteDeals.map(mapCatalogDealToUi));
-        }
-      } catch (error) {
-        console.warn('[DealsPage] Falling back to local deals.', error);
-      }
-    }
-
-    loadDeals();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Initialize state with same 3 deals as seed data mapped to the required Deal interface
   const [deals, setDeals] = useState<Deal[]>([
@@ -483,44 +413,29 @@ export default function DealsPage() {
   };
 
   // Actions handler implementations (Deals)
-  const handleApprove = async (id: string) => {
-    await catalogApi.updateDeal(id, { status: 'live' }).catch((error) => {
-      console.warn('[DealsPage] Failed to approve deal in API.', error);
-    });
+  const handleApprove = (id: string) => {
     setDeals(prev => prev.map(d => d.id === id ? { ...d, status: 'Live' } : d));
     triggerToast("Deal successfully approved and made Live!");
   };
 
-  const handleReject = async (id: string) => {
-    await catalogApi.updateDeal(id, { status: 'rejected' }).catch((error) => {
-      console.warn('[DealsPage] Failed to reject deal in API.', error);
-    });
+  const handleReject = (id: string) => {
     setDeals(prev => prev.map(d => d.id === id ? { ...d, status: 'Rejected' as const } : d));
     triggerToast("Deal request rejected.");
   };
 
-  const handlePause = async (id: string) => {
-    await catalogApi.updateDeal(id, { status: 'expired' }).catch((error) => {
-      console.warn('[DealsPage] Failed to pause deal in API.', error);
-    });
+  const handlePause = (id: string) => {
     setDeals(prev => prev.map(d => d.id === id ? { ...d, status: 'Expired' as const } : d));
     triggerToast("Deal paused (moved to expired state).");
   };
 
-  const handleDelete = async (id: string) => {
-    await catalogApi.deleteDeal(id).catch((error) => {
-      console.warn('[DealsPage] Failed to delete deal in API.', error);
-    });
+  const handleDelete = (id: string) => {
     setDeals(prev => prev.filter(d => d.id !== id));
     setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
     triggerToast("Deal removed successfully.");
   };
 
   // Bulk actions handlers
-  const handleBulkApprove = async () => {
-    await Promise.all(selectedIds.map((id) => catalogApi.updateDeal(id, { status: 'live' }))).catch((error) => {
-      console.warn('[DealsPage] Failed to bulk-approve deals in API.', error);
-    });
+  const handleBulkApprove = () => {
     setDeals(prev => prev.map(d => 
       selectedIds.includes(d.id) && d.status === 'Pending' ? { ...d, status: 'Live' } : d
     ));
@@ -528,17 +443,14 @@ export default function DealsPage() {
     triggerToast("Approved selected pending deal approvals!");
   };
 
-  const handleBulkDelete = async () => {
-    await Promise.all(selectedIds.map((id) => catalogApi.deleteDeal(id))).catch((error) => {
-      console.warn('[DealsPage] Failed to bulk-delete deals in API.', error);
-    });
+  const handleBulkDelete = () => {
     setDeals(prev => prev.filter(d => !selectedIds.includes(d.id)));
     setSelectedIds([]);
     triggerToast("Selected deals successfully removed.");
   };
 
   // Form submission handler (Deals)
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName || !formSeller || formDiscount <= 0 || !formExpiry) {
       alert("Please fill out all fields.");
@@ -559,18 +471,6 @@ export default function DealsPage() {
         expiry: isoExpiry,
         promoCode: formPromoCode || undefined
       } : d));
-      await catalogApi.updateDeal(editingDeal.id, {
-        name: formName,
-        seller: formSeller,
-        discountValue: Number(formDiscount),
-        category: formCategory,
-        type: formType,
-        validUntil: isoExpiry,
-        promoCode: formPromoCode || undefined,
-        status: mapUiStatusToDeal(editingDeal.status),
-      }).catch((error) => {
-        console.warn('[DealsPage] Failed to update deal in API.', error);
-      });
       triggerToast("Deal successfully updated!");
       setEditingDeal(null);
     } else {
@@ -587,20 +487,6 @@ export default function DealsPage() {
         promoCode: formPromoCode || undefined
       };
       setDeals(prev => [newDeal, ...prev]);
-      await catalogApi.createDeal({
-        id: newDeal.id,
-        name: newDeal.name,
-        seller: newDeal.seller,
-        discountValue: newDeal.discount,
-        category: newDeal.category,
-        type: newDeal.type,
-        status: mapUiStatusToDeal(newDeal.status),
-        validUntil: newDeal.expiry,
-        validFrom: new Date().toISOString(),
-        promoCode: newDeal.promoCode,
-      }).catch((error) => {
-        console.warn('[DealsPage] Failed to create deal in API.', error);
-      });
       triggerToast("New deal launched (Pending admin verification).");
       setIsAdding(false);
     }

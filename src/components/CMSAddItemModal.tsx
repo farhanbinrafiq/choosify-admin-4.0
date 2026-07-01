@@ -222,7 +222,7 @@ export default function CMSAddItemModal({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-app-bg/10 backdrop-blur-sm"
           />
 
           {/* Modal Card */}
@@ -233,7 +233,7 @@ export default function CMSAddItemModal({
             className="relative w-full max-w-[480px] bg-white rounded-3xl shadow-2xl border border-slate-100 overflow-hidden z-10"
           >
             {/* Header */}
-            <div className="bg-slate-900 px-6 py-5 flex items-center justify-between text-white">
+            <div className="bg-app-card px-6 py-5 flex items-center justify-between text-app-text-primary">
               <div>
                 <div className="flex items-center gap-1.5 mb-0.5">
                   <Sparkles className="w-4 h-4 text-orange-500" />
@@ -247,7 +247,7 @@ export default function CMSAddItemModal({
               </div>
               <button 
                 onClick={onClose}
-                className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-full transition-all"
+                className="p-1.5 bg-app-bg hover:bg-slate-700 text-app-text-secondary hover:text-white rounded-full transition-all"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -287,7 +287,7 @@ export default function CMSAddItemModal({
                 
                 {/* Search Bar inside items */}
                 <div className="relative">
-                  <Search className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+                  <Search className="absolute left-3.5 top-3 w-4 h-4 text-app-text-secondary" />
                   <input
                     type="text"
                     value={searchQuery}
@@ -310,7 +310,7 @@ export default function CMSAddItemModal({
                           if (isAlreadyAdded) return;
                           handleSelectItem(item.id);
                         }}
-                        className={`flex items-center justify-between p-3 cursor-pointer text-left transition-all ${
+                        className={`flex items-center justify-between p-3 cursor-pointer text-left transition-all${
                           isAlreadyAdded 
                             ? 'bg-slate-50 text-slate-400 cursor-not-allowed opacity-60' 
                             : isSelected 
@@ -344,7 +344,7 @@ export default function CMSAddItemModal({
                   })}
 
                   {filteredCandidates.length === 0 && (
-                    <div className="p-8 text-center text-xs text-slate-400 italic">
+                    <div className="p-8 text-center text-xs text-app-text-secondary italic">
                       No matching {sectionType} candidates found.
                     </div>
                   )}

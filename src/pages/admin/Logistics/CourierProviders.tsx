@@ -361,7 +361,7 @@ export default function CourierProviders() {
               setActiveTab(tab.id as any);
               setSimulationResult(null);
             }}
-            className={`flex items-center gap-2 px-6 py-3.5 border-b-2 text-sm font-medium transition-colors outline-none ${
+            className={`flex items-center gap-2 px-6 py-3.5 border-b-2 text-sm font-medium transition-colors outline-none${
               activeTab === tab.id
                 ? 'border-indigo-600 text-indigo-600 bg-indigo-50/20'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
@@ -380,7 +380,7 @@ export default function CourierProviders() {
         {activeTab === 'providers' && (
           <div className="space-y-6">
             <div className="flex items-center bg-white rounded-lg border border-gray-200 px-3 py-2 max-w-md shadow-sm">
-              <Search className="h-4 w-4 text-gray-400 mr-2" />
+              <Search className="h-4 w-4 text-app-text-secondary mr-2" />
               <input
                 type="text"
                 placeholder="Search carrier integrations..."
@@ -432,12 +432,12 @@ export default function CourierProviders() {
                             <span className="text-xs text-gray-500 font-medium">Active</span>
                             <button
                               onClick={() => handleToggleStatus(courier.code, courier.enabled)}
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors outline-none focus:ring-1 focus:ring-indigo-500 focus:ring-offset-2 ${
+                              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors outline-none focus:ring-1 focus:ring-indigo-500 focus:ring-offset-2${
                                 courier.enabled ? 'bg-indigo-600' : 'bg-gray-200'
                               }`}
                             >
                               <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform${
                                   courier.enabled ? 'translate-x-6' : 'translate-x-1'
                                 }`}
                               />
@@ -447,13 +447,13 @@ export default function CourierProviders() {
 
                         <div className="grid grid-cols-2 gap-2 pt-2 text-xs border-t border-gray-50">
                           <div>
-                            <span className="text-gray-400 block">Environments:</span>
+                            <span className="text-app-text-secondary block">Environments:</span>
                             <span className="font-semibold text-gray-700">
                               {courier.production ? 'Production' : 'Sandbox-only'}
                             </span>
                           </div>
                           <div>
-                            <span className="text-gray-400 block">Gateway Server:</span>
+                            <span className="text-app-text-secondary block">Gateway Server:</span>
                             <span className="font-semibold text-gray-700 truncate block font-mono">
                               {courier.apiUrl}
                             </span>
@@ -474,7 +474,7 @@ export default function CourierProviders() {
                               </strong>
                             </span>
                           </div>
-                          <span className="text-[10px] text-gray-400 font-mono">
+                          <span className="text-[10px] text-app-text-secondary font-mono">
                             Sync: {courier.lastSyncAt ? new Date(courier.lastSyncAt).toLocaleTimeString() : 'N/A'}
                           </span>
                         </div>
@@ -487,7 +487,7 @@ export default function CourierProviders() {
                           disabled={healthChecking[courier.code]}
                           className="flex items-center gap-1 text-xs text-indigo-600 font-medium hover:text-indigo-800 disabled:opacity-50"
                         >
-                          <RefreshCw className={`h-3 w-3 ${healthChecking[courier.code] ? 'animate-spin' : ''}`} />
+                          <RefreshCw className={`h-3 w-3${healthChecking[courier.code] ? 'animate-spin' : ''}`} />
                           {healthChecking[courier.code] ? 'Pinging Gateway...' : 'Health Audit'}
                         </button>
 
@@ -646,7 +646,7 @@ export default function CourierProviders() {
             {/* Warehouse List */}
             {warehouses.length === 0 ? (
               <div className="bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center space-y-4">
-                <Home className="h-12 w-12 text-gray-300 mx-auto" />
+                <Home className="h-12 w-12 text-app-text-secondary mx-auto" />
                 <h4 className="font-semibold text-gray-900">No Custom Warehouses Registered</h4>
                 <p className="text-sm text-gray-500 max-w-sm mx-auto">
                   By default, shipments use your primary seller profile address. Add a warehouse to schedule custom carrier pickups.
@@ -670,11 +670,11 @@ export default function CourierProviders() {
                     {/* Address block */}
                     <div className="space-y-2 border-t pt-3 text-sm text-gray-600">
                       <p className="flex items-start gap-1.5">
-                        <MapPin className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+                        <MapPin className="h-4 w-4 text-app-text-secondary mt-0.5 flex-shrink-0" />
                         <span>{wh.address.street}, {wh.address.city}, {wh.address.district} - {wh.address.postalCode || 'N/A'}</span>
                       </p>
                       <p className="flex items-center gap-1.5">
-                        <Phone className="h-4 w-4 text-gray-400 flex-shrink-0" />
+                        <Phone className="h-4 w-4 text-app-text-secondary flex-shrink-0" />
                         <span>Office: {wh.address.phone}</span>
                       </p>
                     </div>
@@ -694,7 +694,7 @@ export default function CourierProviders() {
 
                     <div className="flex items-center justify-between text-xs pt-2 text-gray-500 border-t">
                       <span>Preferred Carrier: <strong className="text-gray-700 capitalize font-mono">{wh.preferredCourier}</strong></span>
-                      <span className="font-mono text-[10px] text-gray-400">ID: {wh.id}</span>
+                      <span className="font-mono text-[10px] text-app-text-secondary">ID: {wh.id}</span>
                     </div>
                   </div>
                 ))}
@@ -864,7 +864,7 @@ export default function CourierProviders() {
             {/* Rules List */}
             {shippingRules.length === 0 ? (
               <div className="bg-white rounded-xl border border-dashed border-gray-300 p-12 text-center space-y-4">
-                <GitBranch className="h-12 w-12 text-gray-300 mx-auto" />
+                <GitBranch className="h-12 w-12 text-app-text-secondary mx-auto" />
                 <h4 className="font-semibold text-gray-900">No Routing Rules Created</h4>
                 <p className="text-sm text-gray-500 max-w-sm mx-auto">
                   Automatically match incoming orders with the best courier based on destination, weight, and order value.
@@ -890,15 +890,15 @@ export default function CourierProviders() {
                       {/* Conditions */}
                       <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
                         <div className="flex items-center gap-1">
-                          <Sliders className="h-3.5 w-3.5 text-gray-400" />
+                          <Sliders className="h-3.5 w-3.5 text-app-text-secondary" />
                           <span>Districts: <strong>{rule.conditions.destinationDistricts?.join(', ') || 'All BD'}</strong></span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <Layers className="h-3.5 w-3.5 text-gray-400" />
+                          <Layers className="h-3.5 w-3.5 text-app-text-secondary" />
                           <span>Weight: <strong>{rule.conditions.weightRange?.min || 0}kg - {rule.conditions.weightRange?.max || 50}kg</strong></span>
                         </div>
                         <div className="flex items-center gap-1">
-                          <Sparkles className="h-3.5 w-3.5 text-gray-400" />
+                          <Sparkles className="h-3.5 w-3.5 text-app-text-secondary" />
                           <span>Order value: <strong>৳{rule.conditions.orderValueRange?.min || 0} - ৳{rule.conditions.orderValueRange?.max || 'No limit'}</strong></span>
                         </div>
                       </div>
@@ -911,7 +911,7 @@ export default function CourierProviders() {
                       </div>
                       <div className="flex-1 text-xs">
                         <p className="font-semibold text-gray-900">Route to: <span className="capitalize font-mono">{rule.action.courierCode}</span></p>
-                        <p className="text-gray-400 font-mono">Format: {rule.action.packageType}</p>
+                        <p className="text-app-text-secondary font-mono">Format: {rule.action.packageType}</p>
                         <p className="text-indigo-600 font-mono font-medium">
                           {rule.action.autoRequestPickup && '✓ Pickup'} {rule.action.autoGenerateLabel && '✓ Label'}
                         </p>
@@ -1041,9 +1041,9 @@ export default function CourierProviders() {
               </div>
 
               {/* Sandbox Results */}
-              <div className="bg-slate-900 text-slate-100 rounded-xl p-5 border border-slate-800 flex flex-col justify-between overflow-hidden min-h-[300px]">
+              <div className="bg-app-card text-app-text-primary rounded-xl p-5 border border-app-border flex flex-col justify-between overflow-hidden min-h-[300px]">
                 <div className="space-y-3">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                  <div className="flex items-center justify-between border-b border-app-border pb-2">
                     <span className="text-xs font-mono text-indigo-400"># SANDBOX LOG MONITOR</span>
                     <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
                   </div>
@@ -1056,8 +1056,8 @@ export default function CourierProviders() {
 
                       {simulationResult.success && simulationResult.data && (
                         <div className="space-y-2">
-                          <p className="text-slate-400 border-b border-slate-800 pb-1">Normalized Event Payload Output:</p>
-                          <pre className="p-2.5 bg-slate-950 rounded-lg text-[10px] text-slate-300 overflow-x-auto">
+                          <p className="text-app-text-secondary border-b border-app-border pb-1">Normalized Event Payload Output:</p>
+                          <pre className="p-2.5 bg-app-bg rounded-lg text-[10px] text-app-text-secondary overflow-x-auto">
                             {JSON.stringify(simulationResult.data.normalized, null, 2)}
                           </pre>
                         </div>
@@ -1072,7 +1072,7 @@ export default function CourierProviders() {
                   )}
                 </div>
 
-                <div className="border-t border-slate-800 pt-3 text-[10px] text-slate-500 font-mono">
+                <div className="border-t border-app-border pt-3 text-[10px] text-slate-500 font-mono">
                   Endpoint URL: POST /api/webhooks/logistics/:courier
                 </div>
               </div>
@@ -1084,7 +1084,7 @@ export default function CourierProviders() {
 
       {/* Editing Courier API Config Modal */}
       {editingCourier && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-app-card/20 backdrop-blur-sm flex items-center justify-center p-4">
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -1097,7 +1097,7 @@ export default function CourierProviders() {
               </h3>
               <button 
                 onClick={() => setEditingCourier(null)}
-                className="text-gray-400 hover:text-gray-600 outline-none"
+                className="text-app-text-secondary hover:text-gray-600 outline-none"
               >
                 <XCircle className="h-5 w-5" />
               </button>

@@ -12,19 +12,25 @@
   --radius-card:           5px;
 
   /* GLOBAL COLOR TOKENS - BRAND REGISTERED SINGLE LIGHT THEME */
-  --color-page-bg:         #F8FAFC;   /* Light Background Variant */
+  --color-page-bg:         #F0F8FF;   /* Light Background Variant — Alice Blue workspace canvas (Theme Ticket spec) */
   --color-surface:         #FFFFFF;   /* Primary Content Color - White */
   --color-surface-dark:    #0F172A;   /* Primary Navy */
-  --color-border:          #CBD5E1;   /* Elegant border lines */
+  --color-border:          #E8EDF2;   /* Elegant border lines (Theme Ticket card-border spec) */
   --color-border-dark:     #1E293B;   /* Borders inside navy surfaces */
 
-  --color-accent-primary:  #F97316;   /* Primary Orange accent */
+  --color-accent-primary:  #F97316;   /* Primary Orange accent — unchanged, still used for all buttons/CTAs site-wide */
   --color-accent-hover:    #EA580C;   /* Hover Orange */
   --color-accent-light:    #FFF4ED;   /* Soft Orange bg/light tint */
 
-  --color-navy:            #0F172A;   /* Primary Navy */
+  --color-navy:            #000435;   /* Primary Navy (Theme Ticket brand swatch) — sidebar gradient base */
   --color-navy-mid:        #1E293B;   /* Secondary Navy */
   --color-navy-light:      #334155;   /* Hover Navy highlight */
+
+  /* Sidebar-only gradient accent tokens (Theme Ticket brand swatch) — scoped to the sidebar, NOT the global accent color */
+  --color-sidebar-gradient-orange: #FF5B00;
+  --color-sidebar-gradient-orange-deep: #EB4501;
+  --gradient-sidebar: radial-gradient(ellipse 140% 55% at 50% 100%, rgba(255, 91, 0, 0.16) 0%, rgba(255, 91, 0, 0) 62%),
+                       linear-gradient(180deg, #000435 0%, #00062E 80%, #000225 100%);
 
   --color-text-primary:    #111827;   /* Headings, titles, data values */
   --color-text-secondary:  #374151;   /* Descriptions, supporting content, form labels */
@@ -109,7 +115,8 @@ html:not(.dark) textarea::placeholder {
 /* 2. SOLID CONTRAST FOR THE LEFT NAVIGATION SIDEBAR (Unified high-contrast dark-background rules across BOTH modes) */
 aside.sidebar, 
 .sidebar {
-  background-color: var(--color-app-sidebar) !important;
+  background: var(--gradient-sidebar) !important;
+  background-color: var(--color-app-sidebar) !important; /* fallback if gradient fails to parse */
   color: #FFFFFF !important;
 }
 
@@ -833,8 +840,159 @@ html:not(.dark) main [class*="bg-orange-500/5"] {
   border-radius: 5px !important;
 }
 
+/* ============================================================
+   CHOOSIFY — THEME UNIFICATION: LEGACY DARK PANEL → LIGHT SURFACE
+   ----------------------------------------------------------------
+   Root cause of the "some pages are black, some are white" bug:
+   ~49 admin page/component files were built with one-off dark
+   navy/near-black panel colors (custom hex like #121424, #05050C,
+   #0B0D19, plus Tailwind slate-800/900/950, indigo-900/950, etc).
+   Earlier fixes only forced TEXT to stay white on top of those dark
+   boxes (see "TEXT VISIBILITY SAFETY NET" above) — they never fixed
+   the boxes themselves. That's why the app now looks like a light
+   dashboard with random black cards scattered through it.
 
+   This section flips the strategy: every one of those known dark
+   surface classes is forced to the standard white card surface
+   (matching the Executive Control Panel), and any text that was
+   force-whitened to survive on them is switched back to the normal
+   dark text hierarchy. The sidebar (.sidebar) is explicitly excluded
+   — it stays dark by design. Fixed-position toasts/notifications are
+   also excluded, since a dark toast over a light page is a normal,
+   intentional pattern (not part of this bug).
 
+   Scope note: this is a CSS-layer fix, not a per-component rewrite.
+   It covers the vast majority of panels app-wide in one pass. A
+   small number of intentionally-dark decorative elements (e.g. a
+   phone/browser mockup frame inside the CMS Live Preview widget)
+   share these same generic Tailwind slate classes and will also be
+   lightened as a side effect — flagged separately below for a
+   manual look rather than silently left dark.
+   ============================================================ */
 
+html:not(.dark) main :is(
+  [class*="bg-[#121424]"],
+  [class*="bg-[#05050C]"],
+  [class*="bg-[#090a12]"],
+  [class*="bg-[#1A1A2E]"],
+  [class*="bg-[#1a1a2e]"],
+  [class*="bg-[#0B1F3B]"],
+  [class*="bg-[#0B0D19]"],
+  [class*="bg-[#050512]"],
+  [class*="bg-[#0B1528]"],
+  [class*="bg-[#16192E]"],
+  [class*="bg-[#0F172A]"],
+  [class*="bg-[#0d0e1a]"],
+  [class*="bg-[#0D1B2A]"],
+  [class*="bg-[#0A2540]"],
+  [class*="bg-[#1F1F35]"],
+  [class*="bg-[#12182F]"],
+  [class*="bg-[#241A35]"],
+  [class*="bg-[#202030]"],
+  [class*="bg-[#1e2330]"],
+  [class*="bg-[#1e1e2e]"],
+  [class*="bg-[#1e1512]"],
+  [class*="bg-[#1c1214]"],
+  [class*="bg-[#1A314B]"],
+  [class*="bg-[#12121A]"],
+  [class*="bg-[#120509]"],
+  [class*="bg-[#101117]"],
+  [class*="bg-[#0e101f]"],
+  [class*="bg-[#0F0F1D]"],
+  [class*="bg-[#0B0F19]"],
+  [class*="bg-[#06101B]"],
+  [class*="bg-[#05110B]"],
+  [class*="bg-[#05055C]"],
+  [class*="bg-[#05051C]"],
+  [class*="bg-[#1E3A5F]"],
+  [class*="bg-[#000435]"],
+  [class*="bg-slate-700"],
+  [class*="bg-slate-750"],
+  [class*="bg-slate-800"],
+  [class*="bg-slate-850"],
+  [class*="bg-slate-900"],
+  [class*="bg-slate-950"],
+  [class*="bg-gray-800"],
+  [class*="bg-gray-900"],
+  [class*="bg-gray-950"],
+  [class*="bg-zinc-800"],
+  [class*="bg-zinc-900"],
+  [class*="bg-zinc-950"],
+  [class*="bg-indigo-900"],
+  [class*="bg-indigo-950"],
+  [class*="from-[#1A1A2E]"],
+  [class*="from-slate-850"],
+  [class*="from-slate-900"],
+  [class*="from-slate-950"],
+  [class*="to-indigo-900"],
+  [class*="to-indigo-950"],
+  [class*="to-slate-900"],
+  [class*="to-slate-950"],
+  [class*="via-slate-950"]
+):not([class*="fixed"], .sidebar, .sidebar *, aside) {
+  background-color: var(--color-surface) !important;
+  background-image: none !important;
+  color: var(--color-text-primary) !important;
+  border-color: var(--color-border) !important;
+}
 
+/* Dark borders on the same legacy panels become the standard light card border */
+html:not(.dark) main :is(
+  [class*="border-slate-700"],
+  [class*="border-slate-750"],
+  [class*="border-slate-800"],
+  [class*="border-slate-850"],
+  [class*="border-slate-900"],
+  [class*="border-slate-950"],
+  [class*="border-gray-700"],
+  [class*="border-gray-800"],
+  [class*="border-zinc-700"],
+  [class*="border-indigo-800"],
+  [class*="border-indigo-900"]
+):not([class*="fixed"], .sidebar, .sidebar *, aside) {
+  border-color: var(--color-border) !important;
+}
 
+/* Any near-white text that was force-whitened to survive on the old dark
+   panels reverts to the standard dark text hierarchy, now that its parent
+   panel is a light surface. Matches text on the panel element itself
+   AND any nested descendant (buttons/badges/accent colors are untouched
+   since they are not part of the selector list above). */
+html:not(.dark) main :is(
+  [class*="bg-[#121424]"], [class*="bg-[#05050C]"], [class*="bg-[#090a12]"],
+  [class*="bg-[#1A1A2E]"], [class*="bg-[#1a1a2e]"], [class*="bg-[#0B1F3B]"],
+  [class*="bg-[#0B0D19]"], [class*="bg-[#050512]"], [class*="bg-[#0B1528]"],
+  [class*="bg-[#16192E]"], [class*="bg-[#0F172A]"], [class*="bg-[#0d0e1a]"],
+  [class*="bg-[#0D1B2A]"], [class*="bg-[#0A2540]"], [class*="bg-[#1F1F35]"],
+  [class*="bg-[#12182F]"], [class*="bg-[#241A35]"], [class*="bg-[#202030]"],
+  [class*="bg-[#1e2330]"], [class*="bg-[#1e1e2e]"], [class*="bg-[#1e1512]"],
+  [class*="bg-[#1c1214]"], [class*="bg-[#1A314B]"], [class*="bg-[#12121A]"],
+  [class*="bg-[#120509]"], [class*="bg-[#101117]"], [class*="bg-[#0e101f]"],
+  [class*="bg-[#0F0F1D]"], [class*="bg-[#0B0F19]"], [class*="bg-[#06101B]"],
+  [class*="bg-[#05110B]"], [class*="bg-[#05055C]"], [class*="bg-[#05051C]"],
+  [class*="bg-[#1E3A5F]"], [class*="bg-[#000435]"],
+  [class*="bg-slate-700"], [class*="bg-slate-750"], [class*="bg-slate-800"],
+  [class*="bg-slate-850"], [class*="bg-slate-900"], [class*="bg-slate-950"],
+  [class*="bg-gray-800"], [class*="bg-gray-900"], [class*="bg-gray-950"],
+  [class*="bg-zinc-800"], [class*="bg-zinc-900"], [class*="bg-zinc-950"],
+  [class*="bg-indigo-900"], [class*="bg-indigo-950"]
+):not([class*="fixed"], .sidebar, .sidebar *, aside)
+:is(
+  .text-white, .text-white\/90, .text-white\/80, .text-white\/70, .text-white\/60, .text-white\/50,
+  [class*="text-slate-100"], [class*="text-slate-200"], [class*="text-slate-300"],
+  [class*="text-gray-100"], [class*="text-gray-200"], [class*="text-gray-300"],
+  [class*="text-zinc-100"], [class*="text-zinc-200"], [class*="text-zinc-300"]
+):not([class*="bg-orange"], [class*="bg-app-accent"], [class*="bg-[#F"], [class*="bg-[#E"], [class*="bg-green"], [class*="bg-red"], [class*="bg-blue"], [class*="bg-emerald"], [class*="bg-rose"], button, .btn, [role="button"]) {
+  color: var(--color-text-primary) !important;
+}
+
+/* Muted secondary text (slate-400/500 family) inside the same converted panels —
+   the existing unconditional main-wide rule already maps these to #6B7280,
+   this just guarantees precedence over any lingering panel-specific overrides */
+html:not(.dark) main :is(
+  [class*="bg-[#121424]"], [class*="bg-[#05050C]"], [class*="bg-[#090a12]"],
+  [class*="bg-[#0B0D19]"], [class*="bg-[#0d0e1a]"], [class*="bg-slate-800"],
+  [class*="bg-slate-900"], [class*="bg-slate-950"]
+) :is([class*="text-slate-400"], [class*="text-slate-500"], [class*="text-gray-400"], [class*="text-gray-500"]) {
+  color: var(--color-text-muted) !important;
+}

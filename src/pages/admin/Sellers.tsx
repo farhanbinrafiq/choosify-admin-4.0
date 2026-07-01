@@ -620,7 +620,7 @@ export default function SellersPage() {
       
       {/* Toast Notification Container */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-[100] bg-slate-900 border border-[#F4631E] hover:border-emerald-500 text-white text-xs font-bold px-5 py-3 rounded-xl shadow-2xl tracking-wide uppercase transition-all">
+        <div className="fixed bottom-6 right-6 z-[100] bg-app-card border border-[#F4631E] hover:border-emerald-500 text-app-text-primary text-xs font-bold px-5 py-3 rounded-xl shadow-2xl tracking-wide uppercase transition-all">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-[#F4631E] animate-pulse" />
             <span>{toastMessage}</span>
@@ -632,7 +632,7 @@ export default function SellersPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-2xl font-black text-white tracking-tight">Brands Management Studio</h1>
+            <h1 className="text-2xl font-black text-app-text-primary tracking-tight">Brands Management Studio</h1>
             <span className="text-[9px] bg-[#F4631E]/15 border border-[#F4631E]/20 text-[#F4631E] px-2.5 py-0.5 rounded font-black tracking-widest uppercase font-mono">
               Workspace Consolidation
             </span>
@@ -655,9 +655,9 @@ export default function SellersPage() {
       {/* Interactive Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-app-card rounded-2xl border border-app-border p-4.5 space-y-2.5">
-          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">🏢 Unclaimed Profiles</span>
+          <span className="text-[10px] text-app-text-secondary font-bold uppercase tracking-wider block">🏢 Unclaimed Profiles</span>
           <div className="flex justify-between items-baseline">
-            <span className="text-2xl font-black text-white font-mono">{unclaimedProfilesCount}</span>
+            <span className="text-2xl font-black text-app-text-primary font-mono">{unclaimedProfilesCount}</span>
             <span className="text-[9px] text-[#F4631E] font-semibold">SEO Index Enabled</span>
           </div>
           <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
@@ -690,9 +690,9 @@ export default function SellersPage() {
         </div>
 
         <div className="bg-app-card rounded-2xl border border-app-border p-4.5 space-y-2.5">
-          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">📊 Consolidated Listings</span>
+          <span className="text-[10px] text-app-text-secondary font-bold uppercase tracking-wider block">📊 Consolidated Listings</span>
           <div className="flex justify-between items-baseline">
-            <span className="text-2xl font-black text-white font-mono">{unifiedBrands.length}</span>
+            <span className="text-2xl font-black text-app-text-primary font-mono">{unifiedBrands.length}</span>
             <span className="text-[10px] text-green-500 font-semibold">Active & Cataloged</span>
           </div>
           <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
@@ -718,7 +718,7 @@ export default function SellersPage() {
           <button 
             key={tb.id}
             onClick={() => setActiveTab(tb.id as ActiveTab)}
-            className={`px-4.5 py-3.5 text-[10px] font-extrabold uppercase tracking-widest whitespace-nowrap rounded-lg transition-all cursor-pointer ${
+            className={`px-4.5 py-3.5 text-[10px] font-extrabold uppercase tracking-widest whitespace-nowrap rounded-lg transition-all cursor-pointer${
               activeTab === tb.id 
                 ? 'bg-[#F4631E]/10 border border-[#F4631E]/20 text-[#F4631E]' 
                 : 'text-slate-400 hover:text-white hover:bg-white/5 border-transparent border'
@@ -734,33 +734,33 @@ export default function SellersPage() {
       {(activeTab !== 'products' && activeTab !== 'deals' && activeTab !== 'claims') && (
         <div className="flex flex-col md:flex-row gap-4">
           <div className="relative flex-1">
-            <Search className="w-4 h-4 text-slate-400 absolute left-4.5 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-app-text-secondary absolute left-4.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               placeholder="Search by Brand, Seller, representative name, category or trade license doc id..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-app-card border border-app-border rounded-xl pl-12 pr-6 py-3.5 text-xs text-white focus:outline-none focus:border-app-accent placeholder-slate-500 shadow-sm"
+              className="w-full bg-app-card border border-app-border rounded-xl pl-12 pr-6 py-3.5 text-xs text-app-text-primary focus:outline-none focus:border-app-accent placeholder-slate-500 shadow-sm"
               id="search_brands_input"
             />
           </div>
 
           <div className="flex items-center gap-2 bg-app-card border border-app-border px-3 rounded-xl">
-            <Sliders className="w-3.5 h-3.5 text-slate-400" />
-            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Status:</span>
+            <Sliders className="w-3.5 h-3.5 text-app-text-secondary" />
+            <span className="text-[10px] text-app-text-secondary font-bold uppercase tracking-wider">Status:</span>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-transparent text-xs text-white font-extrabold uppercase py-1 border-none focus:outline-none focus:ring-0 cursor-pointer"
+              className="bg-transparent text-xs text-app-text-primary font-extrabold uppercase py-1 border-none focus:outline-none focus:ring-0 cursor-pointer"
               id="filter_status_select"
             >
-              <option value="ALL" className="bg-slate-900 text-white">All Ledger</option>
-              <option value="ACTIVE" className="bg-slate-900 text-white">Active Merchant</option>
-              <option value="SUSPENDED" className="bg-slate-900 text-white">Suspended</option>
-              <option value="FLAGGED" className="bg-slate-900 text-white">Flagged / Incidents</option>
-              <option value="OWNERSHIP_PENDING" className="bg-slate-900 text-white">Ownership Pending</option>
-              <option value="VERIFIED" className="bg-slate-900 text-white">Verified Owner</option>
-              <option value="UNCLAIMED" className="bg-slate-900 text-white">Unclaimed profiles</option>
+              <option value="ALL" className="bg-app-card text-app-text-primary">All Ledger</option>
+              <option value="ACTIVE" className="bg-app-card text-app-text-primary">Active Merchant</option>
+              <option value="SUSPENDED" className="bg-app-card text-app-text-primary">Suspended</option>
+              <option value="FLAGGED" className="bg-app-card text-app-text-primary">Flagged / Incidents</option>
+              <option value="OWNERSHIP_PENDING" className="bg-app-card text-app-text-primary">Ownership Pending</option>
+              <option value="VERIFIED" className="bg-app-card text-app-text-primary">Verified Owner</option>
+              <option value="UNCLAIMED" className="bg-app-card text-app-text-primary">Unclaimed profiles</option>
             </select>
           </div>
         </div>
@@ -775,7 +775,7 @@ export default function SellersPage() {
             <div className="overflow-x-auto -mx-4 px-4 custom-scrollbar">
               <div className="min-w-[900px]">
                 <table className="w-full text-left border-collapse">
-                <thead className="bg-white/[0.02] border-b border-app-border text-[9.5px] text-slate-400 uppercase tracking-widest font-black">
+                <thead className="bg-white/[0.02] border-b border-app-border text-[9.5px] text-app-text-secondary uppercase tracking-widest font-black">
                   <tr>
                     <th className="p-5">Brand / Business Name</th>
                     <th className="p-5">Representative Seller</th>
@@ -789,7 +789,7 @@ export default function SellersPage() {
                     <th className="p-5 text-right">Oversight Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/5 text-xs text-slate-300">
+                <tbody className="divide-y divide-white/5 text-xs text-app-text-secondary">
                   {filteredSellers.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="p-12 text-center text-app-text-secondary">
@@ -802,23 +802,23 @@ export default function SellersPage() {
                       <tr key={brand.id} className="hover:bg-white/[0.01] transition-colors group">
                         
                         {/* 1. Brand/Business Name */}
-                        <td className="p-5 font-bold text-white">
+                        <td className="p-5 font-bold text-app-text-primary">
                           <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-lg overflow-hidden border border-white/10 shrink-0 bg-slate-800 flex items-center justify-center">
+                            <div className="w-10 h-10 rounded-lg overflow-hidden border border-app-border shrink-0 bg-app-bg flex items-center justify-center">
                               {brand.brandProfile ? (
                                 <img src={brand.brandProfile.logo} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
                               ) : (
-                                <Building2 className="w-5 h-5 text-slate-400" />
+                                <Building2 className="w-5 h-5 text-app-text-secondary" />
                               )}
                             </div>
                             <div>
                               <Link 
                                 to={`/upe/brand/${brand.id}`}
-                                className="text-white hover:text-orange-400 cursor-pointer transition-colors block font-black text-sm"
+                                className="text-app-text-primary hover:text-orange-400 cursor-pointer transition-colors block font-black text-sm"
                               >
                                 {brand.name}
                               </Link>
-                              <span className="text-[10px] text-slate-400 font-semibold block mt-1 uppercase tracking-wider">{brand.category}</span>
+                              <span className="text-[10px] text-app-text-secondary font-semibold block mt-1 uppercase tracking-wider">{brand.category}</span>
                             </div>
                           </div>
                         </td>
@@ -838,13 +838,13 @@ export default function SellersPage() {
                         </td>
 
                         {/* 3. Brand Count */}
-                        <td className="p-5 text-center font-mono font-bold text-white">
+                        <td className="p-5 text-center font-mono font-bold text-app-text-primary">
                           {brand.brandCount}
                         </td>
 
                         {/* 4. Ownership Status tag */}
                         <td className="p-5">
-                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-wider ${
+                          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-wider${
                             brand.status === 'VERIFIED_OWNER' || brand.status === 'VERIFIED'
                               ? 'bg-green-500/10 text-emerald-400 border border-green-500/15'
                               : brand.status === 'OWNERSHIP_PENDING'
@@ -853,7 +853,7 @@ export default function SellersPage() {
                               ? 'bg-red-500/10 text-red-500 border border-red-500/15'
                               : 'bg-white/5 text-slate-400 border border-white/5'
                           }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${
+                            <span className={`w-1.5 h-1.5 rounded-full${
                               brand.status === 'VERIFIED_OWNER' || brand.status === 'VERIFIED' ? 'bg-green-400' :
                               brand.status === 'OWNERSHIP_PENDING' ? 'bg-amber-400 animate-pulse' :
                               brand.status === 'SUSPENDED' ? 'bg-red-500' : 'bg-slate-400'
@@ -863,7 +863,7 @@ export default function SellersPage() {
                         </td>
 
                         {/* 5. Brand Summary */}
-                        <td className="p-5 text-slate-400 max-w-[200px] truncate" title={brand.brandSummary}>
+                        <td className="p-5 text-app-text-secondary max-w-[200px] truncate" title={brand.brandSummary}>
                           {brand.brandSummary}
                         </td>
 
@@ -879,7 +879,7 @@ export default function SellersPage() {
                         </td>
 
                         {/* 7. Fulfillment */}
-                        <td className="p-5 text-center font-mono font-medium text-white">
+                        <td className="p-5 text-center font-mono font-medium text-app-text-primary">
                           {brand.fulfillmentRate}
                         </td>
 
@@ -889,7 +889,7 @@ export default function SellersPage() {
                         </td>
 
                         {/* 9. Last Active */}
-                        <td className="p-5 text-slate-300 font-mono text-[10.5px]">
+                        <td className="p-5 text-app-text-secondary font-mono text-[10.5px]">
                           {brand.lastActive}
                         </td>
 
@@ -908,7 +908,7 @@ export default function SellersPage() {
                             {brand.brandProfile && (
                               <button 
                                 onClick={() => handleTriggerEdit(brand.brandProfile!.id)}
-                                className="p-1 px-2.5 bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 rounded-md text-[10.5px] font-black uppercase tracking-wider transition-all"
+                                className="p-1 px-2.5 bg-white/5 hover:bg-white/10 text-app-text-secondary border border-app-border rounded-md text-[10.5px] font-black uppercase tracking-wider transition-all"
                                 title="Edit Pre-onboarding profile & SEO content"
                               >
                                 SEO / Info
@@ -921,7 +921,7 @@ export default function SellersPage() {
                                   <>
                                     <button 
                                       onClick={() => handleApprove(brand.sellerAccount!.id)}
-                                      className="px-2.5 py-1 bg-green-500 text-white font-bold text-[10px] rounded hover:scale-102 cursor-pointer"
+                                      className="px-2.5 py-1 bg-green-500 text-app-text-primary font-bold text-[10px] rounded hover:scale-102 cursor-pointer"
                                       title="Approve Merchant application"
                                     >
                                       Approve
@@ -939,7 +939,7 @@ export default function SellersPage() {
                                 {brand.applicationStatus === 'Approved' && (
                                   <button 
                                     onClick={() => handleSuspend(brand.sellerAccount!.id)}
-                                    className="px-2.5 py-1 bg-white/5 hover:bg-red-500/10 text-slate-400 hover:text-red-500 rounded border border-[#ef4444]/20 font-bold transition-all cursor-pointer"
+                                    className="px-2.5 py-1 bg-white/5 hover:bg-red-500/10 text-app-text-secondary hover:text-red-500 rounded border border-[#ef4444]/20 font-bold transition-all cursor-pointer"
                                     title="Deactivate and Suspend merchant catalog access"
                                   >
                                     Deactivate
@@ -949,7 +949,7 @@ export default function SellersPage() {
                                 {(brand.applicationStatus === 'Suspended' || brand.applicationStatus === 'Banned') && (
                                   <button 
                                     onClick={() => handleRestore(brand.sellerAccount!.id)}
-                                    className="px-2.5 py-1 bg-green-500 text-white font-bold text-[10px] rounded hover:scale-102 cursor-pointer"
+                                    className="px-2.5 py-1 bg-green-500 text-app-text-primary font-bold text-[10px] rounded hover:scale-102 cursor-pointer"
                                     title="Restore active store"
                                   >
                                     Restore
@@ -998,7 +998,7 @@ export default function SellersPage() {
                 <span className="text-[10px] bg-[#F4631E]/10 border border-[#F4631E]/25 text-[#F4631E] px-2.5 py-1 rounded font-black tracking-widest uppercase block w-fit font-mono">
                   Claims Moderation Desk
                 </span>
-                <h3 className="text-md font-bold text-white tracking-tight">Enterprise Claim Verification Engine</h3>
+                <h3 className="text-md font-bold text-app-text-primary tracking-tight">Enterprise Claim Verification Engine</h3>
                 <p className="text-xs text-app-text-secondary leading-relaxed">
                   Review submitted Trade certs, verify corporate DNS TXT tokens, look up corporate email matches, and approve profile claim control loops securely. Approved requests automatically link the seller account to the brand.
                 </p>
@@ -1007,8 +1007,8 @@ export default function SellersPage() {
               {/* Claims Stat Row */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-app-card border border-app-border rounded-xl p-4.5">
-                  <div className="text-slate-400 text-[10px] font-bold uppercase tracking-wider">Total Claims</div>
-                  <div className="text-xl font-black text-white mt-1 font-mono">{total}</div>
+                  <div className="text-app-text-secondary text-[10px] font-bold uppercase tracking-wider">Total Claims</div>
+                  <div className="text-xl font-black text-app-text-primary mt-1 font-mono">{total}</div>
                 </div>
                 <div className="bg-app-card border border-[#F4631E]/25 rounded-xl p-4.5">
                   <div className="text-amber-400 text-[10px] font-bold uppercase tracking-wider">Pending</div>
@@ -1044,14 +1044,14 @@ export default function SellersPage() {
                     <button
                       key={filterOpt.value}
                       onClick={() => setClaimsFilter(filterOpt.value as any)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 border cursor-pointer ${
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 border cursor-pointer${
                         isActive 
                           ? 'bg-[#F4631E]/10 border-[#F4631E]/30 text-[#F4631E]' 
                           : 'bg-app-card border-app-border text-slate-400 hover:text-white hover:bg-white/5 border-transparent'
                       }`}
                     >
                       <span>{filterOpt.label}</span>
-                      <span className={`px-1.5 py-0.2 text-[9.5px] rounded-full font-bold ${
+                      <span className={`px-1.5 py-0.2 text-[9.5px] rounded-full font-bold${
                         isActive ? 'bg-[#F4631E]/25 text-[#F4631E]' : 'bg-white/5 text-slate-400'
                       }`}>
                         {count}
@@ -1113,16 +1113,16 @@ export default function SellersPage() {
                         <div key={c.id} className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4 hover:border-slate-700 transition-all shadow-sm">
                           
                           {/* Top Row Header */}
-                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-white/[0.04]">
+                          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-app-border">
                             <div className="flex items-center gap-3">
-                              <div className="w-11 h-11 rounded-xl overflow-hidden border border-white/10 shrink-0 bg-slate-800 flex items-center justify-center">
+                              <div className="w-11 h-11 rounded-xl overflow-hidden border border-app-border shrink-0 bg-app-bg flex items-center justify-center">
                                 <img src={brandLogo} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
                               </div>
                               <div>
-                                <h4 className="font-bold text-white text-md flex items-center gap-2">
+                                <h4 className="font-bold text-app-text-primary text-md flex items-center gap-2">
                                   {c.brandName}
-                                  <span className={`inline-flex items-center gap-1.5 px-2.2 py-0.5 rounded text-[8.5px] font-extrabold uppercase tracking-wider ${style.bg} ${style.text} ${style.border}`}>
-                                    <span className={`w-1.5 h-1.5 rounded-full ${style.dot} ${c.status === 'pending' ? 'animate-pulse' : ''}`} />
+                                  <span className={`inline-flex items-center gap-1.5 px-2.2 py-0.5 rounded text-[8.5px] font-extrabold uppercase tracking-wider${style.bg}${style.text}${style.border}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full${style.dot}${c.status === 'pending' ? 'animate-pulse' : ''}`} />
                                     {STATUS_LABELS[c.status] || c.status}
                                   </span>
                                 </h4>
@@ -1132,7 +1132,7 @@ export default function SellersPage() {
                               </div>
                             </div>
                             
-                            <div className="flex items-center gap-1.5 text-slate-400 text-[10.5px] font-mono">
+                            <div className="flex items-center gap-1.5 text-app-text-secondary text-[10.5px] font-mono">
                               <Calendar className="w-3.5 h-3.5 text-[#F4631E]" />
                               <span>{formattedDate}</span>
                             </div>
@@ -1140,28 +1140,28 @@ export default function SellersPage() {
 
                           {/* Quick Facts Grid */}
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                            <div className="space-y-1.5 p-3.5 bg-white/[0.01] rounded-xl border border-white/[0.03]">
+                            <div className="space-y-1.5 p-3.5 bg-white/[0.01] rounded-xl border border-app-border">
                               <span className="text-slate-500 text-[9.5px] font-black uppercase tracking-wider block">Claimant / Representative</span>
                               <div className="flex items-center gap-2 mt-1">
-                                <span className="font-bold text-white">{claimantNameVal}</span>
-                                <span className={`text-[8.5px] font-extrabold px-1.5 py-0.2 rounded-md ${
+                                <span className="font-bold text-app-text-primary">{claimantNameVal}</span>
+                                <span className={`text-[8.5px] font-extrabold px-1.5 py-0.2 rounded-md${
                                   c.role === 'owner' ? 'bg-[#1A1A2E] text-orange-400 border border-orange-500/25' : 'bg-slate-800 text-slate-400'
                                 }`}>
                                   {roleBadge}
                                 </span>
                               </div>
-                              <p className="text-slate-400 font-mono mt-1 text-[11px]">{claimantPhoneVal}</p>
+                              <p className="text-app-text-secondary font-mono mt-1 text-[11px]">{claimantPhoneVal}</p>
                             </div>
 
-                            <div className="space-y-1.5 p-3.5 bg-white/[0.01] rounded-xl border border-white/[0.03]">
+                            <div className="space-y-1.5 p-3.5 bg-white/[0.01] rounded-xl border border-app-border">
                               <span className="text-slate-500 text-[9.5px] font-black uppercase tracking-wider block">Factual Ledger Details</span>
-                              <div className="flex justify-between text-slate-400 mt-1">
+                              <div className="flex justify-between text-app-text-secondary mt-1">
                                 <span>Trade License No:</span>
-                                <span className="font-mono text-white text-[11.5px]">{maskedLicense}</span>
+                                <span className="font-mono text-app-text-primary text-[11.5px]">{maskedLicense}</span>
                               </div>
-                              <div className="flex justify-between text-slate-400">
+                              <div className="flex justify-between text-app-text-secondary">
                                 <span>Official Business Email:</span>
-                                <span className="font-mono text-white truncate max-w-[150px]" title={businessEmailVal}>{businessEmailVal}</span>
+                                <span className="font-mono text-app-text-primary truncate max-w-[150px]" title={businessEmailVal}>{businessEmailVal}</span>
                               </div>
                             </div>
                           </div>
@@ -1170,21 +1170,21 @@ export default function SellersPage() {
                           <div className="flex flex-wrap items-center gap-2 pt-1">
                             <span className="text-[9.5px] text-slate-500 font-black uppercase tracking-wider">Document Checklist:</span>
                             <div className="flex flex-wrap gap-1.5">
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold border ${
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold border${
                                 hasTrade 
                                   ? 'bg-green-500/10 text-emerald-400 border-green-500/15' 
                                   : 'bg-rose-500/10 text-rose-400 border-rose-500/15'
                               }`}>
                                 {hasTrade ? '✓' : '✗'} Trade License
                               </span>
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold border ${
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold border${
                                 hasNid 
                                   ? 'bg-green-500/10 text-emerald-400 border-green-500/15' 
                                   : 'bg-rose-500/10 text-rose-400 border-rose-500/15'
                               }`}>
                                 {hasNid ? '✓' : '✗'} NID Verification
                               </span>
-                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold border ${
+                              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-extrabold border${
                                 hasBank 
                                   ? 'bg-green-500/10 text-emerald-400 border-green-500/15' 
                                   : 'bg-rose-500/10 text-rose-400 border-rose-500/15'
@@ -1195,12 +1195,12 @@ export default function SellersPage() {
                           </div>
 
                           {/* Bottom Action Triggers */}
-                          <div className="flex flex-col gap-3 pt-3 border-t border-white/[0.04]">
+                          <div className="flex flex-col gap-3 pt-3 border-t border-app-border">
                             <div className="flex flex-wrap items-center justify-between gap-3">
                               
                               <button
                                 onClick={() => setExpandedClaims(p => ({ ...p, [c.id]: !p[c.id] }))}
-                                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                                className="px-3.5 py-1.5 bg-app-bg hover:bg-slate-700 text-app-text-secondary hover:text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                               >
                                 <FileText className="w-3.5 h-3.5 text-[#F4631E]" />
                                 <span>{expandedClaims[c.id] ? 'Hide Documents' : 'Review Documents'}</span>
@@ -1221,7 +1221,7 @@ export default function SellersPage() {
 
                                     <button
                                       onClick={() => setClaimActionTypeMap(p => ({ ...p, [c.id]: p[c.id] === 'reject' ? null : 'reject' }))}
-                                      className={`px-3 py-1.5 text-white font-extrabold text-[11px] rounded-lg uppercase cursor-pointer ${
+                                      className={`px-3 py-1.5 text-app-text-primary font-extrabold text-[11px] rounded-lg uppercase cursor-pointer${
                                         claimActionTypeMap[c.id] === 'reject' ? 'bg-red-950 text-red-400 border border-red-900/35' : 'bg-red-600 hover:bg-red-700 bg-red-600 hover:bg-red-700'
                                       }`}
                                     >
@@ -1230,7 +1230,7 @@ export default function SellersPage() {
 
                                     <button
                                       onClick={() => setClaimActionTypeMap(p => ({ ...p, [c.id]: p[c.id] === 'info' ? null : 'info' }))}
-                                      className={`px-3 py-1.5 font-extrabold text-[11px] rounded-lg transition-all cursor-pointer ${
+                                      className={`px-3 py-1.5 font-extrabold text-[11px] rounded-lg transition-all cursor-pointer${
                                         claimActionTypeMap[c.id] === 'info' ? 'bg-purple-950 text-purple-400 border border-purple-900/35' : 'bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10'
                                       }`}
                                     >
@@ -1252,12 +1252,12 @@ export default function SellersPage() {
                                   value={claimReasonMap[c.id] || ''}
                                   onChange={(e) => setClaimReasonMap(p => ({ ...p, [c.id]: e.target.value }))}
                                   placeholder="Provide exact refusal reasons..."
-                                  className="w-full bg-slate-900 border border-red-800/45 rounded-lg px-3 py-2.2 text-xs text-white focus:outline-none focus:border-red-500"
+                                  className="w-full bg-app-card border border-red-800/45 rounded-lg px-3 py-2.2 text-xs text-app-text-primary focus:outline-none focus:border-red-500"
                                 />
                                 <div className="flex justify-end gap-2 text-[10.5px]">
                                   <button 
                                     onClick={() => setClaimActionTypeMap(p => ({ ...p, [c.id]: null }))}
-                                    className="px-2.5 py-1 text-slate-400 hover:text-white"
+                                    className="px-2.5 py-1 text-app-text-secondary hover:text-white"
                                   >
                                     Cancel
                                   </button>
@@ -1288,12 +1288,12 @@ export default function SellersPage() {
                                   value={claimNotesMap[c.id] || ''}
                                   onChange={(e) => setClaimNotesMap(p => ({ ...p, [c.id]: e.target.value }))}
                                   placeholder="e.g. Please provide clear non-glossy scan of Trade license"
-                                  className="w-full bg-slate-900 border border-purple-800/45 rounded-lg px-3 py-2.2 text-xs text-white focus:outline-none focus:border-purple-500"
+                                  className="w-full bg-app-card border border-purple-800/45 rounded-lg px-3 py-2.2 text-xs text-app-text-primary focus:outline-none focus:border-purple-500"
                                 />
                                 <div className="flex justify-end gap-2 text-[10.5px]">
                                   <button 
                                     onClick={() => setClaimActionTypeMap(p => ({ ...p, [c.id]: null }))}
-                                    className="px-2.5 py-1 text-slate-400 hover:text-white"
+                                    className="px-2.5 py-1 text-app-text-secondary hover:text-white"
                                   >
                                     Cancel
                                   </button>
@@ -1318,15 +1318,15 @@ export default function SellersPage() {
 
                             {/* Interactive Document Checklist Section */}
                             {expandedClaims[c.id] && (
-                              <div className="bg-slate-950/40 rounded-xl p-4 border border-white/[0.02] space-y-3.5">
-                                <h5 className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider">Detailed Interactive Certificate Review</h5>
+                              <div className="bg-app-bg/10 rounded-xl p-4 border border-app-border space-y-3.5">
+                                <h5 className="text-[10px] text-app-text-secondary font-extrabold uppercase tracking-wider">Detailed Interactive Certificate Review</h5>
                                 <div className="space-y-2.5">
                                   
                                   {/* Doc 1: Trade registry */}
-                                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-3 bg-white/[0.01] rounded-lg border border-white/[0.02]">
+                                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-3 bg-white/[0.01] rounded-lg border border-app-border">
                                     <div>
                                       <span className="text-[9.5px] text-slate-500 font-black uppercase">1. Government Trade Registry Certificate</span>
-                                      <p className="text-white font-mono text-[11px] mt-0.5">License: {licenseStr || 'Unspecified'}</p>
+                                      <p className="text-app-text-primary font-mono text-[11px] mt-0.5">License: {licenseStr || 'Unspecified'}</p>
                                       <p className="text-[10px] text-slate-500 mt-0.5">Attachment name: {c.businessRegistrationDocs || 'trade_license_corp.pdf'}</p>
                                     </div>
                                     <div className="flex gap-1.5 shrink-0">
@@ -1334,7 +1334,7 @@ export default function SellersPage() {
                                         <button
                                           key={actType}
                                           onClick={() => handleDocAction(c.id, 'trade', actType as any)}
-                                          className={`px-2 py-1.2 rounded text-[9.5px] font-black uppercase transition-all cursor-pointer ${
+                                          className={`px-2 py-1.2 rounded text-[9.5px] font-black uppercase transition-all cursor-pointer${
                                             activeDocs['trade'] === actType
                                               ? actType === 'approved' ? 'bg-[#1a1a2e] text-[#F97316] border border-[#F97316]/50' : actType === 'rejected' ? 'bg-red-650 text-white' : 'bg-amber-600 text-white'
                                               : 'bg-white/5 text-slate-400 hover:bg-white/10'
@@ -1347,10 +1347,10 @@ export default function SellersPage() {
                                   </div>
 
                                   {/* Doc 2: National ID registry */}
-                                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-3 bg-white/[0.01] rounded-lg border border-white/[0.02]">
+                                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-3 bg-white/[0.01] rounded-lg border border-app-border">
                                     <div>
                                       <span className="text-[9.5px] text-slate-500 font-black uppercase">2. Claimant National ID & Selfie Verification</span>
-                                      <p className="text-white font-mono text-[11px] mt-0.5">NID: {c.nidNumber || '199026123456789 (Verified format)'}</p>
+                                      <p className="text-app-text-primary font-mono text-[11px] mt-0.5">NID: {c.nidNumber || '199026123456789 (Verified format)'}</p>
                                       <p className="text-[10px] text-slate-500 mt-0.5">Attachments: Front side, back side, selfie card holder</p>
                                     </div>
                                     <div className="flex gap-1.5 shrink-0">
@@ -1358,7 +1358,7 @@ export default function SellersPage() {
                                         <button
                                           key={actType}
                                           onClick={() => handleDocAction(c.id, 'nid', actType as any)}
-                                          className={`px-2 py-1.2 rounded text-[9.5px] font-black uppercase transition-all cursor-pointer ${
+                                          className={`px-2 py-1.2 rounded text-[9.5px] font-black uppercase transition-all cursor-pointer${
                                             activeDocs['nid'] === actType
                                               ? actType === 'approved' ? 'bg-[#1a1a2e] text-[#F97316] border border-[#F97316]/50' : actType === 'rejected' ? 'bg-red-650 text-white' : 'bg-amber-600 text-white'
                                               : 'bg-white/5 text-slate-400 hover:bg-white/10'
@@ -1371,10 +1371,10 @@ export default function SellersPage() {
                                   </div>
 
                                   {/* Doc 3: Corporate Bank statements */}
-                                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-3 bg-white/[0.01] rounded-lg border border-white/[0.02]">
+                                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 p-3 bg-white/[0.01] rounded-lg border border-app-border">
                                     <div>
                                       <span className="text-[9.5px] text-slate-500 font-black uppercase">3. Corporate Bank Account Verification</span>
-                                      <p className="text-white font-mono text-[11px] mt-0.5 font-bold">Bank Name: {c.bankName || 'Prime Bank PLC'}</p>
+                                      <p className="text-app-text-primary font-mono text-[11px] mt-0.5 font-bold">Bank Name: {c.bankName || 'Prime Bank PLC'}</p>
                                       <p className="text-[10px] text-slate-500 mt-0.5">Routing & MICR checked leaf: Yes</p>
                                     </div>
                                     <div className="flex gap-1.5 shrink-0">
@@ -1382,7 +1382,7 @@ export default function SellersPage() {
                                         <button
                                           key={actType}
                                           onClick={() => handleDocAction(c.id, 'bank', actType as any)}
-                                          className={`px-2 py-1.2 rounded text-[9.5px] font-black uppercase transition-all cursor-pointer ${
+                                          className={`px-2 py-1.2 rounded text-[9.5px] font-black uppercase transition-all cursor-pointer${
                                             activeDocs['bank'] === actType
                                               ? actType === 'approved' ? 'bg-[#1a1a2e] text-[#F97316] border border-[#F97316]/50' : actType === 'rejected' ? 'bg-red-650 text-white' : 'bg-amber-600 text-white'
                                               : 'bg-white/5 text-slate-400 hover:bg-white/10'
@@ -1410,17 +1410,17 @@ export default function SellersPage() {
                   <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
                     <div className="border-b border-app-border pb-2.5">
                       <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">🛡️ Studio Audit Security Trail</span>
-                      <span className="text-[9.5px] text-slate-400 block mt-0.5">Immutable record tracker for compliance operations</span>
+                      <span className="text-[9.5px] text-app-text-secondary block mt-0.5">Immutable record tracker for compliance operations</span>
                     </div>
 
                     <div className="space-y-3 max-h-[480px] overflow-y-auto custom-scrollbar pr-1">
                       {logs.map(lg => (
-                        <div key={lg.id} className="p-3 bg-app-bg/55 border border-white/[0.03] rounded-lg text-xs space-y-1">
+                        <div key={lg.id} className="p-3 bg-app-bg/55 border border-app-border rounded-lg text-xs space-y-1">
                           <div className="flex justify-between items-center">
                             <span className="font-bold text-[#F4631E] truncate max-w-[120px]">{lg.brandName}</span>
                             <span className="text-[9px] text-slate-500 font-mono">{new Date(lg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                           </div>
-                          <p className="text-[10px] text-slate-400 block font-semibold">{lg.action}</p>
+                          <p className="text-[10px] text-app-text-secondary block font-semibold">{lg.action}</p>
                           <p className="text-[10px] text-slate-500 leading-normal">{lg.reason}</p>
                           <span className="text-[9px] text-slate-600 font-mono block text-right">By {lg.adminUser}</span>
                         </div>
@@ -1442,32 +1442,32 @@ export default function SellersPage() {
               <span className="text-[10px] bg-[#F4631E]/10 border border-[#F4631E]/25 text-[#F4631E] px-2.5 py-1 rounded font-black tracking-widest uppercase block w-fit font-mono">
                 WORKFLOW SIMULATOR — CASE 1 & CASE 2 RULES (onboarding)
               </span>
-              <h3 className="text-md font-bold text-white tracking-tight">Interactive Onboarding dual logic verification</h3>
+              <h3 className="text-md font-bold text-app-text-primary tracking-tight">Interactive Onboarding dual logic verification</h3>
               <p className="text-xs text-app-text-secondary leading-relaxed">
                 Experience onboarding rules instantly. Post a product dynamically from an <strong>Approved Brand</strong> to trigger <strong>Case 2 Auto-Approval</strong>, or do so from a <strong>New Seller</strong> to see <strong>Case 1 Dual Pending Registration Requests</strong>.
               </p>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                <div className="bg-app-bg/50 rounded-xl p-4 border border-white/[0.04] space-y-3">
+                <div className="bg-app-bg/50 rounded-xl p-4 border border-app-border space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-white uppercase tracking-wider">Approved Brand Product Post</span>
+                    <span className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Approved Brand Product Post</span>
                     <span className="text-[8px] bg-green-500/10 text-green-400 uppercase font-black px-2 py-0.5 rounded border border-green-500/20 font-mono">Case 2 rule</span>
                   </div>
-                  <p className="text-[11px] text-slate-400">Approved brand <strong className="text-white">Meena Bazar Online</strong> publishes. It skips moderation reviews completely and is posted directly.</p>
+                  <p className="text-[11px] text-app-text-secondary">Approved brand <strong className="text-app-text-primary">Meena Bazar Online</strong> publishes. It skips moderation reviews completely and is posted directly.</p>
                   <button
                     onClick={() => simulateOnboardingWorkflow('Meena Bazar Online', 'Groceries & FMCG', 'Organic Fresh Green Mangoes', '৳ 350', true)}
-                    className="w-full py-2 bg-green-500 hover:bg-green-600 text-white font-bold text-[11px] rounded-lg transition-all cursor-pointer"
+                    className="w-full py-2 bg-green-500 hover:bg-green-600 text-app-text-primary font-bold text-[11px] rounded-lg transition-all cursor-pointer"
                   >
                     Simulate Case 2 Product Post
                   </button>
                 </div>
 
-                <div className="bg-app-bg/50 rounded-xl p-4 border border-white/[0.04] space-y-3">
+                <div className="bg-app-bg/50 rounded-xl p-4 border border-app-border space-y-3">
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-bold text-white uppercase tracking-wider">New Seller Product Post</span>
+                    <span className="text-xs font-bold text-app-text-primary uppercase tracking-wider">New Seller Product Post</span>
                     <span className="text-[8px] bg-orange-500/10 text-orange-400 uppercase font-black px-2 py-0.5 rounded border border-orange-500/20 font-mono">Case 1 rule</span>
                   </div>
-                  <p className="text-[11px] text-slate-400">A new unregistered seller <strong className="text-white">Jamuna Electronics BD</strong> posts. Creates a pending seller entity AND a pending product block.</p>
+                  <p className="text-[11px] text-app-text-secondary">A new unregistered seller <strong className="text-app-text-primary">Jamuna Electronics BD</strong> posts. Creates a pending seller entity AND a pending product block.</p>
                   <button
                     onClick={() => simulateOnboardingWorkflow('Jamuna Electronics BD', 'Electronics & Appliances', 'High energy efficient split 1.5Ton AC', '৳ 54,000', false)}
                     className="w-full py-2 bg-[#F4631E] hover:bg-[#F4631E]/90 text-white font-bold text-[11px] rounded-lg transition-all cursor-pointer"
@@ -1482,7 +1482,7 @@ export default function SellersPage() {
             <div className="bg-app-card border border-app-border rounded-xl p-5 space-y-4">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2">Active Catalog & Moderation Desk</span>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-white">
+                <table className="w-full text-left text-xs text-app-text-primary">
                   <thead>
                     <tr className="border-b border-app-border/60 text-slate-500 font-bold">
                       <th className="py-2.5">ID</th>
@@ -1498,14 +1498,14 @@ export default function SellersPage() {
                   <tbody className="divide-y divide-white/[0.03]">
                     {products.map(p => (
                       <tr key={p.id} className="hover:bg-white/[0.01]">
-                        <td className="py-3 font-mono text-[10px] text-slate-400">{p.id}</td>
+                        <td className="py-3 font-mono text-[10px] text-app-text-secondary">{p.id}</td>
                         <td className="py-3 font-bold">{p.name}</td>
-                        <td className="py-3 text-[11px] text-slate-300">{p.category}</td>
+                        <td className="py-3 text-[11px] text-app-text-secondary">{p.category}</td>
                         <td className="py-3 font-extrabold text-[#F4631E]">{p.seller}</td>
                         <td className="py-3 font-mono font-bold">{p.price}</td>
                         <td className="py-3 font-mono text-[10px] text-emerald-400">99.2% green</td>
                         <td className="py-3">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase${
                             p.status === 'Live' ? 'bg-green-500/10 border border-green-500/20 text-green-400' :
                             p.status === 'Pending' ? 'bg-orange-500/10 border border-orange-500/20 text-orange-400 animate-pulse' :
                             'bg-red-500/10 border border-red-500/20 text-red-500'
@@ -1521,7 +1521,7 @@ export default function SellersPage() {
                                   setProducts(prev => prev.map(item => item.id === p.id ? { ...item, status: 'Live' } : item));
                                   showToast(`✓ Product "${p.name}" approved. Live instantly.`);
                                 }}
-                                className="px-2 py-1 bg-green-500 text-white font-bold text-[10px] rounded hover:scale-102 cursor-pointer"
+                                className="px-2 py-1 bg-green-500 text-app-text-primary font-bold text-[10px] rounded hover:scale-102 cursor-pointer"
                               >
                                 Approve
                               </button>
@@ -1531,7 +1531,7 @@ export default function SellersPage() {
                                   setProducts(products.filter(item => item.id !== p.id));
                                   showToast(`✓ Deleted product "${p.name}" from active list.`);
                               }}
-                              className="px-2 py-1 bg-white/5 border border-white/5 hover:border-red-500/20 hover:text-red-500 text-[10px] rounded text-slate-400 transition-all cursor-pointer"
+                              className="px-2 py-1 bg-white/5 border border-app-border hover:border-red-500/20 hover:text-red-500 text-[10px] rounded text-app-text-secondary transition-all cursor-pointer"
                             >
                               Delete
                             </button>
@@ -1580,7 +1580,7 @@ export default function SellersPage() {
             <div className="bg-app-card border border-app-border rounded-xl p-5">
               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block border-b border-app-border pb-2 mb-3">Coupon Pipeline Directory</span>
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs text-white">
+                <table className="w-full text-left text-xs text-app-text-primary">
                   <thead>
                     <tr className="border-b border-app-border text-slate-500 font-bold">
                       <th className="py-2.5">Deal Details</th>
@@ -1598,16 +1598,16 @@ export default function SellersPage() {
                       <tr key={dl.id} className="hover:bg-white/[0.01]">
                         <td className="py-3 font-bold">{dl.name}</td>
                         <td className="py-3 font-semibold text-[#F4631E]">{dl.seller}</td>
-                        <td className="py-3 text-[11px] text-slate-300">{dl.category}</td>
+                        <td className="py-3 text-[11px] text-app-text-secondary">{dl.category}</td>
                         <td className="py-3">
                           <span className="bg-red-500/20 text-red-500 border border-red-500/20 font-black px-1.5 py-0.5 rounded text-[10px] font-mono">
                             {dl.discount}
                           </span>
                         </td>
                         <td className="py-3 font-mono text-[11px] text-orange-400">{dl.expiry}</td>
-                        <td className="py-3 text-center font-mono text-slate-300">{dl.clicks || 0}</td>
+                        <td className="py-3 text-center font-mono text-app-text-secondary">{dl.clicks || 0}</td>
                         <td className="py-3">
-                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${
+                          <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase${
                             dl.status === 'Live' ? 'bg-emerald-500/10 border border-emerald-500/25 text-emerald-400' :
                             'bg-yellow-500/10 border border-yellow-500/25 text-yellow-400 animate-pulse'
                           }`}>
@@ -1622,7 +1622,7 @@ export default function SellersPage() {
                                   setDeals(prev => prev.map(item => item.id === dl.id ? { ...item, status: 'Live' } : item));
                                   showToast(`✓ Flash campaign "${dl.name}" activated.`);
                                 }}
-                                className="px-2 py-1 bg-green-500 text-white font-bold text-[10px] rounded hover:scale-102 cursor-pointer"
+                                className="px-2 py-1 bg-green-500 text-app-text-primary font-bold text-[10px] rounded hover:scale-102 cursor-pointer"
                               >
                                 Activate
                               </button>
@@ -1651,16 +1651,16 @@ export default function SellersPage() {
 
       {/* CREATE BRAND PROFILE MODAL */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-app-card/20 flex items-center justify-center p-4">
           <div className="bg-app-card border border-app-border rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl">
             <div className="bg-white/[0.02] px-6 py-4 border-b border-app-border flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Globe className="w-5 h-5 text-orange-400" />
-                <h3 className="text-md font-bold text-white uppercase tracking-wider">Create Claimable Brand Profile</h3>
+                <h3 className="text-md font-bold text-app-text-primary uppercase tracking-wider">Create Claimable Brand Profile</h3>
               </div>
               <button 
                 onClick={() => setIsCreateModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 hover:bg-white/5 rounded-lg cursor-pointer"
+                className="text-app-text-secondary hover:text-white p-1 hover:bg-white/5 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1669,23 +1669,23 @@ export default function SellersPage() {
             <form onSubmit={handleCreateProfileSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5 col-span-2">
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Brand Name (Display Title)</label>
+                  <label className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider">Brand Name (Display Title)</label>
                   <input
                     type="text"
                     required
                     placeholder="e.g. Apex, Walton Electronics, Aarong Fabrics"
                     value={profileForm.name}
                     onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                    className="w-full bg-slate-950 border border-app-border rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Industry</label>
+                  <label className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider">Industry</label>
                   <select
                     value={profileForm.industry}
                     onChange={(e) => setProfileForm({ ...profileForm, industry: e.target.value })}
-                    className="w-full bg-slate-950 border border-app-border rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   >
                     <option value="Electronics">Electronics & Appliances</option>
                     <option value="Fashion & Apparel">Fashion & Apparel</option>
@@ -1696,47 +1696,47 @@ export default function SellersPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Category Area Tags</label>
+                  <label className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider">Category Area Tags</label>
                   <input
                     type="text"
                     placeholder="e.g. Footwear & Apparel, Electronics, Organics"
                     value={profileForm.category}
                     onChange={(e) => setProfileForm({ ...profileForm, category: e.target.value })}
-                    className="w-full bg-slate-950 border border-app-border rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
                 <div className="space-y-1.5 col-span-2">
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Brand Overview Biography</label>
+                  <label className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider">Brand Overview Biography</label>
                   <textarea
                     required
                     rows={3}
                     placeholder="Detailed bio illustrating brand values, production heritage and market authenticity..."
                     value={profileForm.description}
                     onChange={(e) => setProfileForm({ ...profileForm, description: e.target.value })}
-                    className="w-full bg-slate-950 border border-app-border rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Official Web URL</label>
+                  <label className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider">Official Web URL</label>
                   <input
                     type="url"
                     placeholder="https://brandname.com"
                     value={profileForm.websiteUrl}
                     onChange={(e) => setProfileForm({ ...profileForm, websiteUrl: e.target.value })}
-                    className="w-full bg-slate-950 border border-app-border rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Country of Origin</label>
+                  <label className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider">Country of Origin</label>
                   <input
                     type="text"
                     placeholder="Bangladesh"
                     value={profileForm.country}
                     onChange={(e) => setProfileForm({ ...profileForm, country: e.target.value })}
-                    className="w-full bg-slate-950 border border-app-border rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
@@ -1748,23 +1748,23 @@ export default function SellersPage() {
                   
                   <div className="grid grid-cols-2 gap-3.5">
                     <div className="space-y-1">
-                      <label className="text-[9px] text-slate-400 uppercase font-black">Meta Title SEO tag</label>
+                      <label className="text-[9px] text-app-text-secondary uppercase font-black">Meta Title SEO tag</label>
                       <input
                         type="text"
                         placeholder="Apex BD | Exclusive leather crafts"
                         value={profileForm.seoTitle}
                         onChange={(e) => setProfileForm({ ...profileForm, seoTitle: e.target.value })}
-                        className="w-full bg-slate-900 border border-white/5 rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-yellow-500"
+                        className="w-full bg-app-card border border-app-border rounded-lg p-2 text-[11px] text-app-text-primary focus:outline-none focus:border-yellow-500"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] text-slate-400 uppercase font-black">Meta Description SEO tag</label>
+                      <label className="text-[9px] text-app-text-secondary uppercase font-black">Meta Description SEO tag</label>
                       <input
                         type="text"
                         placeholder="Comprehensive list of premium items..."
                         value={profileForm.seoDescription}
                         onChange={(e) => setProfileForm({ ...profileForm, seoDescription: e.target.value })}
-                        className="w-full bg-slate-900 border border-white/5 rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-yellow-500"
+                        className="w-full bg-app-card border border-app-border rounded-lg p-2 text-[11px] text-app-text-primary focus:outline-none focus:border-yellow-500"
                       />
                     </div>
                   </div>
@@ -1775,7 +1775,7 @@ export default function SellersPage() {
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 bg-white/5 text-slate-300 rounded-lg text-xs font-bold uppercase hover:bg-white/10"
+                  className="px-4 py-2 bg-white/5 text-app-text-secondary rounded-lg text-xs font-bold uppercase hover:bg-white/10"
                 >
                   Cancel
                 </button>
@@ -1793,16 +1793,16 @@ export default function SellersPage() {
 
       {/* EDIT BRAND PROFILE MODAL */}
       {isEditModalOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/60 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-app-card/20 flex items-center justify-center p-4">
           <div className="bg-app-card border border-app-border rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl">
             <div className="bg-white/[0.02] px-6 py-4 border-b border-app-border flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Globe className="w-5 h-5 text-orange-400" />
-                <h3 className="text-md font-bold text-white uppercase tracking-wider">Modify Profile Details & SEO Metadata</h3>
+                <h3 className="text-md font-bold text-app-text-primary uppercase tracking-wider">Modify Profile Details & SEO Metadata</h3>
               </div>
               <button 
                 onClick={() => setIsEditModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 hover:bg-white/5 rounded-lg cursor-pointer"
+                className="text-app-text-secondary hover:text-white p-1 hover:bg-white/5 rounded-lg cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -1811,66 +1811,66 @@ export default function SellersPage() {
             <form onSubmit={handleEditProfileSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1.5 col-span-2">
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Brand Name</label>
+                  <label className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider">Brand Name</label>
                   <input
                     type="text"
                     required
                     value={profileForm.name}
                     onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                    className="w-full bg-slate-950 border border-app-border rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Industry Sector</label>
+                  <label className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider">Industry Sector</label>
                   <input
                     type="text"
                     required
                     value={profileForm.industry}
                     onChange={(e) => setProfileForm({ ...profileForm, industry: e.target.value })}
-                    className="w-full bg-slate-950 border border-app-border rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Market Sub-Category</label>
+                  <label className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider">Market Sub-Category</label>
                   <input
                     type="text"
                     required
                     value={profileForm.category}
                     onChange={(e) => setProfileForm({ ...profileForm, category: e.target.value })}
-                    className="w-full bg-slate-950 border border-app-border rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
                 <div className="space-y-1.5 col-span-2">
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Biography Summary</label>
+                  <label className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider">Biography Summary</label>
                   <textarea
                     required
                     rows={3}
                     value={profileForm.description}
                     onChange={(e) => setProfileForm({ ...profileForm, description: e.target.value })}
-                    className="w-full bg-slate-950 border border-app-border rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Corporate Website</label>
+                  <label className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider">Corporate Website</label>
                   <input
                     type="url"
                     value={profileForm.websiteUrl}
                     onChange={(e) => setProfileForm({ ...profileForm, websiteUrl: e.target.value })}
-                    className="w-full bg-slate-950 border border-app-border rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Country</label>
+                  <label className="text-[11px] text-app-text-secondary font-bold uppercase tracking-wider">Country</label>
                   <input
                     type="text"
                     value={profileForm.country}
                     onChange={(e) => setProfileForm({ ...profileForm, country: e.target.value })}
-                    className="w-full bg-slate-950 border border-app-border rounded-lg p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                    className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   />
                 </div>
 
@@ -1880,41 +1880,41 @@ export default function SellersPage() {
                   
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[9px] text-slate-400 uppercase font-bold">SEO Page Title Tag</label>
+                      <label className="text-[9px] text-app-text-secondary uppercase font-bold">SEO Page Title Tag</label>
                       <input
                         type="text"
                         value={profileForm.seoTitle}
                         onChange={(e) => setProfileForm({ ...profileForm, seoTitle: e.target.value })}
-                        className="w-full bg-slate-900 border border-white/5 rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-orange-500"
+                        className="w-full bg-app-card border border-app-border rounded-lg p-2 text-[11px] text-app-text-primary focus:outline-none focus:border-orange-500"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[9px] text-slate-400 uppercase font-bold">SEO Keywords (Comma Separated)</label>
+                      <label className="text-[9px] text-app-text-secondary uppercase font-bold">SEO Keywords (Comma Separated)</label>
                       <input
                         type="text"
                         value={profileForm.seoKeywords}
                         onChange={(e) => setProfileForm({ ...profileForm, seoKeywords: e.target.value })}
-                        className="w-full bg-slate-900 border border-white/5 rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-orange-500"
+                        className="w-full bg-app-card border border-app-border rounded-lg p-2 text-[11px] text-app-text-primary focus:outline-none focus:border-orange-500"
                       />
                     </div>
                     <div className="space-y-1 col-span-2">
-                      <label className="text-[9px] text-slate-400 uppercase font-bold">Canonical Search Indexing URL</label>
+                      <label className="text-[9px] text-app-text-secondary uppercase font-bold">Canonical Search Indexing URL</label>
                       <input
                         type="url"
                         value={profileForm.canonicalUrl}
                         onChange={(e) => setProfileForm({ ...profileForm, canonicalUrl: e.target.value })}
-                        className="w-full bg-slate-900 border border-white/5 rounded-lg p-2 text-[11px] text-white focus:outline-none focus:border-orange-500"
+                        className="w-full bg-app-card border border-app-border rounded-lg p-2 text-[11px] text-app-text-primary focus:outline-none focus:border-orange-500"
                       />
                     </div>
                   </div>
 
                   <div className="flex gap-4 pt-1">
-                    <label className="flex items-center gap-2 text-xs text-slate-300 font-bold cursor-pointer">
+                    <label className="flex items-center gap-2 text-xs text-app-text-secondary font-bold cursor-pointer">
                       <input
                         type="checkbox"
                         checked={profileForm.indexingToggle}
                         onChange={(e) => setProfileForm({ ...profileForm, indexingToggle: e.target.checked })}
-                        className="rounded border-white/10 bg-slate-900 text-orange-500 focus:ring-0"
+                        className="rounded border-app-border bg-app-card text-orange-500 focus:ring-0"
                       />
                       Enable Search Engine Indexing (Googlebot)
                     </label>
@@ -1926,7 +1926,7 @@ export default function SellersPage() {
                 <button
                   type="button"
                   onClick={() => setIsEditModalOpen(false)}
-                  className="px-4 py-2 bg-white/5 text-slate-300 rounded-lg text-xs font-bold uppercase hover:bg-white/10"
+                  className="px-4 py-2 bg-white/5 text-app-text-secondary rounded-lg text-xs font-bold uppercase hover:bg-white/10"
                 >
                   Cancel
                 </button>
@@ -1944,55 +1944,55 @@ export default function SellersPage() {
 
       {/* CLAIM ACTION MODAL */}
       {selectedClaimId && claimActionType && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50 bg-app-card/20 flex items-center justify-center p-4">
           <div className="bg-app-card border border-app-border rounded-xl w-full max-w-md overflow-hidden">
             <div className="px-5 py-4 border-b border-app-border bg-white/[0.02] flex justify-between items-center">
-              <span className="text-xs font-black uppercase text-white tracking-widest">
+              <span className="text-xs font-black uppercase text-app-text-primary tracking-widest">
                 Confirm Claim Review Action: {claimActionType}
               </span>
-              <button onClick={() => setSelectedClaimId(null)} className="text-slate-400 hover:text-white">
+              <button onClick={() => setSelectedClaimId(null)} className="text-app-text-secondary hover:text-white">
                 <X className="w-4 h-4" />
               </button>
             </div>
             <div className="p-5 space-y-4">
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-app-text-secondary">
                 You are executing an administrative oversight review on ownership claim <strong>{selectedClaimId}</strong> with status <strong>{claimActionType}</strong>.
               </p>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] text-slate-400 uppercase font-black">Audit Determination Reason (Required)</label>
+                <label className="text-[10px] text-app-text-secondary uppercase font-black">Audit Determination Reason (Required)</label>
                 <input
                   type="text"
                   required
                   placeholder="e.g. Approved. Trademark Registry certificates matched fully..."
                   value={claimReasonInput}
                   onChange={(e) => setClaimReasonInput(e.target.value)}
-                  className="w-full bg-slate-950 border border-white/5 rounded p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                  className="w-full bg-app-bg border border-app-border rounded p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                 />
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[10px] text-slate-400 uppercase font-black">Internal Operations Notes (Optional)</label>
+                <label className="text-[10px] text-app-text-secondary uppercase font-black">Internal Operations Notes (Optional)</label>
                 <textarea
                   rows={2}
                   placeholder="Additional support logs or security verification tokens..."
                   value={claimNotesInput}
                   onChange={(e) => setClaimNotesInput(e.target.value)}
-                  className="w-full bg-slate-950 border border-white/5 rounded p-2.5 text-xs text-white focus:outline-none focus:border-orange-500"
+                  className="w-full bg-app-bg border border-app-border rounded p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                 />
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-app-border">
                 <button
                   onClick={() => setSelectedClaimId(null)}
-                  className="px-3.5 py-1.5 bg-white/5 rounded text-xs text-slate-300 hover:bg-white/10"
+                  className="px-3.5 py-1.5 bg-white/5 rounded text-xs text-app-text-secondary hover:bg-white/10"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={executeClaimReview}
                   disabled={!claimReasonInput.trim()}
-                  className={`px-4 py-1.5 rounded text-xs font-black uppercase text-white ${
+                  className={`px-4 py-1.5 rounded text-xs font-black uppercase text-app-text-primary${
                     !claimReasonInput.trim() ? 'bg-slate-700 text-slate-400 cursor-not-allowed' :
                     claimActionType === 'Approved' ? 'bg-green-500 hover:bg-green-600' :
                     claimActionType === 'Rejected' ? 'bg-red-500 hover:bg-red-600' :
