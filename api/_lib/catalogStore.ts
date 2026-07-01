@@ -4,7 +4,7 @@ import type {
   CatalogDeal,
   CatalogProduct,
   HomepageConfig,
-} from '../src/types/catalog';
+} from './catalogTypes';
 import {
   defaultBrands,
   defaultCategories,
@@ -17,60 +17,22 @@ import { hasFirebaseAdminCredentials } from './firebaseAdmin';
 
 export { defaultHomepage } from './catalogDefaults';
 
-type Firestore = import('firebase/firestore').Firestore;
-type FirestoreModule = typeof import('firebase/firestore');
-
-let firestoreModule: FirestoreModule | null = null;
-
-async function getFirestoreModule(): Promise<FirestoreModule> {
-  if (!firestoreModule) {
-    firestoreModule = await import('firebase/firestore');
-  }
-  return firestoreModule;
-}
-
 const PRODUCTS_COLLECTION = 'catalog_products';
 const CATEGORIES_COLLECTION = 'catalog_categories';
 const BRANDS_COLLECTION = 'catalog_brands';
 const DEALS_COLLECTION = 'catalog_deals';
-const HOMEPAGE_DOC = ['settings', 'catalog_homepage'] as const;
 
 const useAdminFirestore =
   process.env.CATALOG_USE_FIRESTORE === 'true' && hasFirebaseAdminCredentials();
 
-let adminStorePromise: Promise<typeof import('./catalogFirestoreAdmin').firestoreAdminStore> | null = null;
+let adminStorePromise: Promise<typeof import('./catalogFirestoreAdmin').firestoreAdminStore> | null =
+  null;
 
 async function getAdminStore() {
   if (!adminStorePromise) {
     adminStorePromise = import('./catalogFirestoreAdmin').then((mod) => mod.firestoreAdminStore);
   }
   return adminStorePromise;
-}
-
-let memoryMode = process.env.CATALOG_USE_FIRESTORE !== 'true' && !useAdminFirestore;
-let firestoreDb: Firestore | null = null;
-let firestoreLoadAttempted = false;
-
-const enableMemoryMode = (reason: unknown) => {
-  if (!memoryMode && !useAdminFirestore) {
-    memoryMode = true;
-    console.warn('[Catalog Store] Falling back to in-memory persistence.', reason);
-  }
-};
-
-async function resolveDb(): Promise<Firestore | null> {
-  if (memoryMode || useAdminFirestore) return null;
-  if (firestoreDb) return firestoreDb;
-  if (firestoreLoadAttempted) return null;
-  firestoreLoadAttempted = true;
-  try {
-    const firebaseModule = await import('../src/lib/firebase');
-    firestoreDb = firebaseModule.db;
-    return firestoreDb;
-  } catch (error) {
-    enableMemoryMode(error);
-    return null;
-  }
 }
 
 async function listCollection<T>(collectionName: string): Promise<T[]> {
@@ -89,17 +51,7 @@ async function listCollection<T>(collectionName: string): Promise<T[]> {
         return [];
     }
   }
-  if (memoryMode) return listFromMemory<T>(collectionName);
-  try {
-    const db = await resolveDb();
-    if (!db) return listFromMemory<T>(collectionName);
-    const { collection, getDocs } = await getFirestoreModule();
-    const snapshot = await getDocs(collection(db, collectionName));
-    return snapshot.docs.map((item) => item.data() as T);
-  } catch (error) {
-    enableMemoryMode(error);
-    return listFromMemory<T>(collectionName);
-  }
+  return listFromMemory<T>(collectionName);
 }
 
 function listFromMemory<T>(collectionName: string): Promise<T[]> {
@@ -178,17 +130,7 @@ async function getById<T>(collectionName: string, id: string): Promise<T | null>
         return null;
     }
   }
-  if (memoryMode) return getFromMemory<T>(collectionName, id);
-  try {
-    const db = await resolveDb();
-    if (!db) return getFromMemory<T>(collectionName, id);
-    const { doc, getDoc } = await getFirestoreModule();
-    const snapshot = await getDoc(doc(db, collectionName, id));
-    return snapshot.exists() ? (snapshot.data() as T) : null;
-  } catch (error) {
-    enableMemoryMode(error);
-    return getFromMemory<T>(collectionName, id);
-  }
+  return getFromMemory<T>(collectionName, id);
 }
 
 async function upsert<T extends { id: string }>(collectionName: string, data: T): Promise<T> {
@@ -207,21 +149,7 @@ async function upsert<T extends { id: string }>(collectionName: string, data: T)
         return data;
     }
   }
-
-  await upsertToMemory(collectionName, data);
-
-  if (!memoryMode) {
-    try {
-      const db = await resolveDb();
-      if (db) {
-        const { doc, setDoc } = await getFirestoreModule();
-        await setDoc(doc(db, collectionName, data.id), data, { merge: true });
-      }
-    } catch (error) {
-      enableMemoryMode(error);
-    }
-  }
-  return data;
+  return upsertToMemory(collectionName, data);
 }
 
 async function remove(collectionName: string, id: string): Promise<void> {
@@ -240,20 +168,7 @@ async function remove(collectionName: string, id: string): Promise<void> {
         return;
     }
   }
-
-  await removeFromMemory(collectionName, id);
-
-  if (!memoryMode) {
-    try {
-      const db = await resolveDb();
-      if (db) {
-        const { doc, deleteDoc } = await getFirestoreModule();
-        await deleteDoc(doc(db, collectionName, id));
-      }
-    } catch (error) {
-      enableMemoryMode(error);
-    }
-  }
+  return removeFromMemory(collectionName, id);
 }
 
 export const catalogStore = {
@@ -283,18 +198,7 @@ export const catalogStore = {
       const homepage = await admin.getHomepage();
       return homepage ?? memoryStore.getHomepage();
     }
-    if (memoryMode) return memoryStore.getHomepage();
-    try {
-      const db = await resolveDb();
-      if (!db) return memoryStore.getHomepage();
-      const { doc, getDoc } = await getFirestoreModule();
-      const snapshot = await getDoc(doc(db, ...HOMEPAGE_DOC));
-      if (!snapshot.exists()) return memoryStore.getHomepage();
-      return snapshot.data() as HomepageConfig;
-    } catch (error) {
-      enableMemoryMode(error);
-      return memoryStore.getHomepage();
-    }
+    return memoryStore.getHomepage();
   },
 
   async upsertHomepage(homepage: HomepageConfig): Promise<HomepageConfig> {
@@ -302,19 +206,7 @@ export const catalogStore = {
       const admin = await getAdminStore();
       return admin.upsertHomepage(homepage);
     }
-    await memoryStore.upsertHomepage(homepage);
-    if (!memoryMode) {
-      try {
-        const db = await resolveDb();
-        if (db) {
-          const { doc, setDoc } = await getFirestoreModule();
-          await setDoc(doc(db, ...HOMEPAGE_DOC), homepage, { merge: true });
-        }
-      } catch (error) {
-        enableMemoryMode(error);
-      }
-    }
-    return homepage;
+    return memoryStore.upsertHomepage(homepage);
   },
 };
 
@@ -324,19 +216,12 @@ export async function ensureCatalogSeedData(): Promise<void> {
       const admin = await getAdminStore();
       const hasProducts = await admin.hasAnyProducts();
       if (hasProducts) return;
-    } else if (!memoryMode) {
-      const db = await resolveDb();
-      if (db) {
-        const { collection, getDocs, limit, query } = await getFirestoreModule();
-        const existingProducts = await getDocs(query(collection(db, PRODUCTS_COLLECTION), limit(1)));
-        if (!existingProducts.empty) return;
-      }
     } else {
       const existing = await memoryStore.listProducts();
       if (existing.length > 0) return;
     }
   } catch (error) {
-    enableMemoryMode(error);
+    console.warn('[Catalog Seed] Seed check failed, continuing with defaults.', error);
   }
 
   await Promise.all([
@@ -347,12 +232,10 @@ export async function ensureCatalogSeedData(): Promise<void> {
     catalogStore.upsertHomepage(defaultHomepage()),
   ]);
 
-  const mode = useAdminFirestore ? 'firestore-admin' : memoryMode ? 'memory' : 'firestore-client';
+  const mode = useAdminFirestore ? 'firestore-admin' : 'memory';
   console.log(`[Catalog Seed] Seeded default catalog snapshot (${mode}).`);
 }
 
-export function getCatalogPersistenceMode(): 'firestore-admin' | 'firestore-client' | 'memory' {
-  if (useAdminFirestore) return 'firestore-admin';
-  if (memoryMode) return 'memory';
-  return 'firestore-client';
+export function getCatalogPersistenceMode(): 'firestore-admin' | 'memory' {
+  return useAdminFirestore ? 'firestore-admin' : 'memory';
 }
