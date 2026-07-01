@@ -1,10 +1,7 @@
 node_modules/
 build/
 dist/
-api/health.cjs
-api/health.js
 api/health.js.map
-api/health.cjs.map
 coverage/
 .DS_Store
 *.log

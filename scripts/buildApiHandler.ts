@@ -1,8 +1,7 @@
-import esbuild from 'esbuild';
 import { rmSync } from 'node:fs';
+import esbuild from 'esbuild';
 
 rmSync('api/health.ts', { force: true });
-rmSync('api/health.js', { force: true });
 rmSync('api/health.cjs', { force: true });
 
 await esbuild.build({
@@ -10,14 +9,14 @@ await esbuild.build({
   bundle: true,
   platform: 'node',
   target: 'node20',
-  format: 'cjs',
-  outfile: 'api/health.cjs',
+  format: 'esm',
+  outfile: 'api/health.js',
   sourcemap: true,
   external: ['firebase-admin'],
   logLevel: 'info',
-  footer: {
-    js: 'module.exports = handler;\nmodule.exports.default = handler;',
+  banner: {
+    js: "import { createRequire } from 'module'; const require = createRequire(import.meta.url);",
   },
 });
 
-console.log('[build:api] Bundled api/health.cjs for Vercel');
+console.log('[build:api] Bundled api/health.js for Vercel');
