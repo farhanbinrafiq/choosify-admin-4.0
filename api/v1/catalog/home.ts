@@ -1,4 +1,4 @@
-import { catalogStore, defaultHomepage } from '../../../server/catalogStore';
+import { catalogStore, defaultHomepage } from '../../../server/catalogMemoryStore';
 import { normalizeHomepageInput } from '../../../server/catalogContract';
 import { readJsonBody, sendError, withCatalogApi } from '../../../server/vercelCatalogApi';
 

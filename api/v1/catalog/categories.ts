@@ -1,4 +1,4 @@
-import { catalogStore } from '../../../server/catalogStore';
+import { catalogStore } from '../../../server/catalogMemoryStore';
 import { normalizeCategoryInput } from '../../../server/catalogContract';
 import { readJsonBody, sendError, withCatalogApi } from '../../../server/vercelCatalogApi';
 

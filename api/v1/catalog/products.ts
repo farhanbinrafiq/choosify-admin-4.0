@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { catalogStore } from '../../../server/catalogStore';
+import { catalogStore } from '../../../server/catalogMemoryStore';
 import { normalizeProductInput } from '../../../server/catalogContract';
 import type { CatalogProduct } from '../../../src/types/catalog';
 import { readJsonBody, sendError, withCatalogApi } from '../../../server/vercelCatalogApi';

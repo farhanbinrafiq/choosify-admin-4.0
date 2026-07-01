@@ -1,4 +1,4 @@
-import { catalogStore } from '../../../server/catalogStore';
+import { catalogStore } from '../../../server/catalogMemoryStore';
 import { withCatalogApi } from '../../../server/vercelCatalogApi';
 
 export default withCatalogApi(async (_req, res) => {

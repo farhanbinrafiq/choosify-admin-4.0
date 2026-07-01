@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { catalogStore, ensureCatalogSeedData } from '../../../server/catalogStore';
+import { catalogStore, ensureCatalogSeedData } from '../../../server/catalogMemoryStore';
 
 let seeded = false;
 
