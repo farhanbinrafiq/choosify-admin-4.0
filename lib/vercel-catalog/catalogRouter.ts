@@ -16,6 +16,7 @@ import {
 } from './catalogEditorialContract';
 import type { CatalogGuide, CatalogProduct } from './catalogTypes';
 import { readJsonBody, sendError, setCorsHeaders } from './catalogApiUtils';
+import { uploadImageToCloudinary } from './mediaUpload';
 
 let seeded = false;
 
@@ -412,6 +413,27 @@ async function handlePlacements(req: VercelRequest, res: VercelResponse, id: str
   sendError(res, 405, 'Method not allowed');
 }
 
+async function handleMediaUpload(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') {
+    sendError(res, 405, 'Method not allowed');
+    return;
+  }
+
+  const body = await readJsonBody<{ data?: string; mimeType?: string; fileName?: string }>(req);
+  if (!body.data?.trim()) {
+    sendError(res, 400, 'Missing image data');
+    return;
+  }
+
+  const url = await uploadImageToCloudinary({
+    base64Data: body.data,
+    mimeType: body.mimeType || 'image/jpeg',
+    fileName: body.fileName || 'product-image',
+  });
+
+  res.status(200).json({ success: true, url });
+}
+
 async function handleProductDetails(req: VercelRequest, res: VercelResponse, productId: string) {
   if (!productId && req.method === 'GET') {
     res.status(200).json({ data: await catalogStore.listProductDetails() });
@@ -498,6 +520,13 @@ export async function handleVercelCatalogRequest(req: VercelRequest, res: Vercel
         return;
       case 'product-details':
         await handleProductDetails(req, res, id);
+        return;
+      case 'media':
+        if (id === 'upload') {
+          await handleMediaUpload(req, res);
+          return;
+        }
+        sendError(res, 404, `Catalog route not found: ${catalogPath}`);
         return;
       case 'snapshot':
         if (req.method === 'GET') {

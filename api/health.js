@@ -16131,6 +16131,49 @@ var sendError = (res, status, message) => {
   res.status(status).json({ error: message });
 };
 
+// lib/vercel-catalog/mediaUpload.ts
+import crypto from "node:crypto";
+var getCloudName = () => process.env.CLOUDINARY_CLOUD_NAME?.trim() || process.env.VITE_CLOUDINARY_CLOUD_NAME?.trim() || "djdyqr8yd";
+var getUploadPreset = () => process.env.CLOUDINARY_UPLOAD_PRESET?.trim() || process.env.VITE_CLOUDINARY_UPLOAD_PRESET?.trim() || "";
+async function uploadImageToCloudinary(input) {
+  const cloudName = getCloudName();
+  const uploadPreset = getUploadPreset();
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+  const dataUri = `data:${input.mimeType || "image/jpeg"};base64,${input.base64Data}`;
+  const form = new FormData();
+  form.append("file", dataUri);
+  form.append("folder", "choosify/products");
+  if (uploadPreset) {
+    form.append("upload_preset", uploadPreset);
+  } else if (apiKey && apiSecret) {
+    const timestamp = Math.round(Date.now() / 1e3);
+    const folder = "choosify/products";
+    const paramsToSign = `folder=${folder}&timestamp=${timestamp}`;
+    const signature = crypto.createHash("sha1").update(paramsToSign + apiSecret).digest("hex");
+    form.append("api_key", apiKey);
+    form.append("timestamp", String(timestamp));
+    form.append("signature", signature);
+  } else {
+    throw new Error(
+      "Image upload is not configured. Set CLOUDINARY_UPLOAD_PRESET or CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET on the server."
+    );
+  }
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: "POST",
+    body: form
+  });
+  if (!response.ok) {
+    const raw = await response.text();
+    throw new Error(raw || `Cloudinary upload failed with ${response.status}`);
+  }
+  const payload = await response.json();
+  if (!payload.secure_url) {
+    throw new Error("Cloudinary upload succeeded but no secure_url was returned.");
+  }
+  return payload.secure_url;
+}
+
 // lib/vercel-catalog/catalogRouter.ts
 var seeded = false;
 var ensureSeeded = async () => {
@@ -16506,6 +16549,23 @@ async function handlePlacements(req, res, id) {
   }
   sendError(res, 405, "Method not allowed");
 }
+async function handleMediaUpload(req, res) {
+  if (req.method !== "POST") {
+    sendError(res, 405, "Method not allowed");
+    return;
+  }
+  const body = await readJsonBody(req);
+  if (!body.data?.trim()) {
+    sendError(res, 400, "Missing image data");
+    return;
+  }
+  const url2 = await uploadImageToCloudinary({
+    base64Data: body.data,
+    mimeType: body.mimeType || "image/jpeg",
+    fileName: body.fileName || "product-image"
+  });
+  res.status(200).json({ success: true, url: url2 });
+}
 async function handleProductDetails(req, res, productId) {
   if (!productId && req.method === "GET") {
     res.status(200).json({ data: await catalogStore2.listProductDetails() });
@@ -16588,6 +16648,13 @@ async function handleVercelCatalogRequest(req, res) {
         return;
       case "product-details":
         await handleProductDetails(req, res, id);
+        return;
+      case "media":
+        if (id === "upload") {
+          await handleMediaUpload(req, res);
+          return;
+        }
+        sendError(res, 404, `Catalog route not found: ${catalogPath}`);
         return;
       case "snapshot":
         if (req.method === "GET") {
