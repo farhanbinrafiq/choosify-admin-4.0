@@ -616,15 +616,15 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     const trimmedCategory = category.trim();
 
     if (!trimmedName) {
-      triggerToast('Add a product name before publishing.');
+      triggerToast('Add a product name in the Product Name field on this page before publishing.');
       return;
     }
     if (!trimmedBrand) {
-      triggerToast('Add a brand label before publishing.');
+      triggerToast('Add a brand name in the Brand field on this page before publishing.');
       return;
     }
     if (!trimmedCategory) {
-      triggerToast('Add a category before publishing.');
+      triggerToast('Add a category in the Category field on this page before publishing.');
       return;
     }
 
@@ -878,6 +878,10 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
               <button
                 type="button"
                 onClick={() => {
+                  if (isNewProduct) {
+                    handleStartEdit("hero");
+                    return;
+                  }
                   if (editingSection === "hero") {
                     setEditingSection(null);
                   } else {
@@ -889,12 +893,87 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                     ? "bg-orange-500 text-white"
                     : "bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500"
                 }`}
-                title="Configure Hero Details"
+                title={isNewProduct ? "Add optional product details" : "Configure Hero Details"}
               >
                 <Pencil className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
+
+          {isNewProduct && (
+            <div
+              className="mb-6 rounded-2xl border border-orange-200 bg-orange-50/50 p-5"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="mb-4">
+                <span className="block text-[10px] font-black uppercase tracking-wider text-orange-700">
+                  Product details (required)
+                </span>
+                <p className="mt-1 text-[11px] font-medium text-slate-600">
+                  Fill these in before you publish. Photos can be added below.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-1.5 text-left md:col-span-2">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    Product name *
+                  </label>
+                  <input
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-xs font-bold text-[#1A1A2E] outline-none focus:border-orange-500"
+                    placeholder="e.g. Samsung Galaxy S25 Ultra"
+                  />
+                </div>
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    Brand *
+                  </label>
+                  <input
+                    value={brandName}
+                    onChange={(e) => setBrandName(e.target.value)}
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-xs font-bold text-[#1A1A2E] outline-none focus:border-orange-500"
+                    placeholder="e.g. Samsung"
+                  />
+                </div>
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    Category *
+                  </label>
+                  <input
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-xs font-bold text-[#1A1A2E] outline-none focus:border-orange-500"
+                    placeholder="e.g. Mobile"
+                  />
+                </div>
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    Price (৳)
+                  </label>
+                  <input
+                    type="number"
+                    value={actualPrice}
+                    onChange={(e) => setActualPrice(Number(e.target.value))}
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-xs font-bold text-[#1A1A2E] outline-none focus:border-orange-500"
+                    placeholder="139999"
+                  />
+                </div>
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    Sale price (৳)
+                  </label>
+                  <input
+                    type="number"
+                    value={discountedPrice}
+                    onChange={(e) => setDiscountedPrice(Number(e.target.value))}
+                    className="w-full rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 text-xs font-bold text-[#1A1A2E] outline-none focus:border-orange-500"
+                    placeholder="129999"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
 
           {(isNewProduct || editingSection === "hero") && (
             <div
@@ -902,7 +981,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
               onClick={(event) => event.stopPropagation()}
             >
               <span className="mb-3 block text-[10px] font-black uppercase tracking-wider text-slate-500">
-                Product Photos
+                {isNewProduct ? 'Product photos' : 'Product Photos'}
               </span>
               <ProductImageUploader
                 images={images}
@@ -915,7 +994,12 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
           {editingSection === "hero" ? (
             <div className="space-y-6">
-              {/* Inside, we show all Form 1 fields! */}
+              {isNewProduct && (
+                <p className="text-[11px] font-medium text-slate-600">
+                  Optional extras: description, checkout actions, and more photo controls.
+                </p>
+              )}
+              {!isNewProduct && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-1.5 text-left">
                   <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Product Catalog SKU Name</label>
@@ -946,8 +1030,10 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                   </div>
                 </div>
               </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {!isNewProduct && (
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5 text-left">
                     <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Actual Price (৳)</label>
@@ -968,8 +1054,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                     />
                   </div>
                 </div>
+                )}
 
-                <div className="space-y-1.5 text-left">
+                <div className={`space-y-1.5 text-left ${isNewProduct ? 'md:col-span-2' : ''}`}>
                   <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Product bio about</label>
                   <textarea 
                     rows={3}
@@ -981,6 +1068,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
               </div>
 
               {/* Photo List editing nodes inside Hero */}
+              {!isNewProduct && (
               <div className="space-y-2.5 pt-3 border-t border-[#E5E7EB] text-left">
                 <span className="text-[10px] uppercase font-black text-slate-500 tracking-wider block">Photo thumbnails</span>
                 <ProductImageUploader
@@ -992,6 +1080,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                   onError={triggerToast}
                 />
               </div>
+              )}
 
               {/* Action buttons toggles config */}
               <div className="space-y-2.5 pt-4 border-t border-[#E5E7EB] text-xs font-bold text-slate-600 text-left">
@@ -1021,13 +1110,15 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
               {/* Save & Cancel buttons */}
               <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4">
-                <button
-                  type="button"
-                  onClick={() => setEditingSection(null)}
-                  className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
-                >
-                  Cancel
-                </button>
+                {!isNewProduct && (
+                  <button
+                    type="button"
+                    onClick={() => setEditingSection(null)}
+                    className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => handleSaveSection("hero")}
@@ -1035,6 +1126,35 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                 >
                   Save Changes
                 </button>
+              </div>
+            </div>
+          ) : isNewProduct ? (
+            <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-8">
+              <div className="flex flex-col gap-6 md:flex-row md:items-start">
+                <div className="h-40 w-40 shrink-0 overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white">
+                  {images[0] ? (
+                    <img src={images[0]} alt="" className="h-full w-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[11px] font-medium text-slate-400">
+                      No photo yet
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 space-y-2 text-left">
+                  <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Live preview</p>
+                  <h3 className="text-lg font-black text-[#1A1A2E]">
+                    {productName.trim() || 'Product name will appear here'}
+                  </h3>
+                  <p className="text-sm font-bold text-slate-500">
+                    {brandName.trim() || 'Brand'} · {category.trim() || 'Category'}
+                  </p>
+                  <p className="text-base font-black text-orange-600">
+                    ৳ {Number(discountedPrice || actualPrice || 0).toLocaleString()}
+                  </p>
+                  <p className="text-[11px] text-slate-500">
+                    When you are ready, click <strong>Publish Product</strong> in the top bar.
+                  </p>
+                </div>
               </div>
             </div>
           ) : (
