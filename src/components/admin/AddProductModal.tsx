@@ -16,6 +16,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { uploadProductImages } from '../../services/mediaUpload';
 import { useAuth } from '../../contexts/AuthContext';
 
 const productSchema = z.object({
@@ -47,6 +48,7 @@ export default function AddProductModal({ isOpen, onClose, onSuccess }: AddProdu
   const [images, setImages] = useState<string[]>([]);
   const [mediaLinks, setMediaLinks] = useState<string[]>(['']);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
 
   const sellerRelations = sellerBrands.filter(r => r.seller_user_id === profile?.id);
   const sellerBrandsList = allBrands.filter(b => sellerRelations.some(r => r.brand_id === b.id));
@@ -72,11 +74,22 @@ export default function AddProductModal({ isOpen, onClose, onSuccess }: AddProdu
   const handleNext = () => setStep(2);
   const handleBack = () => setStep(1);
 
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    e.stopPropagation();
     const files = e.target.files;
-    if (files) {
-      const newImages = Array.from(files).map((file: any) => URL.createObjectURL(file));
-      setImages(prev => [...prev, ...newImages].slice(0, 8));
+    if (!files?.length) return;
+
+    setIsUploadingImages(true);
+    try {
+      const uploaded = await uploadProductImages(Array.from(files));
+      setImages((prev) => [...prev, ...uploaded].slice(0, 8));
+    } catch (error) {
+      const localUrls = Array.from(files as FileList).map((file) => URL.createObjectURL(file));
+      setImages((prev) => [...prev, ...localUrls].slice(0, 8));
+      console.warn('Image upload failed, using local preview.', error);
+    } finally {
+      setIsUploadingImages(false);
+      e.target.value = '';
     }
   };
 
@@ -304,10 +317,26 @@ export default function AddProductModal({ isOpen, onClose, onSuccess }: AddProdu
                         </div>
                       ))}
                       {images.length < 8 && (
-                        <label className="aspect-square rounded-2xl border-2 border-dashed border-app-border bg-white/[0.02] hover:bg-white/[0.05] hover:border-app-accent/40 transition-all flex flex-col items-center justify-center cursor-pointer group">
-                          <Upload className="w-6 h-6 text-app-text-secondary group-hover:text-app-accent mb-2 transition-colors" />
-                          <span className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">Upload</span>
-                          <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} />
+                        <label
+                          className="aspect-square rounded-2xl border-2 border-dashed border-app-border bg-white/[0.02] hover:bg-white/[0.05] hover:border-app-accent/40 transition-all flex flex-col items-center justify-center cursor-pointer group"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          {isUploadingImages ? (
+                            <Upload className="w-6 h-6 text-app-accent mb-2 animate-pulse" />
+                          ) : (
+                            <Upload className="w-6 h-6 text-app-text-secondary group-hover:text-app-accent mb-2 transition-colors" />
+                          )}
+                          <span className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">
+                            {isUploadingImages ? 'Uploading...' : 'Upload'}
+                          </span>
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            className="hidden"
+                            onChange={handleImageUpload}
+                            onClick={(event) => event.stopPropagation()}
+                          />
                         </label>
                       )}
                     </div>

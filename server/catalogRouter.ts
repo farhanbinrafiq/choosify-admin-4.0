@@ -8,6 +8,7 @@ import {
   normalizeProductInput,
 } from './catalogContract';
 import type { CatalogProduct } from '../src/types/catalog';
+import { uploadImageToCloudinary } from '../lib/vercel-catalog/mediaUpload';
 
 export const catalogRouter = Router();
 
@@ -401,6 +402,26 @@ catalogRouter.get('/catalog/placements', async (req, res) => {
     res.json({ data: filtered });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list placements' });
+  }
+});
+
+catalogRouter.post('/catalog/media/upload', async (req, res) => {
+  try {
+    const { data, mimeType, fileName } = req.body as { data?: string; mimeType?: string; fileName?: string };
+    if (!data?.trim()) {
+      res.status(400).json({ error: 'Missing image data' });
+      return;
+    }
+
+    const url = await uploadImageToCloudinary({
+      base64Data: data,
+      mimeType: mimeType || 'image/jpeg',
+      fileName: fileName || 'product-image',
+    });
+
+    res.json({ success: true, url });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to upload image' });
   }
 });
 

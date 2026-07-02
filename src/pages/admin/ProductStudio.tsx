@@ -12,6 +12,7 @@ import { useInventory } from "../../contexts/InventoryContext";
 import { catalogApi } from "../../services/catalogApi";
 import { CreatorExperienceSection, CreatorContentItem } from "../../components/CreatorExperienceSection";
 import { SplitLayout } from "../../components/Layout/SplitLayout";
+import { ProductImageUploader } from "../../components/admin/ProductImageUploader";
 
 interface Spec {
   key: string;
@@ -310,7 +311,6 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const setActiveDrawer = setEditingSection;
 
   // Temporary Editing states for dynamic additions inside right side panel drawer
-  const [tempImagesInput, setTempImagesInput] = useState("");
   const [tempColorsInput, setTempColorsInput] = useState("Titanium Gray, Cosmic Gold, Pearl White");
 
   // Temporary state holders inside Drawer
@@ -575,7 +575,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   // Individual Independent Section Saving Workflows
   const handleSaveSection = (section: string) => {
     if (section === "hero") {
-      // Hero states save triggers automatically because fields bind directly to core states
+      serializeState();
+      triggerToast(`✓ Product details saved. You can keep adding photos.`);
+      return;
     } else if (section === "specs") {
       setSpecs([...tempSpecs]);
     } else if (section === "stores") {
@@ -816,6 +818,23 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
             </div>
           </div>
 
+          {(isNewProduct || editingSection === "hero") && (
+            <div
+              className="mb-6 border-b border-slate-100 pb-6"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <span className="mb-3 block text-[10px] font-black uppercase tracking-wider text-slate-500">
+                Product Photos
+              </span>
+              <ProductImageUploader
+                images={images}
+                onImagesChange={setImages}
+                onSuccess={triggerToast}
+                onError={triggerToast}
+              />
+            </div>
+          )}
+
           {editingSection === "hero" ? (
             <div className="space-y-6">
               {/* Inside, we show all Form 1 fields! */}
@@ -885,50 +904,15 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
               {/* Photo List editing nodes inside Hero */}
               <div className="space-y-2.5 pt-3 border-t border-[#E5E7EB] text-left">
-                <span className="text-[10px] uppercase font-black text-slate-500 tracking-wider block">Modify Photos Grid</span>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {images.map((img, i) => (
-                    <div key={i} className="flex gap-2">
-                      <input 
-                        value={img}
-                        onChange={(e) => {
-                          const copy = [...images];
-                          copy[i] = e.target.value;
-                          setImages(copy);
-                        }}
-                        className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs truncate text-[#1A1A2E] outline-none focus:border-orange-500 font-mono"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setImages(images.filter((_, idx) => idx !== i))}
-                        className="p-2.5 bg-red-100/40 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="flex gap-2 max-w-md">
-                  <input 
-                    value={tempImagesInput}
-                    onChange={(e) => setTempImagesInput(e.target.value)}
-                    placeholder="Add photo HTTPS url listings row..."
-                    className="flex-1 bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#1A1A2E] outline-none focus:border-orange-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (tempImagesInput.trim()) {
-                        setImages([...images, tempImagesInput.trim()]);
-                        setTempImagesInput("");
-                      }
-                    }}
-                    className="px-4 bg-[#1A1A2E] text-white hover:bg-slate-800 rounded-xl text-xs font-black uppercase"
-                  >
-                    Add
-                  </button>
-                </div>
+                <span className="text-[10px] uppercase font-black text-slate-500 tracking-wider block">Photo thumbnails</span>
+                <ProductImageUploader
+                  images={images}
+                  onImagesChange={setImages}
+                  compact
+                  showUrlInput={false}
+                  onSuccess={triggerToast}
+                  onError={triggerToast}
+                />
               </div>
 
               {/* Action buttons toggles config */}
@@ -998,23 +982,14 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                     referrerPolicy="no-referrer"
                   />
                 ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center p-8 bg-slate-50/50 text-center gap-4">
-                    <div className="w-16 h-16 rounded-2xl bg-orange-500/10 text-orange-500 flex items-center justify-center border border-orange-500/15">
-                      <Plus className="w-8 h-8 animate-pulse" />
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-50/80 p-8 text-center">
+                    <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-500">
+                      <Plus className="h-7 w-7" />
                     </div>
-                    <div className="space-y-1.5 max-w-sm">
-                      <h4 className="text-sm font-black text-[#1A1A2E] tracking-tight uppercase">Drag & Drop Photos</h4>
-                      <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
-                        Drag your product photos here, or click to browse. Supports high-resolution JPG, PNG, and MP4 videos.
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleStartEdit("hero")}
-                      className="px-4 py-2 bg-[#FF5B00] text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all hover:bg-orange-600 shadow-md shadow-[#FF5B00]/10 cursor-pointer active:scale-95"
-                    >
-                      Upload Images / Videos
-                    </button>
+                    <p className="text-xs font-black uppercase tracking-wider text-[#1A1A2E]">No photos yet</p>
+                    <p className="mt-1 max-w-xs text-[11px] font-medium text-slate-500">
+                      Use the Product Photos uploader above to choose images from your computer.
+                    </p>
                   </div>
                 )}
 
@@ -3483,47 +3458,12 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                       {/* Photo List editing nodes inside Hero */}
                       <div className="space-y-2.5 pt-3 border-t border-[#E5E7EB]">
                         <span className="text-[10px] uppercase font-black text-slate-500 tracking-wider block">Modify Photos Grid</span>
-                        {images.map((img, i) => (
-                          <div key={i} className="flex gap-2">
-                            <input 
-                              value={img}
-                              onChange={(e) => {
-                                const copy = [...images];
-                                copy[i] = e.target.value;
-                                setImages(copy);
-                              }}
-                              className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs truncate text-[#1A1A2E] outline-none focus:border-orange-500 font-mono"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setImages(images.filter((_, idx) => idx !== i))}
-                              className="p-2.5 bg-red-100/40 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ))}
-
-                        <div className="flex gap-2">
-                          <input 
-                            value={tempImagesInput}
-                            onChange={(e) => setTempImagesInput(e.target.value)}
-                            placeholder="Add photo HTTPS url listings row..."
-                            className="flex-1 bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs text-[#1A1A2E] outline-none focus:border-orange-500"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (tempImagesInput.trim()) {
-                                setImages([...images, tempImagesInput.trim()]);
-                                setTempImagesInput("");
-                              }
-                            }}
-                            className="px-4 bg-orange-500 text-white rounded-xl text-xs font-black uppercase"
-                          >
-                            Add
-                          </button>
-                        </div>
+                        <ProductImageUploader
+                          images={images}
+                          onImagesChange={setImages}
+                          onSuccess={triggerToast}
+                          onError={triggerToast}
+                        />
                       </div>
 
                       {/* Action buttons toggles config */}
