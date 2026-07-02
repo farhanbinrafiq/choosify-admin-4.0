@@ -21,19 +21,51 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import AddProductModal from '../../components/admin/AddProductModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
+import { catalogApi } from '../../services/catalogApi';
+import type { CatalogProduct } from '../../types/catalog';
 
-const mockProducts = [
-  { id: '1', name: 'Samsung S25 Ultra', brand: 'Samsung Bangladesh', category: 'Mobile', seller: 'TechZone BD', price: '৳ 139,999', status: 'Pending', views: 842, icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' },
-  { id: '2', name: 'Vision Smart TV 55"', brand: 'Vision', category: 'Electronics', seller: 'Meena Bazar', price: '৳ 68,500', status: 'Live', views: 12840, icon: Tv, color: 'text-indigo-500 bg-indigo-500/10' },
-  { id: '3', name: 'Aarong Jamdani Saree', brand: 'Aarong', category: 'Fashion', seller: 'Aarong Digital', price: '৳ 4,200', status: 'Flagged', views: 3210, icon: Shirt, color: 'text-purple-500 bg-purple-500/10' },
-  { id: '4', name: 'Walton 2-Door Fridge', brand: 'Walton', category: 'Home', seller: 'ElectroBD', price: '৳ 29,990', status: 'Live', views: 8912, icon: Box, color: 'text-green-500 bg-green-500/10' },
-  { id: 'apex-1', name: 'Apex Men Royal Loafer', brand: 'Apex', category: 'Footwear & Apparel', seller: 'Rahim Uddin', price: '৳ 4,500', status: 'Live', views: 2450, icon: Shirt, color: 'text-orange-500 bg-orange-500/10' },
-  { id: 'apex-2', name: 'Apex Leather Formal Dress Shoes', brand: 'Apex', category: 'Footwear & Apparel', seller: 'Rahim Uddin', price: '৳ 6,200', status: 'Live', views: 1820, icon: Shirt, color: 'text-orange-500 bg-orange-500/10' },
-  { id: 'urbanfit-1', name: 'Urban Fit Elite Compression Tee', brand: 'Urban Fit', category: 'Active Wear', seller: 'Rahim Uddin', price: '৳ 1,800', status: 'Live', views: 980, icon: Shirt, color: 'text-emerald-500 bg-emerald-500/10' },
-  { id: 'urbanfit-2', name: 'Urban Fit Comfort Joggers', brand: 'Urban Fit', category: 'Active Wear', seller: 'Rahim Uddin', price: '৳ 2,400', status: 'Live', views: 1205, icon: Shirt, color: 'text-emerald-500 bg-emerald-500/10' },
-  { id: 'techcore-1', name: 'TechCore Wireless Charging Pad', brand: 'TechCore', category: 'Consumer Tech', seller: 'Rahim Uddin', price: '৳ 1,200', status: 'Live', views: 3410, icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' },
-  { id: 'techcore-2', name: 'TechCore Bluetooth Smart Watch V2', brand: 'TechCore', category: 'Consumer Tech', seller: 'Rahim Uddin', price: '৳ 3,800', status: 'Live', views: 5690, icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' },
-];
+type ProductRow = {
+  id: string;
+  name: string;
+  brand: string;
+  category: string;
+  seller: string;
+  price: string;
+  status: string;
+  views: number;
+  icon: typeof Smartphone;
+  color: string;
+};
+
+const categoryIcon = (category: string) => {
+  const normalized = category.toLowerCase();
+  if (normalized.includes('mobile') || normalized.includes('tech')) {
+    return { icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' };
+  }
+  if (normalized.includes('electronic') || normalized.includes('tv')) {
+    return { icon: Tv, color: 'text-indigo-500 bg-indigo-500/10' };
+  }
+  if (normalized.includes('fashion') || normalized.includes('apparel') || normalized.includes('wear')) {
+    return { icon: Shirt, color: 'text-purple-500 bg-purple-500/10' };
+  }
+  return { icon: Box, color: 'text-green-500 bg-green-500/10' };
+};
+
+const mapCatalogProduct = (product: CatalogProduct): ProductRow => {
+  const { icon, color } = categoryIcon(product.categoryName || '');
+  return {
+    id: product.id,
+    name: product.title,
+    brand: product.brandName,
+    category: product.categoryName,
+    seller: 'Platform Admin',
+    price: `৳ ${Number(product.price || 0).toLocaleString()}`,
+    status: product.status === 'live' ? 'Live' : product.status === 'draft' ? 'Pending' : 'Flagged',
+    views: 0,
+    icon,
+    color,
+  };
+};
 
 export default function ProductsPage() {
   const { profile, activeBrandId, allBrands, sellerBrands } = useAuth();
@@ -41,7 +73,9 @@ export default function ProductsPage() {
   const navigate = useNavigate();
   const isContentStudio = location.pathname.includes("content-studio");
   const [isModalOpen, setIsModalOpen] = useState(location.state?.openAddModal || false);
-  const [products, setProducts] = useState(mockProducts);
+  const [products, setProducts] = useState<ProductRow[]>([]);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
   const [selectedBrandFilter, setSelectedBrandFilter] = useState<string | null>(activeBrandId);
@@ -78,6 +112,35 @@ export default function ProductsPage() {
     document.body.removeChild(link);
     showToast(`Exported ${selectedIds.size} products to CSV`);
   };
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    const loadProducts = async () => {
+      setIsLoadingProducts(true);
+      setCatalogError(null);
+      try {
+        const catalogProducts = await catalogApi.listProducts();
+        if (!cancelled) {
+          setProducts(catalogProducts.map(mapCatalogProduct));
+        }
+      } catch (err) {
+        if (!cancelled) {
+          const message = err instanceof Error ? err.message : 'Failed to load catalog products.';
+          setCatalogError(message);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoadingProducts(false);
+        }
+      }
+    };
+
+    loadProducts();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   React.useEffect(() => {
     if (isModalOpen) {
@@ -344,6 +407,11 @@ export default function ProductsPage() {
       )}
 
       <div className="bg-app-card rounded-[2rem] border border-app-border overflow-hidden shadow-2xl">
+        {catalogError && (
+          <div className="px-6 py-4 border-b border-app-border text-[12px] text-amber-400 bg-amber-500/10">
+            Could not load catalog products: {catalogError.slice(0, 180)}
+          </div>
+        )}
         <table className="w-full text-left">
           <thead className="bg-white/[0.02] border-b border-app-border">
             <tr>
@@ -371,7 +439,19 @@ export default function ProductsPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-white/5">
-            {displayedProducts.map((p) => {
+            {isLoadingProducts ? (
+              <tr>
+                <td colSpan={6} className="p-10 text-center text-app-text-secondary text-sm">
+                  Loading catalog products...
+                </td>
+              </tr>
+            ) : displayedProducts.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="p-10 text-center text-app-text-secondary text-sm">
+                  No products in catalog yet. Publish one from Product Studio.
+                </td>
+              </tr>
+            ) : displayedProducts.map((p) => {
               const Icon = p.icon;
               return (
                 <tr key={p.id} className="group hover:bg-white/[0.02] transition-colors">
