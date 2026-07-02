@@ -185,6 +185,16 @@ function getTemplateForCategory(category: string): OverviewSection[] {
   return template.map(s => ({ ...s, id: `s_${Date.now()}_${Math.random().toString(36).slice(2,7)}` }));
 }
 
+const slugifyCatalog = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'product';
+
+const createCatalogProductId = (title: string) =>
+  `prod-${slugifyCatalog(title).slice(0, 40)}-${Date.now()}`;
+
 interface ProductStudioProps {
   mode?: "create" | "edit";
   productId?: string;
@@ -601,67 +611,68 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   };
 
   const handlePublishRelease = async () => {
-    const liveData = {
-      brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
-      storeComparisonList, overviewBlocks, overviewSectionLabel, bestForTags, physicalStores, creatorContent,
-      actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder,
-      enableSpecs, enableStoreComparison, enableInfluencerReviews, enableOverviewSection, enableBestForTags, enablePhysicalStores,
-      enableBoxContents, enableOptions, enableActiveVariantSpecs, boxContents, optionGroups, productVariants,
-      enableSizeChart, sizeChartType, sizeChartImage, sizeChartHtml, sizeChartColumns, sizeChartRows
-    };
-    
-    localStorage.setItem(publishKey, JSON.stringify(liveData));
-    setPublishStatus("live");
+    const trimmedName = productName.trim();
+    const trimmedBrand = brandName.trim();
+    const trimmedCategory = category.trim();
 
-    // Sync stock changes to Inventory audit log
-    try {
-      if (productVariants && productVariants.length > 0) {
-        productVariants.forEach((v: any, index: number) => {
-          updateStock(activeId || id || "1", v.stockLimit || 0, 'manual_adjustment', `Variant index ${index} (${v.color || ''} ${v.size || ''}) updated via Product Studio`, v.id);
-        });
-      } else {
-        updateStock(activeId || id || "1", 100, 'manual_adjustment', `Standard product stock updated via Product Studio`);
-      }
-    } catch (invErr) {
-      console.warn("Failed to sync stock to inventory context:", invErr);
+    if (!trimmedName) {
+      triggerToast('Add a product name before publishing.');
+      return;
+    }
+    if (!trimmedBrand) {
+      triggerToast('Add a brand label before publishing.');
+      return;
+    }
+    if (!trimmedCategory) {
+      triggerToast('Add a category before publishing.');
+      return;
     }
 
+    const publishableImages = images.filter((img) => /^https?:\/\//i.test(img));
+    if (images.length > 0 && publishableImages.length === 0) {
+      triggerToast('Photos are still local preview only. Configure Cloudinary, then re-upload before publishing.');
+      return;
+    }
+
+    const catalogProductId = isNewProduct
+      ? createCatalogProductId(trimmedName)
+      : String(id || activeId).startsWith('prod-')
+        ? String(id || activeId)
+        : `prod-studio-${id || activeId}`;
+
+    const productPayload = {
+      id: catalogProductId,
+      slug: slugifyCatalog(trimmedName),
+      title: trimmedName,
+      description: about || trimmedName,
+      brandName: trimmedBrand,
+      brandId: `brand-${slugifyCatalog(trimmedBrand)}`,
+      categoryName: trimmedCategory,
+      categoryId: `cat-${slugifyCatalog(trimmedCategory)}`,
+      image: publishableImages[0] || '',
+      gallery: publishableImages,
+      modeType: 'retail' as const,
+      price: Number(discountedPrice || actualPrice || 0),
+      originalPrice: Number(actualPrice || 0),
+      stock: productVariants?.[0]?.stockLimit || 0,
+      status: 'live' as const,
+      tags: bestForTags || [],
+      isDeal: savingsPercent > 0,
+      discountPercent: savingsPercent,
+      featuredFlag: false,
+      isNewArrival: true,
+      isBestseller: false,
+    };
+
     try {
-      const catalogProductId = String(activeId).startsWith('prod-') ? String(activeId) : `prod-studio-${activeId}`;
-      const productPayload = {
-        id: catalogProductId,
-        slug: productName.toLowerCase().replace(/[^a-z0-9\s-]/g, '').replace(/\s+/g, '-'),
-        title: productName,
-        description: about || productName,
-        brandName,
-        brandId: `brand-${brandName.toLowerCase().replace(/\s+/g, '-')}`,
-        categoryName: category,
-        categoryId: `cat-${category.toLowerCase().replace(/\s+/g, '-')}`,
-        image: images?.[0] || '',
-        gallery: images || [],
-        modeType: 'retail' as const,
-        price: Number(discountedPrice || actualPrice || 0),
-        originalPrice: Number(actualPrice || 0),
-        stock: productVariants?.[0]?.stockLimit || 0,
-        status: 'live' as const,
-        tags: bestForTags || [],
-        isDeal: savingsPercent > 0,
-        discountPercent: savingsPercent,
-        featuredFlag: false,
-        isNewArrival: false,
-        isBestseller: false,
-      };
+      const savedProduct = isNewProduct
+        ? await catalogApi.createProduct(productPayload)
+        : await catalogApi.updateProduct(catalogProductId, productPayload);
 
-      if (isNewProduct) {
-        await catalogApi.createProduct(productPayload);
-        triggerToast("🚀 New Product successfully published to catalog!");
-      } else {
-        await catalogApi.updateProduct(catalogProductId, productPayload);
-        triggerToast("✓ Product successfully updated in catalog!");
-      }
+      const savedId = savedProduct.id || catalogProductId;
 
-      await catalogApi.upsertProductDetail(catalogProductId, {
-        productId: catalogProductId,
+      await catalogApi.upsertProductDetail(savedId, {
+        productId: savedId,
         about,
         specs: specs || [],
         pros: [],
@@ -674,8 +685,75 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
         productVariants: productVariants || [],
         creatorContent: creatorContent || [],
       });
+
+      const liveData = {
+        brandName: trimmedBrand,
+        productName: trimmedName,
+        category: trimmedCategory,
+        actualPrice,
+        discountedPrice,
+        images: publishableImages,
+        about,
+        specs,
+        storeComparisonList,
+        overviewBlocks,
+        overviewSectionLabel,
+        bestForTags,
+        physicalStores,
+        creatorContent,
+        actionFindInStore,
+        actionBuyOnline,
+        actionLove,
+        actionWish,
+        actionContactSeller,
+        actionRequestQuote,
+        actionPreOrder,
+        enableSpecs,
+        enableStoreComparison,
+        enableInfluencerReviews,
+        enableOverviewSection,
+        enableBestForTags,
+        enablePhysicalStores,
+        enableBoxContents,
+        enableOptions,
+        enableActiveVariantSpecs,
+        boxContents,
+        optionGroups,
+        productVariants,
+        enableSizeChart,
+        sizeChartType,
+        sizeChartImage,
+        sizeChartHtml,
+        sizeChartColumns,
+        sizeChartRows,
+      };
+
+      localStorage.setItem(`choosify_published_${savedId}`, JSON.stringify(liveData));
+      setPublishStatus('live');
+
+      try {
+        if (productVariants && productVariants.length > 0) {
+          productVariants.forEach((v: any, index: number) => {
+            updateStock(savedId, v.stockLimit || 0, 'manual_adjustment', `Variant index ${index} (${v.color || ''} ${v.size || ''}) updated via Product Studio`, v.id);
+          });
+        } else {
+          updateStock(savedId, 100, 'manual_adjustment', 'Standard product stock updated via Product Studio');
+        }
+      } catch (invErr) {
+        console.warn('Failed to sync stock to inventory context:', invErr);
+      }
+
+      if (isNewProduct) {
+        triggerToast('New product published to catalog. It will appear on the website shortly.');
+        const editBase = isContentStudio ? '/dashboard/content-studio/products' : '/admin/products';
+        navigate(`${editBase}/${savedId}/edit`, { replace: true });
+      } else {
+        triggerToast('Product successfully updated in catalog.');
+      }
     } catch (err) {
-      triggerToast(isNewProduct ? "🚀 Product saved locally (catalog sync failed)." : "✓ Saved locally (catalog sync failed).");
+      const message = err instanceof Error ? err.message : 'Catalog sync failed.';
+      triggerToast(`Publish failed: ${message.slice(0, 180)}`);
+      console.error('[ProductStudio] Publish failed', err);
     }
   };
 
