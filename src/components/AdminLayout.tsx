@@ -90,17 +90,14 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'Category Taxonomy', icon: FolderOpen, path: '/admin/categories' },
     { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
-    { label: 'Order Console', icon: ListOrdered, path: '/admin/orders' },
-    { label: 'Platform Orders', icon: Package, path: '/admin/platform-orders' },
+    { label: 'Orders Hub', icon: ListOrdered, path: '/admin/orders' },
     { label: 'Lead Inbox', icon: Mail, path: '/admin/leads' },
     { label: 'Seller Offer Queue', icon: Send, path: '/admin/seller-offers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
-    { label: 'Orders Overview', icon: ClipboardList, path: '/admin/orders-overview' },
     { label: 'Creators', icon: Award, path: '/admin/creators?viewMode=creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Moderation Center', icon: ShieldCheck, path: '/admin/moderation' },
-    { label: 'Community Submissions', icon: MessageSquarePlus, path: '/admin/community-submissions' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 12 },
     { label: 'Trust Center', icon: ShieldAlert, path: '/admin/trust-center' },
@@ -114,7 +111,6 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Role Management', icon: Lock, path: '/admin/settings?tab=roles' },
     { label: 'Permissions', icon: KeyRound, path: '/admin/settings?tab=permissions' },
     { label: 'Verification Center', icon: BadgeCheck, path: '/admin/brand-verification' },
-    { label: 'Fraud Detection Engine', icon: Bolt, path: '/admin/moderation-v2' },
     { label: 'Subscription Plans', icon: CreditCard, path: '/admin/promotions?tab=plans' },
     { label: 'Monetization Center', icon: CircleDollarSign, path: '/admin/payouts' },
     { label: 'Promo Codes & Vouchers', icon: Ticket, path: '/admin/coupons' },
@@ -136,7 +132,6 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
       path: '/admin/website-cms',
       badge: 'NEW'
     },
-    { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
   ],
   admin: [
     { label: 'Admin Workspace', type: 'label' },
@@ -146,16 +141,13 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'Category Taxonomy', icon: FolderOpen, path: '/admin/categories' },
     { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
-    { label: 'Order Console', icon: ListOrdered, path: '/admin/orders' },
-    { label: 'Platform Orders', icon: Package, path: '/admin/platform-orders' },
+    { label: 'Orders Hub', icon: ListOrdered, path: '/admin/orders' },
     { label: 'Lead Inbox', icon: Mail, path: '/admin/leads' },
     { label: 'Seller Offer Queue', icon: Send, path: '/admin/seller-offers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
-    { label: 'Orders Overview', icon: ClipboardList, path: '/admin/orders-overview' },
     { label: 'Creators', icon: Award, path: '/admin/creators?viewMode=creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
-    { label: 'Community Submissions', icon: MessageSquarePlus, path: '/admin/community-submissions', badge: 'New' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
     { label: 'Trust Center', icon: ShieldAlert, path: '/admin/trust-center' },
@@ -178,7 +170,6 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
       path: '/admin/website-cms',
       badge: 'NEW'
     },
-    { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
   ],
   seller: [
     { label: 'Seller Operations', type: 'label' },
@@ -579,20 +570,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 pt-2 pb-6 custom-scrollbar">
-        {/* Visit Marketplace Link */}
-        <div className="mb-4 mt-2 px-1">
-          <NavLink
-            to="/marketplace"
-            className={`sidebar-marketplace-cta w-full group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-2.5 text-[11px] font-bold rounded-xl border transition-all duration-200 cursor-pointer`}
-            title="Visit Marketplace"
-          >
-            <Globe className="w-4 h-4 shrink-0 text-[#F97316] group-hover:text-white transition-colors" />
-            {!isCollapsed && (
-              <span className="truncate whitespace-nowrap">🌐 Visit Marketplace</span>
-            )}
-          </NavLink>
-        </div>
-
         {!isCollapsed && (
           <div className="mb-3 px-1">
             <div className="relative sidebar-nav-search">

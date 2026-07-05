@@ -405,6 +405,26 @@ const normalizePopularSearch = (payload: unknown, idx: number): SitePopularSearc
   };
 };
 
+const normalizeProductBadge = (raw: Record<string, unknown>, idx: number) => ({
+  id: toString(raw.id, `badge-${idx + 1}`),
+  label: toString(raw.label, ''),
+  color: toString(raw.color, '#F97316'),
+  icon: toString(raw.icon, ''),
+  priority: Math.floor(toNumber(raw.priority, idx + 1)),
+  isActive: toBoolean(raw.isActive, true),
+});
+
+const normalizeWebsiteAssets = (
+  raw: Record<string, unknown> | undefined,
+  existing?: SiteConfig['websiteAssets'],
+): NonNullable<SiteConfig['websiteAssets']> => ({
+  navbarLogo: toString(raw?.navbarLogo, existing?.navbarLogo ?? ''),
+  footerLogo: toString(raw?.footerLogo, existing?.footerLogo ?? ''),
+  favicon: toString(raw?.favicon, existing?.favicon ?? ''),
+  pwaIcon: toString(raw?.pwaIcon, existing?.pwaIcon ?? ''),
+  defaultProductImage: toString(raw?.defaultProductImage, existing?.defaultProductImage ?? ''),
+});
+
 export const normalizeSiteInput = (payload: unknown, existing?: SiteConfig): SiteConfig => {
   const raw = (payload ?? {}) as Record<string, unknown>;
   const footerRaw = (raw.footer ?? existing?.footer ?? {}) as Record<string, unknown>;
@@ -428,6 +448,13 @@ export const normalizeSiteInput = (payload: unknown, existing?: SiteConfig): Sit
     seoEntries: (Array.isArray(raw.seoEntries) ? raw.seoEntries : existing?.seoEntries ?? []).map(normalizeSeoEntryInput),
     announcementBarText: toString(raw.announcementBarText, existing?.announcementBarText ?? ''),
     announcementBarEnabled: toBoolean(raw.announcementBarEnabled, existing?.announcementBarEnabled ?? false),
+    productBadges: (Array.isArray(raw.productBadges) ? raw.productBadges : existing?.productBadges ?? []).map(
+      (item, idx) => normalizeProductBadge((item ?? {}) as Record<string, unknown>, idx),
+    ),
+    websiteAssets: normalizeWebsiteAssets(
+      (raw.websiteAssets ?? existing?.websiteAssets) as Record<string, unknown> | undefined,
+      existing?.websiteAssets,
+    ),
     updatedAt: nowIso(),
   };
 };

@@ -171,6 +171,23 @@ export interface SitePopularSearch {
   isActive: boolean;
 }
 
+export interface SiteProductBadge {
+  id: string;
+  label: string;
+  color: string;
+  icon?: string;
+  priority: number;
+  isActive: boolean;
+}
+
+export interface SiteWebsiteAssets {
+  navbarLogo: string;
+  footerLogo: string;
+  favicon: string;
+  pwaIcon: string;
+  defaultProductImage: string;
+}
+
 export interface SiteConfig {
   id: 'default';
   navigation: SiteNavItem[];
@@ -185,6 +202,8 @@ export interface SiteConfig {
   seoEntries: import('./catalogEditorialTypes').SiteSeoEntry[];
   announcementBarText: string;
   announcementBarEnabled: boolean;
+  productBadges?: SiteProductBadge[];
+  websiteAssets?: SiteWebsiteAssets;
   updatedAt: string;
 }
 

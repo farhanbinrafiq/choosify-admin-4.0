@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   Package, 
   ShoppingBag, 
@@ -138,6 +139,24 @@ export default function SellerDashboard() {
             <CheckCircle className="w-3.5 h-3.5" /> Seller Intelligence Center
           </button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Order Console', path: '/admin/orders' },
+          { label: 'My Products', path: '/admin/products' },
+          { label: 'Post an Offer', path: '/admin/seller-offers' },
+          { label: 'Returns Queue', path: '/admin/returns' },
+        ].map((item) => (
+          <Link
+            key={item.path}
+            to={item.path}
+            className="px-4 py-3 rounded-xl border border-app-border bg-app-card hover:border-app-accent/40 text-[11px] font-bold uppercase tracking-wider text-app-text-primary transition-all flex items-center justify-between"
+          >
+            {item.label}
+            <ChevronRight className="w-4 h-4 text-app-text-secondary" />
+          </Link>
+        ))}
       </div>
 
       {activeDashboardTab === 'sales' ? (

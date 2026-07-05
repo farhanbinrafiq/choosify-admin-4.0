@@ -489,6 +489,21 @@ export default function WebsiteCMSStudio() {
         })),
         announcementBarText: localGlobalSettings?.announcementBarText || '',
         announcementBarEnabled: localGlobalSettings?.announcementBarEnabled === true,
+        productBadges: (localBadges || []).map((badge: any, idx: number) => ({
+          id: String(badge.id || `badge-${idx + 1}`),
+          label: badge.label || '',
+          color: badge.color || '#F97316',
+          icon: badge.icon || '',
+          priority: typeof badge.priority === 'number' ? badge.priority : idx + 1,
+          isActive: badge.isActive !== false,
+        })),
+        websiteAssets: {
+          navbarLogo: localAssets?.navbarLogo || '',
+          footerLogo: localAssets?.footerLogo || '',
+          favicon: localAssets?.favicon || '',
+          pwaIcon: localAssets?.pwaIcon || '',
+          defaultProductImage: localAssets?.defaultProductImage || '',
+        },
         updatedAt: new Date().toISOString(),
       };
 
@@ -659,7 +674,7 @@ export default function WebsiteCMSStudio() {
       ]
     },
     {
-      label: 'DISCOVERY',
+      label: 'MERCHANDISING',
       items: [
         { id: 'search-experience', label: 'Search Experience', icon: Search },
         { id: 'product-badges', label: 'Product Badges', icon: Tag },
@@ -667,26 +682,23 @@ export default function WebsiteCMSStudio() {
         { id: 'featured-brands', label: 'Featured Brands', icon: Building2 },
         { id: 'featured-creators', label: 'Featured Creators', icon: Sparkles },
         { id: 'featured-deals', label: 'Featured Deals', icon: Zap },
+        { id: 'featured-recommendations', label: 'Featured Guides', icon: BookOpen },
+      ]
+    },
+    {
+      label: 'SPONSORED',
+      items: [
         { id: 'spotlight-brands', label: 'Spotlight Brands', icon: Sparkles },
         { id: 'sponsored-ads', label: 'Sponsored Ads', icon: Megaphone },
         { id: 'sponsored-brands', label: 'Sponsored Brands', icon: Building2 },
         { id: 'sponsored-products', label: 'Sponsored Products', icon: ShoppingBag },
-        { id: 'featured-recommendations', label: 'Featured Recommendations', icon: BookOpen },
-        { id: 'recommended-brands', label: 'Recommended Brands', icon: Award },
-        { id: 'recommended-products', label: 'Recommended Products', icon: Star },
-        { id: 'recommended-creators', label: 'Recommended Creators', icon: Users }
-      ]
-    },
-    {
-      label: 'CAMPAIGNS',
-      items: [
-        { id: 'promotions', label: 'Promotional Sections', icon: Megaphone },
-        { id: 'social-media', label: 'Social Media Manager', icon: Share2 }
       ]
     },
     {
       label: 'PLATFORM',
       items: [
+        { id: 'promotions', label: 'Promotional Sections', icon: Megaphone },
+        { id: 'social-media', label: 'Social Media Manager', icon: Share2 },
         { id: 'website-assets', label: 'Website Assets', icon: Folder },
         { id: 'seo', label: 'SEO Manager', icon: Globe },
         { id: 'global-settings', label: 'Global Settings', icon: Settings }

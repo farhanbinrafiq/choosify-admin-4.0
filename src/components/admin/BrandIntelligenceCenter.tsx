@@ -92,7 +92,18 @@ function getBrandBlueprint(brandName: string, isProfileBased: boolean) {
   }
   const absHash = Math.abs(hash);
 
-  const categories = ['Electronics & Gadgets', 'Fashion & Apparel', 'Home & Furniture', 'Food & FMCG', 'Consumer Goods'];
+  const categories = [
+    'Fashion & Lifestyle',
+    'Jewelry & Accessories',
+    'Mobile & Phones',
+    'Sporting & Playstation',
+    'Gaming & Entertainment',
+    'Food & Restaurants',
+    'Tech & Electronics',
+    'TV & Appliances',
+    'Home & Living',
+    'Baby & Maternity',
+  ];
   const category = categories[absHash % categories.length];
 
   const trustScore = 75 + (absHash % 25); // 75-99

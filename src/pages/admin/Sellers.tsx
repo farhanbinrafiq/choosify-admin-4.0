@@ -194,10 +194,10 @@ export default function SellersPage() {
   // Consolidated Single Permanent Sellers Database
   const [sellersList, setSellersList] = useState<SellerItem[]>([
     { id: '1', name: 'Rahim Uddin', storeName: 'Aarong Digital Ltd', verificationStatus: 'Verified Merchant', brandCount: 3, brandSummary: 'Aarong Fabric, Aarong Craft, Aarong Lifestyle', trustScore: 98, fulfillmentRate: '99.4%', returnRate: '0.5%', operationalHealth: 'Excellent', lastActive: 'Today | 1h ago', applicationStatus: 'Approved', riskStatus: 'Low Risk', category: 'Clothing & Lifestyle', contact: 'Rahim Uddin', phone: '01711-554488', revenue: '৳ 12.4M' },
-    { id: '2', name: 'Nadia Akter', storeName: 'Nadia Akter Fashion House', verificationStatus: 'Verified Merchant', brandCount: 1, brandSummary: 'Nadia Traditional Fashion', trustScore: 92, fulfillmentRate: '99.1%', returnRate: '0.8%', operationalHealth: 'Excellent', lastActive: 'Today | 4h ago', applicationStatus: 'Approved', riskStatus: 'Low Risk', category: 'Fashion & Apparel', contact: 'Nadia Akter', phone: '+222 01 414 8447', revenue: '৳ 14.8M' },
-    { id: '3', name: 'Maksud Alam', storeName: 'Khaas Food Organic Hub', verificationStatus: 'Unverified', brandCount: 1, brandSummary: 'Khaas Food Organic', trustScore: 88, fulfillmentRate: '95.2%', returnRate: '1.5%', operationalHealth: 'Good', lastActive: 'Yesterday', applicationStatus: 'Pending Review', riskStatus: 'Medium Risk', category: 'Organic Groceries', contact: 'Maksud Alam', phone: '01511-998822', revenue: '৳ 2.1M' },
+    { id: '2', name: 'Nadia Akter', storeName: 'Nadia Akter Fashion House', verificationStatus: 'Verified Merchant', brandCount: 1, brandSummary: 'Nadia Traditional Fashion', trustScore: 92, fulfillmentRate: '99.1%', returnRate: '0.8%', operationalHealth: 'Excellent', lastActive: 'Today | 4h ago', applicationStatus: 'Approved', riskStatus: 'Low Risk', category: 'Fashion & Lifestyle', contact: 'Nadia Akter', phone: '+222 01 414 8447', revenue: '৳ 14.8M' },
+    { id: '3', name: 'Maksud Alam', storeName: 'Khaas Food Organic Hub', verificationStatus: 'Unverified', brandCount: 1, brandSummary: 'Khaas Food Organic', trustScore: 88, fulfillmentRate: '95.2%', returnRate: '1.5%', operationalHealth: 'Good', lastActive: 'Yesterday', applicationStatus: 'Pending Review', riskStatus: 'Medium Risk', category: 'Food & Restaurants', contact: 'Maksud Alam', phone: '01511-998822', revenue: '৳ 2.1M' },
     { id: '4', name: 'Selina Parvin', storeName: 'Meena Bazar Superstore', verificationStatus: 'Verified Merchant', brandCount: 2, brandSummary: 'Meena FMCG, Meena Fresh', trustScore: 96, fulfillmentRate: '98.5%', returnRate: '1.2%', operationalHealth: 'Excellent', lastActive: 'Today | 2h ago', applicationStatus: 'Approved', riskStatus: 'Low Risk', category: 'Groceries & FMCG', contact: 'Selina Parvin', phone: '01611-334455', revenue: '৳ 4.8M' },
-    { id: '5', name: 'Shaheen Ahmed', storeName: 'Anjans Fashion Boutique', verificationStatus: 'Verified Merchant', brandCount: 1, brandSummary: 'Anjans Traditional Wear', trustScore: 94, fulfillmentRate: '96.8%', returnRate: '1.4%', operationalHealth: 'Excellent', lastActive: 'Today | 5h ago', applicationStatus: 'Approved', riskStatus: 'Low Risk', category: 'Fashion & Apparel', contact: 'Shaheen Ahmed', phone: '01811-332211', revenue: '৳ 3.2M' },
+    { id: '5', name: 'Shaheen Ahmed', storeName: 'Anjans Fashion Boutique', verificationStatus: 'Verified Merchant', brandCount: 1, brandSummary: 'Anjans Traditional Wear', trustScore: 94, fulfillmentRate: '96.8%', returnRate: '1.4%', operationalHealth: 'Excellent', lastActive: 'Today | 5h ago', applicationStatus: 'Approved', riskStatus: 'Low Risk', category: 'Fashion & Lifestyle', contact: 'Shaheen Ahmed', phone: '01811-332211', revenue: '৳ 3.2M' },
     { id: '6', name: 'Sabbir Hasan', storeName: 'Otobi Furniture Home', verificationStatus: 'Verified Merchant', brandCount: 1, brandSummary: 'Otobi Living Home', trustScore: 89, fulfillmentRate: '91.2%', returnRate: '2.8%', operationalHealth: 'Good', lastActive: 'Today | 10h ago', applicationStatus: 'Approved', riskStatus: 'Low Risk', category: 'Home & Living', contact: 'Sabbir Hasan', phone: '01712-445566', revenue: '৳ 6.5M' },
     { id: '7', name: 'Ripon Khan', storeName: 'FakeStore BD', verificationStatus: 'Unverified', brandCount: 0, brandSummary: 'None (No Brand Registered)', trustScore: 34, fulfillmentRate: '62.0%', returnRate: '15.4%', operationalHealth: 'Critical', lastActive: '3 weeks ago', applicationStatus: 'Banned', riskStatus: 'High Risk', category: 'General Merchandise', contact: 'Ripon Khan', phone: '01311-667788', revenue: '৳ 240K' },
     { id: '8', name: 'Fahim Ahmed', storeName: 'Gadget Scam Mart', verificationStatus: 'Unverified', brandCount: 1, brandSummary: 'Fake Gadget BD', trustScore: 48, fulfillmentRate: '71.5%', returnRate: '11.2%', operationalHealth: 'Critical', lastActive: '2 days ago', applicationStatus: 'Suspended', riskStatus: 'High Risk', category: 'Electronics', contact: 'Fahim Ahmed', phone: '01411-992211', revenue: '৳ 180K' },
@@ -1687,11 +1687,16 @@ export default function SellersPage() {
                     onChange={(e) => setProfileForm({ ...profileForm, industry: e.target.value })}
                     className="w-full bg-app-bg border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:outline-none focus:border-orange-500"
                   >
-                    <option value="Electronics">Electronics & Appliances</option>
-                    <option value="Fashion & Apparel">Fashion & Apparel</option>
-                    <option value="Consumer Goods">Consumer Goods</option>
-                    <option value="Food & FMCG">Food & FMCG</option>
+                    <option value="Fashion & Lifestyle">Fashion & Lifestyle</option>
+                    <option value="Jewelry & Accessories">Jewelry & Accessories</option>
+                    <option value="Mobile & Phones">Mobile & Phones</option>
+                    <option value="Sporting & Playstation">Sporting & Playstation</option>
+                    <option value="Gaming & Entertainment">Gaming & Entertainment</option>
+                    <option value="Food & Restaurants">Food & Restaurants</option>
+                    <option value="Tech & Electronics">Tech & Electronics</option>
+                    <option value="TV & Appliances">TV & Appliances</option>
                     <option value="Home & Living">Home & Living</option>
+                    <option value="Baby & Maternity">Baby & Maternity</option>
                   </select>
                 </div>
 

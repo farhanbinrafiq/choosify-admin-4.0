@@ -13,7 +13,6 @@ import { LogisticsProvider } from './contexts/LogisticsContext';
 import { InventoryProvider } from './contexts/InventoryContext';
 
 // Lazy load pages
-const Home = lazy(() => import('./pages/Home'));
 const CashBookHub = lazy(() => import('./pages/admin/CashBookHub'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
@@ -192,7 +191,7 @@ export default function App() {
             <Route path="/creator/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
             
             <Route path="/" element={<RootRoute />} />
-            <Route path="/marketplace" element={<Suspense fallback={null}><Home /></Suspense>} />
+            <Route path="/marketplace" element={<Navigate to="/login" replace />} />
             
             <Route path="/admin/*" element={<ProtectedRoute><RoleGuard><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Platform Interface...</div>}><Routes>
               <Route path="upe/:entityType/:entityId" element={<UnifiedProfileShell />} />
@@ -233,7 +232,7 @@ export default function App() {
               <Route path="recommendations/:id" element={<RecommendationPreview />} />
               <Route path="deals" element={<Deals />} />
               <Route path="reviews" element={<Reviews />} />
-              <Route path="community-submissions" element={<CommunitySubmissions />} />
+              <Route path="community-submissions" element={<Navigate to="/admin/seller-offers" replace />} />
               <Route path="payouts" element={<Payouts />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="messages" element={<Messages />} />
@@ -241,8 +240,8 @@ export default function App() {
               <Route path="settings" element={<SettingsPage />} />
               <Route path="moderation" element={<Moderation />} />
               <Route path="orders" element={<Orders />} />
-              <Route path="orders-overview" element={<OrdersOverview />} />
-              <Route path="platform-orders" element={<PlatformOrdersPage />} />
+              <Route path="orders-overview" element={<Navigate to="/admin/orders" replace />} />
+              <Route path="platform-orders" element={<Navigate to="/admin/orders" replace />} />
               <Route path="leads" element={<LeadsInboxPage />} />
               <Route path="seller-offers" element={<SellerOffersPage />} />
               <Route path="customers" element={<SellerCustomers />} />
@@ -266,7 +265,7 @@ export default function App() {
               <Route path="brand-verification" element={<BrandVerification />} />
               <Route path="creator-hub" element={<CreatorEconomy />} />
               <Route path="creator-earnings" element={<CreatorEarnings />} />
-              <Route path="moderation-v2" element={<ModerationV2 />} />
+              <Route path="moderation-v2" element={<Navigate to="/admin/moderation" replace />} />
               <Route path="disputes" element={<DisputeCenter />} />
               <Route path="coupons" element={<Coupons />} />
             </Routes></Suspense></AdminLayout></RoleGuard></ProtectedRoute>} />

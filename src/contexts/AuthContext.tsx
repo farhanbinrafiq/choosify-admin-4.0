@@ -9,6 +9,12 @@ import {
   persistCategoryUpdate,
   syncAllCategoriesToApi,
 } from '../lib/categoryCatalogSync';
+import {
+  CATEGORY_CATALOG_VERSION,
+  CATEGORY_VERSION_STORAGE_KEY,
+  getCanonicalAdminCategories,
+  isStaleCategorySet,
+} from '../lib/storefrontCategories';
 
 export type UserRole = 
   | 'super_admin' 
@@ -351,11 +357,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     let cancelled = false;
 
+    const applyCategories = (rows: CategoryType[], source: 'api' | 'local') => {
+      const savedVersion = localStorage.getItem(CATEGORY_VERSION_STORAGE_KEY);
+      const canonical = getCanonicalAdminCategories();
+      const shouldReset =
+        savedVersion !== CATEGORY_CATALOG_VERSION || isStaleCategorySet(rows);
+
+      if (shouldReset) {
+        if (!cancelled) {
+          setCategories(canonical);
+          setCategoriesLoaded(true);
+        }
+        localStorage.setItem(CATEGORY_VERSION_STORAGE_KEY, CATEGORY_CATALOG_VERSION);
+        syncAllCategoriesToApi(canonical).catch((error) => {
+          console.error('[AuthContext] Failed to sync canonical categories to catalog API.', error);
+        });
+        return;
+      }
+
+      if (!cancelled) {
+        setCategories(rows);
+        setCategoriesLoaded(true);
+      }
+
+      if (source === 'api') {
+        localStorage.setItem(CATEGORY_VERSION_STORAGE_KEY, CATEGORY_CATALOG_VERSION);
+      }
+    };
+
     fetchCategoriesFromApi()
       .then((rows) => {
         if (!cancelled) {
-          setCategories(rows);
-          setCategoriesLoaded(true);
+          applyCategories(rows, 'api');
         }
       })
       .catch((error) => {
@@ -363,20 +396,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (cancelled) return;
         const saved = localStorage.getItem('choosify_categories');
         if (saved) {
-          setCategories(JSON.parse(saved));
+          applyCategories(JSON.parse(saved) as CategoryType[], 'local');
         } else {
-          const initialCategories: CategoryType[] = [
-            { id: 'cat-fashion', parentId: null, name: 'Fashion & Apparel', slug: 'fashion-apparel', icon: 'Shirt', description: 'Clothing, traditional apparel, sarees, panjabis and wearable accessories.', displayOrder: 1, enabled: true },
-            { id: 'cat-sarees', parentId: 'cat-fashion', name: 'Jamdani & Silk Sarees', slug: 'sarees', icon: 'Layers', description: 'Traditional Jamdani, silk, and boutique sarees of Bangladesh.', displayOrder: 1, enabled: true },
-            { id: 'cat-panjabis', parentId: 'cat-fashion', name: 'Panjabis', slug: 'panjabis', icon: 'User', description: 'Traditional and designer Panjabis for men.', displayOrder: 2, enabled: true },
-            { id: 'cat-electronics', parentId: null, name: 'Electronics & Gadgets', slug: 'electronics-gadgets', icon: 'Smartphone', description: 'Smartphones, home devices, chargers, and tech accessories.', displayOrder: 2, enabled: true },
-            { id: 'cat-smartphones', parentId: 'cat-electronics', name: 'Smartphones', slug: 'smartphones', icon: 'Tablet', description: 'Latest smartphones from trusted global and local brands.', displayOrder: 1, enabled: true },
-            { id: 'cat-groceries', parentId: null, name: 'Organic Groceries', slug: 'organic-groceries', icon: 'Apple', description: 'Fresh, organic, and locally sourced safe food items.', displayOrder: 3, enabled: true },
-            { id: 'cat-home', parentId: null, name: 'Home & Living', slug: 'home-living', icon: 'Home', description: 'Furniture, kitchen items, and home decor items.', displayOrder: 4, enabled: true },
-          ];
-          setCategories(initialCategories);
+          applyCategories(getCanonicalAdminCategories(), 'local');
         }
-        setCategoriesLoaded(true);
       });
 
     return () => {

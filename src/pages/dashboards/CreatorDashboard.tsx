@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   FileText, 
   Users, 
@@ -103,6 +104,24 @@ export default function CreatorDashboard() {
             </p>
          </div>
          <div className="absolute right-[-5%] top-[-10%] w-[400px] h-[400px] bg-app-accent/10 rounded-full blur-3xl group-hover:bg-app-accent/20 transition-all duration-1000" />
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'My Guides', path: '/admin/recommendations' },
+          { label: 'Creator Profile', path: `/admin/creators/${profile?.id || 'creator_001'}` },
+          { label: 'Brand Posts', path: '/admin/brand-posts' },
+          { label: 'Messages', path: '/admin/messages' },
+        ].map((item) => (
+          <Link
+            key={item.path}
+            to={item.path}
+            className="px-4 py-3 rounded-xl border border-app-border bg-app-card hover:border-app-accent/40 text-[11px] font-bold uppercase tracking-wider text-app-text-primary transition-all flex items-center justify-between"
+          >
+            {item.label}
+            <ChevronRight className="w-4 h-4 text-app-text-secondary" />
+          </Link>
+        ))}
       </div>
 
       {/* Analytics Insights */}

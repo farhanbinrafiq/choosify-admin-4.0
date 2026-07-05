@@ -6,19 +6,24 @@ import {
   Save, X, Search, ArrowUp, ArrowDown, Upload, Download, ToggleLeft, 
   ToggleRight, Eye, EyeOff, Settings, AlertTriangle, Layers, Smartphone, 
   Shirt, User, Tablet, Apple, Home, Briefcase, Grid, Filter, Database, 
-  Undo2, Redo2, FileJson, Check, Copy, HelpCircle, Edit3
+  Undo2, Redo2, FileJson, Check, Copy, HelpCircle, Edit3, Gem, Gamepad2,
+  Monitor, Utensils, Tv, Baby
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Supported Lucide Icons for Categorization
 const AVAILABLE_ICONS = [
   { name: 'Shirt', label: 'Fashion & Shirts', icon: Shirt },
-  { name: 'Layers', label: 'Layers & Fabric', icon: Layers },
-  { name: 'User', label: 'Personal & Panjabi', icon: User },
+  { name: 'Gem', label: 'Jewelry & Accessories', icon: Gem },
   { name: 'Smartphone', label: 'Phones & Gadgets', icon: Smartphone },
-  { name: 'Tablet', label: 'Tablets & Devices', icon: Tablet },
-  { name: 'Apple', label: 'Organic & Food', icon: Apple },
-  { name: 'Home', label: 'Furniture & Decor', icon: Home },
+  { name: 'Gamepad2', label: 'Sports & PlayStation', icon: Gamepad2 },
+  { name: 'Monitor', label: 'Gaming & Entertainment', icon: Monitor },
+  { name: 'Utensils', label: 'Food & Restaurants', icon: Utensils },
+  { name: 'Cpu', label: 'Tech & Electronics', icon: Grid },
+  { name: 'Tv', label: 'TV & Appliances', icon: Tv },
+  { name: 'Home', label: 'Home & Living', icon: Home },
+  { name: 'Baby', label: 'Baby & Maternity', icon: Baby },
+  { name: 'Layers', label: 'Layers & Fabric', icon: Layers },
   { name: 'Briefcase', label: 'Office & Work', icon: Briefcase },
   { name: 'Grid', label: 'Grid / General', icon: Grid },
   { name: 'Database', label: 'Data & Utilities', icon: Database },
@@ -58,7 +63,7 @@ export default function CategoriesPage() {
   // Expanded node state tracker (by Category ID)
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
     'cat-fashion': true,
-    'cat-electronics': true
+    'cat-mobile': true,
   });
 
   // Editor form state
@@ -412,13 +417,16 @@ export default function CategoriesPage() {
   const getProductCount = (categoryName: string): number => {
     // Matches Bangladesh standard mocked products
     const standardMockCounts: Record<string, number> = {
-      'Fashion & Apparel': 32,
-      'Jamdani & Silk Sarees': 14,
-      'Panjabis': 18,
-      'Electronics & Gadgets': 45,
-      'Smartphones': 28,
-      'Organic Groceries': 22,
+      'Fashion & Lifestyle': 32,
+      'Jewelry & Accessories': 14,
+      'Mobile & Phones': 28,
+      'Sporting & Playstation': 18,
+      'Gaming & Entertainment': 22,
+      'Food & Restaurants': 15,
+      'Tech & Electronics': 45,
+      'TV & Appliances': 12,
       'Home & Living': 15,
+      'Baby & Maternity': 10,
     };
     return standardMockCounts[categoryName] || Math.floor((categoryName.length * 3) % 19);
   };

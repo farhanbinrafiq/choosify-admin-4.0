@@ -35,10 +35,15 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen bg-app-bg flex items-center justify-center p-6 font-sans relative">
-      <Link to="/marketplace" className="absolute top-8 left-8 flex items-center gap-2 text-app-text-secondary hover:text-white transition-colors text-sm font-bold">
+      <a
+        href="https://choosify.bd"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="absolute top-8 left-8 flex items-center gap-2 text-app-text-secondary hover:text-white transition-colors text-sm font-bold"
+      >
         <ChevronRight className="w-4 h-4 rotate-180" />
-        🌐 Visit Marketplace
-      </Link>
+        Visit choosify.bd
+      </a>
       <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 bg-app-card rounded-[2.5rem] overflow-hidden shadow-2xl border border-app-border">
          {/* Left Side: Illustration / Info */}
          <div className="hidden lg:flex flex-col justify-between p-12 bg-app-sidebar relative overflow-hidden group">

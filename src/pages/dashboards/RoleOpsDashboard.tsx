@@ -12,6 +12,35 @@ import {
 import { ChevronRight, RefreshCw } from 'lucide-react';
 import { operationsApi, type RoleAnalyticsPayload } from '../../services/operationsApi';
 
+const ROLE_QUICK_LINKS: Record<string, { label: string; path: string }[]> = {
+  admin: [
+    { label: 'Orders Hub', path: '/admin/orders' },
+    { label: 'Lead Inbox', path: '/admin/leads' },
+    { label: 'Seller Offer Queue', path: '/admin/seller-offers' },
+    { label: 'Website CMS Studio', path: '/admin/website-cms' },
+  ],
+  moderator: [
+    { label: 'Moderation Center', path: '/admin/moderation' },
+    { label: 'Review Queue', path: '/admin/reviews' },
+    { label: 'Disputes', path: '/admin/disputes' },
+  ],
+  finance_manager: [
+    { label: 'Monetization Center', path: '/admin/payouts' },
+    { label: 'Promo Codes', path: '/admin/coupons' },
+    { label: 'Cashbook', path: '/admin/cashbook' },
+  ],
+  support_agent: [
+    { label: 'Orders Hub', path: '/admin/orders' },
+    { label: 'Shipment Console', path: '/admin/logistics/shipments' },
+    { label: 'Messages', path: '/admin/messages' },
+  ],
+  marketing_manager: [
+    { label: 'Website CMS Studio', path: '/admin/website-cms' },
+    { label: 'Ads & Sponsors', path: '/admin/ads-sponsors' },
+    { label: 'Lead Inbox', path: '/admin/leads' },
+  ],
+};
+
 const ROLE_LABELS: Record<string, { title: string; subtitle: string }> = {
   admin: {
     title: 'Operations Dashboard',
@@ -31,7 +60,7 @@ const ROLE_LABELS: Record<string, { title: string; subtitle: string }> = {
   },
   marketing_manager: {
     title: 'Marketing Dashboard',
-    subtitle: 'Leads, campaigns, coupons, and conversion',
+    subtitle: 'Leads, campaigns, coupons, and CMS publishing for choosify.bd',
   },
 };
 
@@ -69,6 +98,8 @@ export default function RoleOpsDashboard({ roleKey }: Props) {
       orders: row.orders,
       revenue: row.revenue,
     })) || [];
+
+  const quickLinks = data?.quickLinks?.length ? data.quickLinks : ROLE_QUICK_LINKS[roleKey] || ROLE_QUICK_LINKS.admin;
 
   return (
     <div className="space-y-8 pb-16">
@@ -146,7 +177,7 @@ export default function RoleOpsDashboard({ roleKey }: Props) {
         <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
           <h3 className="text-lg font-bold text-app-text-primary mb-6">Quick Actions</h3>
           <div className="space-y-2">
-            {(data?.quickLinks || []).map((link) => (
+            {(quickLinks).map((link) => (
               <Link
                 key={link.path}
                 to={link.path}

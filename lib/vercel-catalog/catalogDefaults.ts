@@ -1,54 +1,14 @@
 import type {
   CatalogBrand,
-  CatalogCategory,
   CatalogDeal,
   CatalogProduct,
   HomepageConfig,
 } from './catalogTypes';
+import { buildDefaultCatalogCategories } from './storefrontCategories';
 
 const nowIso = () => new Date().toISOString();
 
-export const defaultCategories = (): CatalogCategory[] => {
-  const ts = nowIso();
-  return [
-    {
-      id: 'cat-mobile',
-      slug: 'mobile-phones',
-      name: 'Mobile & Phones',
-      description: 'Smartphones and accessories',
-      icon: 'Smartphone',
-      parentId: null,
-      enabled: true,
-      displayOrder: 0,
-      createdAt: ts,
-      updatedAt: ts,
-    },
-    {
-      id: 'cat-fashion',
-      slug: 'fashion-lifestyle',
-      name: 'Fashion & Lifestyle',
-      description: 'Apparel and fashion accessories',
-      icon: 'Shirt',
-      parentId: null,
-      enabled: true,
-      displayOrder: 1,
-      createdAt: ts,
-      updatedAt: ts,
-    },
-    {
-      id: 'cat-tech',
-      slug: 'tech-electronics',
-      name: 'Tech & Electronics',
-      description: 'Laptops, accessories and gadgets',
-      icon: 'Cpu',
-      parentId: null,
-      enabled: true,
-      displayOrder: 2,
-      createdAt: ts,
-      updatedAt: ts,
-    },
-  ];
-};
+export const defaultCategories = () => buildDefaultCatalogCategories();
 
 export const defaultBrands = (): CatalogBrand[] => {
   const ts = nowIso();

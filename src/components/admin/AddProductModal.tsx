@@ -18,6 +18,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { uploadProductImages } from '../../services/mediaUpload';
 import { useAuth } from '../../contexts/AuthContext';
+import { storefrontCategoryNames } from '../../lib/storefrontCategories';
 
 const productSchema = z.object({
   brandName: z.string().min(1, 'Brand is required'),
@@ -32,7 +33,7 @@ const productSchema = z.object({
 
 type ProductFormData = z.infer<typeof productSchema>;
 
-const categories = ['Mobile', 'Electronics', 'Fashion', 'Home', 'Beauty', 'Sports'];
+const categories = storefrontCategoryNames();
 const brands = ['Samsung BD', 'Walton', 'Aarong', 'Vision', 'Xiaomi', 'Apple'];
 
 interface AddProductModalProps {

@@ -164,49 +164,106 @@ var init_catalogFirestoreAdmin = __esm({
   }
 });
 
+// lib/vercel-catalog/storefrontCategories.ts
+var STOREFRONT_CATEGORY_DEFS = [
+  {
+    id: "cat-fashion",
+    slug: "fashion-lifestyle",
+    name: "Fashion & Lifestyle",
+    icon: "Shirt",
+    description: "Apparel, footwear, and lifestyle accessories.",
+    displayOrder: 0
+  },
+  {
+    id: "cat-jewelry",
+    slug: "jewelry-accessories",
+    name: "Jewelry & Accessories",
+    icon: "Gem",
+    description: "Jewelry, watches, and personal accessories.",
+    displayOrder: 1
+  },
+  {
+    id: "cat-mobile",
+    slug: "mobile-phones",
+    name: "Mobile & Phones",
+    icon: "Smartphone",
+    description: "Smartphones, tablets, and mobile accessories.",
+    displayOrder: 2
+  },
+  {
+    id: "cat-sporting",
+    slug: "sporting-playstation",
+    name: "Sporting & Playstation",
+    icon: "Gamepad2",
+    description: "Sports gear, fitness, and PlayStation consoles.",
+    displayOrder: 3
+  },
+  {
+    id: "cat-gaming",
+    slug: "gaming-entertainment",
+    name: "Gaming & Entertainment",
+    icon: "Monitor",
+    description: "Gaming consoles, PCs, and entertainment tech.",
+    displayOrder: 4
+  },
+  {
+    id: "cat-food",
+    slug: "food-restaurants",
+    name: "Food & Restaurants",
+    icon: "Utensils",
+    description: "Restaurants, dining, and food delivery.",
+    displayOrder: 5
+  },
+  {
+    id: "cat-tech",
+    slug: "tech-electronics",
+    name: "Tech & Electronics",
+    icon: "Cpu",
+    description: "Laptops, audio, cameras, and gadgets.",
+    displayOrder: 6
+  },
+  {
+    id: "cat-appliances",
+    slug: "tv-appliances",
+    name: "TV & Appliances",
+    icon: "Tv",
+    description: "Televisions, home appliances, and kitchen tech.",
+    displayOrder: 7
+  },
+  {
+    id: "cat-home",
+    slug: "home-living",
+    name: "Home & Living",
+    icon: "Home",
+    description: "Furniture, decor, and home essentials.",
+    displayOrder: 8
+  },
+  {
+    id: "cat-baby",
+    slug: "baby-maternity",
+    name: "Baby & Maternity",
+    icon: "Baby",
+    description: "Baby care, maternity, and nursery products.",
+    displayOrder: 9
+  }
+];
+var CANONICAL_CATEGORY_IDS = new Set(
+  STOREFRONT_CATEGORY_DEFS.map((category) => category.id)
+);
+var buildDefaultCatalogCategories = () => {
+  const ts = (/* @__PURE__ */ new Date()).toISOString();
+  return STOREFRONT_CATEGORY_DEFS.map((category) => ({
+    ...category,
+    parentId: null,
+    enabled: true,
+    createdAt: ts,
+    updatedAt: ts
+  }));
+};
+
 // lib/vercel-catalog/catalogDefaults.ts
 var nowIso = () => (/* @__PURE__ */ new Date()).toISOString();
-var defaultCategories = () => {
-  const ts = nowIso();
-  return [
-    {
-      id: "cat-mobile",
-      slug: "mobile-phones",
-      name: "Mobile & Phones",
-      description: "Smartphones and accessories",
-      icon: "Smartphone",
-      parentId: null,
-      enabled: true,
-      displayOrder: 0,
-      createdAt: ts,
-      updatedAt: ts
-    },
-    {
-      id: "cat-fashion",
-      slug: "fashion-lifestyle",
-      name: "Fashion & Lifestyle",
-      description: "Apparel and fashion accessories",
-      icon: "Shirt",
-      parentId: null,
-      enabled: true,
-      displayOrder: 1,
-      createdAt: ts,
-      updatedAt: ts
-    },
-    {
-      id: "cat-tech",
-      slug: "tech-electronics",
-      name: "Tech & Electronics",
-      description: "Laptops, accessories and gadgets",
-      icon: "Cpu",
-      parentId: null,
-      enabled: true,
-      displayOrder: 2,
-      createdAt: ts,
-      updatedAt: ts
-    }
-  ];
-};
+var defaultCategories = () => buildDefaultCatalogCategories();
 var defaultBrands = () => {
   const ts = nowIso();
   return [
@@ -16338,6 +16395,21 @@ var normalizePopularSearch = (payload, idx) => {
     isActive: toBoolean2(raw.isActive, true)
   };
 };
+var normalizeProductBadge = (raw, idx) => ({
+  id: toString2(raw.id, `badge-${idx + 1}`),
+  label: toString2(raw.label, ""),
+  color: toString2(raw.color, "#F97316"),
+  icon: toString2(raw.icon, ""),
+  priority: Math.floor(toNumber2(raw.priority, idx + 1)),
+  isActive: toBoolean2(raw.isActive, true)
+});
+var normalizeWebsiteAssets = (raw, existing) => ({
+  navbarLogo: toString2(raw?.navbarLogo, existing?.navbarLogo ?? ""),
+  footerLogo: toString2(raw?.footerLogo, existing?.footerLogo ?? ""),
+  favicon: toString2(raw?.favicon, existing?.favicon ?? ""),
+  pwaIcon: toString2(raw?.pwaIcon, existing?.pwaIcon ?? ""),
+  defaultProductImage: toString2(raw?.defaultProductImage, existing?.defaultProductImage ?? "")
+});
 var normalizeSiteInput = (payload, existing) => {
   const raw = payload ?? {};
   const footerRaw = raw.footer ?? existing?.footer ?? {};
@@ -16360,6 +16432,13 @@ var normalizeSiteInput = (payload, existing) => {
     seoEntries: (Array.isArray(raw.seoEntries) ? raw.seoEntries : existing?.seoEntries ?? []).map(normalizeSeoEntryInput),
     announcementBarText: toString2(raw.announcementBarText, existing?.announcementBarText ?? ""),
     announcementBarEnabled: toBoolean2(raw.announcementBarEnabled, existing?.announcementBarEnabled ?? false),
+    productBadges: (Array.isArray(raw.productBadges) ? raw.productBadges : existing?.productBadges ?? []).map(
+      (item, idx) => normalizeProductBadge(item ?? {}, idx)
+    ),
+    websiteAssets: normalizeWebsiteAssets(
+      raw.websiteAssets ?? existing?.websiteAssets,
+      existing?.websiteAssets
+    ),
     updatedAt: nowIso5()
   };
 };
