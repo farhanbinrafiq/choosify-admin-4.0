@@ -9,17 +9,17 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [selectedRole, setSelectedRole] = useState<UserRole>('super_admin');
-  const { login } = useAuth();
+  const { loginWithEmail } = useAuth();
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    login(selectedRole);
+    const role = await loginWithEmail(email, password, selectedRole);
     
     let redirectPath = '/admin/dashboard';
-    if (selectedRole === 'seller') {
+    if (role === 'seller') {
       redirectPath = '/seller/products';
-    } else if (selectedRole === 'creator') {
+    } else if (role === 'creator') {
       redirectPath = '/dashboard/content-studio/guides';
     }
     

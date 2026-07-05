@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useContact } from '../../contexts/ContactInteractionContext';
+import { operationsApi } from '../../services/operationsApi';
 import { 
   Search, 
   Filter, 
@@ -38,16 +39,7 @@ interface MockUser {
   behaviorSegment: string;
 }
 
-const mockUsers: MockUser[] = [
-  { id: '1', name: 'Rifat Hasan', email: 'rifat.h@choosify.com', role: 'Creator', status: 'Active', joined: 'Mar 12, 2025', active: 'Today', initials: 'RH', trustScore: 98, behaviorSegment: 'Premium Fabrics' },
-  { id: '2', name: 'Nadia Akter', email: 'nadia.akter@choosify.com', role: 'Seller', status: 'Active', joined: 'Jan 5, 2025', active: 'Yesterday', initials: 'NA', trustScore: 95, behaviorSegment: 'Core Merchant' },
-  { id: '3', name: 'Mehedi Rahman', email: 'mehedi.r@choosify.com', role: 'Consumer', status: 'Banned', joined: 'Nov 20, 2024', active: 'Apr 30', initials: 'MR', trustScore: 32, behaviorSegment: 'Electronics Fraud Risk' },
-  { id: '4', name: 'Fatema Khanom', email: 'fatema.k@choosify.com', role: 'Admin', status: 'Active', joined: 'Feb 14, 2025', active: '2 hr ago', initials: 'FK', trustScore: 100, behaviorSegment: 'Platform Auditor' },
-  { id: '5', name: 'Shuvo Islam', email: 'shuvo.islam@choosify.com', role: 'Consumer', status: 'Active', joined: 'Apr 2, 2026', active: '3 hr ago', initials: 'SI', trustScore: 92, behaviorSegment: 'Gadget Sourcing' },
-  { id: '6', name: 'Sumaiya Rahman', email: 'sumaiya@creators.bd', role: 'Creator', status: 'Active', joined: 'Feb 10, 2025', active: '5 min ago', initials: 'SR', trustScore: 96, behaviorSegment: 'Boutique Closets' },
-  { id: '7', name: 'Tahmid Alvi', email: 'tahmid.alvi@creators.bd', role: 'Creator', status: 'Active', joined: 'Jan 28, 2025', active: '1 day ago', initials: 'TA', trustScore: 94, behaviorSegment: 'Tech Reviewing' },
-  { id: '8', name: 'Adnan Chowdhury', email: 'adnan@choosify.com', role: 'Admin', status: 'Active', joined: 'Sep 1, 2024', active: 'Active Now', initials: 'AC', trustScore: 100, behaviorSegment: 'Super Administrator' },
-];
+const mockUsers: MockUser[] = [];
 
 const RoleBadge = ({ role }: { role: string }) => {
   const styles: Record<string, string> = {
@@ -85,6 +77,19 @@ export default function ConsumersPage() {
   const [usersList, setUsersList] = useState<MockUser[]>(mockUsers);
   const { triggerMessage } = useContact();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [usersLoading, setUsersLoading] = useState(true);
+
+  useEffect(() => {
+    operationsApi
+      .listUsers()
+      .then((rows) => {
+        if (Array.isArray(rows) && rows.length) {
+          setUsersList(rows as MockUser[]);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setUsersLoading(false));
+  }, []);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);

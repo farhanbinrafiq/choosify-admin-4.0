@@ -138,6 +138,10 @@ export default function MessagesPage() {
   const [typingAgent, setTypingAgent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
+  const [messagingStatus, setMessagingStatus] = useState<{
+    mode: string;
+    channels: Record<string, string>;
+  } | null>(null);
   
   // Platform Support system state (Sync Threads)
   const [selectedThreadId, setSelectedThreadId] = useState<string>("");
@@ -371,6 +375,15 @@ export default function MessagesPage() {
       setLoading(false);
     };
     bootstrap();
+  }, []);
+
+  useEffect(() => {
+    fetch('/api/messaging/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setMessagingStatus({ mode: data.mode, channels: data.channels });
+      })
+      .catch(() => undefined);
   }, []);
 
   // When active platform changes, load corresponding conversations
@@ -804,6 +817,23 @@ export default function MessagesPage() {
           </div>
         </div>
       </div>
+
+      {messagingStatus && (
+        <div
+          className={`px-4 py-2 text-[10px] font-bold uppercase tracking-wider border-b shrink-0 ${
+            messagingStatus.mode === 'live'
+              ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+              : 'bg-amber-500/10 border-amber-500/20 text-amber-200'
+          }`}
+        >
+          {messagingStatus.mode === 'live'
+            ? 'Live Meta delivery enabled — WhatsApp, Messenger, and Instagram replies go to real customers.'
+            : 'Sandbox mode — inbox and simulator work locally. Set MESSAGING_MODE=live and Meta credentials after approval.'}
+          {' · '}
+          WA: {messagingStatus.channels.whatsapp} · FB: {messagingStatus.channels.messenger} · IG:{' '}
+          {messagingStatus.channels.instagram}
+        </div>
+      )}
 
       {/* 2. LIVE VIEWWORK PORTALS */}
       {activeInboxType === "customer" ? (

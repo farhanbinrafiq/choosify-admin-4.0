@@ -15,6 +15,7 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { operationsApi } from '../../services/operationsApi';
 
 // Required Payout interface
 export interface Payout {
@@ -31,6 +32,14 @@ export interface Payout {
 }
 
 export const Payouts = () => {
+  const [platformRevenue, setPlatformRevenue] = useState<number | null>(null);
+
+  useEffect(() => {
+    operationsApi.getAnalytics('30d').then((summary) => {
+      setPlatformRevenue(summary.orders.revenue);
+    }).catch(() => setPlatformRevenue(null));
+  }, []);
+
   // Initialize payouts with existing 3 entries plus 5 more realistic BD entries
   const [payouts, setPayouts] = useState<Payout[]>([
     { 
@@ -273,7 +282,12 @@ export const Payouts = () => {
     <div className="space-y-6 text-[#1A1A2E] text-left">
       
       {/* 4 Top Dynamic Stat cards computed from state */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm text-left">
+          <div className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mb-1">Storefront Revenue (30d)</div>
+          <div className="text-2xl font-bold text-[#1A1A2E]">৳ {(platformRevenue ?? 0).toLocaleString()}</div>
+          <div className="text-[10px] text-gray-500 mt-1">From live platform checkout orders</div>
+        </div>
         <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm text-left">
           <div className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mb-1">Total Payouts Vol</div>
           <div className="text-2xl font-bold text-[#1A1A2E]">৳ {totalPayoutsVolume.toLocaleString()}</div>

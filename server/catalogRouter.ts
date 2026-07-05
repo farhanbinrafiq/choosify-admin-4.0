@@ -2,12 +2,13 @@ import { Router } from 'express';
 import { catalogStore, defaultHomepage } from '../lib/vercel-catalog/catalogStore';
 import {
   normalizeBrandInput,
+  normalizeBrandPostInput,
   normalizeCategoryInput,
   normalizeDealInput,
   normalizeHomepageInput,
   normalizeProductInput,
 } from './catalogContract';
-import type { CatalogProduct } from '../src/types/catalog';
+import type { CatalogBrandPost, CatalogProduct } from '../src/types/catalog';
 import { uploadImageToCloudinary } from '../lib/vercel-catalog/mediaUpload';
 
 export const catalogRouter = Router();
@@ -435,5 +436,85 @@ catalogRouter.get('/catalog/product-details/:productId', async (req, res) => {
     res.json(detail);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get product detail' });
+  }
+});
+
+catalogRouter.get('/catalog/brand-posts', async (req, res) => {
+  try {
+    const posts = await catalogStore.listBrandPosts();
+    const status = typeof req.query.status === 'string' ? req.query.status : '';
+    const slug = typeof req.query.slug === 'string' ? req.query.slug : '';
+    const brandId = typeof req.query.brandId === 'string' ? req.query.brandId : '';
+    const filtered = posts.filter((post) => {
+      if (status && post.status !== status) return false;
+      if (slug && post.slug !== slug) return false;
+      if (brandId && post.brandId !== brandId) return false;
+      return true;
+    });
+    res.json({ data: filtered });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list brand posts' });
+  }
+});
+
+catalogRouter.get('/catalog/brand-posts/:id', async (req, res) => {
+  try {
+    const post = await catalogStore.getBrandPost(req.params.id);
+    if (!post) {
+      res.status(404).json({ error: 'Brand post not found' });
+      return;
+    }
+    res.json({ data: post });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get brand post' });
+  }
+});
+
+catalogRouter.post('/catalog/brand-posts', async (req, res) => {
+  try {
+    const normalized = normalizeBrandPostInput(req.body);
+    const saved = await catalogStore.upsertBrandPost(normalized);
+    res.status(201).json({ success: true, data: saved });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid brand post payload' });
+  }
+});
+
+catalogRouter.put('/catalog/brand-posts/:id', async (req, res) => {
+  try {
+    const existing = await catalogStore.getBrandPost(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Brand post not found' });
+      return;
+    }
+    const normalized = normalizeBrandPostInput({ ...req.body, id: req.params.id }, existing);
+    const saved = await catalogStore.upsertBrandPost(normalized);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid brand post payload' });
+  }
+});
+
+catalogRouter.patch('/catalog/brand-posts/:id', async (req, res) => {
+  try {
+    const existing = await catalogStore.getBrandPost(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Brand post not found' });
+      return;
+    }
+    const normalized = normalizeBrandPostInput({ ...existing, ...req.body, id: req.params.id }, existing);
+    const saved = await catalogStore.upsertBrandPost(normalized);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid brand post patch payload' });
+  }
+});
+
+catalogRouter.delete('/catalog/brand-posts/:id', async (req, res) => {
+  try {
+    await catalogStore.deleteBrandPost(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to delete brand post' });
   }
 });

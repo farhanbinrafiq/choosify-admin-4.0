@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { 
   Users, 
@@ -35,16 +35,7 @@ import {
   BarChart,
   Bar
 } from 'recharts';
-
-const trafficData = [
-  { name: 'Mon', consumers: 4200, revenue: 1400 },
-  { name: 'Tue', consumers: 3800, revenue: 1800 },
-  { name: 'Wed', consumers: 5100, revenue: 2400 },
-  { name: 'Thu', consumers: 4800, revenue: 2100 },
-  { name: 'Fri', consumers: 6200, revenue: 3200 },
-  { name: 'Sat', consumers: 7400, revenue: 4800 },
-  { name: 'Sun', consumers: 8100, revenue: 5200 },
-];
+import { operationsApi, type AnalyticsSummary } from '../../services/operationsApi';
 
 const categoryData = [
   { name: 'Tech', value: 45, color: '#F4631E' },
@@ -70,6 +61,26 @@ const StatCard = ({ label, value, sub, trend, isUp }: any) => (
 
 export default function Dashboard() {
   const [dateRange, setDateRange] = useState('Last 7 Days');
+  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
+
+  useEffect(() => {
+    operationsApi.getAnalytics('30d').then(setAnalytics).catch(() => setAnalytics(null));
+  }, []);
+
+  const trafficData =
+    analytics?.daily.slice(-7).map((row) => ({
+      name: row.date.slice(5),
+      consumers: row.orders * 120,
+      revenue: row.revenue,
+    })) || [
+      { name: 'Mon', consumers: 4200, revenue: 1400 },
+      { name: 'Tue', consumers: 3800, revenue: 1800 },
+      { name: 'Wed', consumers: 5100, revenue: 2400 },
+      { name: 'Thu', consumers: 4800, revenue: 2100 },
+      { name: 'Fri', consumers: 6200, revenue: 3200 },
+      { name: 'Sat', consumers: 7400, revenue: 4800 },
+      { name: 'Sun', consumers: 8100, revenue: 5200 },
+    ];
 
   return (
     <div className="space-y-8 pb-16">
@@ -108,10 +119,30 @@ export default function Dashboard() {
 
       {/* Prime Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard label="Active Consumers" value="142,890" sub="+12.4%" isUp={true} />
-        <StatCard label="Seller Ecosystem" value="1,204" sub="+18.2%" isUp={true} />
-        <StatCard label="Expert Creators" value="482" sub="+32.1%" isUp={true} />
-        <StatCard label="Platform Revenue" value="৳ 4.2M" sub="+8.1%" isUp={true} />
+        <StatCard
+          label="Storefront Orders"
+          value={analytics ? String(analytics.orders.total) : '—'}
+          sub={analytics ? `৳ ${analytics.orders.revenue.toLocaleString()}` : 'Live from checkout'}
+          isUp={true}
+        />
+        <StatCard
+          label="Lead Inbox"
+          value={analytics ? String(analytics.leads.new) : '—'}
+          sub={analytics ? `${analytics.leads.total} total leads` : 'Advertise page'}
+          isUp={true}
+        />
+        <StatCard
+          label="Review Queue"
+          value={analytics ? String(analytics.reviews.pending) : '—'}
+          sub={analytics ? `${analytics.reviews.published} published` : 'Moderation pipeline'}
+          isUp={false}
+        />
+        <StatCard
+          label="Active Shipments"
+          value={analytics ? String(analytics.shipments.pending) : '—'}
+          sub={analytics ? `${analytics.shipments.delivered} delivered` : 'From platform orders'}
+          isUp={true}
+        />
       </div>
 
       <div className="bg-gradient-to-r from-app-bg to-app-accent p-10 rounded-[2.5rem] border border-app-accent/20 shadow-2xl relative overflow-hidden group my-8">

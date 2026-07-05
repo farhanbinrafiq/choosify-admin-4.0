@@ -1,5 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../lib/firebase';
 import { CategoryType } from '../types';
+import {
+  fetchCategoriesFromApi,
+  persistCategoryCreate,
+  persistCategoryDelete,
+  persistCategoryUpdate,
+  syncAllCategoriesToApi,
+} from '../lib/categoryCatalogSync';
 
 export type UserRole = 
   | 'super_admin' 
@@ -38,6 +47,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   login: (role: UserRole) => void;
+  loginWithEmail: (email: string, password: string, fallbackRole?: UserRole) => Promise<UserRole>;
   logout: () => void;
   switchRole: (role: UserRole) => void;
   // Brand Switching Context API for multi-brand sellers
@@ -108,11 +118,53 @@ const mockProfiles: Record<UserRole, UserProfile> = {
   },
 };
 
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
+
+const EMAIL_ROLE_MAP: Record<string, UserRole> = {
+  'admin@choosify.com.bd': 'super_admin',
+  'finance@choosify.com.bd': 'finance_manager',
+  'support@choosify.com.bd': 'support_agent',
+  'marketing@choosify.com.bd': 'marketing_manager',
+  'moderator@choosify.com.bd': 'moderator',
+  'seller@choosify.com.bd': 'seller',
+  'creator@choosify.com.bd': 'creator',
+};
+
+function toUserRole(role: string, fallback: UserRole = 'admin'): UserRole {
+  const allowed: UserRole[] = [
+    'super_admin',
+    'admin',
+    'seller',
+    'creator',
+    'moderator',
+    'finance_manager',
+    'support_agent',
+    'marketing_manager',
+  ];
+  return allowed.includes(role as UserRole) ? (role as UserRole) : fallback;
+}
+
+async function fetchAuthProfile(token: string) {
+  const response = await fetch(`${API_BASE}/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    throw new Error('Unable to resolve admin profile');
+  }
+  return response.json() as Promise<{
+    uid: string;
+    email: string;
+    displayName: string;
+    role: string;
+  }>;
+}
+
 const AuthContext = createContext<AuthContextType>({ 
   user: null, 
   profile: null, 
   loading: true,
   login: () => {},
+  loginWithEmail: async () => 'admin',
   logout: () => {},
   switchRole: () => {},
   activeBrandId: null,
@@ -177,12 +229,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    // Load profile from local storage if exists
-    const savedRole = localStorage.getItem('choosify_mock_role') as UserRole;
-    if (savedRole && mockProfiles[savedRole]) {
-      setProfile(mockProfiles[savedRole]);
-    }
-    setLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          const token = await firebaseUser.getIdToken();
+          localStorage.setItem('choosify_auth_token', token);
+          const remote = await fetchAuthProfile(token);
+          setProfile({
+            id: remote.uid,
+            displayName: remote.displayName,
+            email: remote.email,
+            role: toUserRole(remote.role),
+          });
+        } catch {
+          const savedRole = localStorage.getItem('choosify_mock_role') as UserRole;
+          if (savedRole && mockProfiles[savedRole]) {
+            setProfile(mockProfiles[savedRole]);
+          }
+        }
+      } else {
+        const savedRole = localStorage.getItem('choosify_mock_role') as UserRole;
+        if (savedRole && mockProfiles[savedRole]) {
+          setProfile(mockProfiles[savedRole]);
+        }
+      }
+      setLoading(false);
+    });
+    return unsubscribe;
   }, []);
 
   // When profile loads or changes, manage activeBrandId
@@ -208,10 +281,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('choosify_mock_role', role);
   };
 
+  const loginWithEmail = async (email: string, password: string, fallbackRole: UserRole = 'super_admin') => {
+    try {
+      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const token = await credential.user.getIdToken();
+      localStorage.setItem('choosify_auth_token', token);
+      const remote = await fetchAuthProfile(token);
+      const role = toUserRole(remote.role, fallbackRole);
+      const nextProfile: UserProfile = {
+        id: remote.uid,
+        displayName: remote.displayName,
+        email: remote.email,
+        role,
+      };
+      setProfile(nextProfile);
+      localStorage.setItem('choosify_mock_role', role);
+      return role;
+    } catch {
+      const mappedRole = EMAIL_ROLE_MAP[email.trim().toLowerCase()] || fallbackRole;
+      login(mappedRole);
+      return mappedRole;
+    }
+  };
+
   const logout = () => {
     setProfile(null);
     localStorage.removeItem('choosify_mock_role');
     localStorage.removeItem('choosify_active_brand_id');
+    localStorage.removeItem('choosify_auth_token');
+    signOut(auth).catch(() => {});
   };
 
   const switchRole = (role: UserRole) => {
@@ -247,21 +345,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   // Categories Management System Implementation
-  const [categories, setCategories] = useState<CategoryType[]>(() => {
-    const saved = localStorage.getItem('choosify_categories');
-    if (saved) return JSON.parse(saved);
-    const initialCategories: CategoryType[] = [
-      { id: 'cat-fashion', parentId: null, name: 'Fashion & Apparel', slug: 'fashion-apparel', icon: 'Shirt', description: 'Clothing, traditional apparel, sarees, panjabis and wearable accessories.', displayOrder: 1, enabled: true },
-      { id: 'cat-sarees', parentId: 'cat-fashion', name: 'Jamdani & Silk Sarees', slug: 'sarees', icon: 'Layers', description: 'Traditional Jamdani, silk, and boutique sarees of Bangladesh.', displayOrder: 1, enabled: true },
-      { id: 'cat-panjabis', parentId: 'cat-fashion', name: 'Panjabis', slug: 'panjabis', icon: 'User', description: 'Traditional and designer Panjabis for men.', displayOrder: 2, enabled: true },
-      { id: 'cat-electronics', parentId: null, name: 'Electronics & Gadgets', slug: 'electronics-gadgets', icon: 'Smartphone', description: 'Smartphones, home devices, chargers, and tech accessories.', displayOrder: 2, enabled: true },
-      { id: 'cat-smartphones', parentId: 'cat-electronics', name: 'Smartphones', slug: 'smartphones', icon: 'Tablet', description: 'Latest smartphones from trusted global and local brands.', displayOrder: 1, enabled: true },
-      { id: 'cat-groceries', parentId: null, name: 'Organic Groceries', slug: 'organic-groceries', icon: 'Apple', description: 'Fresh, organic, and locally sourced safe food items.', displayOrder: 3, enabled: true },
-      { id: 'cat-home', parentId: null, name: 'Home & Living', slug: 'home-living', icon: 'Home', description: 'Furniture, kitchen items, and home decor items.', displayOrder: 4, enabled: true },
-    ];
-    localStorage.setItem('choosify_categories', JSON.stringify(initialCategories));
-    return initialCategories;
-  });
+  const [categories, setCategories] = useState<CategoryType[]>([]);
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchCategoriesFromApi()
+      .then((rows) => {
+        if (!cancelled) {
+          setCategories(rows);
+          setCategoriesLoaded(true);
+        }
+      })
+      .catch((error) => {
+        console.warn('[AuthContext] Failed to load categories from catalog API, using local fallback.', error);
+        if (cancelled) return;
+        const saved = localStorage.getItem('choosify_categories');
+        if (saved) {
+          setCategories(JSON.parse(saved));
+        } else {
+          const initialCategories: CategoryType[] = [
+            { id: 'cat-fashion', parentId: null, name: 'Fashion & Apparel', slug: 'fashion-apparel', icon: 'Shirt', description: 'Clothing, traditional apparel, sarees, panjabis and wearable accessories.', displayOrder: 1, enabled: true },
+            { id: 'cat-sarees', parentId: 'cat-fashion', name: 'Jamdani & Silk Sarees', slug: 'sarees', icon: 'Layers', description: 'Traditional Jamdani, silk, and boutique sarees of Bangladesh.', displayOrder: 1, enabled: true },
+            { id: 'cat-panjabis', parentId: 'cat-fashion', name: 'Panjabis', slug: 'panjabis', icon: 'User', description: 'Traditional and designer Panjabis for men.', displayOrder: 2, enabled: true },
+            { id: 'cat-electronics', parentId: null, name: 'Electronics & Gadgets', slug: 'electronics-gadgets', icon: 'Smartphone', description: 'Smartphones, home devices, chargers, and tech accessories.', displayOrder: 2, enabled: true },
+            { id: 'cat-smartphones', parentId: 'cat-electronics', name: 'Smartphones', slug: 'smartphones', icon: 'Tablet', description: 'Latest smartphones from trusted global and local brands.', displayOrder: 1, enabled: true },
+            { id: 'cat-groceries', parentId: null, name: 'Organic Groceries', slug: 'organic-groceries', icon: 'Apple', description: 'Fresh, organic, and locally sourced safe food items.', displayOrder: 3, enabled: true },
+            { id: 'cat-home', parentId: null, name: 'Home & Living', slug: 'home-living', icon: 'Home', description: 'Furniture, kitchen items, and home decor items.', displayOrder: 4, enabled: true },
+          ];
+          setCategories(initialCategories);
+        }
+        setCategoriesLoaded(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!categoriesLoaded) return;
+    localStorage.setItem('choosify_categories', JSON.stringify(categories));
+  }, [categories, categoriesLoaded]);
 
   const createCategory = (parentId: string | null, name: string, icon: string, description: string) => {
     const slug = name.toLowerCase().trim()
@@ -289,7 +415,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const updated = [...categories, newCategory];
     setCategories(updated);
-    localStorage.setItem('choosify_categories', JSON.stringify(updated));
+    persistCategoryCreate(newCategory).catch((error) => {
+      console.error('[AuthContext] Failed to persist new category to catalog API.', error);
+    });
     return newCategory;
   };
 
@@ -316,7 +444,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return c;
     });
     setCategories(updated);
-    localStorage.setItem('choosify_categories', JSON.stringify(updated));
+    const changed = updated.find((category) => category.id === id);
+    if (changed) {
+      persistCategoryUpdate(changed).catch((error) => {
+        console.error('[AuthContext] Failed to persist category update to catalog API.', error);
+      });
+    }
   };
 
   const deleteCategory = (id: string): boolean => {
@@ -326,7 +459,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     const updated = categories.filter(c => c.id !== id);
     setCategories(updated);
-    localStorage.setItem('choosify_categories', JSON.stringify(updated));
+    persistCategoryDelete(id).catch((error) => {
+      console.error('[AuthContext] Failed to delete category from catalog API.', error);
+    });
     return true;
   };
 
@@ -351,7 +486,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return c;
     });
     setCategories(updated);
-    localStorage.setItem('choosify_categories', JSON.stringify(updated));
+    const moved = updated.find((category) => category.id === id);
+    if (moved) {
+      persistCategoryUpdate(moved).catch((error) => {
+        console.error('[AuthContext] Failed to persist category move to catalog API.', error);
+      });
+    }
   };
 
   const reorderCategory = (id: string, newPosition: number) => {
@@ -375,12 +515,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     setCategories(updated);
-    localStorage.setItem('choosify_categories', JSON.stringify(updated));
+    Promise.all(
+      reorderedSameParent.map((category) => persistCategoryUpdate(category)),
+    ).catch((error) => {
+      console.error('[AuthContext] Failed to persist category reorder to catalog API.', error);
+    });
   };
 
   const importCategories = (imported: CategoryType[]) => {
     setCategories(imported);
-    localStorage.setItem('choosify_categories', JSON.stringify(imported));
+    syncAllCategoriesToApi(imported).catch((error) => {
+      console.error('[AuthContext] Failed to sync imported categories to catalog API.', error);
+    });
   };
 
   return (
@@ -389,6 +535,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       profile, 
       loading,
       login,
+      loginWithEmail,
       logout,
       switchRole,
       activeBrandId,

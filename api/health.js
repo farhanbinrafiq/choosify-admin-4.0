@@ -83,7 +83,7 @@ async function upsertProductDetailDoc(payload) {
   await db.collection(PRODUCT_DETAILS_COLLECTION2).doc(payload.productId).set(payload, { merge: true });
   return payload;
 }
-var PRODUCTS_COLLECTION2, CATEGORIES_COLLECTION2, BRANDS_COLLECTION2, DEALS_COLLECTION2, CREATORS_COLLECTION2, GUIDES_COLLECTION2, PLACEMENTS_COLLECTION2, PRODUCT_DETAILS_COLLECTION2, HOMEPAGE_DOC, SITE_DOC, firestoreAdminStore;
+var PRODUCTS_COLLECTION2, CATEGORIES_COLLECTION2, BRANDS_COLLECTION2, DEALS_COLLECTION2, CREATORS_COLLECTION2, GUIDES_COLLECTION2, PLACEMENTS_COLLECTION2, PRODUCT_DETAILS_COLLECTION2, BRAND_POSTS_COLLECTION2, HOMEPAGE_DOC, SITE_DOC, firestoreAdminStore;
 var init_catalogFirestoreAdmin = __esm({
   "lib/vercel-catalog/catalogFirestoreAdmin.ts"() {
     init_firebaseAdmin();
@@ -95,6 +95,7 @@ var init_catalogFirestoreAdmin = __esm({
     GUIDES_COLLECTION2 = "catalog_guides";
     PLACEMENTS_COLLECTION2 = "catalog_placements";
     PRODUCT_DETAILS_COLLECTION2 = "catalog_product_details";
+    BRAND_POSTS_COLLECTION2 = "catalog_brand_posts";
     HOMEPAGE_DOC = { collection: "settings", id: "catalog_homepage" };
     SITE_DOC = { collection: "settings", id: "catalog_site" };
     firestoreAdminStore = {
@@ -130,6 +131,10 @@ var init_catalogFirestoreAdmin = __esm({
       getProductDetail: (productId) => getProductDetailById(productId),
       upsertProductDetail: (payload) => upsertProductDetailDoc(payload),
       deleteProductDetail: (productId) => remove2(PRODUCT_DETAILS_COLLECTION2, productId),
+      listBrandPosts: () => listCollection2(BRAND_POSTS_COLLECTION2),
+      getBrandPost: (id) => getById2(BRAND_POSTS_COLLECTION2, id),
+      upsertBrandPost: (payload) => upsert2(BRAND_POSTS_COLLECTION2, payload),
+      deleteBrandPost: (id) => remove2(BRAND_POSTS_COLLECTION2, id),
       async getHomepage() {
         const db = await dbOrThrow();
         const snapshot = await db.collection(HOMEPAGE_DOC.collection).doc(HOMEPAGE_DOC.id).get();
@@ -449,8 +454,7 @@ var defaultSiteConfig = () => {
           links: [
             { label: "Suggest a Brand", url: "/suggest-brand" },
             { label: "Partnership", url: "/partnership" },
-            { label: "Advertise", url: "/advertise" },
-            { label: "B2B Solutions", url: "/b2b" }
+            { label: "Advertise", url: "/advertise" }
           ]
         },
         {
@@ -680,6 +684,227 @@ var defaultProductDetails = () => {
   ];
 };
 
+// lib/vercel-catalog/catalogBrandPostDefaults.ts
+var nowIso3 = () => (/* @__PURE__ */ new Date()).toISOString();
+var defaultBrandPosts = () => {
+  const ts = nowIso3();
+  return [
+    {
+      id: "bp-1",
+      slug: "aarong-eid-carnival-2026",
+      brandId: "10",
+      brandName: "Aarong",
+      brandLogo: "Aa",
+      kind: "festival",
+      title: "Aarong Eid Carnival 2026 \u2014 Heritage Collection Preview",
+      excerpt: "Experience handcrafted Eid collections, live artisan demos, and exclusive early access to limited festive pieces across Dhaka outlets.",
+      heroImage: "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=1200&h=700&fit=crop",
+      bannerImages: [
+        "https://images.unsplash.com/photo-1583391733956-3750e0ff4e8b?w=1920&h=800&fit=crop",
+        "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=1920&h=800&fit=crop"
+      ],
+      body: [
+        "Aarong invites you to the Eid Carnival 2026 \u2014 a celebration of Bangladeshi craftsmanship with curated heritage collections, trunk shows, and live weaving demonstrations.",
+        "Visit participating outlets in Gulshan, Dhanmondi, and Bashundhara City for styling sessions, gift wrapping, and members-only preview hours before the public launch.",
+        "Sponsored brand awareness post. Product availability varies by outlet. Terms apply."
+      ],
+      startDate: "2026-04-10T10:00:00",
+      endDate: "2026-04-20T22:00:00",
+      location: "Multiple Aarong outlets \xB7 Dhaka",
+      ctaLabel: "Find nearest outlet",
+      ctaUrl: "/brands/10",
+      linkedProductIds: ["5", "6"],
+      sponsored: true,
+      status: "live",
+      publishedAt: "2026-03-28",
+      createdAt: ts,
+      updatedAt: ts
+    },
+    {
+      id: "bp-2",
+      slug: "sailor-summer-drop-preview",
+      brandId: "12",
+      brandName: "Sailor",
+      brandLogo: "Sa",
+      kind: "launch",
+      title: "Sailor Summer Drop \u2014 Linen & Resort Line Preview",
+      excerpt: "First look at Sailor's breathable linen shirts and resort polos. Notify-me slots open for verified Choosify shoppers.",
+      heroImage: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=1200&h=700&fit=crop",
+      body: [
+        "Sailor's Summer Drop focuses on lightweight linen blends engineered for Bangladesh's heat \u2014 wrinkle-resistant finishes and expanded tall sizing.",
+        "Preview pieces will appear in select stores from April 1. Choosify users can save the drop to their dashboard for restock alerts."
+      ],
+      startDate: "2026-04-01T09:00:00",
+      endDate: "2026-06-30T23:59:00",
+      location: "Nationwide Sailor stores",
+      ctaLabel: "View brand profile",
+      ctaUrl: "/brands/12",
+      sponsored: true,
+      status: "live",
+      publishedAt: "2026-03-25",
+      createdAt: ts,
+      updatedAt: ts
+    },
+    {
+      id: "bp-3",
+      slug: "yellow-dhaka-fashion-week-styling",
+      brandId: "11",
+      brandName: "Yellow",
+      brandLogo: "Y",
+      kind: "event",
+      title: "Yellow \xD7 Dhaka Fashion Week \u2014 Styling Lounge",
+      excerpt: "Book a 15-minute styling session with Yellow consultants during Dhaka Fashion Week. Limited daily slots.",
+      heroImage: "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=1200&h=700&fit=crop",
+      body: [
+        "Yellow hosts an on-site styling lounge at Dhaka Fashion Week with complimentary fit checks and accessory pairing for registered guests.",
+        "Walk-ins welcome after 4 PM subject to availability. Sponsored event listing by Yellow."
+      ],
+      startDate: "2026-05-05T11:00:00",
+      endDate: "2026-05-08T21:00:00",
+      location: "ICCB, Dhaka",
+      ctaLabel: "Explore Yellow",
+      ctaUrl: "/brands/11",
+      sponsored: true,
+      status: "scheduled",
+      publishedAt: "2026-03-20",
+      createdAt: ts,
+      updatedAt: ts
+    },
+    {
+      id: "bp-4",
+      slug: "star-tech-gaming-fest",
+      brandId: "15",
+      brandName: "Star Tech",
+      brandLogo: "ST",
+      kind: "event",
+      title: "Star Tech Gaming Fest \u2014 Builds, Demos & Bundle Deals",
+      excerpt: "Hands-on RTX demo stations, custom PC build consults, and fest-only bundle pricing on peripherals.",
+      heroImage: "https://images.unsplash.com/photo-1587831990711-23ca6441447b?w=1200&h=700&fit=crop",
+      body: [
+        "Star Tech Gaming Fest returns with live benchmark demos, peripheral try-before-you-buy zones, and certified technician Q&A sessions.",
+        "Fest bundles are valid in-store during event hours only. Sponsored post \u2014 prices confirmed at checkout."
+      ],
+      startDate: "2026-04-18T12:00:00",
+      endDate: "2026-04-19T20:00:00",
+      location: "Star Tech \xB7 IDB Bhaban & Multiplan",
+      ctaLabel: "See Star Tech deals",
+      ctaUrl: "/brands/15",
+      linkedProductIds: ["1", "2", "3"],
+      sponsored: true,
+      status: "live",
+      publishedAt: "2026-03-22",
+      createdAt: ts,
+      updatedAt: ts
+    },
+    {
+      id: "bp-5",
+      slug: "apex-marathon-collab",
+      brandId: "3",
+      brandName: "Apex",
+      brandLogo: "Ap",
+      kind: "campaign",
+      title: "Apex \xD7 City Marathon \u2014 Performance Runner Preview",
+      excerpt: "Meet the upcoming Apex endurance runner developed with local athletes. Test pairs at the marathon expo zone.",
+      heroImage: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=1200&h=700&fit=crop",
+      body: [
+        "Apex showcases a marathon-focused silhouette with upgraded midsole foam and reflective upper panels at the city marathon expo.",
+        "Limited tester sizes available \u2014 first come, first served. Sponsored campaign by Apex Footwear."
+      ],
+      startDate: "2026-05-12T08:00:00",
+      endDate: "2026-05-12T18:00:00",
+      location: "Hatirjheel Expo Ground",
+      ctaLabel: "Visit Apex brand page",
+      ctaUrl: "/brands/3",
+      sponsored: true,
+      status: "scheduled",
+      publishedAt: "2026-03-18",
+      createdAt: ts,
+      updatedAt: ts
+    },
+    {
+      id: "bp-6",
+      slug: "bata-back-to-school",
+      brandId: "4",
+      brandName: "Bata",
+      brandLogo: "B",
+      kind: "campaign",
+      title: "Bata Back-to-School \u2014 Family Fit Day",
+      excerpt: "Free foot measurement for kids, school shoe bundles, and same-day insole fitting at participating Bata stores.",
+      heroImage: "https://images.unsplash.com/photo-1595950653106-6c9ebd614d3a?w=1200&h=700&fit=crop",
+      body: [
+        "Bata's Back-to-School campaign offers bundled pricing on verified school shoes with extended exchange windows through May.",
+        "Family Fit Day events run every Saturday morning at flagship locations."
+      ],
+      startDate: "2026-04-05T09:00:00",
+      endDate: "2026-05-31T20:00:00",
+      location: "Bata flagship stores",
+      ctaLabel: "Browse Bata",
+      ctaUrl: "/brands/4",
+      sponsored: true,
+      status: "live",
+      publishedAt: "2026-03-15",
+      createdAt: ts,
+      updatedAt: ts
+    },
+    {
+      id: "bp-7",
+      slug: "perfume-world-ramadan-gifting",
+      brandId: "8",
+      brandName: "Perfume World",
+      brandLogo: "PW",
+      kind: "store_moment",
+      title: "Perfume World \u2014 Ramadan Gifting Atelier",
+      excerpt: "Curated gift sets, engraving, and concierge fragrance matching for Eid gifting.",
+      heroImage: "https://images.unsplash.com/photo-1541643600914-78b084683601?w=1200&h=700&fit=crop",
+      body: [
+        "Perfume World opens a seasonal gifting atelier with complimentary wrapping and scent profiling sessions.",
+        "Appointment slots recommended on weekends. Sponsored store moment listing."
+      ],
+      startDate: "2026-03-20T10:00:00",
+      endDate: "2026-04-15T21:00:00",
+      location: "Banani & Gulshan branches",
+      ctaLabel: "View Perfume World",
+      ctaUrl: "/brands/8",
+      sponsored: true,
+      status: "live",
+      publishedAt: "2026-03-10",
+      createdAt: ts,
+      updatedAt: ts
+    },
+    {
+      id: "bp-8",
+      slug: "samsung-galaxy-unpacked-bd",
+      brandId: "1",
+      brandName: "Samsung",
+      brandLogo: "S",
+      kind: "launch",
+      title: "Samsung Galaxy Unpacked \u2014 Bangladesh Watch Party",
+      excerpt: "Join authorized Samsung partners for the global Unpacked livestream with pre-order incentives.",
+      heroImage: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=1200&h=700&fit=crop",
+      bannerImages: [
+        "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=1920&h=800&fit=crop",
+        "https://images.unsplash.com/photo-1610945415295-d9bbfbe99f95?w=1920&h=800&fit=crop",
+        "https://images.unsplash.com/photo-1556656793-08538906a9f8?w=1920&h=800&fit=crop"
+      ],
+      body: [
+        "Authorized Samsung outlets host watch parties with live Q&A, trade-in assessments, and pre-order bundles for Choosify-verified shoppers.",
+        "Registration opens one week before the event. Sponsored launch awareness by Samsung."
+      ],
+      startDate: "2026-07-15T19:00:00",
+      endDate: "2026-07-15T23:00:00",
+      location: "Authorized Samsung stores \xB7 Dhaka & Chittagong",
+      ctaLabel: "Explore Samsung",
+      ctaUrl: "/brands/1",
+      linkedProductIds: ["1"],
+      sponsored: true,
+      status: "scheduled",
+      publishedAt: "2026-03-01",
+      createdAt: ts,
+      updatedAt: ts
+    }
+  ];
+};
+
 // lib/vercel-catalog/catalogMemoryStore.ts
 var PRODUCTS_COLLECTION = "catalog_products";
 var CATEGORIES_COLLECTION = "catalog_categories";
@@ -689,6 +914,7 @@ var CREATORS_COLLECTION = "catalog_creators";
 var GUIDES_COLLECTION = "catalog_guides";
 var PLACEMENTS_COLLECTION = "catalog_placements";
 var PRODUCT_DETAILS_COLLECTION = "catalog_product_details";
+var BRAND_POSTS_COLLECTION = "catalog_brand_posts";
 var memoryState = {
   products: defaultProducts(),
   categories: defaultCategories(),
@@ -698,6 +924,7 @@ var memoryState = {
   guides: defaultGuides(),
   placements: defaultPlacements(),
   productDetails: defaultProductDetails(),
+  brandPosts: defaultBrandPosts(),
   homepage: defaultHomepage(),
   site: defaultSiteConfig()
 };
@@ -719,6 +946,8 @@ var collectionMemoryRef = (collectionName) => {
       return memoryState.placements;
     case PRODUCT_DETAILS_COLLECTION:
       return memoryState.productDetails;
+    case BRAND_POSTS_COLLECTION:
+      return memoryState.brandPosts;
     default:
       return [];
   }
@@ -796,6 +1025,10 @@ var catalogStore = {
   getProductDetail: (productId) => getById(PRODUCT_DETAILS_COLLECTION, productId),
   upsertProductDetail: (payload) => upsert(PRODUCT_DETAILS_COLLECTION, payload),
   deleteProductDetail: (productId) => remove(PRODUCT_DETAILS_COLLECTION, productId),
+  listBrandPosts: () => listCollection(BRAND_POSTS_COLLECTION),
+  getBrandPost: (id) => getById(BRAND_POSTS_COLLECTION, id),
+  upsertBrandPost: (payload) => upsert(BRAND_POSTS_COLLECTION, payload),
+  deleteBrandPost: (id) => remove(BRAND_POSTS_COLLECTION, id),
   async getHomepage() {
     return memoryState.homepage;
   },
@@ -822,6 +1055,7 @@ var CREATORS_COLLECTION3 = "catalog_creators";
 var GUIDES_COLLECTION3 = "catalog_guides";
 var PLACEMENTS_COLLECTION3 = "catalog_placements";
 var PRODUCT_DETAILS_COLLECTION3 = "catalog_product_details";
+var BRAND_POSTS_COLLECTION3 = "catalog_brand_posts";
 var useAdminFirestore = process.env.CATALOG_USE_FIRESTORE === "true" && hasFirebaseAdminCredentials();
 var adminStorePromise = null;
 async function getAdminStore() {
@@ -850,6 +1084,8 @@ async function listCollection3(collectionName) {
         return admin.listPlacements();
       case PRODUCT_DETAILS_COLLECTION3:
         return admin.listProductDetails();
+      case BRAND_POSTS_COLLECTION3:
+        return admin.listBrandPosts();
       default:
         return [];
     }
@@ -874,6 +1110,8 @@ function listFromMemory(collectionName) {
       return catalogStore.listPlacements();
     case PRODUCT_DETAILS_COLLECTION3:
       return catalogStore.listProductDetails();
+    case BRAND_POSTS_COLLECTION3:
+      return catalogStore.listBrandPosts();
     default:
       return Promise.resolve([]);
   }
@@ -896,6 +1134,8 @@ function getFromMemory(collectionName, id) {
       return catalogStore.getPlacement(id);
     case PRODUCT_DETAILS_COLLECTION3:
       return catalogStore.getProductDetail(id);
+    case BRAND_POSTS_COLLECTION3:
+      return catalogStore.getBrandPost(id);
     default:
       return Promise.resolve(null);
   }
@@ -918,6 +1158,8 @@ function upsertToMemory(collectionName, data) {
       return catalogStore.upsertPlacement(data);
     case PRODUCT_DETAILS_COLLECTION3:
       return catalogStore.upsertProductDetail(data);
+    case BRAND_POSTS_COLLECTION3:
+      return catalogStore.upsertBrandPost(data);
     default:
       return Promise.resolve(data);
   }
@@ -940,6 +1182,8 @@ function removeFromMemory(collectionName, id) {
       return catalogStore.deletePlacement(id);
     case PRODUCT_DETAILS_COLLECTION3:
       return catalogStore.deleteProductDetail(id);
+    case BRAND_POSTS_COLLECTION3:
+      return catalogStore.deleteBrandPost(id);
     default:
       return Promise.resolve();
   }
@@ -964,6 +1208,8 @@ async function getById3(collectionName, id) {
         return admin.getPlacement(id);
       case PRODUCT_DETAILS_COLLECTION3:
         return admin.getProductDetail(id);
+      case BRAND_POSTS_COLLECTION3:
+        return admin.getBrandPost(id);
       default:
         return null;
     }
@@ -990,6 +1236,8 @@ async function upsert3(collectionName, data) {
         return admin.upsertPlacement(data);
       case PRODUCT_DETAILS_COLLECTION3:
         return admin.upsertProductDetail(data);
+      case BRAND_POSTS_COLLECTION3:
+        return admin.upsertBrandPost(data);
       default:
         return data;
     }
@@ -1016,6 +1264,8 @@ async function remove3(collectionName, id) {
         return admin.deletePlacement(id);
       case PRODUCT_DETAILS_COLLECTION3:
         return admin.deleteProductDetail(id);
+      case BRAND_POSTS_COLLECTION3:
+        return admin.deleteBrandPost(id);
       default:
         return;
     }
@@ -1055,6 +1305,10 @@ var catalogStore2 = {
   getProductDetail: (productId) => getById3(PRODUCT_DETAILS_COLLECTION3, productId),
   upsertProductDetail: (payload) => upsert3(PRODUCT_DETAILS_COLLECTION3, { ...payload, id: payload.productId }),
   deleteProductDetail: (productId) => remove3(PRODUCT_DETAILS_COLLECTION3, productId),
+  listBrandPosts: () => listCollection3(BRAND_POSTS_COLLECTION3),
+  getBrandPost: (id) => getById3(BRAND_POSTS_COLLECTION3, id),
+  upsertBrandPost: (payload) => upsert3(BRAND_POSTS_COLLECTION3, payload),
+  deleteBrandPost: (id) => remove3(BRAND_POSTS_COLLECTION3, id),
   async getHomepage() {
     if (useAdminFirestore) {
       const admin = await getAdminStore();
@@ -15633,7 +15887,7 @@ function date4(params) {
 config(en_default());
 
 // lib/vercel-catalog/catalogEditorialContract.ts
-var nowIso3 = () => (/* @__PURE__ */ new Date()).toISOString();
+var nowIso4 = () => (/* @__PURE__ */ new Date()).toISOString();
 var toString = (value, fallback = "") => typeof value === "string" ? value : fallback;
 var toNumber = (value, fallback = 0) => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -15672,8 +15926,8 @@ var normalizeCreatorInput = (payload, existing) => {
     reels: Array.isArray(raw.reels) ? raw.reels : existing?.reels ?? [],
     blogs: Array.isArray(raw.blogs) ? raw.blogs : existing?.blogs ?? [],
     status: statusRaw === "draft" || statusRaw === "archived" ? statusRaw : "live",
-    createdAt: existing?.createdAt ?? nowIso3(),
-    updatedAt: nowIso3()
+    createdAt: existing?.createdAt ?? nowIso4(),
+    updatedAt: nowIso4()
   };
 };
 var normalizeGuideInput = (payload, existing) => {
@@ -15709,8 +15963,8 @@ var normalizeGuideInput = (payload, existing) => {
     seoOgImage: toString(raw.seoOgImage, existing?.seoOgImage),
     seoCanonicalUrl: toString(raw.seoCanonicalUrl, existing?.seoCanonicalUrl),
     status: statusRaw === "draft" || statusRaw === "archived" ? statusRaw : "live",
-    publishedAt: toString(raw.publishedAt, existing?.publishedAt ?? nowIso3()),
-    updatedAt: nowIso3()
+    publishedAt: toString(raw.publishedAt, existing?.publishedAt ?? nowIso4()),
+    updatedAt: nowIso4()
   };
 };
 var normalizePlacementInput = (payload, existing) => {
@@ -15726,15 +15980,15 @@ var normalizePlacementInput = (payload, existing) => {
     placement: toString(raw.placement, existing?.placement ?? "homepage_sponsored_ads"),
     title: toString(raw.title, existing?.title),
     image: toString(raw.image, existing?.image),
-    startDate: toString(raw.startDate, existing?.startDate ?? nowIso3()),
-    endDate: toString(raw.endDate, existing?.endDate ?? nowIso3()),
+    startDate: toString(raw.startDate, existing?.startDate ?? nowIso4()),
+    endDate: toString(raw.endDate, existing?.endDate ?? nowIso4()),
     hasCountdown: toBoolean(raw.hasCountdown, existing?.hasCountdown ?? false),
     dealPrice: raw.dealPrice !== void 0 ? toNumber(raw.dealPrice) : existing?.dealPrice,
     originalPrice: raw.originalPrice !== void 0 ? toNumber(raw.originalPrice) : existing?.originalPrice,
     priority: Math.floor(toNumber(raw.priority, existing?.priority ?? 0)),
     isActive: toBoolean(raw.isActive, existing?.isActive ?? true),
-    createdAt: existing?.createdAt ?? nowIso3(),
-    updatedAt: nowIso3()
+    createdAt: existing?.createdAt ?? nowIso4(),
+    updatedAt: nowIso4()
   };
 };
 var normalizeProductDetailInput = (payload, productId, existing) => {
@@ -15755,7 +16009,7 @@ var normalizeProductDetailInput = (payload, productId, existing) => {
     seoTitle: toString(raw.seoTitle, existing?.seoTitle),
     seoDescription: toString(raw.seoDescription, existing?.seoDescription),
     seoKeywords: toString(raw.seoKeywords, existing?.seoKeywords),
-    updatedAt: nowIso3()
+    updatedAt: nowIso4()
   };
 };
 var normalizeSeoEntryInput = (payload, idx) => {
@@ -15774,7 +16028,7 @@ var normalizeSeoEntryInput = (payload, idx) => {
 // lib/vercel-catalog/catalogContract.ts
 var nonEmpty = external_exports.string().trim().min(1);
 var isoDate = external_exports.string().datetime();
-var nowIso4 = () => (/* @__PURE__ */ new Date()).toISOString();
+var nowIso5 = () => (/* @__PURE__ */ new Date()).toISOString();
 var slugify3 = (value) => value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-");
 var toString2 = (value, fallback) => typeof value === "string" ? value : fallback ?? "";
 var toNumber2 = (value, fallback = 0) => {
@@ -15829,7 +16083,7 @@ var productSchema = external_exports.object({
   categoryName: external_exports.string(),
   image: external_exports.string(),
   gallery: external_exports.array(external_exports.string()),
-  modeType: external_exports.enum(["retail", "wholesale"]),
+  modeType: external_exports.literal("retail"),
   price: external_exports.number().nonnegative(),
   originalPrice: external_exports.number().nonnegative().optional(),
   stock: external_exports.number().int(),
@@ -15853,7 +16107,7 @@ var dealSchema = external_exports.object({
   seller: external_exports.string(),
   category: external_exports.string(),
   status: external_exports.enum(["live", "pending", "expiring", "expired", "rejected", "draft"]),
-  type: external_exports.enum(["retail", "wholesale"]),
+  type: external_exports.literal("retail"),
   discountType: external_exports.enum(["percentage", "flat"]),
   discountValue: external_exports.number().nonnegative(),
   promoCode: external_exports.string().optional(),
@@ -15893,7 +16147,7 @@ var homepageSchema = external_exports.object({
   featuredGuideIds: external_exports.array(external_exports.string()),
   updatedAt: isoDate
 });
-var existingOrNow = (existingDate) => existingDate ? existingDate : nowIso4();
+var existingOrNow = (existingDate) => existingDate ? existingDate : nowIso5();
 var normalizeCategoryInput = (payload, existing) => {
   const raw = payload ?? {};
   const name = toString2(raw.name, existing?.name ?? "Untitled Category");
@@ -15908,7 +16162,7 @@ var normalizeCategoryInput = (payload, existing) => {
     enabled: toBoolean2(raw.enabled, existing?.enabled ?? true),
     displayOrder: Math.floor(toNumber2(raw.displayOrder, existing?.displayOrder ?? 0)),
     createdAt: existingOrNow(existing?.createdAt),
-    updatedAt: nowIso4()
+    updatedAt: nowIso5()
   };
   return categorySchema.parse(normalized);
 };
@@ -15931,7 +16185,7 @@ var normalizeBrandInput = (payload, existing) => {
     featuredFlag: toBoolean2(raw.featuredFlag, existing?.featuredFlag ?? false),
     sponsoredFlag: toBoolean2(raw.sponsoredFlag, existing?.sponsoredFlag ?? false),
     createdAt: existingOrNow(existing?.createdAt),
-    updatedAt: nowIso4()
+    updatedAt: nowIso5()
   };
   return brandSchema.parse(normalized);
 };
@@ -15940,7 +16194,6 @@ var normalizeProductInput = (payload, existing) => {
   const title = toString2(raw.title, toString2(raw.name, existing?.title ?? "Untitled Product"));
   const id = toString2(raw.id, existing?.id ?? `prod-${Date.now()}`);
   const statusRaw = toString2(raw.status, existing?.status ?? "draft").toLowerCase();
-  const modeRaw = toString2(raw.modeType, toString2(raw.mode_type, existing?.modeType ?? "retail")).toLowerCase();
   const normalized = {
     id,
     slug: toString2(raw.slug, existing?.slug ?? slugify3(title || id)),
@@ -15952,7 +16205,7 @@ var normalizeProductInput = (payload, existing) => {
     categoryName: toString2(raw.categoryName, toString2(raw.category, existing?.categoryName ?? "General")),
     image: toString2(raw.image, existing?.image ?? ""),
     gallery: toStringArray2(raw.gallery).length > 0 ? toStringArray2(raw.gallery) : existing?.gallery ?? [],
-    modeType: modeRaw === "wholesale" ? "wholesale" : "retail",
+    modeType: "retail",
     price: toNumber2(raw.price, existing?.price ?? 0),
     originalPrice: raw.originalPrice !== void 0 ? toNumber2(raw.originalPrice) : existing?.originalPrice,
     stock: Math.floor(toNumber2(raw.stock, existing?.stock ?? 0)),
@@ -15967,7 +16220,7 @@ var normalizeProductInput = (payload, existing) => {
     isNewArrival: toBoolean2(raw.isNewArrival, existing?.isNewArrival ?? false),
     isBestseller: toBoolean2(raw.isBestseller, existing?.isBestseller ?? false),
     createdAt: existingOrNow(existing?.createdAt),
-    updatedAt: nowIso4()
+    updatedAt: nowIso5()
   };
   return productSchema.parse(normalized);
 };
@@ -15977,8 +16230,7 @@ var normalizeDealInput = (payload, existing) => {
   const id = toString2(raw.id, existing?.id ?? `deal-${Date.now()}`);
   const statusRaw = toString2(raw.status, existing?.status ?? "draft").toLowerCase();
   const discountTypeRaw = toString2(raw.discountType, existing?.discountType ?? "percentage").toLowerCase();
-  const typeRaw = toString2(raw.type, existing?.type ?? "retail").toLowerCase();
-  const validUntil = toString2(raw.validUntil, toString2(raw.expiry, existing?.validUntil ?? nowIso4()));
+  const validUntil = toString2(raw.validUntil, toString2(raw.expiry, existing?.validUntil ?? nowIso5()));
   const normalized = {
     id,
     slug: toString2(raw.slug, existing?.slug ?? slugify3(name || id)),
@@ -15986,17 +16238,17 @@ var normalizeDealInput = (payload, existing) => {
     seller: toString2(raw.seller, existing?.seller ?? "Platform"),
     category: toString2(raw.category, existing?.category ?? "General"),
     status: statusRaw === "live" || statusRaw === "pending" || statusRaw === "expiring" || statusRaw === "expired" || statusRaw === "rejected" ? statusRaw : "draft",
-    type: typeRaw === "wholesale" ? "wholesale" : "retail",
+    type: "retail",
     discountType: discountTypeRaw === "flat" ? "flat" : "percentage",
     discountValue: toNumber2(raw.discountValue, toNumber2(raw.discount, existing?.discountValue ?? 0)),
     promoCode: toString2(raw.promoCode, existing?.promoCode),
     productId: toString2(raw.productId, existing?.productId),
     brandId: toString2(raw.brandId, existing?.brandId),
     clicks: toNumber2(raw.clicks, existing?.clicks ?? 0),
-    validFrom: toString2(raw.validFrom, existing?.validFrom ?? nowIso4()),
+    validFrom: toString2(raw.validFrom, existing?.validFrom ?? nowIso5()),
     validUntil,
     createdAt: existingOrNow(existing?.createdAt),
-    updatedAt: nowIso4()
+    updatedAt: nowIso5()
   };
   return dealSchema.parse(normalized);
 };
@@ -16038,7 +16290,7 @@ var normalizeHomepageInput = (payload, existing) => {
     featuredDealIds: toStringArray2(raw.featuredDealIds).length > 0 ? toStringArray2(raw.featuredDealIds) : existing?.featuredDealIds ?? [],
     featuredCreatorIds: toStringArray2(raw.featuredCreatorIds).length > 0 ? toStringArray2(raw.featuredCreatorIds) : existing?.featuredCreatorIds ?? [],
     featuredGuideIds: toStringArray2(raw.featuredGuideIds).length > 0 ? toStringArray2(raw.featuredGuideIds) : existing?.featuredGuideIds ?? [],
-    updatedAt: nowIso4()
+    updatedAt: nowIso5()
   };
   return homepageSchema.parse(normalized);
 };
@@ -16108,7 +16360,7 @@ var normalizeSiteInput = (payload, existing) => {
     seoEntries: (Array.isArray(raw.seoEntries) ? raw.seoEntries : existing?.seoEntries ?? []).map(normalizeSeoEntryInput),
     announcementBarText: toString2(raw.announcementBarText, existing?.announcementBarText ?? ""),
     announcementBarEnabled: toBoolean2(raw.announcementBarEnabled, existing?.announcementBarEnabled ?? false),
-    updatedAt: nowIso4()
+    updatedAt: nowIso5()
   };
 };
 

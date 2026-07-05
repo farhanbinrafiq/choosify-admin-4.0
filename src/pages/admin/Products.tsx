@@ -78,24 +78,55 @@ export default function ProductsPage() {
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
+  const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [selectedBrandFilter, setSelectedBrandFilter] = useState<string | null>(activeBrandId);
 
-  const handleBulkApprove = () => {
-    setProducts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, status: 'Live' } : p));
-    showToast(`Approved ${selectedIds.size} products to Live`);
-    setSelectedIds(new Set());
+  const handleBulkApprove = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkActionLoading(true);
+    try {
+      await Promise.all(ids.map((id) => catalogApi.updateProduct(id, { status: 'live' })));
+      setProducts((prev) => prev.map((p) => (selectedIds.has(p.id) ? { ...p, status: 'Live' } : p)));
+      showToast(`Approved ${ids.length} products to Live`);
+      setSelectedIds(new Set());
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Bulk approve failed');
+    } finally {
+      setBulkActionLoading(false);
+    }
   };
 
-  const handleBulkReject = () => {
-    setProducts(prev => prev.map(p => selectedIds.has(p.id) ? { ...p, status: 'Rejected' } : p));
-    showToast(`Rejected ${selectedIds.size} products`);
-    setSelectedIds(new Set());
+  const handleBulkReject = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkActionLoading(true);
+    try {
+      await Promise.all(ids.map((id) => catalogApi.updateProduct(id, { status: 'archived' })));
+      setProducts((prev) => prev.map((p) => (selectedIds.has(p.id) ? { ...p, status: 'Flagged' } : p)));
+      showToast(`Archived ${ids.length} products`);
+      setSelectedIds(new Set());
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Bulk reject failed');
+    } finally {
+      setBulkActionLoading(false);
+    }
   };
 
-  const handleBulkDelete = () => {
-    setProducts(prev => prev.filter(p => !selectedIds.has(p.id)));
-    showToast(`Deleted ${selectedIds.size} products from catalog`);
-    setSelectedIds(new Set());
+  const handleBulkDelete = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBulkActionLoading(true);
+    try {
+      await Promise.all(ids.map((id) => catalogApi.deleteProduct(id)));
+      setProducts((prev) => prev.filter((p) => !selectedIds.has(p.id)));
+      showToast(`Deleted ${ids.length} products from catalog`);
+      setSelectedIds(new Set());
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Bulk delete failed');
+    } finally {
+      setBulkActionLoading(false);
+    }
   };
 
   const handleExportCSV = () => {
@@ -204,7 +235,7 @@ export default function ProductsPage() {
            </p>
         </div>
         <div className="flex items-center gap-3">
-           <button className="p-2.5 bg-white/5 border border-app-border rounded-xl text-app-text-secondary hover:text-white transition-all">
+           <button className="p-2.5 bg-white border border-app-border rounded-xl text-app-text-secondary hover:text-app-accent hover:border-app-accent/30 transition-all">
               <Filter className="w-4 h-4" />
            </button>
            {isContentStudio ? (
@@ -247,7 +278,7 @@ export default function ProductsPage() {
         <div className="bg-app-card rounded-2xl border border-app-border p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="text-[11px] font-bold text-[#EB4501] uppercase tracking-wider">🔥 Popularity Insights</h4>
-            <span className="text-[9px] bg-white/5 px-2 py-0.5 rounded text-app-text-secondary font-semibold">Real-time</span>
+            <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-app-text-secondary font-semibold">Real-time</span>
           </div>
           <div className="space-y-3">
             <div className="flex items-center justify-between text-xs border-b border-app-border pb-2">
@@ -278,7 +309,7 @@ export default function ProductsPage() {
         <div className="bg-app-card rounded-2xl border border-app-border p-5 space-y-4">
           <div className="flex items-center justify-between">
             <h4 className="text-[11px] font-bold text-[#EB4501] uppercase tracking-wider">📊 Top Performing Categories</h4>
-            <span className="text-[9px] bg-white/5 px-2 py-0.5 rounded text-app-text-secondary font-semibold">MTD</span>
+            <span className="text-[9px] bg-slate-100 px-2 py-0.5 rounded text-app-text-secondary font-semibold">MTD</span>
           </div>
           <div className="space-y-2.5">
             {[
@@ -291,7 +322,7 @@ export default function ProductsPage() {
                   <span className="text-app-text-primary">{item.cat}</span>
                   <span className="text-app-text-secondary font-mono">{item.val} ({item.share})</span>
                 </div>
-                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                   <div className={`h-full bg-gradient-to-r from-app-accent to-[#F4631E]${item.width}rounded-full`} />
                 </div>
               </div>
@@ -333,7 +364,7 @@ export default function ProductsPage() {
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-app-text-secondary group-focus-within:text-app-accent transition-colors" />
           <input 
             placeholder="Search products, brands, sellers..." 
-            className="w-full bg-app-sidebar border border-app-border rounded-xl pl-11 pr-4 py-2.5 text-[12px] text-app-text-primary outline-none focus:border-app-accent/40 transition-all font-medium" 
+            className="w-full bg-white border border-app-border rounded-xl pl-11 pr-4 py-2.5 text-[12px] text-app-text-primary placeholder:text-app-text-muted outline-none focus:border-app-accent focus:ring-2 focus:ring-app-accent/15 transition-all font-medium" 
           />
         </div>
         <div className="flex gap-2">
@@ -341,7 +372,7 @@ export default function ProductsPage() {
              <select 
                value={selectedBrandFilter || ''}
                onChange={(e) => setSelectedBrandFilter(e.target.value || null)}
-               className="bg-app-sidebar border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-app-text-primary font-medium outline-none focus:border-app-accent/40 cursor-pointer"
+               className="bg-white border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-app-text-primary font-medium outline-none focus:border-app-accent focus:ring-2 focus:ring-app-accent/15 cursor-pointer"
              >
                <option value="">All Brands</option>
                {allBrands.filter(b => ownedBrandIds.includes(b.id)).map(b => (
@@ -349,13 +380,13 @@ export default function ProductsPage() {
                ))}
              </select>
            )}
-           <select className="bg-app-sidebar border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-app-text-primary font-medium outline-none focus:border-app-accent/40">
+           <select className="bg-white border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-app-text-primary font-medium outline-none focus:border-app-accent focus:ring-2 focus:ring-app-accent/15 cursor-pointer">
              <option>All Categories</option>
              <option>Mobile</option>
              <option>Electronics</option>
              <option>Fashion</option>
            </select>
-           <select className="bg-app-sidebar border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-app-text-primary font-medium outline-none focus:border-app-accent/40">
+           <select className="bg-white border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-app-text-primary font-medium outline-none focus:border-app-accent focus:ring-2 focus:ring-app-accent/15 cursor-pointer">
              <option>Status: Any</option>
              <option>Live</option>
              <option>Pending</option>
@@ -399,7 +430,7 @@ export default function ProductsPage() {
           </div>
           <button
             onClick={() => setSelectedIds(new Set())}
-            className="text-app-text-secondary hover:text-white px-3 py-1 cursor-pointer transition-colors uppercase text-[10px]"
+            className="text-app-text-secondary hover:text-app-accent px-3 py-1 cursor-pointer transition-colors uppercase text-[10px]"
           >
             ✕ Clear selection
           </button>
@@ -413,7 +444,7 @@ export default function ProductsPage() {
           </div>
         )}
         <table className="w-full text-left">
-          <thead className="bg-white/[0.02] border-b border-app-border">
+          <thead className="bg-slate-50 border-b border-app-border">
             <tr>
               <th className="p-6 w-12 text-center">
                 <input 
@@ -438,7 +469,7 @@ export default function ProductsPage() {
               <th className="p-6 text-[10px] font-bold text-app-text-secondary uppercase tracking-[0.2em] text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-app-border">
             {isLoadingProducts ? (
               <tr>
                 <td colSpan={6} className="p-10 text-center text-app-text-secondary text-sm">
@@ -454,7 +485,7 @@ export default function ProductsPage() {
             ) : displayedProducts.map((p) => {
               const Icon = p.icon;
               return (
-                <tr key={p.id} className="group hover:bg-white/[0.02] transition-colors">
+                <tr key={p.id} className="group hover:bg-slate-50/80 transition-colors">
                   <td className="p-6 w-12 text-center">
                     <input 
                       type="checkbox" 
@@ -491,7 +522,7 @@ export default function ProductsPage() {
                     </div>
                   </td>
                   <td className="p-6">
-                    <span className="text-[10px] px-3 py-1 rounded-lg bg-app-sidebar border border-app-border text-app-text-primary font-bold uppercase tracking-widest">{p.category}</span>
+                    <span className="text-[10px] px-3 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold uppercase tracking-widest">{p.category}</span>
                   </td>
                   <td className="p-6">
                     <div className="text-[14px] font-extrabold text-app-text-primary">{p.price}</div>
@@ -509,7 +540,7 @@ export default function ProductsPage() {
                     <div className="flex justify-end gap-2">
                        <Link 
                         to={`/dashboard/content-studio/products/${p.id}/edit`}
-                        className="p-2.5 bg-white/5 border border-app-border rounded-xl text-app-text-secondary hover:text-white hover:border-app-accent/40 transition-all"
+                        className="p-2.5 bg-white border border-app-border rounded-xl text-app-text-secondary hover:text-app-accent hover:border-app-accent/40 transition-all"
                        >
                          <Tag className="w-4 h-4" />
                        </Link>

@@ -16,6 +16,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useBrandProfiles } from '../../contexts/BrandProfilesContext';
 import { useAds } from '../../contexts/AdsContext';
 import { catalogApi } from '../../services/catalogApi';
+import { saveCmsVersion, getCmsVersion } from '../../lib/cmsVersions';
 
 // Types for workspaces
 type WorkspaceId = 
@@ -163,6 +164,57 @@ export default function WebsiteCMSStudio() {
     setTimeout(() => setToast(null), 3500);
   };
 
+  const handleRollback = async (log: { newValue?: string; previousValue?: string }) => {
+    const versionRef = log.newValue?.startsWith('version:')
+      ? log.newValue.slice('version:'.length)
+      : log.previousValue?.startsWith('version:')
+        ? log.previousValue.slice('version:'.length)
+        : null;
+    if (!versionRef) {
+      showToast('No version snapshot linked to this log entry.', 'info');
+      return;
+    }
+    const snapshot = getCmsVersion(versionRef);
+    if (!snapshot) {
+      showToast('Version snapshot not found in local storage.', 'error');
+      return;
+    }
+    setLocalHeroBanners(snapshot.heroBanners as any[]);
+    setLocalHomepageSections(snapshot.homepageSections as any[]);
+    setLocalFooter(snapshot.footer as any);
+    setLocalSeoEntries(snapshot.seoEntries as any[]);
+    setLocalBadges(snapshot.productBadges as any[]);
+    setLocalSocialLinks(snapshot.extendedSocialLinks as any[]);
+    setLocalAssets(snapshot.websiteAssets as any);
+    setLocalGlobalSettings(snapshot.globalSettings as any);
+    setLocalPopularSearches(snapshot.popularSearches as any[]);
+    setLocalNav(snapshot.navigation as any[]);
+    setFeaturedProducts(snapshot.featuredProducts as FeaturedItem[]);
+    setFeaturedBrands(snapshot.featuredBrands as FeaturedItem[]);
+    setFeaturedCreators(snapshot.featuredCreators as FeaturedItem[]);
+    setFeaturedDeals(snapshot.featuredDeals as SponsoredItem[]);
+    setSpotlightBrands(snapshot.spotlightBrands as SponsoredItem[]);
+    setSponsoredItems(snapshot.sponsoredItems as SponsoredItem[]);
+    setFeaturedRecommendations(snapshot.featuredRecommendations as FeaturedItem[]);
+    setRecommendedBrands(snapshot.recommendedBrands as FeaturedItem[]);
+    setRecommendedProducts(snapshot.recommendedProducts as FeaturedItem[]);
+    setRecommendedCreators(snapshot.recommendedCreators as FeaturedItem[]);
+    setHasDraftChanges(true);
+    await updateCMSData({
+      heroBanners: snapshot.heroBanners as any[],
+      homepageSections: snapshot.homepageSections as any[],
+      footer: snapshot.footer as any,
+      seoEntries: snapshot.seoEntries as any[],
+      productBadges: snapshot.productBadges as any[],
+      extendedSocialLinks: snapshot.extendedSocialLinks as any[],
+      websiteAssets: snapshot.websiteAssets as any,
+      globalSettings: snapshot.globalSettings as any,
+      popularSearches: snapshot.popularSearches as any[],
+      navigation: snapshot.navigation as any[],
+    });
+    showToast(`Restored CMS draft from ${snapshot.savedAt}. Publish to push live.`, 'success');
+  };
+
   // State managers initialized from context data
   const [localHeroBanners, setLocalHeroBanners] = useState<any[]>([]);
   const [localHomepageSections, setLocalHomepageSections] = useState<any[]>([]);
@@ -305,6 +357,32 @@ export default function WebsiteCMSStudio() {
   const handlePublishAll = async () => {
     setIsPublishing(true);
     try {
+      const versionId = saveCmsVersion(
+        {
+          heroBanners: localHeroBanners,
+          homepageSections: localHomepageSections,
+          footer: localFooter,
+          seoEntries: localSeoEntries,
+          productBadges: localBadges,
+          extendedSocialLinks: localSocialLinks,
+          websiteAssets: localAssets,
+          globalSettings: localGlobalSettings,
+          popularSearches: localPopularSearches,
+          navigation: localNav,
+          featuredProducts,
+          featuredBrands,
+          featuredCreators,
+          featuredDeals,
+          spotlightBrands,
+          sponsoredItems,
+          featuredRecommendations,
+          recommendedBrands,
+          recommendedProducts,
+          recommendedCreators,
+        },
+        'CMS publish',
+      );
+
       const resolveFeaturedIds = (items: any[]) =>
         items.map((item) => String(item.catalogId || item.id || '')).filter(Boolean);
 
@@ -431,7 +509,7 @@ export default function WebsiteCMSStudio() {
             'Published all CMS changes',
             activeWorkspace,
             '',
-            'Full CMS publish'
+            `version:${versionId}`
           ),
           ...(cmsData.cmsActivityLog || []).slice(0, 49) // cap log at 50 entries
         ]
@@ -2800,7 +2878,7 @@ export default function WebsiteCMSStudio() {
                           </td>
                           <td className="px-4 py-3.5 text-right">
                             <button 
-                              onClick={() => showToast('Rollback requires backend connection. Coming soon.', 'info')}
+                              onClick={() => handleRollback(log)}
                               className="text-app-accent hover:underline text-[10px] font-black uppercase tracking-wider"
                             >
                               Rollback

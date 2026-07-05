@@ -1,5 +1,6 @@
 import type {
   CatalogBrand,
+  CatalogBrandPost,
   CatalogCategory,
   CatalogCreator,
   CatalogDeal,
@@ -20,6 +21,7 @@ const CREATORS_COLLECTION = 'catalog_creators';
 const GUIDES_COLLECTION = 'catalog_guides';
 const PLACEMENTS_COLLECTION = 'catalog_placements';
 const PRODUCT_DETAILS_COLLECTION = 'catalog_product_details';
+const BRAND_POSTS_COLLECTION = 'catalog_brand_posts';
 const HOMEPAGE_DOC = { collection: 'settings', id: 'catalog_homepage' } as const;
 const SITE_DOC = { collection: 'settings', id: 'catalog_site' } as const;
 
@@ -106,6 +108,11 @@ export const firestoreAdminStore = {
   getProductDetail: (productId: string) => getProductDetailById(productId),
   upsertProductDetail: (payload: CatalogProductDetail) => upsertProductDetailDoc(payload),
   deleteProductDetail: (productId: string) => remove(PRODUCT_DETAILS_COLLECTION, productId),
+
+  listBrandPosts: () => listCollection<CatalogBrandPost>(BRAND_POSTS_COLLECTION),
+  getBrandPost: (id: string) => getById<CatalogBrandPost>(BRAND_POSTS_COLLECTION, id),
+  upsertBrandPost: (payload: CatalogBrandPost) => upsert(BRAND_POSTS_COLLECTION, payload),
+  deleteBrandPost: (id: string) => remove(BRAND_POSTS_COLLECTION, id),
 
   async getHomepage(): Promise<HomepageConfig | null> {
     const db = await dbOrThrow();

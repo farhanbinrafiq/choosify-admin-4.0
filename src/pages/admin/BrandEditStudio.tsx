@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { BrandCMSModel, CreatorVideoItem, PromoCodeItem, initialBrandSeeds } from "./brandSeeds";
 import { useAuth } from "../../contexts/AuthContext";
 import { useBrandProfiles } from "../../contexts/BrandProfilesContext";
+import { catalogApi } from "../../services/catalogApi";
 
 const COMPILATION_KEY = "choosify_brand_studio_list";
 
@@ -351,6 +352,15 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
       localStorage.setItem(pubKey, JSON.stringify(model));
       localStorage.setItem(draftKey, JSON.stringify(model));
       setHasUnsavedChanges(false);
+
+      catalogApi
+        .updateBrand(activeId, {
+          name: model.brandName,
+          category: model.category,
+          description: model.description,
+          logo: model.logoUrl,
+        })
+        .catch((err) => console.warn('[BrandEditStudio] Catalog brand sync failed', err));
 
       // Write updates into standard dashboard brands registry
       const cachedList = localStorage.getItem(COMPILATION_KEY);

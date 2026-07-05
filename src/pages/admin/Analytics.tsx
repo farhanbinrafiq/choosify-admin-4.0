@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   BarChart3, 
   TrendingUp, 
@@ -18,6 +18,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar 
 } from 'recharts';
 import { useOrders } from '../../contexts/OrdersContext';
+import { operationsApi, type AnalyticsSummary } from '../../services/operationsApi';
 
 const defaultMockWeeklyData = [
   { name: 'Sun', users: 4000, sessions: 2400, sales: 120000, commission: 14000 },
@@ -49,6 +50,11 @@ export default function AnalyticsPage() {
   const [sortAsc, setSortAsc] = useState(true);
 
   const { orders } = useOrders();
+  const [opsSummary, setOpsSummary] = useState<AnalyticsSummary | null>(null);
+
+  useEffect(() => {
+    operationsApi.getAnalytics('30d').then(setOpsSummary).catch(() => setOpsSummary(null));
+  }, []);
 
   const updateTab = (tab: string) => {
     setSearchParams({ tab });
@@ -254,6 +260,12 @@ export default function AnalyticsPage() {
           ))}
         </div>
       </div>
+
+      {opsSummary && (
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+          Live storefront data: {opsSummary.orders.total} orders · ৳{opsSummary.orders.revenue.toLocaleString()} revenue · {opsSummary.leads.new} new leads · {opsSummary.reviews.pending} reviews pending moderation
+        </div>
+      )}
 
       {/* Grid Quick Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

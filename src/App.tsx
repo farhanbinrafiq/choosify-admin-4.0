@@ -44,8 +44,11 @@ const Messages = lazy(() => import('./pages/admin/Messages'));
 const ProductStudio = lazy(() => import('./pages/admin/ProductStudio'));
 const BrandDetails = lazy(() => import('./pages/admin/BrandDetails'));
 const SellerReview = lazy(() => import('./pages/admin/SellerReview'));
-const CMSPage = lazy(() => import('./pages/admin/CMS'));
 const WebsiteCMSStudio = lazy(() => import('./pages/admin/WebsiteCMSStudio'));
+const BrandPostsPage = lazy(() => import('./pages/admin/BrandPosts'));
+const LeadsInboxPage = lazy(() => import('./pages/admin/LeadsInbox'));
+const SellerOffersPage = lazy(() => import('./pages/admin/SellerOffers'));
+const PlatformOrdersPage = lazy(() => import('./pages/admin/PlatformOrders'));
 const AdsSponsorsPage = lazy(() => import('./pages/admin/AdsSponsors'));
 const SponsoredPromotionsPage = lazy(() => import('./pages/admin/SponsoredPromotions'));
 const Orders = lazy(() => import('./pages/admin/Orders'));
@@ -149,6 +152,8 @@ import { AdsProvider } from './contexts/AdsContext';
 import { ContactInteractionProvider } from './contexts/ContactInteractionContext';
 import { BrandProfilesProvider } from './contexts/BrandProfilesContext';
 import { CreatorProvider } from './contexts/CreatorContext';
+import { RbacProvider } from './contexts/RbacContext';
+import { RoleGuard } from './components/RoleGuard';
 
 export default function App() {
   React.useEffect(() => {
@@ -161,6 +166,7 @@ export default function App() {
         <AdsProvider>
         <Router>
         <AuthProvider>
+          <RbacProvider>
           <LogisticsProvider>
           <CashBookProvider>
             <BrandProfilesProvider>
@@ -188,7 +194,7 @@ export default function App() {
             <Route path="/" element={<RootRoute />} />
             <Route path="/marketplace" element={<Suspense fallback={null}><Home /></Suspense>} />
             
-            <Route path="/admin/*" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Platform Interface...</div>}><Routes>
+            <Route path="/admin/*" element={<ProtectedRoute><RoleGuard><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Platform Interface...</div>}><Routes>
               <Route path="upe/:entityType/:entityId" element={<UnifiedProfileShell />} />
               
               {/* Nested admin aliases for unified profiles */}
@@ -199,7 +205,7 @@ export default function App() {
               <Route path="creator/:id" element={<UnifiedProfileShell />} />
 
               <Route path="dashboard" element={<DashboardRouter />} />
-              <Route path="cms" element={<CMSPage />} />
+              <Route path="cms" element={<Navigate to="/admin/cms-studio" replace />} />
               <Route path="cms-studio" element={<WebsiteCMSStudio />} />
               <Route path="ads-sponsors" element={<AdsSponsorsPage />} />
               <Route path="promotions" element={<SponsoredPromotionsPage />} />
@@ -218,6 +224,7 @@ export default function App() {
               <Route path="products/:id" element={<ProductStudio mode="edit" />} />
               <Route path="products/:id/edit" element={<ProductStudio mode="edit" />} />
               <Route path="categories" element={<Categories />} />
+              <Route path="brand-posts" element={<BrandPostsPage />} />
               <Route path="returns" element={<Returns />} />
               <Route path="inventory" element={<Inventory />} />
               <Route path="brands" element={<Navigate to="/admin/sellers" replace />} />
@@ -235,6 +242,9 @@ export default function App() {
               <Route path="moderation" element={<Moderation />} />
               <Route path="orders" element={<Orders />} />
               <Route path="orders-overview" element={<OrdersOverview />} />
+              <Route path="platform-orders" element={<PlatformOrdersPage />} />
+              <Route path="leads" element={<LeadsInboxPage />} />
+              <Route path="seller-offers" element={<SellerOffersPage />} />
               <Route path="customers" element={<SellerCustomers />} />
               <Route path="invoice/:id" element={<InvoiceView />} />
               <Route path="brand-profiles" element={<Sellers />} />
@@ -259,7 +269,7 @@ export default function App() {
               <Route path="moderation-v2" element={<ModerationV2 />} />
               <Route path="disputes" element={<DisputeCenter />} />
               <Route path="coupons" element={<Coupons />} />
-            </Routes></Suspense></AdminLayout></ProtectedRoute>} />
+            </Routes></Suspense></AdminLayout></RoleGuard></ProtectedRoute>} />
             
             {/* Direct match for requested /dashboard/content-studio routes */}
             <Route path="/dashboard/content-studio/*" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Visual Content Studio...</div>}><Routes>
@@ -287,7 +297,7 @@ export default function App() {
             
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>
-              </DisputeProvider>
+          </DisputeProvider>
               </ReviewModerationProvider>
               </CreatorProvider>
               </TrustProvider>
@@ -295,11 +305,12 @@ export default function App() {
             </ReturnsProvider>
           </OrdersProvider>
           </CouponsProvider>
-          </InventoryProvider>
-          </BrandProfilesProvider>
+            </InventoryProvider>
+            </BrandProfilesProvider>
           </CashBookProvider>
           </LogisticsProvider>
-      </AuthProvider>
+          </RbacProvider>
+        </AuthProvider>
     </Router>
     </AdsProvider>
     </CMSDataProvider>

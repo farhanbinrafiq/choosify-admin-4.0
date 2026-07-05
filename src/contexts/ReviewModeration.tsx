@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Review } from './OrdersContext';
 import { useTrust, TrustEntityType } from './TrustContext';
+import { operationsApi, type OpsReview } from '../services/operationsApi';
 
 interface Toast {
   id: string;
@@ -150,6 +151,49 @@ export const ReviewModerationProvider: React.FC<{ children: React.ReactNode }> =
     localStorage.setItem('choosify_moderation_reviews', JSON.stringify(reviews));
   }, [reviews]);
 
+  const mapOpsReview = (row: OpsReview): Review => ({
+    id: row.id,
+    user: row.userName,
+    product: row.productTitle,
+    store: row.storeName || row.brandName,
+    rating: row.rating,
+    comment: row.comment,
+    status:
+      row.status === 'published'
+        ? 'Published'
+        : row.status === 'flagged'
+          ? 'Flagged'
+          : row.status === 'hidden'
+            ? 'Hidden'
+            : row.status === 'deleted'
+              ? 'Deleted'
+              : row.status === 'approved'
+                ? 'Published'
+                : (row.status as Review['status']),
+    reports: row.reports,
+    flags: row.flags,
+    response: row.response,
+    isAuthentic: row.isAuthentic,
+    authenticityScore: row.authenticityScore,
+    authenticityReason: row.authenticityReason,
+    timestamp: row.createdAt,
+  });
+
+  useEffect(() => {
+    operationsApi
+      .listReviews()
+      .then((apiReviews) => {
+        if (!apiReviews.length) return;
+        setReviews((prev) => {
+          const mapped = apiReviews.map(mapOpsReview);
+          const existingIds = new Set(prev.map((review) => review.id));
+          const merged = [...mapped.filter((review) => !existingIds.has(review.id)), ...prev];
+          return merged;
+        });
+      })
+      .catch(() => {});
+  }, []);
+
   // Approve review (move from pending/flagged to Published)
   const approveReview = (id: string) => {
     setReviews(prev => {
@@ -175,6 +219,7 @@ export const ReviewModerationProvider: React.FC<{ children: React.ReactNode }> =
 
       return prev.map(r => r.id === id ? { ...r, status: 'Published', reports: 0 } : r);
     });
+    operationsApi.updateReview(id, { status: 'published' }).catch(() => {});
   };
 
   // Reject review (set status to Deleted/Hidden)
@@ -202,6 +247,7 @@ export const ReviewModerationProvider: React.FC<{ children: React.ReactNode }> =
 
       return prev.map(r => r.id === id ? { ...r, status: 'Deleted' } : r);
     });
+    operationsApi.updateReview(id, { status: 'deleted' }).catch(() => {});
   };
 
   // Flag review with custom reasons
@@ -290,6 +336,7 @@ export const ReviewModerationProvider: React.FC<{ children: React.ReactNode }> =
       showToast('Review permanently expunged from platform.', 'warning');
       return prev.filter(r => r.id !== id);
     });
+    operationsApi.deleteReview(id).catch(() => {});
   };
 
   // Run Batch Analysis for spam/fake review detection

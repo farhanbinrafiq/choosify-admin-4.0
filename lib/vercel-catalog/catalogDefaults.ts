@@ -306,7 +306,6 @@ export const defaultSiteConfig = (): import('./catalogTypes').SiteConfig => {
             { label: 'Suggest a Brand', url: '/suggest-brand' },
             { label: 'Partnership', url: '/partnership' },
             { label: 'Advertise', url: '/advertise' },
-            { label: 'B2B Solutions', url: '/b2b' },
           ],
         },
         {

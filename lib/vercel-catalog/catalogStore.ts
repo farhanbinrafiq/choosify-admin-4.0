@@ -1,5 +1,6 @@
 import type {
   CatalogBrand,
+  CatalogBrandPost,
   CatalogCategory,
   CatalogCreator,
   CatalogDeal,
@@ -37,6 +38,7 @@ const CREATORS_COLLECTION = 'catalog_creators';
 const GUIDES_COLLECTION = 'catalog_guides';
 const PLACEMENTS_COLLECTION = 'catalog_placements';
 const PRODUCT_DETAILS_COLLECTION = 'catalog_product_details';
+const BRAND_POSTS_COLLECTION = 'catalog_brand_posts';
 
 const useAdminFirestore =
   process.env.CATALOG_USE_FIRESTORE === 'true' && hasFirebaseAdminCredentials();
@@ -71,6 +73,8 @@ async function listCollection<T>(collectionName: string): Promise<T[]> {
         return admin.listPlacements() as Promise<T[]>;
       case PRODUCT_DETAILS_COLLECTION:
         return admin.listProductDetails() as Promise<T[]>;
+      case BRAND_POSTS_COLLECTION:
+        return admin.listBrandPosts() as Promise<T[]>;
       default:
         return [];
     }
@@ -96,6 +100,8 @@ function listFromMemory<T>(collectionName: string): Promise<T[]> {
       return memoryStore.listPlacements() as Promise<T[]>;
     case PRODUCT_DETAILS_COLLECTION:
       return memoryStore.listProductDetails() as Promise<T[]>;
+    case BRAND_POSTS_COLLECTION:
+      return memoryStore.listBrandPosts() as Promise<T[]>;
     default:
       return Promise.resolve([]);
   }
@@ -119,6 +125,8 @@ function getFromMemory<T>(collectionName: string, id: string): Promise<T | null>
       return memoryStore.getPlacement(id) as Promise<T | null>;
     case PRODUCT_DETAILS_COLLECTION:
       return memoryStore.getProductDetail(id) as Promise<T | null>;
+    case BRAND_POSTS_COLLECTION:
+      return memoryStore.getBrandPost(id) as Promise<T | null>;
     default:
       return Promise.resolve(null);
   }
@@ -142,6 +150,8 @@ function upsertToMemory<T extends { id: string }>(collectionName: string, data: 
       return memoryStore.upsertPlacement(data as unknown as CatalogPlacement) as unknown as Promise<T>;
     case PRODUCT_DETAILS_COLLECTION:
       return memoryStore.upsertProductDetail(data as unknown as CatalogProductDetail) as unknown as Promise<T>;
+    case BRAND_POSTS_COLLECTION:
+      return memoryStore.upsertBrandPost(data as unknown as CatalogBrandPost) as unknown as Promise<T>;
     default:
       return Promise.resolve(data);
   }
@@ -165,6 +175,8 @@ function removeFromMemory(collectionName: string, id: string): Promise<void> {
       return memoryStore.deletePlacement(id);
     case PRODUCT_DETAILS_COLLECTION:
       return memoryStore.deleteProductDetail(id);
+    case BRAND_POSTS_COLLECTION:
+      return memoryStore.deleteBrandPost(id);
     default:
       return Promise.resolve();
   }
@@ -190,6 +202,8 @@ async function getById<T>(collectionName: string, id: string): Promise<T | null>
         return admin.getPlacement(id) as Promise<T | null>;
       case PRODUCT_DETAILS_COLLECTION:
         return admin.getProductDetail(id) as Promise<T | null>;
+      case BRAND_POSTS_COLLECTION:
+        return admin.getBrandPost(id) as Promise<T | null>;
       default:
         return null;
     }
@@ -217,6 +231,8 @@ async function upsert<T extends { id: string }>(collectionName: string, data: T)
         return admin.upsertPlacement(data as unknown as CatalogPlacement) as unknown as Promise<T>;
       case PRODUCT_DETAILS_COLLECTION:
         return admin.upsertProductDetail(data as unknown as CatalogProductDetail) as unknown as Promise<T>;
+      case BRAND_POSTS_COLLECTION:
+        return admin.upsertBrandPost(data as unknown as CatalogBrandPost) as unknown as Promise<T>;
       default:
         return data;
     }
@@ -244,6 +260,8 @@ async function remove(collectionName: string, id: string): Promise<void> {
         return admin.deletePlacement(id);
       case PRODUCT_DETAILS_COLLECTION:
         return admin.deleteProductDetail(id);
+      case BRAND_POSTS_COLLECTION:
+        return admin.deleteBrandPost(id);
       default:
         return;
     }
@@ -292,6 +310,11 @@ export const catalogStore = {
   upsertProductDetail: (payload: CatalogProductDetail) =>
     upsert(PRODUCT_DETAILS_COLLECTION, { ...payload, id: payload.productId }),
   deleteProductDetail: (productId: string) => remove(PRODUCT_DETAILS_COLLECTION, productId),
+
+  listBrandPosts: () => listCollection<CatalogBrandPost>(BRAND_POSTS_COLLECTION),
+  getBrandPost: (id: string) => getById<CatalogBrandPost>(BRAND_POSTS_COLLECTION, id),
+  upsertBrandPost: (payload: CatalogBrandPost) => upsert(BRAND_POSTS_COLLECTION, payload),
+  deleteBrandPost: (id: string) => remove(BRAND_POSTS_COLLECTION, id),
 
   async getHomepage(): Promise<HomepageConfig> {
     if (useAdminFirestore) {

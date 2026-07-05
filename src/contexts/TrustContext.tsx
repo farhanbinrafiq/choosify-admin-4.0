@@ -293,8 +293,7 @@ export interface DailyProductMetrics {
 
 export interface DailyOrderMetrics {
   date: string;
-  total_b2b_wholesale: number;
-  total_b2c_retail: number;
+  total_retail: number;
   cancellations: number;
   returns: number;
 }
@@ -632,11 +631,11 @@ export const TrustProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   ];
 
   const dailyOrderMetrics: DailyOrderMetrics[] = [
-    { date: 'June 08', total_b2b_wholesale: 48000, total_b2c_retail: 37000, cancellations: 1, returns: 0 },
-    { date: 'June 09', total_b2b_wholesale: 51000, total_b2c_retail: 41000, cancellations: 4, returns: 1 },
-    { date: 'June 10', total_b2b_wholesale: 30000, total_b2c_retail: 41000, cancellations: 2, returns: 2 },
-    { date: 'June 11', total_b2b_wholesale: 65000, total_b2c_retail: 45000, cancellations: 0, returns: 0 },
-    { date: 'June 12', total_b2b_wholesale: 80000, total_b2c_retail: 65000, cancellations: 1, returns: 1 }
+    { date: 'June 08', total_retail: 37000, cancellations: 1, returns: 0 },
+    { date: 'June 09', total_retail: 41000, cancellations: 4, returns: 1 },
+    { date: 'June 10', total_retail: 41000, cancellations: 2, returns: 2 },
+    { date: 'June 11', total_retail: 45000, cancellations: 0, returns: 0 },
+    { date: 'June 12', total_retail: 65000, cancellations: 1, returns: 1 }
   ];
 
   // ============================================================================

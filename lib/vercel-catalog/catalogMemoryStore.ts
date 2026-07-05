@@ -1,5 +1,6 @@
 import type {
   CatalogBrand,
+  CatalogBrandPost,
   CatalogCategory,
   CatalogCreator,
   CatalogDeal,
@@ -24,6 +25,7 @@ import {
   defaultPlacements,
   defaultProductDetails,
 } from './catalogEditorialDefaults';
+import { defaultBrandPosts } from './catalogBrandPostDefaults';
 
 export { defaultHomepage } from './catalogDefaults';
 
@@ -35,6 +37,7 @@ const CREATORS_COLLECTION = 'catalog_creators';
 const GUIDES_COLLECTION = 'catalog_guides';
 const PLACEMENTS_COLLECTION = 'catalog_placements';
 const PRODUCT_DETAILS_COLLECTION = 'catalog_product_details';
+const BRAND_POSTS_COLLECTION = 'catalog_brand_posts';
 
 const memoryState: {
   products: CatalogProduct[];
@@ -45,6 +48,7 @@ const memoryState: {
   guides: CatalogGuide[];
   placements: CatalogPlacement[];
   productDetails: CatalogProductDetail[];
+  brandPosts: CatalogBrandPost[];
   homepage: HomepageConfig;
   site: SiteConfig;
 } = {
@@ -56,6 +60,7 @@ const memoryState: {
   guides: defaultGuides(),
   placements: defaultPlacements(),
   productDetails: defaultProductDetails(),
+  brandPosts: defaultBrandPosts(),
   homepage: defaultHomepage(),
   site: defaultSiteConfig(),
 };
@@ -78,6 +83,8 @@ const collectionMemoryRef = (collectionName: string): unknown[] => {
       return memoryState.placements;
     case PRODUCT_DETAILS_COLLECTION:
       return memoryState.productDetails;
+    case BRAND_POSTS_COLLECTION:
+      return memoryState.brandPosts;
     default:
       return [];
   }
@@ -169,6 +176,11 @@ export const catalogStore = {
   upsertProductDetail: (payload: CatalogProductDetail) => upsert(PRODUCT_DETAILS_COLLECTION, payload as unknown as { id: string }),
   deleteProductDetail: (productId: string) => remove(PRODUCT_DETAILS_COLLECTION, productId),
 
+  listBrandPosts: () => listCollection<CatalogBrandPost>(BRAND_POSTS_COLLECTION),
+  getBrandPost: (id: string) => getById<CatalogBrandPost>(BRAND_POSTS_COLLECTION, id),
+  upsertBrandPost: (payload: CatalogBrandPost) => upsert(BRAND_POSTS_COLLECTION, payload),
+  deleteBrandPost: (id: string) => remove(BRAND_POSTS_COLLECTION, id),
+
   async getHomepage(): Promise<HomepageConfig> {
     return memoryState.homepage;
   },
@@ -198,6 +210,7 @@ export async function ensureCatalogSeedData(): Promise<void> {
     ...defaultGuides().map((item) => catalogStore.upsertGuide(item)),
     ...defaultPlacements().map((item) => catalogStore.upsertPlacement(item)),
     ...defaultProductDetails().map((item) => catalogStore.upsertProductDetail(item)),
+    ...defaultBrandPosts().map((item) => catalogStore.upsertBrandPost(item)),
     catalogStore.upsertHomepage(defaultHomepage()),
     catalogStore.upsertSiteConfig(defaultSiteConfig()),
   ]);

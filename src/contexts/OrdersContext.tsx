@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useInventory } from './InventoryContext';
 import { useCoupons } from './CouponsContext';
+import { operationsApi } from '../services/operationsApi';
+import { mergePlatformOrders } from '../lib/platformOrderAdapter';
 
 export type OrderStatus = 'Pending' | 'Confirmed' | 'Dispatched' | 'In Transit' | 'Delivered' | 'Cancelled' | 'Rejected' | 'Returned' | 'Exchange' | 'Processing';
 export type PaymentStatus = 'Pending' | 'Paid' | 'Refunded';
@@ -229,67 +231,7 @@ const createEarnings = (price: number) => {
   };
 };
 
-const initialOrders: Order[] = [
-  {
-    id: 'CSS-9921',
-    product: initialProducts[0],
-    customer: initialCustomers[0],
-    status: 'In Transit',
-    paymentStatus: 'Paid',
-    timestamp: '2026-05-20T01:15:00Z',
-    approveTime: '2026-05-20T02:00:00Z',
-    dispatchTime: '2026-05-20T04:30:00Z',
-    deliveryPartner: 'Pathao Delivery',
-    trackingUrl: 'https://track.pathao.com/sheet/9921',
-    customerNotes: ['Please ring the bell three times.', 'Avoid delivery before 10 AM.'],
-    sellerNotes: ['Dispatched on urgent request.'],
-    earnings: createEarnings(4200),
-  },
-  {
-    id: 'CSS-9844',
-    product: initialProducts[1],
-    customer: initialCustomers[0],
-    status: 'Pending',
-    paymentStatus: 'Pending',
-    timestamp: '2026-05-20T08:45:00Z',
-    customerNotes: ['Please provide a sizes guide in case fits tight.'],
-    earnings: createEarnings(3500),
-  },
-  {
-    id: 'CSS-1224',
-    product: initialProducts[2],
-    customer: initialCustomers[1],
-    status: 'Pending',
-    paymentStatus: 'Pending',
-    timestamp: '2026-05-20T07:11:00Z',
-    earnings: createEarnings(139999),
-  },
-  {
-    id: 'CSS-7741',
-    product: initialProducts[3],
-    customer: initialCustomers[2],
-    status: 'Cancelled',
-    paymentStatus: 'Pending',
-    timestamp: '2026-05-19T14:20:00Z',
-    cancelTime: '2026-05-19T15:00:00Z',
-    cancelReason: 'Risk analysis flagged fraudulent buyer intent',
-    earnings: createEarnings(29990),
-  },
-  {
-    id: 'CSS-5561',
-    product: initialProducts[0],
-    customer: initialCustomers[3],
-    status: 'Delivered',
-    paymentStatus: 'Paid',
-    timestamp: '2026-05-17T11:00:00Z',
-    approveTime: '2026-05-17T11:45:00Z',
-    dispatchTime: '2026-05-17T15:00:00Z',
-    deliverTime: '2026-05-18T16:30:00Z',
-    deliveryPartner: 'Paperfly',
-    trackingUrl: 'https://paperfly.com.bd/track/5561',
-    earnings: createEarnings(4200),
-  }
-];
+const initialOrders: Order[] = [];
 
 export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { allocateStock, deallocateStock, logStockChange } = useInventory();
@@ -310,6 +252,15 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       codCollected: o.codCollected !== undefined ? o.codCollected : false
     }));
   });
+
+  useEffect(() => {
+    operationsApi
+      .listOrders()
+      .then((rows) => {
+        setOrders((prev) => mergePlatformOrders(prev, rows));
+      })
+      .catch(() => {});
+  }, []);
 
   const [customers, setCustomers] = useState<Customer[]>(() => {
     const saved = localStorage.getItem('choosify_customers');

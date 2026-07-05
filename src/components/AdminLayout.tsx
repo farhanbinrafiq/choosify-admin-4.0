@@ -9,24 +9,17 @@ import {
   Lightbulb, 
   Tag, 
   Star, 
-  Link as LinkIcon, 
   BarChart3, 
-  Bell, 
   ShieldCheck, 
   Settings,
   MessageCircle,
   Bolt,
   LogOut,
-  ShoppingBag,
   ListOrdered,
   Wallet,
   Globe,
-  PlusCircle,
   FileText,
-  Heart,
   History,
-  Compass,
-  Zap,
   ChevronRight,
   ChevronLeft,
   RefreshCw,
@@ -34,17 +27,35 @@ import {
   UserCheck,
   Lock,
   FolderLock,
-  Activity,
   AlertTriangle,
   Search,
   Menu,
   FolderOpen,
   Truck,
   MapPin,
-  Layers
+  Layers,
+  ClipboardList,
+  MessageSquarePlus,
+  ShieldAlert,
+  KeyRound,
+  BadgeCheck,
+  CreditCard,
+  CircleDollarSign,
+  Ticket,
+  Send,
+  TrendingUp,
+  LayoutTemplate,
+  Store,
+  UserCircle,
+  Handshake,
+  Flag,
+  X,
+  Bell,
+  Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
+import { useRbac } from '../contexts/RbacContext';
 import { useCMS } from '../contexts/CMSContext';
 import { useOrders } from '../contexts/OrdersContext';
 import { useContact } from '../contexts/ContactInteractionContext';
@@ -75,20 +86,24 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Admin Terminal', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Consumers', icon: Users, path: '/admin/consumers' },
-    { label: 'Brand Management Studio', icon: Globe, path: '/admin/sellers' },
+    { label: 'Brand Management Studio', icon: Building2, path: '/admin/sellers' },
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'Category Taxonomy', icon: FolderOpen, path: '/admin/categories' },
+    { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
     { label: 'Order Console', icon: ListOrdered, path: '/admin/orders' },
+    { label: 'Platform Orders', icon: Package, path: '/admin/platform-orders' },
+    { label: 'Lead Inbox', icon: Mail, path: '/admin/leads' },
+    { label: 'Seller Offer Queue', icon: Send, path: '/admin/seller-offers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
-    { label: 'Orders Overview', icon: BarChart3, path: '/admin/orders-overview' },
+    { label: 'Orders Overview', icon: ClipboardList, path: '/admin/orders-overview' },
     { label: 'Creators', icon: Award, path: '/admin/creators?viewMode=creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Moderation Center', icon: ShieldCheck, path: '/admin/moderation' },
-    { label: 'Community Submissions', icon: Users, path: '/admin/community-submissions' },
+    { label: 'Community Submissions', icon: MessageSquarePlus, path: '/admin/community-submissions' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 12 },
-    { label: 'Trust Center', icon: ShieldCheck, path: '/admin/trust-center' },
+    { label: 'Trust Center', icon: ShieldAlert, path: '/admin/trust-center' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     { label: 'Finance', type: 'label' },
     { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
@@ -97,48 +112,53 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Super Admin Core', type: 'label' },
     { label: 'Admin Management', icon: UserCheck, path: '/admin/admins?viewMode=admins' },
     { label: 'Role Management', icon: Lock, path: '/admin/settings?tab=roles' },
-    { label: 'Permissions', icon: ShieldCheck, path: '/admin/settings?tab=permissions' },
-    { label: 'Verification Center', icon: Award, path: '/admin/brand-verification' },
-    { label: 'Fraud Detection Engine', icon: Zap, path: '/admin/moderation-v2' },
-    { label: 'Subscription Plans', icon: Tag, path: '/admin/promotions?tab=plans' },
-    { label: 'Monetization Center', icon: Wallet, path: '/admin/payouts' },
-    { label: 'Promo Codes & Vouchers', icon: Tag, path: '/admin/coupons' },
+    { label: 'Permissions', icon: KeyRound, path: '/admin/settings?tab=permissions' },
+    { label: 'Verification Center', icon: BadgeCheck, path: '/admin/brand-verification' },
+    { label: 'Fraud Detection Engine', icon: Bolt, path: '/admin/moderation-v2' },
+    { label: 'Subscription Plans', icon: CreditCard, path: '/admin/promotions?tab=plans' },
+    { label: 'Monetization Center', icon: CircleDollarSign, path: '/admin/payouts' },
+    { label: 'Promo Codes & Vouchers', icon: Ticket, path: '/admin/coupons' },
     { label: 'Audit Logs', icon: History, path: '/admin/moderation?tab=reports' },
     { label: 'Security Center', icon: FolderLock, path: '/admin/settings?tab=security' },
-    { label: 'Feature Flags', icon: Activity, path: '/admin/settings?tab=features' },
+    { label: 'Feature Flags', icon: Flag, path: '/admin/settings?tab=features' },
     
     { label: 'Logistics Management', type: 'label' },
     { label: 'Courier Providers', icon: Truck, path: '/admin/logistics/couriers' },
-    { label: 'Shipment Console', icon: Package, path: '/admin/logistics/shipments' },
+    { label: 'Shipment Console', icon: Send, path: '/admin/logistics/shipments' },
     { label: 'Tracking Center', icon: MapPin, path: '/admin/logistics/tracking' },
     { label: 'Shipping Labels', icon: FileText, path: '/admin/logistics/labels' },
-    { label: 'Courier Analytics', icon: BarChart3, path: '/admin/logistics/analytics' },
+    { label: 'Courier Analytics', icon: TrendingUp, path: '/admin/logistics/analytics' },
 
     { label: 'Website CMS Studio', type: 'label' },
     {
       label: 'Website CMS Studio',
-      icon: Globe,
+      icon: LayoutTemplate,
       path: '/admin/website-cms',
       badge: 'NEW'
     },
+    { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
   ],
   admin: [
     { label: 'Admin Workspace', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Consumers', icon: Users, path: '/admin/consumers' },
-    { label: 'Brand Management Studio', icon: Globe, path: '/admin/sellers' },
+    { label: 'Brand Management Studio', icon: Building2, path: '/admin/sellers' },
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'Category Taxonomy', icon: FolderOpen, path: '/admin/categories' },
+    { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
     { label: 'Order Console', icon: ListOrdered, path: '/admin/orders' },
+    { label: 'Platform Orders', icon: Package, path: '/admin/platform-orders' },
+    { label: 'Lead Inbox', icon: Mail, path: '/admin/leads' },
+    { label: 'Seller Offer Queue', icon: Send, path: '/admin/seller-offers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
-    { label: 'Orders Overview', icon: BarChart3, path: '/admin/orders-overview' },
+    { label: 'Orders Overview', icon: ClipboardList, path: '/admin/orders-overview' },
     { label: 'Creators', icon: Award, path: '/admin/creators?viewMode=creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
-    { label: 'Community Submissions', icon: Users, path: '/admin/community-submissions', badge: 'New' },
+    { label: 'Community Submissions', icon: MessageSquarePlus, path: '/admin/community-submissions', badge: 'New' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
-    { label: 'Trust Center', icon: ShieldCheck, path: '/admin/trust-center' },
+    { label: 'Trust Center', icon: ShieldAlert, path: '/admin/trust-center' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     { label: 'Finance', type: 'label' },
     { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
@@ -146,34 +166,35 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     
     { label: 'Logistics Management', type: 'label' },
     { label: 'Courier Providers', icon: Truck, path: '/admin/logistics/couriers' },
-    { label: 'Shipment Console', icon: Package, path: '/admin/logistics/shipments' },
+    { label: 'Shipment Console', icon: Send, path: '/admin/logistics/shipments' },
     { label: 'Tracking Center', icon: MapPin, path: '/admin/logistics/tracking' },
     { label: 'Shipping Labels', icon: FileText, path: '/admin/logistics/labels' },
-    { label: 'Courier Analytics', icon: BarChart3, path: '/admin/logistics/analytics' },
+    { label: 'Courier Analytics', icon: TrendingUp, path: '/admin/logistics/analytics' },
 
     { label: 'Website CMS Studio', type: 'label' },
     {
       label: 'Website CMS Studio',
-      icon: Globe,
+      icon: LayoutTemplate,
       path: '/admin/website-cms',
       badge: 'NEW'
     },
+    { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
   ],
   seller: [
     { label: 'Seller Operations', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'My Profile', icon: UserCheck, path: '/admin/sellers/seller_001?tab=overview' },
+    { label: 'My Profile', icon: UserCircle, path: '/admin/sellers/seller_001?tab=overview' },
     { label: 'Order Console', icon: ListOrdered, path: '/admin/orders', badge: 4 },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
     { label: 'Products', icon: Package, path: '/admin/products' },
-    { label: 'My Brand Studio', icon: Globe, path: '/dashboard/content-studio/brands' },
+    { label: 'My Brand Studio', icon: Store, path: '/dashboard/content-studio/brands' },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 2 },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     
     { label: 'Logistics', type: 'label' },
-    { label: 'Shipment Console', icon: Package, path: '/admin/logistics/shipments' },
+    { label: 'Shipment Console', icon: Send, path: '/admin/logistics/shipments' },
     { label: 'Tracking Center', icon: MapPin, path: '/admin/logistics/tracking' },
     { label: 'Shipping Labels', icon: FileText, path: '/admin/logistics/labels' },
 
@@ -184,10 +205,10 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
   creator: [
     { label: 'Creator Hub', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Creator Profile', icon: Users, path: '/admin/creators/1' },
+    { label: 'Creator Profile', icon: UserCircle, path: '/admin/creators/1' },
     { label: 'Guides Studio', icon: FileText, path: '/dashboard/content-studio/guides' },
     { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
-    { label: 'Collaborations', icon: ShieldCheck, path: '/admin/creator-hub', badge: 1 },
+    { label: 'Collaborations', icon: Handshake, path: '/admin/creator-hub', badge: 1 },
     { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     { label: 'Finance', type: 'label' },
@@ -204,7 +225,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
   finance_manager: [
     { label: 'Finance Operations', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Payouts', icon: Wallet, path: '/admin/payouts' },
+    { label: 'Payouts', icon: CircleDollarSign, path: '/admin/payouts' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
   ],
   support_agent: [
@@ -217,12 +238,12 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Marketing Workspace', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Promotions', icon: Megaphone, path: '/admin/promotions' },
-    { label: 'Promo Codes & Vouchers', icon: Tag, path: '/admin/coupons' },
+    { label: 'Promo Codes & Vouchers', icon: Ticket, path: '/admin/coupons' },
     { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
     { label: 'Website CMS Studio', type: 'label' },
     {
       label: 'Website CMS Studio',
-      icon: Globe,
+      icon: LayoutTemplate,
       path: '/admin/website-cms',
       badge: 'NEW'
     },
@@ -231,6 +252,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
 
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile, logout, switchRole, activeBrandId, setActiveBrandId, sellerBrands, allBrands, requestNewBrand } = useAuth();
+  const { canAccessPath } = useRbac();
   const { cmsData } = useCMS();
   const location = useLocation();
   const navigate = useNavigate();
@@ -241,6 +263,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
   const [isBrandsExpanded, setIsBrandsExpanded] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sidebarNavQuery, setSidebarNavQuery] = useState('');
   const sidebarRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -425,7 +448,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const unreadOrdersCount = messageThreads.filter(m => m.status === 'UNREAD').length;
   const unreadTotal = unreadSupportCount + unreadProfileCount + unreadOrdersCount;
 
-  const sidebarItems = (roleMenus[currentRole as UserRole] || []).map(item => {
+  const sidebarItems = (roleMenus[currentRole as UserRole] || [])
+    .filter((item) => {
+      if (item.type === 'label' || !item.path) return true;
+      return canAccessPath(item.path);
+    })
+    .map(item => {
     if (item.label === 'Messages') {
       return {
         ...item,
@@ -434,6 +462,36 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return item;
   });
+
+  const filteredSidebarItems = React.useMemo(() => {
+    const query = sidebarNavQuery.trim().toLowerCase();
+    if (!query) return sidebarItems;
+
+    const matched: SidebarItem[] = [];
+    let pendingLabel: SidebarItem | null = null;
+
+    for (const item of sidebarItems) {
+      if (item.type === 'label') {
+        pendingLabel = item;
+        continue;
+      }
+
+      const haystack = item.label.toLowerCase();
+      if (haystack.includes(query) || query.split(/\s+/).every((term) => haystack.includes(term))) {
+        if (pendingLabel && !matched.some((entry) => entry.type === 'label' && entry.label === pendingLabel!.label)) {
+          matched.push(pendingLabel);
+        }
+        matched.push(item);
+        pendingLabel = null;
+      }
+    }
+
+    return matched.length > 0
+      ? matched
+      : [{ label: 'No navigation matches', type: 'label' }];
+  }, [sidebarItems, sidebarNavQuery]);
+
+  const sidebarItemsToRender = sidebarNavQuery.trim() ? filteredSidebarItems : sidebarItems;
 
   const sellerRelations = sellerBrands.filter(r => r.seller_user_id === profile?.id);
   const sellerBrandsList = allBrands.filter(b => sellerRelations.some(r => r.brand_id === b.id));
@@ -512,10 +570,11 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
         <button
           onClick={toggleCollapse}
-          className={`w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 border border-white/5 text-white flex items-center justify-center transition-all cursor-pointer shrink-0 ${isCollapsed ? 'mt-2' : ''}`}
+          className={`sidebar-collapse-btn w-8 h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer shrink-0 ${isCollapsed ? 'mt-2' : ''}`}
           title={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
+          aria-label={isCollapsed ? "Expand Sidebar" : "Collapse Sidebar"}
         >
-          {isCollapsed ? <Menu className="w-4 h-4" /> : <ChevronLeft className="w-4 h-4" />}
+          {isCollapsed ? <Menu className="w-4 h-4 text-white" /> : <ChevronLeft className="w-4 h-4 text-white" />}
         </button>
       </div>
 
@@ -524,7 +583,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         <div className="mb-4 mt-2 px-1">
           <NavLink
             to="/marketplace"
-            className={`w-full group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-2.5 text-[11px] font-bold rounded-xl border border-[#F97316]/20 bg-[#F97316]/5 hover:bg-[#F97316]/10 text-[#F97316] hover:text-white transition-all duration-200 cursor-pointer`}
+            className={`sidebar-marketplace-cta w-full group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-2.5 text-[11px] font-bold rounded-xl border transition-all duration-200 cursor-pointer`}
             title="Visit Marketplace"
           >
             <Globe className="w-4 h-4 shrink-0 text-[#F97316] group-hover:text-white transition-colors" />
@@ -534,11 +593,43 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           </NavLink>
         </div>
 
-        {sidebarItems.map((item, idx) => {
+        {!isCollapsed && (
+          <div className="mb-3 px-1">
+            <div className="relative sidebar-nav-search">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/50 pointer-events-none" />
+              <input
+                type="search"
+                value={sidebarNavQuery}
+                onChange={(e) => setSidebarNavQuery(e.target.value)}
+                placeholder="Search menu & categories..."
+                aria-label="Search navigation menu"
+                className="w-full rounded-xl border py-2 pl-9 pr-8 text-[11px] font-medium outline-none transition-all"
+              />
+              {sidebarNavQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSidebarNavQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded-md text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                  aria-label="Clear navigation search"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {sidebarItemsToRender.map((item, idx) => {
           if (item.type === 'label') {
             if (isCollapsed) return <div key={idx} className="h-px bg-white/[0.05] my-4 mx-2" />;
+            const isEmptyState = item.label === 'No navigation matches';
             return (
-              <div key={idx} className="text-[10px] font-bold text-white px-3 pt-6 pb-2 uppercase tracking-widest truncate whitespace-nowrap">
+              <div
+                key={idx}
+                className={`text-[10px] font-bold px-3 pt-6 pb-2 uppercase tracking-widest truncate whitespace-nowrap ${
+                  isEmptyState ? 'text-white/40 normal-case tracking-normal font-medium' : 'text-white'
+                }`}
+              >
                 {item.label}
               </div>
             );
@@ -590,10 +681,10 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
               {hasSub ? (
                 <button
                   onClick={() => !isCollapsed && toggleMenu(item.label)}
-                  className={`w-full group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 text-left cursor-pointer min-w-0 ${
+                  className={`w-full group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 text-left cursor-pointer min-w-0 sidebar-nav-hover ${
                     isActive 
                       ? 'bg-[#F97316] text-white border-white' 
-                      : 'border-transparent text-white/90 hover:text-white hover:bg-white/10'
+                      : 'border-transparent text-white'
                   }`}
                   title={item.label}
                 >
@@ -623,10 +714,10 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                 <NavLink
                   to={item.path!}
                   onClick={() => setIsSidebarOpen(false)}
-                  className={`group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 relative min-w-0 ${
+                  className={`group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 relative min-w-0 sidebar-nav-hover ${
                     isActive 
                       ? 'active-sidebar-item bg-[#F97316] text-white border-white shadow-[0_4px_16px_rgba(249,115,22,0.15)]' 
-                      : 'border-transparent text-white/90 hover:text-white hover:bg-white/10'
+                      : 'border-transparent text-white'
                   }`}
                   title={item.label}
                 >
@@ -662,10 +753,10 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                         key={sIdx}
                         to={sub.path}
                         onClick={() => setIsSidebarOpen(false)}
-                        className={`flex items-center gap-2 py-2 px-3 text-[11px] font-medium rounded-md transition-all ${
+                        className={`flex items-center gap-2 py-2 px-3 text-[11px] font-medium rounded-md transition-all sidebar-nav-hover ${
                           isSubActive 
                             ? 'text-white font-bold bg-[#F97316]' 
-                            : 'text-white/80 hover:text-white hover:bg-white/[0.05]'
+                            : 'text-white/80'
                         }`}
                       >
                         <ChevronRight className={`w-2.5 h-2.5 ${isSubActive ? 'text-white rotate-90 scale-110' : 'text-white/60 rotate-90'}`} />
@@ -685,7 +776,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         })}
       </nav>
 
-      <div className={`p-4 border-t border-app-border flex ${isCollapsed ? 'flex-col gap-4 items-center justify-center' : 'items-center gap-3'} mt-auto`}>
+      <div className={`p-4 border-t border-white/10 flex ${isCollapsed ? 'flex-col gap-4 items-center justify-center' : 'items-center gap-3'} mt-auto`}>
         <div className="w-8 h-8 rounded-full bg-app-accent flex items-center justify-center text-white text-[10px] font-bold shrink-0">
           {profile?.displayName?.[0] || 'U'}
         </div>

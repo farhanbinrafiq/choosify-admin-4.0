@@ -3,16 +3,27 @@ import path from "path";
 import dotenv from "dotenv";
 import { createServer } from "http";
 import { Server as SocketIOServer } from "socket.io";
-import { messagingRouter, setSocketIO, seedOmnichannelData } from "./server/messagingHub";
+import { messagingRouter, setSocketIO, seedOmnichannelData, handleMetaWebhookPost } from "./server/messagingHub";
 import { logisticsRouter } from "./server/logisticsRouter";
 import { catalogRouter } from "./server/catalogRouter";
+import { operationsRouter } from "./server/operationsRouter";
+import { authRouter } from "./server/authRouter";
+import { attachOperationsPersistence, ensureOperationsHydrated } from "./server/operations/operationsPersistence";
+import { getAnalyticsSummary } from "./server/operations/analyticsService";
 import { ensureCatalogSeedData } from "./lib/vercel-catalog/catalogStore";
 
 dotenv.config();
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3001;
+
+  // Meta webhooks need the raw body for signature verification (before JSON parser)
+  app.post(
+    "/api/webhooks/meta",
+    express.raw({ type: "application/json" }),
+    handleMetaWebhookPost,
+  );
 
   app.use(express.json());
   app.use((req, res, next) => {
@@ -30,19 +41,24 @@ async function startServer() {
   app.use("/api", messagingRouter);
   app.use("/api", logisticsRouter);
   app.use("/api/v1", catalogRouter);
+  app.use("/api/v1", operationsRouter);
+  app.use("/api/v1", authRouter);
 
-  // API stats route
-  app.get("/api/admin/stats", async (req, res) => {
-    // In production, this would use Firebase Admin to count docs
+  // API stats route — backed by live operations analytics when available
+  app.get("/api/admin/stats", async (_req, res) => {
+    const summary = getAnalyticsSummary("30d");
     res.json({
       totalUsers: 48291,
       activeUsers: 14032,
       sellers: 1847,
       creators: 342,
       products: 94520,
-      revenue: 3200000,
-      engagement: 12.4,
-      pendingModeration: 127
+      revenue: summary.orders.revenue,
+      engagement: summary.orders.total > 0 ? 12.4 : 0,
+      pendingModeration: summary.reviews.pending,
+      storefrontOrders: summary.orders.total,
+      newLeads: summary.leads.new,
+      activeShipments: summary.shipments.pending,
     });
   });
 
@@ -94,6 +110,8 @@ async function startServer() {
   }
 
   // Pre-seed Firestore with beautiful messaging sandbox dataset
+  attachOperationsPersistence();
+  await ensureOperationsHydrated();
   await seedOmnichannelData();
   await ensureCatalogSeedData();
 

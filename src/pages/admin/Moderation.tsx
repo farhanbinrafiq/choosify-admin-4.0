@@ -500,10 +500,10 @@ export default function ModerationPage() {
 
   // 2. Product Moderation Logic
   const [productModerationQueue, setProductModerationQueue] = useState([
-    { id: 'p_mod1', name: 'Xiaomi Redmi Note 14 Pro', seller: 'ElectroBD Express', price: 24500, type: 'Retail B2C', moq: 1, status: 'Pending Review' },
-    { id: 'p_mod2', name: 'Apex Men Luxury Oxfords', seller: 'Apex Footwear', price: 4800, type: 'Retail B2C', moq: 1, status: 'Pending Review' },
-    { id: 'p_mod3', name: 'Samsung S25 Ultra 5G Silicate', seller: 'TechZone BD', price: 112000, type: 'Retail B2C', moq: 1, status: 'Pending Review' },
-    { id: 'p_mod4', name: 'Premium Cotton Silk Sharee', seller: 'Anjans Fashion Accent', price: 14500, type: 'Retail B2C', moq: 1, status: 'Pending Review' }
+    { id: 'p_mod1', name: 'Xiaomi Redmi Note 14 Pro', seller: 'ElectroBD Express', price: 24500, type: 'Retail', status: 'Pending Review' },
+    { id: 'p_mod2', name: 'Apex Men Luxury Oxfords', seller: 'Apex Footwear', price: 4800, type: 'Retail', status: 'Pending Review' },
+    { id: 'p_mod3', name: 'Samsung S25 Ultra 5G Silicate', seller: 'TechZone BD', price: 112000, type: 'Retail', status: 'Pending Review' },
+    { id: 'p_mod4', name: 'Premium Cotton Silk Sharee', seller: 'Anjans Fashion Accent', price: 14500, type: 'Retail', status: 'Pending Review' }
   ]);
 
   const approveProduct = (id: string) => {
@@ -794,7 +794,7 @@ CREATE TABLE products (
     name VARCHAR(255) NOT NULL,
     brand VARCHAR(150),
     base_price DECIMAL(12, 2) NOT NULL,
-    product_type VARCHAR(50) NOT NULL DEFAULT 'retail', -- 'retail', 'wholesale_b2b'
+    product_type VARCHAR(50) NOT NULL DEFAULT 'retail',
     minimum_order_quantity INT DEFAULT 1,
     moderation_status VARCHAR(50) DEFAULT 'pending_review', -- 'pending_review', 'active_live', 'disabled', 'flagged'
     is_sponsored BOOLEAN DEFAULT FALSE,
@@ -834,7 +834,7 @@ CREATE TABLE product_reports (
     id VARCHAR(100) PRIMARY KEY DEFAULT 'rep_' || gen_random_uuid(),
     product_id VARCHAR(100) REFERENCES products(id) ON DELETE CASCADE,
     reporter_id VARCHAR(100) REFERENCES users(id),
-    report_reason VARCHAR(150) NOT NULL, -- 'fake_product', 'misleading_images', 'incorrect_moq', 'out_of_stock'
+    report_reason VARCHAR(150) NOT NULL, -- 'fake_product', 'misleading_images', 'out_of_stock'
     additional_notes TEXT,
     reported_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
@@ -987,7 +987,7 @@ CREATE TABLE dispute_resolutions (
     decided_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 42. VIP High-Value Escalation Tracker (B2C & B2B)
+-- 42. VIP High-Value Escalation Tracker (B2C)
 CREATE TABLE escalation_logs (
     id SERIAL PRIMARY KEY,
     dispute_id VARCHAR(100) REFERENCES disputes(id) ON DELETE CASCADE,
@@ -1049,7 +1049,7 @@ CREATE TABLE homepage_banners (
     sort_priority INT DEFAULT 0
 );
 
--- 48. Sponsorship B2B Proposals from Merchants
+-- 48. Sponsorship Proposals from Merchants
 CREATE TABLE sponsorship_requests (
     id VARCHAR(100) PRIMARY KEY DEFAULT 'spr_' || gen_random_uuid(),
     seller_id VARCHAR(100) REFERENCES sellers(id) ON DELETE CASCADE,
@@ -1137,7 +1137,7 @@ CREATE TABLE buyer_behavior_metrics (
 CREATE TABLE moderation_logs (
     id SERIAL PRIMARY KEY,
     operator_id VARCHAR(100) REFERENCES users(id),
-    moderated_type VARCHAR(100) NOT NULL, -- 'seller_document_verify', 'product_reject', 'b2b_approve'
+    moderated_type VARCHAR(100) NOT NULL, -- 'seller_document_verify', 'product_reject'
     target_reference VARCHAR(100) NOT NULL,
     operator_verdict VARCHAR(100) NOT NULL,
     operator_narrative TEXT,
@@ -1375,7 +1375,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
             <div className="flex justify-between items-center border-b border-white/[0.04] pb-3">
               <div>
                 <h3 className="text-sm font-bold text-white uppercase tracking-wider font-sans">📦 Platform Product Listing Moderation</h3>
-                <p className="text-[10px] text-app-text-secondary mt-1">Review retail (B2C) incoming listings for quality, compliance, and minimum order values.</p>
+                <p className="text-[10px] text-app-text-secondary mt-1">Review retail incoming listings for quality and compliance.</p>
               </div>
             </div>
 
@@ -1385,7 +1385,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
                   <tr className="border-b border-app-border text-[10px] text-app-text-secondary uppercase tracking-widest font-black">
                     <th className="py-3 px-4">Product Name</th>
                     <th className="py-3 px-4">Merchant Shop</th>
-                    <th className="py-3 px-4">Price / MoQ</th>
+                    <th className="py-3 px-4">Price</th>
                     <th className="py-3 px-4">Registry Type</th>
                     <th className="py-3 px-4">Flow Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
@@ -1397,7 +1397,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
                       <td className="py-3.5 px-4 font-bold text-white">{p.name}</td>
                       <td className="py-3.5 px-4 text-app-text-secondary">{p.seller}</td>
                       <td className="py-3.5 px-4 font-mono font-bold text-app-accent">
-                        ৳ {p.price.toLocaleString()} <span className="text-[10px] text-slate-500 italic block">MoQ: {p.moq} unit{p.moq > 1 ? 's' : ''}</span>
+                        ৳ {p.price.toLocaleString()}
                       </td>
                       <td className="py-3.5 px-4">
                         <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/10">

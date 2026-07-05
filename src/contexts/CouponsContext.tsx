@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
+import { operationsApi } from '../services/operationsApi';
 
 export type CouponType = 'percentage' | 'fixed_amount' | 'free_shipping' | 'buy_x_get_y';
 export type DiscountTarget = 'all_products' | 'specific_product' | 'specific_category' | 'specific_brand';
@@ -288,6 +289,45 @@ export const CouponsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.setItem('choosify_coupon_usage', JSON.stringify(couponUsage));
   }, [couponUsage]);
 
+  useEffect(() => {
+    operationsApi
+      .listCoupons()
+      .then((apiCoupons) => {
+        if (!apiCoupons.length) return;
+        setCoupons((prev) => {
+          const merged = [...prev];
+          apiCoupons.forEach((apiCoupon) => {
+            const idx = merged.findIndex(
+              (coupon) => coupon.code.toUpperCase() === apiCoupon.code.toUpperCase(),
+            );
+            const mapped: Coupon = {
+              ...(merged[idx] || {}),
+              id: apiCoupon.id,
+              code: apiCoupon.code,
+              type: apiCoupon.type as CouponType,
+              discountTarget: apiCoupon.discountTarget as DiscountTarget,
+              discountValue: apiCoupon.discountValue,
+              validFrom: apiCoupon.validFrom,
+              validUntil: apiCoupon.validUntil,
+              active: apiCoupon.active,
+              rules: apiCoupon.rules as CouponRule,
+              description: apiCoupon.description,
+              totalUsages: apiCoupon.totalUsages,
+              totalRedemptions: apiCoupon.totalRedemptions,
+              totalDiscountGiven: apiCoupon.totalDiscountGiven,
+              createdBy: merged[idx]?.createdBy || 'operations-api',
+              createdAt: apiCoupon.createdAt,
+              updatedAt: apiCoupon.updatedAt,
+            };
+            if (idx >= 0) merged[idx] = mapped;
+            else merged.push(mapped);
+          });
+          return merged;
+        });
+      })
+      .catch(() => {});
+  }, []);
+
   // Helper date function
   const parseLocalDate = (dateStr: string) => {
     const parts = dateStr.split('-');
@@ -442,6 +482,7 @@ export const CouponsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     setCoupons(prev => [newCoupon, ...prev]);
+    operationsApi.upsertCoupon(newCoupon).catch(() => {});
     toast.success(`Coupon code ${codeUpper} created successfully!`);
   };
 
@@ -451,11 +492,13 @@ export const CouponsProvider: React.FC<{ children: React.ReactNode }> = ({ child
         if (updates.code) {
           updates.code = updates.code.toUpperCase().trim();
         }
-        return {
+        const next = {
           ...c,
           ...updates,
           updatedAt: new Date().toISOString()
         };
+        operationsApi.upsertCoupon(next).catch(() => {});
+        return next;
       }
       return c;
     }));
@@ -473,6 +516,7 @@ export const CouponsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       return c;
     }));
+    operationsApi.deleteCoupon(id).catch(() => {});
 
     toast.success(
       <div className="flex items-center gap-2">

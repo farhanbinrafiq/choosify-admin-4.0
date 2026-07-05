@@ -1,5 +1,6 @@
 import type {
   CatalogBrand,
+  CatalogBrandPost,
   CatalogCategory,
   CatalogCreator,
   CatalogDeal,
@@ -160,5 +161,26 @@ export const catalogApi = {
   upsertProductDetail: async (productId: string, payload: Partial<CatalogProductDetail>): Promise<CatalogProductDetail> => {
     const result = await request<{ data: CatalogProductDetail }>(`/catalog/product-details/${productId}`, 'PUT', payload);
     return result.data;
+  },
+
+  listBrandPosts: async (params?: { status?: string; slug?: string; brandId?: string }): Promise<CatalogBrandPost[]> => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.slug) query.set('slug', params.slug);
+    if (params?.brandId) query.set('brandId', params.brandId);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const result = await request<{ data: CatalogBrandPost[] }>(`/catalog/brand-posts${suffix}`);
+    return result.data;
+  },
+  createBrandPost: async (payload: Partial<CatalogBrandPost>): Promise<CatalogBrandPost> => {
+    const result = await request<{ data: CatalogBrandPost }>('/catalog/brand-posts', 'POST', payload);
+    return result.data;
+  },
+  updateBrandPost: async (id: string, payload: Partial<CatalogBrandPost>): Promise<CatalogBrandPost> => {
+    const result = await request<{ data: CatalogBrandPost }>(`/catalog/brand-posts/${id}`, 'PATCH', payload);
+    return result.data;
+  },
+  deleteBrandPost: async (id: string): Promise<void> => {
+    await request<{ success: boolean }>(`/catalog/brand-posts/${id}`, 'DELETE');
   },
 };

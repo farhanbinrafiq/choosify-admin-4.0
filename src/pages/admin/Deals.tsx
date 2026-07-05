@@ -28,7 +28,7 @@ export interface Deal {
   expiry: string; // ISO date string
   clicks: number;
   status: 'Live' | 'Pending' | 'Expiring' | 'Expired' | 'Rejected';
-  type: 'retail' | 'wholesale';
+  type: 'retail';
   linkedProductId?: string;
   promoCode?: string;
 }
@@ -193,7 +193,6 @@ export default function DealsPage() {
   const [formSeller, setFormSeller] = useState('');
   const [formDiscount, setFormDiscount] = useState<number>(0);
   const [formCategory, setFormCategory] = useState('Electronics');
-  const [formType, setFormType] = useState<'retail' | 'wholesale'>('retail');
   const [formExpiry, setFormExpiry] = useState('');
   const [formPromoCode, setFormPromoCode] = useState('');
 
@@ -213,7 +212,6 @@ export default function DealsPage() {
       setFormSeller(editingDeal.seller);
       setFormDiscount(editingDeal.discount);
       setFormCategory(editingDeal.category);
-      setFormType(editingDeal.type);
       
       const parsedDate = new Date(editingDeal.expiry);
       const yyyy = parsedDate.getFullYear();
@@ -227,7 +225,6 @@ export default function DealsPage() {
       setFormSeller('');
       setFormDiscount(0);
       setFormCategory('Electronics');
-      setFormType('retail');
       
       // Default to 48 hours tomorrow YYYY-MM-DD
       const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -467,7 +464,7 @@ export default function DealsPage() {
         seller: formSeller,
         discount: Number(formDiscount),
         category: formCategory,
-        type: formType,
+        type: 'retail',
         expiry: isoExpiry,
         promoCode: formPromoCode || undefined
       } : d));
@@ -480,7 +477,7 @@ export default function DealsPage() {
         seller: formSeller,
         discount: Number(formDiscount),
         category: formCategory,
-        type: formType,
+        type: 'retail',
         expiry: isoExpiry,
         clicks: 0,
         status: 'Pending',
@@ -759,9 +756,6 @@ export default function DealsPage() {
                           </td>
                           <td className="p-4 font-bold text-[12px] text-[#0D1B2A] max-w-[200px] truncate">
                             {deal.name}
-                            {deal.type === 'wholesale' && (
-                              <span className="ml-1.5 text-[8px] bg-slate-100 text-slate-600 rounded px-1.5 py-0.5 font-bold uppercase tracking-wider">Bulk</span>
-                            )}
                           </td>
                           <td className="p-4 text-[11px] text-gray-500">{deal.seller}</td>
                           <td className="p-4">

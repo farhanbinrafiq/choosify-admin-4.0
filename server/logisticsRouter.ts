@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { LogisticsService } from '../src/services/logistics/LogisticsService';
 import { WebhookNormalizer } from '../src/services/logistics/webhook/WebhookNormalizer';
-// Let's verify the path: server/logisticsRouter.ts is inside /server/ directory. The root src is at /src/.
-// So the relative path is '../src/services/logistics/webhook/WebhookNormalizer' and '../src/services/logistics/LogisticsService'
+import { shipmentStore } from './operations/shipmentStore';
+import type { OpsShipmentStatus } from './operations/shipmentStore';
 
 const router = Router();
 
@@ -34,6 +34,17 @@ router.post('/webhooks/logistics/:courier', async (req, res) => {
         description: normalized.description,
         remarks: normalized.remarks
       }
+    );
+
+    shipmentStore.updateFromWebhook(
+      normalized.trackingNumber,
+      normalized.status as OpsShipmentStatus,
+      {
+        timestamp: new Date().toISOString(),
+        status: normalized.status,
+        location: normalized.location || 'Unknown',
+        description: normalized.description || normalized.status,
+      },
     );
 
     return res.json({
@@ -79,6 +90,17 @@ router.post('/logistics/simulate-webhook', async (req, res) => {
         description: normalized.description,
         remarks: normalized.remarks
       }
+    );
+
+    shipmentStore.updateFromWebhook(
+      normalized.trackingNumber,
+      normalized.status as OpsShipmentStatus,
+      {
+        timestamp: new Date().toISOString(),
+        status: normalized.status,
+        location: normalized.location || 'Unknown',
+        description: normalized.description || normalized.status,
+      },
     );
 
     return res.json({

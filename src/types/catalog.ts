@@ -41,7 +41,7 @@ export interface CatalogProduct {
   categoryName: string;
   image: string;
   gallery: string[];
-  modeType: 'retail' | 'wholesale';
+  modeType: 'retail';
   price: number;
   originalPrice?: number;
   stock: number;
@@ -66,7 +66,7 @@ export interface CatalogDeal {
   seller: string;
   category: string;
   status: 'live' | 'pending' | 'expiring' | 'expired' | 'rejected' | 'draft';
-  type: 'retail' | 'wholesale';
+  type: 'retail';
   discountType: 'percentage' | 'flat';
   discountValue: number;
   promoCode?: string;
@@ -75,6 +75,34 @@ export interface CatalogDeal {
   clicks: number;
   validFrom: string;
   validUntil: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type CatalogBrandPostKind = 'event' | 'launch' | 'festival' | 'campaign' | 'store_moment';
+export type CatalogBrandPostStatus = 'scheduled' | 'live' | 'expired';
+
+export interface CatalogBrandPost {
+  id: string;
+  slug: string;
+  brandId: string;
+  brandName: string;
+  brandLogo?: string;
+  kind: CatalogBrandPostKind;
+  title: string;
+  excerpt: string;
+  heroImage: string;
+  bannerImages?: string[];
+  body: string[];
+  startDate?: string;
+  endDate?: string;
+  location?: string;
+  ctaLabel?: string;
+  ctaUrl?: string;
+  linkedProductIds?: string[];
+  sponsored: boolean;
+  status: CatalogBrandPostStatus;
+  publishedAt: string;
   createdAt: string;
   updatedAt: string;
 }

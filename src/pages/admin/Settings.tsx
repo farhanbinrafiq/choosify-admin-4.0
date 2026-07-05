@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { DEFAULT_ROLE_PERMISSIONS } from '../../lib/rbac';
+import { operationsApi } from '../../services/operationsApi';
 import { 
   Settings, 
   Shield, 
@@ -70,6 +72,7 @@ export default function SettingsPage() {
     const newVal = !maintenance;
     setMaintenance(newVal);
     localStorage.setItem('choosify_settings_maintenance', String(newVal));
+    operationsApi.updateFeatureFlags({ maintenance_mode: newVal }).catch(() => {});
     showToast(`⚠️ Maintenance Mode set to: ${newVal ? 'ACTIVE (Offline)' : 'INACTIVE (Live)'}`);
   };
 
@@ -79,72 +82,7 @@ export default function SettingsPage() {
   const [inviteRole, setInviteRole] = useState('admin');
 
   // 3. Roles and Permissions State
-  const defaultPermissions: Record<string, Record<string, boolean>> = {
-    super_admin: {
-      content: true,
-      users: true,
-      finance: true,
-      brand: true,
-      system: true,
-      analytics: true,
-    },
-    admin: {
-      content: true,
-      users: true,
-      finance: false,
-      brand: true,
-      system: true,
-      analytics: true,
-    },
-    seller: {
-      content: true,
-      users: false,
-      finance: false,
-      brand: false,
-      system: false,
-      analytics: true,
-    },
-    creator: {
-      content: true,
-      users: false,
-      finance: false,
-      brand: false,
-      system: false,
-      analytics: true,
-    },
-    moderator: {
-      content: true,
-      users: false,
-      finance: false,
-      brand: true,
-      system: false,
-      analytics: true,
-    },
-    finance_manager: {
-      content: false,
-      users: false,
-      finance: true,
-      brand: false,
-      system: false,
-      analytics: true,
-    },
-    support_agent: {
-      content: false,
-      users: true,
-      finance: false,
-      brand: false,
-      system: false,
-      analytics: true,
-    },
-    marketing_manager: {
-      content: true,
-      users: false,
-      finance: false,
-      brand: false,
-      system: false,
-      analytics: true,
-    }
-  };
+  const defaultPermissions: Record<string, Record<string, boolean>> = DEFAULT_ROLE_PERMISSIONS;
 
   const [rolePermissions, setRolePermissions] = useState<Record<string, Record<string, boolean>>>(() => {
     const saved = localStorage.getItem('choosify_role_permissions');
@@ -170,18 +108,22 @@ export default function SettingsPage() {
     };
     setRolePermissions(updated);
     localStorage.setItem('choosify_role_permissions', JSON.stringify(updated));
+    operationsApi.updatePermissions(updated as Record<string, Record<'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics', boolean>>).catch(() => {});
     showToast(`✓ Updated [${role.replace('_', ' ')}] permission for [${permKey}]`);
   };
 
   // 4. Feature Flags State
   const defaultFeatureFlags: Record<string, boolean> = {
+    creator_hub: true,
+    compare_tool: true,
+    enable_comparison_engine: true,
     enable_creator_marketplace: true,
     enable_community_submissions: true,
     enable_campaign_banners: true,
     enable_cod_only_mode: false,
     enable_promo_codes: true,
     enable_brand_deals_page: true,
-    enable_comparison_engine: true,
+    maintenance_mode: false,
   };
 
   const [featureFlags, setFeatureFlags] = useState<Record<string, boolean>>(() => {
@@ -196,13 +138,38 @@ export default function SettingsPage() {
     return defaultFeatureFlags;
   });
 
+  useEffect(() => {
+    operationsApi
+      .getFeatureFlags()
+      .then((remote) => {
+        if (remote && Object.keys(remote).length > 0) {
+          setFeatureFlags((prev) => ({ ...prev, ...remote }));
+          if (typeof remote.maintenance_mode === 'boolean') {
+            setMaintenance(remote.maintenance_mode);
+            localStorage.setItem('choosify_settings_maintenance', String(remote.maintenance_mode));
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   const toggleFeatureFlag = (key: string) => {
-    const updated = {
+    const nextVal = !featureFlags[key];
+    const updated: Record<string, boolean> = {
       ...featureFlags,
-      [key]: !featureFlags[key]
+      [key]: nextVal,
     };
+    if (key === 'enable_creator_marketplace' || key === 'creator_hub') {
+      updated.enable_creator_marketplace = nextVal;
+      updated.creator_hub = nextVal;
+    }
+    if (key === 'enable_comparison_engine' || key === 'compare_tool') {
+      updated.enable_comparison_engine = nextVal;
+      updated.compare_tool = nextVal;
+    }
     setFeatureFlags(updated);
     localStorage.setItem('choosify_feature_flags', JSON.stringify(updated));
+    operationsApi.updateFeatureFlags(updated).catch(() => {});
     showToast(`✓ Flag '${key.toUpperCase()}' toggled to: ${updated[key] ? 'TRUE' : 'FALSE'}`);
   };
 

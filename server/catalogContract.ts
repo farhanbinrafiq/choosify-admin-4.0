@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type {
   CatalogBrand,
+  CatalogBrandPost,
   CatalogCategory,
   CatalogDeal,
   CatalogProduct,
@@ -83,7 +84,7 @@ const productSchema = z.object({
   categoryName: z.string(),
   image: z.string(),
   gallery: z.array(z.string()),
-  modeType: z.enum(['retail', 'wholesale']),
+  modeType: z.literal('retail'),
   price: z.number().nonnegative(),
   originalPrice: z.number().nonnegative().optional(),
   stock: z.number().int(),
@@ -108,7 +109,7 @@ const dealSchema = z.object({
   seller: z.string(),
   category: z.string(),
   status: z.enum(['live', 'pending', 'expiring', 'expired', 'rejected', 'draft']),
-  type: z.enum(['retail', 'wholesale']),
+  type: z.literal('retail'),
   discountType: z.enum(['percentage', 'flat']),
   discountValue: z.number().nonnegative(),
   promoCode: z.string().optional(),
@@ -211,7 +212,6 @@ export const normalizeProductInput = (
   const title = toString(raw.title, toString(raw.name, existing?.title ?? 'Untitled Product'));
   const id = toString(raw.id, existing?.id ?? `prod-${Date.now()}`);
   const statusRaw = toString(raw.status, existing?.status ?? 'draft').toLowerCase();
-  const modeRaw = toString(raw.modeType, toString(raw.mode_type, existing?.modeType ?? 'retail')).toLowerCase();
   const normalized: CatalogProduct = {
     id,
     slug: toString(raw.slug, existing?.slug ?? slugify(title || id)),
@@ -223,7 +223,7 @@ export const normalizeProductInput = (
     categoryName: toString(raw.categoryName, toString(raw.category, existing?.categoryName ?? 'General')),
     image: toString(raw.image, existing?.image ?? ''),
     gallery: toStringArray(raw.gallery).length > 0 ? toStringArray(raw.gallery) : existing?.gallery ?? [],
-    modeType: modeRaw === 'wholesale' ? 'wholesale' : 'retail',
+    modeType: 'retail',
     price: toNumber(raw.price, existing?.price ?? 0),
     originalPrice:
       raw.originalPrice !== undefined
@@ -255,7 +255,6 @@ export const normalizeDealInput = (payload: unknown, existing?: CatalogDeal): Ca
   const id = toString(raw.id, existing?.id ?? `deal-${Date.now()}`);
   const statusRaw = toString(raw.status, existing?.status ?? 'draft').toLowerCase();
   const discountTypeRaw = toString(raw.discountType, existing?.discountType ?? 'percentage').toLowerCase();
-  const typeRaw = toString(raw.type, existing?.type ?? 'retail').toLowerCase();
   const validUntil = toString(raw.validUntil, toString(raw.expiry, existing?.validUntil ?? nowIso()));
   const normalized: CatalogDeal = {
     id,
@@ -271,7 +270,7 @@ export const normalizeDealInput = (payload: unknown, existing?: CatalogDeal): Ca
       statusRaw === 'rejected'
         ? statusRaw
         : 'draft',
-    type: typeRaw === 'wholesale' ? 'wholesale' : 'retail',
+    type: 'retail',
     discountType: discountTypeRaw === 'flat' ? 'flat' : 'percentage',
     discountValue: toNumber(raw.discountValue, toNumber(raw.discount, existing?.discountValue ?? 0)),
     promoCode: toString(raw.promoCode, existing?.promoCode),
@@ -349,4 +348,73 @@ export const normalizeHomepageInput = (
   };
 
   return homepageSchema.parse(normalized);
+};
+
+const brandPostKindSchema = z.enum(['event', 'launch', 'festival', 'campaign', 'store_moment']);
+const brandPostStatusSchema = z.enum(['scheduled', 'live', 'expired']);
+
+const brandPostSchema = z.object({
+  id: nonEmpty,
+  slug: nonEmpty,
+  brandId: nonEmpty,
+  brandName: nonEmpty,
+  brandLogo: z.string().optional(),
+  kind: brandPostKindSchema,
+  title: nonEmpty,
+  excerpt: z.string(),
+  heroImage: nonEmpty,
+  bannerImages: z.array(z.string()).optional(),
+  body: z.array(z.string()),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  location: z.string().optional(),
+  ctaLabel: z.string().optional(),
+  ctaUrl: z.string().optional(),
+  linkedProductIds: z.array(z.string()).optional(),
+  sponsored: z.boolean(),
+  status: brandPostStatusSchema,
+  publishedAt: z.string(),
+  createdAt: isoDate,
+  updatedAt: isoDate,
+});
+
+export const normalizeBrandPostInput = (
+  payload: unknown,
+  existing?: CatalogBrandPost,
+): CatalogBrandPost => {
+  const raw = (payload ?? {}) as Record<string, unknown>;
+  const title = toString(raw.title, existing?.title ?? 'Untitled Post');
+  const id = toString(raw.id, existing?.id ?? `bp-${Date.now()}`);
+  const kindRaw = toString(raw.kind, existing?.kind ?? 'campaign');
+  const statusRaw = toString(raw.status, existing?.status ?? 'scheduled');
+  const kindParsed = brandPostKindSchema.safeParse(kindRaw);
+  const statusParsed = brandPostStatusSchema.safeParse(statusRaw);
+  const normalized = {
+    id,
+    slug: toString(raw.slug, existing?.slug ?? slugify(title || id)),
+    brandId: toString(raw.brandId, existing?.brandId ?? ''),
+    brandName: toString(raw.brandName, existing?.brandName ?? ''),
+    brandLogo: toString(raw.brandLogo, existing?.brandLogo ?? '') || undefined,
+    kind: kindParsed.success ? kindParsed.data : 'campaign',
+    title,
+    excerpt: toString(raw.excerpt, existing?.excerpt ?? ''),
+    heroImage: toString(raw.heroImage, existing?.heroImage ?? ''),
+    bannerImages: toStringArray(raw.bannerImages).length > 0 ? toStringArray(raw.bannerImages) : existing?.bannerImages,
+    body: toStringArray(raw.body).length > 0 ? toStringArray(raw.body) : existing?.body ?? [],
+    startDate: toString(raw.startDate, existing?.startDate ?? '') || undefined,
+    endDate: toString(raw.endDate, existing?.endDate ?? '') || undefined,
+    location: toString(raw.location, existing?.location ?? '') || undefined,
+    ctaLabel: toString(raw.ctaLabel, existing?.ctaLabel ?? '') || undefined,
+    ctaUrl: toString(raw.ctaUrl, existing?.ctaUrl ?? '') || undefined,
+    linkedProductIds:
+      toStringArray(raw.linkedProductIds).length > 0
+        ? toStringArray(raw.linkedProductIds)
+        : existing?.linkedProductIds,
+    sponsored: toBoolean(raw.sponsored, existing?.sponsored ?? false),
+    status: statusParsed.success ? statusParsed.data : 'scheduled',
+    publishedAt: toString(raw.publishedAt, existing?.publishedAt ?? nowIso().slice(0, 10)),
+    createdAt: existingOrNow(existing?.createdAt),
+    updatedAt: nowIso(),
+  };
+  return brandPostSchema.parse(normalized) as CatalogBrandPost;
 };
