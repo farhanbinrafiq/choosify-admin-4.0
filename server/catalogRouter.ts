@@ -10,6 +10,8 @@ import {
 } from './catalogContract';
 import type { CatalogBrandPost, CatalogProduct } from '../src/types/catalog';
 import { uploadImageToCloudinary } from '../lib/vercel-catalog/mediaUpload';
+import { validate } from './middleware/validate';
+import { CatalogProductParamsSchema } from './validation/catalog/productSchemas';
 
 export const catalogRouter = Router();
 
@@ -112,7 +114,10 @@ catalogRouter.get('/catalog/products', async (req, res) => {
   }
 });
 
-catalogRouter.get('/catalog/products/:id', async (req, res) => {
+catalogRouter.get(
+  '/catalog/products/:id',
+  validate({ params: CatalogProductParamsSchema }),
+  async (req, res) => {
   try {
     const product = await catalogStore.getProduct(req.params.id);
     if (!product) {
@@ -123,7 +128,8 @@ catalogRouter.get('/catalog/products/:id', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get product' });
   }
-});
+  },
+);
 
 catalogRouter.post('/catalog/products', async (req, res) => {
   try {

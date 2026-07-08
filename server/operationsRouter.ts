@@ -9,6 +9,8 @@ import {
 } from './operations/platformMessagingBridge';
 import { scheduleOperationsPersist } from './operations/operationsPersistence';
 import type { OpsCoupon, OpsReview, OpsStorefrontOrder, PermissionKey } from './operations/types';
+import { validate } from './middleware/validate';
+import { CouponValidateBodySchema } from './validation/operations/couponValidateSchema';
 
 export const operationsRouter = Router();
 
@@ -164,17 +166,11 @@ operationsRouter.delete('/operations/coupons/:id', (req, res) => {
   res.json({ success: true });
 });
 
-operationsRouter.post('/operations/coupons/validate', (req, res) => {
-  const { code, cartTotal, userId, cartItems } = req.body as {
-    code?: string;
-    cartTotal?: number;
-    userId?: string;
-    cartItems?: { id: string; price: number; category?: string; brand?: string; quantity?: number }[];
-  };
-  if (!code?.trim()) {
-    res.status(400).json({ error: 'Promo code is required' });
-    return;
-  }
+operationsRouter.post(
+  '/operations/coupons/validate',
+  validate({ body: CouponValidateBodySchema }),
+  (req, res) => {
+  const { code, cartTotal, userId, cartItems } = req.body;
   const coupon = operationsStore.getCouponByCode(code.trim());
   if (!coupon) {
     res.json({ valid: false, discount: 0, reason: 'Invalid or expired promo code.' });
@@ -183,7 +179,8 @@ operationsRouter.post('/operations/coupons/validate', (req, res) => {
   const userUsageCount = userId ? operationsStore.countCouponUsageForUser(coupon.id, userId) : 0;
   const result = validateCoupon(coupon, Number(cartTotal || 0), userId, cartItems, userUsageCount);
   res.json(result);
-});
+  },
+);
 
 operationsRouter.get('/operations/reviews', (req, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : '';

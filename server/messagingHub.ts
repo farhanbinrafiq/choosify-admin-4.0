@@ -18,6 +18,8 @@ import {
 } from './messaging/omniStore';
 import { seedOmnichannelData } from './messaging/seedData';
 import { verifyMetaWebhookSignature } from './messaging/webhookVerify';
+import { validate } from './middleware/validate';
+import { SendMessageBodySchema } from './validation/messaging/sendMessageSchema';
 
 export function emitOmniEvents(message: UnifiedMessage, conversation: Conversation) {
   emitMessageEvents(message, conversation);
@@ -189,13 +191,12 @@ messagingRouter.get('/messages/:conversationId', async (req: Request, res: Respo
   }
 });
 
-messagingRouter.post('/messages/send', async (req: Request, res: Response) => {
+messagingRouter.post(
+  '/messages/send',
+  validate({ body: SendMessageBodySchema }),
+  async (req: Request, res: Response) => {
   try {
     const { conversationId, content, senderId, senderName, templateName, templateLanguage } = req.body;
-
-    if (!conversationId || !content?.body) {
-      return res.status(400).json({ error: 'Mandatory params content, conversationId required.' });
-    }
 
     const conv = await getConversation(conversationId);
     if (!conv) {
@@ -280,7 +281,8 @@ messagingRouter.post('/messages/send', async (req: Request, res: Response) => {
     const message = err instanceof Error ? err.message : 'Unknown error';
     return res.status(500).json({ error: message });
   }
-});
+  },
+);
 
 messagingRouter.patch('/conversation/status', async (req: Request, res: Response) => {
   try {

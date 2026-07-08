@@ -4,6 +4,8 @@ import {
   getBearerToken,
   resolveAuthenticatedUserFromToken,
 } from './auth/authProfile';
+import { validate } from './middleware/validate';
+import { DevLoginBodySchema } from './validation/auth/devLoginSchema';
 
 export const authRouter = Router();
 
@@ -33,7 +35,7 @@ authRouter.get('/auth/me', async (req, res) => {
   }
 });
 
-authRouter.post('/auth/dev-login', (req, res) => {
+authRouter.post('/auth/dev-login', validate({ body: DevLoginBodySchema }), (req, res) => {
   if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEV_LOGIN !== 'true') {
     res.status(403).json({ error: 'Dev login disabled in production' });
     return;
