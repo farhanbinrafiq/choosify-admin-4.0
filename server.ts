@@ -2,6 +2,8 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import { createServer } from "http";
+import helmet from "helmet";
+import compression from "compression";
 import { Server as SocketIOServer } from "socket.io";
 import { messagingRouter, setSocketIO, seedOmnichannelData, handleMetaWebhookPost } from "./server/messagingHub";
 import { logisticsRouter } from "./server/logisticsRouter";
@@ -11,12 +13,29 @@ import { authRouter } from "./server/authRouter";
 import { attachOperationsPersistence, ensureOperationsHydrated } from "./server/operations/operationsPersistence";
 import { getAnalyticsSummary } from "./server/operations/analyticsService";
 import { ensureCatalogSeedData } from "./lib/vercel-catalog/catalogStore";
+import { Logger } from "./server/lib/logger";
+import { requestIdMiddleware } from "./server/middleware/requestId";
+import { createCorsMiddleware, getAllowedOrigins } from "./server/middleware/cors";
+import { errorHandler } from "./server/middleware/errorHandler";
+import { setupGracefulShutdown } from "./server/middleware/gracefulShutdown";
+import { healthRouter } from "./server/routes/health";
 
 dotenv.config();
 
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3001;
+
+  app.disable("x-powered-by");
+  app.use(requestIdMiddleware);
+  app.use(
+    helmet({
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+  app.use(compression());
+  app.use(healthRouter);
 
   // Meta webhooks need the raw body for signature verification (before JSON parser)
   app.post(
@@ -26,16 +45,7 @@ async function startServer() {
   );
 
   app.use(express.json());
-  app.use((req, res, next) => {
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-    if (req.method === "OPTIONS") {
-      res.status(204).end();
-      return;
-    }
-    next();
-  });
+  app.use(createCorsMiddleware());
 
   // Mount Unified Omnichannel Messaging APIs and Webhooks
   app.use("/api", messagingRouter);
@@ -64,7 +74,12 @@ async function startServer() {
 
   // REST endpoints for creating and updating products as requested
   app.post("/api/products", (req, res) => {
-    console.log("POST /api/products called with payload:", req.body);
+    Logger.info("Deprecated product endpoint called", {
+      requestId: req.requestId,
+      method: "POST",
+      path: "/api/products",
+      payload: req.body,
+    });
     res.status(201).json({
       success: true,
       message: "Deprecated endpoint. Use /api/v1/catalog/products",
@@ -74,7 +89,12 @@ async function startServer() {
   });
 
   app.put("/api/products/:id", (req, res) => {
-    console.log(`PUT /api/products/${req.params.id} called with payload:`, req.body);
+    Logger.info("Deprecated product endpoint called", {
+      requestId: req.requestId,
+      method: "PUT",
+      path: `/api/products/${req.params.id}`,
+      payload: req.body,
+    });
     res.json({
       success: true,
       message: "Deprecated endpoint. Use /api/v1/catalog/products/:id",
@@ -84,7 +104,12 @@ async function startServer() {
   });
 
   app.patch("/api/products/:id", (req, res) => {
-    console.log(`PATCH /api/products/${req.params.id} called with payload:`, req.body);
+    Logger.info("Deprecated product endpoint called", {
+      requestId: req.requestId,
+      method: "PATCH",
+      path: `/api/products/${req.params.id}`,
+      payload: req.body,
+    });
     res.json({
       success: true,
       message: "Deprecated endpoint. Use /api/v1/catalog/products/:id",
@@ -109,6 +134,8 @@ async function startServer() {
     });
   }
 
+  app.use(errorHandler);
+
   // Pre-seed Firestore with beautiful messaging sandbox dataset
   attachOperationsPersistence();
   await ensureOperationsHydrated();
@@ -119,16 +146,29 @@ async function startServer() {
   const httpServer = createServer(app);
   const io = new SocketIOServer(httpServer, {
     cors: {
-      origin: "*",
+      origin: getAllowedOrigins(),
       methods: ["GET", "POST", "PATCH", "DELETE"]
     }
   });
 
   setSocketIO(io);
 
+  setupGracefulShutdown(httpServer);
+
   httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    Logger.info("Server started", {
+      port: PORT,
+      environment: process.env.NODE_ENV || "development",
+      allowedOrigins: getAllowedOrigins(),
+      healthEndpoint: `http://localhost:${PORT}/health`,
+    });
   });
 }
 
-startServer();
+startServer().catch((error) => {
+  Logger.error("Failed to start server", {
+    message: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+  });
+  process.exit(1);
+});
