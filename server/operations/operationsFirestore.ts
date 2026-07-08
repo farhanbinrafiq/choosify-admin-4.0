@@ -8,8 +8,11 @@ import type {
   RolePermissionsMap,
 } from './types';
 import type { OpsShipment } from './shipmentStore';
+import { getDocumentById } from '../lib/firestore/queryHelpers';
+import { snapToData } from '../lib/firestore/documentHelpers';
 
 const DOC_ID = 'snapshot';
+const ADMIN_USER_FIELDS = ['role', 'displayName', 'email'] as const;
 
 export const useOperationsFirestore =
   process.env.OPERATIONS_USE_FIRESTORE === 'true' && hasFirebaseAdminCredentials();
@@ -51,10 +54,7 @@ async function dbOrThrow() {
 
 export async function loadOperationsSnapshot(): Promise<OperationsSnapshot | null> {
   if (!useOperationsFirestore) return null;
-  const db = await dbOrThrow();
-  const snap = await db.collection('ops_state').doc(DOC_ID).get();
-  if (!snap.exists) return null;
-  return snap.data() as OperationsSnapshot;
+  return getDocumentById<OperationsSnapshot>('ops_state', DOC_ID);
 }
 
 export async function saveOperationsSnapshot(snapshot: OperationsSnapshot): Promise<void> {
@@ -65,12 +65,13 @@ export async function saveOperationsSnapshot(snapshot: OperationsSnapshot): Prom
 
 export async function loadAdminUser(uid: string): Promise<{ role: string; displayName: string; email: string } | null> {
   if (!useOperationsFirestore) return null;
-  const db = await getAdminFirestore();
-  if (!db) return null;
-  const snap = await db.collection('admin_users').doc(uid).get();
-  if (!snap.exists) return null;
-  const data = snap.data() as { role?: string; displayName?: string; email?: string };
-  if (!data.role) return null;
+  const data = await getDocumentById<{
+    role?: string;
+    displayName?: string;
+    email?: string;
+  }>('admin_users', uid, [...ADMIN_USER_FIELDS]);
+
+  if (!data?.role) return null;
   return {
     role: data.role,
     displayName: data.displayName || data.email || 'Admin User',
@@ -84,11 +85,19 @@ export async function loadAdminUserByEmail(
   if (!useOperationsFirestore) return null;
   const db = await getAdminFirestore();
   if (!db) return null;
-  const snap = await db.collection('admin_users').where('email', '==', email.toLowerCase()).limit(1).get();
+
+  const snap = await db
+    .collection('admin_users')
+    .where('email', '==', email.toLowerCase())
+    .select(...ADMIN_USER_FIELDS)
+    .limit(1)
+    .get();
+
   if (snap.empty) return null;
   const doc = snap.docs[0];
-  const data = doc.data() as { role?: string; displayName?: string; email?: string };
-  if (!data.role) return null;
+  const data = snapToData(doc);
+  if (!data?.role) return null;
+
   return {
     uid: doc.id,
     role: data.role,

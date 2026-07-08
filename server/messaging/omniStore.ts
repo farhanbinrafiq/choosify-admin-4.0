@@ -1,5 +1,15 @@
 import type { Agent, Conversation, Customer, UnifiedMessage } from '../../src/types';
 import { getAdminFirestore } from '../firebaseAdmin';
+import type { OrderedListOptions } from '../lib/firestore/queryHelpers';
+import {
+  collectionHasDocuments,
+  existsWhere,
+  getDocumentById,
+  getLatestWhere,
+  listOrdered,
+  listWhereOrdered,
+} from '../lib/firestore/queryHelpers';
+import { snapToData } from '../lib/firestore/documentHelpers';
 
 type StoreBackend = 'admin' | 'memory';
 
@@ -29,10 +39,7 @@ export async function hasConversationData(): Promise<boolean> {
   if (mode === 'memory') {
     return memory.conversations.size > 0;
   }
-  const db = await getAdminFirestore();
-  if (!db) return false;
-  const snap = await db.collection('omni_conversations').limit(1).get();
-  return !snap.empty;
+  return collectionHasDocuments('omni_conversations', 1);
 }
 
 export async function saveCustomer(customer: Customer): Promise<void> {
@@ -70,21 +77,25 @@ export async function getConversation(conversationId: string): Promise<Conversat
   if (mode === 'memory') {
     return memory.conversations.get(conversationId) ?? null;
   }
-  const db = await getAdminFirestore();
-  const snap = await db!.collection('omni_conversations').doc(conversationId).get();
-  return snap.exists ? (snap.data() as Conversation) : null;
+  return getDocumentById<Conversation>('omni_conversations', conversationId);
 }
 
-export async function listConversations(): Promise<Conversation[]> {
+export async function listConversations(
+  options?: OrderedListOptions,
+): Promise<Conversation[]> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
-    return Array.from(memory.conversations.values()).sort(
+    const rows = Array.from(memory.conversations.values()).sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     );
+    if (!options?.limit) return rows;
+    return rows.slice(0, options.limit);
   }
-  const db = await getAdminFirestore();
-  const snap = await db!.collection('omni_conversations').orderBy('updatedAt', 'desc').get();
-  return snap.docs.map((doc) => doc.data() as Conversation);
+
+  return listOrdered<Conversation>('omni_conversations', 'updatedAt', {
+    direction: 'desc',
+    ...options,
+  });
 }
 
 export async function saveMessage(message: UnifiedMessage): Promise<void> {
@@ -102,29 +113,28 @@ export async function messageExistsByPlatformId(platformMessageId: string): Prom
   if (mode === 'memory') {
     return Array.from(memory.messages.values()).some((m) => m.platformMessageId === platformMessageId);
   }
-  const db = await getAdminFirestore();
-  const snap = await db!
-    .collection('omni_messages')
-    .where('platformMessageId', '==', platformMessageId)
-    .limit(1)
-    .get();
-  return !snap.empty;
+  return existsWhere('omni_messages', 'platformMessageId', '==', platformMessageId);
 }
 
-export async function listMessages(conversationId: string): Promise<UnifiedMessage[]> {
+export async function listMessages(
+  conversationId: string,
+  options?: OrderedListOptions,
+): Promise<UnifiedMessage[]> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
-    return Array.from(memory.messages.values())
+    const rows = Array.from(memory.messages.values())
       .filter((m) => m.conversationId === conversationId)
       .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+    if (!options?.limit) return rows;
+    return rows.slice(0, options.limit);
   }
-  const db = await getAdminFirestore();
-  const snap = await db!
-    .collection('omni_messages')
-    .where('conversationId', '==', conversationId)
-    .orderBy('timestamp', 'asc')
-    .get();
-  return snap.docs.map((doc) => doc.data() as UnifiedMessage);
+
+  return listWhereOrdered<UnifiedMessage>(
+    'omni_messages',
+    [{ field: 'conversationId', operator: '==', value: conversationId }],
+    'timestamp',
+    { direction: 'asc', ...options },
+  );
 }
 
 export async function getLatestInboundMessage(conversationId: string): Promise<UnifiedMessage | null> {
@@ -135,16 +145,15 @@ export async function getLatestInboundMessage(conversationId: string): Promise<U
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
     return inbound[0] ?? null;
   }
-  const db = await getAdminFirestore();
-  const snap = await db!
-    .collection('omni_messages')
-    .where('conversationId', '==', conversationId)
-    .where('direction', '==', 'inbound')
-    .orderBy('timestamp', 'desc')
-    .limit(1)
-    .get();
-  if (snap.empty) return null;
-  return snap.docs[0].data() as UnifiedMessage;
+
+  return getLatestWhere<UnifiedMessage>(
+    'omni_messages',
+    [
+      { field: 'conversationId', operator: '==', value: conversationId },
+      { field: 'direction', operator: '==', value: 'inbound' },
+    ],
+    'timestamp',
+  );
 }
 
 export async function listAgents(): Promise<Agent[]> {
@@ -154,7 +163,7 @@ export async function listAgents(): Promise<Agent[]> {
   }
   const db = await getAdminFirestore();
   const snap = await db!.collection('omni_agents').get();
-  return snap.docs.map((doc) => doc.data() as Agent);
+  return snap.docs.map((doc) => snapToData(doc) as Agent);
 }
 
 export async function patchConversation(
