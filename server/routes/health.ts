@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { success } from '../lib/apiResponse';
+import { healthRateLimit } from '../middleware/rateLimit';
 
 const startedAt = Date.now();
 
 export const healthRouter = Router();
 
-healthRouter.get('/health', (_req, res) => {
+healthRouter.get('/health', healthRateLimit, (_req, res) => {
   return success(res, {
     status: 'ok',
     timestamp: new Date().toISOString(),

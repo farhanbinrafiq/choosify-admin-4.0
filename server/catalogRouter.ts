@@ -10,6 +10,7 @@ import {
 } from './catalogContract';
 import type { CatalogBrandPost, CatalogProduct } from '../src/types/catalog';
 import { uploadImageToCloudinary } from '../lib/vercel-catalog/mediaUpload';
+import { validateImageUploadInput } from './lib/uploadValidation';
 import { validate } from './middleware/validate';
 import { CatalogProductParamsSchema } from './validation/catalog/productSchemas';
 
@@ -415,15 +416,21 @@ catalogRouter.get('/catalog/placements', async (req, res) => {
 catalogRouter.post('/catalog/media/upload', async (req, res) => {
   try {
     const { data, mimeType, fileName } = req.body as { data?: string; mimeType?: string; fileName?: string };
-    if (!data?.trim()) {
-      res.status(400).json({ error: 'Missing image data' });
+    const validation = validateImageUploadInput({
+      base64Data: data || '',
+      mimeType,
+      fileName,
+    });
+
+    if (validation.ok === false) {
+      res.status(400).json({ error: validation.error });
       return;
     }
 
     const url = await uploadImageToCloudinary({
-      base64Data: data,
-      mimeType: mimeType || 'image/jpeg',
-      fileName: fileName || 'product-image',
+      base64Data: data!,
+      mimeType: validation.mimeType,
+      fileName: validation.fileName,
     });
 
     res.json({ success: true, url });

@@ -11,6 +11,12 @@ declare global {
       userRole?: UserRole;
       permissions?: readonly Permission[];
     }
+
+    interface Locals {
+      requestId?: string;
+      requestStartedAt?: number;
+      requestDurationMs?: number;
+    }
   }
 }
 

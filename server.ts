@@ -2,7 +2,6 @@ import express from "express";
 import path from "path";
 import dotenv from "dotenv";
 import { createServer } from "http";
-import helmet from "helmet";
 import compression from "compression";
 import { Server as SocketIOServer } from "socket.io";
 import { messagingRouter, setSocketIO, seedOmnichannelData, handleMetaWebhookPost } from "./server/messagingHub";
@@ -14,13 +13,31 @@ import { attachOperationsPersistence, ensureOperationsHydrated } from "./server/
 import { getAnalyticsSummary } from "./server/operations/analyticsService";
 import { ensureCatalogSeedData } from "./lib/vercel-catalog/catalogStore";
 import { Logger } from "./server/lib/logger";
+import { validateEnvironment } from "./server/lib/env";
+import { createHelmetMiddleware } from "./server/lib/helmetConfig";
 import { requestIdMiddleware } from "./server/middleware/requestId";
+import { requestTimingMiddleware } from "./server/middleware/requestTiming";
 import { createCorsMiddleware, getAllowedOrigins } from "./server/middleware/cors";
 import { errorHandler } from "./server/middleware/errorHandler";
 import { setupGracefulShutdown } from "./server/middleware/gracefulShutdown";
+import {
+  JSON_BODY_LIMIT,
+  RAW_BODY_LIMIT,
+  URLENCODED_BODY_LIMIT,
+  payloadTooLargeHandler,
+} from "./server/middleware/payloadLimits";
+import {
+  adminRateLimit,
+  authRateLimit,
+  catalogReadRateLimitMiddleware,
+  messagingRateLimit,
+  publicApiRateLimit,
+  searchRateLimitMiddleware,
+} from "./server/middleware/rateLimit";
 import { healthRouter } from "./server/routes/health";
 
 dotenv.config();
+validateEnvironment();
 
 async function startServer() {
   const app = express();
@@ -28,24 +45,33 @@ async function startServer() {
 
   app.disable("x-powered-by");
   app.use(requestIdMiddleware);
-  app.use(
-    helmet({
-      contentSecurityPolicy: false,
-      crossOriginEmbedderPolicy: false,
-    }),
-  );
+  app.use(requestTimingMiddleware);
+  app.use(createHelmetMiddleware());
   app.use(compression());
   app.use(healthRouter);
 
   // Meta webhooks need the raw body for signature verification (before JSON parser)
   app.post(
     "/api/webhooks/meta",
-    express.raw({ type: "application/json" }),
+    express.raw({ type: "application/json", limit: RAW_BODY_LIMIT }),
     handleMetaWebhookPost,
   );
 
-  app.use(express.json());
+  app.use(express.json({ limit: JSON_BODY_LIMIT }));
+  app.use(express.urlencoded({ extended: true, limit: URLENCODED_BODY_LIMIT }));
+  app.use(payloadTooLargeHandler);
   app.use(createCorsMiddleware());
+
+  // Rate limiting — specific policies before public fallback
+  app.use("/api/v1/auth", authRateLimit);
+  app.use("/api/messaging", messagingRateLimit);
+  app.use("/api/conversations", messagingRateLimit);
+  app.use("/api/messages", messagingRateLimit);
+  app.use("/api/agents", messagingRateLimit);
+  app.use("/api/admin", adminRateLimit);
+  app.use("/api/v1/catalog/products", searchRateLimitMiddleware);
+  app.use("/api/v1/catalog", catalogReadRateLimitMiddleware);
+  app.use("/api", publicApiRateLimit);
 
   // Mount Unified Omnichannel Messaging APIs and Webhooks
   app.use("/api", messagingRouter);
@@ -78,7 +104,7 @@ async function startServer() {
       requestId: req.requestId,
       method: "POST",
       path: "/api/products",
-      payload: req.body,
+      payloadKeys: Object.keys(req.body || {}),
     });
     res.status(201).json({
       success: true,
@@ -93,7 +119,7 @@ async function startServer() {
       requestId: req.requestId,
       method: "PUT",
       path: `/api/products/${req.params.id}`,
-      payload: req.body,
+      payloadKeys: Object.keys(req.body || {}),
     });
     res.json({
       success: true,
@@ -108,7 +134,7 @@ async function startServer() {
       requestId: req.requestId,
       method: "PATCH",
       path: `/api/products/${req.params.id}`,
-      payload: req.body,
+      payloadKeys: Object.keys(req.body || {}),
     });
     res.json({
       success: true,

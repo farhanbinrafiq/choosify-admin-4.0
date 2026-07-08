@@ -4,6 +4,8 @@ import {
   getBearerToken,
   resolveAuthenticatedUserFromToken,
 } from './auth/authProfile';
+import { recordFailedAuthAttempt } from './lib/abuseProtection';
+import { Logger } from './lib/logger';
 import { validate } from './middleware/validate';
 import { DevLoginBodySchema } from './validation/auth/devLoginSchema';
 
@@ -13,6 +15,7 @@ authRouter.get('/auth/me', async (req, res) => {
   const token = getBearerToken(req.headers.authorization);
 
   if (!token) {
+    recordFailedAuthAttempt(req.ip, req.originalUrl);
     res.status(401).json({ error: 'Missing bearer token' });
     return;
   }
@@ -31,6 +34,14 @@ authRouter.get('/auth/me', async (req, res) => {
 
     res.status(403).json({ error: 'User is not registered as an admin.' });
   } catch (error) {
+    const abuse = recordFailedAuthAttempt(req.ip, req.originalUrl);
+    if (abuse.thresholdExceeded) {
+      Logger.warn('Excessive failed authentication attempts', {
+        requestId: req.requestId,
+        path: req.originalUrl,
+        count: abuse.count,
+      });
+    }
     res.status(401).json({ error: error instanceof Error ? error.message : 'Invalid token' });
   }
 });

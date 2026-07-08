@@ -1,8 +1,10 @@
-type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
+import { sanitizeLogMeta } from './sanitizeLog';
 
+type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
 type LogMeta = Record<string, unknown>;
 
 function formatLog(level: LogLevel, message: string, meta?: LogMeta) {
+  const safeMeta = sanitizeLogMeta(meta);
   return JSON.stringify({
     level,
     message,
@@ -10,7 +12,7 @@ function formatLog(level: LogLevel, message: string, meta?: LogMeta) {
     environment: process.env.NODE_ENV || 'development',
     app: process.env.APP_NAME || 'choosify-admin',
     version: process.env.APP_VERSION || process.env.npm_package_version || '0.0.0',
-    ...meta,
+    ...safeMeta,
   });
 }
 
