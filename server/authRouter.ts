@@ -1,22 +1,14 @@
 import { Router } from 'express';
-import { getAdminAuth, hasFirebaseAdminCredentials } from './firebaseAdmin';
-import { loadAdminUser, loadAdminUserByEmail } from './operations/operationsFirestore';
+import {
+  DEV_ROLE_MAP,
+  getBearerToken,
+  resolveAuthenticatedUserFromToken,
+} from './auth/authProfile';
 
 export const authRouter = Router();
 
-const DEV_ROLE_MAP: Record<string, string> = {
-  'admin@choosify.com.bd': 'super_admin',
-  'finance@choosify.com.bd': 'finance_manager',
-  'support@choosify.com.bd': 'support_agent',
-  'marketing@choosify.com.bd': 'marketing_manager',
-  'moderator@choosify.com.bd': 'moderator',
-  'seller@choosify.com.bd': 'seller',
-  'creator@choosify.com.bd': 'creator',
-};
-
 authRouter.get('/auth/me', async (req, res) => {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  const token = getBearerToken(req.headers.authorization);
 
   if (!token) {
     res.status(401).json({ error: 'Missing bearer token' });
@@ -24,35 +16,15 @@ authRouter.get('/auth/me', async (req, res) => {
   }
 
   try {
-    if (hasFirebaseAdminCredentials()) {
-      const auth = await getAdminAuth();
-      if (auth) {
-        const decoded = await auth.verifyIdToken(token);
-        const profile =
-          (await loadAdminUser(decoded.uid)) ||
-          (decoded.email ? await loadAdminUserByEmail(decoded.email) : null);
-
-        if (profile) {
-          res.json({
-            uid: decoded.uid,
-            email: profile.email || decoded.email,
-            displayName: profile.displayName,
-            role: profile.role,
-          });
-          return;
-        }
-
-        const mappedRole = decoded.email ? DEV_ROLE_MAP[decoded.email.toLowerCase()] : undefined;
-        if (mappedRole) {
-          res.json({
-            uid: decoded.uid,
-            email: decoded.email,
-            displayName: decoded.name || decoded.email,
-            role: mappedRole,
-          });
-          return;
-        }
-      }
+    const user = await resolveAuthenticatedUserFromToken(token);
+    if (user) {
+      res.json({
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        role: user.role,
+      });
+      return;
     }
 
     res.status(403).json({ error: 'User is not registered as an admin.' });
