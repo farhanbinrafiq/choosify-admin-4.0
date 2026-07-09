@@ -2,6 +2,28 @@
 
 All notable engineering program deliveries for Choosify Admin.
 
+## ES-011 — Unified Communication Platform
+
+### Added
+
+- `server/communication/` module with notification service, broadcast service, preference system, and delivery channel abstraction
+- User APIs: `/api/notifications`, `/api/notifications/preferences`, `/api/notifications/read`, `/api/notifications/archive`
+- Admin APIs: `/api/admin/notifications`, `/api/admin/broadcasts`, `/api/admin/communication`
+- ES-008 communication analytics events: `NOTIFICATION_SENT`, `NOTIFICATION_READ`, `NOTIFICATION_DISMISSED`, `BROADCAST_SENT`, `EMAIL_OPEN`, `PUSH_OPEN`
+- ES-006 audit hooks for broadcasts, deletions, and preference changes
+- Documentation: `docs/COMMUNICATION_PLATFORM.md`
+
+### Changed
+
+- `server.ts` — mounted `communicationRouter` at `/api`
+- `server/analytics/analyticsEvents.ts` — added communication event types
+
+### Notes
+
+- Delivery channels are framework only — no email/SMS/WhatsApp providers implemented
+- Existing messaging hub and inbox preserved without modification
+- Not committed — awaiting review approval
+
 ## ES-010 — Discovery, Search & Ranking Engine
 
 ### Added
@@ -24,7 +46,6 @@ All notable engineering program deliveries for Choosify Admin.
 - Existing `GET /api/v1/catalog/products` search preserved without modification
 - No frontend changes; new APIs are additive
 - Seller health integration framework ready; brand-level reputation used as proxy
-- Not committed — awaiting review approval
 
 ## ES-009 — Trust, Safety & Reputation Platform
 
