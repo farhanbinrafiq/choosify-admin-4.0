@@ -37,6 +37,8 @@ import {
   searchRateLimitMiddleware,
 } from "./server/middleware/rateLimit";
 import { analyticsRouter } from "./server/analytics/analyticsRouter";
+import { moderationRouter } from "./server/moderation/moderationRouter";
+import { searchRouter } from "./server/search/searchRouter";
 import { healthRouter } from "./server/routes/health";
 import { diagnosticsRouter } from "./server/routes/diagnostics";
 
@@ -44,6 +46,8 @@ const LOADED_MODULES = [
   "health",
   "diagnostics",
   "analytics",
+  "moderation",
+  "search",
   "messaging",
   "logistics",
   "catalog",
@@ -92,6 +96,8 @@ async function startServer() {
 
   // Mount Unified Omnichannel Messaging APIs and Webhooks
   app.use("/api", analyticsRouter);
+  app.use("/api", moderationRouter);
+  app.use("/api", searchRouter);
   app.use("/api", messagingRouter);
   app.use("/api", logisticsRouter);
   app.use("/api/v1", catalogRouter);
