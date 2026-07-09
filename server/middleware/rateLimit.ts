@@ -11,7 +11,8 @@ export type RateLimitPolicy =
   | 'catalogRead'
   | 'search'
   | 'messaging'
-  | 'admin';
+  | 'admin'
+  | 'ai';
 
 const WINDOW_MS = readPositiveIntEnv('RATE_LIMIT_WINDOW_MS', 15 * 60 * 1000);
 
@@ -23,6 +24,7 @@ const POLICY_ENV_KEYS: Record<RateLimitPolicy, string> = {
   search: 'RATE_LIMIT_SEARCH_MAX',
   messaging: 'RATE_LIMIT_MESSAGING_MAX',
   admin: 'RATE_LIMIT_ADMIN_MAX',
+  ai: 'RATE_LIMIT_AI_MAX',
 };
 
 const POLICY_DEFAULTS: Record<RateLimitPolicy, number> = {
@@ -33,6 +35,7 @@ const POLICY_DEFAULTS: Record<RateLimitPolicy, number> = {
   search: 120,
   messaging: 100,
   admin: 200,
+  ai: 60,
 };
 
 function createPolicyLimiter(policy: RateLimitPolicy) {
@@ -71,6 +74,7 @@ export const catalogReadRateLimit = createPolicyLimiter('catalogRead');
 export const searchRateLimit = createPolicyLimiter('search');
 export const messagingRateLimit = createPolicyLimiter('messaging');
 export const adminRateLimit = createPolicyLimiter('admin');
+export const aiRateLimit = createPolicyLimiter('ai');
 
 export function getRateLimitSummary() {
   const policies = Object.entries(POLICY_ENV_KEYS).map(([policy, envKey]) => ({

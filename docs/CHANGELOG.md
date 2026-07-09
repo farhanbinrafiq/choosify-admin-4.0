@@ -2,6 +2,31 @@
 
 All notable engineering program deliveries for Choosify Admin.
 
+## ES-012 — Emi AI Intelligence Platform
+
+### Added
+
+- `server/ai/` module with provider abstraction, prompt registry, skill registry, context builders, conversation manager, and safety layer
+- Gemini provider adapter (OpenAI, Claude, Local stubs)
+- AI APIs: `/api/ai/chat`, `/api/ai/recommend`, `/api/ai/summarize`, `/api/ai/compare`, `/api/ai/explain`, `/api/ai/status`
+- ES-008 analytics events: `AI_REQUEST`, `AI_SKILL_EXECUTED`, `AI_CHAT`, `AI_ERROR`
+- ES-006 audit hooks for AI execution metadata (no prompt/response logging)
+- AI rate limiting via `RATE_LIMIT_AI_MAX`
+- Documentation: `docs/EMI_AI_PLATFORM.md`, `docs/AI_CAPABILITIES.md`
+
+### Changed
+
+- `server.ts` — mounted `aiRouter` at `/api`, added AI rate limit
+- `server/analytics/analyticsEvents.ts` — added AI event types
+- `server/middleware/rateLimit.ts` — added `ai` policy
+- `.env.example` — added AI configuration variables
+
+### Notes
+
+- Conversations are in-memory only; not persisted to Firestore
+- No chatbot UI changes; platform is API-only
+- Not committed — awaiting review approval
+
 ## ES-011 — Unified Communication Platform
 
 ### Added
@@ -22,7 +47,6 @@ All notable engineering program deliveries for Choosify Admin.
 
 - Delivery channels are framework only — no email/SMS/WhatsApp providers implemented
 - Existing messaging hub and inbox preserved without modification
-- Not committed — awaiting review approval
 
 ## ES-010 — Discovery, Search & Ranking Engine
 

@@ -30,6 +30,7 @@ import {
 } from "./server/middleware/payloadLimits";
 import {
   adminRateLimit,
+  aiRateLimit,
   authRateLimit,
   catalogReadRateLimitMiddleware,
   messagingRateLimit,
@@ -40,6 +41,7 @@ import { analyticsRouter } from "./server/analytics/analyticsRouter";
 import { moderationRouter } from "./server/moderation/moderationRouter";
 import { searchRouter } from "./server/search/searchRouter";
 import { communicationRouter } from "./server/communication/communicationRouter";
+import { aiRouter } from "./server/ai/aiRouter";
 import { healthRouter } from "./server/routes/health";
 import { diagnosticsRouter } from "./server/routes/diagnostics";
 
@@ -50,6 +52,7 @@ const LOADED_MODULES = [
   "moderation",
   "search",
   "communication",
+  "ai",
   "messaging",
   "logistics",
   "catalog",
@@ -92,6 +95,7 @@ async function startServer() {
   app.use("/api/messages", messagingRateLimit);
   app.use("/api/agents", messagingRateLimit);
   app.use("/api/admin", adminRateLimit);
+  app.use("/api/ai", aiRateLimit);
   app.use("/api/v1/catalog/products", searchRateLimitMiddleware);
   app.use("/api/v1/catalog", catalogReadRateLimitMiddleware);
   app.use("/api", publicApiRateLimit);
@@ -101,6 +105,7 @@ async function startServer() {
   app.use("/api", moderationRouter);
   app.use("/api", searchRouter);
   app.use("/api", communicationRouter);
+  app.use("/api", aiRouter);
   app.use("/api", messagingRouter);
   app.use("/api", logisticsRouter);
   app.use("/api/v1", catalogRouter);
