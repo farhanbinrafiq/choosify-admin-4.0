@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { operationsStore, DEFAULT_ROLE_PERMISSIONS } from './operations/operationsStore';
 import { validateCoupon } from './operations/couponValidator';
 import { getAnalyticsSummary, getRoleAnalytics } from './operations/analyticsService';
+import { getSellerDashboardIntelligence } from './operations/sellerIntelligenceService';
 import { shipmentStore } from './operations/shipmentStore';
 import {
   ensurePlatformOrderConversation,
@@ -328,6 +329,29 @@ operationsRouter.get('/operations/analytics', (req, res) => {
 operationsRouter.get('/operations/analytics/role/:role', (req, res) => {
   const range = typeof req.query.range === 'string' ? req.query.range : '30d';
   res.json({ data: getRoleAnalytics(req.params.role, range) });
+});
+
+operationsRouter.get('/operations/seller-dashboard', async (req, res) => {
+  try {
+    const sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId.trim() : '';
+    if (!sellerId) {
+      res.status(400).json({ error: 'sellerId query parameter is required' });
+      return;
+    }
+
+    const data = await getSellerDashboardIntelligence({
+      sellerId,
+      sellerName: typeof req.query.sellerName === 'string' ? req.query.sellerName : undefined,
+      storeName: typeof req.query.storeName === 'string' ? req.query.storeName : undefined,
+      range: typeof req.query.range === 'string' ? req.query.range : undefined,
+    });
+
+    res.json({ data });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to load seller dashboard intelligence',
+    });
+  }
 });
 
 operationsRouter.get('/operations/shipments', (_req, res) => {

@@ -10,6 +10,7 @@ import {
 } from './catalogContract';
 import type { CatalogBrandPost, CatalogProduct } from '../src/types/catalog';
 import { uploadImageToCloudinary } from '../lib/vercel-catalog/mediaUpload';
+import { recordProductView, recordSearch } from './analytics/eventHooks';
 import { validateImageUploadInput } from './lib/uploadValidation';
 import { validate } from './middleware/validate';
 import { CatalogProductParamsSchema } from './validation/catalog/productSchemas';
@@ -103,6 +104,14 @@ catalogRouter.get('/catalog/products', async (req, res) => {
   try {
     const products = await catalogStore.listProducts();
     const filtered = filterProducts(products, req.query as Record<string, unknown>);
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (q) {
+      recordSearch(req, {
+        searchQuery: q,
+        source: 'catalog_products',
+        metadata: { resultCount: filtered.length },
+      });
+    }
     const limit = parseLimit(req.query.limit, 100);
     const offset = parseOffset(req.query.offset);
     const data = filtered.slice(offset, offset + limit);
@@ -125,6 +134,15 @@ catalogRouter.get(
       res.status(404).json({ error: 'Product not found' });
       return;
     }
+    recordProductView(req, {
+      productId: product.id,
+      productTitle: product.title,
+      categoryId: product.categoryId,
+      categoryName: product.categoryName,
+      brandId: product.brandId,
+      brandName: product.brandName,
+      source: 'catalog_product_detail',
+    });
     res.json(product);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get product' });

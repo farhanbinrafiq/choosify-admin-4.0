@@ -1,6 +1,6 @@
 import { sanitizeLogMeta } from './sanitizeLog';
 
-type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'DEBUG';
+export type LogLevel = 'INFO' | 'WARN' | 'ERROR' | 'SECURITY' | 'AUDIT' | 'DEBUG';
 type LogMeta = Record<string, unknown>;
 
 function formatLog(level: LogLevel, message: string, meta?: LogMeta) {
@@ -22,7 +22,7 @@ function write(level: LogLevel, message: string, meta?: LogMeta) {
     console.error(line);
     return;
   }
-  if (level === 'WARN') {
+  if (level === 'WARN' || level === 'SECURITY') {
     console.warn(line);
     return;
   }
@@ -41,6 +41,12 @@ export const Logger = {
   },
   error(message: string, meta?: LogMeta) {
     write('ERROR', message, meta);
+  },
+  security(message: string, meta?: LogMeta) {
+    write('SECURITY', message, meta);
+  },
+  audit(message: string, meta?: LogMeta) {
+    write('AUDIT', message, meta);
   },
   debug(message: string, meta?: LogMeta) {
     write('DEBUG', message, meta);

@@ -14,6 +14,8 @@ import { getAnalyticsSummary } from "./server/operations/analyticsService";
 import { ensureCatalogSeedData } from "./lib/vercel-catalog/catalogStore";
 import { Logger } from "./server/lib/logger";
 import { validateEnvironment } from "./server/lib/env";
+import { markApplicationReady } from "./server/lib/readiness";
+import { logStartupDiagnostics } from "./server/lib/startupDiagnostics";
 import { createHelmetMiddleware } from "./server/lib/helmetConfig";
 import { requestIdMiddleware } from "./server/middleware/requestId";
 import { requestTimingMiddleware } from "./server/middleware/requestTiming";
@@ -34,7 +36,21 @@ import {
   publicApiRateLimit,
   searchRateLimitMiddleware,
 } from "./server/middleware/rateLimit";
+import { analyticsRouter } from "./server/analytics/analyticsRouter";
 import { healthRouter } from "./server/routes/health";
+import { diagnosticsRouter } from "./server/routes/diagnostics";
+
+const LOADED_MODULES = [
+  "health",
+  "diagnostics",
+  "analytics",
+  "messaging",
+  "logistics",
+  "catalog",
+  "operations",
+  "auth",
+  "admin-stats",
+] as const;
 
 dotenv.config();
 validateEnvironment();
@@ -49,6 +65,7 @@ async function startServer() {
   app.use(createHelmetMiddleware());
   app.use(compression());
   app.use(healthRouter);
+  app.use(diagnosticsRouter);
 
   // Meta webhooks need the raw body for signature verification (before JSON parser)
   app.post(
@@ -74,6 +91,7 @@ async function startServer() {
   app.use("/api", publicApiRateLimit);
 
   // Mount Unified Omnichannel Messaging APIs and Webhooks
+  app.use("/api", analyticsRouter);
   app.use("/api", messagingRouter);
   app.use("/api", logisticsRouter);
   app.use("/api/v1", catalogRouter);
@@ -167,6 +185,7 @@ async function startServer() {
   await ensureOperationsHydrated();
   await seedOmnichannelData();
   await ensureCatalogSeedData();
+  markApplicationReady();
 
   // Create HTTP Server & attach Socket.io
   const httpServer = createServer(app);
@@ -182,11 +201,10 @@ async function startServer() {
   setupGracefulShutdown(httpServer);
 
   httpServer.listen(PORT, "0.0.0.0", () => {
-    Logger.info("Server started", {
+    logStartupDiagnostics({
       port: PORT,
-      environment: process.env.NODE_ENV || "development",
       allowedOrigins: getAllowedOrigins(),
-      healthEndpoint: `http://localhost:${PORT}/health`,
+      loadedModules: [...LOADED_MODULES],
     });
   });
 }

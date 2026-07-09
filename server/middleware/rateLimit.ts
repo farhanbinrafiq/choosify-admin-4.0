@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import { readPositiveIntEnv } from '../lib/env';
 import { Logger } from '../lib/logger';
-import { recordSuspiciousRequest } from '../lib/abuseProtection';
+import { recordSuspiciousRequest, getAbuseProtectionSnapshot } from '../lib/abuseProtection';
 
 export type RateLimitPolicy =
   | 'health'
@@ -71,6 +71,21 @@ export const catalogReadRateLimit = createPolicyLimiter('catalogRead');
 export const searchRateLimit = createPolicyLimiter('search');
 export const messagingRateLimit = createPolicyLimiter('messaging');
 export const adminRateLimit = createPolicyLimiter('admin');
+
+export function getRateLimitSummary() {
+  const policies = Object.entries(POLICY_ENV_KEYS).map(([policy, envKey]) => ({
+    policy,
+    envKey,
+    max: readPositiveIntEnv(envKey, POLICY_DEFAULTS[policy as RateLimitPolicy]),
+    windowMs: WINDOW_MS,
+  }));
+
+  return {
+    windowMs: WINDOW_MS,
+    policies,
+    abuseProtection: getAbuseProtectionSnapshot(),
+  };
+}
 
 export function catalogReadRateLimitMiddleware(req: Request, res: Response, next: NextFunction) {
   if (req.method === 'GET') {

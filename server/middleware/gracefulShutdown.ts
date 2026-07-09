@@ -1,5 +1,5 @@
 import type { Server } from 'http';
-import { Logger } from '../lib/logger';
+import { operationalEvents } from '../logging/operationalEvents';
 
 export function setupGracefulShutdown(server: Server) {
   let shuttingDown = false;
@@ -8,24 +8,22 @@ export function setupGracefulShutdown(server: Server) {
     if (shuttingDown) return;
     shuttingDown = true;
 
-    Logger.info('Graceful shutdown initiated', { signal });
+    operationalEvents.applicationShutdown({ signal });
 
     server.close((error) => {
       if (error) {
-        Logger.error('Error during graceful shutdown', {
+        operationalEvents.securityWarning('Error during graceful shutdown', {
           message: error.message,
-          stack: error.stack,
         });
         process.exit(1);
         return;
       }
 
-      Logger.info('HTTP server closed successfully');
       process.exit(0);
     });
 
     setTimeout(() => {
-      Logger.error('Graceful shutdown timed out');
+      operationalEvents.securityWarning('Graceful shutdown timed out');
       process.exit(1);
     }, 10_000).unref();
   };

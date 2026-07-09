@@ -3,8 +3,6 @@ import { Link } from 'react-router-dom';
 import { 
   Package, 
   ShoppingBag, 
-  Wallet, 
-  TrendingUp, 
   BarChart3, 
   Clock, 
   ArrowUpRight, 
@@ -12,7 +10,6 @@ import {
   Plus,
   Tag,
   Star,
-  MousePointer2,
   Megaphone,
   CheckCircle,
   Sparkles,
@@ -32,6 +29,7 @@ import {
 } from 'recharts';
 import { useAds } from '../../contexts/AdsContext';
 import { useAuth } from '../../contexts/AuthContext';
+import SellerBusinessIntelligence from '../../components/seller-dashboard/SellerBusinessIntelligence';
 import UnifiedProfileShell from '../admin/profiles/UnifiedProfileShell';
 
 const salesData = [
@@ -43,6 +41,8 @@ const salesData = [
   { name: 'Sat', sales: 2390, clicks: 110 },
   { name: 'Sun', sales: 3490, clicks: 130 },
 ];
+
+// Legacy chart data retained for optional commerce widgets below BI section.
 
 export default function SellerDashboard() {
   const { profile } = useAuth();
@@ -161,35 +161,14 @@ export default function SellerDashboard() {
 
       {activeDashboardTab === 'sales' ? (
         <>
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { label: 'Total Earnings', val: '৳ 142,500', icon: Wallet, color: 'text-green-500', trend: '+12.5%' },
-              { label: 'Active Orders', val: '24', icon: ShoppingBag, color: 'text-blue-500', trend: '+2' },
-              { label: 'Product Clicks', val: '1,420', icon: MousePointer2, color: 'text-app-accent', trend: '+8.2%' },
-              { label: 'Store Rating', val: '4.8', icon: TrendingUp, color: 'text-yellow-500', trend: 'High' },
-            ].map((stat, i) => (
-              <div key={i} className="bg-app-card border border-app-border rounded-[1.5rem] p-6 shadow-xl">
-                 <div className="flex items-center justify-between mb-4">
-                    <div className={`p-3 rounded-xl bg-white/5 border border-app-border ${stat.color}`}>
-                       <stat.icon className="w-5 h-5" />
-                    </div>
-                    <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-2 py-0.5 rounded italic">
-                       {stat.trend}
-                    </span>
-                 </div>
-                 <div className="text-2xl font-bold text-app-text-primary tracking-tight">{stat.val}</div>
-                 <div className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest mt-1 opacity-50">{stat.label}</div>
-              </div>
-            ))}
-          </div>
+          <SellerBusinessIntelligence />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Sales Chart */}
+            {/* Commerce snapshot + brand tools retained from original dashboard */}
             <div className="lg:col-span-2 bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
                <div className="flex items-center justify-between mb-8">
                   <div>
-                     <h3 className="text-xl font-bold text-app-text-primary tracking-tight">Sales Analytics</h3>
+                     <h3 className="text-xl font-bold text-app-text-primary tracking-tight">Commerce Snapshot</h3>
                      <p className="text-[11px] text-app-text-secondary uppercase font-bold tracking-widest mt-1">Weekly Store Performance</p>
                   </div>
                   <button className="p-2 hover:bg-white/5 rounded-lg transition-colors">

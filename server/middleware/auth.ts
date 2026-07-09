@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
-import { Logger } from '../lib/logger';
 import { recordFailedAuthAttempt } from '../lib/abuseProtection';
+import { operationalEvents } from '../logging/operationalEvents';
 import {
   AUTH_ERROR_CODES,
   isExpiredFirebaseTokenError,
@@ -47,22 +47,24 @@ export async function authenticateRequest(
     next();
   } catch (error) {
     const expired = isExpiredFirebaseTokenError(error);
-    Logger.warn('Authentication failed', {
+    const reason = expired ? AUTH_ERROR_CODES.EXPIRED_TOKEN : AUTH_ERROR_CODES.INVALID_TOKEN;
+
+    operationalEvents.authenticationFailure({
       requestId: req.requestId,
       path: req.originalUrl,
-      reason: expired ? AUTH_ERROR_CODES.EXPIRED_TOKEN : AUTH_ERROR_CODES.INVALID_TOKEN,
       message: error instanceof Error ? error.message : String(error),
+      metadata: { reason },
     });
 
     sendAuthError(
       res,
       401,
-      expired ? AUTH_ERROR_CODES.EXPIRED_TOKEN : AUTH_ERROR_CODES.INVALID_TOKEN,
+      reason,
       expired ? 'Expired token' : 'Invalid token',
     );
     const abuse = recordFailedAuthAttempt(req.ip, req.originalUrl);
     if (abuse.thresholdExceeded) {
-      Logger.warn('Excessive failed authentication attempts', {
+      operationalEvents.securityWarning('Excessive failed authentication attempts', {
         requestId: req.requestId,
         path: req.originalUrl,
         count: abuse.count,

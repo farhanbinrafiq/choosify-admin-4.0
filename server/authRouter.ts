@@ -4,6 +4,7 @@ import {
   getBearerToken,
   resolveAuthenticatedUserFromToken,
 } from './auth/authProfile';
+import { recordLogin } from './analytics/eventHooks';
 import { recordFailedAuthAttempt } from './lib/abuseProtection';
 import { Logger } from './lib/logger';
 import { validate } from './middleware/validate';
@@ -23,6 +24,10 @@ authRouter.get('/auth/me', async (req, res) => {
   try {
     const user = await resolveAuthenticatedUserFromToken(token);
     if (user) {
+      recordLogin(req, {
+        userId: user.uid,
+        metadata: { mode: 'token', role: user.role },
+      });
       res.json({
         uid: user.uid,
         email: user.email,
@@ -56,6 +61,10 @@ authRouter.post('/auth/dev-login', validate({ body: DevLoginBodySchema }), (req,
     role ||
     (email ? DEV_ROLE_MAP[email.toLowerCase()] : undefined) ||
     'admin';
+  recordLogin(req, {
+    userId: `dev_${resolvedRole}`,
+    metadata: { mode: 'dev', role: resolvedRole },
+  });
   res.json({
     uid: `dev_${resolvedRole}`,
     email: email || `${resolvedRole}@choosify.com.bd`,

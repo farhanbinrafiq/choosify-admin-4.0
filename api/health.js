@@ -9,23 +9,30 @@ var __export = (target, all) => {
     __defProp(target, name, { get: all[name], enumerable: true });
 };
 
-// lib/vercel-catalog/firebaseAdmin.ts
-function hasFirebaseAdminCredentials() {
-  return Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim());
-}
-async function getAdminFirestore() {
-  if (adminDb) return adminDb;
+// server/firebaseAdmin.ts
+async function ensureAdminApp() {
+  if (adminApp) return adminApp;
   if (initFailed) return null;
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim();
   if (!raw) return null;
   try {
-    const [{ cert, getApps, initializeApp }, { getFirestore }] = await Promise.all([
-      import("firebase-admin/app"),
-      import("firebase-admin/firestore")
-    ]);
+    const [{ cert, getApps, initializeApp }] = await Promise.all([import("firebase-admin/app")]);
     const serviceAccount = JSON.parse(raw);
-    const app = getApps()[0] ?? initializeApp({ credential: cert(serviceAccount) });
-    adminDb = getFirestore(app, databaseId);
+    adminApp = getApps()[0] ?? initializeApp({ credential: cert(serviceAccount) });
+    return adminApp;
+  } catch (error51) {
+    initFailed = true;
+    console.error("[Firebase Admin] Failed to initialize app.", error51);
+    return null;
+  }
+}
+async function getAdminFirestore() {
+  if (adminDb) return adminDb;
+  const app = await ensureAdminApp();
+  if (!app) return null;
+  try {
+    const { getFirestore } = await import("firebase-admin/firestore");
+    adminDb = getFirestore(app, databaseId2);
     return adminDb;
   } catch (error51) {
     initFailed = true;
@@ -33,12 +40,86 @@ async function getAdminFirestore() {
     return null;
   }
 }
-var adminDb, initFailed, databaseId;
+var adminDb, adminApp, initFailed, databaseId2;
 var init_firebaseAdmin = __esm({
-  "lib/vercel-catalog/firebaseAdmin.ts"() {
+  "server/firebaseAdmin.ts"() {
     adminDb = null;
+    adminApp = null;
     initFailed = false;
-    databaseId = process.env.FIRESTORE_DATABASE_ID || "ai-studio-c2303f92-945b-405b-9b0b-230b63fef478";
+    databaseId2 = process.env.FIRESTORE_DATABASE_ID || "ai-studio-c2303f92-945b-405b-9b0b-230b63fef478";
+  }
+});
+
+// server/lib/firestore/documentHelpers.ts
+function snapToData(snapshot) {
+  if (!snapshot.exists) return null;
+  return snapshot.data() ?? null;
+}
+function mapDocsToData(docs) {
+  return docs.map((doc) => doc.data());
+}
+var init_documentHelpers = __esm({
+  "server/lib/firestore/documentHelpers.ts"() {
+  }
+});
+
+// server/lib/firestore/pagination.ts
+var init_pagination = __esm({
+  "server/lib/firestore/pagination.ts"() {
+  }
+});
+
+// server/lib/firestore/queryHelpers.ts
+async function requireAdminFirestore() {
+  const db = await getAdminFirestore();
+  if (!db) {
+    throw new Error("Firestore Admin is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON on the server.");
+  }
+  return db;
+}
+async function listCollection2(collectionName, options) {
+  const db = await requireAdminFirestore();
+  let query = db.collection(collectionName);
+  if (options?.limit) {
+    query = query.limit(options.limit);
+  }
+  const snapshot = await query.get();
+  return mapDocsToData(snapshot.docs);
+}
+async function getDocumentById(collectionName, id, fields) {
+  const db = await requireAdminFirestore();
+  const ref = db.collection(collectionName).doc(id);
+  if (fields?.length) {
+    const snapshot2 = await ref.select(...fields).get();
+    return snapToData(snapshot2);
+  }
+  const snapshot = await ref.get();
+  return snapToData(snapshot);
+}
+async function upsertDocument(collectionName, data) {
+  const db = await requireAdminFirestore();
+  await db.collection(collectionName).doc(data.id).set(data, { merge: true });
+  return data;
+}
+async function upsertDocumentById(collectionName, id, data) {
+  const db = await requireAdminFirestore();
+  await db.collection(collectionName).doc(id).set(data, { merge: true });
+  return data;
+}
+async function deleteDocument(collectionName, id) {
+  const db = await requireAdminFirestore();
+  await db.collection(collectionName).doc(id).delete();
+}
+async function collectionHasDocuments(collectionName, limit = 1) {
+  const db = await requireAdminFirestore();
+  const snapshot = await db.collection(collectionName).limit(limit).get();
+  return !snapshot.empty;
+}
+var init_queryHelpers = __esm({
+  "server/lib/firestore/queryHelpers.ts"() {
+    init_firebaseAdmin();
+    init_documentHelpers();
+    init_pagination();
   }
 });
 
@@ -47,46 +128,10 @@ var catalogFirestoreAdmin_exports = {};
 __export(catalogFirestoreAdmin_exports, {
   firestoreAdminStore: () => firestoreAdminStore
 });
-async function dbOrThrow() {
-  const db = await getAdminFirestore();
-  if (!db) {
-    throw new Error("Firestore Admin is not configured. Set FIREBASE_SERVICE_ACCOUNT_JSON on the server.");
-  }
-  return db;
-}
-async function listCollection2(collectionName) {
-  const db = await dbOrThrow();
-  const snapshot = await db.collection(collectionName).get();
-  return snapshot.docs.map((doc) => doc.data());
-}
-async function getById2(collectionName, id) {
-  const db = await dbOrThrow();
-  const snapshot = await db.collection(collectionName).doc(id).get();
-  return snapshot.exists ? snapshot.data() : null;
-}
-async function upsert2(collectionName, data) {
-  const db = await dbOrThrow();
-  await db.collection(collectionName).doc(data.id).set(data, { merge: true });
-  return data;
-}
-async function remove2(collectionName, id) {
-  const db = await dbOrThrow();
-  await db.collection(collectionName).doc(id).delete();
-}
-async function getProductDetailById(productId) {
-  const db = await dbOrThrow();
-  const snapshot = await db.collection(PRODUCT_DETAILS_COLLECTION2).doc(productId).get();
-  return snapshot.exists ? snapshot.data() : null;
-}
-async function upsertProductDetailDoc(payload) {
-  const db = await dbOrThrow();
-  await db.collection(PRODUCT_DETAILS_COLLECTION2).doc(payload.productId).set(payload, { merge: true });
-  return payload;
-}
 var PRODUCTS_COLLECTION2, CATEGORIES_COLLECTION2, BRANDS_COLLECTION2, DEALS_COLLECTION2, CREATORS_COLLECTION2, GUIDES_COLLECTION2, PLACEMENTS_COLLECTION2, PRODUCT_DETAILS_COLLECTION2, BRAND_POSTS_COLLECTION2, HOMEPAGE_DOC, SITE_DOC, firestoreAdminStore;
 var init_catalogFirestoreAdmin = __esm({
   "lib/vercel-catalog/catalogFirestoreAdmin.ts"() {
-    init_firebaseAdmin();
+    init_queryHelpers();
     PRODUCTS_COLLECTION2 = "catalog_products";
     CATEGORIES_COLLECTION2 = "catalog_categories";
     BRANDS_COLLECTION2 = "catalog_brands";
@@ -100,66 +145,46 @@ var init_catalogFirestoreAdmin = __esm({
     SITE_DOC = { collection: "settings", id: "catalog_site" };
     firestoreAdminStore = {
       listProducts: () => listCollection2(PRODUCTS_COLLECTION2),
-      getProduct: (id) => getById2(PRODUCTS_COLLECTION2, id),
-      upsertProduct: (payload) => upsert2(PRODUCTS_COLLECTION2, payload),
-      deleteProduct: (id) => remove2(PRODUCTS_COLLECTION2, id),
+      getProduct: (id) => getDocumentById(PRODUCTS_COLLECTION2, id),
+      upsertProduct: (payload) => upsertDocument(PRODUCTS_COLLECTION2, payload),
+      deleteProduct: (id) => deleteDocument(PRODUCTS_COLLECTION2, id),
       listCategories: () => listCollection2(CATEGORIES_COLLECTION2),
-      getCategory: (id) => getById2(CATEGORIES_COLLECTION2, id),
-      upsertCategory: (payload) => upsert2(CATEGORIES_COLLECTION2, payload),
-      deleteCategory: (id) => remove2(CATEGORIES_COLLECTION2, id),
+      getCategory: (id) => getDocumentById(CATEGORIES_COLLECTION2, id),
+      upsertCategory: (payload) => upsertDocument(CATEGORIES_COLLECTION2, payload),
+      deleteCategory: (id) => deleteDocument(CATEGORIES_COLLECTION2, id),
       listBrands: () => listCollection2(BRANDS_COLLECTION2),
-      getBrand: (id) => getById2(BRANDS_COLLECTION2, id),
-      upsertBrand: (payload) => upsert2(BRANDS_COLLECTION2, payload),
-      deleteBrand: (id) => remove2(BRANDS_COLLECTION2, id),
+      getBrand: (id) => getDocumentById(BRANDS_COLLECTION2, id),
+      upsertBrand: (payload) => upsertDocument(BRANDS_COLLECTION2, payload),
+      deleteBrand: (id) => deleteDocument(BRANDS_COLLECTION2, id),
       listDeals: () => listCollection2(DEALS_COLLECTION2),
-      getDeal: (id) => getById2(DEALS_COLLECTION2, id),
-      upsertDeal: (payload) => upsert2(DEALS_COLLECTION2, payload),
-      deleteDeal: (id) => remove2(DEALS_COLLECTION2, id),
+      getDeal: (id) => getDocumentById(DEALS_COLLECTION2, id),
+      upsertDeal: (payload) => upsertDocument(DEALS_COLLECTION2, payload),
+      deleteDeal: (id) => deleteDocument(DEALS_COLLECTION2, id),
       listCreators: () => listCollection2(CREATORS_COLLECTION2),
-      getCreator: (id) => getById2(CREATORS_COLLECTION2, id),
-      upsertCreator: (payload) => upsert2(CREATORS_COLLECTION2, payload),
-      deleteCreator: (id) => remove2(CREATORS_COLLECTION2, id),
+      getCreator: (id) => getDocumentById(CREATORS_COLLECTION2, id),
+      upsertCreator: (payload) => upsertDocument(CREATORS_COLLECTION2, payload),
+      deleteCreator: (id) => deleteDocument(CREATORS_COLLECTION2, id),
       listGuides: () => listCollection2(GUIDES_COLLECTION2),
-      getGuide: (id) => getById2(GUIDES_COLLECTION2, id),
-      upsertGuide: (payload) => upsert2(GUIDES_COLLECTION2, payload),
-      deleteGuide: (id) => remove2(GUIDES_COLLECTION2, id),
+      getGuide: (id) => getDocumentById(GUIDES_COLLECTION2, id),
+      upsertGuide: (payload) => upsertDocument(GUIDES_COLLECTION2, payload),
+      deleteGuide: (id) => deleteDocument(GUIDES_COLLECTION2, id),
       listPlacements: () => listCollection2(PLACEMENTS_COLLECTION2),
-      getPlacement: (id) => getById2(PLACEMENTS_COLLECTION2, id),
-      upsertPlacement: (payload) => upsert2(PLACEMENTS_COLLECTION2, payload),
-      deletePlacement: (id) => remove2(PLACEMENTS_COLLECTION2, id),
+      getPlacement: (id) => getDocumentById(PLACEMENTS_COLLECTION2, id),
+      upsertPlacement: (payload) => upsertDocument(PLACEMENTS_COLLECTION2, payload),
+      deletePlacement: (id) => deleteDocument(PLACEMENTS_COLLECTION2, id),
       listProductDetails: () => listCollection2(PRODUCT_DETAILS_COLLECTION2),
-      getProductDetail: (productId) => getProductDetailById(productId),
-      upsertProductDetail: (payload) => upsertProductDetailDoc(payload),
-      deleteProductDetail: (productId) => remove2(PRODUCT_DETAILS_COLLECTION2, productId),
+      getProductDetail: (productId) => getDocumentById(PRODUCT_DETAILS_COLLECTION2, productId),
+      upsertProductDetail: (payload) => upsertDocumentById(PRODUCT_DETAILS_COLLECTION2, payload.productId, payload),
+      deleteProductDetail: (productId) => deleteDocument(PRODUCT_DETAILS_COLLECTION2, productId),
       listBrandPosts: () => listCollection2(BRAND_POSTS_COLLECTION2),
-      getBrandPost: (id) => getById2(BRAND_POSTS_COLLECTION2, id),
-      upsertBrandPost: (payload) => upsert2(BRAND_POSTS_COLLECTION2, payload),
-      deleteBrandPost: (id) => remove2(BRAND_POSTS_COLLECTION2, id),
-      async getHomepage() {
-        const db = await dbOrThrow();
-        const snapshot = await db.collection(HOMEPAGE_DOC.collection).doc(HOMEPAGE_DOC.id).get();
-        return snapshot.exists ? snapshot.data() : null;
-      },
-      async upsertHomepage(homepage) {
-        const db = await dbOrThrow();
-        await db.collection(HOMEPAGE_DOC.collection).doc(HOMEPAGE_DOC.id).set(homepage, { merge: true });
-        return homepage;
-      },
-      async getSiteConfig() {
-        const db = await dbOrThrow();
-        const snapshot = await db.collection(SITE_DOC.collection).doc(SITE_DOC.id).get();
-        return snapshot.exists ? snapshot.data() : null;
-      },
-      async upsertSiteConfig(site) {
-        const db = await dbOrThrow();
-        await db.collection(SITE_DOC.collection).doc(SITE_DOC.id).set(site, { merge: true });
-        return site;
-      },
-      async hasAnyProducts() {
-        const db = await dbOrThrow();
-        const snapshot = await db.collection(PRODUCTS_COLLECTION2).limit(1).get();
-        return !snapshot.empty;
-      }
+      getBrandPost: (id) => getDocumentById(BRAND_POSTS_COLLECTION2, id),
+      upsertBrandPost: (payload) => upsertDocument(BRAND_POSTS_COLLECTION2, payload),
+      deleteBrandPost: (id) => deleteDocument(BRAND_POSTS_COLLECTION2, id),
+      getHomepage: () => getDocumentById(HOMEPAGE_DOC.collection, HOMEPAGE_DOC.id),
+      upsertHomepage: (homepage) => upsertDocumentById(HOMEPAGE_DOC.collection, HOMEPAGE_DOC.id, homepage),
+      getSiteConfig: () => getDocumentById(SITE_DOC.collection, SITE_DOC.id),
+      upsertSiteConfig: (site) => upsertDocumentById(SITE_DOC.collection, SITE_DOC.id, site),
+      hasAnyProducts: () => collectionHasDocuments(PRODUCTS_COLLECTION2, 1)
     };
   }
 });
@@ -1102,8 +1127,13 @@ var catalogStore = {
   }
 };
 
+// lib/vercel-catalog/firebaseAdmin.ts
+var databaseId = process.env.FIRESTORE_DATABASE_ID || "ai-studio-c2303f92-945b-405b-9b0b-230b63fef478";
+function hasFirebaseAdminCredentials() {
+  return Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim());
+}
+
 // lib/vercel-catalog/catalogStore.ts
-init_firebaseAdmin();
 var PRODUCTS_COLLECTION3 = "catalog_products";
 var CATEGORIES_COLLECTION3 = "catalog_categories";
 var BRANDS_COLLECTION3 = "catalog_brands";
@@ -1245,7 +1275,7 @@ function removeFromMemory(collectionName, id) {
       return Promise.resolve();
   }
 }
-async function getById3(collectionName, id) {
+async function getById2(collectionName, id) {
   if (useAdminFirestore) {
     const admin = await getAdminStore();
     switch (collectionName) {
@@ -1273,7 +1303,7 @@ async function getById3(collectionName, id) {
   }
   return getFromMemory(collectionName, id);
 }
-async function upsert3(collectionName, data) {
+async function upsert2(collectionName, data) {
   if (useAdminFirestore) {
     const admin = await getAdminStore();
     switch (collectionName) {
@@ -1301,7 +1331,7 @@ async function upsert3(collectionName, data) {
   }
   return upsertToMemory(collectionName, data);
 }
-async function remove3(collectionName, id) {
+async function remove2(collectionName, id) {
   if (useAdminFirestore) {
     const admin = await getAdminStore();
     switch (collectionName) {
@@ -1331,41 +1361,41 @@ async function remove3(collectionName, id) {
 }
 var catalogStore2 = {
   listProducts: () => listCollection3(PRODUCTS_COLLECTION3),
-  getProduct: (id) => getById3(PRODUCTS_COLLECTION3, id),
-  upsertProduct: (payload) => upsert3(PRODUCTS_COLLECTION3, payload),
-  deleteProduct: (id) => remove3(PRODUCTS_COLLECTION3, id),
+  getProduct: (id) => getById2(PRODUCTS_COLLECTION3, id),
+  upsertProduct: (payload) => upsert2(PRODUCTS_COLLECTION3, payload),
+  deleteProduct: (id) => remove2(PRODUCTS_COLLECTION3, id),
   listCategories: () => listCollection3(CATEGORIES_COLLECTION3),
-  getCategory: (id) => getById3(CATEGORIES_COLLECTION3, id),
-  upsertCategory: (payload) => upsert3(CATEGORIES_COLLECTION3, payload),
-  deleteCategory: (id) => remove3(CATEGORIES_COLLECTION3, id),
+  getCategory: (id) => getById2(CATEGORIES_COLLECTION3, id),
+  upsertCategory: (payload) => upsert2(CATEGORIES_COLLECTION3, payload),
+  deleteCategory: (id) => remove2(CATEGORIES_COLLECTION3, id),
   listBrands: () => listCollection3(BRANDS_COLLECTION3),
-  getBrand: (id) => getById3(BRANDS_COLLECTION3, id),
-  upsertBrand: (payload) => upsert3(BRANDS_COLLECTION3, payload),
-  deleteBrand: (id) => remove3(BRANDS_COLLECTION3, id),
+  getBrand: (id) => getById2(BRANDS_COLLECTION3, id),
+  upsertBrand: (payload) => upsert2(BRANDS_COLLECTION3, payload),
+  deleteBrand: (id) => remove2(BRANDS_COLLECTION3, id),
   listDeals: () => listCollection3(DEALS_COLLECTION3),
-  getDeal: (id) => getById3(DEALS_COLLECTION3, id),
-  upsertDeal: (payload) => upsert3(DEALS_COLLECTION3, payload),
-  deleteDeal: (id) => remove3(DEALS_COLLECTION3, id),
+  getDeal: (id) => getById2(DEALS_COLLECTION3, id),
+  upsertDeal: (payload) => upsert2(DEALS_COLLECTION3, payload),
+  deleteDeal: (id) => remove2(DEALS_COLLECTION3, id),
   listCreators: () => listCollection3(CREATORS_COLLECTION3),
-  getCreator: (id) => getById3(CREATORS_COLLECTION3, id),
-  upsertCreator: (payload) => upsert3(CREATORS_COLLECTION3, payload),
-  deleteCreator: (id) => remove3(CREATORS_COLLECTION3, id),
+  getCreator: (id) => getById2(CREATORS_COLLECTION3, id),
+  upsertCreator: (payload) => upsert2(CREATORS_COLLECTION3, payload),
+  deleteCreator: (id) => remove2(CREATORS_COLLECTION3, id),
   listGuides: () => listCollection3(GUIDES_COLLECTION3),
-  getGuide: (id) => getById3(GUIDES_COLLECTION3, id),
-  upsertGuide: (payload) => upsert3(GUIDES_COLLECTION3, payload),
-  deleteGuide: (id) => remove3(GUIDES_COLLECTION3, id),
+  getGuide: (id) => getById2(GUIDES_COLLECTION3, id),
+  upsertGuide: (payload) => upsert2(GUIDES_COLLECTION3, payload),
+  deleteGuide: (id) => remove2(GUIDES_COLLECTION3, id),
   listPlacements: () => listCollection3(PLACEMENTS_COLLECTION3),
-  getPlacement: (id) => getById3(PLACEMENTS_COLLECTION3, id),
-  upsertPlacement: (payload) => upsert3(PLACEMENTS_COLLECTION3, payload),
-  deletePlacement: (id) => remove3(PLACEMENTS_COLLECTION3, id),
+  getPlacement: (id) => getById2(PLACEMENTS_COLLECTION3, id),
+  upsertPlacement: (payload) => upsert2(PLACEMENTS_COLLECTION3, payload),
+  deletePlacement: (id) => remove2(PLACEMENTS_COLLECTION3, id),
   listProductDetails: () => listCollection3(PRODUCT_DETAILS_COLLECTION3),
-  getProductDetail: (productId) => getById3(PRODUCT_DETAILS_COLLECTION3, productId),
-  upsertProductDetail: (payload) => upsert3(PRODUCT_DETAILS_COLLECTION3, { ...payload, id: payload.productId }),
-  deleteProductDetail: (productId) => remove3(PRODUCT_DETAILS_COLLECTION3, productId),
+  getProductDetail: (productId) => getById2(PRODUCT_DETAILS_COLLECTION3, productId),
+  upsertProductDetail: (payload) => upsert2(PRODUCT_DETAILS_COLLECTION3, { ...payload, id: payload.productId }),
+  deleteProductDetail: (productId) => remove2(PRODUCT_DETAILS_COLLECTION3, productId),
   listBrandPosts: () => listCollection3(BRAND_POSTS_COLLECTION3),
-  getBrandPost: (id) => getById3(BRAND_POSTS_COLLECTION3, id),
-  upsertBrandPost: (payload) => upsert3(BRAND_POSTS_COLLECTION3, payload),
-  deleteBrandPost: (id) => remove3(BRAND_POSTS_COLLECTION3, id),
+  getBrandPost: (id) => getById2(BRAND_POSTS_COLLECTION3, id),
+  upsertBrandPost: (payload) => upsert2(BRAND_POSTS_COLLECTION3, payload),
+  deleteBrandPost: (id) => remove2(BRAND_POSTS_COLLECTION3, id),
   async getHomepage() {
     if (useAdminFirestore) {
       const admin = await getAdminStore();
