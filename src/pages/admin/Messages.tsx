@@ -200,6 +200,7 @@ export default function MessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const platformMessagesEndRef = useRef<HTMLDivElement>(null);
   const socketRef = useRef<Socket | null>(null);
+  const [socketConnected, setSocketConnected] = useState(false);
 
   // -------------------------------------------------------------
   // DYNAMIC COMMERCE UTILITIES: Sourcing mentions and auto-linking
@@ -325,6 +326,15 @@ export default function MessagesPage() {
 
     socket.on("connect", () => {
       console.log("[Socket.io-Meta] Client established connection to messaging hub.");
+      setSocketConnected(true);
+    });
+
+    socket.on("disconnect", () => {
+      setSocketConnected(false);
+    });
+
+    socket.on("connect_error", () => {
+      setSocketConnected(false);
     });
 
     socket.on("message:received", (msg: UnifiedMessage) => {
@@ -363,6 +373,7 @@ export default function MessagesPage() {
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
+      setSocketConnected(false);
     };
   }, [selectedConvId]);
 
@@ -501,6 +512,24 @@ export default function MessagesPage() {
       console.error(err);
     }
   };
+
+  // Poll REST messaging endpoints when Socket.IO is unavailable (e.g. Vercel serverless)
+  // or always in production builds where persistent sockets are unreliable.
+  useEffect(() => {
+    const shouldPoll = import.meta.env.PROD || !socketConnected;
+    if (!shouldPoll) return;
+
+    const POLL_MS = 7_000;
+    const tick = () => {
+      void fetchConversations(false);
+      if (selectedConvId) {
+        void fetchMessages(selectedConvId);
+      }
+    };
+
+    const intervalId = window.setInterval(tick, POLL_MS);
+    return () => window.clearInterval(intervalId);
+  }, [socketConnected, selectedConvId]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
