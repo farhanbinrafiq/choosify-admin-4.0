@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useInventory } from "../../contexts/InventoryContext";
 import { catalogApi } from "../../services/catalogApi";
+import type { CatalogBrand, CatalogCategory } from "../../types/catalog";
 import { CreatorExperienceSection, CreatorContentItem } from "../../components/CreatorExperienceSection";
 import { SplitLayout } from "../../components/Layout/SplitLayout";
 import { ProductImageUploader } from "../../components/admin/ProductImageUploader";
@@ -261,6 +262,13 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const [brandName, setBrandName] = useState("");
   const [productName, setProductName] = useState("");
   const [category, setCategory] = useState("");
+  const [selectedBrandId, setSelectedBrandId] = useState("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  const [catalogBrands, setCatalogBrands] = useState<CatalogBrand[]>([]);
+  const [catalogCategories, setCatalogCategories] = useState<CatalogCategory[]>([]);
+  const [catalogOptionsLoaded, setCatalogOptionsLoaded] = useState(false);
+  /** Explicit stock for products without variants. null = not set (do not default to 0). */
+  const [productStock, setProductStock] = useState<number | null>(null);
   const [actualPrice, setActualPrice] = useState(0);
   const [discountedPrice, setDiscountedPrice] = useState(0);
   const [images, setImages] = useState<string[]>([]);
@@ -335,6 +343,54 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const [tempProductVariants, setTempProductVariants] = useState<ProductVariant[]>([]);
 
   const [publishStatus, setPublishStatus] = useState<"draft" | "live">("draft");
+
+  // Load real catalog brands/categories for product linking
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [brands, categories] = await Promise.all([
+          catalogApi.listBrands(),
+          catalogApi.listCategories(),
+        ]);
+        if (cancelled) return;
+        setCatalogBrands(brands);
+        setCatalogCategories(categories);
+      } catch (error) {
+        console.warn('[ProductStudio] Failed to load catalog brands/categories', error);
+      } finally {
+        if (!cancelled) setCatalogOptionsLoaded(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Resolve brand/category IDs once lists are available (edit mode / draft restore by name)
+  useEffect(() => {
+    if (!catalogOptionsLoaded) return;
+
+    if (!selectedBrandId && brandName.trim()) {
+      const matchBrand = catalogBrands.find(
+        (b) => b.name.toLowerCase() === brandName.trim().toLowerCase(),
+      );
+      if (matchBrand) {
+        setSelectedBrandId(matchBrand.id);
+        setBrandName(matchBrand.name);
+      }
+    }
+
+    if (!selectedCategoryId && category.trim()) {
+      const matchCategory = catalogCategories.find(
+        (c) => c.name.toLowerCase() === category.trim().toLowerCase(),
+      );
+      if (matchCategory) {
+        setSelectedCategoryId(matchCategory.id);
+        setCategory(matchCategory.name);
+      }
+    }
+  }, [catalogOptionsLoaded, catalogBrands, catalogCategories, brandName, category, selectedBrandId, selectedCategoryId]);
 
   // Load persistence schemas
   useEffect(() => {
@@ -418,6 +474,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     // Setup brand details according to selection rules
     if (isNewProduct) {
       setBrandSelectionDone(true);
+      setSelectedBrandId("");
+      setSelectedCategoryId("");
+      setProductStock(null);
       if (profile?.role === 'seller' && assignedBrands && assignedBrands.length > 0) {
         setBrandName(assignedBrands[0].name);
         setCategory(assignedBrands[0].category || "");
@@ -428,6 +487,10 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     } else {
       setBrandName(initialBrandName);
       setCategory(initialCategory);
+      if (data.brandId) setSelectedBrandId(String(data.brandId));
+      if (data.categoryId) setSelectedCategoryId(String(data.categoryId));
+      const loadedStock = data.stockLimit ?? data.stock;
+      setProductStock(typeof loadedStock === 'number' ? loadedStock : null);
       setBrandSelectionDone(true);
     }
 
@@ -612,25 +675,43 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
   const handlePublishRelease = async () => {
     const trimmedName = productName.trim();
-    const trimmedBrand = brandName.trim();
-    const trimmedCategory = category.trim();
+    const selectedBrand = catalogBrands.find((b) => b.id === selectedBrandId);
+    const selectedCategory = catalogCategories.find((c) => c.id === selectedCategoryId);
 
     if (!trimmedName) {
       triggerToast('Add a product name before publishing.');
       return;
     }
-    if (!trimmedBrand) {
-      triggerToast('Add a brand label before publishing.');
+    if (!catalogOptionsLoaded) {
+      triggerToast('Still loading brands and categories. Try again in a moment.');
       return;
     }
-    if (!trimmedCategory) {
-      triggerToast('Add a category before publishing.');
+    if (catalogBrands.length === 0) {
+      triggerToast('No brands found. Create a brand in Brand management before publishing a product.');
+      return;
+    }
+    if (catalogCategories.length === 0) {
+      triggerToast('No categories found. Create a category in Category management before publishing a product.');
+      return;
+    }
+    if (!selectedBrand) {
+      triggerToast('Select an existing brand before publishing.');
+      return;
+    }
+    if (!selectedCategory) {
+      triggerToast('Select an existing category before publishing.');
       return;
     }
 
     const publishableImages = images.filter((img) => /^https?:\/\//i.test(img));
-    if (images.length > 0 && publishableImages.length === 0) {
-      triggerToast('Photos are still local preview only. Configure Cloudinary, then re-upload before publishing.');
+    if (publishableImages.length === 0) {
+      triggerToast('Add at least one uploaded product photo before publishing.');
+      return;
+    }
+
+    const hasVariants = Array.isArray(productVariants) && productVariants.length > 0;
+    if (!hasVariants && (productStock === null || Number.isNaN(productStock))) {
+      triggerToast('Set stock for this product (or add variants) before publishing. Stock will not default to 0.');
       return;
     }
 
@@ -645,16 +726,18 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       slug: slugifyCatalog(trimmedName),
       title: trimmedName,
       description: about || trimmedName,
-      brandName: trimmedBrand,
-      brandId: `brand-${slugifyCatalog(trimmedBrand)}`,
-      categoryName: trimmedCategory,
-      categoryId: `cat-${slugifyCatalog(trimmedCategory)}`,
-      image: publishableImages[0] || '',
+      brandName: selectedBrand.name,
+      brandId: selectedBrand.id,
+      categoryName: selectedCategory.name,
+      categoryId: selectedCategory.id,
+      image: publishableImages[0],
       gallery: publishableImages,
       modeType: 'retail' as const,
       price: Number(discountedPrice || actualPrice || 0),
       originalPrice: Number(actualPrice || 0),
-      stock: productVariants?.[0]?.stockLimit || 0,
+      stock: hasVariants ? Number(productVariants[0]?.stockLimit || 0) : Number(productStock),
+      hasVariants,
+      productVariants,
       status: 'live' as const,
       tags: bestForTags || [],
       isDeal: savingsPercent > 0,
@@ -687,9 +770,11 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       });
 
       const liveData = {
-        brandName: trimmedBrand,
+        brandName: selectedBrand.name,
+        brandId: selectedBrand.id,
         productName: trimmedName,
-        category: trimmedCategory,
+        category: selectedCategory.name,
+        categoryId: selectedCategory.id,
         actualPrice,
         discountedPrice,
         images: publishableImages,
@@ -737,7 +822,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
             updateStock(savedId, v.stockLimit || 0, 'manual_adjustment', `Variant index ${index} (${v.color || ''} ${v.size || ''}) updated via Product Studio`, v.id);
           });
         } else {
-          updateStock(savedId, 100, 'manual_adjustment', 'Standard product stock updated via Product Studio');
+          updateStock(savedId, productPayload.stock, 'manual_adjustment', 'Standard product stock updated via Product Studio');
         }
       } catch (invErr) {
         console.warn('Failed to sync stock to inventory context:', invErr);
@@ -752,7 +837,8 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Catalog sync failed.';
-      triggerToast(`Publish failed: ${message.slice(0, 180)}`);
+      const clean = message.replace(/^STOCK_REQUIRED:\s*/i, '');
+      triggerToast(`Publish failed: ${clean.slice(0, 220)}`);
       console.error('[ProductStudio] Publish failed', err);
     }
   };
@@ -929,20 +1015,56 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5 text-left">
-                    <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Brand Label</label>
-                    <input 
-                      value={brandName}
-                      onChange={(e) => setBrandName(e.target.value)}
-                      className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
-                    />
+                    <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Brand</label>
+                    {catalogOptionsLoaded && catalogBrands.length === 0 ? (
+                      <p className="text-[11px] text-rose-600 font-medium leading-snug">
+                        No brands yet. Create one in Brand management first.
+                      </p>
+                    ) : (
+                      <select
+                        value={selectedBrandId}
+                        onChange={(e) => {
+                          const nextId = e.target.value;
+                          setSelectedBrandId(nextId);
+                          const match = catalogBrands.find((b) => b.id === nextId);
+                          setBrandName(match?.name || "");
+                        }}
+                        className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
+                      >
+                        <option value="">Select brand…</option>
+                        {catalogBrands.map((brand) => (
+                          <option key={brand.id} value={brand.id}>
+                            {brand.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                   <div className="space-y-1.5 text-left">
-                    <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Breadcrumb Group</label>
-                    <input 
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
-                    />
+                    <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Category</label>
+                    {catalogOptionsLoaded && catalogCategories.length === 0 ? (
+                      <p className="text-[11px] text-rose-600 font-medium leading-snug">
+                        No categories yet. Create one in Category management first.
+                      </p>
+                    ) : (
+                      <select
+                        value={selectedCategoryId}
+                        onChange={(e) => {
+                          const nextId = e.target.value;
+                          setSelectedCategoryId(nextId);
+                          const match = catalogCategories.find((c) => c.id === nextId);
+                          setCategory(match?.name || "");
+                        }}
+                        className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
+                      >
+                        <option value="">Select category…</option>
+                        {catalogCategories.map((cat) => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 </div>
               </div>
@@ -970,6 +1092,25 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                 </div>
 
                 <div className="space-y-1.5 text-left">
+                  <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">
+                    Stock {productVariants.length > 0 ? '(variants manage stock)' : '(required)'}
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    disabled={productVariants.length > 0}
+                    value={productStock ?? ''}
+                    onChange={(e) => {
+                      const raw = e.target.value;
+                      setProductStock(raw === '' ? null : Number(raw));
+                    }}
+                    placeholder={productVariants.length > 0 ? 'Set on variants' : 'Units in stock'}
+                    className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-mono font-bold disabled:opacity-50"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5 text-left">
                   <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Product bio about</label>
                   <textarea 
                     rows={3}
@@ -977,7 +1118,6 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                     onChange={(e) => setAbout(e.target.value)}
                     className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 resize-none font-medium leading-relaxed"
                   />
-                </div>
               </div>
 
               {/* Photo List editing nodes inside Hero */}
@@ -3485,20 +3625,56 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
-                          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Brand Label</label>
-                          <input 
-                            value={brandName}
-                            onChange={(e) => setBrandName(e.target.value)}
-                            className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
-                          />
+                          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Brand</label>
+                          {catalogOptionsLoaded && catalogBrands.length === 0 ? (
+                            <p className="text-[11px] text-rose-600 font-medium leading-snug">
+                              No brands yet. Create one in Brand management first.
+                            </p>
+                          ) : (
+                            <select
+                              value={selectedBrandId}
+                              onChange={(e) => {
+                                const nextId = e.target.value;
+                                setSelectedBrandId(nextId);
+                                const match = catalogBrands.find((b) => b.id === nextId);
+                                setBrandName(match?.name || "");
+                              }}
+                              className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
+                            >
+                              <option value="">Select brand…</option>
+                              {catalogBrands.map((brand) => (
+                                <option key={brand.id} value={brand.id}>
+                                  {brand.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </div>
                         <div className="space-y-1.5">
-                          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Breadcrumb Group</label>
-                          <input 
-                            value={category}
-                            onChange={(e) => setCategory(e.target.value)}
-                            className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
-                          />
+                          <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Category</label>
+                          {catalogOptionsLoaded && catalogCategories.length === 0 ? (
+                            <p className="text-[11px] text-rose-600 font-medium leading-snug">
+                              No categories yet. Create one in Category management first.
+                            </p>
+                          ) : (
+                            <select
+                              value={selectedCategoryId}
+                              onChange={(e) => {
+                                const nextId = e.target.value;
+                                setSelectedCategoryId(nextId);
+                                const match = catalogCategories.find((c) => c.id === nextId);
+                                setCategory(match?.name || "");
+                              }}
+                              className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
+                            >
+                              <option value="">Select category…</option>
+                              {catalogCategories.map((cat) => (
+                                <option key={cat.id} value={cat.id}>
+                                  {cat.name}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </div>
                       </div>
 

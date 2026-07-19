@@ -51,9 +51,15 @@ async function uploadViaCloudinaryPreset(file: File): Promise<string> {
 
 async function uploadViaCatalogApi(file: File): Promise<string> {
   const base64Data = await fileToBase64(file);
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  const token = localStorage.getItem('choosify_auth_token');
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
   const response = await fetch(`${API_BASE}/catalog/media/upload`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       fileName: file.name,
       mimeType: file.type || 'image/jpeg',
@@ -63,7 +69,14 @@ async function uploadViaCatalogApi(file: File): Promise<string> {
 
   if (!response.ok) {
     const raw = await response.text();
-    throw new Error(raw || `Upload failed with ${response.status}`);
+    let message = raw || `Upload failed with ${response.status}`;
+    try {
+      const parsed = JSON.parse(raw) as { error?: string };
+      if (parsed.error) message = parsed.error;
+    } catch {
+      // keep raw
+    }
+    throw new Error(message);
   }
 
   const payload = (await response.json()) as { url?: string };

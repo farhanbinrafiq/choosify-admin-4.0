@@ -14,8 +14,11 @@ import { recordProductView, recordSearch } from './analytics/eventHooks';
 import { validateImageUploadInput } from './lib/uploadValidation';
 import { validate } from './middleware/validate';
 import { CatalogProductParamsSchema } from './validation/catalog/productSchemas';
+import { authenticateRequest } from './middleware/auth';
 
 export const catalogRouter = Router();
+
+const requireAuth = [authenticateRequest];
 
 const parseLimit = (value: unknown, fallback: number, max = 100): number => {
   const num = Number(value);
@@ -48,6 +51,41 @@ const filterProducts = (products: CatalogProduct[], query: Record<string, unknow
     return true;
   });
 };
+
+async function buildProductNormalizeContext(excludeProductId?: string) {
+  const [brands, categories, products] = await Promise.all([
+    catalogStore.listBrands(),
+    catalogStore.listCategories(),
+    catalogStore.listProducts(),
+  ]);
+  return {
+    brands,
+    categories,
+    existingProductSlugs: products
+      .filter((product) => product.id !== excludeProductId)
+      .map((product) => product.slug),
+  };
+}
+
+async function buildBrandNormalizeContext(excludeBrandId?: string) {
+  const brands = await catalogStore.listBrands();
+  return {
+    existingBrandSlugs: brands
+      .filter((brand) => brand.id !== excludeBrandId)
+      .map((brand) => brand.slug),
+  };
+}
+
+function validationErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object' && 'issues' in error) {
+    const issues = (error as { issues?: Array<{ message?: string }> }).issues;
+    if (Array.isArray(issues) && issues.length > 0) {
+      return issues.map((issue) => issue.message || 'Validation failed').join('; ');
+    }
+  }
+  if (error instanceof Error) return error.message;
+  return fallback;
+}
 
 catalogRouter.get('/catalog/snapshot', async (_req, res) => {
   try {
@@ -89,14 +127,14 @@ catalogRouter.get('/catalog/home', async (_req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/home', async (req, res) => {
+catalogRouter.put('/catalog/home', ...requireAuth, async (req, res) => {
   try {
     const current = await catalogStore.getHomepage().catch(() => defaultHomepage());
     const normalized = normalizeHomepageInput(req.body, current);
     const saved = await catalogStore.upsertHomepage(normalized);
     res.json({ success: true, homepage: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid homepage payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid homepage payload') });
   }
 });
 
@@ -150,47 +188,50 @@ catalogRouter.get(
   },
 );
 
-catalogRouter.post('/catalog/products', async (req, res) => {
+catalogRouter.post('/catalog/products', ...requireAuth, async (req, res) => {
   try {
-    const normalized = normalizeProductInput(req.body);
+    const context = await buildProductNormalizeContext();
+    const normalized = normalizeProductInput(req.body, undefined, context);
     const saved = await catalogStore.upsertProduct(normalized);
     res.status(201).json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid product payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid product payload') });
   }
 });
 
-catalogRouter.put('/catalog/products/:id', async (req, res) => {
+catalogRouter.put('/catalog/products/:id', ...requireAuth, async (req, res) => {
   try {
     const existing = await catalogStore.getProduct(req.params.id);
     if (!existing) {
       res.status(404).json({ error: 'Product not found' });
       return;
     }
-    const normalized = normalizeProductInput({ ...req.body, id: req.params.id }, existing);
+    const context = await buildProductNormalizeContext(req.params.id);
+    const normalized = normalizeProductInput({ ...req.body, id: req.params.id }, existing, context);
     const saved = await catalogStore.upsertProduct(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid product payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid product payload') });
   }
 });
 
-catalogRouter.patch('/catalog/products/:id', async (req, res) => {
+catalogRouter.patch('/catalog/products/:id', ...requireAuth, async (req, res) => {
   try {
     const existing = await catalogStore.getProduct(req.params.id);
     if (!existing) {
       res.status(404).json({ error: 'Product not found' });
       return;
     }
-    const normalized = normalizeProductInput({ ...existing, ...req.body, id: req.params.id }, existing);
+    const context = await buildProductNormalizeContext(req.params.id);
+    const normalized = normalizeProductInput({ ...existing, ...req.body, id: req.params.id }, existing, context);
     const saved = await catalogStore.upsertProduct(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid product patch payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid product patch payload') });
   }
 });
 
-catalogRouter.delete('/catalog/products/:id', async (req, res) => {
+catalogRouter.delete('/catalog/products/:id', ...requireAuth, async (req, res) => {
   try {
     await catalogStore.deleteProduct(req.params.id);
     res.json({ success: true });
@@ -208,17 +249,17 @@ catalogRouter.get('/catalog/categories', async (_req, res) => {
   }
 });
 
-catalogRouter.post('/catalog/categories', async (req, res) => {
+catalogRouter.post('/catalog/categories', ...requireAuth, async (req, res) => {
   try {
     const normalized = normalizeCategoryInput(req.body);
     const saved = await catalogStore.upsertCategory(normalized);
     res.status(201).json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid category payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid category payload') });
   }
 });
 
-catalogRouter.put('/catalog/categories/:id', async (req, res) => {
+catalogRouter.put('/catalog/categories/:id', ...requireAuth, async (req, res) => {
   try {
     const existing = await catalogStore.getCategory(req.params.id);
     if (!existing) {
@@ -229,11 +270,11 @@ catalogRouter.put('/catalog/categories/:id', async (req, res) => {
     const saved = await catalogStore.upsertCategory(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid category payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid category payload') });
   }
 });
 
-catalogRouter.patch('/catalog/categories/:id', async (req, res) => {
+catalogRouter.patch('/catalog/categories/:id', ...requireAuth, async (req, res) => {
   try {
     const existing = await catalogStore.getCategory(req.params.id);
     if (!existing) {
@@ -244,11 +285,11 @@ catalogRouter.patch('/catalog/categories/:id', async (req, res) => {
     const saved = await catalogStore.upsertCategory(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid category patch payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid category patch payload') });
   }
 });
 
-catalogRouter.delete('/catalog/categories/:id', async (req, res) => {
+catalogRouter.delete('/catalog/categories/:id', ...requireAuth, async (req, res) => {
   try {
     await catalogStore.deleteCategory(req.params.id);
     res.json({ success: true });
@@ -266,47 +307,50 @@ catalogRouter.get('/catalog/brands', async (_req, res) => {
   }
 });
 
-catalogRouter.post('/catalog/brands', async (req, res) => {
+catalogRouter.post('/catalog/brands', ...requireAuth, async (req, res) => {
   try {
-    const normalized = normalizeBrandInput(req.body);
+    const context = await buildBrandNormalizeContext();
+    const normalized = normalizeBrandInput(req.body, undefined, context);
     const saved = await catalogStore.upsertBrand(normalized);
     res.status(201).json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid brand payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid brand payload') });
   }
 });
 
-catalogRouter.put('/catalog/brands/:id', async (req, res) => {
+catalogRouter.put('/catalog/brands/:id', ...requireAuth, async (req, res) => {
   try {
     const existing = await catalogStore.getBrand(req.params.id);
     if (!existing) {
       res.status(404).json({ error: 'Brand not found' });
       return;
     }
-    const normalized = normalizeBrandInput({ ...req.body, id: req.params.id }, existing);
+    const context = await buildBrandNormalizeContext(req.params.id);
+    const normalized = normalizeBrandInput({ ...req.body, id: req.params.id }, existing, context);
     const saved = await catalogStore.upsertBrand(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid brand payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid brand payload') });
   }
 });
 
-catalogRouter.patch('/catalog/brands/:id', async (req, res) => {
+catalogRouter.patch('/catalog/brands/:id', ...requireAuth, async (req, res) => {
   try {
     const existing = await catalogStore.getBrand(req.params.id);
     if (!existing) {
       res.status(404).json({ error: 'Brand not found' });
       return;
     }
-    const normalized = normalizeBrandInput({ ...existing, ...req.body, id: req.params.id }, existing);
+    const context = await buildBrandNormalizeContext(req.params.id);
+    const normalized = normalizeBrandInput({ ...existing, ...req.body, id: req.params.id }, existing, context);
     const saved = await catalogStore.upsertBrand(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid brand patch payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid brand patch payload') });
   }
 });
 
-catalogRouter.delete('/catalog/brands/:id', async (req, res) => {
+catalogRouter.delete('/catalog/brands/:id', ...requireAuth, async (req, res) => {
   try {
     await catalogStore.deleteBrand(req.params.id);
     res.json({ success: true });
@@ -324,17 +368,17 @@ catalogRouter.get('/catalog/deals', async (_req, res) => {
   }
 });
 
-catalogRouter.post('/catalog/deals', async (req, res) => {
+catalogRouter.post('/catalog/deals', ...requireAuth, async (req, res) => {
   try {
     const normalized = normalizeDealInput(req.body);
     const saved = await catalogStore.upsertDeal(normalized);
     res.status(201).json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid deal payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid deal payload') });
   }
 });
 
-catalogRouter.put('/catalog/deals/:id', async (req, res) => {
+catalogRouter.put('/catalog/deals/:id', ...requireAuth, async (req, res) => {
   try {
     const existing = await catalogStore.getDeal(req.params.id);
     if (!existing) {
@@ -345,11 +389,11 @@ catalogRouter.put('/catalog/deals/:id', async (req, res) => {
     const saved = await catalogStore.upsertDeal(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid deal payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid deal payload') });
   }
 });
 
-catalogRouter.patch('/catalog/deals/:id', async (req, res) => {
+catalogRouter.patch('/catalog/deals/:id', ...requireAuth, async (req, res) => {
   try {
     const existing = await catalogStore.getDeal(req.params.id);
     if (!existing) {
@@ -360,11 +404,11 @@ catalogRouter.patch('/catalog/deals/:id', async (req, res) => {
     const saved = await catalogStore.upsertDeal(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid deal patch payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid deal patch payload') });
   }
 });
 
-catalogRouter.delete('/catalog/deals/:id', async (req, res) => {
+catalogRouter.delete('/catalog/deals/:id', ...requireAuth, async (req, res) => {
   try {
     await catalogStore.deleteDeal(req.params.id);
     res.json({ success: true });
@@ -431,7 +475,7 @@ catalogRouter.get('/catalog/placements', async (req, res) => {
   }
 });
 
-catalogRouter.post('/catalog/media/upload', async (req, res) => {
+catalogRouter.post('/catalog/media/upload', ...requireAuth, async (req, res) => {
   try {
     const { data, mimeType, fileName } = req.body as { data?: string; mimeType?: string; fileName?: string };
     const validation = validateImageUploadInput({
@@ -501,17 +545,17 @@ catalogRouter.get('/catalog/brand-posts/:id', async (req, res) => {
   }
 });
 
-catalogRouter.post('/catalog/brand-posts', async (req, res) => {
+catalogRouter.post('/catalog/brand-posts', ...requireAuth, async (req, res) => {
   try {
     const normalized = normalizeBrandPostInput(req.body);
     const saved = await catalogStore.upsertBrandPost(normalized);
     res.status(201).json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid brand post payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid brand post payload') });
   }
 });
 
-catalogRouter.put('/catalog/brand-posts/:id', async (req, res) => {
+catalogRouter.put('/catalog/brand-posts/:id', ...requireAuth, async (req, res) => {
   try {
     const existing = await catalogStore.getBrandPost(req.params.id);
     if (!existing) {
@@ -522,11 +566,11 @@ catalogRouter.put('/catalog/brand-posts/:id', async (req, res) => {
     const saved = await catalogStore.upsertBrandPost(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid brand post payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid brand post payload') });
   }
 });
 
-catalogRouter.patch('/catalog/brand-posts/:id', async (req, res) => {
+catalogRouter.patch('/catalog/brand-posts/:id', ...requireAuth, async (req, res) => {
   try {
     const existing = await catalogStore.getBrandPost(req.params.id);
     if (!existing) {
@@ -537,11 +581,11 @@ catalogRouter.patch('/catalog/brand-posts/:id', async (req, res) => {
     const saved = await catalogStore.upsertBrandPost(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
-    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid brand post patch payload' });
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid brand post patch payload') });
   }
 });
 
-catalogRouter.delete('/catalog/brand-posts/:id', async (req, res) => {
+catalogRouter.delete('/catalog/brand-posts/:id', ...requireAuth, async (req, res) => {
   try {
     await catalogStore.deleteBrandPost(req.params.id);
     res.json({ success: true });

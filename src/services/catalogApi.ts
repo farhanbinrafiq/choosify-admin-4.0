@@ -13,21 +13,44 @@ import type {
 } from '../types/catalog';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
+const AUTH_TOKEN_KEY = 'choosify_auth_token';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
+function parseErrorMessage(rawError: string, status: number): string {
+  if (!rawError) return `Request failed (${status})`;
+  try {
+    const parsed = JSON.parse(rawError) as { error?: string; message?: string };
+    if (typeof parsed.error === 'string' && parsed.error.trim()) return parsed.error;
+    if (typeof parsed.message === 'string' && parsed.message.trim()) return parsed.message;
+  } catch {
+    // keep raw text
+  }
+  return rawError;
+}
+
 async function request<T>(path: string, method: HttpMethod = 'GET', body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  // Write routes require Firebase Bearer token (authenticateRequest).
+  if (method !== 'GET') {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+  }
+
   const response = await fetch(`${API_BASE}${path}`, {
     method,
-    headers: {
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
   if (!response.ok) {
     const rawError = await response.text();
-    throw new Error(rawError || `Request failed (${response.status})`);
+    throw new Error(parseErrorMessage(rawError, response.status));
   }
 
   return response.json() as Promise<T>;
@@ -38,11 +61,14 @@ export const catalogApi = {
     const result = await request<{ data: CatalogProduct[] }>('/catalog/products');
     return result.data;
   },
-  createProduct: async (payload: Partial<CatalogProduct>): Promise<CatalogProduct> => {
+  createProduct: async (payload: Partial<CatalogProduct> & Record<string, unknown>): Promise<CatalogProduct> => {
     const result = await request<{ data: CatalogProduct }>('/catalog/products', 'POST', payload);
     return result.data;
   },
-  updateProduct: async (id: string, payload: Partial<CatalogProduct>): Promise<CatalogProduct> => {
+  updateProduct: async (
+    id: string,
+    payload: Partial<CatalogProduct> & Record<string, unknown>,
+  ): Promise<CatalogProduct> => {
     const result = await request<{ data: CatalogProduct }>(`/catalog/products/${id}`, 'PATCH', payload);
     return result.data;
   },

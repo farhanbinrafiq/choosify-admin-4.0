@@ -23,6 +23,36 @@ export const slugify = (value: string): string =>
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-');
 
+/** Append a short unique suffix when `base` already exists in `takenSlugs`. */
+export const ensureUniqueSlug = (base: string, takenSlugs: Iterable<string>): string => {
+  const normalized = slugify(base) || 'item';
+  const taken = new Set(takenSlugs);
+  if (!taken.has(normalized)) return normalized;
+
+  for (let attempt = 0; attempt < 25; attempt += 1) {
+    const suffix =
+      attempt === 0
+        ? Date.now().toString(36).slice(-5)
+        : Math.random().toString(36).slice(2, 7);
+    const candidate = `${normalized}-${suffix}`;
+    if (!taken.has(candidate)) return candidate;
+  }
+
+  return `${normalized}-${Date.now().toString(36)}`;
+};
+
+export type ProductNormalizeContext = {
+  brands: CatalogBrand[];
+  categories: CatalogCategory[];
+  /** Slugs already used by other products (exclude the product being updated). */
+  existingProductSlugs?: string[];
+};
+
+export type BrandNormalizeContext = {
+  /** Slugs already used by other brands (exclude the brand being updated). */
+  existingBrandSlugs?: string[];
+};
+
 const toString = (value: unknown, fallback?: string): string =>
   typeof value === 'string' ? value : fallback ?? '';
 
@@ -82,7 +112,7 @@ const productSchema = z.object({
   brandName: z.string(),
   categoryId: nonEmpty,
   categoryName: z.string(),
-  image: z.string(),
+  image: nonEmpty,
   gallery: z.array(z.string()),
   modeType: z.literal('retail'),
   price: z.number().nonnegative(),
@@ -180,14 +210,23 @@ export const normalizeCategoryInput = (
   return categorySchema.parse(normalized) as CatalogCategory;
 };
 
-export const normalizeBrandInput = (payload: unknown, existing?: CatalogBrand): CatalogBrand => {
+export const normalizeBrandInput = (
+  payload: unknown,
+  existing?: CatalogBrand,
+  context?: BrandNormalizeContext,
+): CatalogBrand => {
   const raw = (payload ?? {}) as Record<string, unknown>;
   const name = toString(raw.name, existing?.name ?? 'Untitled Brand');
   const id = toString(raw.id, existing?.id ?? `brand-${Date.now()}`);
   const claimStatusRaw = toString(raw.claimStatus, existing?.claimStatus ?? 'community');
+  const requestedSlug = toString(raw.slug, existing?.slug ?? slugify(name || id));
+  const takenSlugs = (context?.existingBrandSlugs ?? []).filter(
+    (slug) => !existing || slug !== existing.slug,
+  );
+  const slug = ensureUniqueSlug(requestedSlug, takenSlugs);
   const normalized: CatalogBrand = {
     id,
-    slug: toString(raw.slug, existing?.slug ?? slugify(name || id)),
+    slug,
     name,
     category: toString(raw.category, existing?.category ?? 'General'),
     description: toString(raw.description, existing?.description ?? ''),
@@ -206,21 +245,79 @@ export const normalizeBrandInput = (payload: unknown, existing?: CatalogBrand): 
 
 export const normalizeProductInput = (
   payload: unknown,
-  existing?: CatalogProduct
+  existing?: CatalogProduct,
+  context?: ProductNormalizeContext,
 ): CatalogProduct => {
   const raw = (payload ?? {}) as Record<string, unknown>;
   const title = toString(raw.title, toString(raw.name, existing?.title ?? 'Untitled Product'));
   const id = toString(raw.id, existing?.id ?? `prod-${Date.now()}`);
   const statusRaw = toString(raw.status, existing?.status ?? 'draft').toLowerCase();
+
+  const brandId = toString(raw.brandId, existing?.brandId ?? '');
+  const categoryId = toString(raw.categoryId, existing?.categoryId ?? '');
+
+  if (!brandId) {
+    throw new Error('brandId is required and must reference an existing brand.');
+  }
+  if (!categoryId) {
+    throw new Error('categoryId is required and must reference an existing category.');
+  }
+
+  const brands = context?.brands ?? [];
+  const categories = context?.categories ?? [];
+  const matchedBrand = brands.find((brand) => brand.id === brandId);
+  const matchedCategory = categories.find((category) => category.id === categoryId);
+
+  if (context && !matchedBrand) {
+    throw new Error(`brandId "${brandId}" does not match an existing brand.`);
+  }
+  if (context && !matchedCategory) {
+    throw new Error(`categoryId "${categoryId}" does not match an existing category.`);
+  }
+
+  const brandName = matchedBrand
+    ? matchedBrand.name
+    : toString(raw.brandName, toString(raw.brand, existing?.brandName ?? ''));
+  const categoryName = matchedCategory
+    ? matchedCategory.name
+    : toString(raw.categoryName, toString(raw.category, existing?.categoryName ?? ''));
+
+  const hasVariants =
+    (Array.isArray(raw.productVariants) && raw.productVariants.length > 0) ||
+    (Array.isArray(raw.variants) && raw.variants.length > 0) ||
+    raw.hasVariants === true;
+
+  const stockExplicitlyProvided =
+    raw.stock !== undefined && raw.stock !== null && String(raw.stock).trim() !== '';
+
+  let stock: number;
+  if (stockExplicitlyProvided) {
+    stock = Math.floor(toNumber(raw.stock, 0));
+  } else if (existing?.stock !== undefined) {
+    stock = existing.stock;
+  } else if (!hasVariants) {
+    throw new Error(
+      'STOCK_REQUIRED: Provide an explicit stock value when the product has no variants. Stock was not defaulted to 0.',
+    );
+  } else {
+    stock = 0;
+  }
+
+  const requestedSlug = toString(raw.slug, existing?.slug ?? slugify(title || id));
+  const takenSlugs = (context?.existingProductSlugs ?? []).filter(
+    (slug) => !existing || slug !== existing.slug,
+  );
+  const slug = ensureUniqueSlug(requestedSlug, takenSlugs);
+
   const normalized: CatalogProduct = {
     id,
-    slug: toString(raw.slug, existing?.slug ?? slugify(title || id)),
+    slug,
     title,
     description: toString(raw.description, existing?.description ?? ''),
-    brandId: toString(raw.brandId, existing?.brandId ?? 'brand-generic'),
-    brandName: toString(raw.brandName, toString(raw.brand, existing?.brandName ?? 'Generic')),
-    categoryId: toString(raw.categoryId, existing?.categoryId ?? 'cat-general'),
-    categoryName: toString(raw.categoryName, toString(raw.category, existing?.categoryName ?? 'General')),
+    brandId,
+    brandName,
+    categoryId,
+    categoryName,
     image: toString(raw.image, existing?.image ?? ''),
     gallery: toStringArray(raw.gallery).length > 0 ? toStringArray(raw.gallery) : existing?.gallery ?? [],
     modeType: 'retail',
@@ -229,7 +326,7 @@ export const normalizeProductInput = (
       raw.originalPrice !== undefined
         ? toNumber(raw.originalPrice)
         : existing?.originalPrice,
-    stock: Math.floor(toNumber(raw.stock, existing?.stock ?? 0)),
+    stock,
     status: statusRaw === 'live' || statusRaw === 'archived' ? statusRaw : 'draft',
     tags: toStringArray(raw.tags).length > 0 ? toStringArray(raw.tags) : existing?.tags ?? [],
     isDeal: toBoolean(raw.isDeal, existing?.isDeal ?? false),

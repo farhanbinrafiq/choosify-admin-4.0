@@ -9,7 +9,7 @@ type UploadInput = {
 const getCloudName = () =>
   process.env.CLOUDINARY_CLOUD_NAME?.trim() ||
   process.env.VITE_CLOUDINARY_CLOUD_NAME?.trim() ||
-  'djdyqr8yd';
+  '';
 
 const getUploadPreset = () =>
   process.env.CLOUDINARY_UPLOAD_PRESET?.trim() ||
@@ -18,6 +18,12 @@ const getUploadPreset = () =>
 
 export async function uploadImageToCloudinary(input: UploadInput): Promise<string> {
   const cloudName = getCloudName();
+  if (!cloudName) {
+    throw new Error(
+      'Image upload is not configured. Set CLOUDINARY_CLOUD_NAME (or VITE_CLOUDINARY_CLOUD_NAME) on the server.',
+    );
+  }
+
   const uploadPreset = getUploadPreset();
   const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
   const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();

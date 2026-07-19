@@ -2,7 +2,9 @@ import type { NextFunction, Request, Response } from 'express';
 import { Logger } from '../lib/logger';
 import { readBytesEnv } from '../lib/env';
 
-export const JSON_BODY_LIMIT = readBytesEnv('JSON_BODY_LIMIT', '1mb');
+// 8mb covers max base64 image uploads (~5MB binary ≈ 6.7MB base64) with headroom.
+// URLENCODED stays at 1mb — media uploads use JSON, not form-urlencoded.
+export const JSON_BODY_LIMIT = readBytesEnv('JSON_BODY_LIMIT', '8mb');
 export const URLENCODED_BODY_LIMIT = readBytesEnv('URLENCODED_BODY_LIMIT', '1mb');
 export const RAW_BODY_LIMIT = readBytesEnv('RAW_BODY_LIMIT', '256kb');
 
