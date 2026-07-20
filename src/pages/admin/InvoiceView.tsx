@@ -162,16 +162,54 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Invoice ${invoiceId} - Choosify Merchandising</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+    @font-face {
+      font-family: 'Satoshi';
+      src: url('${typeof window !== 'undefined' ? window.location.origin : ''}/fonts/satoshi/Satoshi-Variable.woff2') format('woff2');
+      font-weight: 300 900;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Satoshi';
+      src: url('${typeof window !== 'undefined' ? window.location.origin : ''}/fonts/satoshi/Satoshi-Regular.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Satoshi';
+      src: url('${typeof window !== 'undefined' ? window.location.origin : ''}/fonts/satoshi/Satoshi-Medium.woff2') format('woff2');
+      font-weight: 500;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Satoshi';
+      src: url('${typeof window !== 'undefined' ? window.location.origin : ''}/fonts/satoshi/Satoshi-Bold.woff2') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Satoshi';
+      src: url('${typeof window !== 'undefined' ? window.location.origin : ''}/fonts/satoshi/Satoshi-Black.woff2') format('woff2');
+      font-weight: 800 900;
+      font-style: normal;
+      font-display: swap;
+    }
     
     body {
       margin: 0;
       padding: 40px 0;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Satoshi', 'Helvetica Neue', Arial, sans-serif;
       color: #1a1a1a;
       background-color: #F0F8FF;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
+    }
+
+    body, body * {
+      font-style: normal !important;
     }
 
     .invoice-container {
@@ -544,7 +582,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
       margin-bottom: 20px;
       font-size: 13px;
       color: #444444;
-      font-style: italic;
+      font-style: normal;
     }
 
     .notes-label {
@@ -659,7 +697,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                   .chfy-fill-navy { fill: #18154c !important; }
                   .chfy-fill-red  { fill: #ef3c23 !important; }
                   .chfy-text {
-                    font-family: HaasGrotDispRTrial-65Medium, 'Haas Grot Disp R Trial';
+                    font-family: 'Satoshi', 'Helvetica Neue', Arial, sans-serif;
                     font-size: 68px;
                     font-weight: 500;
                     fill: #18154c !important;
@@ -965,7 +1003,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
           <ShieldCheck className="w-4 h-4 text-indigo-400" />
           <span>Active Role Access: <strong className="uppercase font-mono text-white text-[11px] bg-indigo-500/20 px-1.5 py-0.5 rounded-md border border-indigo-500/20">{activeRole} View</strong></span>
         </div>
-        <div className="text-[10px] text-indigo-400 font-mono italic">
+        <div className="text-[10px] text-indigo-400 font-mono">
           {activeRole === 'admin' 
             ? '✓ Elevated administrative controls enabled' 
             : '✓ Verified Merchant limited secure endpoint'}
@@ -1153,7 +1191,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
               {/* Customer Special Notes Block */}
               <div className="bg-[#FFF8F7] border-l-4 border-[#EF3C23] rounded-r-lg p-4 mb-5 text-xs text-slate-700">
                 <div className="text-[10px] font-bold text-[#EF3C23] uppercase tracking-wider mb-1">Special Delivery Notes</div>
-                <p className="italic">
+                <p>
                   "{order.customerNotes?.[0] || 'Please execute dispatch and coordinate delivery times. Ring the customer upon arrival.'}"
                 </p>
               </div>

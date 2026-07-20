@@ -1131,7 +1131,7 @@ export function ProductDetailView({
                 </div>
                 <div className="flex flex-wrap gap-1.5 justify-end">
                   {data.bestForTags.map((tag, idx) => (
-                    <span key={idx} className="text-[9px] font-black uppercase tracking-wider text-[#FF5B00] bg-[#FFF0E8] border border-[#FF5B00]/15 px-3 py-1.5 rounded-full">
+                    <span key={idx} className="text-[9px] font-black uppercase tracking-wider text-[#8A00C4] bg-transparent px-3 py-1.5 rounded-full">
                       🔥 {tag}
                     </span>
                   ))}

@@ -5,15 +5,53 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Invoice Template - Choosify Merchandising</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @font-face {
+      font-family: 'Satoshi';
+      src: url('/fonts/satoshi/Satoshi-Variable.woff2') format('woff2');
+      font-weight: 300 900;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Satoshi';
+      src: url('/fonts/satoshi/Satoshi-Regular.woff2') format('woff2');
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Satoshi';
+      src: url('/fonts/satoshi/Satoshi-Medium.woff2') format('woff2');
+      font-weight: 500;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Satoshi';
+      src: url('/fonts/satoshi/Satoshi-Bold.woff2') format('woff2');
+      font-weight: 700;
+      font-style: normal;
+      font-display: swap;
+    }
+    @font-face {
+      font-family: 'Satoshi';
+      src: url('/fonts/satoshi/Satoshi-Black.woff2') format('woff2');
+      font-weight: 800 900;
+      font-style: normal;
+      font-display: swap;
+    }
     
     body {
       margin: 0;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Satoshi', 'Helvetica Neue', Arial, sans-serif;
       color: #1a1a1a;
       background-color: #ffffff;
       -webkit-print-color-adjust: exact;
       print-color-adjust: exact;
+    }
+
+    body, body * {
+      font-style: normal !important;
     }
 
     .invoice-container {
@@ -345,7 +383,7 @@
               .chfy-fill-navy { fill: #18154c !important; }
               .chfy-fill-red  { fill: #ef3c23 !important; }
               .chfy-text {
-                font-family: HaasGrotDispRTrial-65Medium, 'Haas Grot Disp R Trial';
+                font-family: 'Satoshi', 'Helvetica Neue', Arial, sans-serif;
                 font-size: 68px;
                 font-weight: 500;
                 fill: #18154c !important;

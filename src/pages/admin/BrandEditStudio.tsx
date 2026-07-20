@@ -1089,7 +1089,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                 <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#F97316] block">BEST FOR TAGS</span>
                 <div className="flex flex-wrap gap-1.5 mt-4">
                   {(model.bestForTags || []).map((tag, idx) => (
-                    <span key={idx} className="p-1 px-2.5 bg-orange-50 text-orange-600 rounded-lg text-[10px] font-bold border border-orange-100 uppercase">
+                    <span key={idx} className="p-1 px-2.5 bg-transparent text-[#8A00C4] rounded-lg text-[10px] font-bold uppercase">
                       #{tag}
                     </span>
                   ))}
@@ -1691,11 +1691,11 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                       <span className="text-[10px] font-black text-orange-600 block">CARD 5: BEST FOR TAG COLLECTION</span>
                       <div className="flex flex-wrap gap-1 mb-2">
                         {overviewForm.bestForTags.map(tag => (
-                          <span key={tag} className="p-1 px-2.5 bg-orange-50 text-orange-600 rounded text-[10px] font-bold flex items-center gap-1">
+                          <span key={tag} className="p-1 px-2.5 bg-transparent text-[#8A00C4] rounded text-[10px] font-bold flex items-center gap-1">
                             <span>#{tag}</span>
                             <button 
                               onClick={() => setOverviewForm(prev => ({ ...prev, bestForTags: prev.bestForTags.filter(t => t !== tag) }))}
-                              className="font-black hover:text-red-700"
+                              className="font-black hover:text-red-700 text-[#8A00C4]"
                             >
                               ✕
                             </button>

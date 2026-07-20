@@ -3540,7 +3540,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                     bestForTags.map((tag, idx) => (
                       <span 
                         key={idx} 
-                        className="px-4 py-2.5 bg-orange-50 text-[#FF5B00] border border-orange-100 rounded-2xl text-[10.5px] font-black uppercase tracking-widest flex items-center gap-1.5 shadow-sm"
+                        className="px-4 py-2.5 bg-transparent text-[#8A00C4] rounded-2xl text-[10.5px] font-black uppercase tracking-widest flex items-center gap-1.5"
                       >
                         <span>★</span>
                         <span>{tag}</span>
@@ -4288,7 +4288,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                         {tempTagsList.map((tag, idx) => (
                           <span 
                             key={idx} 
-                            className="px-3 py-1.5 bg-orange-100 text-orange-700 border border-orange-200/50 rounded-lg text-[10.5px] font-bold uppercase tracking-widest flex items-center gap-1.5"
+                            className="px-3 py-1.5 bg-transparent text-[#8A00C4] rounded-lg text-[10.5px] font-bold uppercase tracking-widest flex items-center gap-1.5"
                           >
                             <span>{tag}</span>
                             <button

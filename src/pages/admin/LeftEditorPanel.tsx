@@ -410,9 +410,9 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {model.bestForTags?.map((tag, idx) => (
-                    <span key={idx} className="bg-orange-50 text-[#F97316] font-bold text-[10px] px-2.5 py-1 rounded-full flex items-center gap-1.5 border border-orange-100">
+                    <span key={idx} className="bg-transparent text-[#8A00C4] font-bold text-[10px] px-2.5 py-1 rounded-full flex items-center gap-1.5">
                       {tag}
-                      <button onClick={() => removeCategoryTag(tag)} className="text-[#F97316] hover:text-red-500 font-black">×</button>
+                      <button onClick={() => removeCategoryTag(tag)} className="text-[#8A00C4] hover:text-red-500 font-black">×</button>
                     </span>
                   ))}
                 </div>
