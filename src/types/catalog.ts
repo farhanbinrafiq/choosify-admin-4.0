@@ -42,6 +42,23 @@ export interface CatalogProduct {
   image: string;
   gallery: string[];
   modeType: 'retail';
+  /** physical (default) or bookable service listing */
+  productType?: 'physical' | 'service';
+  /** Required when productType is service */
+  serviceCategory?:
+    | 'hotels'
+    | 'restaurants'
+    | 'travel'
+    | 'doctors'
+    | 'education'
+    | 'beauty'
+    | 'real_estate'
+    | 'transport';
+  relatedInfoType?: 'price_across_stores' | 'whats_nearby' | 'before_your_visit';
+  /** Physical products: opt-in toggle for showing Price Across Stores. */
+  priceAcrossStoresEnabled?: boolean;
+  /** Keys from SERVICE_BOOKING_FIELDS the seller requires from buyers (defaults to all required fields) */
+  requiredBookingFieldKeys?: string[];
   price: number;
   originalPrice?: number;
   stock: number;
@@ -317,6 +334,22 @@ export interface CatalogPlacement {
 
 export interface CatalogProductDetail {
   productId: string;
+  relatedInfoType?: 'price_across_stores' | 'whats_nearby' | 'before_your_visit';
+  priceAcrossStoresEnabled?: boolean;
+  whatsNearby?: {
+    restaurantCafe?: string[];
+    entertainmentAttraction?: string[];
+    hospitalPoliceStation?: string[];
+    transportAirport?: string[];
+    shoppingAtm?: string[];
+  };
+  beforeYourVisit?: {
+    parkingAvailability?: string;
+    cancellationPolicy?: string;
+    whatToBring?: string;
+    wheelchairAccess?: string;
+    insuranceAccepted?: string;
+  };
   about?: string;
   specs: { key: string; value: string }[];
   pros: string[];

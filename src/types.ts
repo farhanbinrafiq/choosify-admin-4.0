@@ -16,6 +16,8 @@ export interface UnifiedMessage {
   assignedAgent?: string;
   conversationStatus: 'open' | 'pending' | 'resolved';
   timestamp: string; // ISO String format
+  /** Embedded booking-request card snapshot (platform inbox) */
+  bookingOffer?: Record<string, unknown>;
 }
 
 export interface Conversation {

@@ -14,6 +14,19 @@ import type { CatalogBrand, CatalogCategory } from "../../types/catalog";
 import { CreatorExperienceSection, CreatorContentItem } from "../../components/CreatorExperienceSection";
 import { SplitLayout } from "../../components/Layout/SplitLayout";
 import { ProductImageUploader } from "../../components/admin/ProductImageUploader";
+import {
+  BEFORE_YOUR_VISIT_FIELD_LABELS,
+  SERVICE_CATEGORIES,
+  SERVICE_CATEGORY_LABELS,
+  SERVICE_BOOKING_FIELDS,
+  WHATS_NEARBY_FIELD_LABELS,
+  listingSectionLabels,
+  resolveRelatedInfoConfig,
+  type BeforeYourVisitFieldKey,
+  type ServiceCategory,
+  type ProductListingType,
+  type WhatsNearbyFieldKey,
+} from "../../../shared/booking/bookingFieldConfig";
 
 interface Spec {
   key: string;
@@ -38,6 +51,9 @@ interface PhysicalStore {
   contactNumber: string;
   city: string;
 }
+
+type WhatsNearbyInputs = Record<WhatsNearbyFieldKey, string[]>;
+type BeforeYourVisitInputs = Partial<Record<BeforeYourVisitFieldKey, string>>;
 
 export interface OverviewSection {
   id: string;
@@ -186,6 +202,28 @@ function getTemplateForCategory(category: string): OverviewSection[] {
   return template.map(s => ({ ...s, id: `s_${Date.now()}_${Math.random().toString(36).slice(2,7)}` }));
 }
 
+const EMPTY_WHATS_NEARBY: WhatsNearbyInputs = {
+  restaurantCafe: [],
+  entertainmentAttraction: [],
+  hospitalPoliceStation: [],
+  transportAirport: [],
+  shoppingAtm: [],
+};
+
+const EMPTY_BEFORE_YOUR_VISIT: BeforeYourVisitInputs = {
+  parkingAvailability: '',
+  cancellationPolicy: '',
+  whatToBring: '',
+  wheelchairAccess: '',
+  insuranceAccepted: '',
+};
+
+const splitLineEntries = (value: string): string[] =>
+  String(value || '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean);
+
 const slugifyCatalog = (value: string) =>
   value
     .toLowerCase()
@@ -269,12 +307,18 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const [catalogOptionsLoaded, setCatalogOptionsLoaded] = useState(false);
   /** Explicit stock for products without variants. null = not set (do not default to 0). */
   const [productStock, setProductStock] = useState<number | null>(null);
+  const [productType, setProductType] = useState<ProductListingType>('physical');
+  const [serviceCategory, setServiceCategory] = useState<ServiceCategory>('hotels');
+  const [requiredBookingFieldKeys, setRequiredBookingFieldKeys] = useState<string[]>([]);
   const [actualPrice, setActualPrice] = useState(0);
   const [discountedPrice, setDiscountedPrice] = useState(0);
   const [images, setImages] = useState<string[]>([]);
   const [about, setAbout] = useState("");
   const [specs, setSpecs] = useState<Spec[]>([]);
   const [storeComparisonList, setStoreComparisonList] = useState<StoreListing[]>([]);
+  const [priceAcrossStoresEnabled, setPriceAcrossStoresEnabled] = useState(false);
+  const [whatsNearby, setWhatsNearby] = useState<WhatsNearbyInputs>(EMPTY_WHATS_NEARBY);
+  const [beforeYourVisit, setBeforeYourVisit] = useState<BeforeYourVisitInputs>(EMPTY_BEFORE_YOUR_VISIT);
   const [overviewBlocks, setOverviewBlocks] = useState<OverviewBlock[]>([]);
   const [overviewSectionLabel, setOverviewSectionLabel] = useState('Product Overview');
   const [bestForTags, setBestForTags] = useState<string[]>([]);
@@ -343,6 +387,8 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const [tempProductVariants, setTempProductVariants] = useState<ProductVariant[]>([]);
 
   const [publishStatus, setPublishStatus] = useState<"draft" | "live">("draft");
+  const relatedInfoConfig = resolveRelatedInfoConfig(productType, serviceCategory);
+  const relatedInfoType = relatedInfoConfig.relatedInfoType;
 
   // Load real catalog brands/categories for product linking
   useEffect(() => {
@@ -407,6 +453,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       about: "",
       specs: [],
       storeComparisonList: [],
+      priceAcrossStoresEnabled: false,
+      whatsNearby: EMPTY_WHATS_NEARBY,
+      beforeYourVisit: EMPTY_BEFORE_YOUR_VISIT,
       overviewBlocks: [],
       bestForTags: [],
       physicalStores: [
@@ -446,6 +495,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       setAbout("");
       setSpecs([]);
       setStoreComparisonList([]);
+      setPriceAcrossStoresEnabled(false);
+      setWhatsNearby(EMPTY_WHATS_NEARBY);
+      setBeforeYourVisit(EMPTY_BEFORE_YOUR_VISIT);
       setOverviewBlocks([]);
       setOverviewSectionLabel("Product Overview");
       setBestForTags([]);
@@ -457,6 +509,15 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       setAbout(data.about || dataSrc.about || "");
       setSpecs(data.specs || dataSrc.specs || []);
       setStoreComparisonList(data.storeComparisonList || dataSrc.storeComparisonList || []);
+      setPriceAcrossStoresEnabled(Boolean(data.priceAcrossStoresEnabled || dataSrc.priceAcrossStoresEnabled));
+      setWhatsNearby({
+        ...EMPTY_WHATS_NEARBY,
+        ...(data.whatsNearby || dataSrc.whatsNearby || {}),
+      });
+      setBeforeYourVisit({
+        ...EMPTY_BEFORE_YOUR_VISIT,
+        ...(data.beforeYourVisit || dataSrc.beforeYourVisit || {}),
+      });
       setOverviewBlocks(data.overviewBlocks || dataSrc.overviewBlocks || []);
       if (data.overviewSectionLabel) setOverviewSectionLabel(data.overviewSectionLabel);
       setBestForTags(data.bestForTags || dataSrc.bestForTags || []);
@@ -596,7 +657,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const serializeState = () => {
     const draftData = {
       brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
-      storeComparisonList, overviewBlocks, overviewSectionLabel, bestForTags, physicalStores, creatorContent,
+      storeComparisonList, priceAcrossStoresEnabled, whatsNearby, beforeYourVisit, overviewBlocks, overviewSectionLabel, bestForTags, physicalStores, creatorContent,
       actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder,
       enableSpecs, enableStoreComparison, enableInfluencerReviews, enableOverviewSection, enableBestForTags, enablePhysicalStores,
       enableBoxContents, enableOptions, enableActiveVariantSpecs, boxContents, optionGroups, productVariants,
@@ -609,7 +670,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     if (brandName) serializeState();
   }, [
     brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
-    storeComparisonList, overviewBlocks, overviewSectionLabel, bestForTags, physicalStores, creatorContent,
+    storeComparisonList, priceAcrossStoresEnabled, whatsNearby, beforeYourVisit, overviewBlocks, overviewSectionLabel, bestForTags, physicalStores, creatorContent,
     actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder,
     enableSpecs, enableStoreComparison, enableInfluencerReviews, enableOverviewSection, enableBestForTags, enablePhysicalStores,
     enableBoxContents, enableOptions, enableActiveVariantSpecs, boxContents, optionGroups, productVariants,
@@ -710,9 +771,41 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     }
 
     const hasVariants = Array.isArray(productVariants) && productVariants.length > 0;
-    if (!hasVariants && (productStock === null || Number.isNaN(productStock))) {
+    if (
+      productType === 'physical' &&
+      !hasVariants &&
+      (productStock === null || Number.isNaN(productStock))
+    ) {
       triggerToast('Set stock for this product (or add variants) before publishing. Stock will not default to 0.');
       return;
+    }
+    if (productType === 'service' && !serviceCategory) {
+      triggerToast('Select a service category before publishing a service listing.');
+      return;
+    }
+
+    const publishRelatedInfoConfig = resolveRelatedInfoConfig(productType, serviceCategory);
+    if (publishRelatedInfoConfig.mandatory && publishRelatedInfoConfig.relatedInfoType === 'whats_nearby') {
+      const missingNearby = (Object.keys(WHATS_NEARBY_FIELD_LABELS) as WhatsNearbyFieldKey[]).filter(
+        (key) => !Array.isArray(whatsNearby[key]) || whatsNearby[key].length === 0,
+      );
+      if (missingNearby.length > 0) {
+        triggerToast(
+          `Complete all "What's Nearby" fields before publishing (${missingNearby.length} missing).`,
+        );
+        return;
+      }
+    }
+    if (publishRelatedInfoConfig.mandatory && publishRelatedInfoConfig.relatedInfoType === 'before_your_visit') {
+      const missingBeforeVisit = publishRelatedInfoConfig.beforeYourVisitFields.filter(
+        (key) => !String(beforeYourVisit[key] || '').trim(),
+      );
+      if (missingBeforeVisit.length > 0) {
+        triggerToast(
+          `Complete all "Before Your Visit" fields before publishing (${missingBeforeVisit.length} missing).`,
+        );
+        return;
+      }
     }
 
     const catalogProductId = isNewProduct
@@ -733,9 +826,26 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       image: publishableImages[0],
       gallery: publishableImages,
       modeType: 'retail' as const,
+      productType,
+      serviceCategory: productType === 'service' ? serviceCategory : undefined,
+      relatedInfoType: publishRelatedInfoConfig.relatedInfoType,
+      priceAcrossStoresEnabled: productType === 'physical' ? priceAcrossStoresEnabled : false,
+      requiredBookingFieldKeys:
+        productType === 'service'
+          ? (requiredBookingFieldKeys.length
+              ? requiredBookingFieldKeys
+              : SERVICE_BOOKING_FIELDS[serviceCategory]
+                  .filter((f) => f.required)
+                  .map((f) => f.key))
+          : undefined,
       price: Number(discountedPrice || actualPrice || 0),
       originalPrice: Number(actualPrice || 0),
-      stock: hasVariants ? Number(productVariants[0]?.stockLimit || 0) : Number(productStock),
+      stock:
+        productType === 'service'
+          ? Number(productStock ?? 999)
+          : hasVariants
+            ? Number(productVariants[0]?.stockLimit || 0)
+            : Number(productStock),
       hasVariants,
       productVariants,
       status: 'live' as const,
@@ -761,6 +871,16 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
         pros: [],
         cons: [],
         bestForTags: bestForTags || [],
+        relatedInfoType: publishRelatedInfoConfig.relatedInfoType,
+        priceAcrossStoresEnabled: productType === 'physical' ? priceAcrossStoresEnabled : false,
+        whatsNearby:
+          publishRelatedInfoConfig.relatedInfoType === 'whats_nearby'
+            ? whatsNearby
+            : EMPTY_WHATS_NEARBY,
+        beforeYourVisit:
+          publishRelatedInfoConfig.relatedInfoType === 'before_your_visit'
+            ? beforeYourVisit
+            : EMPTY_BEFORE_YOUR_VISIT,
         storeComparisonList: storeComparisonList || [],
         physicalStores: physicalStores || [],
         overviewBlocks: overviewBlocks || [],
@@ -781,6 +901,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
         about,
         specs,
         storeComparisonList,
+        priceAcrossStoresEnabled,
+        whatsNearby,
+        beforeYourVisit,
         overviewBlocks,
         overviewSectionLabel,
         bestForTags,
@@ -1002,6 +1125,182 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
           {editingSection === "hero" ? (
             <div className="space-y-6">
               {/* Inside, we show all Form 1 fields! */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-1.5 text-left">
+                  <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Listing type</label>
+                  <select
+                    value={productType}
+                    onChange={(e) => {
+                      const next = e.target.value === 'service' ? 'service' : 'physical';
+                      setProductType(next);
+                      if (next === 'service') {
+                        const defaults = SERVICE_BOOKING_FIELDS[serviceCategory]
+                          .filter((f) => f.required)
+                          .map((f) => f.key);
+                        setRequiredBookingFieldKeys(defaults);
+                        const labels = listingSectionLabels('service');
+                        setOverviewSectionLabel(labels.overview);
+                      } else {
+                        setRequiredBookingFieldKeys([]);
+                        setOverviewSectionLabel('Product Overview');
+                      }
+                    }}
+                    className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
+                  >
+                    <option value="physical">Physical product</option>
+                    <option value="service">Service (Message to Book)</option>
+                  </select>
+                </div>
+                {productType === 'service' && (
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Service category</label>
+                    <select
+                      value={serviceCategory}
+                      onChange={(e) => {
+                        const next = e.target.value as ServiceCategory;
+                        setServiceCategory(next);
+                        setRequiredBookingFieldKeys(
+                          SERVICE_BOOKING_FIELDS[next].filter((f) => f.required).map((f) => f.key),
+                        );
+                      }}
+                      className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 bg-white py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-black uppercase"
+                    >
+                      {SERVICE_CATEGORIES.map((id) => (
+                        <option key={id} value={id}>
+                          {SERVICE_CATEGORY_LABELS[id]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {productType === 'service' && (
+                <div className="rounded-2xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 space-y-3 text-left">
+                  <div>
+                    <p className="text-[10px] uppercase font-black text-slate-500 tracking-wider">
+                      Buyer booking fields ({SERVICE_CATEGORY_LABELS[serviceCategory]})
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                      These fields appear in the customer Message to Book popup. Toggle which ones this listing requires.
+                      Shared config source: <code className="text-[10px]">/api/v1/booking/field-config</code>
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {SERVICE_BOOKING_FIELDS[serviceCategory].map((field) => {
+                      const checked = requiredBookingFieldKeys.includes(field.key);
+                      return (
+                        <label
+                          key={field.key}
+                          className="flex items-start gap-2 rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            className="mt-0.5"
+                            checked={checked}
+                            onChange={() => {
+                              setRequiredBookingFieldKeys((prev) =>
+                                checked ? prev.filter((k) => k !== field.key) : [...prev, field.key],
+                              );
+                            }}
+                          />
+                          <span className="min-w-0">
+                            <span className="block text-[11px] font-bold text-[#1A1A2E]">
+                              {field.label}
+                              {field.required ? ' *' : ''}
+                            </span>
+                            <span className="block text-[10px] text-slate-400 uppercase tracking-wide">
+                              {field.type}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-2xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 space-y-3 text-left">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase font-black text-slate-500 tracking-wider">
+                      Sidebar Related Info
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                      Template: <span className="font-bold text-[#1A1A2E]">{relatedInfoType.replace(/_/g, ' ')}</span>
+                    </p>
+                  </div>
+                  {relatedInfoConfig.mandatory ? (
+                    <span className="text-[9px] px-2 py-1 bg-rose-100 text-rose-700 border border-rose-200 rounded-full font-black uppercase tracking-wider">
+                      Required to publish
+                    </span>
+                  ) : (
+                    <span className="text-[9px] px-2 py-1 bg-slate-100 text-slate-600 border border-slate-200 rounded-full font-black uppercase tracking-wider">
+                      Optional
+                    </span>
+                  )}
+                </div>
+
+                {relatedInfoType === 'price_across_stores' && (
+                  <label className="flex items-center justify-between gap-3 rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5 cursor-pointer">
+                    <span className="text-[11px] font-bold text-[#1A1A2E]">Show Price Across Stores on listing page</span>
+                    <input
+                      type="checkbox"
+                      checked={priceAcrossStoresEnabled}
+                      onChange={(e) => setPriceAcrossStoresEnabled(e.target.checked)}
+                    />
+                  </label>
+                )}
+
+                {relatedInfoType === 'whats_nearby' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {(Object.keys(WHATS_NEARBY_FIELD_LABELS) as WhatsNearbyFieldKey[]).map((key) => (
+                      <div key={key} className="rounded-xl border border-[#E5E7EB] bg-white p-2.5">
+                        <label className="block text-[10px] uppercase font-black text-slate-500 tracking-wide mb-1.5">
+                          {WHATS_NEARBY_FIELD_LABELS[key]}
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={(whatsNearby[key] || []).join('\n')}
+                          onChange={(e) =>
+                            setWhatsNearby((prev) => ({
+                              ...prev,
+                              [key]: splitLineEntries(e.target.value),
+                            }))
+                          }
+                          placeholder="One place per line"
+                          className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-lg px-2.5 py-2 text-[11px] text-[#1A1A2E] outline-none focus:border-orange-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {relatedInfoType === 'before_your_visit' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    {relatedInfoConfig.beforeYourVisitFields.map((key) => (
+                      <div key={key} className="rounded-xl border border-[#E5E7EB] bg-white p-2.5">
+                        <label className="block text-[10px] uppercase font-black text-slate-500 tracking-wide mb-1.5">
+                          {BEFORE_YOUR_VISIT_FIELD_LABELS[key]}
+                        </label>
+                        <textarea
+                          rows={3}
+                          value={beforeYourVisit[key] || ''}
+                          onChange={(e) =>
+                            setBeforeYourVisit((prev) => ({
+                              ...prev,
+                              [key]: e.target.value,
+                            }))
+                          }
+                          placeholder="Enter seller guidance for buyers"
+                          className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-lg px-2.5 py-2 text-[11px] text-[#1A1A2E] outline-none focus:border-orange-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-1.5 text-left">
                   <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Product Catalog SKU Name</label>

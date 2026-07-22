@@ -5,6 +5,7 @@ import { messagingRouter, handleMetaWebhookPost } from "./messagingHub";
 import { logisticsRouter } from "./logisticsRouter";
 import { catalogRouter } from "./catalogRouter";
 import { operationsRouter } from "./operationsRouter";
+import { bookingRouter } from "./booking/bookingRouter";
 import { authRouter } from "./authRouter";
 import { getAnalyticsSummary } from "./operations/analyticsService";
 import { Logger } from "./lib/logger";
@@ -91,6 +92,7 @@ export function createApp(): Express {
   app.use("/api", logisticsRouter);
   app.use("/api/v1", catalogRouter);
   app.use("/api/v1", operationsRouter);
+  app.use("/api/v1", bookingRouter);
   app.use("/api/v1", authRouter);
 
   app.get("/api/admin/stats", async (_req, res) => {

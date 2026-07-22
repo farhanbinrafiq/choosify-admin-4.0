@@ -52,6 +52,13 @@ operationsRouter.post('/operations/orders', async (req, res) => {
       res.status(400).json({ error: 'orderId is required' });
       return;
     }
+    const status =
+      body.status === 'pending_payment' ||
+      body.status === 'confirmed' ||
+      body.status === 'cancelled' ||
+      body.status === 'completed'
+        ? body.status
+        : 'active';
     const saved = operationsStore.createOrder({
       orderId: body.orderId,
       buyerId: body.buyerId || 'guest',
@@ -70,7 +77,11 @@ operationsRouter.post('/operations/orders', async (req, res) => {
       tradeLicense: body.tradeLicense,
       companyName: body.companyName,
       isQuotationRequest: body.isQuotationRequest,
-      status: 'active',
+      status,
+      bookingRequestId: body.bookingRequestId,
+      paymentDueAt: body.paymentDueAt,
+      paidAt: body.paidAt,
+      invoiceGeneratedAt: body.invoiceGeneratedAt,
       createdAt: body.createdAt || new Date().toISOString(),
     });
 
@@ -90,7 +101,10 @@ operationsRouter.post('/operations/orders', async (req, res) => {
       }
     }
 
-    const shipment = shipmentStore.createFromOrder(saved);
+    const shipment =
+      saved.status === 'pending_payment'
+        ? null
+        : shipmentStore.createFromOrder(saved);
     scheduleOperationsPersist();
     try {
       await ensurePlatformOrderConversation(saved);
@@ -98,7 +112,7 @@ operationsRouter.post('/operations/orders', async (req, res) => {
       console.warn('[Order] Platform conversation bridge failed:', err);
     }
 
-    res.status(201).json({ success: true, data: saved, shipmentId: shipment.id });
+    res.status(201).json({ success: true, data: saved, shipmentId: shipment?.id });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid order payload' });
   }
@@ -378,21 +392,51 @@ operationsRouter.patch('/operations/shipments/:id', (req, res) => {
 
 operationsRouter.post('/operations/platform-messages', async (req, res) => {
   try {
-    const { buyerId, userName, body, orderId } = req.body as {
+    const { buyerId, userName, body, orderId, bookingOffer } = req.body as {
       buyerId?: string;
       userName?: string;
       body?: string;
       orderId?: string;
+      bookingOffer?: Record<string, unknown>;
     };
     if (!buyerId?.trim() || !body?.trim()) {
       res.status(400).json({ error: 'buyerId and body are required' });
       return;
     }
+
+    let attachedOffer = bookingOffer;
+    // If client sends a bookingOffer without requestId, create a canonical booking_requests row
+    if (bookingOffer && !bookingOffer.requestId) {
+      const { createBookingRequest } = await import('./booking/bookingService');
+      const created = await createBookingRequest({
+        listingId: String(bookingOffer.listingId || ''),
+        listingTitle: String(bookingOffer.listingTitle || 'Service listing'),
+        listingImage: bookingOffer.listingImage as string | undefined,
+        listingHref: bookingOffer.listingHref as string | undefined,
+        sellerId: String(bookingOffer.sellerId || ''),
+        sellerName: String(bookingOffer.sellerName || 'Seller'),
+        buyerId: buyerId.trim(),
+        buyerName: userName?.trim(),
+        serviceCategory: bookingOffer.serviceCategory as string | undefined,
+        isService: bookingOffer.isService !== false,
+        fields: (bookingOffer.fields as Record<string, string | number>) || {},
+        notes: bookingOffer.notes as string | undefined,
+        price: Number(bookingOffer.price) || 0,
+        originalPrice:
+          bookingOffer.originalPrice !== undefined
+            ? Number(bookingOffer.originalPrice)
+            : undefined,
+        conversationId: `conv_platform_${buyerId.trim()}`,
+      });
+      attachedOffer = created.offer as unknown as Record<string, unknown>;
+    }
+
     const result = await submitPlatformMessage({
       buyerId: buyerId.trim(),
       userName: userName?.trim() || buyerId.trim(),
       body: body.trim(),
       orderId: orderId?.trim(),
+      bookingOffer: attachedOffer,
     });
     res.status(201).json({ success: true, data: result });
   } catch (error) {

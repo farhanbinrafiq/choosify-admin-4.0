@@ -42,6 +42,8 @@ import { useOrders, MessageThread, ThreadMessage, Order } from "../../contexts/O
 import { UnifiedMessage, Conversation, Agent, Customer as TypesCustomer } from "../../types";
 import { io, Socket } from "socket.io-client";
 import { SplitLayout } from "../../components/Layout/SplitLayout";
+import { BookingOfferAdminCard } from "../../components/admin/BookingOfferAdminCard";
+import type { BookingOfferCard } from "../../../shared/booking/bookingTypes";
 
 // Platform definitions with branding colors
 interface PlatformBranding {
@@ -1807,7 +1809,7 @@ export default function MessagesPage() {
                     const isOurAgent = m.senderRole === "seller" || m.senderRole === "admin";
                     
                     return (
-                      <div key={m.id} className={`flex${isOurAgent ? "justify-end" : "justify-start"}animate-fade-in`}>
+                      <div key={m.id} className={`flex flex-col gap-2 ${isOurAgent ? "items-end" : "items-start"} animate-fade-in`}>
                         <div className={`max-w-[75%] rounded-2xl p-4 shadow-md${
                           isOurAgent 
                             ? "bg-app-card border border-white/5 text-white rounded-br-none" 
@@ -1826,6 +1828,21 @@ export default function MessagesPage() {
                             <span>{m.timestamp}</span>
                           </div>
                         </div>
+                        {m.bookingOffer ? (
+                          <BookingOfferAdminCard
+                            offer={m.bookingOffer}
+                            sellerId={
+                              m.bookingOffer.sellerId ||
+                              profile?.id ||
+                              'seller'
+                            }
+                            sellerName={profile?.name || 'Seller'}
+                            onUpdated={(next: BookingOfferCard) => {
+                              // Local UI refresh — thread messages are client-state; mutate offer snapshot in place.
+                              m.bookingOffer = next;
+                            }}
+                          />
+                        ) : null}
                       </div>
                     );
                   })}

@@ -72,7 +72,12 @@ export interface OpsStorefrontOrder {
   tradeLicense?: string;
   companyName?: string;
   isQuotationRequest?: boolean;
-  status: 'active' | 'cancelled' | 'completed';
+  /** Booking / service orders use pending_payment until paid, then confirmed */
+  status: 'pending_payment' | 'active' | 'confirmed' | 'cancelled' | 'completed';
+  bookingRequestId?: string;
+  paymentDueAt?: string;
+  paidAt?: string;
+  invoiceGeneratedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

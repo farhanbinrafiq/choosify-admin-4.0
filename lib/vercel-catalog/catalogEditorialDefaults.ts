@@ -147,6 +147,22 @@ export const defaultProductDetails = (): CatalogProductDetail[] => {
   return [
     {
       productId: 'prod-s24-ultra',
+      relatedInfoType: 'price_across_stores',
+      priceAcrossStoresEnabled: false,
+      whatsNearby: {
+        restaurantCafe: [],
+        entertainmentAttraction: [],
+        hospitalPoliceStation: [],
+        transportAirport: [],
+        shoppingAtm: [],
+      },
+      beforeYourVisit: {
+        parkingAvailability: '',
+        cancellationPolicy: '',
+        whatToBring: '',
+        wheelchairAccess: '',
+        insuranceAccepted: '',
+      },
       about: 'Flagship Samsung phone with advanced camera features and titanium frame.',
       specs: [
         { key: 'Display', value: '6.8" Dynamic AMOLED 2X' },

@@ -14,6 +14,7 @@ import {
   Truck, 
   ExternalLink 
 } from 'lucide-react';
+import { listingSectionLabels } from '../../../shared/booking/bookingFieldConfig';
 
 interface InvoiceViewProps {
   role?: 'admin' | 'seller';
@@ -130,10 +131,12 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
   );
 
   const supplier = getSupplierInfo(order.product.sellerId, order.product.sellerName);
+  const isService = order.product.productType === 'service';
+  const sectionLabels = listingSectionLabels(order.product.productType);
   
   // Subtotal & calculated summaries
   const subtotal = order.product.price;
-  const shipping = order.delivery_charge || 120;
+  const shipping = isService ? 0 : (order.delivery_charge || 120);
   const advancePayment = 0;
   const codPayable = subtotal + shipping - advancePayment;
   const invoiceId = order.invoice_id || `INV-${order.id}`;
@@ -1105,7 +1108,9 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
               <div className="h-[1px] bg-slate-100 my-5" />
 
               {/* Product Visual + Specs Row */}
-              <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-3">Ordered Product & Visual Specifications</div>
+              <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-3">
+                {isService ? 'Ordered Service & Specifications' : 'Ordered Product & Visual Specifications'}
+              </div>
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-5">
                 <div className="md:col-span-7">
                   <div className="w-full h-[180px] bg-gradient-to-br from-[#F0F3FA] to-[#E4E8F0] border border-slate-200 rounded-lg overflow-hidden flex flex-col items-center justify-center text-center relative shadow-sm">
@@ -1115,22 +1120,41 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                       <div className="p-4 flex flex-col items-center">
                         <Truck className="w-10 h-10 text-slate-400 mb-2" />
                         <div className="text-xs font-semibold text-slate-500">{order.product.name}</div>
-                        <div className="text-[10px] text-slate-400 mt-1">Product image loads from order data</div>
+                        <div className="text-[10px] text-slate-400 mt-1">
+                          {isService ? 'Service image loads from order data' : 'Product image loads from order data'}
+                        </div>
                       </div>
                     )}
                   </div>
                 </div>
                 <div className="md:col-span-5 flex flex-col justify-center">
-                  <div className="text-[10px] font-bold text-[#EF3C23] uppercase tracking-wider mb-1">Product Details</div>
+                  <div className="text-[10px] font-bold text-[#EF3C23] uppercase tracking-wider mb-1">
+                    {isService ? sectionLabels.overview : 'Product Details'}
+                  </div>
                   <div className="font-extrabold text-slate-900 text-base mb-1.5">{order.product.name}</div>
                   <div className="text-xs text-slate-600 space-y-1 font-medium">
                     <div><strong>Brand:</strong> {order.product.brand}</div>
                     <div><strong>SKU:</strong> SKU-{order.product.id}</div>
-                    <div><strong>Variant:</strong> Elite Edition</div>
-                    <div><strong>Color & Specs:</strong> Crimson Space Gray (Steel Loop)</div>
-                    <div><strong>Category:</strong> Clothing & Lifestyle</div>
+                    {isService && order.product.serviceCategory ? (
+                      <div><strong>Service category:</strong> {order.product.serviceCategory}</div>
+                    ) : (
+                      <>
+                        <div><strong>Variant:</strong> Elite Edition</div>
+                        <div><strong>Color & Specs:</strong> Crimson Space Gray (Steel Loop)</div>
+                        <div><strong>Category:</strong> Clothing & Lifestyle</div>
+                      </>
+                    )}
+                    {isService && order.product.serviceDetails
+                      ? Object.entries(order.product.serviceDetails).map(([key, value]) => (
+                          <div key={key}>
+                            <strong>{key.replace(/([A-Z])/g, ' $1')}:</strong> {String(value)}
+                          </div>
+                        ))
+                      : null}
                   </div>
-                  <div className="mt-3 text-sm font-black text-[#EF3C23]">Authorized Qty: 1 Unit</div>
+                  <div className="mt-3 text-sm font-black text-[#EF3C23]">
+                    {isService ? 'Authorized booking: 1' : 'Authorized Qty: 1 Unit'}
+                  </div>
                 </div>
               </div>
 

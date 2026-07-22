@@ -146,8 +146,27 @@ export const normalizeProductDetailInput = (
   existing?: CatalogProductDetail,
 ): CatalogProductDetail => {
   const raw = (payload ?? {}) as Record<string, unknown>;
+  const relatedInfoTypeRaw = toString(raw.relatedInfoType, existing?.relatedInfoType);
   return {
     productId,
+    relatedInfoType:
+      relatedInfoTypeRaw === 'price_across_stores' ||
+      relatedInfoTypeRaw === 'whats_nearby' ||
+      relatedInfoTypeRaw === 'before_your_visit'
+        ? relatedInfoTypeRaw
+        : existing?.relatedInfoType,
+    priceAcrossStoresEnabled:
+      raw.priceAcrossStoresEnabled !== undefined
+        ? toBoolean(raw.priceAcrossStoresEnabled)
+        : existing?.priceAcrossStoresEnabled,
+    whatsNearby:
+      raw.whatsNearby && typeof raw.whatsNearby === 'object'
+        ? (raw.whatsNearby as CatalogProductDetail['whatsNearby'])
+        : existing?.whatsNearby,
+    beforeYourVisit:
+      raw.beforeYourVisit && typeof raw.beforeYourVisit === 'object'
+        ? (raw.beforeYourVisit as CatalogProductDetail['beforeYourVisit'])
+        : existing?.beforeYourVisit,
     about: toString(raw.about, existing?.about),
     specs: Array.isArray(raw.specs) ? (raw.specs as CatalogProductDetail['specs']) : existing?.specs ?? [],
     pros: toStringArray(raw.pros).length ? toStringArray(raw.pros) : existing?.pros ?? [],

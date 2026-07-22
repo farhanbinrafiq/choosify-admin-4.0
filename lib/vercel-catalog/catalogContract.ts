@@ -90,6 +90,22 @@ const productSchema = z.object({
   image: z.string(),
   gallery: z.array(z.string()),
   modeType: z.literal('retail'),
+  productType: z.enum(['physical', 'service']).optional(),
+  serviceCategory: z
+    .enum([
+      'hotels',
+      'restaurants',
+      'travel',
+      'doctors',
+      'education',
+      'beauty',
+      'real_estate',
+      'transport',
+    ])
+    .optional(),
+  relatedInfoType: z.enum(['price_across_stores', 'whats_nearby', 'before_your_visit']).optional(),
+  priceAcrossStoresEnabled: z.boolean().optional(),
+  requiredBookingFieldKeys: z.array(z.string()).optional(),
   price: z.number().nonnegative(),
   originalPrice: z.number().nonnegative().optional(),
   stock: z.number().int(),
@@ -229,6 +245,40 @@ export const normalizeProductInput = (
     image: toString(raw.image, existing?.image ?? ''),
     gallery: toStringArray(raw.gallery).length > 0 ? toStringArray(raw.gallery) : existing?.gallery ?? [],
     modeType: 'retail',
+    productType:
+      toString(raw.productType, existing?.productType ?? 'physical').toLowerCase() === 'service'
+        ? 'service'
+        : 'physical',
+    serviceCategory: (() => {
+      const value = toString(raw.serviceCategory, existing?.serviceCategory ?? '');
+      const allowed = [
+        'hotels',
+        'restaurants',
+        'travel',
+        'doctors',
+        'education',
+        'beauty',
+        'real_estate',
+        'transport',
+      ] as const;
+      return (allowed as readonly string[]).includes(value)
+        ? (value as CatalogProduct['serviceCategory'])
+        : undefined;
+    })(),
+    relatedInfoType: (() => {
+      const value = toString(raw.relatedInfoType, existing?.relatedInfoType ?? '');
+      return value === 'price_across_stores' || value === 'whats_nearby' || value === 'before_your_visit'
+        ? value
+        : undefined;
+    })(),
+    priceAcrossStoresEnabled:
+      raw.priceAcrossStoresEnabled !== undefined
+        ? toBoolean(raw.priceAcrossStoresEnabled)
+        : existing?.priceAcrossStoresEnabled,
+    requiredBookingFieldKeys:
+      toStringArray(raw.requiredBookingFieldKeys).length > 0
+        ? toStringArray(raw.requiredBookingFieldKeys)
+        : existing?.requiredBookingFieldKeys,
     price: toNumber(raw.price, existing?.price ?? 0),
     originalPrice:
       raw.originalPrice !== undefined

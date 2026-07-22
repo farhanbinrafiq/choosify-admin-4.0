@@ -42,6 +42,20 @@ export interface CatalogProduct {
   image: string;
   gallery: string[];
   modeType: 'retail';
+  productType?: 'physical' | 'service';
+  serviceCategory?:
+    | 'hotels'
+    | 'restaurants'
+    | 'travel'
+    | 'doctors'
+    | 'education'
+    | 'beauty'
+    | 'real_estate'
+    | 'transport';
+  relatedInfoType?: 'price_across_stores' | 'whats_nearby' | 'before_your_visit';
+  /** Physical products: opt-in toggle for showing Price Across Stores. */
+  priceAcrossStoresEnabled?: boolean;
+  requiredBookingFieldKeys?: string[];
   price: number;
   originalPrice?: number;
   stock: number;

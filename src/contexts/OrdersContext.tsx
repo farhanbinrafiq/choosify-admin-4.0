@@ -50,6 +50,9 @@ export interface OrderProduct {
   image: string;
   sellerId: string;
   sellerName: string;
+  productType?: 'physical' | 'service';
+  serviceCategory?: string;
+  serviceDetails?: Record<string, string | number>;
 }
 
 export interface Order {
@@ -102,6 +105,7 @@ export interface ThreadMessage {
   senderRole: 'customer' | 'seller' | 'admin';
   text: string;
   timestamp: string;
+  bookingOffer?: import('../../shared/booking/bookingTypes').BookingOfferCard;
 }
 
 export interface MessageThread {
