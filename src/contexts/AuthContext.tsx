@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { signInWithEmailAndPassword, signOut, onAuthStateChanged } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { CategoryType } from '../types';
 import {
@@ -54,6 +54,12 @@ interface AuthContextType {
   loading: boolean;
   login: (role: UserRole) => void;
   loginWithEmail: (email: string, password: string, fallbackRole?: UserRole) => Promise<UserRole>;
+  registerSeller: (input: {
+    email: string;
+    password: string;
+    displayName: string;
+    storeName?: string;
+  }) => Promise<{ role: UserRole; dashboardPath: string }>;
   logout: () => void;
   switchRole: (role: UserRole) => void;
   // Brand Switching Context API for multi-brand sellers
@@ -171,6 +177,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   login: () => {},
   loginWithEmail: async () => 'admin',
+  registerSeller: async () => ({ role: 'seller', dashboardPath: '/seller/products' }),
   logout: () => {},
   switchRole: () => {},
   activeBrandId: null,
@@ -308,6 +315,82 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       login(mappedRole);
       return mappedRole;
     }
+  };
+
+  const registerSeller = async (input: {
+    email: string;
+    password: string;
+    displayName: string;
+    storeName?: string;
+  }) => {
+    const response = await fetch(`${API_BASE}/auth/seller-register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: input.email.trim().toLowerCase(),
+        password: input.password,
+        displayName: input.displayName.trim(),
+        storeName: input.storeName?.trim() || undefined,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      code?: string;
+      loginPath?: string;
+      customToken?: string;
+      uid?: string;
+      email?: string;
+      displayName?: string;
+      role?: string;
+      dashboardPath?: string;
+    };
+
+    if (!response.ok) {
+      const err = new Error(payload.error || 'Unable to create seller account') as Error & {
+        code?: string;
+        loginPath?: string;
+      };
+      err.code = payload.code;
+      err.loginPath = payload.loginPath;
+      throw err;
+    }
+
+    if (!payload.customToken) {
+      throw new Error('Seller account created but sign-in token was missing.');
+    }
+
+    const credential = await signInWithCustomToken(auth, payload.customToken);
+    const token = await credential.user.getIdToken();
+    localStorage.setItem('choosify_auth_token', token);
+
+    let role: UserRole = 'seller';
+    let nextProfile: UserProfile = {
+      id: payload.uid || credential.user.uid,
+      displayName: payload.displayName || input.displayName.trim(),
+      email: payload.email || input.email.trim().toLowerCase(),
+      role,
+    };
+
+    try {
+      const remote = await fetchAuthProfile(token);
+      role = toUserRole(remote.role, 'seller');
+      nextProfile = {
+        id: remote.uid,
+        displayName: remote.displayName,
+        email: remote.email,
+        role,
+      };
+    } catch {
+      // Profile write may lag; use registration payload.
+    }
+
+    setProfile(nextProfile);
+    localStorage.setItem('choosify_mock_role', role);
+    return {
+      role,
+      dashboardPath: payload.dashboardPath || '/seller/products',
+    };
   };
 
   const logout = () => {
@@ -559,6 +642,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loading,
       login,
       loginWithEmail,
+      registerSeller,
       logout,
       switchRole,
       activeBrandId,

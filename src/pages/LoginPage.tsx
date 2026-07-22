@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Bolt, LayoutDashboard, Building2, Award, Users, ChevronRight, Lock, Mail, ShieldCheck } from 'lucide-react';
+import { Building2, Award, Users, ChevronRight, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
 import { ChoosifyLogo } from '../components/common/ChoosifyLogo';
@@ -15,7 +15,6 @@ function resolveRoleParam(value: string | null): UserRole | null {
 export default function LoginPage() {
   const [searchParams] = useSearchParams();
   const prefillEmail = searchParams.get('email')?.trim() || '';
-  const intent = searchParams.get('intent');
   const nextPath = searchParams.get('next')?.trim() || '';
   const roleFromQuery = resolveRoleParam(searchParams.get('role'));
 
@@ -24,8 +23,6 @@ export default function LoginPage() {
   const [selectedRole, setSelectedRole] = useState<UserRole>(roleFromQuery || 'super_admin');
   const { loginWithEmail } = useAuth();
   const navigate = useNavigate();
-
-  const isJoinIntent = intent === 'join';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,13 +84,9 @@ export default function LoginPage() {
          {/* Right Side: Login Form */}
          <div className="p-8 md:p-12">
             <div className="mb-8">
-               <h3 className="text-2xl font-bold text-white mb-2">
-                 {isJoinIntent ? 'Join as a Seller' : 'Welcome Back'}
-               </h3>
+               <h3 className="text-2xl font-bold text-white mb-2">Welcome Back</h3>
                <p className="text-sm text-app-text-secondary">
-                 {isJoinIntent
-                   ? 'Confirm your password to create or link your seller dashboard account with this email.'
-                   : 'Please sign in to your dashboard'}
+                 Please sign in to your dashboard
                </p>
             </div>
 
@@ -160,6 +153,16 @@ export default function LoginPage() {
                   <span>Sign In</span>
                   <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                </button>
+
+               <p className="text-center text-sm text-app-text-secondary">
+                 New seller?{' '}
+                 <Link
+                   to={`/signup${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''}`}
+                   className="text-app-accent-light font-bold hover:underline"
+                 >
+                   Create a seller account
+                 </Link>
+               </p>
                
                <div className="text-center">
                   <button type="button" className="text-[10px] text-app-text-secondary uppercase tracking-widest font-bold hover:text-white transition-colors">Forgot your password?</button>

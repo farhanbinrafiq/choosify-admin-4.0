@@ -9,7 +9,13 @@ import { recordFailedAuthAttempt } from './lib/abuseProtection';
 import { Logger } from './lib/logger';
 import { validate } from './middleware/validate';
 import { DevLoginBodySchema } from './validation/auth/devLoginSchema';
-import { loadAdminUserByEmail } from './operations/operationsFirestore';
+import { SellerRegisterBodySchema } from './validation/auth/sellerRegisterSchema';
+import {
+  loadAdminUserByEmail,
+  upsertAdminUserProfile,
+  useOperationsFirestore,
+} from './operations/operationsFirestore';
+import { getAdminAuth, hasFirebaseAdminCredentials } from './firebaseAdmin';
 import { ROLES, toUserRole } from './permissions/roles';
 
 export const authRouter = Router();
@@ -45,6 +51,113 @@ authRouter.get('/auth/seller-status', async (req, res) => {
       error: error instanceof Error ? error.message : String(error),
     });
     res.status(500).json({ error: 'Unable to check seller status' });
+  }
+});
+
+/**
+ * Create a seller dashboard account for storefront "Join Now" users.
+ * Returns a Firebase custom token so the client can auto-sign-in after signup.
+ */
+authRouter.post('/auth/seller-register', validate({ body: SellerRegisterBodySchema }), async (req, res) => {
+  const { email, password, displayName, storeName } = req.body as {
+    email: string;
+    password: string;
+    displayName: string;
+    storeName?: string;
+  };
+  const normalizedEmail = email.trim().toLowerCase();
+
+  try {
+    const existingProfile = await loadAdminUserByEmail(normalizedEmail);
+    if (existingProfile) {
+      const role = toUserRole(existingProfile.role);
+      if (role === ROLES.SELLER || role === ROLES.VERIFIED_SELLER) {
+        res.status(409).json({
+          error: 'A seller account already exists for this email. Sign in instead.',
+          code: 'SELLER_EXISTS',
+          loginPath: `/login?email=${encodeURIComponent(normalizedEmail)}&role=seller`,
+        });
+        return;
+      }
+      res.status(409).json({
+        error: 'This email is already registered with another dashboard role.',
+        code: 'EMAIL_IN_USE',
+      });
+      return;
+    }
+
+    if (!hasFirebaseAdminCredentials() || !useOperationsFirestore) {
+      res.status(503).json({
+        error: 'Seller registration is temporarily unavailable.',
+        code: 'FIREBASE_UNAVAILABLE',
+      });
+      return;
+    }
+
+    const auth = await getAdminAuth();
+    if (!auth) {
+      res.status(503).json({
+        error: 'Seller registration is temporarily unavailable.',
+        code: 'FIREBASE_UNAVAILABLE',
+      });
+      return;
+    }
+
+    let uid: string;
+    try {
+      const existingAuthUser = await auth.getUserByEmail(normalizedEmail);
+      res.status(409).json({
+        error: 'An account with this email already exists. Sign in to link your seller dashboard.',
+        code: 'EMAIL_EXISTS',
+        loginPath: `/login?email=${encodeURIComponent(normalizedEmail)}&role=seller`,
+        uid: existingAuthUser.uid,
+      });
+      return;
+    } catch (error: unknown) {
+      const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: string }).code) : '';
+      if (code !== 'auth/user-not-found') {
+        throw error;
+      }
+    }
+
+    const created = await auth.createUser({
+      email: normalizedEmail,
+      password,
+      displayName: displayName.trim(),
+      emailVerified: false,
+    });
+    uid = created.uid;
+
+    await upsertAdminUserProfile({
+      uid,
+      email: normalizedEmail,
+      displayName: displayName.trim(),
+      role: ROLES.SELLER,
+      storeName,
+    });
+
+    const customToken = await auth.createCustomToken(uid, { role: ROLES.SELLER });
+
+    Logger.info('seller account registered', {
+      requestId: req.requestId,
+      uid,
+      email: normalizedEmail,
+    });
+
+    res.status(201).json({
+      uid,
+      email: normalizedEmail,
+      displayName: displayName.trim(),
+      role: ROLES.SELLER,
+      customToken,
+      dashboardPath: '/seller/products',
+    });
+  } catch (error) {
+    Logger.warn('seller-register failed', {
+      requestId: req.requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ error: 'Unable to create seller account' });
   }
 });
 

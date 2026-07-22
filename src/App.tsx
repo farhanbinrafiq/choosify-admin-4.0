@@ -15,6 +15,7 @@ import { InventoryProvider } from './contexts/InventoryContext';
 // Lazy load pages
 const CashBookHub = lazy(() => import('./pages/admin/CashBookHub'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
+const SellerSignupPage = lazy(() => import('./pages/SellerSignupPage'));
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
 const DashboardRouter = lazy(() => import('./pages/dashboards/DashboardRouter'));
 const Consumers = lazy(() => import('./pages/admin/Consumers'));
@@ -127,8 +128,18 @@ const RootRoute: React.FC = () => {
 
 const LoginRoute: React.FC = () => {
   const { profile, loading } = useAuth();
+  const [searchParams] = useSearchParams();
 
   if (loading) return null;
+
+  // Legacy Join Now links used /login?intent=join — send them to real signup.
+  if (searchParams.get('intent') === 'join' && !profile) {
+    const email = searchParams.get('email')?.trim() || '';
+    const qs = new URLSearchParams();
+    if (email) qs.set('email', email);
+    return <Navigate to={`/signup${qs.toString() ? `?${qs}` : ''}`} replace />;
+  }
+
   if (profile) {
     if (profile.role === 'seller') {
       return <Navigate to="/seller/products" replace />;
@@ -141,6 +152,23 @@ const LoginRoute: React.FC = () => {
   return (
     <Suspense fallback={null}>
       <LoginPage />
+    </Suspense>
+  );
+};
+
+const SignupRoute: React.FC = () => {
+  const { profile, loading } = useAuth();
+
+  if (loading) return null;
+  if (profile?.role === 'seller') {
+    return <Navigate to="/seller/products" replace />;
+  }
+  if (profile) {
+    return <Navigate to="/" replace />;
+  }
+  return (
+    <Suspense fallback={null}>
+      <SellerSignupPage />
     </Suspense>
   );
 };
@@ -180,6 +208,7 @@ export default function App() {
               <DisputeProvider>
               <Routes>
             <Route path="/login" element={<LoginRoute />} />
+            <Route path="/signup" element={<SignupRoute />} />
             <Route path="/products/:id" element={<Suspense fallback={null}><ProductDetailPage /></Suspense>} />
             <Route path="/upe/:entityType/:entityId" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Unified Profile...</div>}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
             
