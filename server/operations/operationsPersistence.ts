@@ -17,6 +17,8 @@ export function buildOperationsSnapshot(): OperationsSnapshot {
     couponUsage: operationsStore.listCouponUsage(),
     reviews: operationsStore.listReviews(),
     leads: operationsStore.listLeads(),
+    jobPostings: operationsStore.listJobPostings(),
+    jobApplications: operationsStore.listJobApplications(),
     permissions: operationsStore.getPermissions(),
     shipments: shipmentStore.listShipments(),
     featureFlags: operationsStore.getFeatureFlags(),

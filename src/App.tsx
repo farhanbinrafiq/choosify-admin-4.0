@@ -45,8 +45,10 @@ const ProductStudio = lazy(() => import('./pages/admin/ProductStudio'));
 const BrandDetails = lazy(() => import('./pages/admin/BrandDetails'));
 const SellerReview = lazy(() => import('./pages/admin/SellerReview'));
 const WebsiteCMSStudio = lazy(() => import('./pages/admin/WebsiteCMSStudio'));
+const DealsBannersStudio = lazy(() => import('./pages/admin/DealsBannersStudio'));
 const BrandPostsPage = lazy(() => import('./pages/admin/BrandPosts'));
 const LeadsInboxPage = lazy(() => import('./pages/admin/LeadsInbox'));
+const JobPostingsPage = lazy(() => import('./pages/admin/JobPostings'));
 const SellerOffersPage = lazy(() => import('./pages/admin/SellerOffers'));
 const PlatformOrdersPage = lazy(() => import('./pages/admin/PlatformOrders'));
 const AdsSponsorsPage = lazy(() => import('./pages/admin/AdsSponsors'));
@@ -235,6 +237,7 @@ export default function App() {
               <Route path="dashboard" element={<DashboardRouter />} />
               <Route path="cms" element={<Navigate to="/admin/cms-studio" replace />} />
               <Route path="cms-studio" element={<WebsiteCMSStudio />} />
+              <Route path="deals-banners" element={<DealsBannersStudio />} />
               <Route path="ads-sponsors" element={<AdsSponsorsPage />} />
               <Route path="promotions" element={<SponsoredPromotionsPage />} />
               <Route path="consumers" element={<Consumers />} />
@@ -272,6 +275,7 @@ export default function App() {
               <Route path="orders-overview" element={<Navigate to="/admin/orders" replace />} />
               <Route path="platform-orders" element={<Navigate to="/admin/orders" replace />} />
               <Route path="leads" element={<LeadsInboxPage />} />
+              <Route path="jobs" element={<JobPostingsPage />} />
               <Route path="seller-offers" element={<SellerOffersPage />} />
               <Route path="customers" element={<SellerCustomers />} />
               <Route path="invoice/:id" element={<InvoiceView />} />

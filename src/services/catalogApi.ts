@@ -4,6 +4,7 @@ import type {
   CatalogCategory,
   CatalogCreator,
   CatalogDeal,
+  CatalogDealsBanner,
   CatalogGuide,
   CatalogPlacement,
   CatalogProduct,
@@ -122,6 +123,34 @@ export const catalogApi = {
   },
   deleteDeal: async (id: string): Promise<void> => {
     await request<{ success: boolean }>(`/catalog/deals/${id}`, 'DELETE');
+  },
+
+  listDealsBanners: async (opts?: { active?: boolean }): Promise<CatalogDealsBanner[]> => {
+    const active = opts?.active === false ? 'false' : 'true';
+    const result = await request<{ data: CatalogDealsBanner[] }>(
+      `/catalog/deals-banners?active=${active}`,
+    );
+    return result.data;
+  },
+  createDealsBanner: async (
+    payload: Partial<CatalogDealsBanner> & { id?: string },
+  ): Promise<CatalogDealsBanner> => {
+    const result = await request<{ data: CatalogDealsBanner }>('/catalog/deals-banners', 'POST', payload);
+    return result.data;
+  },
+  updateDealsBanner: async (
+    id: string,
+    payload: Partial<CatalogDealsBanner>,
+  ): Promise<CatalogDealsBanner> => {
+    const result = await request<{ data: CatalogDealsBanner }>(
+      `/catalog/deals-banners/${id}`,
+      'PATCH',
+      payload,
+    );
+    return result.data;
+  },
+  deleteDealsBanner: async (id: string): Promise<void> => {
+    await request<{ success: boolean }>(`/catalog/deals-banners/${id}`, 'DELETE');
   },
 
   getHomepage: async (): Promise<HomepageConfig> => {

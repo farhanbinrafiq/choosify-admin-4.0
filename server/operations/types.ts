@@ -133,6 +133,43 @@ export interface OpsLead {
   updatedAt: string;
 }
 
+export type OpsJobEmploymentType = 'full_time' | 'part_time' | 'internship' | 'contract';
+export type OpsJobStatus = 'open' | 'closed' | 'draft';
+
+export interface OpsJobPosting {
+  id: string;
+  slug: string;
+  title: string;
+  department: string;
+  location: string;
+  employmentType: OpsJobEmploymentType;
+  summary: string;
+  description: string;
+  responsibilities: string;
+  requirements: string;
+  status: OpsJobStatus;
+  postedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type OpsJobApplicationStatus = 'new' | 'reviewed' | 'interviewing' | 'rejected' | 'hired';
+
+export interface OpsJobApplication {
+  id: string;
+  jobId: string;
+  jobTitle: string;
+  name: string;
+  email: string;
+  phone: string;
+  resumeUrl: string;
+  resumeFileName?: string;
+  coverLetter: string;
+  status: OpsJobApplicationStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type PermissionKey = 'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics';
 
 export type RolePermissionsMap = Record<string, Record<PermissionKey, boolean>>;

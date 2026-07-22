@@ -1,6 +1,8 @@
 import type {
   OpsCoupon,
   OpsCouponUsage,
+  OpsJobApplication,
+  OpsJobPosting,
   OpsLead,
   OpsReview,
   OpsStorefrontOrder,
@@ -8,6 +10,78 @@ import type {
 } from './types';
 
 const nowIso = () => new Date().toISOString();
+
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 80) || `job-${Date.now()}`;
+
+const defaultJobPostings = (): OpsJobPosting[] => {
+  const ts = nowIso();
+  return [
+    {
+      id: 'job-frontend-engineer',
+      slug: 'frontend-engineer',
+      title: 'Frontend Engineer',
+      department: 'Engineering',
+      location: 'Dhaka / Hybrid',
+      employmentType: 'full_time',
+      summary:
+        'Build and polish the Choosify storefront experience — discovery feeds, product detail, and buyer dashboard.',
+      description:
+        'As a Frontend Engineer at Choosify, you will ship high-quality React interfaces that help millions of shoppers discover verified brands across Bangladesh. You will work closely with design and product to turn marketplace ideas into fast, accessible UI.',
+      responsibilities:
+        '- Own features across Choosify-Web (React, TypeScript, Vite)\n- Collaborate with design on feed layouts, cards, and forms\n- Improve performance, accessibility, and SEO for public pages\n- Partner with backend on public API contracts',
+      requirements:
+        '- Strong React + TypeScript experience\n- Comfortable with modern CSS / design systems\n- Experience shipping consumer-facing web products\n- Clear written communication',
+      status: 'open',
+      postedAt: ts,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'job-product-designer',
+      slug: 'product-designer',
+      title: 'Product Designer',
+      department: 'Design',
+      location: 'Remote',
+      employmentType: 'full_time',
+      summary: 'Shape Choosify’s visual system and craft clear buyer/seller flows across web and dashboard.',
+      description:
+        'We are looking for a Product Designer who can balance brand expression with practical marketplace UX. You will design flows for discovery, careers, seller tools, and more.',
+      responsibilities:
+        '- Design end-to-end product flows and high-fidelity UI\n- Maintain and evolve the Choosify design system\n- Prototype and validate with stakeholders\n- Partner with engineering for polished implementation',
+      requirements:
+        '- Portfolio showing marketplace or consumer product work\n- Strong Figma skills\n- Systems thinking around components and tokens\n- Comfortable iterating quickly with engineers',
+      status: 'open',
+      postedAt: ts,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'job-growth-marketing-intern',
+      slug: 'growth-marketing-intern',
+      title: 'Growth Marketing Intern',
+      department: 'Growth',
+      location: 'Dhaka',
+      employmentType: 'internship',
+      summary: 'Support campaigns, content experiments, and community outreach that grow Choosify awareness.',
+      description:
+        'Join the Growth team for a hands-on internship. You will help run experiments across social, partnerships, and content while learning how a marketplace brand scales in Bangladesh.',
+      responsibilities:
+        '- Assist with social content calendars and campaign tracking\n- Support creator/brand outreach lists\n- Help analyze simple performance metrics\n- Contribute ideas for seasonal campaigns',
+      requirements:
+        '- Currently studying marketing, communications, or related field\n- Strong Bangla + English writing\n- Curious about e-commerce and social platforms\n- Reliable and organized',
+      status: 'open',
+      postedAt: ts,
+      createdAt: ts,
+      updatedAt: ts,
+    },
+  ];
+};
 
 const defaultCoupons = (): OpsCoupon[] => {
   const ts = nowIso();
@@ -134,6 +208,8 @@ const state: {
   couponUsage: OpsCouponUsage[];
   reviews: OpsReview[];
   leads: OpsLead[];
+  jobPostings: OpsJobPosting[];
+  jobApplications: OpsJobApplication[];
   permissions: RolePermissionsMap;
   featureFlags: Record<string, boolean>;
   sellerOffers: import('./operationsFirestore').OpsSellerOfferRow[];
@@ -143,6 +219,8 @@ const state: {
   couponUsage: [],
   reviews: [],
   leads: [],
+  jobPostings: defaultJobPostings(),
+  jobApplications: [],
   permissions: structuredClone(DEFAULT_ROLE_PERMISSIONS),
   featureFlags: {
     creator_hub: true,
@@ -177,6 +255,8 @@ export const operationsStore = {
     if (snapshot.couponUsage) state.couponUsage = snapshot.couponUsage;
     if (snapshot.reviews) state.reviews = snapshot.reviews;
     if (snapshot.leads) state.leads = snapshot.leads;
+    if (snapshot.jobPostings?.length) state.jobPostings = snapshot.jobPostings;
+    if (snapshot.jobApplications) state.jobApplications = snapshot.jobApplications;
     if (snapshot.permissions) state.permissions = snapshot.permissions;
     if (snapshot.featureFlags) state.featureFlags = snapshot.featureFlags;
     if (snapshot.sellerOffers) state.sellerOffers = snapshot.sellerOffers;
@@ -309,6 +389,85 @@ export const operationsStore = {
     state.leads[idx] = { ...state.leads[idx], ...patch, updatedAt: nowIso() };
     touch();
     return state.leads[idx];
+  },
+
+  listJobPostings: (options?: { publicOnly?: boolean }) => {
+    const rows = [...state.jobPostings].sort((a, b) => b.postedAt.localeCompare(a.postedAt));
+    if (options?.publicOnly) return rows.filter((job) => job.status === 'open');
+    return rows;
+  },
+  getJobPosting: (idOrSlug: string) =>
+    state.jobPostings.find((job) => job.id === idOrSlug || job.slug === idOrSlug) ?? null,
+  createJobPosting: (
+    payload: Omit<OpsJobPosting, 'id' | 'slug' | 'postedAt' | 'createdAt' | 'updatedAt'> & {
+      slug?: string;
+      postedAt?: string;
+    },
+  ) => {
+    const ts = nowIso();
+    const baseSlug = slugify(payload.slug || payload.title);
+    let slug = baseSlug;
+    let n = 2;
+    while (state.jobPostings.some((job) => job.slug === slug)) {
+      slug = `${baseSlug}-${n++}`;
+    }
+    const job: OpsJobPosting = {
+      ...payload,
+      id: `job-${Date.now()}`,
+      slug,
+      postedAt: payload.postedAt || ts,
+      createdAt: ts,
+      updatedAt: ts,
+    };
+    state.jobPostings.unshift(job);
+    touch();
+    return job;
+  },
+  updateJobPosting: (id: string, patch: Partial<OpsJobPosting>) => {
+    const idx = state.jobPostings.findIndex((job) => job.id === id);
+    if (idx < 0) return null;
+    const next = { ...state.jobPostings[idx], ...patch, updatedAt: nowIso() };
+    if (patch.title && !patch.slug) {
+      // keep existing slug unless explicitly changed
+    }
+    if (patch.slug) {
+      next.slug = slugify(patch.slug);
+    }
+    state.jobPostings[idx] = next;
+    touch();
+    return state.jobPostings[idx];
+  },
+  deleteJobPosting: (id: string) => {
+    const before = state.jobPostings.length;
+    state.jobPostings = state.jobPostings.filter((job) => job.id !== id);
+    touch();
+    return state.jobPostings.length < before;
+  },
+
+  listJobApplications: (jobId?: string) => {
+    const rows = [...state.jobApplications].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return jobId ? rows.filter((row) => row.jobId === jobId) : rows;
+  },
+  createJobApplication: (
+    payload: Omit<OpsJobApplication, 'id' | 'status' | 'createdAt' | 'updatedAt'>,
+  ) => {
+    const application: OpsJobApplication = {
+      ...payload,
+      id: `jobapp-${Date.now()}`,
+      status: 'new',
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    };
+    state.jobApplications.unshift(application);
+    touch();
+    return application;
+  },
+  updateJobApplication: (id: string, patch: Partial<OpsJobApplication>) => {
+    const idx = state.jobApplications.findIndex((row) => row.id === id);
+    if (idx < 0) return null;
+    state.jobApplications[idx] = { ...state.jobApplications[idx], ...patch, updatedAt: nowIso() };
+    touch();
+    return state.jobApplications[idx];
   },
 
   getFeatureFlags: () => ({ ...state.featureFlags }),

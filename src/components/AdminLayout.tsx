@@ -43,15 +43,17 @@ import {
   CircleDollarSign,
   Ticket,
   Send,
+  Mail,
+  Briefcase,
   TrendingUp,
   LayoutTemplate,
+  Image as ImageIcon,
   Store,
   UserCircle,
   Handshake,
   Flag,
   X,
   Bell,
-  Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
@@ -92,6 +94,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
     { label: 'Orders Hub', icon: ListOrdered, path: '/admin/orders' },
     { label: 'Lead Inbox', icon: Mail, path: '/admin/leads' },
+    { label: 'Job Postings', icon: Briefcase, path: '/admin/jobs' },
     { label: 'Seller Offer Queue', icon: Send, path: '/admin/seller-offers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
@@ -132,6 +135,11 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
       path: '/admin/website-cms',
       badge: 'NEW'
     },
+    {
+      label: "Today's Deals Banners",
+      icon: ImageIcon,
+      path: '/admin/deals-banners',
+    },
   ],
   admin: [
     { label: 'Admin Workspace', type: 'label' },
@@ -143,6 +151,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
     { label: 'Orders Hub', icon: ListOrdered, path: '/admin/orders' },
     { label: 'Lead Inbox', icon: Mail, path: '/admin/leads' },
+    { label: 'Job Postings', icon: Briefcase, path: '/admin/jobs' },
     { label: 'Seller Offer Queue', icon: Send, path: '/admin/seller-offers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
@@ -169,6 +178,11 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
       icon: LayoutTemplate,
       path: '/admin/website-cms',
       badge: 'NEW'
+    },
+    {
+      label: "Today's Deals Banners",
+      icon: ImageIcon,
+      path: '/admin/deals-banners',
     },
   ],
   seller: [
@@ -237,6 +251,11 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
       icon: LayoutTemplate,
       path: '/admin/website-cms',
       badge: 'NEW'
+    },
+    {
+      label: "Today's Deals Banners",
+      icon: ImageIcon,
+      path: '/admin/deals-banners',
     },
   ]
 };

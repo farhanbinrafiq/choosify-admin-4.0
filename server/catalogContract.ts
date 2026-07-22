@@ -4,6 +4,7 @@ import type {
   CatalogBrandPost,
   CatalogCategory,
   CatalogDeal,
+  CatalogDealsBanner,
   CatalogProduct,
   HomepageConfig,
   HomepageHeroBanner,
@@ -163,6 +164,17 @@ const heroBannerSchema = z.object({
   order: z.number().int(),
 });
 
+const dealsBannerSchema = z.object({
+  id: nonEmpty,
+  image: z.string(),
+  destinationType: z.enum(['product', 'brand', 'custom-url']),
+  destinationRef: z.string(),
+  order: z.number().int(),
+  isActive: z.boolean(),
+  createdAt: isoDate,
+  updatedAt: isoDate,
+});
+
 const sectionSchema = z.object({
   id: nonEmpty,
   label: z.string(),
@@ -174,6 +186,7 @@ const sectionSchema = z.object({
 const homepageSchema = z.object({
   id: z.literal('default'),
   heroBanners: z.array(heroBannerSchema),
+  dealsBanners: z.array(dealsBannerSchema).default([]),
   sections: z.array(sectionSchema),
   featuredProductIds: z.array(z.string()),
   featuredBrandIds: z.array(z.string()),
@@ -397,6 +410,28 @@ const normalizeHeroBannerInput = (payload: unknown, idx: number): HomepageHeroBa
   });
 };
 
+export const normalizeDealsBannerInput = (
+  payload: unknown,
+  idx: number,
+  existing?: CatalogDealsBanner,
+): CatalogDealsBanner => {
+  const raw = (payload ?? {}) as Record<string, unknown>;
+  const id = toString(raw.id, existing?.id ?? `deals-banner-${Date.now()}-${idx}`);
+  const typeRaw = toString(raw.destinationType, existing?.destinationType ?? 'custom-url').toLowerCase();
+  const destinationType =
+    typeRaw === 'product' || typeRaw === 'brand' || typeRaw === 'custom-url' ? typeRaw : 'custom-url';
+  return dealsBannerSchema.parse({
+    id,
+    image: toString(raw.image, existing?.image ?? ''),
+    destinationType,
+    destinationRef: toString(raw.destinationRef, existing?.destinationRef ?? ''),
+    order: Math.floor(toNumber(raw.order, existing?.order ?? idx)),
+    isActive: toBoolean(raw.isActive, existing?.isActive ?? true),
+    createdAt: existingOrNow(existing?.createdAt),
+    updatedAt: nowIso(),
+  });
+};
+
 const normalizeSectionInput = (payload: unknown, idx: number): HomepageSectionConfig => {
   const raw = (payload ?? {}) as Record<string, unknown>;
   const id = toString(raw.id, `section-${idx + 1}`);
@@ -415,11 +450,20 @@ export const normalizeHomepageInput = (
 ): HomepageConfig => {
   const raw = (payload ?? {}) as Record<string, unknown>;
   const heroBannersInput = Array.isArray(raw.heroBanners) ? raw.heroBanners : existing?.heroBanners ?? [];
+  const dealsBannersInput = Array.isArray(raw.dealsBanners)
+    ? raw.dealsBanners
+    : existing?.dealsBanners ?? [];
   const sectionsInput = Array.isArray(raw.sections) ? raw.sections : existing?.sections ?? [];
 
   const normalized: HomepageConfig = {
     id: 'default',
     heroBanners: heroBannersInput.map(normalizeHeroBannerInput),
+    dealsBanners: dealsBannersInput.map((item, idx) => {
+      const existingBanner = existing?.dealsBanners?.find(
+        (b) => b.id === toString((item as Record<string, unknown>)?.id),
+      );
+      return normalizeDealsBannerInput(item, idx, existingBanner);
+    }),
     sections: sectionsInput.map(normalizeSectionInput),
     featuredProductIds:
       toStringArray(raw.featuredProductIds).length > 0

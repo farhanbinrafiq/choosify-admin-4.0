@@ -68,3 +68,46 @@ export function validateImageUploadInput(input: UploadValidationInput): {
 
   return { ok: true, mimeType, fileName, estimatedBytes };
 }
+
+const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+]);
+
+const ALLOWED_DOCUMENT_EXTENSIONS = new Set(['.pdf', '.doc', '.docx']);
+const DEFAULT_RESUME_MAX_BYTES = 8 * 1024 * 1024;
+
+export function validateDocumentUploadInput(input: UploadValidationInput): {
+  ok: true;
+  mimeType: string;
+  fileName: string;
+  estimatedBytes: number;
+} | {
+  ok: false;
+  error: string;
+} {
+  const base64Data = input.base64Data?.trim();
+  if (!base64Data) {
+    return { ok: false, error: 'Missing document data' };
+  }
+
+  const mimeType = (input.mimeType || 'application/pdf').trim().toLowerCase();
+  if (!ALLOWED_DOCUMENT_MIME_TYPES.has(mimeType)) {
+    return { ok: false, error: 'Unsupported document type. Upload PDF, DOC, or DOCX.' };
+  }
+
+  const fileName = (input.fileName || 'resume.pdf').trim();
+  const extension = extensionFromFileName(fileName);
+  if (!extension || !ALLOWED_DOCUMENT_EXTENSIONS.has(extension)) {
+    return { ok: false, error: 'Unsupported document extension. Use .pdf, .doc, or .docx.' };
+  }
+
+  const estimatedBytes = estimateBase64Bytes(base64Data);
+  const maxBytes = Math.max(readMaxUploadBytes(), DEFAULT_RESUME_MAX_BYTES);
+  if (estimatedBytes > maxBytes) {
+    return { ok: false, error: `Document exceeds maximum upload size of ${maxBytes} bytes` };
+  }
+
+  return { ok: true, mimeType, fileName, estimatedBytes };
+}

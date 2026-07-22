@@ -111,6 +111,43 @@ export interface OpsLead {
   updatedAt: string;
 }
 
+export type OpsJobEmploymentType = 'full_time' | 'part_time' | 'internship' | 'contract';
+export type OpsJobStatus = 'open' | 'closed' | 'draft';
+
+export interface OpsJobPosting {
+  id: string;
+  slug: string;
+  title: string;
+  department: string;
+  location: string;
+  employmentType: OpsJobEmploymentType;
+  summary: string;
+  description: string;
+  responsibilities: string;
+  requirements: string;
+  status: OpsJobStatus;
+  postedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type OpsJobApplicationStatus = 'new' | 'reviewed' | 'interviewing' | 'rejected' | 'hired';
+
+export interface OpsJobApplication {
+  id: string;
+  jobId: string;
+  jobTitle: string;
+  name: string;
+  email: string;
+  phone: string;
+  resumeUrl: string;
+  resumeFileName?: string;
+  coverLetter: string;
+  status: OpsJobApplicationStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type PermissionKey = 'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics';
 
 export interface OpsShipment {
@@ -229,6 +266,37 @@ export const operationsApi = {
   },
   updateLead: async (id: string, payload: Partial<OpsLead>): Promise<OpsLead> => {
     const result = await request<{ data: OpsLead }>(`/operations/leads/${id}`, 'PATCH', payload);
+    return result.data;
+  },
+
+  listJobs: async (): Promise<OpsJobPosting[]> => {
+    const result = await request<{ data: OpsJobPosting[] }>('/operations/jobs');
+    return result.data;
+  },
+  createJob: async (
+    payload: Omit<OpsJobPosting, 'id' | 'postedAt' | 'createdAt' | 'updatedAt'> & { slug?: string },
+  ): Promise<OpsJobPosting> => {
+    const result = await request<{ data: OpsJobPosting }>('/operations/jobs', 'POST', payload);
+    return result.data;
+  },
+  updateJob: async (id: string, payload: Partial<OpsJobPosting>): Promise<OpsJobPosting> => {
+    const result = await request<{ data: OpsJobPosting }>(`/operations/jobs/${id}`, 'PATCH', payload);
+    return result.data;
+  },
+  listJobApplications: async (jobId?: string): Promise<OpsJobApplication[]> => {
+    const qs = jobId ? `?jobId=${encodeURIComponent(jobId)}` : '';
+    const result = await request<{ data: OpsJobApplication[] }>(`/operations/job-applications${qs}`);
+    return result.data;
+  },
+  updateJobApplication: async (
+    id: string,
+    payload: Partial<OpsJobApplication>,
+  ): Promise<OpsJobApplication> => {
+    const result = await request<{ data: OpsJobApplication }>(
+      `/operations/job-applications/${id}`,
+      'PATCH',
+      payload,
+    );
     return result.data;
   },
 

@@ -12,8 +12,51 @@ import { scheduleOperationsPersist } from './operations/operationsPersistence';
 import type { OpsCoupon, OpsReview, OpsStorefrontOrder, PermissionKey } from './operations/types';
 import { validate } from './middleware/validate';
 import { CouponValidateBodySchema } from './validation/operations/couponValidateSchema';
+import {
+  evaluatePostOrderConversationExpiry,
+  type OrderLikeForExpiry,
+} from '../shared/messaging/conversationExpiry';
 
 export const operationsRouter = Router();
+
+function toExpiryOrder(order: OpsStorefrontOrder | OrderLikeForExpiry): OrderLikeForExpiry {
+  return {
+    orderId: order.orderId,
+    status: order.status,
+    cancelledAt: 'cancelledAt' in order ? order.cancelledAt : undefined,
+    subOrders: (order.subOrders as OrderLikeForExpiry['subOrders']) || [],
+  };
+}
+
+function assertPostOrderReplyAllowed(
+  orderId: string | undefined,
+  skipExpiry: boolean,
+  orderSnapshot?: OrderLikeForExpiry | null,
+) {
+  if (skipExpiry) return null;
+
+  const stored = orderId?.trim() ? operationsStore.getOrder(orderId.trim()) : null;
+  // Prefer authoritative store record; fall back to client snapshot only to *close*
+  // (never to keep a conversation open when the store says closed — store wins when present).
+  const orderForEval = stored
+    ? toExpiryOrder(stored)
+    : orderSnapshot?.orderId || orderSnapshot?.subOrders?.length
+      ? toExpiryOrder(orderSnapshot)
+      : null;
+
+  if (!orderForEval) return null; // no order context → cannot enforce yet
+
+  const expiry = evaluatePostOrderConversationExpiry(orderForEval);
+  if (expiry.status === 'closed') {
+    return {
+      error: 'CONVERSATION_EXPIRED',
+      message: expiry.closedLabel || 'This conversation has ended',
+      expiry,
+      enforcedFrom: stored ? 'store' : 'snapshot',
+    };
+  }
+  return null;
+}
 
 const normalizeReviewStatus = (status: string): OpsReview['status'] => {
   const map: Record<string, OpsReview['status']> = {
@@ -306,6 +349,152 @@ operationsRouter.patch('/operations/leads/:id', (req, res) => {
   res.json({ success: true, data: saved });
 });
 
+operationsRouter.get('/operations/jobs/public', (_req, res) => {
+  res.json({ data: operationsStore.listJobPostings({ publicOnly: true }) });
+});
+
+operationsRouter.get('/operations/jobs/public/:idOrSlug', (req, res) => {
+  const job = operationsStore.getJobPosting(req.params.idOrSlug);
+  if (!job || job.status !== 'open') {
+    res.status(404).json({ error: 'Job posting not found' });
+    return;
+  }
+  res.json({ data: job });
+});
+
+operationsRouter.get('/operations/jobs', (_req, res) => {
+  res.json({ data: operationsStore.listJobPostings() });
+});
+
+operationsRouter.post('/operations/jobs', (req, res) => {
+  const body = req.body as {
+    title?: string;
+    department?: string;
+    location?: string;
+    employmentType?: string;
+    summary?: string;
+    description?: string;
+    responsibilities?: string;
+    requirements?: string;
+    status?: string;
+    slug?: string;
+  };
+  if (!body.title?.trim() || !body.department?.trim() || !body.location?.trim()) {
+    res.status(400).json({ error: 'title, department, and location are required' });
+    return;
+  }
+  const employmentType = (body.employmentType || 'full_time') as
+    | 'full_time'
+    | 'part_time'
+    | 'internship'
+    | 'contract';
+  const status = (body.status || 'open') as 'open' | 'closed' | 'draft';
+  const saved = operationsStore.createJobPosting({
+    title: body.title.trim(),
+    department: body.department.trim(),
+    location: body.location.trim(),
+    employmentType,
+    summary: (body.summary || '').trim(),
+    description: (body.description || '').trim(),
+    responsibilities: (body.responsibilities || '').trim(),
+    requirements: (body.requirements || '').trim(),
+    status,
+    slug: body.slug?.trim(),
+  });
+  res.status(201).json({ success: true, data: saved });
+});
+
+operationsRouter.patch('/operations/jobs/:id', (req, res) => {
+  const saved = operationsStore.updateJobPosting(req.params.id, req.body);
+  if (!saved) {
+    res.status(404).json({ error: 'Job posting not found' });
+    return;
+  }
+  res.json({ success: true, data: saved });
+});
+
+operationsRouter.delete('/operations/jobs/:id', (req, res) => {
+  const ok = operationsStore.deleteJobPosting(req.params.id);
+  if (!ok) {
+    res.status(404).json({ error: 'Job posting not found' });
+    return;
+  }
+  res.json({ success: true });
+});
+
+operationsRouter.get('/operations/job-applications', (req, res) => {
+  const jobId = typeof req.query.jobId === 'string' ? req.query.jobId : undefined;
+  res.json({ data: operationsStore.listJobApplications(jobId) });
+});
+
+operationsRouter.post('/operations/job-applications', (req, res) => {
+  const body = req.body as {
+    jobId?: string;
+    name?: string;
+    email?: string;
+    phone?: string;
+    resumeUrl?: string;
+    resumeFileName?: string;
+    coverLetter?: string;
+  };
+  if (!body.jobId?.trim() || !body.name?.trim() || !body.email?.trim() || !body.resumeUrl?.trim()) {
+    res.status(400).json({ error: 'jobId, name, email, and resumeUrl are required' });
+    return;
+  }
+  const job = operationsStore.getJobPosting(body.jobId.trim());
+  if (!job || job.status !== 'open') {
+    res.status(404).json({ error: 'Open job posting not found' });
+    return;
+  }
+  const saved = operationsStore.createJobApplication({
+    jobId: job.id,
+    jobTitle: job.title,
+    name: body.name.trim(),
+    email: body.email.trim(),
+    phone: (body.phone || '').trim(),
+    resumeUrl: body.resumeUrl.trim(),
+    resumeFileName: body.resumeFileName?.trim(),
+    coverLetter: (body.coverLetter || '').trim(),
+  });
+  res.status(201).json({ success: true, data: saved });
+});
+
+operationsRouter.patch('/operations/job-applications/:id', (req, res) => {
+  const saved = operationsStore.updateJobApplication(req.params.id, req.body);
+  if (!saved) {
+    res.status(404).json({ error: 'Application not found' });
+    return;
+  }
+  res.json({ success: true, data: saved });
+});
+
+operationsRouter.post('/operations/media/upload-resume', async (req, res) => {
+  try {
+    const { validateDocumentUploadInput } = await import('./lib/uploadValidation');
+    const { uploadDocumentToCloudinary } = await import('../lib/vercel-catalog/mediaUpload');
+    const body = req.body as { data?: string; mimeType?: string; fileName?: string };
+    const validation = validateDocumentUploadInput({
+      base64Data: body.data || '',
+      mimeType: body.mimeType,
+      fileName: body.fileName,
+    });
+    if (!validation.ok) {
+      res.status(400).json({ error: validation.error });
+      return;
+    }
+    const url = await uploadDocumentToCloudinary({
+      base64Data: body.data!,
+      mimeType: validation.mimeType,
+      fileName: validation.fileName,
+    });
+    res.status(201).json({ success: true, url, fileName: validation.fileName });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Resume upload failed',
+    });
+  }
+});
+
 operationsRouter.get('/operations/permissions', (_req, res) => {
   res.json({ permissions: operationsStore.getPermissions(), defaults: DEFAULT_ROLE_PERMISSIONS });
 });
@@ -392,15 +581,31 @@ operationsRouter.patch('/operations/shipments/:id', (req, res) => {
 
 operationsRouter.post('/operations/platform-messages', async (req, res) => {
   try {
-    const { buyerId, userName, body, orderId, bookingOffer } = req.body as {
-      buyerId?: string;
-      userName?: string;
-      body?: string;
-      orderId?: string;
-      bookingOffer?: Record<string, unknown>;
-    };
+    const { buyerId, userName, body, orderId, bookingOffer, conversationId, isComplaint, sellerId, orderSnapshot } =
+      req.body as {
+        buyerId?: string;
+        userName?: string;
+        body?: string;
+        orderId?: string;
+        bookingOffer?: Record<string, unknown>;
+        conversationId?: string;
+        sellerId?: string;
+        /** Client order shape used when ops store has no row yet (close-only enforcement). */
+        orderSnapshot?: OrderLikeForExpiry;
+        /** Support complaints bypass post-order reply lock (they go to platform inbox, not seller thread). */
+        isComplaint?: boolean;
+      };
     if (!buyerId?.trim() || !body?.trim()) {
       res.status(400).json({ error: 'buyerId and body are required' });
+      return;
+    }
+
+    // Pre-order booking offers keep their own 24h/8h timers — skip post-order expiry.
+    // Complaints are support tickets routed to platform inbox, not seller replies.
+    const skipExpiry = Boolean(bookingOffer) || Boolean(isComplaint);
+    const blocked = assertPostOrderReplyAllowed(orderId, skipExpiry, orderSnapshot);
+    if (blocked) {
+      res.status(403).json(blocked);
       return;
     }
 
@@ -431,10 +636,14 @@ operationsRouter.post('/operations/platform-messages', async (req, res) => {
       attachedOffer = created.offer as unknown as Record<string, unknown>;
     }
 
+    const complaintPrefix = isComplaint
+      ? `[Complaint${conversationId ? ` · thread ${conversationId}` : ''}${orderId ? ` · order ${orderId}` : ''}${sellerId ? ` · seller ${sellerId}` : ''}] `
+      : '';
+
     const result = await submitPlatformMessage({
       buyerId: buyerId.trim(),
       userName: userName?.trim() || buyerId.trim(),
-      body: body.trim(),
+      body: `${complaintPrefix}${body.trim()}`,
       orderId: orderId?.trim(),
       bookingOffer: attachedOffer,
     });
@@ -442,6 +651,27 @@ operationsRouter.post('/operations/platform-messages', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to submit message' });
   }
+});
+
+operationsRouter.get('/operations/conversation-expiry', (req, res) => {
+  const orderId = String(req.query.orderId || '').trim();
+  if (!orderId) {
+    res.status(400).json({ error: 'orderId is required' });
+    return;
+  }
+  const order = operationsStore.getOrder(orderId);
+  if (!order) {
+    res.json({
+      data: {
+        status: 'not_applicable',
+        enforced: false,
+        reason: 'order_not_found_on_server',
+      },
+    });
+    return;
+  }
+  const expiry = evaluatePostOrderConversationExpiry(toExpiryOrder(order));
+  res.json({ data: { ...expiry, enforced: true } });
 });
 
 operationsRouter.get('/operations/shipments/track/:orderId', (req, res) => {

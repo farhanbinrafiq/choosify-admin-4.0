@@ -171,22 +171,26 @@ export default function SellerSignupPage() {
       />
 
       <div className="relative z-[2] flex flex-col min-h-screen">
-        <div className="flex justify-between items-center px-6 sm:px-10 py-6">
-          <a
-            href="https://choosify.bd"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[12.5px] text-white/60 hover:text-white/85 transition-colors"
-          >
-            ← Visit choosify.bd
-          </a>
-          <Link to={loginHref} className="text-[12.5px] text-white/60 hover:text-white/85 transition-colors">
-            Already a seller? Sign in
-          </Link>
-        </div>
+        <div className="flex-1 flex items-center justify-center px-6 sm:px-10 py-8 sm:py-10">
+          <div className="w-full max-w-[920px]">
+            <div className="flex justify-between items-center gap-3 mb-3">
+              <a
+                href="https://choosify.bd"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center min-h-[36px] px-3.5 py-1.5 rounded-full text-[12.5px] font-bold bg-white text-[#EB4501] hover:brightness-105 transition-all no-underline border-0 shadow-sm"
+              >
+                ← Visit choosify.bd
+              </a>
+              <Link
+                to={loginHref}
+                className="inline-flex items-center min-h-[36px] px-3.5 py-1.5 rounded-full text-[12.5px] font-bold bg-[#EB4501] text-white hover:brightness-110 transition-all no-underline border-0 shadow-sm"
+              >
+                Already a seller? Sign in
+              </Link>
+            </div>
 
-        <div className="flex-1 flex items-center justify-center px-6 sm:px-10 py-5">
-          <div className="flex flex-col lg:flex-row w-full max-w-[920px] rounded-2xl overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+            <div className="flex flex-col lg:flex-row rounded-2xl overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
             {/* Left marketing panel — flush dark surface */}
             <div
               className="flex-1 min-w-0 p-7 sm:p-9"
@@ -380,6 +384,7 @@ export default function SellerSignupPage() {
                 </button>
               </form>
             </div>
+          </div>
           </div>
         </div>
       </div>

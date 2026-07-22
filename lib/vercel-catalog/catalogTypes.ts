@@ -132,6 +132,21 @@ export interface HomepageHeroBanner {
   order: number;
 }
 
+/** Homepage "Today's Deals" image-only carousel banners */
+export type DealsBannerDestinationType = 'product' | 'brand' | 'custom-url';
+
+export interface CatalogDealsBanner {
+  id: string;
+  image: string;
+  destinationType: DealsBannerDestinationType;
+  /** Product ID, brand ID, or raw URL depending on destinationType */
+  destinationRef: string;
+  order: number;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface HomepageSectionConfig {
   id: string;
   label: string;
@@ -143,6 +158,8 @@ export interface HomepageSectionConfig {
 export interface HomepageConfig {
   id: 'default';
   heroBanners: HomepageHeroBanner[];
+  /** Image-only banners for homepage Today's Deals carousel */
+  dealsBanners: CatalogDealsBanner[];
   sections: HomepageSectionConfig[];
   featuredProductIds: string[];
   featuredBrandIds: string[];

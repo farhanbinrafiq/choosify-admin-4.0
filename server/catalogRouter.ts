@@ -5,10 +5,12 @@ import {
   normalizeBrandPostInput,
   normalizeCategoryInput,
   normalizeDealInput,
+  normalizeDealsBannerInput,
   normalizeHomepageInput,
   normalizeProductInput,
 } from './catalogContract';
 import type { CatalogBrandPost, CatalogProduct } from '../src/types/catalog';
+import { resolveDealsBannerHref } from '../lib/vercel-catalog/dealsBannerUtils';
 import { uploadImageToCloudinary } from '../lib/vercel-catalog/mediaUpload';
 import { recordProductView, recordSearch } from './analytics/eventHooks';
 import { validateImageUploadInput } from './lib/uploadValidation';
@@ -414,6 +416,117 @@ catalogRouter.delete('/catalog/deals/:id', ...requireAuth, async (req, res) => {
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to delete deal' });
+  }
+});
+
+async function readHomepageWithDealsBanners() {
+  const current = await catalogStore.getHomepage().catch(() => defaultHomepage());
+  return normalizeHomepageInput(current, current);
+}
+
+/** Public: active Today's Deals carousel banners in display order */
+catalogRouter.get('/catalog/deals-banners', async (req, res) => {
+  try {
+    const homepage = await readHomepageWithDealsBanners();
+    const activeOnly = String(req.query.active || 'true').toLowerCase() !== 'false';
+    const banners = (homepage.dealsBanners || [])
+      .filter((b) => (activeOnly ? b.isActive : true))
+      .slice()
+      .sort((a, b) => a.order - b.order)
+      .map((b) => ({
+        ...b,
+        href: resolveDealsBannerHref(b),
+      }));
+    res.json({ data: banners });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list deals banners' });
+  }
+});
+
+catalogRouter.post('/catalog/deals-banners', ...requireAuth, async (req, res) => {
+  try {
+    const homepage = await readHomepageWithDealsBanners();
+    const nextOrder =
+      homepage.dealsBanners.reduce((max, b) => Math.max(max, b.order), -1) + 1;
+    const banner = normalizeDealsBannerInput(
+      { ...req.body, order: req.body?.order ?? nextOrder },
+      homepage.dealsBanners.length,
+    );
+    if (!banner.image.trim()) {
+      res.status(400).json({ error: 'image is required' });
+      return;
+    }
+    const dealsBanners = [...homepage.dealsBanners, banner].sort((a, b) => a.order - b.order);
+    const saved = await catalogStore.upsertHomepage(
+      normalizeHomepageInput({ ...homepage, dealsBanners }, homepage),
+    );
+    const created = saved.dealsBanners.find((b) => b.id === banner.id) || banner;
+    res.status(201).json({ success: true, data: { ...created, href: resolveDealsBannerHref(created) } });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid deals banner payload') });
+  }
+});
+
+catalogRouter.put('/catalog/deals-banners/:id', ...requireAuth, async (req, res) => {
+  try {
+    const homepage = await readHomepageWithDealsBanners();
+    const existing = homepage.dealsBanners.find((b) => b.id === req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Deals banner not found' });
+      return;
+    }
+    const idx = homepage.dealsBanners.findIndex((b) => b.id === req.params.id);
+    const banner = normalizeDealsBannerInput({ ...req.body, id: req.params.id }, idx, existing);
+    const dealsBanners = homepage.dealsBanners
+      .map((b) => (b.id === banner.id ? banner : b))
+      .sort((a, b) => a.order - b.order);
+    const saved = await catalogStore.upsertHomepage(
+      normalizeHomepageInput({ ...homepage, dealsBanners }, homepage),
+    );
+    const updated = saved.dealsBanners.find((b) => b.id === banner.id) || banner;
+    res.json({ success: true, data: { ...updated, href: resolveDealsBannerHref(updated) } });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid deals banner payload') });
+  }
+});
+
+catalogRouter.patch('/catalog/deals-banners/:id', ...requireAuth, async (req, res) => {
+  try {
+    const homepage = await readHomepageWithDealsBanners();
+    const existing = homepage.dealsBanners.find((b) => b.id === req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Deals banner not found' });
+      return;
+    }
+    const idx = homepage.dealsBanners.findIndex((b) => b.id === req.params.id);
+    const banner = normalizeDealsBannerInput({ ...existing, ...req.body, id: req.params.id }, idx, existing);
+    const dealsBanners = homepage.dealsBanners
+      .map((b) => (b.id === banner.id ? banner : b))
+      .sort((a, b) => a.order - b.order);
+    const saved = await catalogStore.upsertHomepage(
+      normalizeHomepageInput({ ...homepage, dealsBanners }, homepage),
+    );
+    const updated = saved.dealsBanners.find((b) => b.id === banner.id) || banner;
+    res.json({ success: true, data: { ...updated, href: resolveDealsBannerHref(updated) } });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid deals banner patch') });
+  }
+});
+
+catalogRouter.delete('/catalog/deals-banners/:id', ...requireAuth, async (req, res) => {
+  try {
+    const homepage = await readHomepageWithDealsBanners();
+    if (!homepage.dealsBanners.some((b) => b.id === req.params.id)) {
+      res.status(404).json({ error: 'Deals banner not found' });
+      return;
+    }
+    const dealsBanners = homepage.dealsBanners.filter((b) => b.id !== req.params.id);
+    await catalogStore.upsertHomepage(
+      normalizeHomepageInput({ ...homepage, dealsBanners }, homepage),
+    );
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to delete deals banner' });
   }
 });
 
