@@ -12,7 +12,7 @@ import {
   BarChart3, 
   ShieldCheck, 
   Settings,
-  MessageCircle,
+  MessageCircleMore,
   Bolt,
   LogOut,
   ListOrdered,
@@ -102,7 +102,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Moderation Center', icon: ShieldCheck, path: '/admin/moderation' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
-    { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 12 },
+    { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages', badge: 12 },
     { label: 'Trust Center', icon: ShieldAlert, path: '/admin/trust-center' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     { label: 'Finance', type: 'label' },
@@ -158,7 +158,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Creators', icon: Award, path: '/admin/creators?viewMode=creators' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
-    { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
+    { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages' },
     { label: 'Trust Center', icon: ShieldAlert, path: '/admin/trust-center' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     { label: 'Finance', type: 'label' },
@@ -194,7 +194,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'My Brand Studio', icon: Store, path: '/dashboard/content-studio/brands' },
-    { label: 'Messages', icon: MessageCircle, path: '/admin/messages', badge: 2 },
+    { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages', badge: 2 },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     
@@ -214,7 +214,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Guides Studio', icon: FileText, path: '/dashboard/content-studio/guides' },
     { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
     { label: 'Collaborations', icon: Handshake, path: '/admin/creator-hub', badge: 1 },
-    { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
+    { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     { label: 'Finance', type: 'label' },
     { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
@@ -225,7 +225,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Moderation Center', icon: ShieldCheck, path: '/admin/moderation' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
-    { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
+    { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages' },
   ],
   finance_manager: [
     { label: 'Finance Operations', type: 'label' },
@@ -236,7 +236,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
   support_agent: [
     { label: 'Support Operations', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Messages', icon: MessageCircle, path: '/admin/messages' },
+    { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
   ],
   marketing_manager: [
@@ -992,7 +992,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                className="w-8 h-8 rounded-full bg-app-card border border-app-border flex items-center justify-center hover:bg-slate-50 hover:border-slate-300 active:scale-95 cursor-pointer relative shrink-0 transition-all text-app-text-primary"
                title="Open Messenger"
              >
-               <MessageCircle className="w-4 h-4 text-app-text-secondary" />
+               <MessageCircleMore className="w-4 h-4 text-[#EB4501]" />
                {unreadTotal > 0 && (
                  <span id="NotificationBadge" className="absolute -top-1 -right-1 bg-[#F97316] text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-app-bg NotificationBadge">
                    {unreadTotal}

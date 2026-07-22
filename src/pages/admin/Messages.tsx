@@ -5,7 +5,7 @@ import {
   Phone, 
   Mail, 
   User, 
-  MessageCircle, 
+  MessageCircleMore, 
   Check, 
   CheckCheck, 
   Clock, 
@@ -795,7 +795,7 @@ export default function MessagesPage() {
       <div className="border-b border-app-border bg-gradient-to-r from-slate-900 to-indigo-950 px-6 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0 transition-all">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-app-accent/20 rounded-xl">
-            <MessageCircle className="w-5 h-5 text-app-accent" />
+            <MessageCircleMore className="w-5 h-5 text-[#EB4501]" />
           </div>
           <div>
             <h1 className="text-sm font-black uppercase tracking-widest text-app-text-primary leading-none">Choosify Workspace</h1>
