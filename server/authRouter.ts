@@ -9,8 +9,44 @@ import { recordFailedAuthAttempt } from './lib/abuseProtection';
 import { Logger } from './lib/logger';
 import { validate } from './middleware/validate';
 import { DevLoginBodySchema } from './validation/auth/devLoginSchema';
+import { loadAdminUserByEmail } from './operations/operationsFirestore';
+import { ROLES, toUserRole } from './permissions/roles';
 
 export const authRouter = Router();
+
+/**
+ * Public seller-account lookup for the storefront Dashboard dual-account UI.
+ * Returns only a boolean — no profile details — to limit email enumeration risk.
+ */
+authRouter.get('/auth/seller-status', async (req, res) => {
+  const email = String(req.query.email || '')
+    .trim()
+    .toLowerCase();
+
+  if (!email || !email.includes('@')) {
+    res.status(400).json({ error: 'Valid email query parameter is required' });
+    return;
+  }
+
+  try {
+    const profile = await loadAdminUserByEmail(email);
+    const mappedRole = profile?.role ? toUserRole(profile.role) : undefined;
+    const devRole = DEV_ROLE_MAP[email];
+    const role = mappedRole || devRole;
+    const hasSellerAccount = role === ROLES.SELLER || role === ROLES.VERIFIED_SELLER;
+
+    res.json({
+      hasSellerAccount,
+      dashboardPath: '/seller/products',
+    });
+  } catch (error) {
+    Logger.warn('seller-status lookup failed', {
+      requestId: req.requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ error: 'Unable to check seller status' });
+  }
+});
 
 authRouter.get('/auth/me', async (req, res) => {
   const token = getBearerToken(req.headers.authorization);

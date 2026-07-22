@@ -1,23 +1,40 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Bolt, LayoutDashboard, Building2, Award, Users, ChevronRight, Lock, Mail, ShieldCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
 import { ChoosifyLogo } from '../components/common/ChoosifyLogo';
 
+const ALLOWED_ROLES: UserRole[] = ['super_admin', 'seller', 'creator', 'moderator'];
+
+function resolveRoleParam(value: string | null): UserRole | null {
+  if (!value) return null;
+  return ALLOWED_ROLES.includes(value as UserRole) ? (value as UserRole) : null;
+}
+
 export default function LoginPage() {
-  const [email, setEmail] = useState('');
+  const [searchParams] = useSearchParams();
+  const prefillEmail = searchParams.get('email')?.trim() || '';
+  const intent = searchParams.get('intent');
+  const nextPath = searchParams.get('next')?.trim() || '';
+  const roleFromQuery = resolveRoleParam(searchParams.get('role'));
+
+  const [email, setEmail] = useState(prefillEmail);
   const [password, setPassword] = useState('');
-  const [selectedRole, setSelectedRole] = useState<UserRole>('super_admin');
+  const [selectedRole, setSelectedRole] = useState<UserRole>(roleFromQuery || 'super_admin');
   const { loginWithEmail } = useAuth();
   const navigate = useNavigate();
+
+  const isJoinIntent = intent === 'join';
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const role = await loginWithEmail(email, password, selectedRole);
     
     let redirectPath = '/admin/dashboard';
-    if (role === 'seller') {
+    if (nextPath.startsWith('/') && !nextPath.startsWith('//')) {
+      redirectPath = nextPath;
+    } else if (role === 'seller') {
       redirectPath = '/seller/products';
     } else if (role === 'creator') {
       redirectPath = '/dashboard/content-studio/guides';
@@ -70,8 +87,14 @@ export default function LoginPage() {
          {/* Right Side: Login Form */}
          <div className="p-8 md:p-12">
             <div className="mb-8">
-               <h3 className="text-2xl font-bold text-white mb-2">Welcome Back</h3>
-               <p className="text-sm text-app-text-secondary">Please sign in to your dashboard</p>
+               <h3 className="text-2xl font-bold text-white mb-2">
+                 {isJoinIntent ? 'Join as a Seller' : 'Welcome Back'}
+               </h3>
+               <p className="text-sm text-app-text-secondary">
+                 {isJoinIntent
+                   ? 'Confirm your password to create or link your seller dashboard account with this email.'
+                   : 'Please sign in to your dashboard'}
+               </p>
             </div>
 
             <form onSubmit={handleLogin} className="space-y-6">
