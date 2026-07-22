@@ -114,6 +114,10 @@ export async function upsertAdminUserProfile(input: {
   displayName: string;
   role: string;
   storeName?: string;
+  phone?: string;
+  category?: string;
+  city?: string;
+  website?: string;
 }): Promise<void> {
   if (!useOperationsFirestore) {
     throw new Error('Firestore Admin is not configured.');
@@ -126,9 +130,11 @@ export async function upsertAdminUserProfile(input: {
     role: input.role,
     updatedAt: new Date().toISOString(),
   };
-  if (input.storeName?.trim()) {
-    payload.storeName = input.storeName.trim();
-  }
+  if (input.storeName?.trim()) payload.storeName = input.storeName.trim();
+  if (input.phone?.trim()) payload.phone = input.phone.trim();
+  if (input.category?.trim()) payload.category = input.category.trim();
+  if (input.city?.trim()) payload.city = input.city.trim();
+  if (input.website?.trim()) payload.website = input.website.trim();
 
   const existing = await db.collection('admin_users').doc(input.uid).get();
   if (!existing.exists) {

@@ -56,9 +56,13 @@ interface AuthContextType {
   loginWithEmail: (email: string, password: string, fallbackRole?: UserRole) => Promise<UserRole>;
   registerSeller: (input: {
     email: string;
-    password: string;
     displayName: string;
-    storeName?: string;
+    storeName: string;
+    phone: string;
+    category: string;
+    city: string;
+    website?: string;
+    password?: string;
   }) => Promise<{ role: UserRole; dashboardPath: string }>;
   logout: () => void;
   switchRole: (role: UserRole) => void;
@@ -319,9 +323,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const registerSeller = async (input: {
     email: string;
-    password: string;
     displayName: string;
-    storeName?: string;
+    storeName: string;
+    phone: string;
+    category: string;
+    city: string;
+    website?: string;
+    password?: string;
   }) => {
     const response = await fetch(`${API_BASE}/auth/seller-register`, {
       method: 'POST',
@@ -330,7 +338,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: input.email.trim().toLowerCase(),
         password: input.password,
         displayName: input.displayName.trim(),
-        storeName: input.storeName?.trim() || undefined,
+        storeName: input.storeName.trim(),
+        phone: input.phone.trim(),
+        category: input.category.trim(),
+        city: input.city.trim(),
+        website: input.website?.trim() || undefined,
       }),
     });
 
@@ -347,6 +359,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     if (!response.ok) {
+      // Local/dev without Firebase Admin: complete the UX path with a mock seller session.
+      if (payload.code === 'FIREBASE_UNAVAILABLE' && import.meta.env.DEV) {
+        const nextProfile: UserProfile = {
+          id: `seller_local_${Date.now()}`,
+          displayName: input.displayName.trim(),
+          email: input.email.trim().toLowerCase(),
+          role: 'seller',
+        };
+        setProfile(nextProfile);
+        localStorage.setItem('choosify_mock_role', 'seller');
+        return { role: 'seller' as UserRole, dashboardPath: '/seller/products' };
+      }
+
       const err = new Error(payload.error || 'Unable to create seller account') as Error & {
         code?: string;
         loginPath?: string;

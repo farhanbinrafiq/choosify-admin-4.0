@@ -59,11 +59,15 @@ authRouter.get('/auth/seller-status', async (req, res) => {
  * Returns a Firebase custom token so the client can auto-sign-in after signup.
  */
 authRouter.post('/auth/seller-register', validate({ body: SellerRegisterBodySchema }), async (req, res) => {
-  const { email, password, displayName, storeName } = req.body as {
+  const { email, password, displayName, storeName, phone, category, city, website } = req.body as {
     email: string;
-    password: string;
+    password?: string;
     displayName: string;
-    storeName?: string;
+    storeName: string;
+    phone: string;
+    category: string;
+    city: string;
+    website?: string;
   };
   const normalizedEmail = email.trim().toLowerCase();
 
@@ -120,9 +124,12 @@ authRouter.post('/auth/seller-register', validate({ body: SellerRegisterBodySche
       }
     }
 
+    const { randomBytes } = await import('node:crypto');
+    const resolvedPassword = password || `Chz!${randomBytes(18).toString('base64url')}`;
+
     const created = await auth.createUser({
       email: normalizedEmail,
-      password,
+      password: resolvedPassword,
       displayName: displayName.trim(),
       emailVerified: false,
     });
@@ -134,6 +141,10 @@ authRouter.post('/auth/seller-register', validate({ body: SellerRegisterBodySche
       displayName: displayName.trim(),
       role: ROLES.SELLER,
       storeName,
+      phone,
+      category,
+      city,
+      website,
     });
 
     const customToken = await auth.createCustomToken(uid, { role: ROLES.SELLER });
