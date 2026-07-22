@@ -238,7 +238,7 @@ export const defaultSiteConfig = (): import('./catalogTypes').SiteConfig => {
     navigation: [
       { id: 'nav-home', label: 'Home', path: '/', order: 0 },
       { id: 'nav-categories', label: 'Categories', path: '/categories', order: 1 },
-      { id: 'nav-products', label: 'Products', path: '/products', order: 2 },
+      { id: 'nav-products', label: 'Browse', path: '/products', order: 2 },
       { id: 'nav-brands', label: 'Brands', path: '/brands', order: 3 },
       { id: 'nav-guides', label: 'Recommendations', path: '/guides', order: 4 },
       { id: 'nav-deals', label: 'Deals', path: '/deals', order: 5 },
@@ -254,6 +254,7 @@ export const defaultSiteConfig = (): import('./catalogTypes').SiteConfig => {
           title: 'Discover',
           links: [
             { label: 'Top Brands', url: '/brands' },
+            { label: 'Browse', url: '/products' },
             { label: 'New Arrivals', url: '/products' },
             { label: 'Compare', url: '/compare' },
             { label: 'Best Deals', url: '/deals' },

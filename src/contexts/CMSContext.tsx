@@ -147,7 +147,7 @@ const defaultCMSData: CMSData = {
     footer: ''
   },
   navigation: [
-    { id: '1', label: 'Curated Products', path: '/products', order: 0 },
+    { id: '1', label: 'Browse', path: '/products', order: 0 },
     { id: '2', label: 'Expert Guides', path: '/recommendations', order: 1 },
     { id: '3', label: 'Exclusive Deals', path: '/deals', order: 2 }
   ],
@@ -159,7 +159,7 @@ const defaultCMSData: CMSData = {
     { id: '5', platform: 'WhatsApp', url: 'https://wa.me', isVisible: false }
   ],
   heroBanners: [
-    { id: '1', headline: "Bangladesh's Most Trusted Product Discovery Platform", subtitle: 'Find verified brands, expert guides, and exclusive deals — all in one place.', ctaText: 'Explore Products', ctaUrl: '/products', backgroundImage: '', textAlignment: 'center', isActive: true, order: 0 }
+    { id: '1', headline: "Bangladesh's Most Trusted Product Discovery Platform", subtitle: 'Find verified brands, expert guides, and exclusive deals — all in one place.', ctaText: 'Browse Products & Services', ctaUrl: '/products', backgroundImage: '', textAlignment: 'center', isActive: true, order: 0 }
   ],
   homepageSections: [
     { id: 'hero', label: 'Hero Banner', isVisible: true, order: 0, isLocked: true },
