@@ -136,6 +136,12 @@ interface GuideData {
   otherPriceOverrides: Record<string, string>; // productId -> Price override
   otherRanks: Record<string, number>; // productId -> custom display rank
 
+  /**
+   * Content Detail optional sections — toggled when publishing.
+   * Frontend Guide Details page renders only enabled entries (in order).
+   */
+  detailSections: { id: string; enabled: boolean; order: number }[];
+
   // SECTION 9: SEO SETTINGS
   seoTitle: string;
   seoDescription: string;
@@ -298,6 +304,16 @@ const defaultNewGuide: GuideData = {
     p5: 5
   },
 
+  detailSections: [
+    { id: "winner", enabled: true, order: 0 },
+    { id: "why_it_won", enabled: true, order: 1 },
+    { id: "verdict", enabled: true, order: 2 },
+    { id: "takeaways", enabled: true, order: 3 },
+    { id: "items_mentioned", enabled: true, order: 4 },
+    { id: "brands_mentioned", enabled: false, order: 5 },
+    { id: "how_review_was_made", enabled: true, order: 6 },
+  ],
+
   // SEO
   seoTitle: "Best Flagship Smartphone to Buy in Bangladesh (June 2026)",
   seoDescription: "Exhaustive hands-on lab comparisons of elite mobile flagships. Find out why the Galaxy S24 Ultra took our platinum overall champion seal.",
@@ -409,6 +425,11 @@ export default function GuideEditStudio() {
       productIds: guideData.rankedProductIds || [],
       whatWeLike: guideData.verdictPros || [],
       whatToConsider: guideData.verdictCons || [],
+      sections: (guideData.detailSections || []).map((s, i) => ({
+        id: s.id,
+        enabled: s.enabled !== false,
+        order: typeof s.order === "number" ? s.order : i,
+      })),
       seoTitle: guideData.seoTitle,
       seoDescription: guideData.seoDescription,
       seoKeywords: guideData.seoKeywords,
@@ -1125,6 +1146,61 @@ export default function GuideEditStudio() {
               );
             })}
           </div>
+        </div>
+
+        {/* ================= CONTENT DETAIL SECTION TOGGLES ================= */}
+        <div className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm mb-6 text-left">
+          <span className="text-[9px] font-mono font-black text-[#0B1528] block uppercase tracking-widest mb-1">
+            CONTENT DETAIL PAGE — OPTIONAL SECTIONS
+          </span>
+          <h5 className="text-xs font-bold text-slate-900 mb-1">
+            Toggle which blocks appear on the universal Content Detail page
+          </h5>
+          <p className="text-[10px] text-slate-500 mb-4">
+            Fixed sections (Hero, Gallery, What Is Discussed, You May Also Like, Profile) always render.
+            Enable only the optional blocks that apply to this guide.
+          </p>
+          <ul className="space-y-2">
+            {(guide.detailSections || []).map((section, idx) => {
+              const labels: Record<string, string> = {
+                winner: "Winner / Top Pick(s)",
+                why_it_won: "Why This Won",
+                verdict: "Recommendation & Quick Verdict",
+                takeaways: "Key Takeaways",
+                items_mentioned: "Items Mentioned",
+                brands_mentioned: "Brands Mentioned",
+                how_review_was_made: "How This Review Was Made",
+              };
+              return (
+                <li
+                  key={section.id}
+                  className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-[10px] font-mono text-slate-400 w-5">{idx + 1}</span>
+                    <span className="text-xs font-bold text-slate-900 truncate">
+                      {labels[section.id] || section.id}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next = [...(guide.detailSections || [])];
+                      next[idx] = { ...next[idx], enabled: !next[idx].enabled };
+                      handleFieldChange("detailSections", next);
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors ${
+                      section.enabled
+                        ? "bg-emerald-500/15 text-emerald-700"
+                        : "bg-slate-200 text-slate-500"
+                    }`}
+                  >
+                    {section.enabled ? "On" : "Off"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
         </div>
 
         {/* ================= SECTION 9: SEO SETTINGS ================= */}
