@@ -4,70 +4,47 @@ export interface ChoosifyLogoProps {
   width?: string | number;
   height?: string | number;
   className?: string;
-  variant?: 'full' | 'icon';
+  variant?: 'full' | 'icon' | 'stacked' | 'wordmark';
   theme?: 'light' | 'dark' | 'auto';
 }
+
+const SRC = {
+  fullDark: '/brand/choosify-logo-horizontal-white.svg',
+  fullLight: '/brand/choosify-logo-horizontal-navy.svg',
+  icon: '/brand/choosify-logo-icon.svg',
+  stackedDark: '/brand/choosify-logo-stacked-white.svg',
+  stackedLight: '/brand/choosify-logo-stacked-navy.svg',
+  wordmarkDark: '/brand/choosify-logo-wordmark-white.svg',
+  wordmarkLight: '/brand/choosify-logo-wordmark-navy.svg',
+} as const;
 
 export const ChoosifyLogo: React.FC<ChoosifyLogoProps> = ({
   width,
   height,
-  className = "h-8",
+  className = 'h-8',
   variant = 'full',
-  theme = 'dark'
+  theme = 'dark',
 }) => {
-  // Determine text color based on theme
-  const textColor = theme === 'light' ? '#0f172a' : '#ffffff';
-
-  // If variant is 'icon', we crop the viewBox to show only the dual-ring visual symbol
-  const viewBox = variant === 'icon' ? '0 0 1031.88 505.4' : '0 0 2585.84 505.4';
+  const light = theme === 'light';
+  let src: string = light ? SRC.fullLight : SRC.fullDark;
+  if (variant === 'icon') src = SRC.icon;
+  else if (variant === 'stacked') src = light ? SRC.stackedLight : SRC.stackedDark;
+  else if (variant === 'wordmark') src = light ? SRC.wordmarkLight : SRC.wordmarkDark;
 
   return (
-    <svg 
-      id="Layer_1" 
-      data-name="Layer 1" 
-      xmlns="http://www.w3.org/2000/svg" 
-      viewBox={viewBox}
+    <img
+      src={src}
+      alt="Choosify"
       className={className}
       style={{
-        width: width,
-        height: height,
+        width,
+        height,
         display: 'inline-block',
-        verticalAlign: 'middle'
+        verticalAlign: 'middle',
+        objectFit: 'contain',
       }}
-      referrerPolicy="no-referrer"
-    >
-      <defs>
-        <style>{`
-          .cls-logo-white-text { fill: ${textColor}; }
-          .cls-logo-red-dot { fill: #ef3c23; }
-        `}</style>
-      </defs>
-      <g>
-        {/* Dual-ring icon (visible in both 'full' and 'icon' variants) */}
-        <g>
-          <path className="cls-logo-red-dot" d="M921.65,303.09c0-47.35-38.42-85.71-85.76-85.71s-85.76,38.36-85.76,85.71,38.42,85.76,85.76,85.76c8.22,0,16.14-1.17,23.65-3.3-3.3-5.38-5.23-11.77-5.23-18.57,0-19.74,15.99-35.73,35.68-35.73,8.93,0,17.1,3.3,23.34,8.68,5.33-11.16,8.32-23.65,8.32-36.84Z"/>
-          <path className="cls-logo-red-dot" d="M356.15,303.09c0-47.35-38.42-85.71-85.76-85.71s-85.76,38.36-85.76,85.71c0,47.35,38.42,85.76,85.76,85.76,8.22,0,16.14-1.17,23.65-3.3-3.3-5.38-5.23-11.77-5.23-18.57,0-19.74,15.99-35.73,35.68-35.73,8.93,0,17.1,3.3,23.34,8.68,5.33-11.16,8.32-23.65,8.32-36.84Z"/>
-          <path className="cls-logo-red-dot" d="M252.7,505.4C113.36,505.4,0,392.04,0,252.7S113.36,0,252.7,0s252.7,113.36,252.7,252.7-113.36,252.7-252.7,252.7ZM252.7,57.74c-107.5,0-194.96,87.46-194.96,194.96s87.46,194.96,194.96,194.96,194.96-87.46,194.96-194.96S360.2,57.74,252.7,57.74Z"/>
-          <path className="cls-logo-red-dot" d="M779.18,505.4c-139.34,0-252.7-113.36-252.7-252.7S639.84,0,779.18,0s252.7,113.36,252.7,252.7-113.36,252.7-252.7,252.7ZM779.18,57.74c-107.5,0-194.96,87.46-194.96,194.96s87.46,194.96,194.96,194.96,194.96-87.46,194.96-194.96-87.46-194.96-194.96-194.96Z"/>
-        </g>
-        
-        {/* Brand Name Text "choosify" (only rendered in 'full' variant) */}
-        {variant === 'full' && (
-          <g>
-            <path className="cls-logo-white-text" d="M1094.27,260.83c0-54.18,36.9-95.48,93.45-95.48,48.09,0,77.9,27.43,84.31,66.7h-51.45c-3.72-16.59-14.55-27.09-32.15-27.09-26.77,0-40.3,22.01-40.3,55.88s13.53,55.19,40.3,55.19c19.62,0,31.48-11.85,33.85-32.51h51.13c-1.7,40.97-34.21,72.8-84.31,72.8-57.58,0-94.83-41.64-94.83-95.48Z"/>
-            <path className="cls-logo-white-text" d="M1351.4,350.56h-53.18V98.64h53.18v69.42c0,1.68,0,16.25-.35,28.1h1.03c10.84-19.3,29.11-30.81,54.18-30.81,39.59,0,62.64,26.4,62.64,66.7v118.52h-52.83v-108.36c0-19.64-10.48-32.84-30.13-32.84-20.65,0-34.53,16.59-34.53,39.62v101.58Z"/>
-            <path className="cls-logo-white-text" d="M1494.41,260.83c0-54.18,37.92-95.48,95.5-95.48s94.8,41.31,94.8,95.48-37.57,95.48-94.8,95.48-95.5-41.64-95.5-95.48ZM1630.88,260.83c0-34.21-14.91-57.56-41.32-57.56s-41.29,23.35-41.29,57.56,14.2,56.89,41.29,56.89,41.32-23.03,41.32-56.89Z"/>
-            <path className="cls-logo-white-text" d="M1703.14,260.83c0-54.18,37.92-95.48,95.5-95.48s94.8,41.31,94.8,95.48-37.57,95.48-94.8,95.48-95.5-41.64-95.5-95.48ZM1839.61,260.83c0-34.21-14.91-57.56-41.32-57.56s-41.29,23.35-41.29,57.56,14.2,56.89,41.29,56.89,41.32-23.03,41.32-56.89Z"/>
-            <path className="cls-logo-white-text" d="M1908.8,295.02h50.11c3.05,16.94,15.93,26.42,36.58,26.42,18.98,0,29.81-7.79,29.81-20.65,0-16.25-21.35-18.29-46.39-23.03-32.19-6.09-64.69-14.22-64.69-56.21,0-36.9,33.53-56.2,75.85-56.2,50.11,0,75.18,21.67,79.92,53.15h-49.43c-3.4-12.86-13.56-19.3-30.49-19.3s-26.74,6.78-26.74,18.29c0,13.54,19.62,15.58,44.34,19.97,32.19,5.75,68.76,14.22,68.76,59.6,0,38.95-34.56,59.26-81.27,59.26-52.16,0-83.64-25.05-86.36-61.29Z"/>
-            <rect className="cls-logo-white-text" x="2102.94" y="170.41" width="53.18" height="180.15"/>
-            <path className="cls-logo-white-text" d="M2260.83,204.96v145.61h-53.18v-145.61h-27.09v-34.54h27.09v-15.23c0-19.3,4.74-32.84,15.26-42.33,11.83-10.5,30.46-14.55,53.47-14.22,7.12,0,14.59.34,22.02,1.35v37.92c-26.74-1.01-37.57.69-37.57,21v11.51h37.57v34.54h-37.57Z"/>
-            <path className="cls-logo-white-text" d="M2335.71,410.16v-41.64h2.72c.67.34,15.9.34,17.28.34,16.57,0,24.72-6.09,25.71-18.29,0-6.09-3.05-19.97-9.46-36.23l-55.88-143.92h55.88l23.02,69.09c8.11,24.38,14.91,62.64,14.91,62.64h.67s8.11-38.6,15.9-62.64l22.02-69.09h52.83l-64.34,184.56c-14.59,41.64-31.16,55.86-65.69,55.86-1.7,0-34.56-.34-35.58-.67Z"/>
-            <path className="cls-logo-red-dot" d="M2129.7,152.15c15.9,0,28.78-12.9,28.78-28.8,0-15.9-12.88-28.8-28.78-28.8-15.9,0-28.8,12.9-28.8,28.8,0,2.76.39,5.42,1.11,7.94,1.81-1.11,3.95-1.76,6.24-1.76,6.63,0,12,5.37,12,11.98,0,3-1.11,5.74-2.91,7.84,3.75,1.79,7.94,2.79,12.37,2.79Z"/>
-            <path className="cls-logo-white-text" d="M2529.31,313.17h17.3c7.28,0,12.13,4.22,12.13,10.5,0,4.43-2.06,7.81-6.91,9.13v.16c3.48,1,5.27,3.01,5.75,7.6.53,5.33.32,9.39,1.64,9.97v.37h-7.33c-.95-.42-1.06-4.64-1.37-8.7-.32-4.11-2.64-6.44-7.38-6.44h-6.17v15.14h-7.65v-37.72ZM2536.96,329.84h8.12c4.17,0,6.22-2.16,6.22-5.17s-1.95-5.33-6.01-5.33h-8.33v10.5Z"/>
-            <path className="cls-logo-white-text" d="M2543.58,375.14c-11.29,0-21.9-4.4-29.88-12.38-7.98-7.98-12.38-18.59-12.38-29.88s4.4-21.9,12.38-29.88c7.98-7.98,18.59-12.38,29.88-12.38s21.9,4.4,29.88,12.38c7.98,7.98,12.38,18.59,12.38,29.88s-4.4,21.9-12.38,29.88c-7.98,7.98-18.59,12.38-29.88,12.38ZM2543.58,299.28c-18.53,0-33.6,15.07-33.6,33.6s15.07,33.6,33.6,33.6,33.6-15.07,33.6-33.6-15.07-33.6-33.6-33.6Z"/>
-          </g>
-        )}
-      </g>
-    </svg>
+      draggable={false}
+      decoding="async"
+    />
   );
 };

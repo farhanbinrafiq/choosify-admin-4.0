@@ -575,7 +575,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     <>
       <div className={`py-6 px-4 flex ${isCollapsed ? 'flex-col items-center justify-center' : 'items-center justify-between'} gap-3 border-b border-white/[0.03]`}>
         <div className="flex items-center gap-3 overflow-hidden shrink-0">
-          <ChoosifyLogo variant={isCollapsed ? "icon" : "full"} theme="dark" className={isCollapsed ? "h-6 w-auto select-none" : "h-8 w-auto select-none"} />
+          <ChoosifyLogo variant={isCollapsed ? "icon" : "full"} theme="dark" className={isCollapsed ? "h-8 w-8 select-none" : "h-11 w-auto max-w-[220px] select-none"} />
         </div>
 
         <button

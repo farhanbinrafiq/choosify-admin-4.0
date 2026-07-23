@@ -63,7 +63,7 @@ export default function LoginPage() {
          <div className="hidden lg:flex flex-col justify-between p-12 bg-app-sidebar relative overflow-hidden group">
             <div className="relative z-10">
                <div className="flex items-center gap-3 mb-10">
-                  <ChoosifyLogo variant="full" theme="dark" className="h-9 w-auto select-none" />
+                  <ChoosifyLogo variant="stacked" theme="dark" className="h-32 w-auto max-w-[240px] select-none" />
                </div>
                <h2 className="text-4xl font-extrabold text-white tracking-tight mb-6 leading-tight">
                   Discover <br/> Bangladesh's <br/> finest products.

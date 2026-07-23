@@ -138,7 +138,7 @@ export default function Home() {
       <nav className="h-20 border-b border-app-border bg-app-bg/80 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-full flex items-center justify-between">
           <Link to="/marketplace" className="flex items-center gap-3">
-            <ChoosifyLogo variant="full" theme="dark" className="h-9 w-auto select-none" />
+            <ChoosifyLogo variant="full" theme="dark" className="h-12 w-auto max-w-[240px] select-none" />
           </Link>
 
           <div className="hidden lg:flex items-center gap-8 text-sm font-semibold text-app-text-secondary">
@@ -465,7 +465,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-4 gap-12">
           <div className="col-span-1 md:col-span-2 space-y-6">
             <Link to="/marketplace">
-              <ChoosifyLogo variant="full" theme="dark" className="h-9 w-auto select-none" />
+              <ChoosifyLogo variant="full" theme="dark" className="h-12 w-auto max-w-[240px] select-none" />
             </Link>
             <p className="text-app-text-secondary text-sm leading-relaxed max-w-sm">
               {globalCMS?.footer?.description || "Bangladesh's premier discovery platform. We connect sellers, creators, and consumers in a unified, trusted ecosystem."}
