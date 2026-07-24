@@ -126,6 +126,9 @@ operationsRouter.post('/operations/orders', async (req, res) => {
       paidAt: body.paidAt,
       invoiceGeneratedAt: body.invoiceGeneratedAt,
       createdAt: body.createdAt || new Date().toISOString(),
+      isManual: body.isManual,
+      platformSource: body.platformSource,
+      claimToken: body.claimToken,
     });
 
     if (body.promoCode && body.promoDiscount) {
@@ -159,6 +162,54 @@ operationsRouter.post('/operations/orders', async (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid order payload' });
   }
+});
+
+// Public — no staff auth. Powers the customer-facing "View & Confirm Order" page on
+// Choosify-Web, reached via the confirm link a seller sends from a manually-created order.
+operationsRouter.get('/operations/orders/claim/:token', (req, res) => {
+  const order = operationsStore.getOrderByClaimToken(req.params.token);
+  if (!order) {
+    res.status(404).json({ error: 'This order link is invalid or has expired.' });
+    return;
+  }
+  res.json({
+    data: {
+      orderId: order.orderId,
+      overallTotal: order.overallTotal,
+      subtotal: order.subtotal,
+      deliveryTotal: order.deliveryTotal,
+      isCOD: order.isCOD,
+      paymentMethod: order.paymentMethod,
+      platformSource: order.platformSource,
+      subOrders: order.subOrders,
+      createdAt: order.createdAt,
+      claimed: Boolean(order.claimedAt),
+      claimedByName: order.claimedByName,
+    },
+  });
+});
+
+operationsRouter.post('/operations/orders/claim/:token/confirm', (req, res) => {
+  const { buyerId, buyerName } = req.body as { buyerId?: string; buyerName?: string };
+  if (!buyerId?.trim()) {
+    res.status(400).json({ error: 'buyerId is required' });
+    return;
+  }
+  const existing = operationsStore.getOrderByClaimToken(req.params.token);
+  if (!existing) {
+    res.status(404).json({ error: 'This order link is invalid or has expired.' });
+    return;
+  }
+  if (existing.claimedAt && existing.buyerId !== buyerId.trim()) {
+    res.status(409).json({ error: 'This order has already been confirmed by another account.' });
+    return;
+  }
+  const saved = operationsStore.claimOrder(req.params.token, {
+    buyerId: buyerId.trim(),
+    buyerName: buyerName?.trim(),
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
 });
 
 operationsRouter.patch('/operations/orders/:id', (req, res) => {

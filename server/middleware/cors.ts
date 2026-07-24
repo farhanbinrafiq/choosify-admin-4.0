@@ -16,6 +16,9 @@ function parseAllowedOrigins(): string[] {
     'http://localhost:3001',
     'http://127.0.0.1:3000',
     'http://127.0.0.1:3001',
+    // Choosify-Web (customer storefront) dev server — order-claim confirm page calls this API.
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
   ];
 }
 

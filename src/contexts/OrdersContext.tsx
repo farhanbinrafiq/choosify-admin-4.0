@@ -97,6 +97,10 @@ export interface Order {
   codCollected?: boolean;
   promoCode?: string;
   promoDiscount?: number;
+  /** Set on manual orders — the token embedded in confirmOrderUrl, cleared once claimed */
+  claimToken?: string;
+  /** Customer-facing "View & Confirm Order" link sent to the buyer's chat (Choosify-Web) */
+  confirmOrderUrl?: string;
 }
 
 export interface ThreadMessage {
@@ -768,6 +772,14 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const orderId = 'CSS-' + Math.floor(1000 + Math.random() * 9000);
     const invoiceId = 'INV-' + Math.floor(100000 + Math.random() * 900000);
     const timestampStr = new Date().toISOString();
+    const claimToken =
+      (typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+      ).replace(/-/g, '');
+    const choosifyWebBase =
+      (import.meta as any).env?.VITE_CHOOSIFY_WEB_URL || 'http://localhost:5173';
+    const confirmOrderUrl = `${choosifyWebBase.replace(/\/$/, '')}/orders/confirm/${claimToken}`;
 
     const productPrice = params.priceOverride !== undefined ? params.priceOverride : params.product.price;
     const finalProductPrice = productPrice * params.quantity;
@@ -826,7 +838,9 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       chatRefId: params.chatRefId,
       quantity: params.quantity,
       promoCode: params.promoCode,
-      promoDiscount: discount
+      promoDiscount: discount,
+      claimToken,
+      confirmOrderUrl,
     } as any;
 
     setOrders(prev => [newOrder, ...prev]);
@@ -869,13 +883,55 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           id: 'chat_msg_2',
           senderName: 'System ERP',
           senderRole: 'admin',
-          text: `🟢 [MANUAL ORDER CREATED - ERP RECORD]\nInvoice Number: #${invoiceId}\n\nInvoice Total Payable Summary:\n- Item: ${params.product.name} (Qty: ${params.quantity})\n- Unit Price: ৳${productPrice.toLocaleString()}\n- Total Product Price: ৳${finalProductPrice.toLocaleString()}\n- Logistics Carriage: ৳120\n- Grand Total Amount: ৳${totalPayable.toLocaleString()}\n- Invoice URL Link: /invoice/${orderId}\n\nSync established with seller order console.`,
+          text: `🟢 [MANUAL ORDER CREATED - ERP RECORD]\nInvoice Number: #${invoiceId}\n\nInvoice Total Payable Summary:\n- Item: ${params.product.name} (Qty: ${params.quantity})\n- Unit Price: ৳${productPrice.toLocaleString()}\n- Total Product Price: ৳${finalProductPrice.toLocaleString()}\n- Logistics Carriage: ৳120\n- Grand Total Amount: ৳${totalPayable.toLocaleString()}\n\n👉 View & Confirm Order: ${confirmOrderUrl}\n(Sign in or create a Choosify.bd account to confirm — this links the order to your account and order history.)\n\nSync established with seller order console.`,
           timestamp: timestampStr,
         }
       ]
     };
 
     setMessageThreads(prev => [newThread, ...prev]);
+
+    // Mirror this manual order into the real storefront order store — unclaimed until the
+    // customer signs in on Choosify-Web and confirms it via confirmOrderUrl.
+    operationsApi
+      .createOrder({
+        orderId,
+        buyerId: 'unclaimed',
+        isCOD: true,
+        isSplit: false,
+        overallTotal: totalPayable,
+        subtotal: finalProductPrice,
+        deliveryTotal: deliveryCharge,
+        subOrders: [
+          {
+            sellerId: params.product.sellerId,
+            sellerBusinessName: params.product.sellerName,
+            items: [
+              {
+                productId: Number(params.product.id) || 0,
+                productTitle: params.product.name,
+                quantity: params.quantity,
+                price: productPrice,
+                productType: params.product.productType,
+                serviceCategory: params.product.serviceCategory,
+              },
+            ],
+            deliveryFee: deliveryCharge,
+            invoiceId,
+            trackingStatus: 'pending',
+          },
+        ],
+        promoCode: params.promoCode,
+        promoDiscount: discount,
+        status: 'pending_payment',
+        createdAt: timestampStr,
+        isManual: true,
+        platformSource: params.platformSource,
+        claimToken,
+      } as any)
+      .catch((err) => {
+        console.error('Failed to sync manual order to storefront order store:', err);
+      });
   };
 
   const markAllThreadsAsRead = () => {

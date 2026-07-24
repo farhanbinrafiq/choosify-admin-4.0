@@ -40,6 +40,11 @@ export interface OpsStorefrontOrder {
   status: string;
   createdAt: string;
   updatedAt: string;
+  isManual?: boolean;
+  platformSource?: 'WhatsApp' | 'Facebook' | 'Instagram' | 'Offline';
+  claimToken?: string;
+  claimedAt?: string;
+  claimedByName?: string;
 }
 
 export interface OpsCouponRule {

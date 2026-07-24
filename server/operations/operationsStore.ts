@@ -282,6 +282,24 @@ export const operationsStore = {
     touch();
     return state.orders[idx];
   },
+  getOrderByClaimToken: (token: string) =>
+    state.orders.find((order) => order.claimToken === token) ?? null,
+  claimOrder: (token: string, buyer: { buyerId: string; buyerName?: string }) => {
+    const idx = state.orders.findIndex((order) => order.claimToken === token);
+    if (idx < 0) return null;
+    const order = state.orders[idx];
+    if (order.claimedAt) return order; // already claimed — idempotent, return as-is
+    state.orders[idx] = {
+      ...order,
+      buyerId: buyer.buyerId,
+      claimedAt: nowIso(),
+      claimedByName: buyer.buyerName,
+      status: order.status === 'pending_payment' ? 'confirmed' : order.status,
+      updatedAt: nowIso(),
+    };
+    touch();
+    return state.orders[idx];
+  },
 
   listCoupons: () => state.coupons.filter((coupon) => !coupon.deleted),
   getCoupon: (id: string) => state.coupons.find((coupon) => coupon.id === id) ?? null,
