@@ -1,21 +1,74 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  CreditCard, 
-  ArrowUpRight, 
-  CheckCircle, 
-  Clock, 
-  AlertCircle, 
-  Download, 
-  Search, 
+import {
+  CreditCard,
+  ArrowUpRight,
+  CheckCircle,
+  Clock,
+  AlertCircle,
+  Download,
+  Search,
   X,
   User,
   Wallet,
   Coins,
   History,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Landmark,
+  Send,
+  TrendingUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { operationsApi } from '../../services/operationsApi';
+import { useAuth } from '../../contexts/AuthContext';
+import { Tabs, TabItem } from '../../components/ui/Tabs';
+import { GlassCard } from '../../components/ui/GlassCard';
+import { StatTile } from '../../components/ui/StatTile';
+import { Badge, BadgeVariant } from '../../components/ui/Badge';
+
+type PayoutsPageTab = 'requests' | 'earnings' | 'withdrawal' | 'payment-info';
+
+const BD_BANKS = [
+  'Sonali Bank',
+  'Janata Bank',
+  'Agrani Bank',
+  'Rupali Bank',
+  'BRAC Bank',
+  'Dutch-Bangla Bank',
+  'Eastern Bank',
+  'City Bank',
+  'Islami Bank Bangladesh',
+  'Prime Bank',
+  'Standard Chartered Bangladesh',
+  'Mutual Trust Bank',
+  'Bank Asia',
+  'Southeast Bank',
+  'Uttara Bank',
+  'Pubali Bank',
+  'NCC Bank',
+  'IFIC Bank',
+];
+
+interface PaymentInfo {
+  accountHolderName: string;
+  bankName: string;
+  accountNumber: string;
+  routingNumber: string;
+  branchName: string;
+  bkashNumber: string;
+  nagadNumber: string;
+  updatedAt: string;
+}
+
+const EMPTY_PAYMENT_INFO: PaymentInfo = {
+  accountHolderName: '',
+  bankName: BD_BANKS[0],
+  accountNumber: '',
+  routingNumber: '',
+  branchName: '',
+  bkashNumber: '',
+  nagadNumber: '',
+  updatedAt: '',
+};
 
 // Required Payout interface
 export interface Payout {
@@ -32,6 +85,8 @@ export interface Payout {
 }
 
 export const Payouts = () => {
+  const { profile } = useAuth();
+  const [activeTab, setActiveTab] = useState<PayoutsPageTab>('requests');
   const [platformRevenue, setPlatformRevenue] = useState<number | null>(null);
 
   useEffect(() => {
@@ -270,6 +325,86 @@ export const Payouts = () => {
   };
 
   // Format Helper
+  // ----- Earnings tab: derived from completed vs pending/processing payouts -----
+  const earningsByType = useMemo(() => {
+    const groups: Record<Payout['type'], { total: number; count: number }> = {
+      Affiliate: { total: 0, count: 0 },
+      Sales: { total: 0, count: 0 },
+      'Creator Commission': { total: 0, count: 0 },
+      Refund: { total: 0, count: 0 },
+    };
+    payouts.forEach((p) => {
+      if (p.status === 'Completed') {
+        groups[p.type].total += p.amount;
+        groups[p.type].count += 1;
+      }
+    });
+    return groups;
+  }, [payouts]);
+
+  const totalRealizedEarnings = useMemo(
+    () => payouts.filter((p) => p.status === 'Completed').reduce((acc, p) => acc + p.amount, 0),
+    [payouts]
+  );
+  const totalInFlightEarnings = useMemo(
+    () => payouts.filter((p) => p.status === 'Pending' || p.status === 'Approved' || p.status === 'Processing').reduce((acc, p) => acc + p.amount, 0),
+    [payouts]
+  );
+
+  // ----- Withdrawal Request tab -----
+  const [withdrawAmount, setWithdrawAmount] = useState<number>(0);
+  const [withdrawMethod, setWithdrawMethod] = useState<Payout['method']>('bKash');
+  const [withdrawNote, setWithdrawNote] = useState('');
+
+  const handleSubmitWithdrawal = () => {
+    if (!withdrawAmount || withdrawAmount <= 0) {
+      triggerToast('Enter a withdrawal amount greater than 0.');
+      return;
+    }
+    const requesterName = profile?.displayName || 'Current User';
+    const newRequest: Payout = {
+      id: `wd_${Date.now()}`,
+      recipient: requesterName,
+      amount: withdrawAmount,
+      type: profile?.role === 'creator' ? 'Creator Commission' : 'Affiliate',
+      status: 'Pending',
+      date: new Date().toISOString(),
+      method: withdrawMethod,
+      note: withdrawNote || undefined,
+      recipientId: profile?.id || `rec_${Date.now()}`,
+      recipientType: profile?.role === 'creator' ? 'creator' : 'seller',
+    };
+    setPayouts((prev) => [newRequest, ...prev]);
+    triggerToast('Withdrawal request submitted for admin review.');
+    setWithdrawAmount(0);
+    setWithdrawNote('');
+  };
+
+  // ----- Payment Info tab -----
+  const paymentInfoKey = `choosify_payment_info_${profile?.id || 'guest'}`;
+  const [paymentInfo, setPaymentInfo] = useState<PaymentInfo>(() => {
+    try {
+      const saved = localStorage.getItem(paymentInfoKey);
+      return saved ? JSON.parse(saved) : EMPTY_PAYMENT_INFO;
+    } catch {
+      return EMPTY_PAYMENT_INFO;
+    }
+  });
+
+  const handleSavePaymentInfo = () => {
+    const next = { ...paymentInfo, updatedAt: new Date().toISOString() };
+    setPaymentInfo(next);
+    localStorage.setItem(paymentInfoKey, JSON.stringify(next));
+    triggerToast('Payment info saved successfully.');
+  };
+
+  const payoutsTabs: TabItem[] = [
+    { key: 'requests', label: 'Payout Requests', icon: Wallet, badge: totalPendingRequestsCount },
+    { key: 'earnings', label: 'Earnings', icon: TrendingUp },
+    { key: 'withdrawal', label: 'Withdrawal Request', icon: Send },
+    { key: 'payment-info', label: 'Payment Info', icon: Landmark },
+  ];
+
   const getFormattedDate = (dateStr: string) => {
     return new Date(dateStr).toLocaleDateString('en-US', {
       month: 'short',
@@ -280,7 +415,11 @@ export const Payouts = () => {
 
   return (
     <div className="space-y-6 text-[#1A1A2E] text-left">
-      
+
+      <Tabs tabs={payoutsTabs} activeKey={activeTab} onChange={(key) => setActiveTab(key as PayoutsPageTab)} />
+
+      {activeTab === 'requests' && (
+      <>
       {/* 4 Top Dynamic Stat cards computed from state */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm text-left">
@@ -295,13 +434,13 @@ export const Payouts = () => {
             <ArrowUpRight className="w-3 h-3"/> +12% this month
           </div>
         </div>
-        
+
         <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm text-left">
           <div className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mb-1">Pending Requests</div>
           <div className="text-2xl font-bold text-orange-600">{totalPendingRequestsCount}</div>
           <div className="text-[10px] text-gray-400 mt-1">Total ৳ {totalPendingVolume.toLocaleString()}</div>
         </div>
-        
+
         <div className="bg-white p-5 rounded-xl border border-gray-100 shadow-sm text-left">
           <div className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mb-1">Conversion Ratio</div>
           <div className="text-2xl font-bold text-blue-600">{conversionPercentage}%</div>
@@ -608,6 +747,182 @@ export const Payouts = () => {
         </AnimatePresence>
 
       </div>
+      </>
+      )}
+
+      {activeTab === 'earnings' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <StatTile label="Realized Earnings (Completed)" value={`৳ ${totalRealizedEarnings.toLocaleString()}`} icon={CheckCircle} accent="emerald" />
+            <StatTile label="In-Flight Earnings (Pending/Processing)" value={`৳ ${totalInFlightEarnings.toLocaleString()}`} icon={Clock} accent="orange" />
+          </div>
+
+          <GlassCard hoverLift={false} className="overflow-hidden !rounded-[1.25rem]">
+            <div className="p-4 border-b border-app-border">
+              <span className="text-[13px] font-bold text-app-text-primary">Earnings Breakdown by Type</span>
+            </div>
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 border-b border-app-border">
+                <tr>
+                  <th className="p-4 text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">Type</th>
+                  <th className="p-4 text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">Completed Payouts</th>
+                  <th className="p-4 text-[10px] font-bold text-app-text-secondary uppercase tracking-widest text-right">Realized Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-app-border text-[12px]">
+                {(Object.keys(earningsByType) as Payout['type'][]).map((type) => (
+                  <tr key={type}>
+                    <td className="p-4 font-bold text-app-text-primary">{type}</td>
+                    <td className="p-4 text-app-text-secondary font-mono">{earningsByType[type].count}</td>
+                    <td className="p-4 text-right font-mono font-bold text-emerald-600">৳ {earningsByType[type].total.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </GlassCard>
+        </div>
+      )}
+
+      {activeTab === 'withdrawal' && (
+        <GlassCard hoverLift={false} className="p-6 space-y-4 max-w-lg">
+          <div>
+            <h3 className="text-base font-extrabold text-app-text-primary">New Withdrawal Request</h3>
+            <p className="text-xs text-app-text-secondary mt-1">
+              Submit a withdrawal request against your realized earnings. It lands in the Payout Requests queue as Pending for admin review.
+            </p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Amount (৳)</label>
+            <input
+              type="number"
+              min={1}
+              value={withdrawAmount || ''}
+              onChange={(e) => setWithdrawAmount(Number(e.target.value))}
+              className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs font-mono text-app-text-primary focus:border-app-accent focus:outline-none transition"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Payout Method</label>
+            <select
+              value={withdrawMethod}
+              onChange={(e) => setWithdrawMethod(e.target.value as Payout['method'])}
+              className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:border-app-accent focus:outline-none transition"
+            >
+              <option value="bKash">bKash</option>
+              <option value="Nagad">Nagad</option>
+              <option value="Rocket">Rocket</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+            </select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Note (optional)</label>
+            <textarea
+              value={withdrawNote}
+              onChange={(e) => setWithdrawNote(e.target.value)}
+              className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary h-20 focus:border-app-accent focus:outline-none transition"
+            />
+          </div>
+          <button
+            onClick={handleSubmitWithdrawal}
+            className="w-full py-2.5 bg-app-accent hover:bg-app-accent-hover text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all"
+          >
+            Submit Withdrawal Request
+          </button>
+        </GlassCard>
+      )}
+
+      {activeTab === 'payment-info' && (
+        <GlassCard hoverLift={false} className="p-6 space-y-4 max-w-lg">
+          <div>
+            <h3 className="text-base font-extrabold text-app-text-primary">Payment Info</h3>
+            <p className="text-xs text-app-text-secondary mt-1">
+              Bank account and mobile wallet details used when your payout/withdrawal requests are settled.
+            </p>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Account Holder Name</label>
+            <input
+              value={paymentInfo.accountHolderName}
+              onChange={(e) => setPaymentInfo((p) => ({ ...p, accountHolderName: e.target.value }))}
+              className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:border-app-accent focus:outline-none transition"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Bank Name</label>
+            <select
+              value={paymentInfo.bankName}
+              onChange={(e) => setPaymentInfo((p) => ({ ...p, bankName: e.target.value }))}
+              className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:border-app-accent focus:outline-none transition"
+            >
+              {BD_BANKS.map((bank) => (
+                <option key={bank} value={bank}>
+                  {bank}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Account Number</label>
+              <input
+                value={paymentInfo.accountNumber}
+                onChange={(e) => setPaymentInfo((p) => ({ ...p, accountNumber: e.target.value }))}
+                className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs font-mono text-app-text-primary focus:border-app-accent focus:outline-none transition"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Routing Number</label>
+              <input
+                value={paymentInfo.routingNumber}
+                onChange={(e) => setPaymentInfo((p) => ({ ...p, routingNumber: e.target.value }))}
+                className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs font-mono text-app-text-primary focus:border-app-accent focus:outline-none transition"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Branch Name</label>
+            <input
+              value={paymentInfo.branchName}
+              onChange={(e) => setPaymentInfo((p) => ({ ...p, branchName: e.target.value }))}
+              className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:border-app-accent focus:outline-none transition"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">bKash Number</label>
+              <input
+                value={paymentInfo.bkashNumber}
+                onChange={(e) => setPaymentInfo((p) => ({ ...p, bkashNumber: e.target.value }))}
+                className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs font-mono text-app-text-primary focus:border-app-accent focus:outline-none transition"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Nagad Number</label>
+              <input
+                value={paymentInfo.nagadNumber}
+                onChange={(e) => setPaymentInfo((p) => ({ ...p, nagadNumber: e.target.value }))}
+                className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs font-mono text-app-text-primary focus:border-app-accent focus:outline-none transition"
+              />
+            </div>
+          </div>
+
+          {paymentInfo.updatedAt && (
+            <p className="text-[10px] text-app-text-secondary">Last updated: {new Date(paymentInfo.updatedAt).toLocaleString()}</p>
+          )}
+
+          <button
+            onClick={handleSavePaymentInfo}
+            className="w-full py-2.5 bg-app-accent hover:bg-app-accent-hover text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all"
+          >
+            Save Payment Info
+          </button>
+        </GlassCard>
+      )}
 
       {/* Floating active Toast notification */}
       <AnimatePresence>

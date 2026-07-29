@@ -570,19 +570,19 @@ export default function DealsPage() {
 
   // Render metric items dynamically depending on activeTab
   const metrics = activeTab === 'deals' ? [
-    { label: 'Total Deals', val: computedStats.total, color: 'border-l-[#F4631E]' },
+    { label: 'Total Deals', val: computedStats.total, color: 'border-l-[#FF5B00]' },
     { label: 'Live Deals', val: computedStats.live, color: 'border-l-green-600' },
     { label: 'Pending Approval', val: computedStats.pending, color: 'border-l-orange-400' },
     { label: 'Expiring 48h', val: computedStats.expiring48h, color: 'border-l-red-600' },
   ] : [
-    { label: 'Total Promo Codes', val: promoStats.total, color: 'border-l-[#F4631E]' },
+    { label: 'Total Promo Codes', val: promoStats.total, color: 'border-l-[#FF5B00]' },
     { label: 'Active Promotions', val: promoStats.active, color: 'border-l-green-600' },
     { label: 'Expired Promo Codes', val: promoStats.expired, color: 'border-l-red-600' },
     { label: 'Code Redemptions', val: promoStats.totalUses, color: 'border-l-indigo-600' },
   ];
 
   return (
-    <div className="space-y-6 text-[#1A1A2E]">
+    <div className="space-y-6 text-[#111827]">
       
       {/* Tab Selector Headers */}
       <div className="flex border-b border-gray-200 gap-2 mb-2">
@@ -590,8 +590,8 @@ export default function DealsPage() {
           onClick={() => switchTab('deals')}
           className={`px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer flex items-center gap-2 outline-none ${
             activeTab === 'deals' 
-              ? 'border-[#F4631E] text-[#F4631E]' 
-              : 'border-transparent text-gray-500 hover:text-[#F4631E]'
+              ? 'border-[#FF5B00] text-[#FF5B00]' 
+              : 'border-transparent text-gray-500 hover:text-[#FF5B00]'
           }`}
         >
           🏷️ Active Deals Manager
@@ -600,8 +600,8 @@ export default function DealsPage() {
           onClick={() => switchTab('promo_codes')}
           className={`px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer flex items-center gap-2 outline-none ${
             activeTab === 'promo_codes' 
-              ? 'border-[#F4631E] text-[#F4631E]' 
-              : 'border-transparent text-gray-500 hover:text-[#F4631E]'
+              ? 'border-[#FF5B00] text-[#FF5B00]' 
+              : 'border-transparent text-gray-500 hover:text-[#FF5B00]'
           }`}
         >
           🎟️ Promo Code Manager
@@ -612,7 +612,7 @@ export default function DealsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {metrics.map(s => (
           <div key={s.label} className={`bg-white p-4 rounded-xl border-l-[3px] shadow-sm ${s.color} text-left`}>
-             <div className="text-2xl font-bold text-[#1A1A2E]">{s.val}</div>
+             <div className="text-2xl font-bold text-[#111827]">{s.val}</div>
              <div className="text-[10px] text-gray-400 uppercase font-bold mt-0.5">{s.label}</div>
           </div>
         ))}
@@ -626,7 +626,7 @@ export default function DealsPage() {
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder={activeTab === 'deals' ? "Search deals by name or seller..." : "Search promotions by code or brand name..."} 
-            className="flex-1 bg-transparent text-[12px] outline-none text-[#1A1A2E]" 
+            className="flex-1 bg-transparent text-[12px] outline-none text-[#111827]" 
           />
         </div>
         
@@ -637,7 +637,7 @@ export default function DealsPage() {
             <div className="relative">
               <button 
                 onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                className="bg-[#F4631E] hover:bg-orange-600 text-white px-4 py-2 h-full rounded-lg text-xs font-bold shadow-lg shadow-orange-500/10 flex items-center gap-1.5 transition cursor-pointer border-none"
+                className="bg-[#FF5B00] hover:bg-orange-600 text-white px-4 py-2 h-full rounded-lg text-xs font-bold shadow-lg shadow-orange-500/10 flex items-center gap-1.5 transition cursor-pointer border-none"
               >
                 <Filter className="w-3.5 h-3.5" />
                 <span>Filter</span>
@@ -650,7 +650,7 @@ export default function DealsPage() {
                      <select 
                        value={statusFilter}
                        onChange={(e) => setStatusFilter(e.target.value)}
-                       className="w-full bg-slate-50 border border-gray-200 rounded-lg p-2 text-xs text-[#1A1A2E] outline-none"
+                       className="w-full bg-slate-50 border border-gray-200 rounded-lg p-2 text-xs text-[#111827] outline-none"
                      >
                         <option value="All">All Statuses</option>
                         <option value="Live">Live</option>
@@ -664,7 +664,7 @@ export default function DealsPage() {
                      <select
                        value={categoryFilter}
                        onChange={(e) => setCategoryFilter(e.target.value)}
-                       className="w-full bg-slate-50 border border-gray-200 rounded-lg p-2 text-xs text-[#1A1A2E] outline-none"
+                       className="w-full bg-slate-50 border border-gray-200 rounded-lg p-2 text-xs text-[#111827] outline-none"
                      >
                         <option value="All">All Categories</option>
                         {uniqueCategories.map(cat => (
@@ -681,7 +681,7 @@ export default function DealsPage() {
                      </button>
                      <button 
                        onClick={() => setShowFilterDropdown(false)}
-                       className="text-[10px] text-[#F4631E] font-black uppercase hover:underline bg-transparent border-none cursor-pointer"
+                       className="text-[10px] text-[#FF5B00] font-black uppercase hover:underline bg-transparent border-none cursor-pointer"
                      >
                        Close
                      </button>
@@ -703,7 +703,7 @@ export default function DealsPage() {
                 setIsAddingPromo(true);
               }
             }}
-            className="bg-white hover:bg-slate-50 text-[#F4631E] border border-[#F4631E]/40 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
+            className="bg-white hover:bg-slate-50 text-[#FF5B00] border border-[#FF5B00]/40 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
           >
             <Plus className="w-4 h-4" />
             <span>{activeTab === 'deals' ? 'Create Deal' : 'Create Promo Code'}</span>
@@ -754,12 +754,12 @@ export default function DealsPage() {
                               className="cursor-pointer rounded"
                             />
                           </td>
-                          <td className="p-4 font-bold text-[12px] text-[#0D1B2A] max-w-[200px] truncate">
+                          <td className="p-4 font-bold text-[12px] text-[#111827] max-w-[200px] truncate">
                             {deal.name}
                           </td>
                           <td className="p-4 text-[11px] text-gray-500">{deal.seller}</td>
                           <td className="p-4">
-                            <span className="bg-[#F4631E] text-white px-2 py-0.5 rounded text-[10px] font-bold">{deal.discount}% OFF</span>
+                            <span className="bg-[#FF5B00] text-white px-2 py-0.5 rounded text-[10px] font-bold">{deal.discount}% OFF</span>
                           </td>
                           <td className={`p-4 text-[10px] flex items-center gap-1.5 mt-2.5 ${isExpiring ? 'text-red-650' : 'text-gray-400'}`}>
                             {isExpiring && <Clock className="w-3.5 h-3.5" />} {getExpiryDisplay(deal.expiry)}
@@ -876,12 +876,12 @@ export default function DealsPage() {
                      return (
                        <tr key={promo.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="p-4">
-                            <span className="font-mono bg-orange-100 border border-orange-200 text-[#F4631E] px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider select-all">
+                            <span className="font-mono bg-orange-100 border border-orange-200 text-[#FF5B00] px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider select-all">
                               {promo.code}
                             </span>
                           </td>
-                          <td className="p-4 text-xs font-bold text-[#0D1B2A]">{promo.brandName}</td>
-                          <td className="p-4 text-xs font-semibold text-[#F4631E]">{promo.discount}</td>
+                          <td className="p-4 text-xs font-bold text-[#111827]">{promo.brandName}</td>
+                          <td className="p-4 text-xs font-semibold text-[#FF5B00]">{promo.discount}</td>
                           <td className="p-4 text-xs uppercase text-gray-500 font-mono tracking-tight">{promo.type}</td>
                           <td className="p-4 text-xs text-gray-700">
                             {promo.minOrderValue ? `৳ ${promo.minOrderValue.toLocaleString()}` : "৳ 0"}
@@ -995,8 +995,8 @@ export default function DealsPage() {
                 className="bg-white border border-gray-200 rounded-[2rem] p-6 shadow-2xl text-left space-y-4"
               >
                 <div className="flex justify-between items-center pb-3 border-b border-gray-100">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-[#1a1a2e] flex items-center gap-1.5">
-                    <Tag className="w-4 h-4 text-[#F4631E]" />
+                  <h3 className="text-xs font-black uppercase tracking-widest text-[#111827] flex items-center gap-1.5">
+                    <Tag className="w-4 h-4 text-[#FF5B00]" />
                     <span>
                       {activeTab === 'deals' 
                         ? (editingDeal ? 'Modify Custom Deal' : 'Publish New Deal')
@@ -1011,7 +1011,7 @@ export default function DealsPage() {
                       setIsAddingPromo(false); 
                       setEditingPromo(null); 
                     }}
-                    className="p-1.5 text-slate-400 hover:text-[#F4631E] rounded-xl text-xs font-bold transition cursor-pointer bg-transparent border-none"
+                    className="p-1.5 text-slate-400 hover:text-[#FF5B00] rounded-xl text-xs font-bold transition cursor-pointer bg-transparent border-none"
                   >
                     Cancel
                   </button>
@@ -1028,7 +1028,7 @@ export default function DealsPage() {
                         value={formName}
                         onChange={(e) => setFormName(e.target.value)}
                         placeholder="e.g. Walton Smart TV Discount"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                       />
                     </div>
 
@@ -1040,7 +1040,7 @@ export default function DealsPage() {
                         value={formSeller}
                         onChange={(e) => setFormSeller(e.target.value)}
                         placeholder="e.g. ElectroBD Dhaka"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                       />
                     </div>
 
@@ -1055,7 +1055,7 @@ export default function DealsPage() {
                           value={formDiscount || ''}
                           onChange={(e) => setFormDiscount(Number(e.target.value))}
                           placeholder="e.g. 15"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                         />
                       </div>
 
@@ -1064,7 +1064,7 @@ export default function DealsPage() {
                         <select
                           value={formCategory}
                           onChange={(e) => setFormCategory(e.target.value)}
-                          className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
+                          className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                         >
                           <option value="Electronics">Electronics</option>
                           <option value="Home">Home</option>
@@ -1083,7 +1083,7 @@ export default function DealsPage() {
                           required
                           value={formExpiry}
                           onChange={(e) => setFormExpiry(e.target.value)}
-                          className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-2 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
+                          className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-2 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                         />
                       </div>
 
@@ -1094,13 +1094,13 @@ export default function DealsPage() {
                         value={formPromoCode}
                         onChange={(e) => setFormPromoCode(e.target.value)}
                         placeholder="e.g. SAVINGS25"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                       />
                     </div>
 
                     <button 
                       type="submit"
-                      className="w-full py-3 bg-[#F4631E] hover:bg-orange-600 text-white font-extrabold uppercase tracking-wide rounded-xl text-xs shadow-lg shadow-orange-500/10 cursor-pointer transition border-none mt-4"
+                      className="w-full py-3 bg-[#FF5B00] hover:bg-orange-600 text-white font-extrabold uppercase tracking-wide rounded-xl text-xs shadow-lg shadow-orange-500/10 cursor-pointer transition border-none mt-4"
                     >
                       {editingDeal ? 'Apply Updates' : 'Publish / Add Deal'}
                     </button>
@@ -1116,7 +1116,7 @@ export default function DealsPage() {
                         value={promoFormCode}
                         onChange={(e) => setPromoFormCode(e.target.value.toUpperCase())}
                         placeholder="e.g. AARONG20"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E] font-mono font-bold"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00] font-mono font-bold"
                       />
                     </div>
 
@@ -1128,7 +1128,7 @@ export default function DealsPage() {
                         value={promoFormBrandName}
                         onChange={(e) => setPromoFormBrandName(e.target.value)}
                         placeholder="e.g. Aarong, Apex, Sailor, etc."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                       />
                     </div>
 
@@ -1138,7 +1138,7 @@ export default function DealsPage() {
                         <select
                           value={promoFormType}
                           onChange={(e) => setPromoFormType(e.target.value as 'percentage' | 'flat')}
-                          className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
+                          className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                         >
                           <option value="percentage">Percentage (%)</option>
                           <option value="flat">Flat Cash (৳)</option>
@@ -1154,7 +1154,7 @@ export default function DealsPage() {
                           value={promoFormValue || ''}
                           onChange={(e) => setPromoFormValue(Number(e.target.value))}
                           placeholder={promoFormType === 'percentage' ? "e.g. 15" : "e.g. 500"}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                         />
                       </div>
                     </div>
@@ -1167,7 +1167,7 @@ export default function DealsPage() {
                           value={promoFormMinOrder || ''}
                           onChange={(e) => setPromoFormMinOrder(Number(e.target.value))}
                           placeholder="e.g. 2500"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                         />
                       </div>
 
@@ -1178,7 +1178,7 @@ export default function DealsPage() {
                           value={promoFormMaxUsage || ''}
                           onChange={(e) => setPromoFormMaxUsage(Number(e.target.value))}
                           placeholder="e.g. 500"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                         />
                       </div>
                     </div>
@@ -1190,13 +1190,13 @@ export default function DealsPage() {
                         required
                         value={promoFormValidUntil}
                         onChange={(e) => setPromoFormValidUntil(e.target.value)}
-                        className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-2 text-xs text-[#1a1a2e] outline-none focus:border-[#F4631E]"
+                        className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-2 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                       />
                     </div>
 
                     <button 
                       type="submit"
-                      className="w-full py-3 bg-[#F4631E] hover:bg-orange-600 text-white font-extrabold uppercase tracking-wide rounded-xl text-xs shadow-lg shadow-orange-500/10 cursor-pointer transition border-none mt-4"
+                      className="w-full py-3 bg-[#FF5B00] hover:bg-orange-600 text-white font-extrabold uppercase tracking-wide rounded-xl text-xs shadow-lg shadow-orange-500/10 cursor-pointer transition border-none mt-4"
                     >
                       {editingPromo ? 'Apply Promo Updates' : 'Launch Promo Code'}
                     </button>
@@ -1217,11 +1217,11 @@ export default function DealsPage() {
             initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-auto md:right-32 z-55 bg-[#1A1A2E] text-white px-6 py-3.5 rounded-2xl shadow-2xl flex flex-col gap-3 border border-[#F4631E]/30 w-96 max-w-full"
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-auto md:right-32 z-55 bg-[#111827] text-white px-6 py-3.5 rounded-2xl shadow-2xl flex flex-col gap-3 border border-[#FF5B00]/30 w-96 max-w-full"
           >
             <div className="flex items-center justify-between gap-6">
               <div className="flex items-center gap-2 text-left">
-                <span className="w-5 h-5 bg-[#F4631E] rounded-full text-[10px] font-black flex items-center justify-center text-white">
+                <span className="w-5 h-5 bg-[#FF5B00] rounded-full text-[10px] font-black flex items-center justify-center text-white">
                   {selectedIds.length}
                 </span>
                 <span className="text-xs font-bold uppercase tracking-wider text-slate-350">Selected Deals</span>
@@ -1279,7 +1279,7 @@ export default function DealsPage() {
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="fixed bottom-6 right-6 z-[600] bg-[#1A1A2E] border border-[#F4631E]/30 p-4 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold text-white"
+            className="fixed bottom-6 right-6 z-[600] bg-[#111827] border border-[#FF5B00]/30 p-4 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold text-white"
           >
             <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
             <span>{toast}</span>

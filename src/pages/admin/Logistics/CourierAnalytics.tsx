@@ -14,6 +14,7 @@ import {
   Compass
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { StatTile } from '../../../components/ui/StatTile';
 
 interface CarrierStat {
   code: string;
@@ -124,17 +125,17 @@ export default function CourierAnalytics() {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900 tracking-tight flex items-center gap-2">
-            <BarChart3 className="h-6 w-6 text-indigo-600" />
+          <h1 className="text-[17px] font-extrabold text-app-text-primary tracking-tight flex items-center gap-2">
+            <BarChart3 className="h-6 w-6 text-app-accent" />
             Courier Analytics
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-app-text-secondary mt-1">
             Audit logistics performance metrics, delivery speed efficiency, cost per package, and volume trends.
           </p>
         </div>
 
         {/* Time Filter */}
-        <div className="flex bg-white rounded-xl border border-gray-200 p-1 shadow-sm text-xs font-semibold text-gray-600">
+        <div className="flex bg-white rounded-xl border border-app-border p-1 shadow-sm text-xs font-bold text-app-text-secondary">
           {[
             { id: '7days', lbl: '7D' },
             { id: '30days', lbl: '30D' },
@@ -144,7 +145,7 @@ export default function CourierAnalytics() {
               key={t.id}
               onClick={() => setTimeframe(t.id)}
               className={`px-3.5 py-1.5 rounded-lg transition-all ${
-                timeframe === t.id ? 'bg-indigo-600 text-white shadow-sm' : 'hover:bg-gray-50'
+                timeframe === t.id ? 'bg-app-accent text-white shadow-sm' : 'hover:bg-slate-50'
               }`}
             >
               {t.lbl}
@@ -156,38 +157,30 @@ export default function CourierAnalytics() {
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 animate-pulse">
           {[1, 2, 3, 4].map(n => (
-            <div key={n} className="h-24 bg-gray-100 rounded-xl border border-gray-200" />
+            <div key={n} className="h-24 bg-gray-100 rounded-xl border border-app-border" />
           ))}
         </div>
       ) : (
         <>
           {/* Top Scorecard Metrics */}
+          {/* NOTE: StatTile has no secondary-caption slot, so each card's descriptive
+              sub-text (e.g. "Optimal zone", "Fulfillment leakage") is dropped except where it
+              maps cleanly onto the trend prop. StatTile also has no violet/blue/red border-left
+              accent variant per the full design spec's stat-card treatment; using the closest
+              supported accent tokens instead. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {[
-              { label: 'Overall Volumetric Flow', val: `${totalShipments} Parcels`, change: '+12% vs last month', icon: TrendingUp, col: 'indigo' },
-              { label: 'Delivery Success Rate', val: `${successRate.toFixed(1)}%`, change: 'Optimal zone', icon: Percent, col: 'emerald' },
-              { label: 'Carrier Loss / Return Rate', val: `${failRate.toFixed(1)}%`, change: 'Fulfillment leakage', icon: ShieldAlert, col: 'rose' },
-              { label: 'Avg Consignment Charge', val: `BDT ${Math.round(avgCost)}`, change: 'Carrier service rates', icon: DollarSign, col: 'blue' }
-            ].map((card, i) => (
-              <div key={i} className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-start gap-4">
-                <div className={`p-3 rounded-xl bg-${card.col}-50 text-${card.col}-600 border border-${card.col}-100`}>
-                  <card.icon className="h-5 w-5" />
-                </div>
-                <div className="space-y-1">
-                  <span className="text-xs text-gray-500 font-semibold uppercase tracking-wider block">{card.label}</span>
-                  <p className="text-2xl font-bold text-gray-900 font-mono leading-none">{card.val}</p>
-                  <span className="text-[10px] text-gray-400 block font-semibold">{card.change}</span>
-                </div>
-              </div>
-            ))}
+            <StatTile label="Overall Volumetric Flow" value={`${totalShipments} Parcels`} icon={TrendingUp} accent="orange" trend={{ value: '12% vs last month', direction: 'up' }} />
+            <StatTile label="Delivery Success Rate" value={`${successRate.toFixed(1)}%`} icon={Percent} accent="emerald" />
+            <StatTile label="Carrier Loss / Return Rate" value={`${failRate.toFixed(1)}%`} icon={ShieldAlert} accent="rose" />
+            <StatTile label="Avg Consignment Charge" value={`BDT ${Math.round(avgCost)}`} icon={DollarSign} accent="indigo" />
           </div>
 
           {/* Core Analytics Visual Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             {/* Carrier comparison table / progress chart */}
-            <div className="lg:col-span-8 bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4">
-              <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-1.5 border-b border-gray-100 pb-3">
-                <Truck className="h-4 w-4 text-indigo-500" />
+            <div className="lg:col-span-8 bg-white p-6 rounded-card border border-app-border shadow-sm space-y-4">
+              <h3 className="font-extrabold text-app-text-primary text-sm flex items-center gap-1.5 border-b border-app-border pb-3">
+                <Truck className="h-4 w-4 text-app-accent" />
                 Carrier Network Performance Indexes
               </h3>
 
@@ -201,30 +194,30 @@ export default function CourierAnalytics() {
                       <div className="flex justify-between items-center text-sm">
                         <div className="flex items-center gap-2">
                           {stat.logo && (
-                            <img 
-                              src={stat.logo} 
-                              alt={stat.name} 
+                            <img
+                              src={stat.logo}
+                              alt={stat.name}
                               referrerPolicy="no-referrer"
-                              className="h-6 w-6 object-contain rounded bg-gray-50 p-0.5 border border-gray-100" 
+                              className="h-6 w-6 object-contain rounded bg-slate-50 p-0.5 border border-app-border"
                             />
                           )}
-                          <span className="font-semibold text-gray-800">{stat.name}</span>
-                          <span className="text-xs text-gray-400 font-mono">({stat.volume} parcels)</span>
+                          <span className="font-bold text-app-text-primary">{stat.name}</span>
+                          <span className="text-xs text-app-text-muted font-mono">({stat.volume} parcels)</span>
                         </div>
-                        <div className="flex items-center gap-4 text-xs font-mono font-semibold">
-                          <span className="text-gray-500">Speed: {stat.avgDays.toFixed(1)}d</span>
-                          <span className="text-gray-500">Rate: BDT {Math.round(stat.avgCost)}</span>
-                          <span className={isHealthy ? 'text-emerald-600' : 'text-amber-600'}>
+                        <div className="flex items-center gap-4 text-xs font-mono font-bold">
+                          <span className="text-app-text-secondary">Speed: {stat.avgDays.toFixed(1)}d</span>
+                          <span className="text-app-text-secondary">Rate: BDT {Math.round(stat.avgCost)}</span>
+                          <span className={isHealthy ? 'text-app-success' : 'text-app-warning'}>
                             {stat.successRate.toFixed(1)}% Success
                           </span>
                         </div>
                       </div>
 
                       {/* Visual Bar */}
-                      <div className="w-full h-2 rounded-full bg-gray-100 overflow-hidden">
-                        <div 
+                      <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div
                           className={`h-full rounded-full transition-all duration-500 ${
-                            isHealthy ? 'bg-indigo-600' : 'bg-amber-500'
+                            isHealthy ? 'bg-app-accent' : 'bg-app-warning'
                           }`}
                           style={{ width: widthSuccess }}
                         />
@@ -236,10 +229,10 @@ export default function CourierAnalytics() {
             </div>
 
             {/* Geographical volume layout */}
-            <div className="lg:col-span-4 bg-white p-6 rounded-xl border border-gray-200 shadow-sm space-y-4 flex flex-col justify-between">
+            <div className="lg:col-span-4 bg-white p-6 rounded-card border border-app-border shadow-sm space-y-4 flex flex-col justify-between">
               <div>
-                <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-1.5 border-b border-gray-100 pb-3">
-                  <Compass className="h-4 w-4 text-indigo-500" />
+                <h3 className="font-extrabold text-app-text-primary text-sm flex items-center gap-1.5 border-b border-app-border pb-3">
+                  <Compass className="h-4 w-4 text-app-accent" />
                   Top Delivery Hubs
                 </h3>
 
@@ -247,17 +240,17 @@ export default function CourierAnalytics() {
                   {Object.entries(districtVolume).map(([district, volume], i) => {
                     const total = Object.values(districtVolume).reduce((a, b) => a + b, 0);
                     const pct = total > 0 ? (volume / total) * 100 : 0;
-                    
+
                     return (
                       <div key={i} className="space-y-1.5">
                         <div className="flex justify-between items-center text-xs">
-                          <span className="font-semibold text-gray-800">{district} Hub</span>
-                          <span className="font-mono font-semibold text-gray-500">{volume} ({pct.toFixed(0)}%)</span>
+                          <span className="font-bold text-app-text-primary">{district} Hub</span>
+                          <span className="font-mono font-bold text-app-text-secondary">{volume} ({pct.toFixed(0)}%)</span>
                         </div>
-                        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                          <div 
-                            className="h-full bg-indigo-500 rounded-full" 
-                            style={{ width: `${pct}%` }} 
+                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-app-accent rounded-full"
+                            style={{ width: `${pct}%` }}
                           />
                         </div>
                       </div>
@@ -266,7 +259,7 @@ export default function CourierAnalytics() {
                 </div>
               </div>
 
-              <div className="bg-indigo-50/50 p-3 rounded-lg border border-indigo-100/50 text-[11px] text-indigo-700 font-medium leading-relaxed mt-4">
+              <div className="bg-app-bg p-3 rounded-lg border border-app-border text-[11px] text-app-text-secondary font-semibold leading-relaxed mt-4">
                 Dhaka and Chittagong zones handle 80%+ of platform volumetric flow, exhibiting delivery speeds 15% faster than outlying districts.
               </div>
             </div>

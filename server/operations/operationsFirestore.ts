@@ -2,8 +2,11 @@ import { getAdminFirestore, hasFirebaseAdminCredentials } from '../firebaseAdmin
 import type {
   OpsCoupon,
   OpsCouponUsage,
+  OpsFeeCharge,
   OpsLead,
+  OpsPaymentOptionsConfig,
   OpsReview,
+  OpsSellerBookingSettings,
   OpsStorefrontOrder,
   RolePermissionsMap,
 } from './types';
@@ -29,6 +32,9 @@ export interface OperationsSnapshot {
   shipments: OpsShipment[];
   featureFlags: Record<string, boolean>;
   sellerOffers: OpsSellerOfferRow[];
+  feeCharges?: OpsFeeCharge[];
+  paymentOptionsConfig?: OpsPaymentOptionsConfig;
+  sellerBookingSettings?: Record<string, OpsSellerBookingSettings>;
 }
 
 export interface OpsSellerOfferRow {

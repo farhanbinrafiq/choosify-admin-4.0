@@ -1,6 +1,7 @@
 import React from 'react';
 import { Plus, Search, Filter, ShieldCheck, TrendingUp, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { Badge } from '../../components/ui/Badge';
 
 const mockBrands = [
   { id: '1', name: 'Samsung Bangladesh', category: 'Electronics · Mobile', status: 'Verified', followers: '12,400', products: 48, initials: 'SB', color: 'bg-blue-600 text-white' },
@@ -24,7 +25,7 @@ export default function BrandsPage() {
                 <div className="text-[10px] text-app-text-secondary uppercase font-bold tracking-wider mt-0.5">Verified</div>
              </div>
           </div>
-          <button className="bg-[#F4631E] text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg shadow-orange-500/20 hover:scale-105 transition-transform">
+          <button className="bg-app-accent hover:bg-[var(--color-accent-hover)] text-white px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 shadow-lg shadow-orange-500/20 transition-colors">
              <Plus className="w-4 h-4" /> Add Brand
           </button>
        </div>
@@ -63,13 +64,11 @@ export default function BrandsPage() {
                    </div>
                 </div>
                 {brand.status === 'Verified' ? (
-                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-green-500/10 text-green-500 font-bold border border-green-500/20 flex items-center gap-1">
+                  <Badge variant="success" className="gap-1">
                     <ShieldCheck className="w-3 h-3" /> VERIFIED
-                  </span>
+                  </Badge>
                 ) : (
-                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-500 font-bold border border-orange-500/20">
-                    PENDING
-                  </span>
+                  <Badge variant="warning">PENDING</Badge>
                 )}
              </div>
 
@@ -89,7 +88,7 @@ export default function BrandsPage() {
              </div>
 
               <div className="flex gap-2">
-                 <Link to={`/admin/brands/${brand.id}`} className="flex-1 py-2 bg-app-sidebar text-white rounded-lg text-[11px] font-bold opacity-90 hover:opacity-100 text-center transition-colors">View Details</Link>
+                 <Link to={`/admin/brands/${brand.id}`} className="flex-1 py-2 bg-app-accent text-white rounded-lg text-[11px] font-bold hover:bg-[var(--color-accent-hover)] text-center transition-colors">View Details</Link>
                  <button className="flex-1 py-2 border border-app-border text-app-text-secondary rounded-lg text-[11px] font-bold hover:bg-app-bg transition-colors">Edit Page</button>
               </div>
            </div>

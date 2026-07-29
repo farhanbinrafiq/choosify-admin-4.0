@@ -1,30 +1,49 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useReturns, ReturnRequest } from '../../contexts/ReturnsContext';
 import { useOrders } from '../../contexts/OrdersContext';
-import { 
-  Package, Truck, CheckCircle, DollarSign, AlertTriangle, Printer, 
-  ArrowRight, Search, Calendar, Filter, Clock, ChevronRight, Trash2, 
-  Plus, FileText, X, CheckCircle2, RefreshCw, ZoomIn, Eye, MessageSquare, 
+import {
+  Package, Truck, CheckCircle, DollarSign, AlertTriangle, Printer,
+  ArrowRight, Search, Calendar, Filter, Clock, ChevronRight, Trash2,
+  Plus, FileText, X, CheckCircle2, RefreshCw, ZoomIn, Eye, MessageSquare,
   ArrowUpRight, ExternalLink, Download, TrendingUp, HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis, 
-  CartesianGrid, Tooltip, Legend, BarChart, Bar 
+import {
+  ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, XAxis, YAxis,
+  CartesianGrid, Tooltip, Legend, BarChart, Bar
 } from 'recharts';
+import { Badge, BadgeVariant } from '../../components/ui/Badge';
+import { StatTile } from '../../components/ui/StatTile';
+import { Tabs, TabItem } from '../../components/ui/Tabs';
 
-const COLORS = ['#FF6A00', '#FF9E2C', '#3b82f6', '#10b981', '#ef4444'];
+const COLORS = ['#FF5B00', '#F59E0B', '#6C4CFF', '#16A34A', '#DC2626'];
+
+const RETURN_STATUS_VARIANT: Record<string, BadgeVariant> = {
+  initiated: 'warning',
+  dispute: 'danger',
+  rejected: 'neutral',
+  approved: 'info',
+  returned_in_transit: 'accent',
+  received: 'success',
+  refunded: 'success',
+};
+
+const REFUND_STATUS_VARIANT: Record<string, BadgeVariant> = {
+  processed: 'success',
+  failed: 'danger',
+  pending: 'warning',
+};
 
 export default function ReturnsPage() {
-  const { 
-    returnRequests, 
-    approveReturn, 
-    rejectReturn, 
-    processRefund, 
-    addReturnNote, 
-    updateReturnStatus, 
-    generateReturnLabel, 
-    linkReturnToDispute 
+  const {
+    returnRequests,
+    approveReturn,
+    rejectReturn,
+    processRefund,
+    addReturnNote,
+    updateReturnStatus,
+    generateReturnLabel,
+    linkReturnToDispute
   } = useReturns();
 
   const { orders } = useOrders();
@@ -34,13 +53,13 @@ export default function ReturnsPage() {
   const [statusFilter, setStatusFilter] = useState<string>('All');
   const [reasonFilter, setReasonFilter] = useState<string>('All');
   const [dateRange, setDateRange] = useState<'7d' | '30d' | '90d'>('30d');
-  
+
   // Tabs: 'queue' | 'transit' | 'refunds' | 'analytics'
   const [activeTab, setActiveTab] = useState<'queue' | 'transit' | 'refunds' | 'analytics'>('queue');
 
   // Selected Return Detail Modal state
   const [selectedReturnId, setSelectedReturnId] = useState<string | null>(null);
-  
+
   // Local Forms State for active Detail Modal
   const [noteInput, setNoteInput] = useState('');
   const [refundInput, setRefundInput] = useState<number>(0);
@@ -126,6 +145,21 @@ export default function ReturnsPage() {
   const refundedCount = returnRequests.filter(r => r.status === 'refunded').length;
   const activeDisputesCount = returnRequests.filter(r => r.status === 'dispute').length;
 
+  // Tab bucket counts (also used to filter each tab's table below)
+  const queueReturns = filteredReturns.filter(r => r.status === 'initiated' || r.status === 'dispute' || r.status === 'rejected');
+  const transitReturns = filteredReturns.filter(r => r.status === 'approved' || r.status === 'returned_in_transit');
+  const refundsReturns = filteredReturns.filter(r => r.status === 'received' || r.status === 'refunded');
+  const queueCount = returnRequests.filter(r => r.status === 'initiated' || r.status === 'dispute' || r.status === 'rejected').length;
+  const transitTabCount = returnRequests.filter(r => r.status === 'approved' || r.status === 'returned_in_transit').length;
+  const refundsTabCount = returnRequests.filter(r => r.status === 'received' || r.status === 'refunded').length;
+
+  const tabs: TabItem[] = [
+    { key: 'queue', label: 'Return Queue', badge: queueCount },
+    { key: 'transit', label: 'Logistics & Transit', badge: transitTabCount },
+    { key: 'refunds', label: 'Refund Ledger', badge: refundsTabCount },
+    { key: 'analytics', label: 'Insights & Analytics' },
+  ];
+
   // Handle Note Submission
   const handleAddNoteSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,7 +174,7 @@ export default function ReturnsPage() {
     if (!selectedReturnId) return;
     const order = orders.find(o => o.id === selectedReturn?.orderId);
     const limit = order?.total_payable || order?.product.price || 99999;
-    
+
     if (refundInput <= 0) {
       showToast('Refund amount must be greater than zero BDT', 'error');
       return;
@@ -232,7 +266,7 @@ export default function ReturnsPage() {
       'seller_002': { name: 'TechZone BD', total: 12, returned: 1 },
       'seller_003': { name: 'Apex Shoes Bangladesh', total: 24, returned: 0 }
     };
-    
+
     // Aggregate return totals
     returnRequests.forEach(r => {
       if (sellersMap[r.sellerId]) {
@@ -267,50 +301,53 @@ export default function ReturnsPage() {
     });
   };
 
+  const secondaryBtn = 'px-3 py-1.5 bg-white border border-app-border text-app-text-secondary text-xs font-extrabold rounded-md hover:border-app-accent hover:text-app-accent transition-all';
+  const primaryBtn = 'px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold uppercase tracking-wide rounded-md transition-all shadow-sm';
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 p-4 sm:p-6 font-sans">
-      
+    <div className="min-h-screen bg-app-bg text-app-text-primary p-4 sm:p-6 font-sans">
+
       {/* Toast alert notice */}
       <AnimatePresence>
         {toast && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className={`fixed top-6 right-6 z-50 flex items-center space-x-2.5 px-4 py-3 rounded-md shadow-2xl border text-sm font-semibold max-w-sm${
-              toast.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border-emerald-800/50' :
-              toast.type === 'error' ? 'bg-rose-950/90 text-rose-300 border-rose-800/50' :
-              'bg-[#1a1a2e]/95 text-sky-300 border-[#FF6A00]/30'
+            className={`fixed top-6 right-6 z-50 flex items-center space-x-2.5 px-4 py-3 rounded-md shadow-lg border text-sm font-bold max-w-sm ${
+              toast.type === 'success' ? 'bg-[#F0FDF4] text-[#16A34A] border-[#86EFAC]' :
+              toast.type === 'error' ? 'bg-[#FEF2F2] text-[#DC2626] border-[#FCA5A5]' :
+              'bg-white text-app-text-primary border-app-border'
             }`}
           >
-            <div className={`w-2 h-2 rounded-full${toast.type === 'success' ? 'bg-emerald-400' : toast.type === 'error' ? 'bg-rose-400' : 'bg-[#FF6A00]'}animate-pulse`} />
+            <div className={`w-2 h-2 rounded-full shrink-0 ${toast.type === 'success' ? 'bg-[#16A34A]' : toast.type === 'error' ? 'bg-[#DC2626]' : 'bg-app-accent'} animate-pulse`} />
             <span>{toast.message}</span>
           </motion.div>
         )}
       </AnimatePresence>
 
       {/* HEADER SECTION WITH FILTER SLIDER */}
-      <div className="mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-gray-200 pb-5">
+      <div className="mb-6 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 border-b border-app-border pb-5">
         <div>
-          <h1 className="text-xl sm:text-2xl font-black uppercase tracking-wider text-slate-900 flex items-center space-x-2">
-            <Package className="w-6 h-6 text-[#FF6A00]" />
+          <h1 className="text-base sm:text-lg font-extrabold uppercase tracking-wide text-app-text-primary flex items-center space-x-2">
+            <Package className="w-5 h-5 text-app-accent" />
             <span>Returns & Refunds Control Desk</span>
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
+          <p className="text-xs font-semibold text-app-text-muted mt-1">
             Audit customer return complaints, process reverse logistics, and handle payment ledger refunds
           </p>
         </div>
 
         {/* Global Toolbar Controls */}
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center space-x-1.5 bg-[#121424] border border-app-border rounded p-1">
-            <Calendar className="w-3.5 h-3.5 text-app-text-secondary ml-1.5" />
+          <div className="flex items-center space-x-1.5 bg-white border border-app-border rounded-md p-1">
+            <Calendar className="w-3.5 h-3.5 text-app-text-muted ml-1.5" />
             {(['7d', '30d', '90d'] as const).map(range => (
               <button
                 key={range}
                 onClick={() => setDateRange(range)}
-                className={`px-2.5 py-1 text-[10px] font-bold rounded uppercase tracking-wider transition-all${
-                  dateRange === range ? 'bg-[#FF6A00] text-white' : 'text-slate-400 hover:text-white'
+                className={`px-2.5 py-1 text-[10px] font-extrabold rounded uppercase tracking-wider transition-all ${
+                  dateRange === range ? 'bg-app-accent text-white' : 'text-app-text-muted hover:text-app-text-primary'
                 }`}
               >
                 Last {range}
@@ -322,74 +359,30 @@ export default function ReturnsPage() {
 
       {/* STATS COUNT GRID SECTION */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
-        <div className="bg-[#121424] border border-app-border p-4 rounded-lg shadow-md flex items-center space-x-3.5">
-          <div className="p-2.5 rounded bg-orange-950/40 text-[#FF6A00] border border-orange-900/30">
-            <Package className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Initiated</div>
-            <div className="text-lg font-black font-mono text-app-text-primary mt-0.5">
-              {returnRequests.filter(r => r.status === 'initiated').length}
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-[#121424] border border-app-border p-4 rounded-lg shadow-md flex items-center space-x-3.5">
-          <div className="p-2.5 rounded bg-indigo-950/40 text-indigo-400 border border-indigo-900/30">
-            <CheckCircle className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Approved</div>
-            <div className="text-lg font-black font-mono text-app-text-primary mt-0.5">{approvedCount}</div>
-          </div>
-        </div>
-
-        <div className="bg-[#121424] border border-app-border p-4 rounded-lg shadow-md flex items-center space-x-3.5">
-          <div className="p-2.5 rounded bg-blue-950/40 text-blue-400 border border-blue-900/30">
-            <Truck className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">In Transit</div>
-            <div className="text-lg font-black font-mono text-app-text-primary mt-0.5">{transitCount}</div>
-          </div>
-        </div>
-
-        <div className="bg-[#121424] border border-app-border p-4 rounded-lg shadow-md flex items-center space-x-3.5">
-          <div className="p-2.5 rounded bg-emerald-950/40 text-emerald-400 border border-emerald-900/30">
-            <DollarSign className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Refunded</div>
-            <div className="text-lg font-black font-mono text-app-text-primary mt-0.5">{refundedCount}</div>
-          </div>
-        </div>
-
-        <div className="bg-[#121424] border border-app-border p-4 rounded-lg shadow-md col-span-2 md:col-span-1 flex items-center space-x-3.5">
-          <div className="p-2.5 rounded bg-rose-950/40 text-rose-400 border border-rose-900/30">
-            <AlertTriangle className="w-5 h-5" />
-          </div>
-          <div>
-            <div className="text-[10px] uppercase font-bold tracking-wider text-slate-500">Disputes</div>
-            <div className="text-lg font-black font-mono text-app-text-primary mt-0.5">{activeDisputesCount}</div>
-          </div>
+        <StatTile label="Initiated" value={returnRequests.filter(r => r.status === 'initiated').length} icon={Package} accent="orange" />
+        <StatTile label="Approved" value={approvedCount} icon={CheckCircle} accent="indigo" />
+        <StatTile label="In Transit" value={transitCount} icon={Truck} accent="slate" />
+        <StatTile label="Refunded" value={refundedCount} icon={DollarSign} accent="emerald" />
+        <div className="col-span-2 md:col-span-1">
+          <StatTile label="Disputes" value={activeDisputesCount} icon={AlertTriangle} accent="rose" />
         </div>
       </div>
 
       {/* SEARCH AND FILTERS TOOLBAR */}
-      <div className="bg-[#121424] border border-app-border p-3.5 rounded-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        
+      <div className="bg-white border border-app-border p-3.5 rounded-lg mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+
         {/* Search Input */}
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-3 w-4 h-4 text-slate-500" />
+          <Search className="absolute left-3 top-3 w-4 h-4 text-app-text-muted" />
           <input
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             placeholder="Search return by Request ID, Order code, or customer name..."
-            className="w-full pl-9 pr-4 py-2 text-xs bg-[#090a12] border border-app-border rounded text-app-text-secondary placeholder-slate-500 focus:outline-none focus:border-[#FF6A00] transition-colors"
+            className="w-full pl-9 pr-4 py-2 text-xs font-semibold bg-app-bg border border-app-border rounded-md text-app-text-secondary placeholder-app-text-muted focus:outline-none focus:border-app-accent transition-colors"
           />
           {searchTerm && (
-            <button onClick={() => setSearchTerm('')} className="absolute right-3 top-2.5 p-0.5 rounded text-slate-500 hover:text-slate-300">
+            <button onClick={() => setSearchTerm('')} className="absolute right-3 top-2.5 p-0.5 rounded text-app-text-muted hover:text-app-text-primary">
               <X className="w-3.5 h-3.5" />
             </button>
           )}
@@ -397,14 +390,14 @@ export default function ReturnsPage() {
 
         {/* Dropdowns filters */}
         <div className="flex flex-wrap items-center gap-3">
-          
+
           {/* Reason filter */}
-          <div className="flex items-center space-x-1 bg-[#090a12] border border-app-border rounded px-2 py-1.5">
-            <Filter className="w-3.5 h-3.5 text-slate-500" />
+          <div className="flex items-center space-x-1 bg-app-bg border border-app-border rounded-md px-2 py-1.5">
+            <Filter className="w-3.5 h-3.5 text-app-text-muted" />
             <select
               value={reasonFilter}
               onChange={(e) => setReasonFilter(e.target.value)}
-              className="bg-transparent border-none text-app-text-secondary text-xs focus:outline-none pr-1"
+              className="bg-transparent border-none text-app-text-secondary text-xs font-semibold focus:outline-none pr-1"
             >
               <option value="All">All Reasons</option>
               <option value="defective">Defective</option>
@@ -416,12 +409,12 @@ export default function ReturnsPage() {
           </div>
 
           {/* Status filter */}
-          <div className="flex items-center space-x-1 bg-[#090a12] border border-app-border rounded px-2 py-1.5">
-            <Clock className="w-3.5 h-3.5 text-slate-500" />
+          <div className="flex items-center space-x-1 bg-app-bg border border-app-border rounded-md px-2 py-1.5">
+            <Clock className="w-3.5 h-3.5 text-app-text-muted" />
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="bg-transparent border-none text-app-text-secondary text-xs focus:outline-none pr-1"
+              className="bg-transparent border-none text-app-text-secondary text-xs font-semibold focus:outline-none pr-1"
             >
               <option value="All">All Statuses</option>
               <option value="initiated">Initiated</option>
@@ -437,50 +430,14 @@ export default function ReturnsPage() {
       </div>
 
       {/* CORE WORKFLOW TABS VIEW */}
-      <div className="border-b border-app-border mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex space-x-2">
-          <button
-            onClick={() => setActiveTab('queue')}
-            className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all px-4${
-              activeTab === 'queue' ? 'border-[#FF6A00] text-white' : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            Return Queue ({returnRequests.filter(r => r.status === 'initiated' || r.status === 'dispute' || r.status === 'rejected').length})
-          </button>
-          
-          <button
-            onClick={() => setActiveTab('transit')}
-            className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all px-4${
-              activeTab === 'transit' ? 'border-[#FF6A00] text-white' : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            Logistics & Transit ({returnRequests.filter(r => r.status === 'approved' || r.status === 'returned_in_transit').length})
-          </button>
-
-          <button
-            onClick={() => setActiveTab('refunds')}
-            className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all px-4${
-              activeTab === 'refunds' ? 'border-[#FF6A00] text-white' : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            Refund Ledger ({returnRequests.filter(r => r.status === 'received' || r.status === 'refunded').length})
-          </button>
-
-          <button
-            onClick={() => setActiveTab('analytics')}
-            className={`pb-3 text-xs font-black uppercase tracking-widest border-b-2 transition-all px-4${
-              activeTab === 'analytics' ? 'border-[#FF6A00] text-white' : 'border-transparent text-slate-400 hover:text-white'
-            }`}
-          >
-            Insights & Analytics
-          </button>
-        </div>
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <Tabs tabs={tabs} activeKey={activeTab} onChange={(key) => setActiveTab(key as typeof activeTab)} className="border-b-0" />
 
         {activeTab === 'refunds' && (
           <div className="flex items-center space-x-2 pb-2">
             <button
               onClick={handleExportRefundBatch}
-              className="flex items-center space-x-1 bg-sky-950/50 text-sky-400 border border-sky-900/40 px-3 py-1.5 rounded text-xs font-bold hover:bg-sky-900/50 transition-all"
+              className={secondaryBtn + ' flex items-center space-x-1.5'}
             >
               <Download className="w-3.5 h-3.5" />
               <span>Export Refund Batch</span>
@@ -490,14 +447,14 @@ export default function ReturnsPage() {
       </div>
 
       {/* MAIN CONTAINER PANELS */}
-      <div className="bg-[#121424] border border-app-border rounded-lg shadow-xl overflow-hidden">
-        
+      <div className="bg-white border border-app-border rounded-lg shadow-sm overflow-hidden">
+
         {/* TAB 1: RETURN QUEUE */}
         {activeTab === 'queue' && (
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-white/[0.02] border-b border-app-border text-[10px] text-app-text-secondary uppercase tracking-widest font-black">
+                <tr className="bg-[#F9FAFB] border-b border-app-border text-[10px] text-app-text-disabled uppercase tracking-widest font-extrabold">
                   <th className="p-4">Return ID</th>
                   <th className="p-4">Order ID</th>
                   <th className="p-4">Customer Info</th>
@@ -507,48 +464,42 @@ export default function ReturnsPage() {
                   <th className="p-4 text-right">Action Desk</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 text-xs">
-                {filteredReturns.filter(r => r.status === 'initiated' || r.status === 'dispute' || r.status === 'rejected').length > 0 ? (
-                  filteredReturns
-                    .filter(r => r.status === 'initiated' || r.status === 'dispute' || r.status === 'rejected')
-                    .map(ret => {
+              <tbody className="divide-y divide-[#F1F3F5] text-xs">
+                {queueReturns.length > 0 ? (
+                  queueReturns.map(ret => {
                       const order = orders.find(o => o.id === ret.orderId);
                       const customerName = order?.customer.name || 'Unknown Buyer';
                       const customerEmail = order?.customer.email || 'N/A';
                       const productPrice = order?.total_payable || order?.product.price || 0;
 
                       return (
-                        <tr key={ret.id} className="hover:bg-white/[0.01] transition-colors">
-                          <td className="p-4 font-bold font-mono text-[#FF6A00]">{ret.id}</td>
-                          <td className="p-4 font-mono text-app-text-secondary">{ret.orderId}</td>
+                        <tr key={ret.id} className="hover:bg-[#F9FAFB] transition-colors">
+                          <td className="p-4 font-bold font-mono text-app-accent">{ret.id}</td>
+                          <td className="p-4 font-mono font-semibold text-app-text-secondary">{ret.orderId}</td>
                           <td className="p-4">
-                            <div className="font-semibold text-app-text-primary">{customerName}</div>
-                            <div className="text-[10px] text-slate-500 font-mono">{customerEmail}</div>
+                            <div className="font-bold text-app-text-primary">{customerName}</div>
+                            <div className="text-[10px] font-semibold text-app-text-disabled font-mono">{customerEmail}</div>
                           </td>
                           <td className="p-4">
                             <span className="capitalize font-bold text-app-text-secondary">
                               {ret.reason.replace(/_/g, ' ')}
                             </span>
-                            <p className="text-[10px] text-slate-500 truncate max-w-[200px]" title={ret.description}>
+                            <p className="text-[10px] font-semibold text-app-text-disabled truncate max-w-[200px]" title={ret.description}>
                               {ret.description}
                             </p>
                           </td>
-                          <td className="p-4 font-black font-mono text-app-text-primary">
+                          <td className="p-4 font-extrabold font-mono text-app-text-primary">
                             ৳{productPrice.toLocaleString()}
                           </td>
                           <td className="p-4">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider${
-                              ret.status === 'initiated' ? 'bg-orange-950 text-orange-400 border border-orange-800/40' :
-                              ret.status === 'dispute' ? 'bg-rose-950 text-rose-400 border border-rose-800/40' :
-                              'bg-slate-800 text-slate-400'
-                            }`}>
-                              {ret.status}
-                            </span>
+                            <Badge variant={RETURN_STATUS_VARIANT[ret.status] || 'neutral'}>
+                              {ret.status.replace(/_/g, ' ')}
+                            </Badge>
                           </td>
                           <td className="p-4 text-right">
                             <button
                               onClick={() => setSelectedReturnId(ret.id)}
-                              className="px-3 py-1.5 text-xs font-bold text-app-text-secondary bg-app-bg hover:bg-[#FF6A00] hover:text-white rounded transition-all"
+                              className={secondaryBtn}
                             >
                               Process Return
                             </button>
@@ -558,7 +509,7 @@ export default function ReturnsPage() {
                     })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="text-center py-12 text-slate-500 font-mono text-xs">
+                    <td colSpan={7} className="text-center py-12 text-app-text-muted font-mono text-xs">
                       No returns pending audit inside the active filter parameters.
                     </td>
                   </tr>
@@ -573,7 +524,7 @@ export default function ReturnsPage() {
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-white/[0.02] border-b border-app-border text-[10px] text-app-text-secondary uppercase tracking-widest font-black">
+                <tr className="bg-[#F9FAFB] border-b border-app-border text-[10px] text-app-text-disabled uppercase tracking-widest font-extrabold">
                   <th className="p-4">Return ID</th>
                   <th className="p-4">Order ID</th>
                   <th className="p-4">Courier Partner</th>
@@ -583,38 +534,32 @@ export default function ReturnsPage() {
                   <th className="p-4 text-right">Action Desk</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 text-xs">
-                {filteredReturns.filter(r => r.status === 'approved' || r.status === 'returned_in_transit').length > 0 ? (
-                  filteredReturns
-                    .filter(r => r.status === 'approved' || r.status === 'returned_in_transit')
-                    .map(ret => {
+              <tbody className="divide-y divide-[#F1F3F5] text-xs">
+                {transitReturns.length > 0 ? (
+                  transitReturns.map(ret => {
                       return (
-                        <tr key={ret.id} className="hover:bg-white/[0.01] transition-colors">
-                          <td className="p-4 font-bold font-mono text-[#FF6A00]">{ret.id}</td>
-                          <td className="p-4 font-mono text-app-text-secondary">{ret.orderId}</td>
-                          <td className="p-4 font-semibold text-app-text-primary">
+                        <tr key={ret.id} className="hover:bg-[#F9FAFB] transition-colors">
+                          <td className="p-4 font-bold font-mono text-app-accent">{ret.id}</td>
+                          <td className="p-4 font-mono font-semibold text-app-text-secondary">{ret.orderId}</td>
+                          <td className="p-4 font-bold text-app-text-primary">
                             {ret.returnCourier || '[Courier Unassigned]'}
                           </td>
                           <td className="p-4 font-mono">
                             {ret.returnTrackingId ? (
-                              <span className="bg-[#090a12] border border-app-border px-2 py-1 rounded text-app-text-secondary select-all">
+                              <span className="bg-app-bg border border-app-border px-2 py-1 rounded text-app-text-secondary font-semibold select-all">
                                 {ret.returnTrackingId}
                               </span>
                             ) : (
-                              <span className="text-slate-500 font-bold lowercase italic">waiting generation</span>
+                              <span className="text-app-text-disabled font-bold lowercase italic">waiting generation</span>
                             )}
                           </td>
-                          <td className="p-4 font-black font-mono text-app-text-primary">
+                          <td className="p-4 font-extrabold font-mono text-app-text-primary">
                             ৳{(ret.refundAmount || 0).toLocaleString()}
                           </td>
                           <td className="p-4">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider${
-                              ret.status === 'approved' ? 'bg-indigo-950 text-indigo-400 border border-indigo-800/40' :
-                              ret.status === 'returned_in_transit' ? 'bg-blue-950 text-blue-400 border border-blue-800/40' :
-                              'bg-slate-850 text-slate-400'
-                            }`}>
+                            <Badge variant={RETURN_STATUS_VARIANT[ret.status] || 'neutral'}>
                               {ret.status.replace(/_/g, ' ')}
-                            </span>
+                            </Badge>
                           </td>
                           <td className="p-4 text-right space-x-2">
                             {ret.returnTrackingId && (
@@ -622,7 +567,7 @@ export default function ReturnsPage() {
                                 href={`https://track.pathao.com/ret/${ret.returnTrackingId}`}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="inline-flex items-center space-x-1 px-2.5 py-1.5 text-xs bg-app-bg text-app-text-secondary hover:bg-slate-750 rounded transition-all"
+                                className={secondaryBtn + ' inline-flex items-center space-x-1'}
                               >
                                 <ExternalLink className="w-3.5 h-3.5" />
                                 <span>Track</span>
@@ -630,7 +575,7 @@ export default function ReturnsPage() {
                             )}
                             <button
                               onClick={() => setSelectedReturnId(ret.id)}
-                              className="px-3 py-1.5 text-xs font-bold text-app-text-primary bg-app-bg hover:bg-[#FF6A00] hover:text-white rounded transition-all"
+                              className={secondaryBtn}
                             >
                               Dispatch Logistics
                             </button>
@@ -640,7 +585,7 @@ export default function ReturnsPage() {
                     })
                 ) : (
                   <tr>
-                    <td colSpan={7} className="text-center py-12 text-slate-500 font-mono text-xs">
+                    <td colSpan={7} className="text-center py-12 text-app-text-muted font-mono text-xs">
                       No return items currently transitioning logistics routes.
                     </td>
                   </tr>
@@ -655,7 +600,7 @@ export default function ReturnsPage() {
           <div className="overflow-x-auto custom-scrollbar">
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-white/[0.02] border-b border-app-border text-[10px] text-app-text-secondary uppercase tracking-widest font-black">
+                <tr className="bg-[#F9FAFB] border-b border-app-border text-[10px] text-app-text-disabled uppercase tracking-widest font-extrabold">
                   <th className="p-4">Return ID</th>
                   <th className="p-4">Customer Info</th>
                   <th className="p-4">Refund Amount</th>
@@ -664,41 +609,35 @@ export default function ReturnsPage() {
                   <th className="p-4 text-right">Refund Action Desk</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60 text-xs">
-                {filteredReturns.filter(r => r.status === 'received' || r.status === 'refunded').length > 0 ? (
-                  filteredReturns
-                    .filter(r => r.status === 'received' || r.status === 'refunded')
-                    .map(ret => {
+              <tbody className="divide-y divide-[#F1F3F5] text-xs">
+                {refundsReturns.length > 0 ? (
+                  refundsReturns.map(ret => {
                       const order = orders.find(o => o.id === ret.orderId);
                       const customerName = order?.customer.name || 'Unknown Buyer';
                       const customerEmail = order?.customer.email || 'N/A';
 
                       return (
-                        <tr key={ret.id} className="hover:bg-white/[0.01] transition-colors">
-                          <td className="p-4 font-bold font-mono text-[#FF6A00]">{ret.id}</td>
+                        <tr key={ret.id} className="hover:bg-[#F9FAFB] transition-colors">
+                          <td className="p-4 font-bold font-mono text-app-accent">{ret.id}</td>
                           <td className="p-4">
-                            <div className="font-semibold text-app-text-primary">{customerName}</div>
-                            <div className="text-[10px] text-slate-500 font-mono">{customerEmail}</div>
+                            <div className="font-bold text-app-text-primary">{customerName}</div>
+                            <div className="text-[10px] font-semibold text-app-text-disabled font-mono">{customerEmail}</div>
                           </td>
-                          <td className="p-4 font-black font-mono text-[#FF9E2C]">
+                          <td className="p-4 font-extrabold font-mono text-app-accent">
                             ৳{(ret.refundAmount || 0).toLocaleString()}
                           </td>
                           <td className="p-4">
-                            <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider${
-                              ret.refundStatus === 'processed' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/40' :
-                              ret.refundStatus === 'failed' ? 'bg-rose-950 text-rose-400 border border-rose-800/40' :
-                              'bg-amber-950 text-amber-400 border border-amber-800/40'
-                            }`}>
+                            <Badge variant={REFUND_STATUS_VARIANT[ret.refundStatus] || 'neutral'}>
                               {ret.refundStatus}
-                            </span>
+                            </Badge>
                           </td>
-                          <td className="p-4 text-app-text-secondary font-mono">
+                          <td className="p-4 text-app-text-secondary font-mono font-semibold">
                             {new Date(ret.updatedAt).toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' })}
                           </td>
                           <td className="p-4 text-right">
                             <button
                               onClick={() => setSelectedReturnId(ret.id)}
-                              className="px-3 py-1.5 text-xs font-bold text-app-text-primary bg-app-bg hover:bg-[#FF6A00] hover:text-white rounded transition-all"
+                              className={secondaryBtn}
                             >
                               Manage Refund
                             </button>
@@ -708,7 +647,7 @@ export default function ReturnsPage() {
                     })
                 ) : (
                   <tr>
-                    <td colSpan={6} className="text-center py-12 text-slate-500 font-mono text-xs">
+                    <td colSpan={6} className="text-center py-12 text-app-text-muted font-mono text-xs">
                       No payments ready for or logged in the refund channels.
                     </td>
                   </tr>
@@ -722,10 +661,10 @@ export default function ReturnsPage() {
         {activeTab === 'analytics' && (
           <div className="p-5 space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              
+
               {/* Chart 1: Return rate by reason */}
-              <div className="bg-[#090a12] border border-app-border p-4 rounded-lg">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-app-text-secondary mb-4">
+              <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg">
+                <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-app-text-disabled mb-4">
                   Returns Share by Customer Reason
                 </h3>
                 <div className="h-64">
@@ -752,8 +691,8 @@ export default function ReturnsPage() {
               </div>
 
               {/* Chart 2: Returns 7 Day Trend */}
-              <div className="bg-[#090a12] border border-app-border p-4 rounded-lg">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-app-text-secondary mb-4">
+              <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg">
+                <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-app-text-disabled mb-4">
                   Daily Reverse Logistics Pipeline Trend (7 Days)
                 </h3>
                 <div className="h-64">
@@ -761,15 +700,15 @@ export default function ReturnsPage() {
                     <AreaChart data={get7DayTrendData()}>
                       <defs>
                         <linearGradient id="colorReturns" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#FF6A00" stopOpacity={0.4}/>
-                          <stop offset="95%" stopColor="#FF6A00" stopOpacity={0}/>
+                          <stop offset="5%" stopColor="#FF5B00" stopOpacity={0.4}/>
+                          <stop offset="95%" stopColor="#FF5B00" stopOpacity={0}/>
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                      <XAxis dataKey="date" stroke="#9ca3af" fontSize={10} />
-                      <YAxis stroke="#9ca3af" fontSize={10} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#E8EDF2" />
+                      <XAxis dataKey="date" stroke="#9CA3AF" fontSize={10} />
+                      <YAxis stroke="#9CA3AF" fontSize={10} />
                       <Tooltip />
-                      <Area type="monotone" dataKey="Returns" stroke="#FF6A00" fillOpacity={1} fill="url(#colorReturns)" />
+                      <Area type="monotone" dataKey="Returns" stroke="#FF5B00" fillOpacity={1} fill="url(#colorReturns)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -779,29 +718,29 @@ export default function ReturnsPage() {
 
             {/* Performance table and Common factors row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
+
               {/* Merchant return rates */}
-              <div className="bg-[#090a12] border border-app-border p-4 rounded-lg lg:col-span-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-app-text-secondary mb-4">
+              <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg lg:col-span-2">
+                <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-app-text-disabled mb-4">
                   Returns Rate Breakdown by Seller Store
                 </h3>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
-                      <tr className="border-b border-app-border font-extrabold uppercase text-[10px] text-slate-500">
+                      <tr className="border-b border-app-border font-extrabold uppercase text-[10px] text-app-text-disabled">
                         <th className="pb-2">Merchant Partner Name</th>
                         <th className="pb-2 text-center">Fulfillments</th>
                         <th className="pb-2 text-center">Returns Checked</th>
                         <th className="pb-2 text-right">Returns Rate %</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-850 text-app-text-secondary">
+                    <tbody className="divide-y divide-[#F1F3F5] text-app-text-secondary">
                       {getSellerPerformanceData().map((s, idx) => (
-                        <tr key={idx} className="hover:bg-white/[0.01]">
-                          <td className="py-2.5 font-semibold text-app-text-primary">{s.name}</td>
-                          <td className="py-2.5 text-center font-mono">{s.total}</td>
-                          <td className="py-2.5 text-center font-mono text-orange-400">{s.returned}</td>
-                          <td className="py-2.5 text-right font-mono font-black text-rose-400">
+                        <tr key={idx} className="hover:bg-white">
+                          <td className="py-2.5 font-bold text-app-text-primary">{s.name}</td>
+                          <td className="py-2.5 text-center font-mono font-semibold">{s.total}</td>
+                          <td className="py-2.5 text-center font-mono font-semibold text-app-accent">{s.returned}</td>
+                          <td className="py-2.5 text-right font-mono font-extrabold text-[#DC2626]">
                             {s.rate}%
                           </td>
                         </tr>
@@ -812,21 +751,21 @@ export default function ReturnsPage() {
               </div>
 
               {/* Quick advice/audit center info */}
-              <div className="bg-[#090a12] border border-app-border p-4 rounded-lg flex flex-col justify-between">
+              <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg flex flex-col justify-between">
                 <div>
-                  <h4 className="text-xs font-bold uppercase text-[#FF6A00] tracking-wider mb-2">
+                  <h4 className="text-xs font-extrabold uppercase text-app-accent tracking-wider mb-2">
                     Logistics Health Summary
                   </h4>
-                  <p className="text-[11px] text-app-text-secondary leading-relaxed mb-3">
+                  <p className="text-[11px] font-semibold text-app-text-secondary leading-relaxed mb-3">
                     Defective merchandise represents <strong>42% of total logged returns</strong> this period. Sizing miscalculations account for the rest.
                   </p>
-                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                  <p className="text-[11px] font-semibold text-app-text-muted leading-relaxed">
                     Check size charts on sellers catalogs. Flag merchant profiles experiencing return rates above 15% immediately to prevent bad customer satisfaction.
                   </p>
                 </div>
-                <div className="border-t border-app-border pt-3 mt-4 text-[10px] font-bold font-mono text-slate-500 flex items-center justify-between">
+                <div className="border-t border-app-border pt-3 mt-4 text-[10px] font-extrabold font-mono text-app-text-disabled flex items-center justify-between">
                   <span>Audit Desk Checked:</span>
-                  <span className="text-[#FF6A00]">2026-06-27</span>
+                  <span className="text-app-accent">2026-06-27</span>
                 </div>
               </div>
 
@@ -839,52 +778,52 @@ export default function ReturnsPage() {
       {/* DETAIL AUDIT & PROCESS MODAL */}
       <AnimatePresence>
         {selectedReturnId && selectedReturn && (
-          <div className="fixed inset-0 bg-app-card/20 flex items-center justify-center p-4 z-40 backdrop-blur-sm overflow-y-auto">
-            <motion.div 
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-40 backdrop-blur-sm overflow-y-auto">
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-[#121424] border border-app-border rounded-lg max-w-4xl w-full shadow-2xl overflow-hidden my-8"
+              className="bg-white border border-app-border rounded-lg max-w-4xl w-full shadow-2xl overflow-hidden my-8"
             >
-              
+
               {/* Modal Title bar */}
-              <div className="bg-white/[0.02] border-b border-app-border px-5 py-4 flex items-center justify-between">
+              <div className="bg-[#F9FAFB] border-b border-app-border px-5 py-4 flex items-center justify-between">
                 <div className="flex items-center space-x-2.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-[#FF6A00] animate-ping" />
-                  <h3 className="text-sm font-black uppercase tracking-wider text-app-text-primary">
-                    Audit Return: <span className="text-[#FF6A00] font-mono">{selectedReturn.id}</span>
+                  <div className="w-2.5 h-2.5 rounded-full bg-app-accent animate-ping" />
+                  <h3 className="text-sm font-extrabold uppercase tracking-wide text-app-text-primary">
+                    Audit Return: <span className="text-app-accent font-mono">{selectedReturn.id}</span>
                   </h3>
                 </div>
-                <button 
+                <button
                   onClick={() => setSelectedReturnId(null)}
-                  className="p-1 rounded text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
+                  className="p-1 rounded text-app-text-muted hover:text-app-text-primary hover:bg-app-bg transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
               {/* Split layout inside modal */}
-              <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-800">
-                
+              <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-app-border">
+
                 {/* LEFT SIDE: INITIATOR AND EVIDENCE DETS */}
                 <div className="p-5 space-y-4">
-                  
+
                   {/* Customer Information */}
                   <div>
-                    <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-1.5">
+                    <h4 className="text-[10px] font-extrabold uppercase text-app-text-disabled tracking-widest mb-1.5">
                       Initiating Customer
                     </h4>
                     {(() => {
                       const order = orders.find(o => o.id === selectedReturn.orderId);
                       return (
-                        <div className="bg-[#090a12] border border-app-border p-3 rounded flex items-center justify-between">
+                        <div className="bg-[#F9FAFB] border border-app-border p-3 rounded-md flex items-center justify-between">
                           <div>
                             <div className="font-bold text-app-text-primary text-xs">{order?.customer.name || 'Unknown'}</div>
-                            <div className="text-[10px] text-slate-500 font-mono">{order?.customer.email || 'N/A'}</div>
+                            <div className="text-[10px] font-semibold text-app-text-disabled font-mono">{order?.customer.email || 'N/A'}</div>
                           </div>
                           <div className="text-right">
-                            <div className="text-[9px] uppercase font-bold text-slate-500">Total Purchase</div>
-                            <div className="text-xs font-black font-mono text-app-text-primary mt-0.5">
+                            <div className="text-[9px] uppercase font-extrabold text-app-text-disabled">Total Purchase</div>
+                            <div className="text-xs font-extrabold font-mono text-app-text-primary mt-0.5">
                               ৳{(order?.total_payable || order?.product.price || 0).toLocaleString()}
                             </div>
                           </div>
@@ -896,41 +835,41 @@ export default function ReturnsPage() {
                   {/* Return details */}
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                      <span className="text-[10px] font-extrabold uppercase text-app-text-disabled tracking-widest">
                         Return Reason:
                       </span>
-                      <span className="capitalize text-xs font-black text-app-text-primary bg-app-bg px-2 py-0.5 rounded">
+                      <span className="capitalize text-xs font-extrabold text-app-text-primary bg-[#F9FAFB] border border-app-border px-2 py-0.5 rounded">
                         {selectedReturn.reason.replace(/_/g, ' ')}
                       </span>
                     </div>
 
-                    <div className="bg-[#090a12] border border-app-border p-3 rounded text-xs text-app-text-secondary min-h-[60px] leading-relaxed">
+                    <div className="bg-[#F9FAFB] border border-app-border p-3 rounded-md text-xs font-semibold text-app-text-secondary min-h-[60px] leading-relaxed">
                       {selectedReturn.description}
                     </div>
                   </div>
 
                   {/* Evidence Photo Grid with high-res zoom triggers */}
                   <div>
-                    <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-2">
+                    <h4 className="text-[10px] font-extrabold uppercase text-app-text-disabled tracking-widest mb-2">
                       Evidence Photos ({selectedReturn.evidencePhotos.length})
                     </h4>
                     {selectedReturn.evidencePhotos.length > 0 ? (
                       <div className="grid grid-cols-4 gap-2">
                         {selectedReturn.evidencePhotos.map((img, i) => (
-                          <div 
-                            key={i} 
+                          <div
+                            key={i}
                             onClick={() => setZoomImg(img)}
-                            className="relative group aspect-square rounded overflow-hidden bg-app-card border border-app-border cursor-zoom-in"
+                            className="relative group aspect-square rounded-md overflow-hidden bg-white border border-app-border cursor-zoom-in"
                           >
                             <img src={img} alt="evidence" className="w-full h-full object-cover group-hover:scale-105 transition-all" />
-                            <div className="absolute inset-0 bg-app-card/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
-                              <ZoomIn className="w-4 h-4 text-app-text-primary" />
+                            <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-all">
+                              <ZoomIn className="w-4 h-4 text-white" />
                             </div>
                           </div>
                         ))}
                       </div>
                     ) : (
-                      <div className="bg-[#090a12] border border-app-border p-4 rounded text-center text-slate-600 font-mono text-[11px]">
+                      <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-md text-center text-app-text-disabled font-mono text-[11px] font-semibold">
                         No evidence photographs uploaded with request.
                       </div>
                     )}
@@ -940,50 +879,50 @@ export default function ReturnsPage() {
                   <div className="pt-2">
                     <button
                       onClick={handlePrintLabel}
-                      className="w-full flex items-center justify-center space-x-1.5 px-4 py-2.5 bg-app-bg hover:bg-slate-750 text-app-text-secondary hover:text-white border border-app-border rounded text-xs font-bold transition-all shadow-md"
+                      className="w-full flex items-center justify-center space-x-1.5 px-4 py-2.5 bg-white hover:border-app-accent hover:text-app-accent text-app-text-secondary border border-app-border rounded-md text-xs font-extrabold transition-all"
                     >
-                      <Printer className="w-4 h-4 text-[#FF6A00]" />
+                      <Printer className="w-4 h-4 text-app-accent" />
                       <span>Print Prepaid Shipping Return Label</span>
                     </button>
                   </div>
 
                   {/* Status progression Timeline */}
                   <div>
-                    <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-widest mb-3">
+                    <h4 className="text-[10px] font-extrabold uppercase text-app-text-disabled tracking-widest mb-3">
                       Logistics Pipeline Status
                     </h4>
                     <div className="relative pl-5 border-l-2 border-app-border space-y-4 text-[11px]">
-                      
+
                       <div className="relative">
-                        <span className="absolute -left-[27px] top-0.5 w-3 h-3 rounded-full bg-[#FF6A00] border-2 border-[#121424]" />
+                        <span className="absolute -left-[27px] top-0.5 w-3 h-3 rounded-full bg-app-accent border-2 border-white" />
                         <div className="font-bold text-app-text-secondary">Complaint Initiated</div>
-                        <div className="text-[9px] text-slate-500 font-mono">
+                        <div className="text-[9px] font-semibold text-app-text-disabled font-mono">
                           {new Date(selectedReturn.createdAt).toLocaleString()}
                         </div>
                       </div>
 
                       <div className="relative">
-                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-[#121424]${
-                          selectedReturn.status !== 'initiated' ? 'bg-[#FF9E2C]' : 'bg-slate-800'
+                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-white ${
+                          selectedReturn.status !== 'initiated' ? 'bg-app-accent' : 'bg-app-border'
                         }`} />
                         <div className="font-bold text-app-text-secondary">Review & Approved</div>
                         {selectedReturn.approvedAt && (
-                          <div className="text-[9px] text-slate-500 font-mono">
+                          <div className="text-[9px] font-semibold text-app-text-disabled font-mono">
                             {new Date(selectedReturn.approvedAt).toLocaleString()}
                           </div>
                         )}
                       </div>
 
                       <div className="relative">
-                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-[#121424]${
-                          selectedReturn.status === 'returned_in_transit' || selectedReturn.status === 'received' || selectedReturn.status === 'refunded' ? 'bg-sky-400' : 'bg-slate-800'
+                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-white ${
+                          selectedReturn.status === 'returned_in_transit' || selectedReturn.status === 'received' || selectedReturn.status === 'refunded' ? 'bg-[#6C4CFF]' : 'bg-app-border'
                         }`} />
                         <div className="font-bold text-app-text-secondary">Transit & Logistics Pickup</div>
                       </div>
 
                       <div className="relative">
-                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-[#121424]${
-                          selectedReturn.status === 'received' || selectedReturn.status === 'refunded' ? 'bg-emerald-400' : 'bg-slate-800'
+                        <span className={`absolute -left-[27px] top-0.5 w-3 h-3 rounded-full border-2 border-white ${
+                          selectedReturn.status === 'received' || selectedReturn.status === 'refunded' ? 'bg-[#16A34A]' : 'bg-app-border'
                         }`} />
                         <div className="font-bold text-app-text-secondary">Item Received & Verified</div>
                       </div>
@@ -995,24 +934,24 @@ export default function ReturnsPage() {
 
                 {/* RIGHT SIDE: AUDITING CONTROLS AND NOTE WRITER */}
                 <div className="p-5 flex flex-col justify-between space-y-5">
-                  
+
                   {/* Audit Control Desk Form */}
                   <div className="space-y-4">
-                    <h4 className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
+                    <h4 className="text-[10px] font-extrabold uppercase text-app-text-disabled tracking-widest">
                       Auditor Control Actions
                     </h4>
 
                     {/* Pending review approvals */}
                     {selectedReturn.status === 'initiated' && (
-                      <div className="bg-[#090a12] border border-app-border p-4 rounded-lg space-y-3">
-                        <p className="text-[11px] text-app-text-secondary leading-relaxed">
+                      <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg space-y-3">
+                        <p className="text-[11px] font-semibold text-app-text-secondary leading-relaxed">
                           Analyze complaint details. To approve, specify correct refund ledger value (cannot exceed order total).
                         </p>
 
                         {!isRejecting ? (
                           <>
                             <div>
-                              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                              <label className="text-[9px] font-extrabold text-app-text-disabled uppercase tracking-wider block mb-1">
                                 Lock Refund Ledger (BDT)
                               </label>
                               <div className="relative">
@@ -1021,7 +960,7 @@ export default function ReturnsPage() {
                                   type="number"
                                   value={refundInput}
                                   onChange={(e) => setRefundInput(parseFloat(e.target.value) || 0)}
-                                  className="w-full pl-6 pr-3 py-1.5 bg-[#121424] border border-app-border rounded text-xs font-bold font-mono text-[#FF6A00]"
+                                  className="w-full pl-6 pr-3 py-1.5 bg-white border border-app-border rounded-md text-xs font-bold font-mono text-app-accent"
                                 />
                               </div>
                             </div>
@@ -1029,13 +968,13 @@ export default function ReturnsPage() {
                             <div className="grid grid-cols-2 gap-2">
                               <button
                                 onClick={() => setIsRejecting(true)}
-                                className="px-3 py-2 bg-rose-950/30 text-rose-400 border border-rose-900/40 hover:bg-rose-900/20 text-xs font-bold rounded transition-all"
+                                className="px-3 py-2 bg-white text-[#DC2626] border border-app-border hover:bg-[#FEF2F2] text-xs font-extrabold rounded-md transition-all"
                               >
                                 Reject Return
                               </button>
                               <button
                                 onClick={handleApprove}
-                                className="px-4 py-2 bg-[#FF6A00] hover:bg-[#FF9E2C] text-app-text-primary text-xs font-black uppercase tracking-wider rounded transition-all shadow-md"
+                                className="px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold uppercase tracking-wider rounded-md transition-all shadow-sm"
                               >
                                 Approve Return
                               </button>
@@ -1044,27 +983,27 @@ export default function ReturnsPage() {
                         ) : (
                           <div className="space-y-3">
                             <div>
-                              <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                              <label className="text-[9px] font-extrabold text-app-text-disabled uppercase tracking-wider block mb-1">
                                 Rejection Justification
                               </label>
                               <textarea
                                 value={rejectReasonInput}
                                 onChange={(e) => setRejectReasonInput(e.target.value)}
                                 placeholder="Describe why this complaint is rejected (e.g. item worn/missing box)..."
-                                className="w-full px-3 py-1.5 bg-[#121424] border border-app-border rounded text-xs text-app-text-secondary placeholder-slate-600 focus:outline-none"
+                                className="w-full px-3 py-1.5 bg-white border border-app-border rounded-md text-xs font-semibold text-app-text-secondary placeholder-app-text-disabled focus:outline-none"
                                 rows={2}
                               />
                             </div>
                             <div className="flex justify-end space-x-2">
                               <button
                                 onClick={() => setIsRejecting(false)}
-                                className="px-3 py-1.5 text-xs text-app-text-secondary hover:text-white transition-colors"
+                                className="px-3 py-1.5 text-xs font-bold text-app-text-secondary hover:text-app-text-primary transition-colors"
                               >
                                 Cancel
                               </button>
                               <button
                                 onClick={handleReject}
-                                className="px-4 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded transition-all"
+                                className="px-4 py-1.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-extrabold rounded-md transition-all"
                               >
                                 Confirm Rejection
                               </button>
@@ -1076,23 +1015,23 @@ export default function ReturnsPage() {
 
                     {/* Logistics Courier assignment controls */}
                     {selectedReturn.status === 'approved' && (
-                      <div className="bg-[#090a12] border border-app-border p-4 rounded-lg space-y-3">
+                      <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg space-y-3">
                         <div className="text-[11px] font-bold text-app-text-secondary">
                           Configure Reverse Shipment Courier
                         </div>
-                        <p className="text-[10px] text-slate-500 leading-relaxed">
+                        <p className="text-[10px] font-semibold text-app-text-disabled leading-relaxed">
                           Provide courier routing information to notify courier warehouse pickup.
                         </p>
 
                         <div className="grid grid-cols-2 gap-2">
                           <div>
-                            <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                            <label className="text-[8px] font-extrabold text-app-text-disabled uppercase tracking-wider block mb-1">
                               Courier
                             </label>
                             <select
                               value={courierInput}
                               onChange={(e) => setCourierInput(e.target.value)}
-                              className="w-full px-2 py-1.5 bg-[#121424] border border-app-border rounded text-xs text-app-text-secondary focus:outline-none"
+                              className="w-full px-2 py-1.5 bg-white border border-app-border rounded-md text-xs font-semibold text-app-text-secondary focus:outline-none"
                             >
                               <option value="Pathao Delivery">Pathao Delivery</option>
                               <option value="Steadfast Courier">Steadfast Courier</option>
@@ -1101,7 +1040,7 @@ export default function ReturnsPage() {
                             </select>
                           </div>
                           <div>
-                            <label className="text-[8px] font-bold text-slate-500 uppercase tracking-wider block mb-1">
+                            <label className="text-[8px] font-extrabold text-app-text-disabled uppercase tracking-wider block mb-1">
                               Tracking ID
                             </label>
                             <input
@@ -1109,7 +1048,7 @@ export default function ReturnsPage() {
                               value={trackingIdInput}
                               onChange={(e) => setTrackingIdInput(e.target.value)}
                               placeholder="e.g. TRACK-91283"
-                              className="w-full px-2 py-1.5 bg-[#121424] border border-app-border rounded text-xs text-app-text-secondary focus:outline-none"
+                              className="w-full px-2 py-1.5 bg-white border border-app-border rounded-md text-xs font-semibold text-app-text-secondary focus:outline-none"
                             />
                           </div>
                         </div>
@@ -1123,7 +1062,7 @@ export default function ReturnsPage() {
                             updateReturnStatus(selectedReturn.id, 'returned_in_transit');
                             showToast('Logistics configured & transit started', 'success');
                           }}
-                          className="w-full py-2 bg-blue-600 hover:bg-blue-500 text-app-text-primary text-xs font-bold rounded transition-all"
+                          className="w-full py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold rounded-md transition-all"
                         >
                           Mark as Shipped/In Transit
                         </button>
@@ -1132,11 +1071,11 @@ export default function ReturnsPage() {
 
                     {/* Item receipt verification */}
                     {selectedReturn.status === 'returned_in_transit' && (
-                      <div className="bg-[#090a12] border border-app-border p-4 rounded-lg space-y-3">
+                      <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg space-y-3">
                         <div className="text-[11px] font-bold text-app-text-secondary">
                           Inspect & Verify Returned Goods
                         </div>
-                        <p className="text-[10px] text-slate-500 leading-relaxed">
+                        <p className="text-[10px] font-semibold text-app-text-disabled leading-relaxed">
                           Once the return package lands in the seller warehouse, mark as received to trigger final refund ledger step.
                         </p>
                         <button
@@ -1144,7 +1083,7 @@ export default function ReturnsPage() {
                             updateReturnStatus(selectedReturn.id, 'received');
                             showToast('Item received and logged into ERP ledger.', 'success');
                           }}
-                          className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold rounded transition-all"
+                          className="w-full py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold rounded-md transition-all"
                         >
                           Mark as Received at Warehouse
                         </button>
@@ -1153,16 +1092,16 @@ export default function ReturnsPage() {
 
                     {/* Process Refund to Gateway */}
                     {selectedReturn.status === 'received' && (
-                      <div className="bg-[#090a12] border border-app-border p-4 rounded-lg space-y-3">
+                      <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg space-y-3">
                         <div className="text-[11px] font-bold text-app-text-secondary">
                           Ready for Payment Refund Channels
                         </div>
-                        <p className="text-[10px] text-slate-500 leading-relaxed">
+                        <p className="text-[10px] font-semibold text-app-text-disabled leading-relaxed">
                           Verification successfully audited. Click to authorize BDT <strong>৳{(selectedReturn.refundAmount || 0).toLocaleString()}</strong> payout back to customer's source account.
                         </p>
                         <button
                           onClick={handleProcessRefund}
-                          className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded transition-all"
+                          className="w-full py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold rounded-md transition-all"
                         >
                           Process & Issue Refund Payment
                         </button>
@@ -1171,12 +1110,12 @@ export default function ReturnsPage() {
 
                     {/* Resolved view */}
                     {(selectedReturn.status === 'refunded' || selectedReturn.status === 'rejected') && (
-                      <div className="bg-[#090a12] border border-app-border p-4 rounded-lg text-center space-y-2">
-                        <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto" />
-                        <div className="text-xs font-bold text-app-text-primary uppercase tracking-wider">
+                      <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg text-center space-y-2">
+                        <CheckCircle2 className="w-8 h-8 text-[#16A34A] mx-auto" />
+                        <div className="text-xs font-extrabold text-app-text-primary uppercase tracking-wider">
                           Taxonomy Rule Closed
                         </div>
-                        <p className="text-[11px] text-slate-500 leading-relaxed">
+                        <p className="text-[11px] font-semibold text-app-text-disabled leading-relaxed">
                           This return complaint has reached a final resolution state and the order ledger remains locked.
                         </p>
                       </div>
@@ -1185,14 +1124,14 @@ export default function ReturnsPage() {
                     {/* Dispute escalation tool */}
                     {selectedReturn.status !== 'dispute' && selectedReturn.status !== 'refunded' && selectedReturn.status !== 'rejected' && (
                       <div className="border-t border-app-border pt-3 flex justify-between items-center text-xs">
-                        <span className="text-slate-500 font-medium">Logistics conflict?</span>
+                        <span className="text-app-text-muted font-semibold">Logistics conflict?</span>
                         <button
                           type="button"
                           onClick={() => {
                             linkReturnToDispute(selectedReturn.id, `DISP-${Math.floor(1000 + Math.random() * 9000)}`);
                             showToast('Return escalated to Dispute channels', 'info');
                           }}
-                          className="text-red-400 hover:text-red-300 font-bold hover:underline"
+                          className="text-[#DC2626] hover:text-[#B91C1C] font-extrabold hover:underline"
                         >
                           Escalate to Dispute Resolution
                         </button>
@@ -1202,15 +1141,15 @@ export default function ReturnsPage() {
                   </div>
 
                   {/* NOTE KEEPER LOG */}
-                  <div className="flex-1 flex flex-col min-h-[160px] bg-[#090a12] border border-app-border p-3 rounded-lg">
-                    <h5 className="text-[9px] font-extrabold text-app-text-secondary uppercase tracking-wider mb-2 flex items-center space-x-1">
-                      <MessageSquare className="w-3.5 h-3.5 text-slate-500" />
+                  <div className="flex-1 flex flex-col min-h-[160px] bg-[#F9FAFB] border border-app-border p-3 rounded-lg">
+                    <h5 className="text-[9px] font-extrabold text-app-text-disabled uppercase tracking-wider mb-2 flex items-center space-x-1">
+                      <MessageSquare className="w-3.5 h-3.5 text-app-text-disabled" />
                       <span>Internal Admin Notes Log</span>
                     </h5>
-                    
-                    <div className="flex-1 overflow-y-auto max-h-[120px] custom-scrollbar space-y-2 pr-1 text-[10px] text-app-text-secondary mb-3">
+
+                    <div className="flex-1 overflow-y-auto max-h-[120px] custom-scrollbar space-y-2 pr-1 text-[10px] font-semibold text-app-text-secondary mb-3">
                       {selectedReturn.notes.map((n, i) => (
-                        <div key={i} className="bg-[#121424] p-2 rounded border border-app-border leading-relaxed">
+                        <div key={i} className="bg-white p-2 rounded border border-app-border leading-relaxed">
                           {n}
                         </div>
                       ))}
@@ -1222,11 +1161,11 @@ export default function ReturnsPage() {
                         value={noteInput}
                         onChange={(e) => setNoteInput(e.target.value)}
                         placeholder="Write auditor logs (Press Enter to submit)..."
-                        className="flex-1 px-2.5 py-1.5 bg-[#121424] border border-app-border rounded text-xs text-app-text-secondary placeholder-slate-600 focus:outline-none"
+                        className="flex-1 px-2.5 py-1.5 bg-white border border-app-border rounded-md text-xs font-semibold text-app-text-secondary placeholder-app-text-disabled focus:outline-none"
                       />
                       <button
                         type="submit"
-                        className="px-3 bg-app-bg hover:bg-slate-700 text-app-text-secondary font-bold rounded text-xs transition-colors"
+                        className="px-3 bg-white border border-app-border hover:border-app-accent hover:text-app-accent text-app-text-secondary font-extrabold rounded-md text-xs transition-colors"
                       >
                         Add
                       </button>
@@ -1245,20 +1184,20 @@ export default function ReturnsPage() {
       {/* PICTURE ZOOM VIEW LIGHTBOX */}
       <AnimatePresence>
         {zoomImg && (
-          <div 
-            className="fixed inset-0 bg-app-card/20 flex items-center justify-center p-4 z-50 cursor-zoom-out"
+          <div
+            className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 cursor-zoom-out"
             onClick={() => setZoomImg(null)}
           >
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               className="relative max-w-3xl w-full"
             >
-              <img src={zoomImg} alt="Evidence high-res view" className="w-full h-auto rounded border border-app-border shadow-2xl" />
-              <button 
+              <img src={zoomImg} alt="Evidence high-res view" className="w-full h-auto rounded-md border border-app-border shadow-2xl" />
+              <button
                 onClick={() => setZoomImg(null)}
-                className="absolute top-4 right-4 p-2 rounded-full bg-app-card/20 text-app-text-primary hover:bg-app-card/80 transition-colors"
+                className="absolute top-4 right-4 p-2 rounded-full bg-black/40 text-white hover:bg-black/60 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>

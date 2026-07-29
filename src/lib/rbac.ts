@@ -13,6 +13,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<PermissionKey, bool
 
 const ROUTE_PERMISSION: Array<{ prefix: string; permission: PermissionKey }> = [
   { prefix: '/admin/payouts', permission: 'finance' },
+  { prefix: '/admin/fee-charges', permission: 'finance' },
   { prefix: '/admin/cashbook', permission: 'finance' },
   { prefix: '/admin/coupons', permission: 'content' },
   { prefix: '/admin/products', permission: 'content' },
@@ -25,11 +26,13 @@ const ROUTE_PERMISSION: Array<{ prefix: string; permission: PermissionKey }> = [
   { prefix: '/admin/community-submissions', permission: 'content' },
   { prefix: '/admin/moderation', permission: 'content' },
   { prefix: '/admin/deals', permission: 'content' },
+  { prefix: '/admin/ads-deals-studio', permission: 'content' },
   { prefix: '/admin/inventory', permission: 'content' },
   { prefix: '/admin/orders', permission: 'users' },
   { prefix: '/admin/orders-overview', permission: 'users' },
   { prefix: '/admin/messages', permission: 'users' },
   { prefix: '/admin/consumers', permission: 'users' },
+  { prefix: '/admin/creators-hub', permission: 'users' },
   { prefix: '/admin/returns', permission: 'users' },
   { prefix: '/admin/leads', permission: 'users' },
   { prefix: '/admin/jobs', permission: 'users' },

@@ -81,6 +81,34 @@ export interface OpsCoupon {
   updatedAt: string;
 }
 
+export type OpsFeeChargeType = 'service_charge' | 'platform_fee' | 'tax' | 'delivery';
+export type OpsFeeRateType = 'percentage' | 'flat';
+export type OpsFeeScopeType = 'platform' | 'brand' | 'category' | 'product';
+
+export interface OpsFeeCharge {
+  id: string;
+  name: string;
+  type: OpsFeeChargeType;
+  rateType: OpsFeeRateType;
+  rateValue: number;
+  scopeType: OpsFeeScopeType;
+  scopeBrandIds?: string[];
+  scopeCategoryIds?: string[];
+  scopeProductIds?: string[];
+  active: boolean;
+  deleted?: boolean;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OpsPaymentOptionsConfig {
+  partialPaymentEnabled: boolean;
+  minDepositPercent: number;
+  maxDepositPercent: number;
+  updatedAt: string;
+}
+
 export interface OpsReview {
   id: string;
   userId: string;
@@ -251,6 +279,31 @@ export const operationsApi = {
 
   deleteCoupon: async (id: string): Promise<void> => {
     await request<{ success: boolean }>(`/operations/coupons/${id}`, 'DELETE');
+  },
+
+  listFeeCharges: async (): Promise<OpsFeeCharge[]> => {
+    const result = await request<{ data: OpsFeeCharge[] }>('/operations/fee-charges');
+    return result.data;
+  },
+  upsertFeeCharge: async (payload: Partial<OpsFeeCharge>): Promise<OpsFeeCharge> => {
+    if (payload.id) {
+      const result = await request<{ data: OpsFeeCharge }>(`/operations/fee-charges/${payload.id}`, 'PATCH', payload);
+      return result.data;
+    }
+    const result = await request<{ data: OpsFeeCharge }>('/operations/fee-charges', 'POST', payload);
+    return result.data;
+  },
+  deleteFeeCharge: async (id: string): Promise<void> => {
+    await request<{ success: boolean }>(`/operations/fee-charges/${id}`, 'DELETE');
+  },
+
+  getPaymentOptionsConfig: async (): Promise<OpsPaymentOptionsConfig> => {
+    const result = await request<{ data: OpsPaymentOptionsConfig }>('/operations/payment-options');
+    return result.data;
+  },
+  updatePaymentOptionsConfig: async (payload: Partial<OpsPaymentOptionsConfig>): Promise<OpsPaymentOptionsConfig> => {
+    const result = await request<{ data: OpsPaymentOptionsConfig }>('/operations/payment-options', 'PUT', payload);
+    return result.data;
   },
 
   listReviews: async (): Promise<OpsReview[]> => {

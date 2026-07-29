@@ -15,6 +15,7 @@ import {
   ExternalLink 
 } from 'lucide-react';
 import { listingSectionLabels } from '../../../shared/booking/bookingFieldConfig';
+import { Badge } from '../../components/ui/Badge';
 
 interface InvoiceViewProps {
   role?: 'admin' | 'seller';
@@ -111,12 +112,12 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
   if (!loggedInProfile) {
     return (
       <div className="p-8 text-center bg-app-bg text-app-text-secondary min-h-screen flex flex-col items-center justify-center">
-        <ShieldCheck className="w-12 h-12 text-[#ef3c23] mb-4 animate-pulse" />
+        <ShieldCheck className="w-12 h-12 text-app-accent mb-4 animate-pulse" />
         <h2 className="text-lg font-bold text-app-text-primary mb-2 font-mono uppercase">Authorization Required</h2>
         <p className="text-xs mb-6 max-w-sm">Please log in to your merchant credential profile to authorize viewing of this transaction invoice.</p>
-        <button 
-          onClick={() => navigate('/login')} 
-          className="px-4 py-2 bg-[#ef3c23] hover:bg-orange-600 text-app-text-primary rounded text-xs font-bold uppercase tracking-wider"
+        <button
+          onClick={() => navigate('/login')}
+          className="px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white rounded-md text-xs font-bold uppercase tracking-wider"
         >
           Forward to Login
         </button>
@@ -903,7 +904,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 bg-app-card border-t border-app-border text-app-text-primary min-h-screen">
+    <div className="p-4 sm:p-6 lg:p-8 bg-app-bg border-t border-app-border text-app-text-primary min-h-screen">
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           .no-print { display: none !important; }
@@ -913,15 +914,15 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
           @page { margin: 15mm; size: A4; }
         }
       ` }} />
-      
+
       {/* Toast Notification */}
       {notif && (
-        <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl text-xs font-bold font-mono border shadow-2xl flex items-center gap-2 max-w-md animate-bounce${
-          notif.type === 'success' 
-            ? 'bg-emerald-950 text-emerald-400 border-emerald-500/20' 
-            : 'bg-indigo-950 text-indigo-400 border-indigo-500/20'
+        <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-lg text-xs font-bold font-mono border shadow-2xl flex items-center gap-2 max-w-md ${
+          notif.type === 'success'
+            ? 'bg-[#F0FDF4] text-[#16A34A] border-[#22C55E]/30'
+            : 'bg-white text-app-text-primary border-app-border'
         }`}>
-          <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+          <CheckCircle2 className="w-4 h-4 shrink-0" />
           <span>{notif.message}</span>
         </div>
       )}
@@ -931,12 +932,12 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="p-2 bg-app-bg border border-app-border rounded-lg text-app-text-secondary hover:text-white transition-all cursor-pointer"
+            className="p-2 bg-white border border-app-border rounded-lg text-app-text-secondary hover:text-app-accent hover:border-app-accent/40 transition-all cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <div className="text-[10px] tracking-[0.2em] text-[#ef3c23] uppercase font-black">Merchandising Operations</div>
+            <div className="text-[10px] tracking-[0.2em] text-app-accent uppercase font-black">Merchandising Operations</div>
             <h1 className="text-xl font-black text-app-text-primary tracking-tight uppercase font-mono mt-0.5">
               Invoice Console
             </h1>
@@ -946,15 +947,15 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
         <div className="flex items-center gap-2">
           <button
             onClick={triggerPrint}
-            className="flex items-center gap-1.5 px-4 py-2 bg-app-bg hover:bg-slate-700 border border-app-border text-app-text-primary rounded-lg text-[10.5px] font-extrabold uppercase tracking-wider cursor-pointer transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 bg-white hover:bg-gray-50 border border-app-border text-app-text-secondary rounded-lg text-[10.5px] font-extrabold uppercase tracking-wider cursor-pointer transition-all"
           >
             <Printer className="w-3.5 h-3.5" />
             Print / Save PDF
           </button>
-          
+
           <button
             onClick={downloadHtmlTemplate}
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#ef3c23] hover:bg-[#ef3c23]/90 text-app-text-primary rounded-lg text-[10.5px] font-extrabold uppercase tracking-wider cursor-pointer shadow-lg shadow-[#ef3c23]/10 transition-all border border-[#ef3c23]/20"
+            className="flex items-center gap-1.5 px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white rounded-lg text-[10.5px] font-extrabold uppercase tracking-wider cursor-pointer shadow-lg shadow-app-accent/10 transition-all"
           >
             <Download className="w-3.5 h-3.5" />
             Export Static A4 HTML
@@ -963,14 +964,14 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
       </div>
 
       {/* Role Notice */}
-      <div className="mb-6 px-4 py-3 bg-[#1a1a2e]/50 border border-indigo-500/10 rounded-xl flex items-center justify-between text-xs text-indigo-300 no-print">
+      <div className="mb-6 px-4 py-3 bg-[#000435] border border-app-border rounded-lg flex items-center justify-between text-xs text-white/80 no-print">
         <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-indigo-400" />
-          <span>Active Role Access: <strong className="uppercase font-mono text-white text-[11px] bg-indigo-500/20 px-1.5 py-0.5 rounded-md border border-indigo-500/20">{activeRole} View</strong></span>
+          <ShieldCheck className="w-4 h-4 text-app-accent" />
+          <span>Active Role Access: <strong className="uppercase font-mono text-white text-[11px] bg-white/10 px-1.5 py-0.5 rounded-md border border-white/10">{activeRole} View</strong></span>
         </div>
-        <div className="text-[10px] text-indigo-400 font-mono">
-          {activeRole === 'admin' 
-            ? '✓ Elevated administrative controls enabled' 
+        <div className="text-[10px] text-white/60 font-mono">
+          {activeRole === 'admin'
+            ? '✓ Elevated administrative controls enabled'
             : '✓ Verified Merchant limited secure endpoint'}
         </div>
       </div>
@@ -979,10 +980,10 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
         {/* Printable/Preview area */}
-        <div className="lg:col-span-8 flex flex-col items-center bg-[#F0F3FA] p-4 sm:p-8 rounded-2xl border border-slate-200">
-          
+        <div className="lg:col-span-8 flex flex-col items-center bg-app-bg p-4 sm:p-8 rounded-lg border border-app-border">
+
           {/* Main Visual Invoice Card (Design mimics static page with real-time responsive styling) */}
-          <div className="invoice-card w-full max-w-[794px] min-h-[1123px] bg-white text-slate-900 shadow-2xl p-6 sm:p-12 rounded-lg border border-slate-200 flex flex-col justify-between selection:bg-slate-200">
+          <div className="invoice-card w-full max-w-[794px] min-h-[1123px] bg-white text-app-text-primary shadow-2xl p-6 sm:p-12 rounded-lg border border-app-border flex flex-col justify-between selection:bg-slate-200">
             
             <div>
               {/* Brand Header */}
@@ -1013,7 +1014,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">
                 <div>
                   <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">Billed To</div>
-                  <div className="text-base font-extrabold text-[#1a1a2e]">{order.customer.name}</div>
+                  <div className="text-base font-extrabold text-[#000435]">{order.customer.name}</div>
                   <div className="text-xs text-slate-500 mt-1.5 leading-relaxed font-medium">
                     {order.customer.address || 'House 14, Road 4, Sector 12, Uttara, Dhaka'}<br />
                     Phone: {order.customer.phone || '+880 1711-456789'}<br />
@@ -1023,10 +1024,10 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                 <div className="flex flex-col md:items-end">
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-left md:text-right">
                     <div className="text-slate-400 uppercase tracking-wider font-semibold">Invoice Number</div>
-                    <div className="font-extrabold text-[#1a1a2e]">#{invoiceId}</div>
+                    <div className="font-extrabold text-[#000435]">#{invoiceId}</div>
 
                     <div className="text-slate-400 uppercase tracking-wider font-semibold self-center">Invoice Amount</div>
-                    <div className="text-[28px] font-black text-[#EF3C23] leading-none">৳ {codPayable.toLocaleString()}</div>
+                    <div className="text-[28px] font-black text-app-accent leading-none">৳ {codPayable.toLocaleString()}</div>
 
                     <div className="text-slate-400 uppercase tracking-wider font-semibold">Reference</div>
                     <div className="font-semibold text-slate-800">{invoiceId}</div>
@@ -1061,7 +1062,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                   <span className="text-[9.5px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                     ✓ System Verified
                   </span>
-                  <span className="text-[9.5px] font-black text-[#EF3C23] bg-orange-50 border border-orange-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                  <span className="text-[9.5px] font-black text-app-accent bg-orange-50 border border-orange-200 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
                     Official Supply Hub
                   </span>
                 </div>
@@ -1090,7 +1091,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                   </div>
                 </div>
                 <div className="md:col-span-5 flex flex-col justify-center">
-                  <div className="text-[10px] font-bold text-[#EF3C23] uppercase tracking-wider mb-1">
+                  <div className="text-[10px] font-bold text-app-accent uppercase tracking-wider mb-1">
                     {isService ? sectionLabels.overview : 'Product Details'}
                   </div>
                   <div className="font-extrabold text-slate-900 text-base mb-1.5">{order.product.name}</div>
@@ -1114,7 +1115,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                         ))
                       : null}
                   </div>
-                  <div className="mt-3 text-sm font-black text-[#EF3C23]">
+                  <div className="mt-3 text-sm font-black text-app-accent">
                     {isService ? 'Authorized booking: 1' : 'Authorized Qty: 1 Unit'}
                   </div>
                 </div>
@@ -1136,7 +1137,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                   <tbody>
                     <tr className="border-b border-slate-100">
                       <td className="py-4">
-                        <div className="font-bold text-[#1a1a2e] text-sm">{order.product.name}</div>
+                        <div className="font-bold text-[#000435] text-sm">{order.product.name}</div>
                         <div className="text-[11px] text-slate-400 mt-1">SKU-{order.product.id} · Elite Edition · Crimson Space Gray</div>
                       </td>
                       <td className="py-4 text-right text-slate-700 font-medium">1</td>
@@ -1162,12 +1163,12 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                     <span>Advance Paid:</span>
                     <span>৳ {advancePayment.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between font-extrabold text-sm text-[#EF3C23] border-t border-slate-100 pt-2.5">
+                  <div className="flex justify-between font-extrabold text-sm text-app-accent border-t border-slate-100 pt-2.5">
                     <span>Total COD Payable:</span>
                     <span className="text-base font-black">৳ {codPayable.toLocaleString()}</span>
                   </div>
                   <div className="text-right">
-                    <span className="inline-block mt-2 text-[10px] font-bold text-white bg-[#1a1a2e] px-2.5 py-0.5 rounded uppercase tracking-wider">
+                    <span className="inline-block mt-2 text-[10px] font-bold text-white bg-[#000435] px-2.5 py-0.5 rounded uppercase tracking-wider">
                       COD — Cash On Delivery
                     </span>
                   </div>
@@ -1175,8 +1176,8 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
               </div>
 
               {/* Customer Special Notes Block */}
-              <div className="bg-[#FFF8F7] border-l-4 border-[#EF3C23] rounded-r-lg p-4 mb-5 text-xs text-slate-700">
-                <div className="text-[10px] font-bold text-[#EF3C23] uppercase tracking-wider mb-1">Special Delivery Notes</div>
+              <div className="bg-[#FFF8F7] border-l-4 border-app-accent rounded-r-lg p-4 mb-5 text-xs text-slate-700">
+                <div className="text-[10px] font-bold text-app-accent uppercase tracking-wider mb-1">Special Delivery Notes</div>
                 <p>
                   "{order.customerNotes?.[0] || 'Please execute dispatch and coordinate delivery times. Ring the customer upon arrival.'}"
                 </p>
@@ -1189,7 +1190,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                   <div className="font-bold text-slate-800">Active Courier: {order.deliveryPartner || "Pathao / SteadFast BD Courier"}</div>
                 </div>
                 <div>
-                  <a href={order.trackingUrl || 'https://track.pathao.com/sheet/9921'} target="_blank" rel="noopener noreferrer" className="text-[#EF3C23] font-bold underline">
+                  <a href={order.trackingUrl || 'https://track.pathao.com/sheet/9921'} target="_blank" rel="noopener noreferrer" className="text-app-accent font-bold underline">
                     Click to track parcel
                   </a>
                 </div>
@@ -1198,15 +1199,15 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
             </div>
 
             {/* Footer */}
-            <div className="border-t-2 border-[#EF3C23] pt-5 flex justify-between items-start">
+            <div className="border-t-2 border-app-accent pt-5 flex justify-between items-start">
               <div className="max-w-[80%]">
-                <div className="text-lg font-extrabold text-[#1a1a2e] mb-1">Thanks for shopping with Choosify.</div>
+                <div className="text-lg font-extrabold text-[#000435] mb-1">Thanks for shopping with Choosify.</div>
                 <div className="text-[10px] text-slate-400 leading-relaxed">
                   Terms & Conditions: Payment due upon delivery via COD. This is a system-generated invoice — no signature required. Powered by Choosify.bd
                 </div>
               </div>
               <div className="w-16 h-16 opacity-15">
-                <svg className="w-full h-auto fill-[#18154c]" viewBox="0 0 651.43 651.43" xmlns="http://www.w3.org/2000/svg">
+                <svg className="w-full h-auto fill-[#000435]" viewBox="0 0 651.43 651.43" xmlns="http://www.w3.org/2000/svg">
                   <path d="M325.71,651.43C146.11,651.43,0,505.31,0,325.71S146.11,0,325.71,0s325.71,146.11,325.71,325.71-146.11,325.71-325.71,325.71ZM325.71,74.42c-138.56,0-251.29,112.73-251.29,251.29s112.73,251.29,251.29,251.29,251.29-112.73,251.29-251.29-112.73-251.29-251.29-251.29Z" />
                 </svg>
               </div>
@@ -1266,7 +1267,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
             </div>
           </div>
 
-          <div className="p-5 bg-[#1a1a2e]/20 border border-indigo-500/10 rounded-xl">
+          <div className="p-5 bg-[#000435]/20 border border-indigo-500/10 rounded-xl">
             <h4 className="text-[10px] font-black text-indigo-300 uppercase tracking-wider mb-2">Print & Export Instructions</h4>
             <ul className="text-[11px] text-app-text-secondary list-disc list-inside space-y-1.5 leading-relaxed">
               <li>Click <strong className="text-app-text-primary">Print / Save PDF</strong> to execute system-level printer driver integrations.</li>

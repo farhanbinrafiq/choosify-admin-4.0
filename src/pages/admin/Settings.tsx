@@ -2,34 +2,59 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../lib/rbac';
 import { operationsApi } from '../../services/operationsApi';
-import { 
-  Settings, 
-  Shield, 
-  Bell, 
-  Database, 
-  Globe, 
-  Smartphone, 
-  User, 
-  Lock, 
-  Mail, 
-  Users, 
-  FileText, 
-  Trash2, 
-  Key, 
-  AlertTriangle, 
+import { Badge } from '../../components/ui/Badge';
+import {
+  Settings,
+  Shield,
+  Bell,
+  Database,
+  Globe,
+  Smartphone,
+  User,
+  Lock,
+  Mail,
+  Users,
+  FileText,
+  Trash2,
+  Key,
+  AlertTriangle,
   RefreshCw,
   CheckCircle2
 } from 'lucide-react';
 
+// Shared toggle switch — matches the design-system spec exactly:
+// track 38x22px radius 11px, bg accent-primary (on) / #D1D5DB (off); knob 16x16px white circle.
+const Toggle = ({ checked, onChange, id }: { checked: boolean; onChange: () => void; id?: string }) => (
+  <button
+    id={id}
+    type="button"
+    role="switch"
+    aria-checked={checked}
+    onClick={onChange}
+    className="relative shrink-0 cursor-pointer transition-colors duration-200"
+    style={{
+      width: 38,
+      height: 22,
+      borderRadius: 11,
+      backgroundColor: checked ? 'var(--color-accent-primary)' : '#D1D5DB',
+    }}
+  >
+    <span
+      className="absolute top-0.5 bg-white rounded-full transition-all duration-200"
+      style={{ width: 16, height: 16, left: checked ? 20 : 2 }}
+    />
+  </button>
+);
+
 const SettingRow = ({ icon: Icon, label, desc, action }: any) => (
-  <div className="flex items-center justify-between py-4 border-b border-gray-50 last:border-0">
+  <div className="flex items-center justify-between py-4 border-b border-app-border last:border-0">
      <div className="flex gap-4">
-        <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center text-gray-400">
+        <div className="w-10 h-10 rounded-xl bg-app-bg flex items-center justify-center text-app-text-disabled">
            <Icon className="w-5 h-5" />
         </div>
         <div>
-           <h4 className="text-[13px] font-bold text-[#0D1B2A]">{label}</h4>
-           <p className="text-[11px] text-gray-400 mt-0.5">{desc}</p>
+           <h4 className="text-[13px] font-extrabold text-app-text-primary">{label}</h4>
+           <p className="text-[11px] font-semibold text-app-text-muted mt-0.5">{desc}</p>
         </div>
      </div>
      {action}

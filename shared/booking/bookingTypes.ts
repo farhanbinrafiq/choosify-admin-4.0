@@ -52,6 +52,12 @@ export interface BookingRequest {
   status: BookingOfferStatus;
   createdAt: string;
   updatedAt: string;
+  /** True when the listing was configured to skip manual seller acceptance — the buyer can pay immediately. */
+  autoApproved?: boolean;
+  /** Copied from the listing at request time — lets the buyer pay a deposit now, rest due later (check-in/delivery). */
+  partialPaymentEnabled?: boolean;
+  /** Seller's chosen deposit percent (within the platform's configured min/max range) when partialPaymentEnabled. */
+  depositPercent?: number;
   /** Seller must accept/decline/modify by this time while status=pending */
   sellerRespondBy: string;
   /** Buyer must respond to a counter-offer by this time while status=countered */
@@ -85,6 +91,9 @@ export type BookingOfferCard = Pick<
   | 'currency'
   | 'status'
   | 'createdAt'
+  | 'autoApproved'
+  | 'partialPaymentEnabled'
+  | 'depositPercent'
   | 'sellerRespondBy'
   | 'buyerRespondBy'
   | 'buyerPayBy'
@@ -113,6 +122,9 @@ export function toBookingOfferCard(request: BookingRequest): BookingOfferCard {
     currency: request.currency,
     status: request.status,
     createdAt: request.createdAt,
+    autoApproved: request.autoApproved,
+    partialPaymentEnabled: request.partialPaymentEnabled,
+    depositPercent: request.depositPercent,
     sellerRespondBy: request.sellerRespondBy,
     buyerRespondBy: request.buyerRespondBy,
     buyerPayBy: request.buyerPayBy,

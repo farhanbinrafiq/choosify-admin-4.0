@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { getBookingFieldConfigPayload } from '../../shared/booking/bookingFieldConfig';
 import { toBookingOfferCard } from '../../shared/booking/bookingTypes';
+import { operationsStore } from '../operations/operationsStore';
+import { scheduleOperationsPersist } from '../operations/operationsPersistence';
 import { getBookingRequest, listBookingRequests } from './bookingStore';
 import {
   acceptBookingRequest,
@@ -9,6 +11,8 @@ import {
   createBookingRequest,
   declineBookingRequest,
   markBookingPaid,
+  resolveAutoApprove,
+  resolvePartialPaymentSettings,
   sweepExpiredBookings,
 } from './bookingService';
 
@@ -17,6 +21,28 @@ export const bookingRouter = Router();
 /** Public — shared field config for Product Studio + storefront Message Seller */
 bookingRouter.get('/booking/field-config', (_req, res) => {
   res.json({ success: true, data: getBookingFieldConfigPayload() });
+});
+
+/** Seller's account-wide default for whether new bookings need their manual acceptance. */
+bookingRouter.get('/booking/seller-settings/:sellerId', (req, res) => {
+  res.json({ success: true, data: operationsStore.getSellerBookingSettings(req.params.sellerId) });
+});
+
+bookingRouter.patch('/booking/seller-settings/:sellerId', (req, res) => {
+  try {
+    const { autoApproveBookingsDefault } = req.body || {};
+    if (typeof autoApproveBookingsDefault !== 'boolean') {
+      res.status(400).json({ error: 'autoApproveBookingsDefault (boolean) is required' });
+      return;
+    }
+    const updated = operationsStore.updateSellerBookingSettings(req.params.sellerId, {
+      autoApproveBookingsDefault,
+    });
+    scheduleOperationsPersist();
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to update seller booking settings' });
+  }
 });
 
 bookingRouter.get('/booking/requests', async (req, res) => {
@@ -61,12 +87,19 @@ bookingRouter.post('/booking/requests', async (req, res) => {
       res.status(400).json({ error: 'listingId, buyerId, and sellerId are required' });
       return;
     }
+    const listingId = String(body.listingId);
+    const sellerId = String(body.sellerId);
+    const autoApprove = await resolveAutoApprove(sellerId, listingId).catch(() => false);
+    const partialPayment = await resolvePartialPaymentSettings(listingId).catch(() => ({
+      partialPaymentEnabled: false,
+      depositPercent: undefined as number | undefined,
+    }));
     const result = await createBookingRequest({
-      listingId: String(body.listingId),
+      listingId,
       listingTitle: String(body.listingTitle || 'Service listing'),
       listingImage: body.listingImage,
       listingHref: body.listingHref,
-      sellerId: String(body.sellerId),
+      sellerId,
       sellerName: String(body.sellerName || 'Seller'),
       buyerId: String(body.buyerId),
       buyerName: body.buyerName,
@@ -77,6 +110,9 @@ bookingRouter.post('/booking/requests', async (req, res) => {
       price: Number(body.price) || 0,
       originalPrice: body.originalPrice !== undefined ? Number(body.originalPrice) : undefined,
       conversationId: body.conversationId,
+      autoApprove,
+      partialPaymentEnabled: partialPayment.partialPaymentEnabled,
+      depositPercent: partialPayment.depositPercent,
       threadId: body.threadId,
     });
     res.status(201).json({ success: true, data: result.offer, request: result.request });
@@ -163,7 +199,8 @@ bookingRouter.post('/booking/requests/:id/buyer-accept', async (req, res) => {
 
 bookingRouter.post('/booking/requests/:id/mark-paid', async (req, res) => {
   try {
-    const result = await markBookingPaid(req.params.id, req.body?.orderId);
+    const paymentType = req.body?.paymentType === 'partial' ? 'partial' : 'full';
+    const result = await markBookingPaid(req.params.id, req.body?.orderId, paymentType);
     res.json({ success: true, data: result.offer, request: result.request });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to mark booking paid' });

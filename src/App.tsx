@@ -11,6 +11,7 @@ import { ReviewModerationProvider } from './contexts/ReviewModeration';
 import { CashBookProvider } from './contexts/CashBookContext';
 import { LogisticsProvider } from './contexts/LogisticsContext';
 import { InventoryProvider } from './contexts/InventoryContext';
+import { FeeChargesProvider } from './contexts/FeeChargesContext';
 
 // Lazy load pages
 const CashBookHub = lazy(() => import('./pages/admin/CashBookHub'));
@@ -27,9 +28,11 @@ const SellerDashboardPreview = lazy(() => import('./pages/admin/previews/SellerD
 const RecommendationPreview = lazy(() => import('./pages/admin/previews/RecommendationPreview'));
 const Sellers = lazy(() => import('./pages/admin/Sellers'));
 const Products = lazy(() => import('./pages/admin/Products'));
+const FeeChargesEngine = lazy(() => import('./pages/admin/FeeChargesEngine'));
+const AdsDealsStudio = lazy(() => import('./pages/admin/AdsDealsStudio'));
+const CreatorsHub = lazy(() => import('./pages/admin/CreatorsHub'));
 const Categories = lazy(() => import('./pages/admin/Categories'));
 const Returns = lazy(() => import('./pages/admin/Returns'));
-const Inventory = lazy(() => import('./pages/admin/Inventory'));
 const Brands = lazy(() => import('./pages/admin/Brands'));
 const Recommendations = lazy(() => import('./pages/admin/Recommendations'));
 const Deals = lazy(() => import('./pages/admin/Deals'));
@@ -201,6 +204,7 @@ export default function App() {
             <BrandProfilesProvider>
             <InventoryProvider>
           <CouponsProvider>
+          <FeeChargesProvider>
           <OrdersProvider>
             <ReturnsProvider>
             <ContactInteractionProvider>
@@ -257,7 +261,7 @@ export default function App() {
               <Route path="categories" element={<Categories />} />
               <Route path="brand-posts" element={<BrandPostsPage />} />
               <Route path="returns" element={<Returns />} />
-              <Route path="inventory" element={<Inventory />} />
+              <Route path="inventory" element={<Navigate to="/admin/products?tab=alerts" replace />} />
               <Route path="brands" element={<Navigate to="/admin/sellers" replace />} />
               <Route path="brands/:id" element={<UnifiedProfileShell />} />
               <Route path="recommendations" element={<Recommendations />} />
@@ -266,6 +270,9 @@ export default function App() {
               <Route path="reviews" element={<Reviews />} />
               <Route path="community-submissions" element={<Navigate to="/admin/seller-offers" replace />} />
               <Route path="payouts" element={<Payouts />} />
+              <Route path="fee-charges" element={<FeeChargesEngine />} />
+              <Route path="ads-deals-studio" element={<AdsDealsStudio />} />
+              <Route path="creators-hub" element={<CreatorsHub />} />
               <Route path="analytics" element={<Analytics />} />
               <Route path="messages" element={<Messages />} />
               <Route path="notifications" element={<NotificationsPage />} />
@@ -336,6 +343,7 @@ export default function App() {
             </ContactInteractionProvider>
             </ReturnsProvider>
           </OrdersProvider>
+          </FeeChargesProvider>
           </CouponsProvider>
             </InventoryProvider>
             </BrandProfilesProvider>

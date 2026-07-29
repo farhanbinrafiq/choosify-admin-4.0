@@ -60,6 +60,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { useBrandProfiles } from '../../contexts/BrandProfilesContext';
 import { SplitLayout } from '../../components/Layout/SplitLayout';
+import { Badge } from '../../components/ui/Badge';
 
 // Import newly refactored tab components matching Seller "My Profile" design rules
 import { BrandAccountTab } from '../../components/brand/BrandAccountTab';
@@ -355,7 +356,7 @@ export default function BrandDetails() {
   ];
 
   return (
-    <div className="bg-slate-50 min-h-screen text-slate-800 font-sans pb-24">
+    <div className="bg-app-bg min-h-screen text-app-text-secondary font-sans pb-24">
       {/* Toast Notification */}
       <AnimatePresence>
         {toastMessage && (
@@ -372,37 +373,33 @@ export default function BrandDetails() {
       </AnimatePresence>
 
       {/* Hero Header Area */}
-      <div className="bg-white border-b border-slate-200 py-6 px-8 shadow-sm">
+      <div className="bg-app-card border-b border-app-border py-6 px-8 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-5">
-            <button 
+            <button
               onClick={() => navigate('/admin/sellers')}
-              className="p-3 bg-white border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl transition-all shadow-sm active:scale-95"
+              className="p-3 bg-app-card border border-app-border hover:bg-app-bg text-app-text-secondary rounded-xl transition-all shadow-sm active:scale-95"
               id="back_to_sellers_btn"
             >
-              <ArrowLeft className="w-5 h-5 text-slate-600" />
+              <ArrowLeft className="w-5 h-5 text-app-text-secondary" />
             </button>
             <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center shadow-inner">
+              <div className="w-16 h-16 rounded-2xl overflow-hidden border border-app-border bg-app-bg flex items-center justify-center shadow-inner">
                 <img src={brandProfile.logo} alt="" referrerPolicy="no-referrer" className="w-full h-full object-cover" />
               </div>
               <div>
                 <div className="flex items-center flex-wrap gap-2">
-                  <h1 className="text-2xl font-black text-slate-900 tracking-tight">{brandProfile.name}</h1>
-                  <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider border${
-                    brandProfile.status === 'VERIFIED_OWNER' 
-                      ? 'bg-green-50 text-green-600 border-green-200' 
-                      : brandProfile.status === 'SUSPENDED'
-                      ? 'bg-red-50 text-red-600 border-red-200'
-                      : 'bg-yellow-50 text-yellow-600 border-yellow-200'
-                  }`}>
+                  <h1 className="text-2xl font-black text-app-text-primary tracking-tight">{brandProfile.name}</h1>
+                  <Badge variant={
+                    brandProfile.status === 'VERIFIED_OWNER' ? 'success' : brandProfile.status === 'SUSPENDED' ? 'danger' : 'warning'
+                  }>
                     {brandProfile.status === 'VERIFIED_OWNER' ? 'Verified' : brandProfile.status === 'SUSPENDED' ? 'Suspended' : 'Unclaimed'}
-                  </span>
-                  <span className="bg-orange-50 text-[#F4631E] border border-orange-100 px-2 py-0.5 rounded-full text-[9px] font-black uppercase flex items-center gap-1 shadow-sm">
-                     <ShieldCheck className="w-3.5 h-3.5 text-[#F4631E]" /> PARTNER STUDIO
-                  </span>
+                  </Badge>
+                  <Badge variant="accent" className="gap-1">
+                     <ShieldCheck className="w-3.5 h-3.5" /> PARTNER STUDIO
+                  </Badge>
                 </div>
-                <p className="text-slate-500 text-xs mt-1.5 font-medium flex items-center gap-2">
+                <p className="text-app-text-secondary text-xs mt-1.5 font-medium flex items-center gap-2">
                    <Building2 className="w-3.5 h-3.5 text-app-text-secondary" /> {brandProfile.industry} &middot; {brandProfile.category}
                 </p>
               </div>
@@ -410,21 +407,21 @@ export default function BrandDetails() {
           </div>
 
           <div className="flex items-center gap-3">
-             <a 
-               href={brandProfile.websiteUrl} 
-               target="_blank" 
-               rel="noopener noreferrer" 
-               className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 text-slate-600 hover:text-slate-900 bg-white rounded-lg text-xs font-bold shadow-sm transition-all"
+             <a
+               href={brandProfile.websiteUrl}
+               target="_blank"
+               rel="noopener noreferrer"
+               className="flex items-center gap-1.5 px-4 py-2 border border-app-border text-app-text-secondary hover:text-app-text-primary bg-app-card rounded-lg text-xs font-bold shadow-sm transition-all"
              >
                 <Globe className="w-4 h-4 text-app-text-secondary" /> Visit Storefront <ExternalLink className="w-3 h-3" />
              </a>
-             <button 
+             <button
                onClick={() => {
                  setAdminControls(prev => ({ ...prev, sellerStatus: 'Suspended', isActive: false }));
                  updateProfile(brandProfile.id, { status: 'SUSPENDED' });
                  showToast('👮 Regulatory emergency lockdown executed on brand access settings.');
                }}
-               className="flex items-center gap-1.5 px-4 py-2 border border-red-200 hover:bg-red-50 text-red-600 bg-white rounded-lg text-xs font-bold shadow-sm transition-all"
+               className="flex items-center gap-1.5 px-4 py-2 border border-app-border hover:bg-red-50 text-red-600 bg-app-card rounded-lg text-xs font-bold shadow-sm transition-all"
              >
                 <Ban className="w-4 h-4" /> Lock Account
              </button>
@@ -434,12 +431,12 @@ export default function BrandDetails() {
 
       {/* Main Studio Area */}
       <div className="max-w-7xl mx-auto px-8 mt-8">
-        <SplitLayout layoutId="brand-details-studio" panes={panes} className="border border-slate-200 rounded-3xl overflow-hidden bg-white shadow-sm min-h-[70vh]">
+        <SplitLayout layoutId="brand-details-studio" panes={panes} className="border border-app-border rounded-3xl overflow-hidden bg-app-card shadow-sm min-h-[70vh]">
           {/* Left Side Sub-Navigation Drawer / Tabs Sidebar */}
-          <div className="space-y-4 p-6 bg-slate-50/50 h-full border-r border-slate-100 flex flex-col justify-between">
-          <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-1">
+          <div className="space-y-4 p-6 bg-app-bg/50 h-full border-r border-app-border flex flex-col justify-between">
+          <div className="bg-app-card rounded-2xl border border-app-border p-4 shadow-sm space-y-1">
              <div className="px-3 py-2 text-[10px] font-black uppercase tracking-wider text-app-text-secondary">STUDIO SECTIONS</div>
-             
+
              {[
                { id: 'account', label: '⚙️ Account Information' },
                { id: 'verification', label: '🧾 Verification Center' },
@@ -453,36 +450,36 @@ export default function BrandDetails() {
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as TabId)}
                   className={`w-full text-left px-4 py-3.5 rounded-xl text-xs font-bold tracking-wide transition-all flex items-center justify-between${
-                    activeTab === tab.id 
-                      ? 'bg-orange-50 text-[#F4631E] border border-orange-100 shadow-sm shadow-orange-500/5' 
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900 border border-transparent'
+                    activeTab === tab.id
+                      ? 'bg-app-accent-light text-app-accent border border-app-accent/20 shadow-sm shadow-orange-500/5'
+                      : 'text-app-text-secondary hover:bg-app-bg hover:text-app-text-primary border border-transparent'
                   }`}
                   id={`tab_anchor_${tab.id}`}
                 >
                   <span>{tab.label}</span>
-                  {activeTab === tab.id && <ChevronRight className="w-4 h-4 text-[#F4631E]" />}
+                  {activeTab === tab.id && <ChevronRight className="w-4 h-4 text-app-accent" />}
                 </button>
              ))}
           </div>
 
           {/* Sticky Brand Analytics Summary */}
-          <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm space-y-5">
-             <div className="text-xs font-bold text-slate-900 uppercase tracking-wide border-b border-slate-100 pb-3">Completion & Trust</div>
+          <div className="bg-app-card rounded-2xl border border-app-border p-5 shadow-sm space-y-5">
+             <div className="text-xs font-bold text-app-text-primary uppercase tracking-wide border-b border-app-border pb-3">Completion & Trust</div>
              <div className="space-y-4 text-xs">
                 <div>
-                  <div className="flex justify-between text-slate-600 font-medium mb-1">
+                  <div className="flex justify-between text-app-text-secondary font-medium mb-1">
                      <span>Profile Strength Index</span>
-                     <span className="font-bold text-[#F4631E]">{brandProfile.completionScore}%</span>
+                     <span className="font-bold text-app-accent">{brandProfile.completionScore}%</span>
                   </div>
-                  <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                     <div className="bg-[#F4631E] h-full" style={{ width: `${brandProfile.completionScore}%` }} />
+                  <div className="w-full bg-app-bg h-1.5 rounded-full overflow-hidden">
+                     <div className="bg-app-accent h-full" style={{ width: `${brandProfile.completionScore}%` }} />
                   </div>
                 </div>
 
                 <div>
                    <span className="text-[10px] text-app-text-secondary uppercase font-bold tracking-wider block">Onboard Representative</span>
-                   <span className="font-bold text-slate-800 block mt-0.5">{merchantContact.repName}</span>
-                   <span className="text-slate-500 font-mono text-[11px] block mt-0.5">{merchantContact.busEmail}</span>
+                   <span className="font-bold text-app-text-primary block mt-0.5">{merchantContact.repName}</span>
+                   <span className="text-app-text-secondary font-mono text-[11px] block mt-0.5">{merchantContact.busEmail}</span>
                 </div>
              </div>
           </div>
@@ -497,7 +494,7 @@ export default function BrandDetails() {
                animate={{ opacity: 1, y: 0 }}
                exit={{ opacity: 0, y: -10 }}
                transition={{ duration: 0.15 }}
-               className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm space-y-8"
+               className="bg-app-card rounded-3xl border border-app-border p-8 shadow-sm space-y-8"
              >
                 {/* ACCOUNT INFORMATION TAB */}
                 {activeTab === 'account' && (

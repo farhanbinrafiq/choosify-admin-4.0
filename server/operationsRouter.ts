@@ -9,7 +9,7 @@ import {
   submitPlatformMessage,
 } from './operations/platformMessagingBridge';
 import { scheduleOperationsPersist } from './operations/operationsPersistence';
-import type { OpsCoupon, OpsReview, OpsStorefrontOrder, PermissionKey } from './operations/types';
+import type { OpsCoupon, OpsFeeCharge, OpsReview, OpsStorefrontOrder, PermissionKey } from './operations/types';
 import { validate } from './middleware/validate';
 import { CouponValidateBodySchema } from './validation/operations/couponValidateSchema';
 import {
@@ -129,6 +129,13 @@ operationsRouter.post('/operations/orders', async (req, res) => {
       isManual: body.isManual,
       platformSource: body.platformSource,
       claimToken: body.claimToken,
+      codDeliveryFeePaid: body.codDeliveryFeePaid,
+      codDeliveryFeePaidAt: body.codDeliveryFeePaidAt,
+      codRemainingAmount: body.codRemainingAmount,
+      isPartialPayment: body.isPartialPayment,
+      depositPercent: body.depositPercent,
+      depositAmount: body.depositAmount,
+      remainingAmount: body.remainingAmount,
     });
 
     if (body.promoCode && body.promoDiscount) {
@@ -273,6 +280,75 @@ operationsRouter.delete('/operations/coupons/:id', (req, res) => {
     return;
   }
   res.json({ success: true });
+});
+
+operationsRouter.get('/operations/fee-charges', (_req, res) => {
+  res.json({ data: operationsStore.listFeeCharges() });
+});
+
+operationsRouter.post('/operations/fee-charges', (req, res) => {
+  const body = req.body as Partial<OpsFeeCharge>;
+  if (!body.name?.trim()) {
+    res.status(400).json({ error: 'Fee/charge name is required' });
+    return;
+  }
+  const saved = operationsStore.upsertFeeCharge({
+    id: body.id || `fee_${Date.now()}`,
+    name: body.name.trim(),
+    type: body.type || 'platform_fee',
+    rateType: body.rateType || 'percentage',
+    rateValue: Number(body.rateValue || 0),
+    scopeType: body.scopeType || 'platform',
+    scopeBrandIds: body.scopeBrandIds || [],
+    scopeCategoryIds: body.scopeCategoryIds || [],
+    scopeProductIds: body.scopeProductIds || [],
+    active: body.active ?? true,
+    description: body.description || '',
+    createdAt: body.createdAt || new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  res.status(201).json({ success: true, data: saved });
+});
+
+operationsRouter.patch('/operations/fee-charges/:id', (req, res) => {
+  const existing = operationsStore.getFeeCharge(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Fee/charge rule not found' });
+    return;
+  }
+  const saved = operationsStore.upsertFeeCharge({ ...existing, ...req.body, id: existing.id });
+  res.json({ success: true, data: saved });
+});
+
+operationsRouter.delete('/operations/fee-charges/:id', (req, res) => {
+  const ok = operationsStore.deleteFeeCharge(req.params.id);
+  if (!ok) {
+    res.status(404).json({ error: 'Fee/charge rule not found' });
+    return;
+  }
+  res.json({ success: true });
+});
+
+operationsRouter.get('/operations/payment-options', (_req, res) => {
+  res.json({ data: operationsStore.getPaymentOptionsConfig() });
+});
+
+operationsRouter.put('/operations/payment-options', (req, res) => {
+  const body = req.body as Partial<{ partialPaymentEnabled: boolean; minDepositPercent: number; maxDepositPercent: number }>;
+  if (
+    body.minDepositPercent !== undefined &&
+    body.maxDepositPercent !== undefined &&
+    Number(body.minDepositPercent) > Number(body.maxDepositPercent)
+  ) {
+    res.status(400).json({ error: 'Minimum deposit percent cannot exceed maximum deposit percent' });
+    return;
+  }
+  const saved = operationsStore.updatePaymentOptionsConfig({
+    ...(body.partialPaymentEnabled !== undefined && { partialPaymentEnabled: body.partialPaymentEnabled }),
+    ...(body.minDepositPercent !== undefined && { minDepositPercent: Number(body.minDepositPercent) }),
+    ...(body.maxDepositPercent !== undefined && { maxDepositPercent: Number(body.maxDepositPercent) }),
+  });
+  res.json({ success: true, data: saved });
 });
 
 operationsRouter.post(
@@ -663,13 +739,22 @@ operationsRouter.post('/operations/platform-messages', async (req, res) => {
     let attachedOffer = bookingOffer;
     // If client sends a bookingOffer without requestId, create a canonical booking_requests row
     if (bookingOffer && !bookingOffer.requestId) {
-      const { createBookingRequest } = await import('./booking/bookingService');
+      const { createBookingRequest, resolveAutoApprove, resolvePartialPaymentSettings } = await import(
+        './booking/bookingService'
+      );
+      const listingId = String(bookingOffer.listingId || '');
+      const sellerId = String(bookingOffer.sellerId || '');
+      const autoApprove = await resolveAutoApprove(sellerId, listingId).catch(() => false);
+      const partialPayment = await resolvePartialPaymentSettings(listingId).catch(() => ({
+        partialPaymentEnabled: false,
+        depositPercent: undefined as number | undefined,
+      }));
       const created = await createBookingRequest({
-        listingId: String(bookingOffer.listingId || ''),
+        listingId,
         listingTitle: String(bookingOffer.listingTitle || 'Service listing'),
         listingImage: bookingOffer.listingImage as string | undefined,
         listingHref: bookingOffer.listingHref as string | undefined,
-        sellerId: String(bookingOffer.sellerId || ''),
+        sellerId,
         sellerName: String(bookingOffer.sellerName || 'Seller'),
         buyerId: buyerId.trim(),
         buyerName: userName?.trim(),
@@ -683,6 +768,9 @@ operationsRouter.post('/operations/platform-messages', async (req, res) => {
             ? Number(bookingOffer.originalPrice)
             : undefined,
         conversationId: `conv_platform_${buyerId.trim()}`,
+        autoApprove,
+        partialPaymentEnabled: partialPayment.partialPaymentEnabled,
+        depositPercent: partialPayment.depositPercent,
       });
       attachedOffer = created.offer as unknown as Record<string, unknown>;
     }

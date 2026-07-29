@@ -54,6 +54,7 @@ import {
   Flag,
   X,
   Bell,
+  Percent,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
@@ -92,13 +93,14 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'Category Taxonomy', icon: FolderOpen, path: '/admin/categories' },
     { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
+    { label: 'Ads & Deals Studio', icon: Megaphone, path: '/admin/ads-deals-studio' },
     { label: 'Orders Hub', icon: ListOrdered, path: '/admin/orders' },
     { label: 'Lead Inbox', icon: Mail, path: '/admin/leads' },
     { label: 'Job Postings', icon: Briefcase, path: '/admin/jobs' },
     { label: 'Seller Offer Queue', icon: Send, path: '/admin/seller-offers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
-    { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
-    { label: 'Creators', icon: Award, path: '/admin/creators?viewMode=creators' },
+    { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },
+    { label: 'Creators Hub', icon: Award, path: '/admin/creators-hub' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Moderation Center', icon: ShieldCheck, path: '/admin/moderation' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
@@ -116,6 +118,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Verification Center', icon: BadgeCheck, path: '/admin/brand-verification' },
     { label: 'Subscription Plans', icon: CreditCard, path: '/admin/promotions?tab=plans' },
     { label: 'Monetization Center', icon: CircleDollarSign, path: '/admin/payouts' },
+    { label: 'Fee & Charges Engine', icon: Percent, path: '/admin/fee-charges' },
     { label: 'Promo Codes & Vouchers', icon: Ticket, path: '/admin/coupons' },
     { label: 'Audit Logs', icon: History, path: '/admin/moderation?tab=reports' },
     { label: 'Security Center', icon: FolderLock, path: '/admin/settings?tab=security' },
@@ -149,13 +152,14 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'Category Taxonomy', icon: FolderOpen, path: '/admin/categories' },
     { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
+    { label: 'Ads & Deals Studio', icon: Megaphone, path: '/admin/ads-deals-studio' },
     { label: 'Orders Hub', icon: ListOrdered, path: '/admin/orders' },
     { label: 'Lead Inbox', icon: Mail, path: '/admin/leads' },
     { label: 'Job Postings', icon: Briefcase, path: '/admin/jobs' },
     { label: 'Seller Offer Queue', icon: Send, path: '/admin/seller-offers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
-    { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
-    { label: 'Creators', icon: Award, path: '/admin/creators?viewMode=creators' },
+    { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },
+    { label: 'Creators Hub', icon: Award, path: '/admin/creators-hub' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
     { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages' },
@@ -191,7 +195,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'My Profile', icon: UserCircle, path: '/admin/sellers/seller_001?tab=overview' },
     { label: 'Order Console', icon: ListOrdered, path: '/admin/orders', badge: 4 },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
-    { label: 'Inventory & Stock', icon: Layers, path: '/admin/inventory' },
+    { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'My Brand Studio', icon: Store, path: '/dashboard/content-studio/brands' },
     { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages', badge: 2 },
@@ -231,6 +235,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Finance Operations', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Payouts', icon: CircleDollarSign, path: '/admin/payouts' },
+    { label: 'Fee & Charges Engine', icon: Percent, path: '/admin/fee-charges' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
   ],
   support_agent: [
@@ -242,7 +247,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
   marketing_manager: [
     { label: 'Marketing Workspace', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Promotions', icon: Megaphone, path: '/admin/promotions' },
+    { label: 'Ads & Deals Studio', icon: Megaphone, path: '/admin/ads-deals-studio' },
     { label: 'Promo Codes & Vouchers', icon: Ticket, path: '/admin/coupons' },
     { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
     { label: 'Website CMS Studio', type: 'label' },
@@ -885,7 +890,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
       {/* Desktop Resizable Sidebar */}
       <ResizableSidebar
-        defaultWidth={280}
+        defaultWidth={240}
         minWidth={72}
         maxWidth={450}
         className="hidden sm:flex h-full"
@@ -899,9 +904,9 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
-        <header className="h-[64px] px-8 flex items-center justify-between shrink-0 mb-2 border-b border-app-border bg-white sticky top-0 z-40">
+        <header className="glass-header h-[64px] px-8 flex items-center justify-between shrink-0 mb-2 sticky top-0 z-40">
           <button
-            className="sm:hidden flex items-center justify-center w-9 h-9 rounded-lg bg-app-card border border-app-border text-app-text-secondary hover:text-app-accent transition-colors mr-3 flex-shrink-0"
+            className="sm:hidden flex items-center justify-center w-9 h-9 rounded-lg glass-on-navy text-white hover:text-app-accent transition-colors mr-3 flex-shrink-0"
             onClick={() => setIsSidebarOpen(true)}
             aria-label="Open navigation menu"
           >
@@ -909,7 +914,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           </button>
 
           <div className="flex flex-col">
-            <div className="text-[12px] text-app-text-secondary opacity-60">
+            <div className="text-[12px] text-white/60">
               {currentRole.replace('_', ' ').toUpperCase()} / Dashboard / {location.pathname.split('/').pop()?.replace('-', ' ')}
             </div>
           </div>
@@ -918,7 +923,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           <div className="relative mx-4 flex-1 max-w-sm" ref={searchContainerRef}>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-gray-400" />
+                <Search className="h-4 w-4 text-white/50" />
               </div>
               <input
                 type="text"
@@ -929,7 +934,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                   setSearchQuery(e.target.value);
                   setIsSearchFocused(true);
                 }}
-                className="pl-9 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 text-[12px] w-full max-w-xs placeholder-gray-400 outline-none focus:border-orange-400 text-slate-800 transition-colors"
+                className="glass-on-navy pl-9 rounded-lg px-3 py-2 text-[12px] w-full max-w-xs placeholder-white/45 outline-none focus:border-white/30 text-white transition-colors"
               />
             </div>
 
@@ -979,31 +984,31 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           </div>
           <div className="flex items-center gap-4">
              <div className="flex items-center gap-3">
-               <span className="bg-app-accent/10 text-app-accent px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
+               <span className="bg-app-accent text-white px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
                  {currentRole.replace('_', ' ')}
                </span>
                <div className="text-right">
-                  <div className="text-[13px] font-semibold">{profile?.displayName || 'Guest'}</div>
-                  <div className="text-[11px] text-app-text-secondary">{profile?.email}</div>
+                  <div className="text-[13px] font-semibold text-white">{profile?.displayName || 'Guest'}</div>
+                  <div className="text-[11px] text-white/60">{profile?.email}</div>
                </div>
              </div>
              <button
                onClick={() => triggerOpenInbox()}
-               className="w-8 h-8 rounded-full bg-app-card border border-app-border flex items-center justify-center hover:bg-slate-50 hover:border-slate-300 active:scale-95 cursor-pointer relative shrink-0 transition-all text-app-text-primary"
+               className="w-8 h-8 rounded-full glass-on-navy flex items-center justify-center hover:bg-white/20 active:scale-95 cursor-pointer relative shrink-0 transition-all"
                title="Open Messenger"
              >
-               <MessageCircleMore className="w-4 h-4 text-[#EB4501]" />
+               <MessageCircleMore className="w-4 h-4 text-white" />
                {unreadTotal > 0 && (
-                 <span id="NotificationBadge" className="absolute -top-1 -right-1 bg-[#F97316] text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-app-bg NotificationBadge">
+                 <span id="NotificationBadge" className="absolute -top-1 -right-1 bg-[#F97316] text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-[#000435] NotificationBadge">
                    {unreadTotal}
                  </span>
                )}
              </button>
 
-             <div className="w-8 h-8 rounded-full bg-app-card border border-app-border flex items-center justify-center">
+             <div className="w-8 h-8 rounded-full glass-on-navy flex items-center justify-center">
                 <div className="relative">
-                  <Bell className="w-4 h-4 text-app-text-secondary" />
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-app-accent rounded-full border-2 border-app-bg" />
+                  <Bell className="w-4 h-4 text-white" />
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-app-accent rounded-full border-2 border-[#000435]" />
                 </div>
              </div>
           </div>

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap');
 @import './styles/satoshi.css';
 @import "tailwindcss";
 
@@ -11,15 +11,15 @@
   /* GLOBAL DESIGN TOKENS - BORDER RADIUS STANDARDIZATION */
   --radius-card:           5px;
 
-  /* GLOBAL COLOR TOKENS - BRAND REGISTERED SINGLE LIGHT THEME */
-  --color-page-bg:         #F0F8FF;   /* Light Background Variant — Alice Blue workspace canvas (Theme Ticket spec) */
+  /* GLOBAL COLOR TOKENS — matched pixel-for-pixel to the approved design reference */
+  --color-page-bg:         #F0F2F5;   /* Design reference body background */
   --color-surface:         #FFFFFF;   /* Primary Content Color - White */
   --color-surface-dark:    #0F172A;   /* Primary Navy */
   --color-border:          #E8EDF2;   /* Elegant border lines (Theme Ticket card-border spec) */
   --color-border-dark:     #1E293B;   /* Borders inside navy surfaces */
 
-  --color-accent-primary:  #F97316;   /* Primary Orange accent — unchanged, still used for all buttons/CTAs site-wide */
-  --color-accent-hover:    #EA580C;   /* Hover Orange */
+  --color-accent-primary:  #FF5B00;   /* Design reference global accent — buttons, links, badges, CTAs everywhere */
+  --color-accent-hover:    #E64A00;   /* Design reference a:hover */
   --color-accent-light:    #FFF4ED;   /* Soft Orange bg/light tint */
 
   --color-navy:            #000435;   /* Primary Navy (Theme Ticket brand swatch) — sidebar gradient base */
@@ -30,7 +30,7 @@
   --color-sidebar-gradient-orange: #FF5B00;
   --color-sidebar-gradient-orange-deep: #EB4501;
   --gradient-sidebar: radial-gradient(ellipse 140% 55% at 50% 100%, rgba(255, 91, 0, 0.16) 0%, rgba(255, 91, 0, 0) 62%),
-                       linear-gradient(180deg, #000435 0%, #00062E 80%, #000225 100%);
+                       linear-gradient(180deg, rgba(0, 4, 53, 0.85) 0%, rgba(0, 6, 46, 0.82) 80%, rgba(0, 2, 37, 0.85) 100%);
 
   --color-text-primary:    #111827;   /* Headings, titles, data values */
   --color-text-secondary:  #374151;   /* Descriptions, supporting content, form labels */
@@ -60,7 +60,8 @@
 }
 
 @theme {
-  --font-sans: "Satoshi", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-heading: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 
   /* Global border radius overrides for standard cards/content (5px) */
@@ -104,6 +105,11 @@
     font-style: normal !important;
   }
 
+  /* Design reference: headings use Outfit, body copy uses DM Sans */
+  h1, h2, h3, .heading, .font-heading {
+    font-family: var(--font-heading);
+  }
+
   /* Restores mono font weights properly to keep dashboard elements readable */
   .font-mono, .font-mono *, code, pre, kbd, samp {
     font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
@@ -120,10 +126,13 @@ html:not(.dark) textarea::placeholder {
 }
 
 /* 2. SOLID CONTRAST FOR THE LEFT NAVIGATION SIDEBAR (Unified high-contrast dark-background rules across BOTH modes) */
-aside.sidebar, 
+aside.sidebar,
 .sidebar {
   background: var(--gradient-sidebar) !important;
   background-color: var(--color-app-sidebar) !important; /* fallback if gradient fails to parse */
+  -webkit-backdrop-filter: blur(18px) !important;
+  backdrop-filter: blur(18px) !important;
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.05) !important;
   color: #FFFFFF !important;
 }
 
@@ -1310,4 +1319,59 @@ html:not(.dark) .sidebar .sidebar-nav-search input::placeholder,
 html.dark aside.sidebar .sidebar-nav-search input::placeholder,
 html.dark .sidebar .sidebar-nav-search input::placeholder {
   color: rgba(255, 255, 255, 0.45) !important;
+}
+
+/* --- GLASS DESIGN SYSTEM ---
+   Values below are copied 1:1 (colors, blur radii, gradient stops, border-radius)
+   from the approved "Choosify Admin CMS (standalone)" design reference — not
+   approximated from existing tokens. Keep in sync with that file if it changes. */
+
+/* .sidebar itself carries the exact glass gradient + blur (see "SOLID CONTRAST
+   FOR THE LEFT NAVIGATION SIDEBAR" rule above) — no separate class needed here. */
+
+/* Header glass bar — exact match to reference header style */
+.glass-header {
+  background: linear-gradient(180deg, rgba(0, 4, 53, 0.85), rgba(0, 4, 53, 0.8));
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  color: #FFFFFF;
+}
+
+/* Navy-glass bulk-action bar — exact match to reference bulk bar style */
+.navy-glass {
+  background: linear-gradient(180deg, rgba(0, 4, 53, 0.94) 0%, rgba(0, 6, 46, 0.92) 80%, rgba(0, 2, 37, 0.94) 100%);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  color: #FFFFFF;
+}
+
+/* White-glass content card — exact match to reference card style */
+.glass-card {
+  background: rgba(255, 255, 255, 0.7);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-top: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 16px;
+  box-shadow: 0 8px 20px rgba(17, 24, 39, 0.08);
+  transition: all 0.2s ease;
+}
+
+.glass-card-hover:hover {
+  background: rgba(255, 255, 255, 0.88);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px rgba(17, 24, 39, 0.1);
+}
+
+/* Glass surface variant for use inside navy-glass bars (e.g. search input, chips) */
+.glass-on-navy {
+  background: rgba(255, 255, 255, 0.08);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #FFFFFF;
 }

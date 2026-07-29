@@ -2,6 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Megaphone, RefreshCw, Trash2, Eye, EyeOff, Search } from 'lucide-react';
 import { catalogApi } from '../../services/catalogApi';
 import type { CatalogBrandPost, CatalogBrandPostStatus } from '../../types/catalog';
+import { Badge, BadgeVariant } from '../../components/ui/Badge';
+
+const STATUS_BADGE_VARIANT: Record<CatalogBrandPostStatus, BadgeVariant> = {
+  scheduled: 'warning',
+  live: 'success',
+  expired: 'neutral',
+};
 
 const STATUS_OPTIONS: CatalogBrandPostStatus[] = ['scheduled', 'live', 'expired'];
 
@@ -73,18 +80,18 @@ export default function BrandPostsPage() {
     <div className="p-6 lg:p-8 space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+          <h1 className="text-[17px] font-extrabold text-app-text-primary flex items-center gap-2">
             <Megaphone className="w-6 h-6 text-app-accent" />
             What&apos;s On — Brand Posts
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-app-text-secondary mt-1">
             Manage sponsored brand moments, launches, and events shown on the public storefront.
           </p>
         </div>
         <button
           type="button"
           onClick={loadPosts}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-app-border bg-app-card text-app-text-secondary font-bold hover:bg-app-bg"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           Refresh
@@ -93,18 +100,18 @@ export default function BrandPostsPage() {
 
       <div className="flex flex-col gap-3 md:flex-row md:items-center">
         <div className="relative flex-1">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-app-text-secondary" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search title, brand, or slug..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-900"
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-app-border bg-app-card text-app-text-primary"
           />
         </div>
         <select
           value={statusFilter}
           onChange={(event) => setStatusFilter(event.target.value as 'all' | CatalogBrandPostStatus)}
-          className="px-4 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-900"
+          className="px-4 py-2.5 rounded-lg border border-app-border bg-app-card text-app-text-primary"
         >
           <option value="all">All statuses</option>
           {STATUS_OPTIONS.map((status) => (
@@ -116,15 +123,15 @@ export default function BrandPostsPage() {
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-[#FCA5A5] bg-[#FEF2F2] px-4 py-3 text-sm font-bold text-[#DC2626]">
           {error}
         </div>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+      <div className="rounded-[5px] border border-app-border bg-app-card overflow-hidden">
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 text-left text-slate-500 uppercase text-[11px] tracking-wide">
+            <thead className="bg-app-bg text-left text-app-text-secondary uppercase text-[10px] font-extrabold tracking-wide">
               <tr>
                 <th className="px-4 py-3">Post</th>
                 <th className="px-4 py-3">Brand</th>
@@ -137,45 +144,48 @@ export default function BrandPostsPage() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={6} className="px-4 py-10 text-center text-app-text-secondary">
                     Loading brand posts...
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                  <td colSpan={6} className="px-4 py-10 text-center text-app-text-secondary">
                     No brand posts match your filters.
                   </td>
                 </tr>
               ) : (
                 filtered.map((post) => (
-                  <tr key={post.id} className="border-t border-slate-100 hover:bg-slate-50/70">
+                  <tr key={post.id} className="border-t border-[#F1F3F5] hover:bg-app-bg/70">
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-900">{post.title}</div>
-                      <div className="text-xs text-slate-500 mt-0.5">/{post.slug}</div>
+                      <div className="font-bold text-app-text-primary">{post.title}</div>
+                      <div className="text-xs font-semibold text-app-text-secondary mt-0.5">/{post.slug}</div>
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{post.brandName}</td>
-                    <td className="px-4 py-3 capitalize text-slate-600">{post.kind.replace('_', ' ')}</td>
+                    <td className="px-4 py-3 font-semibold text-app-text-secondary">{post.brandName}</td>
+                    <td className="px-4 py-3 capitalize font-semibold text-app-text-secondary">{post.kind.replace('_', ' ')}</td>
                     <td className="px-4 py-3">
-                      <select
-                        value={post.status}
-                        onChange={(event) => updateStatus(post, event.target.value as CatalogBrandPostStatus)}
-                        className="px-2 py-1 rounded border border-slate-200 bg-white text-slate-800 capitalize"
-                      >
-                        {STATUS_OPTIONS.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={STATUS_BADGE_VARIANT[post.status]}>{post.status}</Badge>
+                        <select
+                          value={post.status}
+                          onChange={(event) => updateStatus(post, event.target.value as CatalogBrandPostStatus)}
+                          className="px-2 py-1 rounded border border-app-border bg-app-card text-app-text-primary capitalize text-xs font-bold"
+                        >
+                          {STATUS_OPTIONS.map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-600">{post.publishedAt}</td>
+                    <td className="px-4 py-3 font-semibold text-app-text-secondary">{post.publishedAt}</td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => updateStatus(post, post.status === 'live' ? 'expired' : 'live')}
-                          className="p-2 rounded-lg border border-slate-200 hover:bg-slate-100 text-slate-600"
+                          className="p-2 rounded-lg border border-app-border hover:bg-app-bg text-app-text-secondary"
                           title={post.status === 'live' ? 'Hide from storefront' : 'Publish live'}
                         >
                           {post.status === 'live' ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -183,7 +193,7 @@ export default function BrandPostsPage() {
                         <button
                           type="button"
                           onClick={() => removePost(post)}
-                          className="p-2 rounded-lg border border-red-200 hover:bg-red-50 text-red-600"
+                          className="p-2 rounded-lg border border-[#E8EDF2] hover:bg-[#FEF2F2] text-[#DC2626]"
                           title="Delete post"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -199,7 +209,7 @@ export default function BrandPostsPage() {
       </div>
 
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-slate-900 text-white px-4 py-3 text-sm shadow-lg">
+        <div className="fixed bottom-6 right-6 z-50 rounded-lg bg-app-sidebar text-white px-4 py-3 text-sm font-bold shadow-lg">
           {toast}
         </div>
       )}

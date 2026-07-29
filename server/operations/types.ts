@@ -78,6 +78,23 @@ export interface OpsStorefrontOrder {
   paymentDueAt?: string;
   paidAt?: string;
   invoiceGeneratedAt?: string;
+  /**
+   * COD orders only: buyer prepays the delivery fee online at checkout so the order
+   * confirms immediately; the product amount (`codRemainingAmount`) stays payable at
+   * the doorstep. Not set for online/`credit` orders, which are paid in full upfront.
+   */
+  codDeliveryFeePaid?: boolean;
+  codDeliveryFeePaidAt?: string;
+  codRemainingAmount?: number;
+  /**
+   * Deposit-now / rest-later payment (services: rest due at check-in; products: rest due
+   * at delivery). Independent of the COD fields above — this is for buyers who paid
+   * online but chose a partial amount rather than the full price.
+   */
+  isPartialPayment?: boolean;
+  depositPercent?: number;
+  depositAmount?: number;
+  remainingAmount?: number;
   createdAt: string;
   updatedAt: string;
   /** Manual orders created from a seller's Meta inbox chat, awaiting the customer's confirmation */
@@ -174,6 +191,45 @@ export interface OpsJobApplication {
   coverLetter: string;
   status: OpsJobApplicationStatus;
   createdAt: string;
+  updatedAt: string;
+}
+
+export type OpsFeeChargeType = 'service_charge' | 'platform_fee' | 'tax' | 'delivery';
+export type OpsFeeRateType = 'percentage' | 'flat';
+export type OpsFeeScopeType = 'platform' | 'brand' | 'category' | 'product';
+
+export interface OpsFeeCharge {
+  id: string;
+  name: string;
+  type: OpsFeeChargeType;
+  rateType: OpsFeeRateType;
+  rateValue: number;
+  scopeType: OpsFeeScopeType;
+  /** Populated when scopeType === 'brand'; supports multi-brand scoping. */
+  scopeBrandIds?: string[];
+  scopeCategoryIds?: string[];
+  scopeProductIds?: string[];
+  active: boolean;
+  deleted?: boolean;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OpsPaymentOptionsConfig {
+  partialPaymentEnabled: boolean;
+  minDepositPercent: number;
+  maxDepositPercent: number;
+  updatedAt: string;
+}
+
+/**
+ * Per-seller default for whether new service booking requests need manual acceptance.
+ * A listing's own `CatalogProduct.requiresApproval` overrides this when set explicitly.
+ */
+export interface OpsSellerBookingSettings {
+  sellerId: string;
+  autoApproveBookingsDefault: boolean;
   updatedAt: string;
 }
 

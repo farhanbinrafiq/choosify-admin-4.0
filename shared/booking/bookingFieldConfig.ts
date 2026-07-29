@@ -15,7 +15,15 @@ export type ServiceCategory =
   | 'education'
   | 'beauty'
   | 'real_estate'
-  | 'transport';
+  | 'transport'
+  | 'events'
+  | 'tickets'
+  | 'home_services'
+  | 'gov_services'
+  | 'recruitment'
+  | 'b2b'
+  | 'rental'
+  | 'donation';
 
 export type ProductListingType = 'physical' | 'service';
 export type RelatedInfoType = 'price_across_stores' | 'whats_nearby' | 'before_your_visit';
@@ -76,6 +84,14 @@ export const SERVICE_CATEGORIES: readonly ServiceCategory[] = [
   'beauty',
   'real_estate',
   'transport',
+  'events',
+  'tickets',
+  'home_services',
+  'gov_services',
+  'recruitment',
+  'b2b',
+  'rental',
+  'donation',
 ] as const;
 
 export const SERVICE_CATEGORY_LABELS: Record<ServiceCategory, string> = {
@@ -87,6 +103,14 @@ export const SERVICE_CATEGORY_LABELS: Record<ServiceCategory, string> = {
   beauty: 'Beauty',
   real_estate: 'Real Estate',
   transport: 'Transport',
+  events: 'Events & Wedding',
+  tickets: 'Tickets & Entry Passes',
+  home_services: 'Home & Professional Services',
+  gov_services: 'Government & Financial Services',
+  recruitment: 'Jobs & Recruitment',
+  b2b: 'B2B Marketplace',
+  rental: 'Rental Marketplace',
+  donation: 'Donations & Community',
 };
 
 const notes: BookingRequestField = {
@@ -159,6 +183,48 @@ export const SERVICE_BOOKING_FIELDS: Record<ServiceCategory, BookingRequestField
     { key: 'destination', label: 'Destination', type: 'text', required: true },
     notes,
   ],
+  events: [
+    { key: 'eventDate', label: 'Event date', type: 'date', required: true },
+    { key: 'eventLocation', label: 'Event location', type: 'text', required: true },
+    { key: 'guestCount', label: 'Guest count', type: 'number', min: 1 },
+    notes,
+  ],
+  tickets: [
+    { key: 'visitDate', label: 'Visit / event date', type: 'date', required: true },
+    { key: 'quantity', label: 'Number of tickets', type: 'number', required: true, min: 1 },
+    notes,
+  ],
+  home_services: [
+    { key: 'serviceDate', label: 'Preferred date', type: 'date', required: true },
+    { key: 'serviceTime', label: 'Preferred time', type: 'time' },
+    { key: 'address', label: 'Service address', type: 'text', required: true },
+    notes,
+  ],
+  gov_services: [
+    { key: 'preferredDate', label: 'Preferred date', type: 'date', required: true },
+    { key: 'applicantName', label: 'Applicant name', type: 'text', required: true },
+    notes,
+  ],
+  recruitment: [
+    { key: 'preferredStartDate', label: 'Preferred start date', type: 'date', required: true },
+    { key: 'rolesNeeded', label: 'Roles needed', type: 'number', required: true, min: 1 },
+    notes,
+  ],
+  b2b: [
+    { key: 'preferredDate', label: 'Preferred date', type: 'date', required: true },
+    { key: 'quantity', label: 'Order quantity', type: 'number', required: true, min: 1 },
+    notes,
+  ],
+  rental: [
+    { key: 'rentalStartDate', label: 'Rental start date', type: 'date', required: true },
+    { key: 'rentalEndDate', label: 'Rental end date', type: 'date', required: true },
+    { key: 'quantity', label: 'Quantity', type: 'number', required: true, min: 1 },
+    notes,
+  ],
+  donation: [
+    { key: 'amount', label: 'Donation amount', type: 'number', required: true, min: 1 },
+    notes,
+  ],
 };
 
 const CATEGORY_ALIASES: Record<string, ServiceCategory> = {
@@ -166,19 +232,48 @@ const CATEGORY_ALIASES: Record<string, ServiceCategory> = {
   hotels: 'hotels',
   restaurant: 'restaurants',
   restaurants: 'restaurants',
+  reservation: 'restaurants',
   travel: 'travel',
+  tour: 'travel',
+  tours: 'travel',
   doctor: 'doctors',
   doctors: 'doctors',
   healthcare: 'doctors',
   education: 'education',
   beauty: 'beauty',
   salon: 'beauty',
+  spa: 'beauty',
+  appointment: 'beauty',
+  appointments: 'beauty',
   'real estate': 'real_estate',
   'real-estate': 'real_estate',
   real_estate: 'real_estate',
   property: 'real_estate',
   transport: 'transport',
   transportation: 'transport',
+  event: 'events',
+  events: 'events',
+  wedding: 'events',
+  ticket: 'tickets',
+  tickets: 'tickets',
+  'home service': 'home_services',
+  'home services': 'home_services',
+  home_services: 'home_services',
+  cleaning: 'home_services',
+  'gov service': 'gov_services',
+  'gov services': 'gov_services',
+  gov_services: 'gov_services',
+  government: 'gov_services',
+  recruitment: 'recruitment',
+  hiring: 'recruitment',
+  jobs: 'recruitment',
+  b2b: 'b2b',
+  wholesale: 'b2b',
+  rental: 'rental',
+  rent: 'rental',
+  donation: 'donation',
+  donations: 'donation',
+  charity: 'donation',
 };
 
 export function normalizeServiceCategory(value?: string | null): ServiceCategory {

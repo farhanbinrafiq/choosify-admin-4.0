@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useInventory } from "../../contexts/InventoryContext";
 import { catalogApi } from "../../services/catalogApi";
+import { useFeeCharges } from "../../contexts/FeeChargesContext";
 import type { CatalogBrand, CatalogCategory } from "../../types/catalog";
 import { CreatorExperienceSection, CreatorContentItem } from "../../components/CreatorExperienceSection";
 import { SplitLayout } from "../../components/Layout/SplitLayout";
@@ -257,6 +258,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     (location && (location.pathname.endsWith("/products/new") || location.pathname.includes("/products/new")));
   const activeId = isNewProduct ? "new" : (id || "1");
   const { profile, sellerBrands = [], allBrands = [] } = useAuth();
+  const { paymentOptions } = useFeeCharges();
   
   // Find assigned brands
   const assignedBrands = allBrands.filter(b => 
@@ -317,6 +319,12 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const [specs, setSpecs] = useState<Spec[]>([]);
   const [storeComparisonList, setStoreComparisonList] = useState<StoreListing[]>([]);
   const [priceAcrossStoresEnabled, setPriceAcrossStoresEnabled] = useState(false);
+  const [partialPaymentEnabled, setPartialPaymentEnabled] = useState(false);
+  const [depositPercent, setDepositPercent] = useState<number>(0);
+  /** 'default' = follow the seller's account-wide setting; 'always'/'auto' explicitly override it for this listing. */
+  const [requiresApprovalMode, setRequiresApprovalMode] = useState<'default' | 'always' | 'auto'>('default');
+  const [sellerAutoApproveDefault, setSellerAutoApproveDefault] = useState(false);
+  const [savingSellerDefault, setSavingSellerDefault] = useState(false);
   const [whatsNearby, setWhatsNearby] = useState<WhatsNearbyInputs>(EMPTY_WHATS_NEARBY);
   const [beforeYourVisit, setBeforeYourVisit] = useState<BeforeYourVisitInputs>(EMPTY_BEFORE_YOUR_VISIT);
   const [overviewBlocks, setOverviewBlocks] = useState<OverviewBlock[]>([]);
@@ -413,6 +421,44 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     };
   }, []);
 
+  // Load the seller's account-wide booking-approval default
+  useEffect(() => {
+    if (!profile?.id) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/v1/booking/seller-settings/${profile.id}`);
+        const json = await res.json();
+        if (!cancelled && json?.data) {
+          setSellerAutoApproveDefault(Boolean(json.data.autoApproveBookingsDefault));
+        }
+      } catch (error) {
+        console.warn('[ProductStudio] Failed to load seller booking settings', error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [profile?.id]);
+
+  const updateSellerAutoApproveDefault = async (next: boolean) => {
+    if (!profile?.id) return;
+    setSavingSellerDefault(true);
+    setSellerAutoApproveDefault(next);
+    try {
+      await fetch(`/api/v1/booking/seller-settings/${profile.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ autoApproveBookingsDefault: next }),
+      });
+    } catch (error) {
+      console.warn('[ProductStudio] Failed to update seller booking settings', error);
+      setSellerAutoApproveDefault(!next);
+    } finally {
+      setSavingSellerDefault(false);
+    }
+  };
+
   // Resolve brand/category IDs once lists are available (edit mode / draft restore by name)
   useEffect(() => {
     if (!catalogOptionsLoaded) return;
@@ -496,6 +542,9 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       setSpecs([]);
       setStoreComparisonList([]);
       setPriceAcrossStoresEnabled(false);
+      setPartialPaymentEnabled(false);
+      setDepositPercent(paymentOptions.minDepositPercent);
+      setRequiresApprovalMode('default');
       setWhatsNearby(EMPTY_WHATS_NEARBY);
       setBeforeYourVisit(EMPTY_BEFORE_YOUR_VISIT);
       setOverviewBlocks([]);
@@ -510,6 +559,13 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       setSpecs(data.specs || dataSrc.specs || []);
       setStoreComparisonList(data.storeComparisonList || dataSrc.storeComparisonList || []);
       setPriceAcrossStoresEnabled(Boolean(data.priceAcrossStoresEnabled || dataSrc.priceAcrossStoresEnabled));
+      setPartialPaymentEnabled(Boolean(data.partialPaymentEnabled || dataSrc.partialPaymentEnabled));
+      setDepositPercent(Number(data.depositPercent ?? dataSrc.depositPercent ?? paymentOptions.minDepositPercent));
+      {
+        const rawRequiresApproval =
+          data.requiresApproval !== undefined ? data.requiresApproval : dataSrc.requiresApproval;
+        setRequiresApprovalMode(rawRequiresApproval === true ? 'always' : rawRequiresApproval === false ? 'auto' : 'default');
+      }
       setWhatsNearby({
         ...EMPTY_WHATS_NEARBY,
         ...(data.whatsNearby || dataSrc.whatsNearby || {}),
@@ -840,6 +896,14 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
           : undefined,
       price: Number(discountedPrice || actualPrice || 0),
       originalPrice: Number(actualPrice || 0),
+      partialPaymentEnabled: paymentOptions.partialPaymentEnabled ? partialPaymentEnabled : false,
+      depositPercent: partialPaymentEnabled
+        ? Math.min(Math.max(Number(depositPercent || 0), paymentOptions.minDepositPercent), paymentOptions.maxDepositPercent)
+        : undefined,
+      requiresApproval:
+        productType === 'service'
+          ? (requiresApprovalMode === 'always' ? true : requiresApprovalMode === 'auto' ? false : undefined)
+          : undefined,
       stock:
         productType === 'service'
           ? Number(productStock ?? 999)
@@ -902,6 +966,10 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
         specs,
         storeComparisonList,
         priceAcrossStoresEnabled,
+        partialPaymentEnabled,
+        depositPercent,
+        requiresApproval:
+          requiresApprovalMode === 'always' ? true : requiresApprovalMode === 'auto' ? false : undefined,
         whatsNearby,
         beforeYourVisit,
         overviewBlocks,
@@ -1220,6 +1288,55 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                 </div>
               )}
 
+              {productType === 'service' && (
+                <div className="rounded-2xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 space-y-4 text-left">
+                  <div>
+                    <p className="text-[10px] uppercase font-black text-slate-500 tracking-wider">
+                      Booking approval
+                    </p>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                      Choose whether a new booking request needs your manual acceptance before the
+                      buyer can pay, or is instantly pre-approved so the buyer goes straight to
+                      Pay &amp; Confirm.
+                    </p>
+                  </div>
+
+                  <label className="flex items-center justify-between gap-3 cursor-pointer rounded-xl border border-[#E5E7EB] bg-white px-3 py-2.5">
+                    <span className="min-w-0">
+                      <span className="block text-[11px] font-bold text-[#1A1A2E]">
+                        Auto-approve all my bookings by default
+                      </span>
+                      <span className="block text-[10px] text-slate-400 mt-0.5">
+                        Applies account-wide unless a listing overrides it below.
+                      </span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={sellerAutoApproveDefault}
+                      disabled={savingSellerDefault}
+                      onChange={(e) => updateSellerAutoApproveDefault(e.target.checked)}
+                    />
+                  </label>
+
+                  <div className="space-y-1.5">
+                    <p className="text-[10px] uppercase font-black text-slate-500 tracking-wider">
+                      This listing
+                    </p>
+                    <select
+                      value={requiresApprovalMode}
+                      onChange={(e) => setRequiresApprovalMode(e.target.value as 'default' | 'always' | 'auto')}
+                      className="w-full bg-white border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-semibold"
+                    >
+                      <option value="default">
+                        Follow my account default (currently: {sellerAutoApproveDefault ? 'Auto-approve' : 'Require approval'})
+                      </option>
+                      <option value="always">Always require my approval for this listing</option>
+                      <option value="auto">Auto-approve instantly for this listing</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
               <div className="rounded-2xl border border-[#E5E7EB] bg-[#FAFAFA] p-4 space-y-3 text-left">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -1408,6 +1525,41 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                   />
                 </div>
               </div>
+
+              {paymentOptions.partialPaymentEnabled && (
+                <div className="rounded-xl border border-[#E5E7EB] bg-white p-3 space-y-3">
+                  <label className="flex items-center justify-between gap-3 cursor-pointer">
+                    <span className="text-[11px] font-bold text-[#1A1A2E]">Accept advance / partial payment on this product</span>
+                    <input
+                      type="checkbox"
+                      checked={partialPaymentEnabled}
+                      onChange={(e) => setPartialPaymentEnabled(e.target.checked)}
+                    />
+                  </label>
+                  {partialPaymentEnabled && (
+                    <div className="space-y-1.5 text-left">
+                      <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">
+                        Deposit % (platform range: {paymentOptions.minDepositPercent}%–{paymentOptions.maxDepositPercent}%)
+                      </label>
+                      <input
+                        type="number"
+                        min={paymentOptions.minDepositPercent}
+                        max={paymentOptions.maxDepositPercent}
+                        value={depositPercent}
+                        onChange={(e) =>
+                          setDepositPercent(
+                            Math.min(Math.max(Number(e.target.value), paymentOptions.minDepositPercent), paymentOptions.maxDepositPercent)
+                          )
+                        }
+                        className="w-full bg-[#FAFAFA] border border-[#E5E7EB] rounded-xl px-3 py-2.5 text-xs text-[#1A1A2E] outline-none focus:border-orange-500 font-mono font-bold"
+                      />
+                      <p className="text-[10px] text-slate-500">
+                        Buyer pays ৳{Math.round(((discountedPrice || actualPrice || 0) * depositPercent) / 100).toLocaleString()} upfront, remainder due on delivery.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="space-y-1.5 text-left">
                   <label className="text-[10px] uppercase font-black text-slate-500 tracking-wider">Product bio about</label>

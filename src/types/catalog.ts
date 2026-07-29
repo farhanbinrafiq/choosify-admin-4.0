@@ -57,8 +57,19 @@ export interface CatalogProduct {
   relatedInfoType?: 'price_across_stores' | 'whats_nearby' | 'before_your_visit';
   /** Physical products: opt-in toggle for showing Price Across Stores. */
   priceAcrossStoresEnabled?: boolean;
+  /** Seller opt-in toggle for accepting an advance/partial payment on this product. */
+  partialPaymentEnabled?: boolean;
+  /** Deposit percent required upfront when partialPaymentEnabled is true; must fall within the admin-configured range. */
+  depositPercent?: number;
   /** Keys from SERVICE_BOOKING_FIELDS the seller requires from buyers (defaults to all required fields) */
   requiredBookingFieldKeys?: string[];
+  /**
+   * Service listings only. Whether a new booking request needs the seller to manually
+   * accept it before the buyer can pay. `undefined` = follow the seller's account-wide
+   * default (see `OpsSellerBookingSettings`); `true` = always require approval; `false`
+   * = auto-approve instantly so the buyer goes straight to Pay & Confirm.
+   */
+  requiresApproval?: boolean;
   price: number;
   originalPrice?: number;
   stock: number;

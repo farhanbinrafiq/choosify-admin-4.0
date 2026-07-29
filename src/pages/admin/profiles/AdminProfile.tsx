@@ -238,9 +238,9 @@ export default function AdminProfile() {
       
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-app-card text-app-text-primary shadow-2xl px-4 py-2.5 rounded-[4px] border border-app-border animate-slide-in">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-white text-app-text-primary shadow-2xl px-4 py-2.5 rounded-lg border border-app-border animate-slide-in">
           <div className="w-2 h-2 rounded-full bg-app-accent" />
-          <span className="text-xs font-bold font-mono text-white">{toast.message}</span>
+          <span className="text-xs font-bold font-mono text-app-text-primary">{toast.message}</span>
         </div>
       )}
 
@@ -252,27 +252,27 @@ export default function AdminProfile() {
             <ChevronRight className="w-3.5 h-3.5 text-app-text-secondary/30" />
             <Link to="/admin/consumers?tab=admins" className="hover:text-app-accent transition-colors">Consumers</Link>
             <ChevronRight className="w-3.5 h-3.5 text-app-text-secondary/30" />
-            <span className="text-app-accent-light">
+            <span className="text-app-accent">
               {profile.name} (Admin)
             </span>
           </div>
-          <h1 className="text-xl font-bold text-white tracking-tight">System Guard & Audit</h1>
-          <p className="text-app-text-secondary text-[12px]">Detailed security monitoring, identity verification, and permission group authorization</p>
+          <h1 className="text-[17px] font-extrabold text-app-text-primary tracking-tight">System Guard & Audit</h1>
+          <p className="text-app-text-secondary text-[12px] font-semibold">Detailed security monitoring, identity verification, and permission group authorization</p>
         </div>
 
         {/* Action Controls */}
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={() => showToast(`Regenerated API tokens & Rotate session keys`, 'success')}
-            className="px-3.5 py-2 bg-app-accent text-white hover:bg-app-accent-light rounded-[4px] text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 bg-app-accent text-white hover:opacity-90 rounded-lg text-xs font-extrabold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
           >
             <Shield className="w-3.5 h-3.5" />
             <span>Generate Security Credentials</span>
           </button>
-          
-          <Link 
+
+          <Link
             to="/admin/consumers?tab=admins"
-            className="flex items-center gap-2 px-3.5 py-2 border border-app-border rounded-[4px] text-xs font-bold text-app-text-primary bg-app-card hover:border-app-accent hover:text-white transition-all shadow-sm"
+            className="flex items-center gap-2 px-3.5 py-2 border border-app-border rounded-lg text-xs font-extrabold text-app-text-secondary bg-white hover:border-app-accent hover:text-app-accent transition-all shadow-sm"
           >
             <ArrowLeft className="w-4 h-4 text-app-accent" />
             <span>All Admins</span>
@@ -287,10 +287,10 @@ export default function AdminProfile() {
         <div className="lg:col-span-4 space-y-6">
           
           {/* Profile Identity Card */}
-          <div className="bg-app-card border border-app-border rounded-[4px] overflow-hidden shadow-xl">
-            
+          <div className="bg-white border border-app-border rounded-lg overflow-hidden shadow-sm">
+
             {/* Top Banner gradient compatible with Choosify colors */}
-            <div className="h-24 bg-gradient-to-r from-red-610/30 via-app-card to-app-gradient-end opacity-90 relative overflow-hidden flex items-center justify-center">
+            <div className="h-24 bg-gradient-to-r from-app-sidebar to-app-accent relative overflow-hidden flex items-center justify-center">
               <div className="absolute inset-0 flex items-center justify-center px-4">
                 <span className="text-xl sm:text-2xl md:text-xl lg:text-xl xl:text-2xl font-black text-white uppercase tracking-[0.25em] select-none text-center max-w-full truncate">ADMIN</span>
               </div>
@@ -298,26 +298,26 @@ export default function AdminProfile() {
 
             {/* Profile Avatar & Details Box */}
             <div className="px-5 pb-5 relative">
-              
+
               <div className="-mt-10 mb-4 flex items-end justify-between">
-                <img 
-                  src={profile.avatarUrl} 
+                <img
+                  src={profile.avatarUrl}
                   alt={profile.name}
-                  className="w-20 h-20 rounded-full border-2 border-app-border object-cover bg-app-card shrink-0" 
+                  className="w-20 h-20 rounded-full border-2 border-white object-cover bg-white shrink-0 shadow-sm"
                 />
 
                 {/* Styled action triggers */}
                 <div className="flex gap-1.5">
-                  <button 
+                  <button
                     onClick={() => showToast(`Audited System Permission Logs for: ${profile.name}`, 'info')}
-                    className="p-2 rounded-[4px] border border-app-border text-app-accent hover:border-app-accent hover:bg-app-accent/5 transition-all bg-app-card cursor-pointer"
+                    className="p-2 rounded-lg border border-app-border text-app-accent hover:border-app-accent hover:bg-app-accent-light transition-all bg-white cursor-pointer"
                     title="Audit Employee"
                   >
                     <Activity className="w-3.5 h-3.5" />
                   </button>
-                  <button 
+                  <button
                     onClick={() => showToast(`Initiated Confidential Slack Tunnel`, 'info')}
-                    className="p-2 rounded-[4px] bg-app-accent text-white hover:bg-app-accent-light transition-all shadow-sm cursor-pointer"
+                    className="p-2 rounded-lg bg-app-accent text-white hover:opacity-90 transition-all shadow-sm cursor-pointer"
                     title="Secure Message"
                   >
                     <MessageSquare className="w-3.5 h-3.5" />
@@ -328,66 +328,66 @@ export default function AdminProfile() {
               {/* Identity Row */}
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h2 className="text-base font-bold tracking-tight text-white">{profile.name}</h2>
-                  <span className="px-2 py-0.5 rounded-[2px] text-[8.5px] uppercase tracking-widest font-extrabold border bg-red-500/10 text-red-400 border-red-500/20">
+                  <h2 className="text-base font-extrabold tracking-tight text-app-text-primary">{profile.name}</h2>
+                  <span className="px-2 py-0.5 rounded text-[8.5px] uppercase tracking-widest font-extrabold border bg-[#FEF2F2] text-[#DC2626] border-[#FCA5A5]">
                     {profile.role}
                   </span>
-                  <span className="px-2 py-0.5 rounded-[2px] text-[8.5px] uppercase tracking-widest font-extrabold border bg-green-500/10 text-green-400 border-green-500/20">
+                  <span className="px-2 py-0.5 rounded text-[8.5px] uppercase tracking-widest font-extrabold border bg-[#F0FDF4] text-[#16A34A] border-[#DCFCE7]">
                     {profile.status}
                   </span>
                 </div>
-                <p className="text-[9.5px] font-semibold text-app-accent-light font-mono block">
+                <p className="text-[9.5px] font-semibold text-app-text-muted font-mono block">
                   {profile.employeeId}
                 </p>
-                <p className="text-[11px] text-app-text-secondary leading-relaxed">
+                <p className="text-[11px] text-app-text-secondary font-medium leading-relaxed">
                   {profile.department}
                 </p>
               </div>
 
               {/* Admin Information Fields */}
-              <div className="mt-5 space-y-3.5 pt-4 border-t border-white/[0.04]">
-                
+              <div className="mt-5 space-y-3.5 pt-4 border-t border-app-border">
+
                 <div>
-                  <label className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider block opacity-70">
+                  <label className="text-[9px] text-app-text-muted font-extrabold uppercase tracking-wider block">
                     Staff Email Contract
                   </label>
-                  <span className="text-xs text-white font-semibold mt-0.5 block truncate">
+                  <span className="text-xs text-app-text-primary font-bold mt-0.5 block truncate">
                     {profile.email}
                   </span>
                 </div>
 
-                <div className="pt-2 border-t border-white/[0.04]">
-                  <label className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider block opacity-70">
+                <div className="pt-2 border-t border-app-border">
+                  <label className="text-[9px] text-app-text-muted font-extrabold uppercase tracking-wider block">
                     Permission Scope Domain
                   </label>
-                  <span className="text-xs text-white font-semibold mt-0.5 block truncate">
+                  <span className="text-xs text-app-text-primary font-bold mt-0.5 block truncate">
                     {profile.permissionGroup}
                   </span>
                 </div>
 
-                <div className="pt-2 border-t border-white/[0.04]">
-                  <label className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider block opacity-70">
+                <div className="pt-2 border-t border-app-border">
+                  <label className="text-[9px] text-app-text-muted font-extrabold uppercase tracking-wider block">
                     Assigned Phone
                   </label>
-                  <span className="text-xs text-white font-semibold mt-0.5 block font-mono">
+                  <span className="text-xs text-app-text-primary font-bold mt-0.5 block font-mono">
                     {profile.phone}
                   </span>
                 </div>
 
-                <div className="pt-2 border-t border-white/[0.04]">
-                  <label className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider block opacity-70">
+                <div className="pt-2 border-t border-app-border">
+                  <label className="text-[9px] text-app-text-muted font-extrabold uppercase tracking-wider block">
                     Security Operations Level
                   </label>
-                  <span className="text-xs text-app-accent-light font-bold mt-0.5 block truncate">
+                  <span className="text-xs text-app-accent font-extrabold mt-0.5 block truncate">
                     {profile.securityLevel}
                   </span>
                 </div>
 
-                <div className="pt-2 border-t border-white/[0.04]">
-                  <label className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider block opacity-70">
+                <div className="pt-2 border-t border-app-border">
+                  <label className="text-[9px] text-app-text-muted font-extrabold uppercase tracking-wider block">
                     Last active timestamp
                   </label>
-                  <span className="text-xs text-app-accent-light font-bold mt-0.5 flex items-center gap-1.5 font-mono">
+                  <span className="text-xs text-app-accent font-extrabold mt-0.5 flex items-center gap-1.5 font-mono">
                     <Clock className="w-3 h-3" />
                     <span>{profile.lastLogin}</span>
                   </span>
@@ -399,34 +399,34 @@ export default function AdminProfile() {
           </div>
 
           {/* Social Connectivity & Specialties */}
-          <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-4">
-            <h3 className="text-[10px] font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2 flex items-center justify-between">
+          <div className="bg-white border border-app-border rounded-lg p-5 shadow-sm space-y-4">
+            <h3 className="text-[10px] font-extrabold text-app-text-muted uppercase tracking-wider border-b border-app-border pb-2 flex items-center justify-between">
               <span>Authorized Security Scopes</span>
-              <span className="text-[8px] bg-red-500/10 text-red-500 px-1.5 py-0.5 rounded-[2px] border border-red-500/20">RBAC ADMIN</span>
+              <span className="text-[8px] bg-[#FEF2F2] text-[#DC2626] px-1.5 py-0.5 rounded border border-[#FCA5A5] font-extrabold">RBAC ADMIN</span>
             </h3>
 
             <div className="flex flex-wrap gap-1.5">
               {profile.authorizedScopes.map((scope) => (
-                <span key={scope} className="px-2 py-1 rounded-[2px] bg-white/[0.02] border border-white/[0.04] text-[10px] font-bold text-red-400">
-                  🛡️ {scope}
+                <span key={scope} className="px-2 py-1 rounded bg-app-bg border border-app-border text-[10px] font-bold text-app-text-secondary">
+                  {scope}
                 </span>
               ))}
             </div>
           </div>
 
           {/* Recent Activities Timeline card */}
-          <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-4">
-            <h3 className="text-[10px] font-bold text-white uppercase tracking-wider border-b border-white/[0.04] pb-2">
+          <div className="bg-white border border-app-border rounded-lg p-5 shadow-sm space-y-4">
+            <h3 className="text-[10px] font-extrabold text-app-text-muted uppercase tracking-wider border-b border-app-border pb-2">
               Recent System Action Trail
             </h3>
 
             <div className="space-y-3 pt-1">
               {profile.recentActivities.map((act, index) => (
-                <div key={index} className="flex gap-3 items-start p-1.5 hover:bg-white/[0.01] transition-all rounded-[3px]">
+                <div key={index} className="flex gap-3 items-start p-1.5 hover:bg-app-bg transition-all rounded-md">
                   {getActivityIcon(act.iconType)}
                   <div className="min-w-0">
-                    <h4 className="text-xs font-bold text-white">{act.title}</h4>
-                    <p className="text-[9.5px] text-app-text-secondary font-mono mt-0.5">{act.subtitle}</p>
+                    <h4 className="text-xs font-bold text-app-text-primary">{act.title}</h4>
+                    <p className="text-[9.5px] text-app-text-muted font-mono mt-0.5 font-semibold">{act.subtitle}</p>
                   </div>
                 </div>
               ))}

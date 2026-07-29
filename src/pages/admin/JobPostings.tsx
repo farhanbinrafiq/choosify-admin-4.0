@@ -7,6 +7,8 @@ import {
   type OpsJobPosting,
   type OpsJobStatus,
 } from '../../services/operationsApi';
+import { Tabs } from '../../components/ui/Tabs';
+import { Badge, type BadgeVariant } from '../../components/ui/Badge';
 
 const EMPLOYMENT_OPTIONS: OpsJobEmploymentType[] = ['full_time', 'part_time', 'internship', 'contract'];
 const JOB_STATUS_OPTIONS: OpsJobStatus[] = ['open', 'closed', 'draft'];
@@ -34,6 +36,20 @@ const emptyForm = (): Omit<OpsJobPosting, 'id' | 'createdAt' | 'updatedAt' | 'po
 function employmentLabel(type: OpsJobEmploymentType) {
   return type.replace(/_/g, ' ');
 }
+
+const JOB_STATUS_BADGE: Record<OpsJobStatus, BadgeVariant> = {
+  open: 'success',
+  closed: 'danger',
+  draft: 'neutral',
+};
+
+const APP_STATUS_BADGE: Record<OpsJobApplication['status'], BadgeVariant> = {
+  new: 'accent',
+  reviewed: 'neutral',
+  interviewing: 'warning',
+  rejected: 'danger',
+  hired: 'success',
+};
 
 export default function JobPostingsPage() {
   const [tab, setTab] = useState<'postings' | 'applications'>('postings');
@@ -159,11 +175,11 @@ export default function JobPostingsPage() {
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Briefcase className="w-6 h-6 text-app-accent" />
+          <h1 className="text-[16px] font-extrabold text-app-text-primary flex items-center gap-2">
+            <Briefcase className="w-5 h-5 text-app-accent" />
             Job Postings
           </h1>
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-[12px] font-semibold text-app-text-secondary mt-1">
             Manage open roles and review Careers page applications.
           </p>
         </div>
@@ -171,7 +187,7 @@ export default function JobPostingsPage() {
           <button
             type="button"
             onClick={load}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-app-border bg-white text-app-text-secondary font-bold text-[12px]"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Refresh
@@ -180,7 +196,7 @@ export default function JobPostingsPage() {
             <button
               type="button"
               onClick={openCreate}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-app-accent text-white font-semibold"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-app-accent text-white font-extrabold text-[12px]"
             >
               <Plus className="w-4 h-4" />
               New posting
@@ -189,75 +205,72 @@ export default function JobPostingsPage() {
         </div>
       </div>
 
-      <div className="flex gap-2">
-        {(['postings', 'applications'] as const).map((key) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize ${
-              tab === key ? 'bg-slate-900 text-white' : 'bg-white border border-slate-200 text-slate-700'
-            }`}
-          >
-            {key}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        tabs={[
+          { key: 'postings', label: 'Postings' },
+          { key: 'applications', label: 'Applications' },
+        ]}
+        activeKey={tab}
+        onChange={(key) => setTab(key as 'postings' | 'applications')}
+      />
 
       <div className="relative max-w-md">
-        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-app-text-muted" />
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={tab === 'postings' ? 'Search title, team, location...' : 'Search applicant or role...'}
-          className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-slate-200 bg-white"
+          className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-app-border bg-white text-[12px] font-semibold text-app-text-primary"
         />
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+        <div className="rounded-lg border border-red-300 bg-red-50 px-4 py-3 text-[12px] font-bold text-red-600">{error}</div>
       )}
 
       {tab === 'postings' && (
         <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6">
-          <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+          <div className="rounded-xl border border-app-border bg-white overflow-hidden">
             <table className="w-full text-sm">
-              <thead className="bg-slate-50 text-left text-slate-500">
+              <thead className="bg-[#F9FAFB] text-left">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Role</th>
-                  <th className="px-4 py-3 font-semibold">Team</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold">Actions</th>
+                  <th className="px-4 py-3 text-[9.5px] font-extrabold uppercase tracking-wider text-app-text-muted">Role</th>
+                  <th className="px-4 py-3 text-[9.5px] font-extrabold uppercase tracking-wider text-app-text-muted">Team</th>
+                  <th className="px-4 py-3 text-[9.5px] font-extrabold uppercase tracking-wider text-app-text-muted">Status</th>
+                  <th className="px-4 py-3 text-[9.5px] font-extrabold uppercase tracking-wider text-app-text-muted">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredJobs.map((job) => (
-                  <tr key={job.id} className="border-t border-slate-100">
+                  <tr key={job.id} className="border-t border-[#F1F3F5]">
                     <td className="px-4 py-3">
-                      <div className="font-semibold text-slate-900">{job.title}</div>
-                      <div className="text-xs text-slate-500">
+                      <div className="font-bold text-app-text-primary text-[12px]">{job.title}</div>
+                      <div className="text-[10.5px] font-semibold text-app-text-muted">
                         {job.location} · {employmentLabel(job.employmentType)}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{job.department}</td>
+                    <td className="px-4 py-3 font-semibold text-app-text-secondary text-[12px]">{job.department}</td>
                     <td className="px-4 py-3">
-                      <select
-                        value={job.status}
-                        onChange={(event) => setJobStatus(job, event.target.value as OpsJobStatus)}
-                        className="rounded-md border border-slate-200 px-2 py-1 text-xs capitalize"
-                      >
-                        {JOB_STATUS_OPTIONS.map((status) => (
-                          <option key={status} value={status}>
-                            {status}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="inline-flex flex-col gap-1">
+                        <Badge variant={JOB_STATUS_BADGE[job.status]}>{job.status}</Badge>
+                        <select
+                          value={job.status}
+                          onChange={(event) => setJobStatus(job, event.target.value as OpsJobStatus)}
+                          className="rounded-md border border-app-border px-2 py-1 text-[10px] font-bold capitalize bg-white text-app-text-secondary"
+                        >
+                          {JOB_STATUS_OPTIONS.map((status) => (
+                            <option key={status} value={status}>
+                              {status}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <button
                         type="button"
                         onClick={() => openEdit(job)}
-                        className="text-app-accent font-semibold text-xs"
+                        className="text-app-accent font-extrabold text-[11px]"
                       >
                         Edit
                       </button>
@@ -266,7 +279,7 @@ export default function JobPostingsPage() {
                 ))}
                 {!loading && filteredJobs.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
+                    <td colSpan={4} className="px-4 py-8 text-center text-[12px] font-semibold text-app-text-muted">
                       No job postings yet.
                     </td>
                   </tr>
@@ -275,11 +288,11 @@ export default function JobPostingsPage() {
             </table>
           </div>
 
-          <form onSubmit={saveJob} className="rounded-xl border border-slate-200 bg-white p-5 space-y-3">
+          <form onSubmit={saveJob} className="rounded-xl border border-app-border bg-white p-5 space-y-3">
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-slate-900">{editing ? 'Edit posting' : 'Create posting'}</h2>
+              <h2 className="font-extrabold text-app-text-primary text-[13px]">{editing ? 'Edit posting' : 'Create posting'}</h2>
               {editing && (
-                <button type="button" onClick={openCreate} className="text-slate-400 hover:text-slate-700">
+                <button type="button" onClick={openCreate} className="text-app-text-muted hover:text-app-text-secondary">
                   <X className="w-4 h-4" />
                 </button>
               )}

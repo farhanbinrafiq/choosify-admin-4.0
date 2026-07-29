@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useOrders, Order, OrderStatus } from '../../contexts/OrdersContext';
 import { 
@@ -580,11 +580,11 @@ Thank you for using Choosify Commerce Network.
           )}
 
           {/* Back header */}
-          <div className="flex items-center justify-between bg-app-card border border-app-border rounded-[2rem] p-6 shadow-2xl">
+          <div className="flex items-center justify-between bg-app-card border border-app-border rounded-2xl p-6 shadow-2xl">
             <div className="flex items-center gap-4">
               <button 
                 onClick={() => setSelectedOrderId(null)}
-                className="p-3 bg-white/5 hover:bg-white/10 rounded-xl text-app-text-primary transition-all cursor-pointer border border-app-border"
+                className="p-3 bg-app-bg hover:bg-app-border/40 rounded-xl text-app-text-primary transition-all cursor-pointer border border-app-border"
               >
                 <ArrowLeft className="w-5 h-5" />
               </button>
@@ -616,13 +616,13 @@ Thank you for using Choosify Commerce Network.
           </div>
 
           {/* 2-column Layout with Splitter */}
-          <SplitLayout layoutId="order-details-studio" panes={orderDetailsPanes} className="border border-app-border rounded-[2rem] overflow-hidden bg-app-card min-h-[600px]">
+          <SplitLayout layoutId="order-details-studio" panes={orderDetailsPanes} className="border border-app-border rounded-2xl overflow-hidden bg-app-card min-h-[600px]">
             {/* Main Info Column */}
             <div className="space-y-8 p-8 h-full overflow-y-auto">
               
               {/* Timeline Progress Bar */}
-              <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl relative">
-                <h3 className="text-xs font-black uppercase tracking-widest text-[#F4631E] mb-6">Operations Timeline</h3>
+              <div className="bg-app-card border border-app-border rounded-2xl p-8 shadow-2xl relative">
+                <h3 className="text-xs font-black uppercase tracking-widest text-[#FF5B00] mb-6">Operations Timeline</h3>
                 
                 <div className="relative">
                   {/* Visual Line */}
@@ -647,7 +647,7 @@ Thank you for using Choosify Commerce Network.
                         <div key={idx} className="flex flex-row md:flex-col items-center gap-3 text-center md:text-sans">
                           <div className={`w-8 h-8 rounded-full border flex items-center justify-center font-black text-xs shrink-0 transition-all${
                             isCurrent 
-                              ? 'bg-[#F4631E] text-white border-[#F4631E] animate-pulse scale-110 shadow-lg shadow-[#F4631E]/30'
+                              ? 'bg-[#FF5B00] text-white border-[#FF5B00] animate-pulse scale-110 shadow-lg shadow-[#FF5B00]/30'
                               : isCompleted 
                                 ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                                 : 'bg-app-bg text-slate-500 border-app-border'
@@ -655,10 +655,10 @@ Thank you for using Choosify Commerce Network.
                             {isCompleted ? '✓' : idx + 1}
                           </div>
                           <div className="text-left md:text-center mt-0 md:mt-2">
-                            <div className={`text-[11px] font-black uppercase tracking-wider${isCurrent ? 'text-[#F4631E]' : 'text-white'}`}>
+                            <div className={`text-[11px] font-black uppercase tracking-wider${isCurrent ? 'text-[#FF5B00]' : 'text-white'}`}>
                               {step.label}
                             </div>
-                            <div className="text-[9px] text-[#8E9BAE] font-medium leading-tight">
+                            <div className="text-[9px] text-[#6B7280] font-medium leading-tight">
                               {step.desc}
                             </div>
                           </div>
@@ -670,10 +670,10 @@ Thank you for using Choosify Commerce Network.
               </div>
 
               {/* Product description & Invoice info */}
-              <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl space-y-6">
+              <div className="bg-app-card border border-app-border rounded-2xl p-8 shadow-2xl space-y-6">
                 <div className="flex items-center justify-between border-b border-app-border/40 pb-4">
-                  <span className="text-xs font-black uppercase tracking-widest text-[#F4631E]">Retail Cart Items</span>
-                  <span className="font-mono text-xs text-[#8E9BAE]">Invoice Ref: {order.invoice_id || 'N/A'}</span>
+                  <span className="text-xs font-black uppercase tracking-widest text-[#FF5B00]">Retail Cart Items</span>
+                  <span className="font-mono text-xs text-[#6B7280]">Invoice Ref: {order.invoice_id || 'N/A'}</span>
                 </div>
 
                 <div className="flex gap-6 items-start">
@@ -681,7 +681,7 @@ Thank you for using Choosify Commerce Network.
                     <img src={order.product.image} className="w-full h-full object-cover" alt={order.product.name} />
                   </div>
                   <div className="space-y-1.5 flex-1">
-                    <span className="text-[9px] font-black uppercase tracking-wider bg-white/5 border border-app-border px-2.5 py-1 rounded-full text-[#F4631E]">
+                    <span className="text-[9px] font-black uppercase tracking-wider bg-app-bg border border-app-border px-2.5 py-1 rounded-full text-[#FF5B00]">
                       {order.product.brand}
                     </span>
                     <h4 className="text-md font-bold text-app-text-primary font-sans">
@@ -689,8 +689,8 @@ Thank you for using Choosify Commerce Network.
                         {order.product.name}
                       </Link>
                     </h4>
-                    <div className="text-xs text-[#8E9BAE] font-medium">SKU ID: <span className="font-mono text-app-text-primary text-[11px] font-black">{order.product.id}</span></div>
-                    <div className="text-xs text-[#8E9BAE] font-medium">Quantity: <span className="text-app-text-primary font-bold">{order.quantity || 1}</span></div>
+                    <div className="text-xs text-[#6B7280] font-medium">SKU ID: <span className="font-mono text-app-text-primary text-[11px] font-black">{order.product.id}</span></div>
+                    <div className="text-xs text-[#6B7280] font-medium">Quantity: <span className="text-app-text-primary font-bold">{order.quantity || 1}</span></div>
                   </div>
                   <div className="text-right">
                     <div className="text-xs font-bold text-app-text-secondary uppercase">Unit Price</div>
@@ -710,7 +710,7 @@ Thank you for using Choosify Commerce Network.
                   </div>
                   <div className="space-y-1">
                     <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Commission ({order.earnings.commissionPercent}%)</span>
-                    <span className="text-sm font-black text-[#F4631E]">৳ {order.earnings.futureAutomatedDeduction.toLocaleString()}</span>
+                    <span className="text-sm font-black text-[#FF5B00]">৳ {order.earnings.futureAutomatedDeduction.toLocaleString()}</span>
                   </div>
                   <div className="space-y-1">
                     <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider block">Merchant Net Payout</span>
@@ -718,7 +718,7 @@ Thank you for using Choosify Commerce Network.
                   </div>
                 </div>
 
-                <div className="flex flex-col sm:flex-row justify-between sm:items-center bg-white/5 border border-app-border rounded-xl px-5 py-3.5 gap-4">
+                <div className="flex flex-col sm:flex-row justify-between sm:items-center bg-app-bg border border-app-border rounded-xl px-5 py-3.5 gap-4">
                   <div className="flex items-center gap-4 flex-1 justify-between sm:justify-start">
                     <span className="text-xs font-black uppercase tracking-wider text-app-text-secondary">Total Billed Customer Amount:</span>
                     <span className="text-md font-black text-app-text-primary">৳ {((order.product.price * (order.quantity || 1)) + (order.delivery_charge || 120)).toLocaleString()} BDT</span>
@@ -728,25 +728,25 @@ Thank you for using Choosify Commerce Network.
                       sessionStorage.setItem(`choosify_invoice_${order.id}`, JSON.stringify(order));
                       navigate(`/admin/invoice/${order.id}`, { state: { order } });
                     }}
-                    className="flex items-center gap-1.5 px-3.5 py-2 text-app-text-primary bg-white/5 hover:bg-white/10 border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shrink-0"
+                    className="flex items-center gap-1.5 px-3.5 py-2 text-app-text-primary bg-app-bg hover:bg-app-border/40 border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer shrink-0"
                   >
-                    <FileText className="w-3.5 h-3.5 text-[#F4631E]" /> Invoice
+                    <FileText className="w-3.5 h-3.5 text-[#FF5B00]" /> Invoice
                   </button>
                 </div>
               </div>
 
               {/* Secure Admin Fulfillment Control Panel */}
               {isAdmin && (
-                <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl space-y-6">
+                <div className="bg-app-card border border-app-border rounded-2xl p-8 shadow-2xl space-y-6">
                   <div className="flex items-center gap-2 border-b border-app-border/40 pb-4">
-                    <Truck className="w-5 h-5 text-[#F4631E]" />
+                    <Truck className="w-5 h-5 text-[#FF5B00]" />
                     <h3 className="text-sm font-black uppercase tracking-wider text-app-text-primary">Full-Stack ERP Logistics &amp; Fulfillment Control</h3>
                   </div>
 
                   {order.status === 'Returned' && (
                     <div className="bg-orange-950/40 text-orange-400 border border-orange-900/40 rounded-xl p-5 space-y-3">
                       <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-5 h-5 text-[#F4631E] shrink-0" />
+                        <AlertTriangle className="w-5 h-5 text-[#FF5B00] shrink-0" />
                         <h4 className="text-xs font-black uppercase tracking-wider text-app-text-primary">Reverse Logistics &amp; Refund in Progress</h4>
                       </div>
                       <p className="text-[10px] text-app-text-secondary leading-relaxed font-medium">
@@ -754,7 +754,7 @@ Thank you for using Choosify Commerce Network.
                       </p>
                       <button
                         onClick={() => navigate('/admin/returns')}
-                        className="px-4 py-2 bg-[#F4631E] hover:bg-[#F4631E]/80 text-white font-black uppercase tracking-widest text-[9px] rounded-lg transition-all shadow-md cursor-pointer flex items-center gap-1.5"
+                        className="px-4 py-2 bg-[#FF5B00] hover:bg-[#FF5B00]/80 text-white font-black uppercase tracking-widest text-[9px] rounded-lg transition-all shadow-md cursor-pointer flex items-center gap-1.5"
                       >
                         <Package className="w-3.5 h-3.5" />
                         Go to Returns Dashboard
@@ -763,7 +763,7 @@ Thank you for using Choosify Commerce Network.
                   )}
 
                   <div className="space-y-4">
-                    <span className="text-xs font-black uppercase tracking-widest text-[#F4631E] block">Sellers Sub-Orders Dispatch &amp; Tracking</span>
+                    <span className="text-xs font-black uppercase tracking-widest text-[#FF5B00] block">Sellers Sub-Orders Dispatch &amp; Tracking</span>
                     {(order.subOrders || [
                       {
                         sellerId: order.product.sellerId,
@@ -787,7 +787,7 @@ Thank you for using Choosify Commerce Network.
                     const isDelivered = order.status === 'Delivered';
                     if (isCOD && isDelivered) {
                       return (
-                        <div className="bg-white/5 border border-app-border rounded-xl p-5 flex items-center justify-between">
+                        <div className="bg-app-bg border border-app-border rounded-xl p-5 flex items-center justify-between">
                           <div>
                             <h4 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">COD Collected Status</h4>
                             <p className="text-[10px] text-app-text-secondary mt-1 font-medium">Has CASH payment been fully collected by courier agent?</p>
@@ -802,7 +802,7 @@ Thank you for using Choosify Commerce Network.
                                 addCustomerNotes(order.id, `🔒 Admin confirmed COD collection: ${e.target.checked ? 'Collected' : 'Pending'}`);
                                 showInlineToast(`✓ COD Collected set to: ${e.target.checked ? 'True' : 'False'}`);
                               }}
-                              className="w-5 h-5 rounded border-app-border text-[#F4631E] focus:ring-[#F4631E] bg-app-card cursor-pointer accent-[#F4631E]"
+                              className="w-5 h-5 rounded border-app-border text-[#FF5B00] focus:ring-[#FF5B00] bg-app-card cursor-pointer accent-[#FF5B00]"
                             />
                             <label htmlFor={`cod-collect-checkbox-${order.id}`} className="text-xs font-bold text-app-text-primary uppercase tracking-wider cursor-pointer">
                               Confirm COD Collected
@@ -832,12 +832,12 @@ Thank you for using Choosify Commerce Network.
                         name="adminNoteText"
                         rows={3}
                         placeholder="Type private admin notes..."
-                        className="w-full p-4 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary placeholder-slate-500 outline-none focus:border-[#F4631E] min-h-[80px]"
+                        className="w-full p-4 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary placeholder-slate-500 outline-none focus:border-[#FF5B00] min-h-[80px]"
                       />
                       <div className="flex justify-end">
                         <button 
                           type="submit"
-                          className="px-4 py-2 bg-[#F4631E]/20 hover:bg-[#F4631E]/30 text-[#F4631E] border border-[#F4631E]/30 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer active:scale-95 transition-all"
+                          className="px-4 py-2 bg-[#FF5B00]/20 hover:bg-[#FF5B00]/30 text-[#FF5B00] border border-[#FF5B00]/30 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer active:scale-95 transition-all"
                         >
                           Save Note
                         </button>
@@ -847,7 +847,7 @@ Thank you for using Choosify Commerce Network.
                     {/* Render existing adminNotes */}
                     {order.adminNotes && order.adminNotes.length > 0 && (
                       <div className="space-y-2 mt-4">
-                        <span className="text-[9px] font-bold text-[#F4631E] uppercase tracking-wider block">Admin Notes History:</span>
+                        <span className="text-[9px] font-bold text-[#FF5B00] uppercase tracking-wider block">Admin Notes History:</span>
                         <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
                           {order.adminNotes.map((an, idx) => (
                             <div key={idx} className="bg-app-card border border-app-border rounded-xl p-3 text-[11px] text-app-text-secondary font-medium font-mono">
@@ -863,9 +863,9 @@ Thank you for using Choosify Commerce Network.
 
               {/* Secure Admin Overrides panel */}
               {isAdmin && (
-                <div className="bg-[#1e1512] border border-[#F4631E]/20 rounded-[2rem] p-8 shadow-2xl space-y-6">
-                  <div className="flex items-center gap-2 border-b border-[#F4631E]/10 pb-4">
-                    <ShieldCheck className="w-5 h-5 text-[#F4631E]" />
+                <div className="bg-[#1e1512] border border-[#FF5B00]/20 rounded-2xl p-8 shadow-2xl space-y-6">
+                  <div className="flex items-center gap-2 border-b border-[#FF5B00]/10 pb-4">
+                    <ShieldCheck className="w-5 h-5 text-[#FF5B00]" />
                     <h3 className="text-sm font-black uppercase tracking-wider text-app-text-primary">Administrative Decisive Control Panel</h3>
                   </div>
 
@@ -882,7 +882,7 @@ Thank you for using Choosify Commerce Network.
                           });
                           showInlineToast(`✓ Status overrode to ${e.target.value} successfully.`);
                         }}
-                        className="w-full px-4 py-3 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary outline-none focus:border-[#F4631E]"
+                        className="w-full px-4 py-3 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary outline-none focus:border-[#FF5B00]"
                       >
                         {['Pending', 'Confirmed', 'Processing', 'Dispatched', 'In Transit', 'Delivered', 'Cancelled', 'Rejected', 'Returned', 'Exchange'].map((st) => (
                           <option key={st} value={st}>{st}</option>
@@ -907,7 +907,7 @@ Thank you for using Choosify Commerce Network.
                             showInlineToast(`✓ Courier agency reassigned to ${e.target.value}.`);
                           }
                         }}
-                        className="w-full px-4 py-3 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary outline-none focus:border-[#F4631E]"
+                        className="w-full px-4 py-3 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary outline-none focus:border-[#FF5B00]"
                       />
                     </div>
 
@@ -928,7 +928,7 @@ Thank you for using Choosify Commerce Network.
                             showInlineToast(`✓ Invoice pricing overrode to ৳ ${val}.`);
                           }
                         }}
-                        className="w-full px-4 py-3 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary outline-none focus:border-[#F4631E]"
+                        className="w-full px-4 py-3 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary outline-none focus:border-[#FF5B00]"
                       />
                     </div>
 
@@ -943,7 +943,7 @@ Thank you for using Choosify Commerce Network.
                           });
                           showInlineToast(`✓ Brand attribution re-mapped to ${e.target.value}.`);
                         }}
-                        className="w-full px-4 py-3 bg-app-card border border-[#F4631E]/20 rounded-xl text-xs text-app-text-primary outline-none focus:border-[#F4631E]"
+                        className="w-full px-4 py-3 bg-app-card border border-[#FF5B00]/20 rounded-xl text-xs text-app-text-primary outline-none focus:border-[#FF5B00]"
                       >
                         {Array.from(new Set(orders.map(o => o.product.brand))).map((brand) => (
                           <option key={brand} value={brand}>{brand}</option>
@@ -952,7 +952,7 @@ Thank you for using Choosify Commerce Network.
                     </div>
                   </div>
 
-                  <div className="flex flex-wrap gap-3 pt-4 border-t border-[#F4631E]/10">
+                  <div className="flex flex-wrap gap-3 pt-4 border-t border-[#FF5B00]/10">
                     {/* Suspend Order */}
                     <button 
                       onClick={() => {
@@ -966,7 +966,7 @@ Thank you for using Choosify Commerce Network.
                       className={`px-4 py-2.5 text-[10px] font-black uppercase tracking-wider rounded-xl border flex items-center gap-2 cursor-pointer transition-all${
                         order.isSuspended 
                           ? 'bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30' 
-                          : 'bg-white/5 text-slate-300 border-slate-700 hover:bg-white/10'
+                          : 'bg-app-bg text-slate-300 border-slate-700 hover:bg-app-border/40'
                       }`}
                     >
                       <ShieldAlert className="w-3.5 h-3.5" /> {order.isSuspended ? 'Unsuspend Pay' : 'Unsuspend Pay'}
@@ -1062,14 +1062,14 @@ Thank you for using Choosify Commerce Network.
             </div>
 
             {/* Customer Profile & Dispute Center */}
-            <div className="space-y-8 p-8 h-full overflow-y-auto bg-white/5 border-l border-app-border">
+            <div className="space-y-8 p-8 h-full overflow-y-auto bg-app-bg border-l border-app-border">
               
               {/* Customer Box */}
-              <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl space-y-6">
-                <span className="text-xs font-black uppercase tracking-widest text-[#F4631E] block border-b border-app-border/40 pb-4">Customer profile ledger</span>
+              <div className="bg-app-card border border-app-border rounded-2xl p-8 shadow-2xl space-y-6">
+                <span className="text-xs font-black uppercase tracking-widest text-[#FF5B00] block border-b border-app-border/40 pb-4">Customer profile ledger</span>
                 
                 <div className="flex gap-4 items-center">
-                  <div className="w-12 h-12 rounded-full bg-[#F4631E]/20 border border-[#F4631E]/30 text-[#F4631E] font-black text-sm flex items-center justify-center shadow-inner">
+                  <div className="w-12 h-12 rounded-full bg-[#FF5B00]/20 border border-[#FF5B00]/30 text-[#FF5B00] font-black text-sm flex items-center justify-center shadow-inner">
                     {order.customer.avatar}
                   </div>
                   <div>
@@ -1077,7 +1077,7 @@ Thank you for using Choosify Commerce Network.
                       {isAdmin ? (
                         <Link 
                           to={`/admin/consumers/${order.customer.id}`}
-                          className="hover:text-[#F4631E] hover:underline focus:outline-none focus:ring-1 focus:ring-[#F4631E] transition-colors"
+                          className="hover:text-[#FF5B00] hover:underline focus:outline-none focus:ring-1 focus:ring-[#FF5B00] transition-colors"
                         >
                           {order.customer.name}
                         </Link>
@@ -1085,7 +1085,7 @@ Thank you for using Choosify Commerce Network.
                         order.customer.name
                       )}
                     </h4>
-                    <p className="text-xs text-[#8E9BAE]">{order.customer.email}</p>
+                    <p className="text-xs text-[#6B7280]">{order.customer.email}</p>
                   </div>
                 </div>
 
@@ -1100,7 +1100,7 @@ Thank you for using Choosify Commerce Network.
                       {(order.customer as any).address || "House 14, Road 4, Sector 12, Uttara, Dhaka"}
                     </div>
                   </div>
-                  <div className="flex justify-between items-center bg-[#F4631E]/5 p-3 rounded-xl border border-[#F4631E]/10">
+                  <div className="flex justify-between items-center bg-[#FF5B00]/5 p-3 rounded-xl border border-[#FF5B00]/10">
                     <span className="text-app-text-secondary font-bold">Behavior Verification:</span>
                     <span className={`text-[10px] uppercase font-black px-2.5 py-0.5 rounded border${
                       order.customer.behavior === 'Good' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
@@ -1115,7 +1115,7 @@ Thank you for using Choosify Commerce Network.
                       <div className="grid grid-cols-2 gap-2">
                         <Link 
                           to={`/admin/consumers/${order.customer.id}`}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/5 border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium hover:bg-white/10 transition-colors"
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium hover:bg-app-border/40 transition-colors"
                         >
                           👤 Profile
                         </Link>
@@ -1124,7 +1124,7 @@ Thank you for using Choosify Commerce Network.
                             navigator.clipboard.writeText(order.customer.id);
                             showInlineToast('✓ Customer ID copied to clipboard!');
                           }}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/5 border border-app-border rounded-xl text-[10px] text-left text-app-text-primary font-medium hover:bg-white/10 transition-colors cursor-pointer"
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-app-bg border border-app-border rounded-xl text-[10px] text-left text-app-text-primary font-medium hover:bg-app-border/40 transition-colors cursor-pointer"
                         >
                           📋 ID
                         </button>
@@ -1133,7 +1133,7 @@ Thank you for using Choosify Commerce Network.
                             navigator.clipboard.writeText(order.customer.email);
                             showInlineToast('✓ Customer Email copied to clipboard!');
                           }}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/5 border border-app-border rounded-xl text-[10px] text-left text-app-text-primary font-medium hover:bg-white/10 transition-colors cursor-pointer"
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-app-bg border border-app-border rounded-xl text-[10px] text-left text-app-text-primary font-medium hover:bg-app-border/40 transition-colors cursor-pointer"
                         >
                           ✉️ Email
                         </button>
@@ -1142,7 +1142,7 @@ Thank you for using Choosify Commerce Network.
                             navigator.clipboard.writeText((order.customer as any).phone || "+880 1711-456789");
                             showInlineToast('✓ Customer Phone copied to clipboard!');
                           }}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white/5 border border-app-border rounded-xl text-[10px] text-left text-app-text-primary font-medium hover:bg-white/10 transition-colors cursor-pointer"
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-app-bg border border-app-border rounded-xl text-[10px] text-left text-app-text-primary font-medium hover:bg-app-border/40 transition-colors cursor-pointer"
                         >
                           📞 Phone
                         </button>
@@ -1154,7 +1154,7 @@ Thank you for using Choosify Commerce Network.
 
               {/* Admin Dispute Center */}
               {isAdmin && (
-                <div className="bg-[#1c1214] border border-rose-500/10 rounded-[2rem] p-8 shadow-2xl space-y-6">
+                <div className="bg-[#1c1214] border border-rose-500/10 rounded-2xl p-8 shadow-2xl space-y-6">
                   <div className="flex items-center gap-2 border-b border-rose-500/10 pb-4">
                     <AlertCircle className="w-5 h-5 text-rose-500" />
                     <h3 className="text-xs font-black uppercase tracking-widest text-app-text-primary">Dispute Center Secure Panel</h3>
@@ -1192,13 +1192,13 @@ Thank you for using Choosify Commerce Network.
               )}
 
               {/* Audit Logs Trail */}
-              <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl space-y-6">
-                <span className="text-xs font-black uppercase tracking-widest text-[#F4631E] block border-b border-app-border/40 pb-4">Audit log activity trail</span>
+              <div className="bg-app-card border border-app-border rounded-2xl p-8 shadow-2xl space-y-6">
+                <span className="text-xs font-black uppercase tracking-widest text-[#FF5B00] block border-b border-app-border/40 pb-4">Audit log activity trail</span>
                 
                 <div className="space-y-4 max-h-[220px] overflow-y-auto custom-scrollbar">
                   {auditLogs.map((log: any, idx: number) => (
                     <div key={idx} className="flex gap-3 text-[11px] items-start">
-                      <div className="w-1.5 h-1.5 rounded-full bg-[#F4631E] mt-1 shrink-0" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#FF5B00] mt-1 shrink-0" />
                       <div>
                         <div className="text-app-text-secondary font-mono font-medium">{log.time} · {log.actor}</div>
                         <div className="text-app-text-primary mt-0.5 font-sans leading-relaxed">{log.log}</div>
@@ -1226,11 +1226,11 @@ Thank you for using Choosify Commerce Network.
 
       {/* Dynamic Floating Sticky Bulk Actions Control Tray */}
       {isAdmin && selectedOrders.length > 0 && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-[#1e1e2e]/95 border border-[#F4631E]/40 px-6 py-4 rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.7)] flex items-center gap-6 animate-in slide-in-from-bottom duration-300">
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-[#1e1e2e]/95 border border-[#FF5B00]/40 px-6 py-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.7)] flex items-center gap-6 animate-in slide-in-from-bottom duration-300">
           <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#F4631E] animate-ping" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#FF5B00] animate-ping" />
             <span className="text-[10px] font-black uppercase tracking-wider text-app-text-primary">
-              Selected <span className="text-[#F4631E] font-black">{selectedOrders.length}</span> Batch Orders
+              Selected <span className="text-[#FF5B00] font-black">{selectedOrders.length}</span> Batch Orders
             </span>
           </div>
 
@@ -1311,15 +1311,15 @@ Thank you for using Choosify Commerce Network.
       )}
 
       {/* Header Banner */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl relative overflow-hidden">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 bg-app-card border border-app-border rounded-2xl p-8 shadow-2xl relative overflow-hidden">
         <div className="space-y-1 relative z-10">
           <h1 className="text-2xl font-black text-app-text-primary tracking-tight flex items-center gap-3">
-            <span className="p-2 bg-[#F4631E]/10 border border-[#F4631E]/20 text-[#F4631E] rounded-xl block">
+            <span className="p-2 bg-[#FF5B00]/10 border border-[#FF5B00]/20 text-[#FF5B00] rounded-xl block">
               <ListOrdered className="w-5 h-5" />
             </span>
             <span>Order Console</span>
           </h1>
-          <p className="text-xs text-[#8E9BAE]">
+          <p className="text-xs text-[#6B7280]">
             Process active customer orders, print statements, track logistics couriers, and explore historic shipments.
           </p>
         </div>
@@ -1343,7 +1343,7 @@ Thank you for using Choosify Commerce Network.
               </div>
               <div className="bg-app-bg/60 border border-app-border rounded-2xl px-5 py-3 flex flex-col justify-center min-w-[110px]">
                 <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Active Run</span>
-                <span className="text-lg font-black text-[#F4631E]">{sellerOrders.filter(o => ['Confirmed', 'Dispatched', 'In Transit'].includes(o.status)).length}</span>
+                <span className="text-lg font-black text-[#FF5B00]">{sellerOrders.filter(o => ['Confirmed', 'Dispatched', 'In Transit'].includes(o.status)).length}</span>
               </div>
               <div className="bg-app-bg/60 border border-app-border rounded-2xl px-5 py-3 flex flex-col justify-center min-w-[110px]">
                 <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Fulfilled</span>
@@ -1363,14 +1363,14 @@ Thank you for using Choosify Commerce Network.
       </div>
 
       {/* REQUIRED TOP NAVIGATION TABS */}
-      <div className="bg-app-card border border-app-border rounded-[2rem] p-4.5 shadow-xl flex gap-3">
+      <div className="bg-app-card border border-app-border rounded-2xl p-4.5 shadow-xl flex gap-3">
         <button
           id="btn-nav-order-console"
           onClick={() => setCurrentMainTab('console')}
           className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3.5 text-xs font-black uppercase tracking-widest transition-all rounded-xl cursor-pointer${
             currentMainTab === 'console'
-              ? 'bg-[#F4631E] text-white shadow-lg shadow-[#F4631E]/20'
-              : 'bg-app-bg border border-app-border text-slate-400 hover:text-white hover:bg-white/5'
+              ? 'bg-[#FF5B00] text-white shadow-lg shadow-[#FF5B00]/20'
+              : 'bg-app-bg border border-app-border text-slate-400 hover:text-white hover:bg-app-bg'
           }`}
         >
           <span>📥 Order Console</span>
@@ -1380,8 +1380,8 @@ Thank you for using Choosify Commerce Network.
           onClick={() => setCurrentMainTab('history')}
           className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3.5 text-xs font-black uppercase tracking-widest transition-all rounded-xl cursor-pointer${
             currentMainTab === 'history'
-              ? 'bg-[#F4631E] text-white shadow-lg shadow-[#F4631E]/20'
-              : 'bg-app-bg border border-app-border text-slate-400 hover:text-white hover:bg-white/5'
+              ? 'bg-[#FF5B00] text-white shadow-lg shadow-[#FF5B00]/20'
+              : 'bg-app-bg border border-app-border text-slate-400 hover:text-white hover:bg-app-bg'
           }`}
         >
           <span>📜 Order History</span>
@@ -1389,17 +1389,17 @@ Thank you for using Choosify Commerce Network.
       </div>
 
       {/* 12 Core Filter Tabs Operational Workspace Nav */}
-      <div className="bg-app-card border border-app-border rounded-[2rem] p-6 shadow-xl space-y-5">
+      <div className="bg-app-card border border-app-border rounded-2xl p-6 shadow-xl space-y-5">
         <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-transparent">
           <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto items-stretch md:items-center">
             <div className="relative w-full md:w-96 group">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[#F4631E] transition-colors" />
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[#FF5B00] transition-colors" />
               <input 
                 type="text"
                 placeholder="Search by ID, Customer Name, SKU, product brand, invoice..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 bg-app-bg border border-app-border rounded-xl text-xs text-app-text-primary placeholder-slate-500 outline-none focus:border-[#F4631E]/60 transition-all font-medium"
+                className="w-full pl-10 pr-4 py-3 bg-app-bg border border-app-border rounded-xl text-xs text-app-text-primary placeholder-slate-500 outline-none focus:border-[#FF5B00]/60 transition-all font-medium"
               />
               {searchTerm && (
                 <button 
@@ -1416,8 +1416,8 @@ Thank you for using Choosify Commerce Network.
               onClick={() => setCodFilterOnly(!codFilterOnly)}
               className={`px-4 py-3 text-xs font-black uppercase tracking-widest rounded-xl border cursor-pointer transition-all${
                 codFilterOnly 
-                  ? 'bg-[#F4631E] border-[#F4631E] text-white shadow-lg shadow-[#F4631E]/20' 
-                  : 'bg-app-bg border-app-border text-slate-400 hover:text-white hover:bg-white/5'
+                  ? 'bg-[#FF5B00] border-[#FF5B00] text-white shadow-lg shadow-[#FF5B00]/20' 
+                  : 'bg-app-bg border-app-border text-slate-400 hover:text-white hover:bg-app-bg'
               }`}
             >
               💵 COD Only
@@ -1425,7 +1425,7 @@ Thank you for using Choosify Commerce Network.
           </div>
 
           <div className="flex items-center gap-2 text-xs font-bold text-app-text-secondary uppercase tracking-widest">
-            <Filter className="w-3.5 h-3.5 text-[#F4631E]" /> 12 Operations Filter Ledger 
+            <Filter className="w-3.5 h-3.5 text-[#FF5B00]" /> 12 Operations Filter Ledger 
           </div>
         </div>
 
@@ -1465,12 +1465,12 @@ Thank you for using Choosify Commerce Network.
                 onClick={() => setActiveTab(tab.id as OrderConsoleTab)}
                 className={`px-4.5 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all rounded-xl whitespace-nowrap flex items-center gap-2 shrink-0 cursor-pointer${
                   isActive 
-                    ? 'bg-[#F4631E] text-white shadow-lg shadow-[#F4631E]/20' 
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    ? 'bg-[#FF5B00] text-white shadow-lg shadow-[#FF5B00]/20' 
+                    : 'text-slate-400 hover:text-white hover:bg-app-bg'
                 }`}
               >
                 <span>{tab.label}</span>
-                <span className={`text-[8.5px] font-mono px-2 py-0.5 rounded-full${isActive ? 'bg-white text-[#F4631E] font-black' : 'bg-white/5 text-slate-500 font-bold'}`}>
+                <span className={`text-[8.5px] font-mono px-2 py-0.5 rounded-full${isActive ? 'bg-white text-[#FF5B00] font-black' : 'bg-app-bg text-slate-500 font-bold'}`}>
                   {count}
                 </span>
               </button>
@@ -1480,11 +1480,11 @@ Thank you for using Choosify Commerce Network.
       </div>
 
       {isAdmin && (
-        <div className="bg-app-card border border-app-border rounded-[2rem] p-6 shadow-xl space-y-4">
+        <div className="bg-app-card border border-app-border rounded-2xl p-6 shadow-xl space-y-4">
           <div className="flex items-center justify-between border-b border-app-border/40 pb-3">
             <div className="flex items-center gap-2">
-              <Filter className="w-4 h-4 text-[#F4631E]" />
-              <span className="text-xs font-black uppercase tracking-widest text-[#F4631E]">Marketplace Advanced Cross-Check Filters (14 Criteria Checklist)</span>
+              <Filter className="w-4 h-4 text-[#FF5B00]" />
+              <span className="text-xs font-black uppercase tracking-widest text-[#FF5B00]">Marketplace Advanced Cross-Check Filters (14 Criteria Checklist)</span>
             </div>
             <button 
               onClick={() => {
@@ -1504,7 +1504,7 @@ Thank you for using Choosify Commerce Network.
                 setFilterFulfillmentStatus('All');
                 showInlineToast('✓ All 14 Advanced Filters cleared successfully.');
               }}
-              className="text-[9px] font-black uppercase tracking-widest px-3 py-1 bg-white/5 border border-app-border rounded-lg text-app-text-secondary hover:text-[#F4631E]"
+              className="text-[9px] font-black uppercase tracking-widest px-3 py-1 bg-app-bg border border-app-border rounded-lg text-app-text-secondary hover:text-[#FF5B00]"
             >
               Reset Filters
             </button>
@@ -1517,7 +1517,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterSeller}
                 onChange={(e) => setFilterSeller(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Sellers</option>
                 {Array.from(new Set(orders.map(o => o.product.sellerName))).filter(Boolean).map(s => (
@@ -1532,7 +1532,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterBrand}
                 onChange={(e) => setFilterBrand(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Brands</option>
                 {Array.from(new Set(orders.map(o => o.product.brand))).filter(Boolean).map(b => (
@@ -1547,7 +1547,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterCategory}
                 onChange={(e) => setFilterCategory(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Categories</option>
                 <option value="Clot">Apparel & Fashion</option>
@@ -1563,7 +1563,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterCourier}
                 onChange={(e) => setFilterCourier(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Couriers</option>
                 {Array.from(new Set(orders.map(o => o.deliveryPartner))).filter(Boolean).map(c => (
@@ -1578,7 +1578,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterDivision}
                 onChange={(e) => setFilterDivision(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Divisions</option>
                 <option value="Dhaka">Dhaka</option>
@@ -1597,7 +1597,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterDistrict}
                 onChange={(e) => setFilterDistrict(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Districts</option>
                 <option value="Uttara">Uttara Sub-zone</option>
@@ -1614,7 +1614,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterPaymentMethod}
                 onChange={(e) => setFilterPaymentMethod(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Methods</option>
                 <option value="COD">Cash On Delivery (COD)</option>
@@ -1630,7 +1630,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterPaymentStatus}
                 onChange={(e) => setFilterPaymentStatus(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Statuses</option>
                 <option value="Paid">Paid</option>
@@ -1645,7 +1645,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterRiskScore}
                 onChange={(e) => setFilterRiskScore(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Score Categories</option>
                 <option value="Good">Good Behavior (Green)</option>
@@ -1659,7 +1659,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterDisputeStatus}
                 onChange={(e) => setFilterDisputeStatus(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Cases</option>
                 <option value="No Dispute">No Dispute Case</option>
@@ -1674,7 +1674,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterOrderSource}
                 onChange={(e) => setFilterOrderSource(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Gateways</option>
                 <option value="Marketplace">Marketplace Order</option>
@@ -1688,7 +1688,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterDateRange}
                 onChange={(e) => setFilterDateRange(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Historic Times</option>
                 <option value="Today">Recorded Today</option>
@@ -1702,7 +1702,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterVerificationStatus}
                 onChange={(e) => setFilterVerificationStatus(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Identifiers</option>
                 <option value="Verified">Verified Customers</option>
@@ -1716,7 +1716,7 @@ Thank you for using Choosify Commerce Network.
               <select 
                 value={filterFulfillmentStatus}
                 onChange={(e) => setFilterFulfillmentStatus(e.target.value)}
-                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#F4631E]"
+                className="w-full px-3 py-2 bg-app-bg border border-app-border rounded-xl text-[10px] text-app-text-primary font-medium outline-none focus:border-[#FF5B00]"
               >
                 <option value="All">All Statuses</option>
                 {['Pending', 'Confirmed', 'Processing', 'Dispatched', 'In Transit', 'Delivered', 'Cancelled', 'Rejected'].map(st => (
@@ -1730,15 +1730,15 @@ Thank you for using Choosify Commerce Network.
 
       {/* Brand Context Switching Tab Row */}
       {profile?.role === 'seller' && sellerRelations.length > 0 && (
-        <div className="bg-app-card border border-app-border rounded-[2rem] p-4 shadow-xl flex items-center justify-between gap-4 flex-wrap">
+        <div className="bg-app-card border border-app-border rounded-2xl p-4 shadow-xl flex items-center justify-between gap-4 flex-wrap">
           <div className="flex flex-wrap gap-1.5 items-center">
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500 mr-2">Segment Filter:</span>
             <button
               onClick={() => setActiveBrandId(null)}
               className={`px-4.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all${
                 activeBrandId === null 
-                  ? 'bg-[#F4631E] text-white shadow-md' 
-                  : 'text-slate-400 hover:text-white hover:bg-white/5'
+                  ? 'bg-[#FF5B00] text-white shadow-md' 
+                  : 'text-slate-400 hover:text-white hover:bg-app-bg'
               }`}
             >
               All Brands
@@ -1749,8 +1749,8 @@ Thank you for using Choosify Commerce Network.
                 onClick={() => setActiveBrandId(b.id)}
                 className={`px-4.5 py-2 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all${
                   activeBrandId === b.id 
-                    ? 'bg-[#F4631E] text-white shadow-md' 
-                    : 'text-slate-400 hover:text-[#F4631E] hover:bg-white/5'
+                    ? 'bg-[#FF5B00] text-white shadow-md' 
+                    : 'text-slate-400 hover:text-[#FF5B00] hover:bg-app-bg'
                 }`}
               >
                 {b.name}
@@ -1766,10 +1766,10 @@ Thank you for using Choosify Commerce Network.
       {/* Dynamic 12 tab core filtered orders display list */}
       <div className="space-y-6 animate-in fade-in duration-300">
         {filteredOrders.length === 0 ? (
-          <div className="bg-app-card border border-app-border rounded-[2rem] p-16 text-center shadow-lg animate-fade-in">
-            <AlertCircle className="w-12 h-12 text-[#8E9BAE] mx-auto mb-4" />
+          <div className="bg-app-card border border-app-border rounded-2xl p-16 text-center shadow-lg animate-fade-in">
+            <AlertCircle className="w-12 h-12 text-[#6B7280] mx-auto mb-4" />
             <h3 className="text-md font-bold text-app-text-primary mb-1 font-sans">No Orders Loaded</h3>
-            <p className="text-xs text-[#8E9BAE] max-w-sm mx-auto font-sans">
+            <p className="text-xs text-[#6B7280] max-w-sm mx-auto font-sans">
               There are no orders matching the selected filter criteria tab or search query string.
             </p>
           </div>
@@ -1777,9 +1777,9 @@ Thank you for using Choosify Commerce Network.
           filteredOrders.map((order) => (
                 <div 
                   key={order.id} 
-                  className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl relative overflow-hidden hover:border-[#F4631E]/30 transition-all group"
+                  className="bg-app-card border border-app-border rounded-2xl p-8 shadow-2xl relative overflow-hidden hover:border-[#FF5B00]/30 transition-all group"
                 >
-                  <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-[#F4631E] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-[#FF5B00] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
                   {/* Order card heading info */}
                   <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-app-border/60">
@@ -1794,7 +1794,7 @@ Thank you for using Choosify Commerce Network.
                             setSelectedOrders([...selectedOrders, order.id]);
                           }
                         }}
-                        className="w-4.5 h-4.5 rounded border-app-border text-[#F4631E] focus:ring-[#F4631E] bg-app-card cursor-pointer accent-[#F4631E] shrink-0"
+                        className="w-4.5 h-4.5 rounded border-app-border text-[#FF5B00] focus:ring-[#FF5B00] bg-app-card cursor-pointer accent-[#FF5B00] shrink-0"
                       />
 
                       <Link 
@@ -1812,7 +1812,7 @@ Thank you for using Choosify Commerce Network.
                         </div>
                         <div>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-mono text-sm font-black text-[#F4631E] hover:underline">{order.id}</span>
+                            <span className="font-mono text-sm font-black text-[#FF5B00] hover:underline">{order.id}</span>
                           <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border${getStatusStyle(order.status)}`}>
                             {order.status}
                           </span>
@@ -1838,7 +1838,7 @@ Thank you for using Choosify Commerce Network.
                             </span>
                           ))}
                           {order.invoice_id && (
-                            <span className="font-mono text-[9px] text-[#8E9BAE] bg-white/5 border border-app-border px-2 py-0.5 rounded">
+                            <span className="font-mono text-[9px] text-[#6B7280] bg-app-bg border border-app-border px-2 py-0.5 rounded">
                               INV: {order.invoice_id}
                             </span>
                           )}
@@ -1856,10 +1856,10 @@ Thank you for using Choosify Commerce Network.
                         e.stopPropagation();
                         sessionStorage.setItem(`choosify_invoice_${order.id}`, JSON.stringify(order));
                       }}
-                      className="flex items-center gap-1 p-1 px-2.5 bg-app-card hover:bg-[#F4631E]/20 text-[#8E9BAE] hover:text-[#F4631E] border border-app-border rounded-lg text-[9px] font-bold transition-colors cursor-pointer shrink-0"
+                      className="flex items-center gap-1 p-1 px-2.5 bg-app-card hover:bg-[#FF5B00]/20 text-[#6B7280] hover:text-[#FF5B00] border border-app-border rounded-lg text-[9px] font-bold transition-colors cursor-pointer shrink-0"
                       title="Quick Invoice Action"
                     >
-                      <FileText className="w-3.5 h-3.5 text-[#F4631E]" />
+                      <FileText className="w-3.5 h-3.5 text-[#FF5B00]" />
                       <span>Invoice</span>
                     </Link>
                   </div>
@@ -1881,7 +1881,7 @@ Thank you for using Choosify Commerce Network.
                               </button>
                               <button 
                                 onClick={() => openAction(order, 'decline')}
-                                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-rose-400 border border-rose-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-app-bg hover:bg-app-border/40 text-rose-400 border border-rose-500/20 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
                               >
                                 <XCircle className="w-3.5 h-3.5" /> Reject
                               </button>
@@ -1892,13 +1892,13 @@ Thank you for using Choosify Commerce Network.
                             <>
                               <button 
                                 onClick={() => openAction(order, 'dispatch')}
-                                className="flex items-gradient-to-r from-[#F4631E] to-orange-500 text-app-text-primary rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg shadow-[#F4631E]/20 transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 px-3.5 py-2.5"
+                                className="flex items-gradient-to-r from-[#FF5B00] to-orange-500 text-app-text-primary rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg shadow-[#FF5B00]/20 transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 px-3.5 py-2.5"
                               >
                                 <Truck className="w-3.5 h-3.5" /> Mark Dispatched
                               </button>
                               <button 
                                 onClick={() => openAction(order, 'cancel')}
-                                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-app-text-secondary border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-app-bg hover:bg-app-border/40 text-app-text-secondary border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
                               >
                                 Cancel Order
                               </button>
@@ -1933,10 +1933,10 @@ Thank you for using Choosify Commerce Network.
 
                           <button 
                             onClick={() => openAction(order, 'note')}
-                            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-white/5 hover:bg-white/10 text-app-text-primary border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                            className="flex items-center gap-1.5 px-3.5 py-2.5 bg-app-bg hover:bg-app-border/40 text-app-text-primary border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
                             title="Add note sent to client conversation layout"
                           >
-                            <MessageSquare className="w-3.5 h-3.5 text-[#F4631E]" /> Comms Note
+                            <MessageSquare className="w-3.5 h-3.5 text-[#FF5B00]" /> Comms Note
                           </button>
 
                           <button 
@@ -1952,7 +1952,7 @@ Thank you for using Choosify Commerce Network.
                       {isAdmin && (
                         <button 
                           onClick={() => setSelectedOrderId(order.id)}
-                          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-[#F4631E]/20 to-orange-500/20 text-[#F4631E] border border-[#F4631E]/25 hover:border-[#F4631E]/45 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                          className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-[#FF5B00]/20 to-orange-500/20 text-[#FF5B00] border border-[#FF5B00]/25 hover:border-[#FF5B00]/45 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
                         >
                           Fulfillment
                         </button>
@@ -1966,7 +1966,7 @@ Thank you for using Choosify Commerce Network.
                         }}
                         className="flex items-center gap-1.5 px-3.5 py-2.5 bg-app-bg hover:bg-slate-700 text-app-text-primary border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
                       >
-                        <FileText className="w-3.5 h-3.5 text-[#ef3c23]" /> View Inv
+                        <FileText className="w-3.5 h-3.5 text-[#FF5B00]" /> View Inv
                       </Link>
 
                       <button 
@@ -1998,8 +1998,8 @@ Thank you for using Choosify Commerce Network.
                         </div>
                         <div>
                           <h4 className="text-[12px] font-bold text-app-text-primary">{order.product.name}</h4>
-                          <p className="text-[10px] text-[#F4631E] font-extrabold mt-1">৳ {order.product.price.toLocaleString()}</p>
-                          <p className="text-[9px] text-[#8E9BAE] mt-0.5">Brand Source: {order.product.brand}</p>
+                          <p className="text-[10px] text-[#FF5B00] font-extrabold mt-1">৳ {order.product.price.toLocaleString()}</p>
+                          <p className="text-[9px] text-[#6B7280] mt-0.5">Brand Source: {order.product.brand}</p>
                         </div>
                       </div>
                     </div>
@@ -2023,7 +2023,7 @@ Thank you for using Choosify Commerce Network.
                             {isAdmin ? (
                               <Link 
                                 to={`/admin/consumers/${order.customer.id}`}
-                                className="hover:text-[#F4631E] hover:underline focus:outline-none focus:ring-1 focus:ring-[#F4631E] transition-colors"
+                                className="hover:text-[#FF5B00] hover:underline focus:outline-none focus:ring-1 focus:ring-[#FF5B00] transition-colors"
                               >
                                 {order.customer.name}
                               </Link>
@@ -2031,7 +2031,7 @@ Thank you for using Choosify Commerce Network.
                               order.customer.name
                             )}
                           </h5>
-                          <p className="text-[9px] text-[#8E9BAE] truncate">{order.customer.email}</p>
+                          <p className="text-[9px] text-[#6B7280] truncate">{order.customer.email}</p>
                           <div className="flex items-center gap-1.5 mt-1">
                             <span className="text-[9px] text-slate-500 font-medium">Auto-Risk Score:</span>
                             <span className={`text-[9px] font-black px-1.5 py-0.2 rounded uppercase${
@@ -2063,14 +2063,14 @@ Thank you for using Choosify Commerce Network.
                               href={order.trackingUrl} 
                               target="_blank" 
                               rel="noreferrer" 
-                              className="text-[10px] font-extrabold text-[#F4631E] hover:underline flex items-center gap-1"
+                              className="text-[10px] font-extrabold text-[#FF5B00] hover:underline flex items-center gap-1"
                             >
                               Track URL <ChevronRight className="w-3 h-3" />
                             </a>
                           </div>
                         </div>
                       ) : (
-                        <p className="text-[10px] text-[#8E9BAE] leading-relaxed italic pt-1">
+                        <p className="text-[10px] text-[#6B7280] leading-relaxed italic pt-1">
                           No shipment handler assigned. Complete order authorization & dispatch to lock delivery partner logs.
                         </p>
                       )}
@@ -2084,11 +2084,11 @@ Thank you for using Choosify Commerce Network.
                       {/* Customer Side Conversation Notes */}
                       {order.customerNotes && order.customerNotes.length > 0 && (
                         <div className="space-y-1.5">
-                          <span className="text-[9px] font-bold text-[#8E9BAE] uppercase tracking-wider block">Customer Conversation Log:</span>
+                          <span className="text-[9px] font-bold text-[#6B7280] uppercase tracking-wider block">Customer Conversation Log:</span>
                           <div className="space-y-1">
                             {order.customerNotes.map((cn, idx) => (
-                              <div key={idx} className="bg-white/5 border border-app-border rounded-xl p-3 text-[11px] text-app-text-secondary flex gap-2">
-                                <span className="text-[#F4631E] font-bold">💬</span>
+                              <div key={idx} className="bg-app-bg border border-app-border rounded-xl p-3 text-[11px] text-app-text-secondary flex gap-2">
+                                <span className="text-[#FF5B00] font-bold">💬</span>
                                 <div>{cn}</div>
                               </div>
                             ))}
@@ -2146,7 +2146,7 @@ Thank you for using Choosify Commerce Network.
                 return (
                   <div 
                     key={order.id} 
-                    className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl relative overflow-hidden hover:border-[#F4631E]/30 transition-all group"
+                    className="bg-app-card border border-app-border rounded-2xl p-8 shadow-2xl relative overflow-hidden hover:border-[#FF5B00]/30 transition-all group"
                   >
                     <div className="absolute top-0 left-0 w-1.5 h-full bg-gradient-to-b from-teal-500 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
 
@@ -2218,7 +2218,7 @@ Thank you for using Choosify Commerce Network.
                                 {isAdmin ? (
                                   <Link 
                                     to={`/admin/consumers/${order.customer.id}`}
-                                    className="hover:text-[#F4631E] hover:underline focus:outline-none focus:ring-1 focus:ring-[#F4631E] transition-colors"
+                                    className="hover:text-[#FF5B00] hover:underline focus:outline-none focus:ring-1 focus:ring-[#FF5B00] transition-colors"
                                   >
                                     {order.customer.name}
                                   </Link>
@@ -2230,8 +2230,8 @@ Thank you for using Choosify Commerce Network.
                             </div>
                           </div>
                           <div className="pt-2 border-t border-app-border/40 text-[10px] space-y-1">
-                            <div className="text-[#8E9BAE] font-sans">📞 Phone: <span className="text-app-text-primary font-mono font-medium">{customerPhone}</span></div>
-                            <div className="text-[#8E9BAE] font-sans">🏠 Address: <span className="text-app-text-primary font-sans">{customerAddress}</span></div>
+                            <div className="text-[#6B7280] font-sans">📞 Phone: <span className="text-app-text-primary font-mono font-medium">{customerPhone}</span></div>
+                            <div className="text-[#6B7280] font-sans">🏠 Address: <span className="text-app-text-primary font-sans">{customerAddress}</span></div>
                           </div>
                         </div>
                       </div>
@@ -2254,8 +2254,8 @@ Thank you for using Choosify Commerce Network.
                                 {order.product.name}
                               </Link>
                             </div>
-                            <div className="text-[9px] text-[#F4631E] font-black uppercase tracking-wider">{order.product.brand}</div>
-                            <div className="text-[10px] text-[#8E9BAE] font-sans">
+                            <div className="text-[9px] text-[#FF5B00] font-black uppercase tracking-wider">{order.product.brand}</div>
+                            <div className="text-[10px] text-[#6B7280] font-sans">
                               Qty Ordered: <span className="text-app-text-primary font-bold">{order.quantity || 1}</span>
                             </div>
                             <div className="text-xs font-black text-app-text-primary pt-1">
@@ -2280,7 +2280,7 @@ Thank you for using Choosify Commerce Network.
                                 href={order.trackingUrl} 
                                 target="_blank" 
                                 rel="noreferrer" 
-                                className="text-[10px] font-extrabold text-[#F4631E] hover:underline flex items-center gap-1"
+                                className="text-[10px] font-extrabold text-[#FF5B00] hover:underline flex items-center gap-1"
                               >
                                 {order.trackingUrl?.split('/').pop() || 'Track Link'} <ChevronRight className="w-3 h-3" />
                               </a>
@@ -2289,7 +2289,7 @@ Thank you for using Choosify Commerce Network.
                         ) : (
                           <div className="bg-app-bg/50 border border-app-border border-dashed rounded-xl p-4 text-center">
                             <Truck className="w-5 h-5 text-slate-600 mx-auto mb-1.5" />
-                            <p className="text-[9px] text-[#8E9BAE] leading-relaxed italic">
+                            <p className="text-[9px] text-[#6B7280] leading-relaxed italic">
                               No dispatch carrier assigned. Set tracking in the Platform Inbox ERP workspace to launch this flow.
                             </p>
                           </div>
@@ -2377,7 +2377,7 @@ Thank you for using Choosify Commerce Network.
                 return (
                   <div 
                     key={order.id} 
-                    className="bg-app-card/65 border border-app-border/85 rounded-[2rem] p-8 shadow-xl relative overflow-hidden"
+                    className="bg-app-card/65 border border-app-border/85 rounded-2xl p-8 shadow-xl relative overflow-hidden"
                   >
                     {/* Upper heading segment for history card */}
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-app-border/40">
@@ -2396,7 +2396,7 @@ Thank you for using Choosify Commerce Network.
                           </span>
                         </div>
                         <p className="text-[10px] text-slate-500 mt-1 font-semibold">
-                          Log Time: {new Date(order.timestamp).toLocaleString()} | End State: <span className="text-[#8E9BAE]">{order.deliverTime || order.cancelTime || 'Processed'}</span>
+                          Log Time: {new Date(order.timestamp).toLocaleString()} | End State: <span className="text-[#6B7280]">{order.deliverTime || order.cancelTime || 'Processed'}</span>
                         </p>
                       </div>
 
@@ -2420,7 +2420,7 @@ Thank you for using Choosify Commerce Network.
                           onClick={() => {
                             sessionStorage.setItem(`choosify_invoice_${order.id}`, JSON.stringify(order));
                           }}
-                          className="px-3.5 py-2 bg-app-bg hover:bg-slate-700 text-[#F4631E] border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
+                          className="px-3.5 py-2 bg-app-bg hover:bg-slate-700 text-[#FF5B00] border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all"
                         >
                           Invoice Details
                         </Link>
@@ -2441,7 +2441,7 @@ Thank you for using Choosify Commerce Network.
                                 {order.product.name}
                               </Link>
                             </div>
-                            <div className="text-[9.5px] text-[#F4631E] font-bold mt-0.5">৳ {order.product.price.toLocaleString()}</div>
+                            <div className="text-[9.5px] text-[#FF5B00] font-bold mt-0.5">৳ {order.product.price.toLocaleString()}</div>
                           </div>
                         </div>
                       </div>
@@ -2453,7 +2453,7 @@ Thank you for using Choosify Commerce Network.
                           {isAdmin ? (
                             <Link 
                               to={`/admin/consumers/${order.customer.id}`}
-                              className="font-extrabold text-[#F4631E] hover:underline focus:outline-none focus:ring-1 focus:ring-[#F4631E] transition-colors block"
+                              className="font-extrabold text-[#FF5B00] hover:underline focus:outline-none focus:ring-1 focus:ring-[#FF5B00] transition-colors block"
                             >
                               {order.customer.name}
                             </Link>
@@ -2461,7 +2461,7 @@ Thank you for using Choosify Commerce Network.
                             <span className="font-extrabold text-app-text-secondary block">{order.customer.name}</span>
                           )}
                           <span className="text-[10px] text-slate-500 block mt-0.5">{order.customer.email}</span>
-                          <span className="text-[9px] text-[#8E9BAE] block mt-0.5">Phone: {customerPhone}</span>
+                          <span className="text-[9px] text-[#6B7280] block mt-0.5">Phone: {customerPhone}</span>
                         </div>
                       </div>
 
@@ -2509,7 +2509,7 @@ Thank you for using Choosify Commerce Network.
               <h3 className="text-lg font-black text-app-text-primary capitalize">
                 {actionType === 'decline' ? 'Decline Request' : actionType === 'cancel' ? 'Cancel Order' : actionType === 'dispatch' ? 'Fulfill Shipment' : actionType === 'internal' ? 'Merchant Internal Comment' : 'Customer Conversation Note'}
               </h3>
-              <p className="text-xs text-[#8E9BAE] mt-1">
+              <p className="text-xs text-[#6B7280] mt-1">
                 Order Reference: <span className="font-mono text-app-text-primary font-bold">{actioningOrder.id}</span>
               </p>
             </div>
@@ -2578,7 +2578,7 @@ Thank you for using Choosify Commerce Network.
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
                     placeholder="Say something to the customer regarding shipment sizing, timelines..."
-                    className="w-full bg-app-bg border border-app-border rounded-xl p-4 text-xs text-app-text-primary outline-none focus:border-[#F4631E]/50"
+                    className="w-full bg-app-bg border border-app-border rounded-xl p-4 text-xs text-app-text-primary outline-none focus:border-[#FF5B00]/50"
                   />
                 </div>
               )}
@@ -2608,7 +2608,7 @@ Thank you for using Choosify Commerce Network.
                 <button 
                   type="submit"
                   className={`px-6 py-3 text-[10px] font-black uppercase text-app-text-primary rounded-xl shadow-lg transition-all${
-                    actionType === 'decline' ? 'bg-red-600 hover:bg-red-500' : actionType === 'cancel' ? 'bg-rose-600 hover:bg-rose-100' : actionType === 'internal' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-[#F4631E] hover:bg-orange-500'
+                    actionType === 'decline' ? 'bg-red-600 hover:bg-red-500' : actionType === 'cancel' ? 'bg-rose-600 hover:bg-rose-100' : actionType === 'internal' ? 'bg-amber-600 hover:bg-amber-500' : 'bg-[#FF5B00] hover:bg-orange-500'
                   }`}
                 >
                   Apply Action
@@ -2663,7 +2663,7 @@ function SubOrderTrackerRow({ subOrder, orderId, updateOrderTrackingStatus, show
         <select 
           value={selectedStatus}
           onChange={(e) => setSelectedStatus(e.target.value as any)}
-          className="px-3 py-1.5 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary outline-none focus:border-[#F4631E]"
+          className="px-3 py-1.5 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary outline-none focus:border-[#FF5B00]"
         >
           {['pending', 'dispatched', 'transit', 'delivered', 'cancelled'].map((val) => (
             <option key={val} value={val}>{val}</option>
@@ -2674,7 +2674,7 @@ function SubOrderTrackerRow({ subOrder, orderId, updateOrderTrackingStatus, show
             updateOrderTrackingStatus(orderId, subOrder.sellerId, selectedStatus);
             showInlineToast(`✓ Updated ${subOrder.sellerName} tracking to: ${selectedStatus}`);
           }}
-          className="px-3.5 py-1.5 bg-[#F4631E] text-white rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-orange-600 transition-all active:scale-95"
+          className="px-3.5 py-1.5 bg-[#FF5B00] text-white rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-orange-600 transition-all active:scale-95"
         >
           Update
         </button>

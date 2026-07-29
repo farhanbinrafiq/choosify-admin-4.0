@@ -23,6 +23,9 @@ export function buildOperationsSnapshot(): OperationsSnapshot {
     shipments: shipmentStore.listShipments(),
     featureFlags: operationsStore.getFeatureFlags(),
     sellerOffers: operationsStore.listSellerOffers(),
+    feeCharges: operationsStore.listFeeCharges(),
+    paymentOptionsConfig: operationsStore.getPaymentOptionsConfig(),
+    sellerBookingSettings: operationsStore.getAllSellerBookingSettings(),
   };
 }
 

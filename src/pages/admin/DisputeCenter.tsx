@@ -304,9 +304,9 @@ export default function DisputeCenter() {
           <button 
             id="file-dispute-btn"
             onClick={() => setShowCreateModal(true)}
-            className="flex items-center gap-2 bg-app-card hover:bg-slate-800 text-app-text-primary px-4 py-2.5 rounded-lg text-sm font-medium shadow-sm transition"
+            className="flex items-center gap-2 bg-app-accent hover:bg-[#E64A00] text-white px-4 py-2.5 rounded-lg text-sm font-bold shadow-sm transition"
           >
-            <Plus className="w-4 h-4 text-app-text-primary" />
+            <Plus className="w-4 h-4 text-white" />
             Intake New Complaint
           </button>
         </div>
@@ -594,7 +594,7 @@ export default function DisputeCenter() {
                                 )}
                                 <button
                                   onClick={() => handleViewDetail(dispute)}
-                                  className="bg-app-card hover:bg-slate-800 text-app-text-primary px-2.5 py-1.5 rounded text-xs font-semibold transition"
+                                  className="bg-app-accent hover:bg-[#E64A00] text-white px-2.5 py-1.5 rounded text-xs font-bold transition"
                                 >
                                   Open Workspace
                                 </button>
@@ -649,7 +649,7 @@ export default function DisputeCenter() {
                   <AlertCircle className="w-12 h-12 text-app-text-secondary mx-auto mb-4" />
                   <h3 className="text-lg font-bold text-slate-800 mb-1">No Active Case Selected</h3>
                   <p className="text-sm text-slate-500 mb-4">Please pick a dispute file from the Case Queue to enter the administrative mediation workspace.</p>
-                  <button onClick={() => setActiveTab('active')} className="bg-app-card text-app-text-primary hover:bg-slate-800 px-4 py-2 rounded-lg text-sm font-semibold transition">
+                  <button onClick={() => setActiveTab('active')} className="bg-app-accent text-white hover:bg-[#E64A00] px-4 py-2 rounded-lg text-sm font-bold transition">
                     Return to Active Cases
                   </button>
                 </div>
@@ -700,7 +700,7 @@ export default function DisputeCenter() {
 
                       <button
                         onClick={() => setActiveTab('active')}
-                        className="bg-app-card hover:bg-slate-800 text-app-text-primary px-3.5 py-2 rounded-lg text-xs font-semibold transition"
+                        className="bg-app-accent hover:bg-[#E64A00] text-white px-3.5 py-2 rounded-lg text-xs font-bold transition"
                       >
                         Back to Queue
                       </button>
@@ -789,8 +789,8 @@ export default function DisputeCenter() {
                                       className="w-full h-full object-cover group-hover:scale-105 transition duration-300" 
                                       referrerPolicy="no-referrer"
                                     />
-                                    <div className="absolute inset-0 bg-app-card/20 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                                      <span className="text-[10px] text-app-text-primary font-bold tracking-wider font-mono bg-app-card/20 px-2 py-1 rounded">CLICK TO VIEW</span>
+                                    <div className="absolute inset-0 bg-navy/60 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
+                                      <span className="text-[10px] text-white font-bold tracking-wider font-mono bg-navy/40 px-2 py-1 rounded">CLICK TO VIEW</span>
                                     </div>
                                   </div>
                                 ) : (
@@ -890,10 +890,10 @@ export default function DisputeCenter() {
                           <div className="absolute right-3.5 bottom-3.5 flex items-center gap-2">
                             <button
                               type="submit"
-                              className={`px-4 py-2 rounded-lg text-xs font-bold text-app-text-primary shadow flex items-center gap-1.5 transition${
-                                isInternalNote 
-                                  ? 'bg-amber-600 hover:bg-amber-700' 
-                                  : 'bg-app-card hover:bg-slate-800'
+                              className={`px-4 py-2 rounded-lg text-xs font-bold text-white shadow flex items-center gap-1.5 transition${
+                                isInternalNote
+                                  ? 'bg-amber-600 hover:bg-amber-700'
+                                  : 'bg-app-accent hover:bg-[#E64A00]'
                               }`}
                             >
                               <Send className="w-3 h-3" />
@@ -972,7 +972,7 @@ export default function DisputeCenter() {
                               reopenDispute(currentDispute.id, 'New evidence submitted regarding physical damages');
                               toast.success('Case status reset to Active open.');
                             }}
-                            className="w-full bg-app-card hover:bg-slate-800 text-app-text-primary p-3 rounded-lg text-center text-sm font-semibold transition"
+                            className="w-full bg-app-accent hover:bg-[#E64A00] text-white p-3 rounded-lg text-center text-sm font-bold transition"
                           >
                             Re-Open Dispute File
                           </button>
@@ -1348,9 +1348,9 @@ export default function DisputeCenter() {
                     <button
                       key={range}
                       onClick={() => setReportRange(range as any)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold font-mono uppercase transition${
-                        reportRange === range 
-                          ? 'bg-app-card text-white' 
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold font-mono uppercase transition${
+                        reportRange === range
+                          ? 'bg-app-accent text-white'
                           : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                       }`}
                     >
@@ -1684,7 +1684,7 @@ export default function DisputeCenter() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-app-card hover:bg-slate-800 text-app-text-primary rounded-lg text-xs font-semibold transition"
+                  className="px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white rounded-lg text-xs font-bold transition"
                 >
                   Lodge Case Intake
                 </button>
@@ -1770,7 +1770,7 @@ export default function DisputeCenter() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-app-card hover:bg-slate-800 text-app-text-primary rounded-lg text-xs font-semibold transition"
+                  className="px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white rounded-lg text-xs font-bold transition"
                 >
                   Link Asset
                 </button>
@@ -1826,7 +1826,7 @@ export default function DisputeCenter() {
                     }
                     setShowAssignModal(false);
                   }}
-                  className="px-4 py-2 bg-app-card hover:bg-slate-800 text-app-text-primary rounded-lg text-xs font-semibold shadow"
+                  className="px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white rounded-lg text-xs font-bold shadow"
                 >
                   Assign Officer
                 </button>
@@ -1857,7 +1857,7 @@ export default function DisputeCenter() {
             <div className="p-6 border-t flex justify-end">
               <button
                 onClick={() => setShowAuditModal(false)}
-                className="px-4 py-2 bg-app-card text-app-text-primary hover:bg-slate-800 rounded-lg text-xs font-bold shadow"
+                className="px-4 py-2 bg-app-accent text-white hover:bg-[#E64A00] rounded-lg text-xs font-bold shadow"
               >
                 Close Audit Sheet
               </button>

@@ -27,12 +27,17 @@ export interface Promotion {
   };
 }
 
+/**
+ * Generic feature/sponsor-request approval queue. Originally scoped to product/brand
+ * promotion requests; extended to cover creator and guide feature requests so the
+ * Ads & Deals Studio can run one unified approval queue across all requestable content.
+ */
 export interface PromotionRequest {
   id: string;
   requesterId: string;
   requesterRole: 'seller' | 'creator';
   requesterName: string; // e.g. business name or creator displayName
-  contentType: 'PRODUCT' | 'DEAL' | 'RECOMMENDATION' | 'BRAND' | 'POST';
+  contentType: 'PRODUCT' | 'DEAL' | 'RECOMMENDATION' | 'BRAND' | 'POST' | 'CREATOR' | 'GUIDE';
   contentId: string;
   contentName: string;
   requestedPromotionType: 'Featured' | 'Sponsored' | 'Hot' | 'Verified' | 'Trending' | 'Editor Pick';
@@ -42,6 +47,9 @@ export interface PromotionRequest {
   approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
   createdAt: string;
 }
+
+/** Alias for readability at call sites that treat this purely as a generic feature-request queue. */
+export type FeatureRequest = PromotionRequest;
 
 interface AdsContextType {
   promotions: Promotion[];

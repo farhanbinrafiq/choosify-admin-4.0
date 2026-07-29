@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useContact } from '../../contexts/ContactInteractionContext';
 import { operationsApi } from '../../services/operationsApi';
-import { 
+import { Badge } from '../../components/ui/Badge';
+import {
   Search, 
   Filter, 
   MoreVertical, 
@@ -42,18 +43,14 @@ interface MockUser {
 const mockUsers: MockUser[] = [];
 
 const RoleBadge = ({ role }: { role: string }) => {
-  const styles: Record<string, string> = {
-    'Consumer': 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-    'Seller': 'bg-orange-500/10 text-orange-400 border-orange-500/20',
-    'Creator': 'bg-green-500/10 text-green-400 border-green-500/20',
-    'Admin': 'bg-red-500/10 text-red-400 border-red-500/20',
+  const variants: Record<string, 'info' | 'accent' | 'success' | 'danger'> = {
+    'Consumer': 'info',
+    'Seller': 'accent',
+    'Creator': 'success',
+    'Admin': 'danger',
   };
 
-  return (
-    <span className={`px-2 py-0.5 rounded-[2px] text-[9px] font-bold uppercase tracking-wider border ${styles[role] || styles['Consumer']}`}>
-      {role}
-    </span>
-  );
+  return <Badge variant={variants[role] || 'info'}>{role}</Badge>;
 };
 
 export default function ConsumersPage() {
@@ -136,29 +133,29 @@ export default function ConsumersPage() {
       
       {/* Toast banner */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-app-card shadow-2xl px-4 py-2.5 rounded-[4px] border border-app-border animate-slide-in">
+        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-white shadow-2xl px-4 py-2.5 rounded-lg border border-app-border animate-slide-in">
           <div className="w-2 h-2 rounded-full bg-app-accent" />
-          <span className="text-xs font-bold font-mono text-white">{toastMessage}</span>
+          <span className="text-xs font-bold font-mono text-app-text-primary">{toastMessage}</span>
         </div>
       )}
 
       {/* Breadcrumb Indicators */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-app-text-secondary">
+          <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.05em] text-app-text-disabled">
             <span>Platform Registry</span>
-            <ChevronRight className="w-3.5 h-3.5 text-app-text-secondary/30" />
+            <ChevronRight className="w-3.5 h-3.5 text-app-text-disabled/50" />
             <span>Consumers</span>
-            <ChevronRight className="w-3.5 h-3.5 text-app-text-secondary/30" />
-            <span className="text-app-accent-light">{currentViewRole}s Directory</span>
+            <ChevronRight className="w-3.5 h-3.5 text-app-text-disabled/50" />
+            <span className="text-app-accent">{currentViewRole}s Directory</span>
           </div>
 
-           <h1 className="text-xl font-bold text-white tracking-tight">
+           <h1 className="text-[17px] font-extrabold text-app-text-primary tracking-tight">
             {isCreatorView && 'Creator Management'}
             {isAdminView && 'Security & Administration'}
             {isConsumerView && 'Consumer Management Hub'}
           </h1>
-          <p className="text-app-text-secondary text-[12px]">
+          <p className="text-app-text-secondary text-[12px] font-semibold">
             {isCreatorView && 'Monitor expert content curators, recommendation algorithms, and campaign conversion rates.'}
             {isAdminView && 'Comprehensive monitoring of credentials, assigned permission groups, and staff action logs.'}
             {isConsumerView && 'Manage registered platform buyers, behavior intent patterns, and audit safety ratings.'}
@@ -168,25 +165,25 @@ export default function ConsumersPage() {
         {/* Filters and Inputs */}
         <div className="flex items-center gap-3">
           <div className="relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-app-text-secondary group-focus-within:text-app-accent-light transition-colors" />
-            <input 
-              type="text" 
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-app-text-muted group-focus-within:text-app-accent transition-colors" />
+            <input
+              type="text"
               placeholder={`Search ${currentViewRole.toLowerCase()}s...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-1.5 bg-app-card border border-app-border rounded-[4px] text-xs w-full md:w-64 focus:outline-none focus:border-app-accent/50 transition-all text-white placeholder-app-text-secondary/40 font-medium"
+              className="pl-9 pr-4 py-1.5 bg-white border border-app-border rounded-lg text-xs w-full md:w-64 focus:outline-none focus:border-app-accent/50 transition-all text-app-text-primary placeholder-app-text-muted font-semibold"
             />
           </div>
-          <button 
+          <button
             onClick={() => showToast('Applied advanced filtering profiles')}
-            className="flex items-center gap-1.5 bg-app-card border border-app-border hover:border-app-accent text-app-text-primary px-3 py-1.5 rounded-[4px] text-xs font-bold transition-all shadow-sm active:scale-95 shrink-0 hover:text-white cursor-pointer"
+            className="flex items-center gap-1.5 bg-white border border-app-border hover:border-app-accent text-app-text-secondary px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all shadow-sm active:scale-95 shrink-0 hover:text-app-accent cursor-pointer"
           >
              <Filter className="w-3.5 h-3.5 text-app-accent" />
              <span>Refine List</span>
           </button>
-          <button 
+          <button
             onClick={() => showToast(`Initiated onboard wrapper for ${currentViewRole}`)}
-            className="flex items-center gap-1.5 bg-app-accent border border-transparent text-white px-3.5 py-1.5 rounded-[4px] text-xs font-bold transition-all shadow-md hover:bg-orange-600 cursor-pointer shrink-0"
+            className="flex items-center gap-1.5 bg-app-accent border border-transparent text-white px-3.5 py-1.5 rounded-lg text-xs font-extrabold transition-all shadow-md hover:bg-[var(--color-accent-hover)] cursor-pointer shrink-0"
           >
              <span>{isCreatorView ? 'Onboard Creator' : isAdminView ? 'Invite Admin' : 'Invite Consumer'}</span>
           </button>
@@ -198,47 +195,47 @@ export default function ConsumersPage() {
         <div className="space-y-6 animate-in fade-in duration-200">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {[
-              { label: 'Total Influencers', val: '8,410', color: 'border-l-green-500', note: 'Verified ecosystem curators' },
-              { label: 'Active in 30d', val: '7,240', color: 'border-l-blue-500', note: '86% active contribution MTD' },
-              { label: 'Avg Engagement Rate', val: '18.4%', color: 'border-l-purple-500', note: 'Highly resonant posts' },
-              { label: 'Brand Sales Generated', val: '৳ 1.84M', color: 'border-l-orange-500', note: 'Direct marketing attribution' },
+              { label: 'Total Influencers', val: '8,410', color: 'border-l-[#16A34A]', note: 'Verified ecosystem curators' },
+              { label: 'Active in 30d', val: '7,240', color: 'border-l-[#2563EB]', note: '86% active contribution MTD' },
+              { label: 'Avg Engagement Rate', val: '18.4%', color: 'border-l-[#6C4CFF]', note: 'Highly resonant posts' },
+              { label: 'Brand Sales Generated', val: '৳ 1.84M', color: 'border-l-[#FF5B00]', note: 'Direct marketing attribution' },
             ].map(s => (
-              <div key={s.label} className={`bg-app-card p-4.5 rounded-[4px] border border-app-border border-l-[3px] shadow-lg ${s.color}`}>
-                <div className="text-[20px] font-bold text-white tracking-tight font-mono">{s.val}</div>
-                <div className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest mt-1 opacity-70">{s.label}</div>
-                <div className="text-[9.5px] text-app-text-secondary italic mt-1">{s.note}</div>
+              <div key={s.label} className={`bg-white p-4 rounded-lg border border-app-border border-l-4 ${s.color}`}>
+                <div className="text-[20px] font-extrabold text-app-text-primary tracking-tight font-mono">{s.val}</div>
+                <div className="text-[10px] text-app-text-disabled uppercase font-extrabold tracking-widest mt-1">{s.label}</div>
+                <div className="text-[9.5px] text-app-text-muted font-semibold mt-1">{s.note}</div>
               </div>
             ))}
           </div>
 
           {/* Detailed Creator Behavioural Insights */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="bg-app-card rounded-[4px] border border-app-border p-5 space-y-4">
-              <h4 className="text-[10px] font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-emerald-400" /> CREATOR PERFORMANCE RANKINGS
+            <div className="bg-white rounded-lg border border-app-border p-5 space-y-4">
+              <h4 className="text-[10px] font-extrabold text-app-text-disabled uppercase tracking-wider flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-[#16A34A]" /> CREATOR PERFORMANCE RANKINGS
               </h4>
               <div className="space-y-3">
                 {[
-                  { rank: '#1', category: 'Boutique Closets', engagement: '24.2% engagement', bg: 'bg-green-500/10 text-green-400' },
-                  { rank: '#2', category: 'Gadget Overviews', engagement: '18.9% engagement', bg: 'bg-blue-500/10 text-blue-400' },
-                  { rank: '#3', category: 'Traditional Wear', engagement: '15.4% engagement', bg: 'bg-purple-500/10 text-purple-400' },
+                  { rank: '#1', category: 'Boutique Closets', engagement: '24.2% engagement', bg: 'bg-[#F0FDF4] text-[#16A34A]' },
+                  { rank: '#2', category: 'Gadget Overviews', engagement: '18.9% engagement', bg: 'bg-[#EFF6FF] text-[#2563EB]' },
+                  { rank: '#3', category: 'Traditional Wear', engagement: '15.4% engagement', bg: 'bg-[#F5F3FF] text-[#6C4CFF]' },
                 ].map((item, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs py-1.5 border-b border-white/[0.04] last:border-none">
+                  <div key={idx} className="flex items-center justify-between text-xs py-1.5 border-t border-[#F1F3F5] first:border-none">
                     <div className="flex items-center gap-2">
                       <span className={`w-5 h-5 rounded-full flex items-center justify-center font-mono font-bold text-[9px] ${item.bg}`}>
                         {item.rank}
                       </span>
-                      <span className="text-white font-semibold">{item.category}</span>
+                      <span className="text-app-text-primary font-bold">{item.category}</span>
                     </div>
-                    <span className="font-mono text-[11px] text-app-text-secondary">{item.engagement}</span>
+                    <span className="font-mono text-[11px] text-app-text-muted font-semibold">{item.engagement}</span>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="bg-app-card rounded-[4px] border border-app-border p-5 space-y-4">
-              <h4 className="text-[10px] font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Eye className="w-4 h-4 text-emerald-400" /> RESOUNDING RECOMMENDATIONS
+            <div className="bg-white rounded-lg border border-app-border p-5 space-y-4">
+              <h4 className="text-[10px] font-extrabold text-app-text-disabled uppercase tracking-wider flex items-center gap-2">
+                <Eye className="w-4 h-4 text-[#16A34A]" /> RESOUNDING RECOMMENDATIONS
               </h4>
               <div className="space-y-3">
                 {[
@@ -246,34 +243,34 @@ export default function ConsumersPage() {
                   { title: 'Must-Have Tech Gear Bangladesh', views: '38.1k clicks', author: 'Sumaiya Rahman' },
                   { title: 'Aarong Silk Heritage Review', views: '29.3k clicks', author: 'Tahmid Alvi' },
                 ].map((post, idx) => (
-                  <div key={idx} className="space-y-0.5 pb-2 border-b border-white/[0.04] last:border-none">
-                    <div className="text-xs font-bold text-white truncate">{post.title}</div>
-                    <div className="flex justify-between text-[10px] text-app-text-secondary font-mono">
+                  <div key={idx} className="space-y-0.5 pb-2 border-t border-[#F1F3F5] first:border-none pt-2 first:pt-0">
+                    <div className="text-xs font-bold text-app-text-primary truncate">{post.title}</div>
+                    <div className="flex justify-between text-[10px] text-app-text-muted font-mono font-semibold">
                       <span>By {post.author}</span>
-                      <span className="text-emerald-400 font-semibold">{post.views}</span>
+                      <span className="text-[#16A34A] font-bold">{post.views}</span>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="bg-app-card rounded-[4px] border border-app-border p-5 space-y-4">
-              <h4 className="text-[10px] font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <Award className="w-4 h-4 text-emerald-400" /> HIGH AFFILIATE EARNERS
+            <div className="bg-white rounded-lg border border-app-border p-5 space-y-4">
+              <h4 className="text-[10px] font-extrabold text-app-text-disabled uppercase tracking-wider flex items-center gap-2">
+                <Award className="w-4 h-4 text-[#16A34A]" /> HIGH AFFILIATE EARNERS
               </h4>
               <div className="space-y-3.5">
-                <div className="flex items-center justify-between text-xs pb-2 border-b border-white/[0.04]">
-                  <span className="text-app-text-secondary font-medium">Top Affiliate Contributor</span>
+                <div className="flex items-center justify-between text-xs pb-2 border-b border-[#F1F3F5]">
+                  <span className="text-app-text-secondary font-semibold">Top Affiliate Contributor</span>
                   <div className="text-right">
-                    <span className="block font-bold text-white">Rifat Hasan</span>
-                    <span className="text-[10px] text-emerald-400 font-mono font-semibold">৳ 142k Commission Generated</span>
+                    <span className="block font-bold text-app-text-primary">Rifat Hasan</span>
+                    <span className="text-[10px] text-[#16A34A] font-mono font-bold">৳ 142k Commission Generated</span>
                   </div>
                 </div>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-app-text-secondary font-medium">Highest Lead Value Tag</span>
+                  <span className="text-app-text-secondary font-semibold">Highest Lead Value Tag</span>
                   <div className="text-right">
-                    <span className="block font-bold text-white">Traditional Fabric Saree</span>
-                    <span className="text-[10px] text-indigo-400 font-mono font-semibold">12.4k conversions</span>
+                    <span className="block font-bold text-app-text-primary">Traditional Fabric Saree</span>
+                    <span className="text-[10px] text-[#6C4CFF] font-mono font-bold">12.4k conversions</span>
                   </div>
                 </div>
               </div>
@@ -286,71 +283,71 @@ export default function ConsumersPage() {
         <div className="space-y-4 animate-in fade-in duration-200">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {[
-              { label: 'Registered Consumers', val: '142,500', color: 'border-l-indigo-500', note: 'Enrolled platform buyers' },
-              { label: 'Purchased in 30d', val: '12,940', color: 'border-l-emerald-500', note: '90.8% organic conversion rate' },
-              { label: 'Average Basket Value', val: '৳ 3,250', color: 'border-l-blue-500', note: 'High value retention target' },
-              { label: 'Unverified Flagged Accounts', val: '5 accounts', color: 'border-l-red-500', note: 'Under observation' },
+              { label: 'Registered Consumers', val: '142,500', color: 'border-l-[#6C4CFF]', note: 'Enrolled platform buyers' },
+              { label: 'Purchased in 30d', val: '12,940', color: 'border-l-[#16A34A]', note: '90.8% organic conversion rate' },
+              { label: 'Average Basket Value', val: '৳ 3,250', color: 'border-l-[#2563EB]', note: 'High value retention target' },
+              { label: 'Unverified Flagged Accounts', val: '5 accounts', color: 'border-l-[#DC2626]', note: 'Under observation' },
             ].map(s => (
-              <div key={s.label} className={`bg-app-card p-4.5 rounded-[4px] border border-app-border border-l-[3px] shadow-lg ${s.color}`}>
-                <div className="text-[20px] font-bold text-white tracking-tight font-mono">{s.val}</div>
-                <div className="text-[10px] text-app-text-secondary uppercase font-bold tracking-widest mt-1 opacity-70">{s.label}</div>
-                <div className="text-[9.5px] text-app-text-secondary italic mt-1">{s.note}</div>
+              <div key={s.label} className={`bg-white p-4 rounded-lg border border-app-border border-l-4 ${s.color}`}>
+                <div className="text-[20px] font-extrabold text-app-text-primary tracking-tight font-mono">{s.val}</div>
+                <div className="text-[10px] text-app-text-disabled uppercase font-extrabold tracking-widest mt-1">{s.label}</div>
+                <div className="text-[9.5px] text-app-text-muted font-semibold mt-1">{s.note}</div>
               </div>
             ))}
           </div>
 
           {/* SECTION B: Consumer Behavioral Trends (Search, View, Save) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="bg-app-card border border-app-border rounded-xl p-5 shadow-xl space-y-3">
-              <h4 className="text-[10px] uppercase font-bold tracking-widest text-[#F4631E] block">Most Searched Products</h4>
+            <div className="bg-white border border-app-border rounded-lg p-5 space-y-3">
+              <h4 className="text-[10px] uppercase font-extrabold tracking-widest text-app-accent block">Most Searched Products</h4>
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-white font-medium">Jamdani Silk Traditional Saree</span>
-                  <span className="text-slate-400 font-mono text-[10.5px]">8.4k searches</span>
+                  <span className="text-app-text-primary font-bold">Jamdani Silk Traditional Saree</span>
+                  <span className="text-app-text-muted font-mono text-[10.5px] font-semibold">8.4k searches</span>
                 </div>
-                <div className="flex justify-between items-center text-xs opacity-80">
-                  <span className="text-white">Samsung S25 Ultra</span>
-                  <span className="text-slate-400 font-mono text-[10.5px]">6.1k searches</span>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-app-text-primary font-semibold">Samsung S25 Ultra</span>
+                  <span className="text-app-text-muted font-mono text-[10.5px] font-semibold">6.1k searches</span>
                 </div>
-                <div className="flex justify-between items-center text-xs opacity-60">
-                  <span className="text-slate-200">Pure Mustard Oil 1L</span>
-                  <span className="text-slate-400 font-mono text-[10.5px]">2.1k searches</span>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-app-text-secondary font-semibold">Pure Mustard Oil 1L</span>
+                  <span className="text-app-text-muted font-mono text-[10.5px] font-semibold">2.1k searches</span>
                 </div>
               </div>
             </div>
 
-            <div className="bg-app-card border border-app-border rounded-xl p-5 shadow-xl space-y-3">
-              <h4 className="text-[10px] uppercase font-bold tracking-widest text-emerald-400 block">Most Viewed Products</h4>
+            <div className="bg-white border border-app-border rounded-lg p-5 space-y-3">
+              <h4 className="text-[10px] uppercase font-extrabold tracking-widest text-[#16A34A] block">Most Viewed Products</h4>
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-white font-medium">Vision Smart TV 55"</span>
-                  <span className="text-slate-400 font-mono text-[10.5px]">12.8k views</span>
+                  <span className="text-app-text-primary font-bold">Vision Smart TV 55"</span>
+                  <span className="text-app-text-muted font-mono text-[10.5px] font-semibold">12.8k views</span>
                 </div>
-                <div className="flex justify-between items-center text-xs opacity-80">
-                  <span className="text-white">Walton 2-Door Fridge</span>
-                  <span className="text-slate-400 font-mono text-[10.5px]">8.9k views</span>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-app-text-primary font-semibold">Walton 2-Door Fridge</span>
+                  <span className="text-app-text-muted font-mono text-[10.5px] font-semibold">8.9k views</span>
                 </div>
-                <div className="flex justify-between items-center text-xs opacity-60">
-                  <span className="text-slate-200">Samsung S25 Ultra</span>
-                  <span className="text-slate-400 font-mono text-[10.5px]">8.4k views</span>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-app-text-secondary font-semibold">Samsung S25 Ultra</span>
+                  <span className="text-app-text-muted font-mono text-[10.5px] font-semibold">8.4k views</span>
                 </div>
               </div>
             </div>
 
-            <div className="bg-app-card border border-app-border rounded-xl p-5 shadow-xl space-y-3">
-              <h4 className="text-[10px] uppercase font-bold tracking-widest text-blue-400 block">Most Saved / Wishlisted</h4>
+            <div className="bg-white border border-app-border rounded-lg p-5 space-y-3">
+              <h4 className="text-[10px] uppercase font-extrabold tracking-widest text-[#2563EB] block">Most Saved / Wishlisted</h4>
               <div className="space-y-2">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-white font-medium">Walton 2-Door Fridge</span>
-                  <span className="text-slate-400 font-mono text-[10.5px]">1.2k saves</span>
+                  <span className="text-app-text-primary font-bold">Walton 2-Door Fridge</span>
+                  <span className="text-app-text-muted font-mono text-[10.5px] font-semibold">1.2k saves</span>
                 </div>
-                <div className="flex justify-between items-center text-xs opacity-80">
-                  <span className="text-white">Jamdani Silk Traditional Saree</span>
-                  <span className="text-slate-400 font-mono text-[10.5px]">950 saves</span>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-app-text-primary font-semibold">Jamdani Silk Traditional Saree</span>
+                  <span className="text-app-text-muted font-mono text-[10.5px] font-semibold">950 saves</span>
                 </div>
-                <div className="flex justify-between items-center text-xs opacity-60">
-                  <span className="text-slate-200">TechCore Bluetooth Smart Watch</span>
-                  <span className="text-slate-400 font-mono text-[10.5px]">810 saves</span>
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-app-text-secondary font-semibold">TechCore Bluetooth Smart Watch</span>
+                  <span className="text-app-text-muted font-mono text-[10.5px] font-semibold">810 saves</span>
                 </div>
               </div>
             </div>

@@ -1,10 +1,13 @@
 import type {
   OpsCoupon,
   OpsCouponUsage,
+  OpsFeeCharge,
   OpsJobApplication,
   OpsJobPosting,
   OpsLead,
+  OpsPaymentOptionsConfig,
   OpsReview,
+  OpsSellerBookingSettings,
   OpsStorefrontOrder,
   RolePermissionsMap,
 } from './types';
@@ -191,6 +194,55 @@ const defaultCoupons = (): OpsCoupon[] => {
   ];
 };
 
+const defaultFeeCharges = (): OpsFeeCharge[] => {
+  const ts = nowIso();
+  return [
+    {
+      id: 'fee_platform_commission',
+      name: 'Platform Commission',
+      type: 'platform_fee',
+      rateType: 'percentage',
+      rateValue: 8,
+      scopeType: 'platform',
+      active: true,
+      description: 'Default platform-wide commission applied to every order.',
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'fee_service_charge',
+      name: 'Service Charge',
+      type: 'service_charge',
+      rateType: 'flat',
+      rateValue: 20,
+      scopeType: 'platform',
+      active: true,
+      description: 'Flat service charge applied per order.',
+      createdAt: ts,
+      updatedAt: ts,
+    },
+    {
+      id: 'fee_standard_delivery',
+      name: 'Standard Delivery Fee',
+      type: 'delivery',
+      rateType: 'flat',
+      rateValue: 60,
+      scopeType: 'platform',
+      active: true,
+      description: 'Default flat delivery fee for platform-wide orders.',
+      createdAt: ts,
+      updatedAt: ts,
+    },
+  ];
+};
+
+const defaultPaymentOptionsConfig = (): OpsPaymentOptionsConfig => ({
+  partialPaymentEnabled: true,
+  minDepositPercent: 10,
+  maxDepositPercent: 50,
+  updatedAt: nowIso(),
+});
+
 export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
   super_admin: { content: true, users: true, finance: true, brand: true, system: true, analytics: true },
   admin: { content: true, users: true, finance: false, brand: true, system: true, analytics: true },
@@ -213,6 +265,9 @@ const state: {
   permissions: RolePermissionsMap;
   featureFlags: Record<string, boolean>;
   sellerOffers: import('./operationsFirestore').OpsSellerOfferRow[];
+  feeCharges: OpsFeeCharge[];
+  paymentOptionsConfig: OpsPaymentOptionsConfig;
+  sellerBookingSettings: Record<string, OpsSellerBookingSettings>;
 } = {
   orders: [],
   coupons: defaultCoupons(),
@@ -222,6 +277,9 @@ const state: {
   jobPostings: defaultJobPostings(),
   jobApplications: [],
   permissions: structuredClone(DEFAULT_ROLE_PERMISSIONS),
+  feeCharges: defaultFeeCharges(),
+  paymentOptionsConfig: defaultPaymentOptionsConfig(),
+  sellerBookingSettings: {},
   featureFlags: {
     creator_hub: true,
     compare_tool: true,
@@ -260,6 +318,9 @@ export const operationsStore = {
     if (snapshot.permissions) state.permissions = snapshot.permissions;
     if (snapshot.featureFlags) state.featureFlags = snapshot.featureFlags;
     if (snapshot.sellerOffers) state.sellerOffers = snapshot.sellerOffers;
+    if (snapshot.feeCharges?.length) state.feeCharges = snapshot.feeCharges;
+    if (snapshot.paymentOptionsConfig) state.paymentOptionsConfig = snapshot.paymentOptionsConfig;
+    if (snapshot.sellerBookingSettings) state.sellerBookingSettings = snapshot.sellerBookingSettings;
   },
 
   listCouponUsage: () => [...state.couponUsage],
@@ -588,5 +649,58 @@ export const operationsStore = {
     state.permissions = structuredClone(permissions);
     touch();
     return state.permissions;
+  },
+
+  listFeeCharges: () => state.feeCharges.filter((fee) => !fee.deleted),
+  getFeeCharge: (id: string) => state.feeCharges.find((fee) => fee.id === id) ?? null,
+  upsertFeeCharge: (fee: OpsFeeCharge) => {
+    const idx = state.feeCharges.findIndex((row) => row.id === fee.id);
+    if (idx >= 0) {
+      state.feeCharges[idx] = { ...state.feeCharges[idx], ...fee, updatedAt: nowIso() };
+      touch();
+      return state.feeCharges[idx];
+    }
+    state.feeCharges.push({ ...fee, createdAt: fee.createdAt || nowIso(), updatedAt: nowIso() });
+    touch();
+    return fee;
+  },
+  deleteFeeCharge: (id: string) => {
+    const fee = state.feeCharges.find((row) => row.id === id);
+    if (!fee) return false;
+    fee.deleted = true;
+    fee.active = false;
+    fee.updatedAt = nowIso();
+    touch();
+    return true;
+  },
+
+  getPaymentOptionsConfig: () => ({ ...state.paymentOptionsConfig }),
+  getAllSellerBookingSettings: () => ({ ...state.sellerBookingSettings }),
+  updatePaymentOptionsConfig: (patch: Partial<OpsPaymentOptionsConfig>) => {
+    state.paymentOptionsConfig = { ...state.paymentOptionsConfig, ...patch, updatedAt: nowIso() };
+    touch();
+    return state.paymentOptionsConfig;
+  },
+
+  /** Defaults to `autoApproveBookingsDefault: false` (require approval) for sellers who haven't set one. */
+  getSellerBookingSettings: (sellerId: string): OpsSellerBookingSettings => {
+    return (
+      state.sellerBookingSettings[sellerId] || {
+        sellerId,
+        autoApproveBookingsDefault: false,
+        updatedAt: nowIso(),
+      }
+    );
+  },
+  updateSellerBookingSettings: (sellerId: string, patch: Partial<OpsSellerBookingSettings>) => {
+    const existing = state.sellerBookingSettings[sellerId] || {
+      sellerId,
+      autoApproveBookingsDefault: false,
+      updatedAt: nowIso(),
+    };
+    const updated: OpsSellerBookingSettings = { ...existing, ...patch, sellerId, updatedAt: nowIso() };
+    state.sellerBookingSettings[sellerId] = updated;
+    touch();
+    return updated;
   },
 };

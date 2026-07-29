@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Package, RefreshCw } from 'lucide-react';
 import { operationsApi, type OpsStorefrontOrder } from '../../services/operationsApi';
+import { GlassCard } from '../../components/ui/GlassCard';
+import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
 
 export default function PlatformOrdersPage() {
   const [orders, setOrders] = useState<OpsStorefrontOrder[]>([]);
@@ -23,60 +25,99 @@ export default function PlatformOrdersPage() {
     loadOrders();
   }, []);
 
+  const columns: DataTableColumn<OpsStorefrontOrder>[] = [
+    {
+      key: 'order',
+      header: 'Order',
+      render: (order) => <span className="font-extrabold text-app-text-primary text-[12px]">{order.orderId}</span>,
+      sortValue: (order) => order.orderId,
+    },
+    {
+      key: 'buyer',
+      header: 'Buyer',
+      render: (order) => (
+        <span className="font-semibold text-app-text-secondary text-[12px]">
+          {order.shipping?.fullName || order.buyerId}
+        </span>
+      ),
+    },
+    {
+      key: 'total',
+      header: 'Total',
+      render: (order) => (
+        <span className="font-extrabold text-app-text-primary text-[12px]">
+          ৳ {Number(order.overallTotal || 0).toLocaleString()}
+        </span>
+      ),
+      sortValue: (order) => Number(order.overallTotal || 0),
+    },
+    {
+      key: 'mode',
+      header: 'Mode',
+      render: (order) => (
+        <span className="font-semibold text-app-text-secondary text-[12px] capitalize">
+          {order.sourceMode || 'retail'}
+        </span>
+      ),
+    },
+    {
+      key: 'promo',
+      header: 'Promo',
+      render: (order) => (
+        <span className="font-semibold text-app-text-muted text-[12px]">{order.promoCode || '—'}</span>
+      ),
+    },
+    {
+      key: 'created',
+      header: 'Created',
+      render: (order) => (
+        <span className="font-semibold text-app-text-secondary text-[12px]">
+          {new Date(order.createdAt).toLocaleString()}
+        </span>
+      ),
+      sortValue: (order) => order.createdAt,
+    },
+  ];
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Package className="w-6 h-6 text-app-accent" />
+          <h1 className="text-[17px] font-extrabold text-app-text-primary tracking-tight flex items-center gap-2">
+            <Package className="w-5 h-5 text-app-accent" />
             Platform Orders (Storefront)
           </h1>
-          <p className="text-sm text-slate-500 mt-1">Live orders submitted through Choosify checkout.</p>
+          <p className="text-[12px] font-semibold text-app-text-secondary mt-1">
+            Live orders submitted through Choosify checkout.
+          </p>
         </div>
         <button
           type="button"
           onClick={loadOrders}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-700"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-app-border bg-white text-app-text-secondary text-[11px] font-extrabold uppercase tracking-wider hover:text-app-accent transition-colors cursor-pointer"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
 
-      {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div className="rounded-lg border border-[#FCA5A5] bg-[#FEF2F2] px-4 py-3 text-[12px] font-semibold text-[#DC2626]">
+          {error}
+        </div>
+      )}
 
-      <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-        <table className="min-w-full text-sm">
-          <thead className="bg-slate-50 text-left text-slate-500 uppercase text-[11px]">
-            <tr>
-              <th className="px-4 py-3">Order</th>
-              <th className="px-4 py-3">Buyer</th>
-              <th className="px-4 py-3">Total</th>
-              <th className="px-4 py-3">Mode</th>
-              <th className="px-4 py-3">Promo</th>
-              <th className="px-4 py-3">Created</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">Loading orders...</td></tr>
-            ) : orders.length === 0 ? (
-              <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">No storefront orders yet.</td></tr>
-            ) : (
-              orders.map((order) => (
-                <tr key={order.id} className="border-t border-slate-100">
-                  <td className="px-4 py-3 font-medium text-slate-900">{order.orderId}</td>
-                  <td className="px-4 py-3 text-slate-600">{order.shipping?.fullName || order.buyerId}</td>
-                  <td className="px-4 py-3">৳ {Number(order.overallTotal || 0).toLocaleString()}</td>
-                  <td className="px-4 py-3 capitalize">{order.sourceMode || 'retail'}</td>
-                  <td className="px-4 py-3">{order.promoCode || '—'}</td>
-                  <td className="px-4 py-3 text-slate-600">{new Date(order.createdAt).toLocaleString()}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+      <GlassCard hoverLift={false} className="p-0 overflow-hidden">
+        <DataTable
+          columns={columns}
+          rows={orders}
+          getRowId={(order) => order.id}
+          showRowNumbers={false}
+          isLoading={loading}
+          loadingMessage="Loading orders..."
+          emptyMessage="No storefront orders yet."
+        />
+      </GlassCard>
     </div>
   );
 }

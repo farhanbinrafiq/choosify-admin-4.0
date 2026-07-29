@@ -42,6 +42,9 @@ import {
 import { Link, useSearchParams } from 'react-router-dom';
 import { useBrandProfiles, BrandProfile, BrandStatus, VisibilityStatus, BrandBadge, OwnershipClaim, ClaimStatus, BrandAuditLog } from '../../contexts/BrandProfilesContext';
 import { BrandIntelligenceCenter } from '../../components/admin/BrandIntelligenceCenter';
+import { MarketplaceAccessPanel } from '../../components/admin/MarketplaceAccessPanel';
+import { Modal } from '../../components/ui/Modal';
+import type { SuspendInput } from '../../hooks/useMarketplaceAccess';
 
 type ActiveTab = 'all' | 'requests' | 'active' | 'flagged' | 'suspended' | 'banned' | 'products' | 'deals' | 'claims' | 'verified';
 
@@ -64,6 +67,11 @@ interface SellerItem {
   phone: string;
   revenue: string;
   reportsCount?: number;
+  suspendedAt?: string;
+  suspensionReason?: string;
+  suspensionDurationDays?: number;
+  autoReinstateAt?: string;
+  notifyOnSuspend?: boolean;
 }
 
 const initProducts = [
@@ -229,23 +237,69 @@ export default function SellersPage() {
     showToast(`✗ Declined and blacklisted seller application for ${seller?.storeName || 'Merchant'}.`);
   };
 
-  const handleSuspend = (id: string) => {
-    setSellersList(prev => prev.map(s => s.id === id ? { ...s, applicationStatus: 'Suspended' } : s));
+  // Marketplace Access panel: suspend with duration + auto-reinstate date + notify, or reinstate
+  const [accessPanelSellerId, setAccessPanelSellerId] = useState<string | null>(null);
+  const accessPanelSeller = sellersList.find(s => s.id === accessPanelSellerId) || null;
+
+  const handleSuspendWithAccess = (id: string, input: SuspendInput) => {
+    const suspendedAt = new Date().toISOString();
+    const autoReinstateAt = input.durationDays && input.durationDays > 0
+      ? new Date(Date.now() + input.durationDays * 24 * 60 * 60 * 1000).toISOString()
+      : undefined;
+    setSellersList(prev => prev.map(s => s.id === id ? {
+      ...s,
+      applicationStatus: 'Suspended',
+      suspendedAt,
+      suspensionReason: input.reason,
+      suspensionDurationDays: input.durationDays ?? undefined,
+      autoReinstateAt,
+      notifyOnSuspend: input.notify,
+    } : s));
     const seller = sellersList.find(s => s.id === id);
     if (seller) {
-      addLog(`seller_${id}`, seller.storeName, 'Global Manager (Admin)', 'Account Suspended', `Executed regulatory lockdown due to audit investigations.`);
+      addLog(
+        `seller_${id}`,
+        seller.storeName,
+        'Global Manager (Admin)',
+        'Marketplace Access Suspended',
+        `${input.durationDays ? `Suspended for ${input.durationDays} day(s), auto-reinstates ${new Date(autoReinstateAt!).toLocaleDateString()}` : 'Suspended indefinitely'}. Reason: ${input.reason}`
+      );
     }
-    showToast(`🔒 Suspended active registry status for ${seller?.storeName || 'Merchant'}.`);
+    showToast(`🔒 Suspended marketplace access for ${seller?.storeName || 'Merchant'}.`);
   };
 
-  const handleRestore = (id: string) => {
-    setSellersList(prev => prev.map(s => s.id === id ? { ...s, applicationStatus: 'Approved' } : s));
+  const handleReinstateFromAccess = (id: string) => {
+    setSellersList(prev => prev.map(s => s.id === id ? {
+      ...s,
+      applicationStatus: 'Approved',
+      suspendedAt: undefined,
+      suspensionReason: undefined,
+      suspensionDurationDays: undefined,
+      autoReinstateAt: undefined,
+      notifyOnSuspend: undefined,
+    } : s));
     const seller = sellersList.find(s => s.id === id);
     if (seller) {
-      addLog(`seller_${id}`, seller.storeName, 'Global Manager (Admin)', 'Account Restored', `Lifted suspension flags and restored operations.`);
+      addLog(`seller_${id}`, seller.storeName, 'Global Manager (Admin)', 'Marketplace Access Reinstated', 'Suspension lifted; marketplace access restored.');
     }
-    showToast(`✓ Restored active profile for ${seller?.storeName || 'Merchant'}.`);
+    showToast(`✓ Reinstated marketplace access for ${seller?.storeName || 'Merchant'}.`);
+    setAccessPanelSellerId(null);
   };
+
+  // Auto-reinstate sweep: lazily clear expired suspensions on each render pass
+  React.useEffect(() => {
+    const now = Date.now();
+    const expired = sellersList.filter(s => s.applicationStatus === 'Suspended' && s.autoReinstateAt && new Date(s.autoReinstateAt).getTime() <= now);
+    if (expired.length === 0) return;
+    setSellersList(prev => prev.map(s => {
+      if (s.applicationStatus === 'Suspended' && s.autoReinstateAt && new Date(s.autoReinstateAt).getTime() <= now) {
+        return { ...s, applicationStatus: 'Approved', suspendedAt: undefined, suspensionReason: undefined, suspensionDurationDays: undefined, autoReinstateAt: undefined, notifyOnSuspend: undefined };
+      }
+      return s;
+    }));
+    expired.forEach(s => addLog(`seller_${s.id}`, s.storeName, 'System (Auto-Reinstate)', 'Marketplace Access Reinstated', 'Scheduled suspension window elapsed; access auto-restored.'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const simulateOnboardingWorkflow = (sellerName: string, category: string, productName: string, price: string, isApproved: boolean) => {
     if (isApproved) {
@@ -937,22 +991,22 @@ export default function SellersPage() {
                                 )}
 
                                 {brand.applicationStatus === 'Approved' && (
-                                  <button 
-                                    onClick={() => handleSuspend(brand.sellerAccount!.id)}
+                                  <button
+                                    onClick={() => setAccessPanelSellerId(brand.sellerAccount!.id)}
                                     className="px-2.5 py-1 bg-white/5 hover:bg-red-500/10 text-app-text-secondary hover:text-red-500 rounded border border-[#ef4444]/20 font-bold transition-all cursor-pointer"
-                                    title="Deactivate and Suspend merchant catalog access"
+                                    title="Suspend marketplace access (duration, auto-reinstate, notify)"
                                   >
-                                    Deactivate
+                                    Suspend
                                   </button>
                                 )}
 
                                 {(brand.applicationStatus === 'Suspended' || brand.applicationStatus === 'Banned') && (
-                                  <button 
-                                    onClick={() => handleRestore(brand.sellerAccount!.id)}
+                                  <button
+                                    onClick={() => setAccessPanelSellerId(brand.sellerAccount!.id)}
                                     className="px-2.5 py-1 bg-green-500 text-app-text-primary font-bold text-[10px] rounded hover:scale-102 cursor-pointer"
-                                    title="Restore active store"
+                                    title="Review suspension details & reinstate"
                                   >
-                                    Restore
+                                    Manage Access
                                   </button>
                                 )}
                               </>
@@ -2013,6 +2067,30 @@ export default function SellersPage() {
       )}
 
       {/* REMOVED DRAWERS */}
+
+      <Modal
+        isOpen={!!accessPanelSellerId}
+        onClose={() => setAccessPanelSellerId(null)}
+        title={accessPanelSeller ? `Marketplace Access — ${accessPanelSeller.storeName}` : 'Marketplace Access'}
+        maxWidth="max-w-md"
+      >
+        {accessPanelSeller && (
+          <MarketplaceAccessPanel
+            entityType="seller"
+            entityName={accessPanelSeller.storeName}
+            state={{
+              suspended: accessPanelSeller.applicationStatus === 'Suspended',
+              suspendedAt: accessPanelSeller.suspendedAt,
+              suspensionReason: accessPanelSeller.suspensionReason,
+              suspensionDurationDays: accessPanelSeller.suspensionDurationDays,
+              autoReinstateAt: accessPanelSeller.autoReinstateAt,
+              notifyOnSuspend: accessPanelSeller.notifyOnSuspend,
+            }}
+            onSuspend={(input) => handleSuspendWithAccess(accessPanelSeller.id, input)}
+            onReinstate={() => handleReinstateFromAccess(accessPanelSeller.id)}
+          />
+        )}
+      </Modal>
 
     </div>
   );

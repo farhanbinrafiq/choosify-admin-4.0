@@ -4,6 +4,8 @@ import { useOrders, Order, OrderStatus, PaymentStatus } from '../../../contexts/
 import { useBrandProfiles, BrandProfile, BrandStatus } from '../../../contexts/BrandProfilesContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useContact } from '../../../contexts/ContactInteractionContext';
+import { MarketplaceAccessPanel } from '../../../components/admin/MarketplaceAccessPanel';
+import type { MarketplaceAccessState, MarketplaceEntityType, SuspendInput } from '../../../hooks/useMarketplaceAccess';
 import { 
   Building2, 
   ShieldCheck, 
@@ -370,7 +372,7 @@ export default function UnifiedProfileShell() {
   const navigate = useNavigate();
 
   const { orders, customers, approveOrder, dispatchOrder, cancelOrder, addCustomerNotes, sendChatMessage } = useOrders();
-  const { profiles: brandProfiles } = useBrandProfiles();
+  const { profiles: brandProfiles, addLog } = useBrandProfiles();
   const { profile: loggedInProfile } = useAuth();
   const { triggerMessage, triggerPhone } = useContact();
 
@@ -622,6 +624,55 @@ export default function UnifiedProfileShell() {
 
     return null;
   }, [typeKey, idKey, orders, customers, brandProfiles]);
+
+  // ----- Marketplace Access (suspend/reinstate) — shared across Brand/Seller/Creator/Consumer Account Info tabs -----
+  const [marketplaceAccessByEntity, setMarketplaceAccessByEntity] = useState<Record<string, MarketplaceAccessState>>({});
+  const marketplaceAccessKey = `${typeKey}_${idKey}`;
+  const marketplaceAccessState: MarketplaceAccessState = marketplaceAccessByEntity[marketplaceAccessKey] || { suspended: false };
+  const marketplaceEntityName =
+    (entityData as any)?.name || (entityData as any)?.storeName || (entityData as any)?.displayName || 'Account';
+
+  const handleMarketplaceSuspend = (input: SuspendInput) => {
+    const suspendedAt = new Date().toISOString();
+    const autoReinstateAt = input.durationDays && input.durationDays > 0
+      ? new Date(Date.now() + input.durationDays * 24 * 60 * 60 * 1000).toISOString()
+      : undefined;
+    setMarketplaceAccessByEntity(prev => ({
+      ...prev,
+      [marketplaceAccessKey]: {
+        suspended: true,
+        suspendedAt,
+        suspensionReason: input.reason,
+        suspensionDurationDays: input.durationDays ?? undefined,
+        autoReinstateAt,
+        notifyOnSuspend: input.notify,
+      },
+    }));
+    addLog(
+      marketplaceAccessKey,
+      marketplaceEntityName,
+      loggedInProfile?.displayName || 'Admin',
+      'Marketplace Access Suspended',
+      `${input.durationDays ? `Suspended for ${input.durationDays} day(s), auto-reinstates ${new Date(autoReinstateAt!).toLocaleDateString()}` : 'Suspended indefinitely'}. Reason: ${input.reason}`
+    );
+    showToast(`🔒 Suspended marketplace access for ${marketplaceEntityName}.`, 'success');
+  };
+
+  const handleMarketplaceReinstate = () => {
+    setMarketplaceAccessByEntity(prev => ({ ...prev, [marketplaceAccessKey]: { suspended: false } }));
+    addLog(marketplaceAccessKey, marketplaceEntityName, loggedInProfile?.displayName || 'Admin', 'Marketplace Access Reinstated', 'Suspension lifted; marketplace access restored.');
+    showToast(`✓ Reinstated marketplace access for ${marketplaceEntityName}.`, 'success');
+  };
+
+  // Auto-reinstate sweep: lazily clear an expired suspension for the entity currently in view
+  useEffect(() => {
+    const state = marketplaceAccessByEntity[marketplaceAccessKey];
+    if (!state?.suspended || !state.autoReinstateAt) return;
+    if (new Date(state.autoReinstateAt).getTime() > Date.now()) return;
+    setMarketplaceAccessByEntity(prev => ({ ...prev, [marketplaceAccessKey]: { suspended: false } }));
+    addLog(marketplaceAccessKey, marketplaceEntityName, 'System (Auto-Reinstate)', 'Marketplace Access Reinstated', 'Scheduled suspension window elapsed; access auto-restored.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marketplaceAccessKey]);
 
   // Action overrides
   const handleUserBanStatusToggle = () => {
@@ -1203,6 +1254,13 @@ export default function UnifiedProfileShell() {
         {/* TAB 1: ⚙️ Account Information */}
         {activeTab === 'account' && typeKey === 'consumer' && entityData && (
           <div className="space-y-6 text-left font-sans">
+            <MarketplaceAccessPanel
+              entityType="consumer"
+              entityName={marketplaceEntityName}
+              state={marketplaceAccessState}
+              onSuspend={handleMarketplaceSuspend}
+              onReinstate={handleMarketplaceReinstate}
+            />
             {/* Billing & Shipping Addresses (Editable Mocks) */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
               <div className="border-b border-app-border pb-3">
@@ -2118,6 +2176,13 @@ export default function UnifiedProfileShell() {
         {/* TAB 1: ⚙️ Account Information */}
         {activeTab === 'account' && (typeKey === 'seller' || typeKey === 'brand') && (
           <div className="space-y-6 text-left">
+            <MarketplaceAccessPanel
+              entityType={typeKey as MarketplaceEntityType}
+              entityName={marketplaceEntityName}
+              state={marketplaceAccessState}
+              onSuspend={handleMarketplaceSuspend}
+              onReinstate={handleMarketplaceReinstate}
+            />
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
               <div className="border-b border-app-border pb-3">
                 <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Account Settings & Communication Preferences</h3>
@@ -2828,6 +2893,13 @@ export default function UnifiedProfileShell() {
         {/* TAB 1: ⚙️ Account Information */}
         {activeTab === 'account' && typeKey === 'creator' && entityData && (
           <div className="space-y-6 text-left">
+            <MarketplaceAccessPanel
+              entityType="creator"
+              entityName={marketplaceEntityName}
+              state={marketplaceAccessState}
+              onSuspend={handleMarketplaceSuspend}
+              onReinstate={handleMarketplaceReinstate}
+            />
             {/* Notification Preferences & Password Security Section */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
               <div className="border-b border-app-border pb-3">

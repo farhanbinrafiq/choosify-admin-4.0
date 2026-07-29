@@ -8,6 +8,7 @@ import { toBookingOfferCard } from '../../shared/booking/bookingTypes';
 import type { OpsStorefrontOrder } from '../operations/types';
 import { operationsStore } from '../operations/operationsStore';
 import { scheduleOperationsPersist } from '../operations/operationsPersistence';
+import { catalogStore } from '../catalogStore';
 import {
   getBookingRequest,
   listExpirableBookingRequests,
@@ -23,6 +24,94 @@ function hoursFromNow(hours: number): string {
 
 function makeInvoiceId(): string {
   return `INV-${Math.floor(100000 + Math.random() * 900000)}`;
+}
+
+/** Builds the pending-payment order for a booking request — shared by accept, buyer-accept-counter, and auto-approve. */
+function buildOrderFromRequest(
+  request: Pick<
+    BookingRequest,
+    'buyerId' | 'sellerId' | 'sellerName' | 'listingId' | 'listingTitle' | 'price' | 'isService' | 'serviceCategory' | 'fields' | 'id'
+  >,
+  ts: string,
+): { order: OpsStorefrontOrder; buyerPayBy: string; orderId: string; invoiceId: string } {
+  const buyerPayBy = hoursFromNow(BOOKING_PAYMENT_WINDOW_HOURS);
+  const orderId = `BOOK-${Date.now()}`;
+  const invoiceId = makeInvoiceId();
+
+  const order: OpsStorefrontOrder = {
+    id: orderId,
+    orderId,
+    buyerId: request.buyerId,
+    isCOD: false,
+    isSplit: false,
+    overallTotal: request.price,
+    subtotal: request.price,
+    deliveryTotal: 0,
+    subOrders: [
+      {
+        sellerId: request.sellerId,
+        sellerBusinessName: request.sellerName,
+        invoiceId,
+        deliveryFee: 0,
+        items: [
+          {
+            productId: request.listingId,
+            productTitle: request.listingTitle,
+            quantity: 1,
+            price: request.price,
+            productType: request.isService ? 'service' : 'physical',
+            serviceCategory: request.serviceCategory,
+            serviceDetails: request.fields,
+          },
+        ],
+      },
+    ],
+    sourceMode: 'retail',
+    paymentMethod: 'credit',
+    status: 'pending_payment',
+    bookingRequestId: request.id,
+    paymentDueAt: buyerPayBy,
+    createdAt: ts,
+    updatedAt: ts,
+  };
+
+  return { order, buyerPayBy, orderId, invoiceId };
+}
+
+/**
+ * Whether a new booking request for this listing should skip manual seller acceptance.
+ * The listing's own `requiresApproval` wins when explicitly set; otherwise falls back
+ * to the seller's account-wide default (off unless the seller opted in).
+ */
+export async function resolveAutoApprove(sellerId: string, listingId: string): Promise<boolean> {
+  const product = await catalogStore.getProduct(listingId).catch(() => null);
+  if (product && typeof product.requiresApproval === 'boolean') {
+    return product.requiresApproval === false;
+  }
+  const settings = operationsStore.getSellerBookingSettings(sellerId);
+  return Boolean(settings.autoApproveBookingsDefault);
+}
+
+/**
+ * Whether this listing lets the buyer pay a deposit now with the rest due later, and at
+ * what percent. Gated by the platform-wide `partialPaymentEnabled` switch — if the super
+ * admin has turned the feature off platform-wide, no listing can offer it regardless of
+ * its own setting.
+ */
+export async function resolvePartialPaymentSettings(
+  listingId: string,
+): Promise<{ partialPaymentEnabled: boolean; depositPercent?: number }> {
+  const platform = operationsStore.getPaymentOptionsConfig();
+  if (!platform.partialPaymentEnabled) return { partialPaymentEnabled: false };
+
+  const product = await catalogStore.getProduct(listingId).catch(() => null);
+  if (!product?.partialPaymentEnabled) return { partialPaymentEnabled: false };
+
+  const depositPercent = Math.min(
+    Math.max(Number(product.depositPercent || platform.minDepositPercent), platform.minDepositPercent),
+    platform.maxDepositPercent,
+  );
+  return { partialPaymentEnabled: true, depositPercent };
 }
 
 export interface CreateBookingRequestInput {
@@ -42,6 +131,11 @@ export interface CreateBookingRequestInput {
   originalPrice?: number;
   conversationId?: string;
   threadId?: string;
+  /** Listing (or seller default) is configured to skip manual seller acceptance. */
+  autoApprove?: boolean;
+  /** Listing allows a deposit-now/rest-later payment, per `resolvePartialPaymentSettings`. */
+  partialPaymentEnabled?: boolean;
+  depositPercent?: number;
 }
 
 async function notifyBuyer(buyerId: string, buyerName: string | undefined, body: string, orderId?: string) {
@@ -59,11 +153,13 @@ async function notifyBuyer(buyerId: string, buyerName: string | undefined, body:
 
 export async function createBookingRequest(
   input: CreateBookingRequestInput,
-): Promise<{ request: BookingRequest; offer: BookingOfferCard }> {
+): Promise<{ request: BookingRequest; offer: BookingOfferCard; order?: OpsStorefrontOrder }> {
   const ts = nowIso();
   const id = `BOOK-REQ-${Date.now()}`;
   const isService = input.isService ?? true;
-  const request: BookingRequest = {
+  const price = Number(input.price) || 0;
+
+  const base: BookingRequest = {
     id,
     kind: 'booking_offer',
     version: 1,
@@ -83,17 +179,19 @@ export async function createBookingRequest(
     isService,
     fields: input.fields || {},
     notes: input.notes,
-    price: Number(input.price) || 0,
+    price,
     originalPrice: input.originalPrice,
     currency: 'BDT',
     status: 'pending',
     createdAt: ts,
     updatedAt: ts,
+    partialPaymentEnabled: input.partialPaymentEnabled,
+    depositPercent: input.depositPercent,
     sellerRespondBy: hoursFromNow(BOOKING_SELLER_RESPONSE_HOURS),
     versions: [
       {
         version: 1,
-        price: Number(input.price) || 0,
+        price,
         fields: input.fields || {},
         notes: input.notes,
         status: 'pending',
@@ -103,8 +201,48 @@ export async function createBookingRequest(
     ],
   };
 
-  await saveBookingRequest(request);
-  return { request, offer: toBookingOfferCard(request) };
+  if (!input.autoApprove) {
+    await saveBookingRequest(base);
+    return { request: base, offer: toBookingOfferCard(base) };
+  }
+
+  // Listing (or seller default) skips manual acceptance — go straight to accepted + order.
+  const { order, buyerPayBy, orderId, invoiceId } = buildOrderFromRequest(base, ts);
+  operationsStore.createOrder(order);
+  scheduleOperationsPersist();
+
+  const accepted: BookingRequest = {
+    ...base,
+    version: 2,
+    status: 'accepted',
+    autoApproved: true,
+    buyerPayBy,
+    orderId,
+    invoiceId,
+    updatedAt: ts,
+    versions: [
+      ...base.versions,
+      {
+        version: 2,
+        price,
+        fields: base.fields,
+        notes: base.notes,
+        status: 'accepted',
+        changedAt: ts,
+        changedBy: 'system',
+      },
+    ],
+  };
+
+  await saveBookingRequest(accepted);
+  await notifyBuyer(
+    accepted.buyerId,
+    accepted.buyerName,
+    `${accepted.sellerName} has pre-approved instant booking for "${accepted.listingTitle}" — your request is already accepted. Complete payment within ${BOOKING_PAYMENT_WINDOW_HOURS} hours to confirm (order ${orderId}).`,
+    orderId,
+  );
+
+  return { request: accepted, offer: toBookingOfferCard(accepted), order };
 }
 
 export async function acceptBookingRequest(
@@ -119,46 +257,7 @@ export async function acceptBookingRequest(
   }
 
   const ts = nowIso();
-  const buyerPayBy = hoursFromNow(BOOKING_PAYMENT_WINDOW_HOURS);
-  const orderId = `BOOK-${Date.now()}`;
-  const invoiceId = makeInvoiceId();
-
-  const order: OpsStorefrontOrder = {
-    id: orderId,
-    orderId,
-    buyerId: existing.buyerId,
-    isCOD: false,
-    isSplit: false,
-    overallTotal: existing.price,
-    subtotal: existing.price,
-    deliveryTotal: 0,
-    subOrders: [
-      {
-        sellerId: existing.sellerId,
-        sellerBusinessName: existing.sellerName,
-        invoiceId,
-        deliveryFee: 0,
-        items: [
-          {
-            productId: existing.listingId,
-            productTitle: existing.listingTitle,
-            quantity: 1,
-            price: existing.price,
-            productType: existing.isService ? 'service' : 'physical',
-            serviceCategory: existing.serviceCategory,
-            serviceDetails: existing.fields,
-          },
-        ],
-      },
-    ],
-    sourceMode: 'retail',
-    paymentMethod: 'credit',
-    status: 'pending_payment',
-    bookingRequestId: existing.id,
-    paymentDueAt: buyerPayBy,
-    createdAt: ts,
-    updatedAt: ts,
-  };
+  const { order, buyerPayBy, orderId, invoiceId } = buildOrderFromRequest(existing, ts);
 
   operationsStore.createOrder(order);
   scheduleOperationsPersist();
@@ -344,46 +443,7 @@ export async function buyerAcceptCounter(
 
   // Create pending payment order from countered offer (buyer locking in seller's counter).
   const ts = nowIso();
-  const buyerPayBy = hoursFromNow(BOOKING_PAYMENT_WINDOW_HOURS);
-  const orderId = `BOOK-${Date.now()}`;
-  const invoiceId = makeInvoiceId();
-
-  const order: OpsStorefrontOrder = {
-    id: orderId,
-    orderId,
-    buyerId: existing.buyerId,
-    isCOD: false,
-    isSplit: false,
-    overallTotal: existing.price,
-    subtotal: existing.price,
-    deliveryTotal: 0,
-    subOrders: [
-      {
-        sellerId: existing.sellerId,
-        sellerBusinessName: existing.sellerName,
-        invoiceId,
-        deliveryFee: 0,
-        items: [
-          {
-            productId: existing.listingId,
-            productTitle: existing.listingTitle,
-            quantity: 1,
-            price: existing.price,
-            productType: existing.isService ? 'service' : 'physical',
-            serviceCategory: existing.serviceCategory,
-            serviceDetails: existing.fields,
-          },
-        ],
-      },
-    ],
-    sourceMode: 'retail',
-    paymentMethod: 'credit',
-    status: 'pending_payment',
-    bookingRequestId: existing.id,
-    paymentDueAt: buyerPayBy,
-    createdAt: ts,
-    updatedAt: ts,
-  };
+  const { order, buyerPayBy, orderId, invoiceId } = buildOrderFromRequest(existing, ts);
 
   operationsStore.createOrder(order);
   scheduleOperationsPersist();
@@ -417,18 +477,35 @@ export async function buyerAcceptCounter(
 export async function markBookingPaid(
   id: string,
   orderId?: string,
+  paymentType: 'full' | 'partial' = 'full',
 ): Promise<{ request: BookingRequest; offer: BookingOfferCard }> {
   const existing = await getBookingRequest(id);
   if (!existing) throw new Error('Booking request not found');
+  if (paymentType === 'partial' && !existing.partialPaymentEnabled) {
+    throw new Error('This listing does not offer partial payment');
+  }
 
   const ts = nowIso();
   const resolvedOrderId = orderId || existing.orderId;
   if (resolvedOrderId) {
-    operationsStore.updateOrder(resolvedOrderId, {
-      status: 'confirmed',
-      paidAt: ts,
-      invoiceGeneratedAt: ts,
-    });
+    if (paymentType === 'partial' && existing.depositPercent) {
+      const depositAmount = Math.round((existing.price * existing.depositPercent) / 100);
+      operationsStore.updateOrder(resolvedOrderId, {
+        status: 'confirmed',
+        paidAt: ts,
+        invoiceGeneratedAt: ts,
+        isPartialPayment: true,
+        depositPercent: existing.depositPercent,
+        depositAmount,
+        remainingAmount: Math.max(0, existing.price - depositAmount),
+      });
+    } else {
+      operationsStore.updateOrder(resolvedOrderId, {
+        status: 'confirmed',
+        paidAt: ts,
+        invoiceGeneratedAt: ts,
+      });
+    }
     scheduleOperationsPersist();
   }
 
