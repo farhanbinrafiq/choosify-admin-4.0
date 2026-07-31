@@ -5,7 +5,7 @@
   "crons": [
     {
       "path": "/api/v1/booking/expire",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 0 * * *"
     }
   ],
   "rewrites": [
