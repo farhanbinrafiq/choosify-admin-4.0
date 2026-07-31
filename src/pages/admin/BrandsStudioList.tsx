@@ -13,6 +13,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useTrust } from "../../contexts/TrustContext";
 import BrandEditStudio from "./BrandEditStudio";
+import { DataTable, DataTableColumn } from "../../components/ui/DataTable";
+import { BulkActionBar, BulkAction } from "../../components/ui/BulkActionBar";
 
 // Local storage key for persistent brands list in visual brand studio
 const COMPILATION_KEY = "choosify_brand_studio_list";
@@ -66,6 +68,7 @@ export default function BrandsStudioList() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newBrandName, setNewBrandName] = useState('');
   const [newBrandCategory, setNewBrandCategory] = useState('Retail & Lifestyle');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const cached = localStorage.getItem(COMPILATION_KEY);
@@ -130,6 +133,49 @@ export default function BrandsStudioList() {
     triggerToast("✓ Brand visual blueprint removed from CMS registry.");
   };
 
+  const handleBulkSetStatus = (status: BrandStudioItem["status"]) => {
+    const ids = [...selectedIds];
+    const updated = brands.map((b) => (ids.includes(b.id) ? { ...b, status } : b));
+    setBrands(updated);
+    localStorage.setItem(COMPILATION_KEY, JSON.stringify(updated));
+    triggerToast(`✓ ${ids.length} brand(s) marked as ${status}.`);
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDeleteBrands = () => {
+    const ids = [...selectedIds];
+    const updated = brands.filter((b) => !ids.includes(b.id));
+    setBrands(updated);
+    localStorage.setItem(COMPILATION_KEY, JSON.stringify(updated));
+    triggerToast(`✓ ${ids.length} brand(s) removed from CMS registry.`);
+    setSelectedIds(new Set());
+  };
+
+  const handleExportBrandsCSV = () => {
+    const ids = [...selectedIds];
+    const rows = filteredBrands.filter((b) => ids.includes(b.id));
+    const header = ["Brand Name", "Category", "Status", "Followers", "Loves", "Trust Score", "Last Updated"];
+    const csv = [
+      header.join(","),
+      ...rows.map((b) => [b.brandName, b.category, b.status, b.followersCount, b.loveCount, b.trustScore, b.lastUpdated].join(",")),
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "brands-export.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+    triggerToast(`✓ Exported ${rows.length} brand record(s) to CSV.`);
+  };
+
+  const brandBulkActions: BulkAction[] = [
+    { label: "Mark Live", onClick: () => handleBulkSetStatus("Live"), variant: "success" },
+    { label: "Archive", onClick: () => handleBulkSetStatus("Archived"), variant: "warning" },
+    { label: "Delete", onClick: handleBulkDeleteBrands, variant: "danger" },
+    { label: "Export CSV", onClick: handleExportBrandsCSV, variant: "info" },
+  ];
+
 
 
   const handleSaveContactDetails = (e: React.FormEvent) => {
@@ -157,6 +203,111 @@ export default function BrandsStudioList() {
     const matchesStatus = statusFilter === "All" || brand.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const brandColumns: DataTableColumn<BrandStudioItem>[] = [
+    {
+      key: "brand",
+      header: "Brand visual detail",
+      sortValue: (b) => b.brandName,
+      render: (brand) => (
+        <div className="flex items-center gap-3">
+          <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-xs uppercase border border-app-border shrink-0${brand.color}`}>
+            {brand.initials}
+          </div>
+          <div>
+            <div className="text-xs font-bold text-app-text-primary flex items-center gap-1.5">
+              <Link to={`/admin/brands/${brand.id}`} className="hover:text-app-accent hover:underline flex items-center gap-1">
+                {brand.brandName}
+              </Link>
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <div className="text-[10px] text-app-text-secondary">{brand.category}</div>
+          </div>
+        </div>
+      ),
+    },
+    { key: "followers", header: "Followers", render: (b) => <span className="font-mono text-xs">{b.followersCount}</span> },
+    { key: "loves", header: "Loves count", render: (b) => <span className="font-mono text-xs text-red-400">{b.loveCount}</span> },
+    {
+      key: "trust",
+      header: "Trust Score",
+      sortValue: (b) => b.trustScore,
+      render: (b) => <span className="font-mono text-xs text-amber-400">{b.trustScore} / 5.0</span>,
+    },
+    {
+      key: "status",
+      header: "Content Status",
+      sortValue: (b) => b.status,
+      render: (brand) => (
+        <span
+          className={`px-2 py-0.5 text-[8px] font-black tracking-widest uppercase rounded border${
+            brand.status === "Live" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-app-accent/10 text-app-accent border-app-accent/20"
+          }`}
+        >
+          {brand.status}
+        </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      align: "right",
+      render: (brand) => (
+        <div className="flex justify-end items-center gap-3">
+          {profile?.role === 'seller' && (
+            activeBrandId === brand.id ? (
+              <span className="px-3 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0">
+                Active
+              </span>
+            ) : (
+              <button
+                onClick={() => {
+                  setActiveBrandId(brand.id);
+                  triggerToast(`✓ Active Brand context switched.`);
+                }}
+                className="px-3 py-1 bg-[#05050C] hover:bg-emerald-500/10 border border-[#202030] hover:border-emerald-500/30 text-app-text-secondary hover:text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
+              >
+                Select
+              </button>
+            )
+          )}
+          <div className="flex flex-col items-end">
+            <div className="flex justify-end gap-2">
+              <Link
+                to={`/dashboard/content-studio/brands/${brand.id}/edit`}
+                className="p-1.5 bg-app-accent/10 hover:bg-app-accent/20 text-app-accent hover:text-white rounded-lg transition-colors border border-transparent"
+                title="Edit Experience"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+              </Link>
+              <button
+                onClick={() => setConfirmingId(brand.id)}
+                className="p-1.5 bg-white/5 hover:bg-red-500/10 text-app-text-secondary hover:text-red-400 rounded-lg transition-colors border border-app-border hover:border-red-500/20"
+                title="Delete"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+            {confirmingId === brand.id && (
+              <div className="mt-2 p-2 bg-red-950/40 border border-red-500/30 rounded-xl flex flex-col items-end gap-1.5 z-10">
+                <span className="text-[9px] font-black text-red-400">Delete this brand?</span>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => { handleDeleteBrand(brand.id); setConfirmingId(null); }}
+                    className="px-2 py-1 bg-red-500 text-white text-[8px] font-black uppercase rounded hover:bg-red-600 transition-colors border border-transparent"
+                  >Confirm</button>
+                  <button
+                    onClick={() => setConfirmingId(null)}
+                    className="px-2 py-1 bg-white/5 text-app-text-secondary text-[8px] font-black uppercase rounded hover:bg-white/10 transition-colors border border-transparent"
+                  >Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="space-y-6 pb-12 text-left text-app-text-primary">
@@ -551,107 +702,27 @@ export default function BrandsStudioList() {
             ))}
           </motion.div>
         ) : (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="bg-app-card border border-app-border rounded-3xl overflow-hidden shadow-xl"
+            className="space-y-3"
           >
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-[#202030] bg-[#05050C]">
-                  <th className="p-4.5 text-[9px] font-black uppercase text-app-text-secondary tracking-wider">Brand visual detail</th>
-                  <th className="p-4.5 text-[9px] font-black uppercase text-app-text-secondary tracking-wider">Followers</th>
-                  <th className="p-4.5 text-[9px] font-black uppercase text-app-text-secondary tracking-wider">Loves count</th>
-                  <th className="p-4.5 text-[9px] font-black uppercase text-app-text-secondary tracking-wider">Trust Score</th>
-                  <th className="p-4.5 text-[9px] font-black uppercase text-app-text-secondary tracking-wider">Content Status</th>
-                  <th className="p-4.5 text-[9px] font-black uppercase text-app-text-secondary tracking-wider text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#202030]/60">
-                {filteredBrands.map((brand) => (
-                  <tr key={brand.id} className="hover:bg-white/5 transition-colors">
-                    <td className="p-4.5 flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-lg flex items-center justify-center font-black text-xs uppercase border border-app-border shrink-0${brand.color}`}>
-                        {brand.initials}
-                      </div>
-                      <div>
-                        <div className="text-xs font-bold text-app-text-primary flex items-center gap-1.5">
-                          <Link to={`/admin/brands/${brand.id}`} className="hover:text-app-accent hover:underline flex items-center gap-1">
-                            {brand.brandName}
-                          </Link>
-                          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                        </div>
-                        <div className="text-[10px] text-app-text-secondary">{brand.category}</div>
-                      </div>
-                    </td>
-                    <td className="p-4.5 font-mono text-xs">{brand.followersCount}</td>
-                    <td className="p-4.5 font-mono text-xs text-red-400">{brand.loveCount}</td>
-                    <td className="p-4.5 font-mono text-xs text-amber-400">{brand.trustScore} / 5.0</td>
-                    <td className="p-4.5">
-                      <span className={`px-2 py-0.5 text-[8px] font-black tracking-widest uppercase rounded border${
-                        brand.status === "Live" ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-app-accent/10 text-app-accent border-app-accent/20"
-                      }`}>
-                        {brand.status}
-                      </span>
-                    </td>
-                    <td className="p-4.5 text-right">
-                      <div className="flex justify-end items-center gap-3">
-                        {profile?.role === 'seller' && (
-                          activeBrandId === brand.id ? (
-                            <span className="px-3 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0">
-                              Active
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setActiveBrandId(brand.id);
-                                triggerToast(`✓ Active Brand context switched.`);
-                              }}
-                              className="px-3 py-1 bg-[#05050C] hover:bg-emerald-500/10 border border-[#202030] hover:border-emerald-500/30 text-app-text-secondary hover:text-emerald-400 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all"
-                            >
-                              Select
-                            </button>
-                          )
-                        )}
-                        <div className="flex flex-col items-end">
-                          <div className="flex justify-end gap-2">
-                            <Link 
-                              to={`/dashboard/content-studio/brands/${brand.id}/edit`}
-                              className="p-1.5 bg-app-accent/10 hover:bg-app-accent/20 text-app-accent hover:text-white rounded-lg transition-colors border border-transparent"
-                              title="Edit Experience"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </Link>
-                            <button 
-                              onClick={() => setConfirmingId(brand.id)}
-                              className="p-1.5 bg-white/5 hover:bg-red-500/10 text-app-text-secondary hover:text-red-400 rounded-lg transition-colors border border-app-border hover:border-red-500/20"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          {confirmingId === brand.id && (
-                            <div className="mt-2 p-2 bg-red-950/40 border border-red-500/30 rounded-xl flex flex-col items-end gap-1.5 z-10">
-                              <span className="text-[9px] font-black text-red-400">Delete this brand?</span>
-                              <div className="flex gap-1.5">
-                                <button
-                                  onClick={() => { handleDeleteBrand(brand.id); setConfirmingId(null); }}
-                                  className="px-2 py-1 bg-red-500 text-white text-[8px] font-black uppercase rounded hover:bg-red-600 transition-colors border border-transparent"
-                                >Confirm</button>
-                                <button
-                                  onClick={() => setConfirmingId(null)}
-                                  className="px-2 py-1 bg-white/5 text-app-text-secondary text-[8px] font-black uppercase rounded hover:bg-white/10 transition-colors border border-transparent"
-                                >Cancel</button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <BulkActionBar
+              count={selectedIds.size}
+              actions={brandBulkActions}
+              onClear={() => setSelectedIds(new Set())}
+              itemLabel="brands"
+            />
+            <div className="bg-app-card border border-app-border rounded-3xl overflow-hidden shadow-xl">
+              <DataTable
+                columns={brandColumns}
+                rows={filteredBrands}
+                getRowId={(b: BrandStudioItem) => b.id}
+                selectedIds={selectedIds}
+                onSelectedIdsChange={setSelectedIds}
+                emptyMessage="No brand experiences match your active filters."
+              />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

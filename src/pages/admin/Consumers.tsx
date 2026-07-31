@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useContact } from '../../contexts/ContactInteractionContext';
 import { operationsApi } from '../../services/operationsApi';
 import { Badge } from '../../components/ui/Badge';
+import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
+import { BulkActionBar, BulkAction } from '../../components/ui/BulkActionBar';
 import {
   Search, 
   Filter, 
@@ -75,6 +77,7 @@ export default function ConsumersPage() {
   const { triggerMessage } = useContact();
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     operationsApi
@@ -127,6 +130,243 @@ export default function ConsumersPage() {
     if (role === 'Admin') return `/upe/consumer/${id}`;
     return `/upe/consumer/${id}`;
   };
+
+  const handleBulkAction = (actionType: 'verify' | 'suspend') => {
+    const ids = [...selectedIds];
+    ids.forEach((id) => handleAction(id, actionType));
+    showToast(
+      actionType === 'suspend'
+        ? `${ids.length} account(s) suspended.`
+        : `${ids.length} account(s) reactivated/approved.`
+    );
+    setSelectedIds(new Set());
+  };
+
+  const handleExportCSV = () => {
+    const rows = finalFiltered.filter((u) => selectedIds.has(u.id));
+    const header = ['Name', 'Email', 'Role', 'Status', 'Joined', 'Last Active'];
+    const csv = [header.join(','), ...rows.map((u) => [u.name, u.email, u.role, u.status, u.joined, u.active].join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${currentViewRole.toLowerCase()}s-export.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${rows.length} record(s) to CSV.`);
+  };
+
+  const bulkActions: BulkAction[] = isCreatorView
+    ? [
+        { label: 'Approve', onClick: () => handleBulkAction('verify'), variant: 'success' },
+        { label: 'Suspend', onClick: () => handleBulkAction('suspend'), variant: 'danger' },
+        { label: 'Export CSV', onClick: handleExportCSV, variant: 'info' },
+      ]
+    : [
+        { label: 'Reactivate', onClick: () => handleBulkAction('verify'), variant: 'success' },
+        { label: 'Suspend', onClick: () => handleBulkAction('suspend'), variant: 'danger' },
+        { label: 'Export CSV', onClick: handleExportCSV, variant: 'info' },
+      ];
+
+  const registryColumns = useMemo<DataTableColumn<MockUser>[]>(() => {
+    const columns: DataTableColumn<MockUser>[] = [
+      {
+        key: 'account',
+        header: 'Account Identification',
+        sortValue: (u) => u.name,
+        render: (u) => (
+          <div className="flex items-center gap-3">
+            <Link
+              to={getProfilePath(u.role, u.id)}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-[11.5px] font-bold bg-app-sidebar border border-app-border text-app-accent-light hover:border-app-accent/50 transition-all active:scale-95 shrink-0"
+            >
+              {u.initials}
+            </Link>
+            <div className="min-w-0">
+              <Link
+                to={getProfilePath(u.role, u.id)}
+                className="font-bold text-white hover:text-app-accent-light transition-colors block truncate"
+              >
+                {u.name}
+              </Link>
+              <div className="text-[10px] text-app-text-secondary/50 font-mono italic truncate">{u.email}</div>
+            </div>
+          </div>
+        ),
+      },
+    ];
+
+    if (!isCreatorView) {
+      columns.push(
+        { key: 'role', header: 'Role Type', render: (u) => <RoleBadge role={u.role} /> },
+        {
+          key: 'segment',
+          header: 'Behavior Intent Segment',
+          render: (u) => (
+            <span className="font-bold text-[11px] text-indigo-300 bg-indigo-500/5 px-2 py-1 rounded-[2px] border border-indigo-500/10">
+              🎯 {u.behaviorSegment || 'General User Profile'}
+            </span>
+          ),
+        },
+        {
+          key: 'trust',
+          header: 'Security Trust Score',
+          sortValue: (u) => u.trustScore,
+          render: (u) => (
+            <div className="flex items-center gap-2 font-mono shrink-0">
+              <span
+                className={`font-black text-[11px] ${
+                  u.trustScore >= 90 ? 'text-green-400' : u.trustScore >= 75 ? 'text-yellow-400' : 'text-red-400'
+                }`}
+              >
+                {u.trustScore || 85}%
+              </span>
+              <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden hidden sm:block">
+                <div
+                  className={`h-full ${u.trustScore >= 90 ? 'bg-green-500' : u.trustScore >= 75 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                  style={{ width: `${u.trustScore || 85}%` }}
+                />
+              </div>
+            </div>
+          ),
+        }
+      );
+    } else {
+      columns.push(
+        {
+          key: 'followers',
+          header: 'Follower Range',
+          render: (u) => (
+            <span className="font-mono text-xs text-white">{u.id === '1' ? '120k' : u.id === '6' ? '85k' : '42k'} Followers</span>
+          ),
+        },
+        {
+          key: 'content',
+          header: 'Content Count',
+          render: (u) => (
+            <span className="font-mono text-xs text-slate-300">{u.id === '1' ? '142' : u.id === '6' ? '98' : '64'} posts</span>
+          ),
+        },
+        {
+          key: 'verification',
+          header: 'Verification Status',
+          render: (u) => (
+            <span
+              className={`px-2 py-0.5 rounded-[2px] text-[10px] font-bold ${
+                u.id === '1'
+                  ? 'bg-green-500/10 text-green-400 border border-green-500/20'
+                  : u.id === '6'
+                  ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10'
+                  : 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
+              }`}
+            >
+              {u.id === '1' ? 'Elite Partner' : u.id === '6' ? 'Pro Creator' : 'Approved'}
+            </span>
+          ),
+        },
+        {
+          key: 'commission',
+          header: 'Commission Tier',
+          render: (u) => (
+            <span className="font-mono text-xs text-emerald-400 font-bold">{u.id === '1' ? '12%' : u.id === '6' ? '10%' : '8%'} tier</span>
+          ),
+        }
+      );
+    }
+
+    columns.push({
+      key: 'status',
+      header: 'Status Badge',
+      sortValue: (u) => u.status,
+      render: (u) => (
+        <div className="flex items-center gap-2 shrink-0">
+          <div className={`w-1.5 h-1.5 rounded-full ${u.status === 'Active' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-red-500'}`} />
+          <span className={`text-[10px] font-bold uppercase tracking-wider ${u.status === 'Active' ? 'text-green-500' : 'text-red-500'}`}>
+            {u.status}
+          </span>
+        </div>
+      ),
+    });
+
+    if (!isCreatorView) {
+      columns.push({
+        key: 'lastActive',
+        header: 'Last Access Active',
+        render: (u) => (
+          <span className="text-app-text-secondary/60 shrink-0 font-mono text-[11px]">
+            {u.active}
+            <span className="text-[9.5px] text-slate-500 block font-sans">joined {u.joined}</span>
+          </span>
+        ),
+      });
+    }
+
+    columns.push({
+      key: 'actions',
+      header: 'Administrative',
+      align: 'right',
+      render: (u) => (
+        <div className="flex justify-end relative">
+          <button
+            onClick={() => setActiveMenu(activeMenu === u.id ? null : u.id)}
+            className={`w-8 h-8 flex items-center justify-center rounded-[4px] border transition-all cursor-pointer ${
+              activeMenu === u.id
+                ? 'bg-app-accent text-white border-app-accent shadow-lg'
+                : 'bg-white/5 text-app-text-secondary border-transparent hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <MoreVertical className="w-4 h-4" />
+          </button>
+
+          {activeMenu === u.id && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setActiveMenu(null)} />
+              <div className="absolute right-0 top-10 w-48 bg-app-card border border-app-border rounded-[4px] shadow-2xl z-20 py-1 overflow-hidden animate-in fade-in zoom-in duration-200">
+                <Link
+                  to={getProfilePath(u.role, u.id)}
+                  className="flex items-center gap-2 px-4 py-2 text-[11.5px] font-medium text-app-text-primary hover:bg-app-accent/10 hover:text-app-accent-light transition-colors"
+                >
+                  <Eye className="w-3.5 h-3.5 text-app-accent" />
+                  <span>View Dashboard Card</span>
+                </Link>
+                <button
+                  onClick={() => {
+                    setActiveMenu(null);
+                    triggerMessage({ id: u.id, name: u.name, avatarUrl: (u as any).avatar, phone: (u as any).phone || '+8801700000000', status: u.status, role: u.role });
+                  }}
+                  className="w-full flex items-center gap-2 px-4 py-2 text-[11.5px] font-medium text-app-text-primary hover:bg-app-accent/10 hover:text-app-accent-light transition-colors text-left"
+                >
+                  <MessageCircle className="w-3.5 h-3.5 text-app-accent" />
+                  <span>Direct Message</span>
+                </button>
+
+                <div className="border-t border-app-border my-1" />
+                {u.status === 'Banned' ? (
+                  <button
+                    onClick={() => handleAction(u.id, 'verify')}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-[11.5px] font-bold text-green-400 hover:bg-green-500/10 transition-colors text-left"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>Restore Profile</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleAction(u.id, 'suspend')}
+                    className="w-full flex items-center gap-2 px-4 py-2 text-[11.5px] font-bold text-red-500 hover:bg-red-500/10 transition-colors text-left"
+                  >
+                    <Ban className="w-3.5 h-3.5" />
+                    <span>Block User Access</span>
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      ),
+    });
+
+    return columns;
+  }, [isCreatorView, activeMenu]);
 
   return (
     <div className="space-y-6 pb-12 text-app-text-primary transition-all animate-in fade-in duration-300">
@@ -409,198 +649,33 @@ export default function ConsumersPage() {
       )}
 
       {/* REGISTRY TABLE PANEL */}
-      <div className="bg-app-card border border-app-border rounded-[4px] overflow-hidden shadow-xl">
+      <BulkActionBar
+        count={selectedIds.size}
+        actions={bulkActions}
+        onClear={() => setSelectedIds(new Set())}
+        itemLabel={currentViewRole.toLowerCase() + 's'}
+      />
+      <div className="bg-white border border-app-border rounded-2xl overflow-hidden shadow-sm">
         <div className="overflow-x-auto custom-scrollbar">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-white/5 border-b border-app-border">
-                <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Account Identification</th>
-                {!isCreatorView ? (
-                  <>
-                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Role Type</th>
-                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Behavior Intent Segment</th>
-                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Security Trust Score</th>
-                  </>
-                ) : (
-                  <>
-                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Follower Range</th>
-                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Content Count</th>
-                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Verification Status</th>
-                    <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Commission Tier</th>
-                  </>
-                )}
-                <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Status Badge</th>
-                {!isCreatorView && (
-                  <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest">Last Access Active</th>
-                )}
-                <th className="px-6 py-4 text-[11px] font-bold text-app-text-secondary uppercase tracking-widest text-right">Administrative</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5 text-[13px]">
-              {finalFiltered.length > 0 ? (
-                finalFiltered.map((u) => (
-                  <tr key={u.id} className="hover:bg-white/[0.02] transition-all group">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <Link 
-                          to={getProfilePath(u.role, u.id)} 
-                          className="w-9 h-9 rounded-full flex items-center justify-center text-[11.5px] font-bold bg-app-sidebar border border-app-border text-app-accent-light hover:border-app-accent/50 transition-all active:scale-95 shrink-0"
-                        >
-                          {u.initials}
-                        </Link>
-                        <div className="min-w-0">
-                          <Link 
-                            to={getProfilePath(u.role, u.id)} 
-                            className="font-bold text-white hover:text-app-accent-light transition-colors block truncate"
-                          >
-                            {u.name}
-                          </Link>
-                          <div className="text-[10px] text-app-text-secondary/50 font-mono italic truncate">{u.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    {!isCreatorView ? (
-                      <>
-                        <td className="px-6 py-4">
-                          <RoleBadge role={u.role} />
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="font-bold text-[11px] text-indigo-300 bg-indigo-500/5 px-2 py-1 rounded-[2px] border border-indigo-500/10">
-                            🎯 {u.behaviorSegment || 'General User Profile'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center gap-2 font-mono shrink-0">
-                            <span className={`font-black text-[11px] ${
-                              u.trustScore >= 90 ? 'text-green-400' : u.trustScore >= 75 ? 'text-yellow-400' : 'text-red-400'
-                            }`}>
-                              {u.trustScore || 85}%
-                            </span>
-                            <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden hidden sm:block">
-                              <div 
-                                className={`h-full ${u.trustScore >= 90 ? 'bg-green-500' : u.trustScore >= 75 ? 'bg-yellow-500' : 'bg-red-500'}`} 
-                                style={{ width: `${u.trustScore || 85}%` }} 
-                              />
-                            </div>
-                          </div>
-                        </td>
-                      </>
-                    ) : (
-                      <>
-                        <td className="px-6 py-4">
-                          <span className="font-mono text-xs text-white">
-                            {u.id === '1' ? '120k' : u.id === '6' ? '85k' : '42k'} Followers
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 font-mono text-xs text-slate-300">
-                          {u.id === '1' ? '142' : u.id === '6' ? '98' : '64'} posts
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`px-2 py-0.5 rounded-[2px] text-[10px] font-bold ${
-                            u.id === '1' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : u.id === '6' ? 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/10' : 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
-                          }`}>
-                            {u.id === '1' ? 'Elite Partner' : u.id === '6' ? 'Pro Creator' : 'Approved'}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 font-mono text-xs text-emerald-400 font-bold">
-                          {u.id === '1' ? '12%' : u.id === '6' ? '10%' : '8%'} tier
-                        </td>
-                      </>
-                    )}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-2 shrink-0">
-                         <div className={`w-1.5 h-1.5 rounded-full ${u.status === 'Active' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-red-500'}`} />
-                         <span className={`text-[10px] font-bold uppercase tracking-wider ${u.status === 'Active' ? 'text-green-500' : 'text-red-500'}`}>
-                           {u.status}
-                         </span>
-                      </div>
-                    </td>
-                    {!isCreatorView && (
-                      <td className="px-6 py-4 text-app-text-secondary/60 shrink-0 font-mono text-[11px]">
-                        {u.active} 
-                        <span className="text-[9.5px] text-slate-500 block font-sans">joined {u.joined}</span>
-                      </td>
-                    )}
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end relative">
-                         <button 
-                           onClick={() => setActiveMenu(activeMenu === u.id ? null : u.id)}
-                           className={`w-8 h-8 flex items-center justify-center rounded-[4px] border transition-all cursor-pointer ${
-                             activeMenu === u.id 
-                               ? 'bg-app-accent text-white border-app-accent shadow-lg' 
-                               : 'bg-white/5 text-app-text-secondary border-transparent hover:text-white hover:bg-white/10'
-                           }`}
-                         >
-                            <MoreVertical className="w-4 h-4" />
-                         </button>
-
-                         {activeMenu === u.id && (
-                           <>
-                             <div className="fixed inset-0 z-10" onClick={() => setActiveMenu(null)} />
-                             <div className="absolute right-0 top-10 w-48 bg-app-card border border-app-border rounded-[4px] shadow-2xl z-20 py-1 overflow-hidden animate-in fade-in zoom-in duration-200">
-                                <Link 
-                                  to={getProfilePath(u.role, u.id)} 
-                                  className="flex items-center gap-2 px-4 py-2 text-[11.5px] font-medium text-app-text-primary hover:bg-app-accent/10 hover:text-app-accent-light transition-colors"
-                                >
-                                   <Eye className="w-3.5 h-3.5 text-app-accent" /> 
-                                   <span>View Dashboard Card</span>
-                                </Link>
-                                <button 
-                                  onClick={() => {
-                                    setActiveMenu(null);
-                                    triggerMessage({ id: u.id, name: u.name, avatarUrl: u.avatar, phone: u.phone || '+8801700000000', status: u.status, role: u.role });
-                                  }}
-                                  className="w-full flex items-center gap-2 px-4 py-2 text-[11.5px] font-medium text-app-text-primary hover:bg-app-accent/10 hover:text-app-accent-light transition-colors text-left"
-                                >
-                                   <MessageCircle className="w-3.5 h-3.5 text-app-accent" /> 
-                                   <span>Direct Message</span>
-                                </button>
-                                
-                                <div className="border-t border-app-border my-1" />
-                                {u.status === 'Banned' ? (
-                                  <button 
-                                    onClick={() => handleAction(u.id, 'verify')}
-                                    className="w-full flex items-center gap-2 px-4 py-2 text-[11.5px] font-bold text-green-400 hover:bg-green-500/10 transition-colors text-left"
-                                  >
-                                     <UserCheck className="w-3.5 h-3.5" /> 
-                                     <span>Restore Profile</span>
-                                  </button>
-                                ) : (
-                                  <button 
-                                    onClick={() => handleAction(u.id, 'suspend')}
-                                    className="w-full flex items-center gap-2 px-4 py-2 text-[11.5px] font-bold text-red-500 hover:bg-red-500/10 transition-colors text-left"
-                                  >
-                                     <Ban className="w-3.5 h-3.5" /> 
-                                     <span>Block User Access</span>
-                                  </button>
-                                )}
-                             </div>
-                           </>
-                         )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan={7} className="text-center py-12 text-app-text-secondary">
-                    <ShieldAlert className="w-8 h-8 text-app-text-secondary/20 mx-auto mb-2" />
-                    <p className="text-sm font-bold text-white">No matches found for your search inquiry</p>
-                    <p className="text-xs">Refine your keyword queries or select a different user catalog tab.</p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          <DataTable
+            columns={registryColumns}
+            rows={finalFiltered}
+            getRowId={(u: MockUser) => u.id}
+            selectedIds={selectedIds}
+            onSelectedIdsChange={setSelectedIds}
+            isLoading={usersLoading}
+            loadingMessage="Loading registry..."
+            emptyMessage="No matches found for your search inquiry. Refine your keyword queries or select a different user catalog tab."
+          />
         </div>
-        
+
         {/* Pagination Section */}
-        <div className="px-6 py-4 border-t border-app-border flex items-center justify-between text-[11px] font-bold text-app-text-secondary uppercase tracking-widest bg-white/[0.01]">
+        <div className="px-6 py-4 border-t border-app-border flex items-center justify-between text-[11px] font-bold text-app-text-secondary uppercase tracking-widest bg-slate-50/60">
            <div>Registry range: 1 — {finalFiltered.length} of {finalFiltered.length} matches</div>
            <div className="flex gap-1.5">
-              <button className="px-3 py-1 bg-white/5 border border-white/5 text-white/20 cursor-not-allowed rounded-[2px]">Prev</button>
+              <button className="px-3 py-1 bg-white border border-app-border text-app-text-disabled cursor-not-allowed rounded-[2px]">Prev</button>
               <button className="px-3 py-1 bg-app-accent text-white shadow-sm rounded-[2px]">01</button>
-              <button className="px-3 py-1 bg-white/5 border border-white/5 text-slate-500 hover:text-white transition-all rounded-[2px]">Next</button>
+              <button className="px-3 py-1 bg-white border border-app-border text-app-text-secondary hover:text-app-accent transition-all rounded-[2px]">Next</button>
            </div>
         </div>
       </div>

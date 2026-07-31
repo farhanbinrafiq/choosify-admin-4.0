@@ -12,8 +12,23 @@ import { BrandCMSModel, CreatorVideoItem, PromoCodeItem, initialBrandSeeds } fro
 import { useAuth } from "../../contexts/AuthContext";
 import { useBrandProfiles } from "../../contexts/BrandProfilesContext";
 import { catalogApi } from "../../services/catalogApi";
+import { BrandImageUploadField } from "./BrandImageUploadField";
 
 const COMPILATION_KEY = "choosify_brand_studio_list";
+
+/** Soft URL check — empty is fine; only warn when non-empty looks invalid. */
+function softUrlError(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  try {
+    const withProtocol = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const parsed = new URL(withProtocol);
+    if (!parsed.hostname.includes(".")) return "Enter a valid URL";
+    return null;
+  } catch {
+    return "Enter a valid URL";
+  }
+}
 
 interface BrandEditStudioProps {
   overrideId?: string;
@@ -265,7 +280,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
       socialFbUrl: headerForm.socialFbUrl,
       socialInstaUrl: headerForm.socialInstaUrl,
       socialTiktokUrl: headerForm.socialTiktokUrl,
-      socialYtUrl: model.socialYtUrl,
+      socialYtUrl: headerForm.socialYtUrl,
       website: headerForm.website
     };
     setModel(nextModel);
@@ -1148,92 +1163,187 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                   </button>
                 </div>
 
-                {/* DRAWERS SECTON: 1. BRAND HEADER */}
+                {/* DRAWERS SECTON: 1. BRAND HEADER — WYSIWYG mini hero */}
                 {activeDrawer === "header" && (
-                  <div className="space-y-4">
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Brand Corporate Name</label>
-                      <input 
-                        type="text"
-                        value={headerForm.brandName}
-                        onChange={e => setHeaderForm(prev => ({ ...prev, brandName: e.target.value }))}
-                        className="w-full p-2.5 border rounded-xl text-xs bg-slate-50 border-slate-200 font-bold focus:ring-[#FF5B00]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Brand Focus Category</label>
-                      <input 
-                        type="text"
-                        value={headerForm.category}
-                        onChange={e => setHeaderForm(prev => ({ ...prev, category: e.target.value }))}
-                        className="w-full p-2.5 border rounded-xl text-xs bg-slate-50 border-slate-200 focus:ring-[#FF5B00]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Logo URL Address</label>
-                      <input 
-                        type="text"
-                        value={headerForm.logo}
-                        onChange={e => setHeaderForm(prev => ({ ...prev, logo: e.target.value }))}
-                        className="w-full p-2.5 border rounded-xl text-xs bg-slate-50 border-slate-200 focus:ring-[#FF5B00]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Cover Banner Image URL</label>
-                      <input 
-                        type="text"
-                        value={headerForm.coverImage}
-                        onChange={e => setHeaderForm(prev => ({ ...prev, coverImage: e.target.value }))}
-                        className="w-full p-2.5 border rounded-xl text-xs bg-slate-50 border-slate-200 focus:ring-[#FF5B00]"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase">Brand Tagline</label>
-                      <input 
-                        type="text"
-                        value={headerForm.tagline}
-                        onChange={e => setHeaderForm(prev => ({ ...prev, tagline: e.target.value }))}
-                        className="w-full p-2.5 border rounded-xl text-xs bg-slate-50 border-slate-200 focus:ring-[#FF5B00]"
-                      />
-                    </div>
-                    
-                    <div className="border-t border-slate-100 pt-3 space-y-3">
-                      <p className="text-[9px] font-black text-app-text-secondary uppercase">Social Connectivity Coordinates</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-500">Facebook URL</label>
-                          <input 
-                            type="text"
-                            value={headerForm.socialFbUrl}
-                            onChange={e => setHeaderForm(prev => ({ ...prev, socialFbUrl: e.target.value }))}
-                            className="w-full p-2 border rounded-xl text-xs text-slate-700 bg-slate-50"
+                  <div className="space-y-5">
+                    {/* Live mini hero preview */}
+                    <div className="rounded-2xl overflow-hidden border border-slate-200 bg-white shadow-sm">
+                      <div className="relative h-32 bg-slate-100">
+                        {headerForm.coverImage ? (
+                          <img
+                            src={headerForm.coverImage}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover brightness-95"
+                          />
+                        ) : (
+                          <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-400 font-bold uppercase tracking-wide">
+                            Cover banner
+                          </div>
+                        )}
+                        <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+                        <BrandImageUploadField
+                          embedded
+                          variant="banner"
+                          value={headerForm.coverImage}
+                          onChange={(url) => setHeaderForm((prev) => ({ ...prev, coverImage: url }))}
+                        />
+                      </div>
+
+                      <div className="px-4 pb-4 -mt-10 relative flex items-end gap-3">
+                        <div className="relative w-20 h-20 shrink-0 rounded-2xl border-4 border-white bg-white shadow-md overflow-hidden">
+                          {headerForm.logo ? (
+                            <img src={headerForm.logo} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-[8px] text-slate-400 font-bold uppercase bg-slate-50">
+                              Logo
+                            </div>
+                          )}
+                          <BrandImageUploadField
+                            embedded
+                            variant="logo"
+                            value={headerForm.logo}
+                            onChange={(url) => setHeaderForm((prev) => ({ ...prev, logo: url }))}
                           />
                         </div>
-                        <div className="space-y-1">
-                          <label className="text-[9px] font-bold text-slate-500">Instagram URL</label>
-                          <input 
+
+                        <div className="flex-1 min-w-0 space-y-1 pt-10">
+                          <input
                             type="text"
-                            value={headerForm.socialInstaUrl}
-                            onChange={e => setHeaderForm(prev => ({ ...prev, socialInstaUrl: e.target.value }))}
-                            className="w-full p-2 border rounded-xl text-xs text-slate-700 bg-slate-50"
+                            value={headerForm.brandName}
+                            onChange={(e) => setHeaderForm((prev) => ({ ...prev, brandName: e.target.value }))}
+                            placeholder="Brand name"
+                            className="w-full bg-transparent border-none p-0 text-base font-black text-[#111827] tracking-tight focus:outline-none focus:ring-0 placeholder:text-slate-300"
+                          />
+                          <input
+                            type="text"
+                            value={headerForm.category}
+                            onChange={(e) => setHeaderForm((prev) => ({ ...prev, category: e.target.value }))}
+                            placeholder="Category"
+                            className="w-full bg-transparent border-none p-0 text-[11px] font-extrabold uppercase tracking-widest text-[#FF5B00] focus:outline-none focus:ring-0 placeholder:text-orange-200"
+                          />
+                          <input
+                            type="text"
+                            value={headerForm.tagline}
+                            onChange={(e) => setHeaderForm((prev) => ({ ...prev, tagline: e.target.value }))}
+                            placeholder="Tagline"
+                            className="w-full bg-transparent border-none p-0 text-xs text-slate-600 font-medium focus:outline-none focus:ring-0 placeholder:text-slate-300"
                           />
                         </div>
                       </div>
+                    </div>
+
+                    <details className="group rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
+                      <summary className="text-[10px] font-bold text-slate-500 cursor-pointer list-none flex items-center justify-between">
+                        <span>Paste image URLs instead</span>
+                        <span className="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
+                      </summary>
+                      <div className="mt-3 space-y-2">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">Logo URL</label>
+                          <input
+                            type="url"
+                            value={headerForm.logo}
+                            onChange={(e) => setHeaderForm((prev) => ({ ...prev, logo: e.target.value }))}
+                            placeholder="https://…"
+                            className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">Cover URL</label>
+                          <input
+                            type="url"
+                            value={headerForm.coverImage}
+                            onChange={(e) => setHeaderForm((prev) => ({ ...prev, coverImage: e.target.value }))}
+                            placeholder="https://…"
+                            className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700"
+                          />
+                        </div>
+                      </div>
+                    </details>
+
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3.5 space-y-3">
+                      <p className="text-[9px] font-black text-app-text-secondary uppercase tracking-wide">Social & website</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                            <Facebook className="w-3 h-3" /> Facebook
+                          </label>
+                          <input
+                            type="text"
+                            value={headerForm.socialFbUrl}
+                            onChange={(e) => setHeaderForm((prev) => ({ ...prev, socialFbUrl: e.target.value }))}
+                            className="w-full p-2 border rounded-xl text-xs text-slate-700 bg-white border-slate-200"
+                          />
+                          {softUrlError(headerForm.socialFbUrl) && (
+                            <p className="text-[9px] text-red-600">{softUrlError(headerForm.socialFbUrl)}</p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                            <Instagram className="w-3 h-3" /> Instagram
+                          </label>
+                          <input
+                            type="text"
+                            value={headerForm.socialInstaUrl}
+                            onChange={(e) => setHeaderForm((prev) => ({ ...prev, socialInstaUrl: e.target.value }))}
+                            className="w-full p-2 border rounded-xl text-xs text-slate-700 bg-white border-slate-200"
+                          />
+                          {softUrlError(headerForm.socialInstaUrl) && (
+                            <p className="text-[9px] text-red-600">{softUrlError(headerForm.socialInstaUrl)}</p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-500">TikTok</label>
+                          <input
+                            type="text"
+                            value={headerForm.socialTiktokUrl}
+                            onChange={(e) => setHeaderForm((prev) => ({ ...prev, socialTiktokUrl: e.target.value }))}
+                            className="w-full p-2 border rounded-xl text-xs text-slate-700 bg-white border-slate-200"
+                          />
+                          {softUrlError(headerForm.socialTiktokUrl) && (
+                            <p className="text-[9px] text-red-600">{softUrlError(headerForm.socialTiktokUrl)}</p>
+                          )}
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                            <Youtube className="w-3 h-3" /> YouTube
+                          </label>
+                          <input
+                            type="text"
+                            value={headerForm.socialYtUrl}
+                            onChange={(e) => setHeaderForm((prev) => ({ ...prev, socialYtUrl: e.target.value }))}
+                            className="w-full p-2 border rounded-xl text-xs text-slate-700 bg-white border-slate-200"
+                          />
+                          {softUrlError(headerForm.socialYtUrl) && (
+                            <p className="text-[9px] text-red-600">{softUrlError(headerForm.socialYtUrl)}</p>
+                          )}
+                        </div>
+                      </div>
                       <div className="space-y-1">
-                        <label className="text-[9px] font-bold text-slate-500">Official Storefront Website Domain</label>
-                        <input 
+                        <label className="text-[9px] font-bold text-slate-500 flex items-center gap-1">
+                          <Globe className="w-3 h-3" /> Website
+                        </label>
+                        <input
                           type="text"
                           value={headerForm.website}
-                          onChange={e => setHeaderForm(prev => ({ ...prev, website: e.target.value }))}
-                          className="w-full p-2 border rounded-xl text-xs text-slate-700 bg-slate-50"
+                          onChange={(e) => setHeaderForm((prev) => ({ ...prev, website: e.target.value }))}
+                          className="w-full p-2 border rounded-xl text-xs text-slate-700 bg-white border-slate-200"
                         />
+                        {softUrlError(headerForm.website) && (
+                          <p className="text-[9px] text-red-600">{softUrlError(headerForm.website)}</p>
+                        )}
                       </div>
                     </div>
 
                     <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl space-y-1 relative">
                       <span className="block text-[10px] font-bold text-app-text-secondary">READ ONLY SECTOR</span>
-                      <p className="text-xs text-slate-500">Verification Seal: <span className="font-bold text-red-600">{model.verificationStatus}</span></p>
-                      <span className="absolute top-2 right-2 text-app-text-secondary"><Lock className="w-3.5 h-3.5" /></span>
+                      <p className="text-xs text-slate-500">
+                        Verification Seal:{" "}
+                        <span className="font-bold text-red-600">{model.verificationStatus}</span>
+                      </p>
+                      <span className="absolute top-2 right-2 text-app-text-secondary">
+                        <Lock className="w-3.5 h-3.5" />
+                      </span>
                     </div>
                   </div>
                 )}

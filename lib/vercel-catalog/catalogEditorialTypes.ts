@@ -12,18 +12,36 @@ export interface CatalogMediaItem {
   associatedGuideId?: string;
 }
 
+export interface CatalogCreatorSocialLinks {
+  facebook?: string;
+  instagram?: string;
+  youtube?: string;
+  tiktok?: string;
+  linkedin?: string;
+}
+
 export interface CatalogCreator {
   id: string;
   slug: string;
   name: string;
   handle: string;
   avatar: string;
+  coverImage?: string;
+  role?: string;
+  location?: string;
+  /** HTTPS URL for creator review / story embed */
+  reviewVideoUrl?: string;
   score: number;
   bestFor: string;
   bestForTags: string[];
   platforms: string[];
   bio: string;
   followers: Record<string, string>;
+  socialLinks?: CatalogCreatorSocialLinks;
+  brandPartners?: string[];
+  collabTypes?: string[];
+  responseTime?: string;
+  preferredContact?: string;
   email?: string;
   phone?: string;
   category?: string;
@@ -163,6 +181,15 @@ export interface CatalogProductDetail {
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string;
+  sizeGuide?: {
+    enabled: boolean;
+    title?: string;
+    description?: string;
+    imageUrl?: string;
+    unitLabel?: string;
+    columnHeaders?: string[];
+    rows?: Array<{ size: string; [measurement: string]: string }>;
+  };
   updatedAt: string;
 }
 

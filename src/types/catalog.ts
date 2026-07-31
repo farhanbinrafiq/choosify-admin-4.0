@@ -13,6 +13,36 @@ export interface CatalogCategory {
   updatedAt: string;
 }
 
+export interface CatalogSocialLinks {
+  facebook?: string;
+  instagram?: string;
+  youtube?: string;
+  tiktok?: string;
+  linkedin?: string;
+}
+
+export interface CatalogBrandOverview {
+  address?: string;
+  email?: string;
+  phone?: string;
+  priceRange?: string;
+  ageFocus?: string;
+  audience?: string;
+  services?: string[];
+  tags?: string[];
+}
+
+export interface CatalogBrandFaq {
+  q: string;
+  a: string;
+}
+
+export interface CatalogBrandStores {
+  authorized?: Array<{ name: string; sub?: string }>;
+  distributors?: Array<{ name: string; sub?: string }>;
+  serviceCenters?: Array<{ name: string; sub?: string; hours?: string }>;
+}
+
 export interface CatalogBrand {
   id: string;
   slug: string;
@@ -20,6 +50,16 @@ export interface CatalogBrand {
   category: string;
   description: string;
   logo: string;
+  coverImage?: string;
+  tagline?: string;
+  website?: string;
+  socialLinks?: CatalogSocialLinks;
+  story?: string;
+  storyVideoUrl?: string;
+  credentials?: string;
+  overview?: CatalogBrandOverview;
+  faq?: CatalogBrandFaq[];
+  stores?: CatalogBrandStores;
   verifiedStatus: boolean;
   claimStatus: 'community' | 'pending' | 'verified';
   followers: number;
@@ -275,18 +315,35 @@ export interface CatalogMediaItem {
   associatedGuideId?: string;
 }
 
+export interface CatalogCreatorSocialLinks {
+  facebook?: string;
+  instagram?: string;
+  youtube?: string;
+  tiktok?: string;
+  linkedin?: string;
+}
+
 export interface CatalogCreator {
   id: string;
   slug: string;
   name: string;
   handle: string;
   avatar: string;
+  coverImage?: string;
+  role?: string;
+  location?: string;
+  reviewVideoUrl?: string;
   score: number;
   bestFor: string;
   bestForTags: string[];
   platforms: string[];
   bio: string;
   followers: Record<string, string>;
+  socialLinks?: CatalogCreatorSocialLinks;
+  brandPartners?: string[];
+  collabTypes?: string[];
+  responseTime?: string;
+  preferredContact?: string;
   email?: string;
   phone?: string;
   category?: string;
@@ -426,6 +483,15 @@ export interface CatalogProductDetail {
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string;
+  sizeGuide?: {
+    enabled: boolean;
+    title?: string;
+    description?: string;
+    imageUrl?: string;
+    unitLabel?: string;
+    columnHeaders?: string[];
+    rows?: Array<{ size: string; [measurement: string]: string }>;
+  };
   updatedAt: string;
 }
 

@@ -59,6 +59,7 @@ import {
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
 import { useBrandProfiles } from '../../contexts/BrandProfilesContext';
+import { useAds } from '../../contexts/AdsContext';
 import { SplitLayout } from '../../components/Layout/SplitLayout';
 import { Badge } from '../../components/ui/Badge';
 
@@ -78,6 +79,7 @@ export default function BrandDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { profiles, updateProfile, reviewClaim, logs, addLog } = useBrandProfiles();
+  const { promotionRequests, addPromotionRequest } = useAds();
 
   // Find profile in standard database or generate a standard fallback
   const brandProfile = useMemo(() => {
@@ -144,6 +146,28 @@ export default function BrandDetails() {
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const latestBrandFeatureRequest = useMemo(() => {
+    return promotionRequests
+      .filter((r) => r.contentType === 'BRAND' && r.contentId === brandProfile.id)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  }, [promotionRequests, brandProfile.id]);
+
+  const handleRequestBrandFeature = async () => {
+    await addPromotionRequest({
+      requesterId: brandProfile.ownerSellerId || 'seller_001',
+      requesterRole: 'seller',
+      requesterName: brandProfile.name,
+      contentType: 'BRAND',
+      contentId: brandProfile.id,
+      contentName: brandProfile.name,
+      requestedPromotionType: 'Featured',
+      featurePriority: 'Standard Featured',
+      duration: 30,
+      placementRequest: 'homepage_banner',
+    });
+    showToast('✓ Feature request submitted for admin review.');
   };
 
   // ----- TAB 1 LAYOUT STATES & ACTIONS -----
@@ -398,6 +422,25 @@ export default function BrandDetails() {
                   <Badge variant="accent" className="gap-1">
                      <ShieldCheck className="w-3.5 h-3.5" /> PARTNER STUDIO
                   </Badge>
+                  {latestBrandFeatureRequest?.approvalStatus === 'APPROVED' ? (
+                    <Badge variant="success">Featured</Badge>
+                  ) : latestBrandFeatureRequest?.approvalStatus === 'PENDING' ? (
+                    <Badge variant="warning">Feature Request Pending</Badge>
+                  ) : latestBrandFeatureRequest?.approvalStatus === 'REJECTED' ? (
+                    <button
+                      onClick={handleRequestBrandFeature}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 transition-all"
+                    >
+                      Feature Rejected · Retry
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleRequestBrandFeature}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-white text-app-accent border border-app-accent/40 hover:bg-app-accent/10 transition-all"
+                    >
+                      Request to be Featured
+                    </button>
+                  )}
                 </div>
                 <p className="text-app-text-secondary text-xs mt-1.5 font-medium flex items-center gap-2">
                    <Building2 className="w-3.5 h-3.5 text-app-text-secondary" /> {brandProfile.industry} &middot; {brandProfile.category}

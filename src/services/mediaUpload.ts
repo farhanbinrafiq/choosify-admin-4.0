@@ -21,7 +21,7 @@ const fileToBase64 = (file: File) =>
     reader.readAsDataURL(file);
   });
 
-async function uploadViaCloudinaryPreset(file: File): Promise<string> {
+async function uploadViaCloudinaryPreset(file: File, folder = 'choosify/products'): Promise<string> {
   if (!UPLOAD_PRESET?.trim()) {
     throw new Error('Missing VITE_CLOUDINARY_UPLOAD_PRESET');
   }
@@ -29,7 +29,7 @@ async function uploadViaCloudinaryPreset(file: File): Promise<string> {
   const form = new FormData();
   form.append('file', file);
   form.append('upload_preset', UPLOAD_PRESET.trim());
-  form.append('folder', 'choosify/products');
+  form.append('folder', folder);
 
   const response = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`, {
     method: 'POST',
@@ -87,20 +87,32 @@ async function uploadViaCatalogApi(file: File): Promise<string> {
   return payload.url;
 }
 
-export async function uploadProductImage(file: File): Promise<string> {
+async function uploadImage(file: File, folder = 'choosify/products'): Promise<string> {
   if (!file.type.startsWith('image/')) {
     throw new Error('Only image files are supported.');
   }
 
   if (UPLOAD_PRESET?.trim()) {
     try {
-      return await uploadViaCloudinaryPreset(file);
+      return await uploadViaCloudinaryPreset(file, folder);
     } catch (error) {
       console.warn('[mediaUpload] Direct Cloudinary upload failed, trying catalog API.', error);
     }
   }
 
   return uploadViaCatalogApi(file);
+}
+
+export async function uploadProductImage(file: File): Promise<string> {
+  return uploadImage(file, 'choosify/products');
+}
+
+export async function uploadBrandImage(file: File): Promise<string> {
+  return uploadImage(file, 'choosify/brands');
+}
+
+export async function uploadCreatorImage(file: File): Promise<string> {
+  return uploadImage(file, 'choosify/creators');
 }
 
 export async function uploadProductImages(files: File[]): Promise<string[]> {

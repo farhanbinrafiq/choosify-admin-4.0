@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate, Link, useLocation } from "react-router-dom";
 import {
   ArrowLeft, Pencil, Trash2, Plus, ArrowUp, ArrowDown, Lock, Star, Heart,
@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { useAuth } from "../../contexts/AuthContext";
+import { useAds } from "../../contexts/AdsContext";
 import { useInventory } from "../../contexts/InventoryContext";
 import { catalogApi } from "../../services/catalogApi";
 import { useFeeCharges } from "../../contexts/FeeChargesContext";
@@ -15,6 +16,17 @@ import type { CatalogBrand, CatalogCategory } from "../../types/catalog";
 import { CreatorExperienceSection, CreatorContentItem } from "../../components/CreatorExperienceSection";
 import { SplitLayout } from "../../components/Layout/SplitLayout";
 import { ProductImageUploader } from "../../components/admin/ProductImageUploader";
+import { ProductSpecsGrid, SpecEditRow } from "../../components/admin/product-studio/ProductSpecsGrid";
+import {
+  OverviewBentoGrid,
+  OverviewQuadrantEditor,
+  BestForTagsChipField,
+} from "../../components/admin/product-studio/OverviewBento";
+import {
+  BoxPhysicalSpecsPanel,
+  CheckoutBuyBoxPreview,
+} from "../../components/admin/product-studio/StorefrontPanels";
+import { OverviewListItem } from "../../components/admin/product-studio/OverviewListIcon";
 import {
   BEFORE_YOUR_VISIT_FIELD_LABELS,
   SERVICE_CATEGORIES,
@@ -84,6 +96,20 @@ export interface BoxContentItem {
 }
 
 export type OverviewBlock = OverviewSection; // legacy alias
+
+export interface PublicReview {
+  id: string;
+  reviewerName: string;
+  rating: number;
+  comment: string;
+}
+
+export interface AddonItem {
+  id: string;
+  title: string;
+  description?: string;
+  price: number;
+}
 
 export interface OptionGroup {
   id: string;
@@ -258,6 +284,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     (location && (location.pathname.endsWith("/products/new") || location.pathname.includes("/products/new")));
   const activeId = isNewProduct ? "new" : (id || "1");
   const { profile, sellerBrands = [], allBrands = [] } = useAuth();
+  const { promotionRequests, addPromotionRequest } = useAds();
   const { paymentOptions } = useFeeCharges();
   
   // Find assigned brands
@@ -280,6 +307,28 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
+  };
+
+  const latestProductFeatureRequest = useMemo(() => {
+    return promotionRequests
+      .filter((r) => r.contentType === "PRODUCT" && r.contentId === activeId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())[0];
+  }, [promotionRequests, activeId]);
+
+  const handleRequestProductFeature = async () => {
+    await addPromotionRequest({
+      requesterId: profile?.id || "seller_001",
+      requesterRole: profile?.role === "creator" ? "creator" : "seller",
+      requesterName: profile?.displayName || brandName || "Seller",
+      contentType: "PRODUCT",
+      contentId: activeId,
+      contentName: productName || "Product",
+      requestedPromotionType: "Featured",
+      featurePriority: "Standard Featured",
+      duration: 30,
+      placementRequest: "trending_section",
+    });
+    triggerToast("✓ Feature request submitted for admin review.");
   };
 
   // View state and Active Image index
@@ -341,11 +390,20 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const [enableBoxContents, setEnableBoxContents] = useState(false);
   const [enableOptions, setEnableOptions] = useState(false);
   const [enableActiveVariantSpecs, setEnableActiveVariantSpecs] = useState(true);
+  const [enableAdditionalSpecs, setEnableAdditionalSpecs] = useState(false);
+  const [enablePublicReviews, setEnablePublicReviews] = useState(false);
+  const [enableAddonItems, setEnableAddonItems] = useState(false);
 
   // New features data structures
   const [boxContents, setBoxContents] = useState<BoxContentItem[]>([]);
   const [optionGroups, setOptionGroups] = useState<OptionGroup[]>([]);
   const [productVariants, setProductVariants] = useState<ProductVariant[]>([]);
+  const [additionalSpecs, setAdditionalSpecs] = useState<Spec[]>([]);
+  const [tempAdditionalSpecs, setTempAdditionalSpecs] = useState<Spec[]>([]);
+  const [publicReviews, setPublicReviews] = useState<PublicReview[]>([]);
+  const [tempPublicReviews, setTempPublicReviews] = useState<PublicReview[]>([]);
+  const [addonItems, setAddonItems] = useState<AddonItem[]>([]);
+  const [tempAddonItems, setTempAddonItems] = useState<AddonItem[]>([]);
 
   // Size chart states
   const [enableSizeChart, setEnableSizeChart] = useState(false);
@@ -376,7 +434,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const [creatorContent, setCreatorContent] = useState<CreatorContentItem[]>([]);
 
   // UI Inline Editing State Manager
-  const [editingSection, setEditingSection] = useState<"hero" | "creator" | "stores" | "specs" | "physical-stores" | "overview" | "tags" | "box-contents" | "options" | null>(null);
+  const [editingSection, setEditingSection] = useState<"hero" | "creator" | "stores" | "specs" | "physical-stores" | "overview" | "tags" | "box-contents" | "options" | "additional-specs" | "public-reviews" | "addon-items" | null>(null);
   const activeDrawer = editingSection;
   const setActiveDrawer = setEditingSection;
 
@@ -742,7 +800,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   };
 
   // Open Inline Edit Mode
-  const handleStartEdit = (section: "hero" | "creator" | "stores" | "specs" | "physical-stores" | "overview" | "tags" | "box-contents" | "options" | null) => {
+  const handleStartEdit = (section: "hero" | "creator" | "stores" | "specs" | "physical-stores" | "overview" | "tags" | "box-contents" | "options" | "additional-specs" | "public-reviews" | "addon-items" | null) => {
     setEditingSection(section);
     if (section === "specs") {
       setTempSpecs([...specs]);
@@ -759,6 +817,12 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     } else if (section === "options") {
       setTempOptionGroups([...optionGroups]);
       setTempProductVariants([...productVariants]);
+    } else if (section === "additional-specs") {
+      setTempAdditionalSpecs([...additionalSpecs]);
+    } else if (section === "public-reviews") {
+      setTempPublicReviews([...publicReviews]);
+    } else if (section === "addon-items") {
+      setTempAddonItems([...addonItems]);
     }
   };
 
@@ -783,6 +847,12 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     } else if (section === "options") {
       setOptionGroups([...tempOptionGroups]);
       setProductVariants([...tempProductVariants]);
+    } else if (section === "additional-specs") {
+      setAdditionalSpecs([...tempAdditionalSpecs]);
+    } else if (section === "public-reviews") {
+      setPublicReviews([...tempPublicReviews]);
+    } else if (section === "addon-items") {
+      setAddonItems([...tempAddonItems]);
     }
 
     serializeState();
@@ -1087,6 +1157,33 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
           </div>
 
           <div className="flex items-center gap-3">
+            {!isNewProduct && (
+              latestProductFeatureRequest?.approvalStatus === "APPROVED" ? (
+                <span className="px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-700 border border-emerald-200">
+                  Featured
+                </span>
+              ) : latestProductFeatureRequest?.approvalStatus === "PENDING" ? (
+                <span className="px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-amber-100 text-amber-700 border border-amber-200">
+                  Feature Pending
+                </span>
+              ) : latestProductFeatureRequest?.approvalStatus === "REJECTED" ? (
+                <button
+                  type="button"
+                  onClick={handleRequestProductFeature}
+                  className="px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 transition-all cursor-pointer"
+                >
+                  Feature Rejected · Retry
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleRequestProductFeature}
+                  className="px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider bg-white text-orange-500 border border-orange-500/40 hover:bg-orange-50 transition-all cursor-pointer"
+                >
+                  Request to be Featured
+                </button>
+              )
+            )}
             <button
               type="button"
               onClick={async () => {
@@ -1587,26 +1684,43 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
               {/* Action buttons toggles config */}
               <div className="space-y-2.5 pt-4 border-t border-[#E5E7EB] text-xs font-bold text-slate-600 text-left">
                 <span className="text-[10px] uppercase font-black text-slate-500 tracking-wider block">Enabled Interactive Checkout Actions</span>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1">
-                  {[
-                    { l: "Enable 'FIND IN STORE' Map search trigger", v: actionFindInStore, s: setActionFindInStore },
-                    { l: "Enable 'BUY ONLINE' direct portal", v: actionBuyOnline, s: setActionBuyOnline },
-                    { l: "Enable 'HEART LOVE' stats counter", v: actionLove, s: setActionLove },
-                    { l: "Enable 'WISHLIST' catalog bookmarking", v: actionWish, s: setActionWish },
-                    { l: "Enable 'DIGITAL CHAT WITH SELLER' assistant", v: actionContactSeller, s: setActionContactSeller },
-                    { l: "Enable 'REQUEST BULK QUOTE' document module", v: actionRequestQuote, s: setActionRequestQuote },
-                    { l: "Enable 'PRE ORDER' billing toggle", v: actionPreOrder, s: setActionPreOrder }
-                  ].map((item, idx) => (
-                    <div key={idx} className="flex justify-between items-center py-2 border-b border-[#E5E7EB]/40">
-                      <span>{item.l}</span>
-                      <input 
-                        type="checkbox" 
-                        checked={item.v}
-                        onChange={(e) => item.s(e.target.checked)}
-                        className="rounded border-[#E5E7EB] text-orange-500 focus:ring-orange-500 w-4 h-4 accent-orange-500"
-                      />
-                    </div>
-                  ))}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-y-1">
+                    {[
+                      { l: "Enable 'FIND IN STORE' Map search trigger", v: actionFindInStore, s: setActionFindInStore },
+                      { l: "Enable 'BUY ONLINE' direct portal", v: actionBuyOnline, s: setActionBuyOnline },
+                      { l: "Enable 'HEART LOVE' stats counter", v: actionLove, s: setActionLove },
+                      { l: "Enable 'WISHLIST' catalog bookmarking", v: actionWish, s: setActionWish },
+                      { l: "Enable 'DIGITAL CHAT WITH SELLER' assistant", v: actionContactSeller, s: setActionContactSeller },
+                      { l: "Enable 'REQUEST BULK QUOTE' document module", v: actionRequestQuote, s: setActionRequestQuote },
+                      { l: "Enable 'PRE ORDER' billing toggle", v: actionPreOrder, s: setActionPreOrder }
+                    ].map((item, idx) => (
+                      <div key={idx} className="flex justify-between items-center py-2 border-b border-[#E5E7EB]/40">
+                        <span>{item.l}</span>
+                        <input 
+                          type="checkbox" 
+                          checked={item.v}
+                          onChange={(e) => item.s(e.target.checked)}
+                          className="rounded border-[#E5E7EB] text-orange-500 focus:ring-orange-500 w-4 h-4 accent-orange-500"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <CheckoutBuyBoxPreview
+                    flags={{
+                      actionBuyOnline,
+                      actionWish,
+                      actionLove,
+                      actionContactSeller,
+                      actionFindInStore,
+                      actionPreOrder,
+                      actionRequestQuote,
+                    }}
+                    price={discountedPrice || actualPrice}
+                    stockLimit={stockLimit}
+                    productName={productName}
+                    isService={productType === 'service'}
+                  />
                 </div>
               </div>
 
@@ -1757,41 +1871,24 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                   </div>
                 </div>
 
-                {/* PUBLIC DISPLAY ACTION BUTTONS CONFIG */}
+                {/* PUBLIC DISPLAY ACTION BUTTONS — live buy box */}
                 <div className="pt-2 border-t border-[#E5E7EB] space-y-2">
-                  <span className="text-[8px] text-slate-400 uppercase font-black tracking-widest block font-mono mb-1.5">Configure Active Action Buttons on PDP Banner</span>
-                  <div className="flex flex-wrap gap-2">
-                    {actionFindInStore && (
-                      <button type="button" className="px-3.5 py-1.5 bg-[#1A1A2E] text-white rounded-xl text-[10px] font-black uppercase tracking-wider">
-                        Find in Store
-                      </button>
-                    )}
-                    {actionBuyOnline && (
-                      <button type="button" className="px-3.5 py-1.5 bg-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider">
-                        Buy Online
-                      </button>
-                    )}
-                    {actionLove && (
-                      <button type="button" className="p-1.5 bg-rose-50 border border-rose-100 text-rose-500 rounded-xl" title="Love Product">
-                        <Heart className="w-3.5 h-3.5 fill-rose-500" />
-                      </button>
-                    )}
-                    {actionWish && (
-                      <button type="button" className="px-3 py-1.5 bg-[#FAFAFA] border border-slate-200 text-slate-600 rounded-xl text-[10px] uppercase font-bold">
-                        Add to Wishlist
-                      </button>
-                    )}
-                    {actionContactSeller && (
-                      <button type="button" className="px-3.5 py-1.5 bg-[#FAFAFA] text-[#1A1A2E] border border-[#E5E7EB] rounded-xl text-[10px] font-black uppercase tracking-wider">
-                        Contact Seller
-                      </button>
-                    )}
-                    {actionPreOrder && (
-                      <button type="button" className="px-3.5 py-1.5 bg-amber-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider">
-                        Pre Order
-                      </button>
-                    )}
-                  </div>
+                  <span className="text-[8px] text-slate-400 uppercase font-black tracking-widest block font-mono mb-1.5">Checkout Actions Preview</span>
+                  <CheckoutBuyBoxPreview
+                    flags={{
+                      actionBuyOnline,
+                      actionWish,
+                      actionLove,
+                      actionContactSeller,
+                      actionFindInStore,
+                      actionPreOrder,
+                      actionRequestQuote,
+                    }}
+                    price={discountedPrice || actualPrice}
+                    stockLimit={stockLimit}
+                    productName={productName}
+                    isService={productType === 'service'}
+                  />
                 </div>
               </div>
 
@@ -2570,7 +2667,97 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                                 setCreatorContent(updated);
                               }}
                               className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 outline-none font-medium"
+                              placeholder="4:50"
                             />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Video URL</span>
+                          <input
+                            value={item.videoUrl}
+                            onChange={(e) => {
+                              const updated = creatorContent.map(c => c.id === item.id ? { ...c, videoUrl: e.target.value } : c);
+                              setCreatorContent(updated);
+                            }}
+                            className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs outline-none font-medium"
+                            placeholder="https://youtube.com/watch?v=…"
+                          />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Creator Handle</span>
+                            <input
+                              value={item.creatorHandle}
+                              onChange={(e) => {
+                                const updated = creatorContent.map(c => c.id === item.id ? { ...c, creatorHandle: e.target.value } : c);
+                                setCreatorContent(updated);
+                              }}
+                              className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs outline-none font-bold"
+                              placeholder="@handle"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Views</span>
+                            <input
+                              type="number"
+                              value={typeof item.views === 'number' ? item.views : Number(item.views) || 0}
+                              onChange={(e) => {
+                                const updated = creatorContent.map(c => c.id === item.id ? { ...c, views: parseInt(e.target.value) || 0 } : c);
+                                setCreatorContent(updated);
+                              }}
+                              className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs outline-none font-medium"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Thumbnail</span>
+                          <ProductImageUploader
+                            images={item.thumbnail ? [item.thumbnail] : []}
+                            onImagesChange={(imgs) => {
+                              const updated = creatorContent.map(c => c.id === item.id ? { ...c, thumbnail: imgs[0] || '' } : c);
+                              setCreatorContent(updated);
+                            }}
+                            compact
+                            maxImages={1}
+                            showUrlInput
+                            onSuccess={triggerToast}
+                            onError={triggerToast}
+                          />
+                        </div>
+
+                        <div className="space-y-1">
+                          <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Creator Avatar URL</span>
+                          <input
+                            value={item.creatorAvatar}
+                            onChange={(e) => {
+                              const updated = creatorContent.map(c => c.id === item.id ? { ...c, creatorAvatar: e.target.value } : c);
+                              setCreatorContent(updated);
+                            }}
+                            className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs outline-none font-medium"
+                            placeholder="https://…"
+                          />
+                        </div>
+
+                        {/* Live card mini-preview */}
+                        <div className="rounded-xl overflow-hidden border border-[#E5E7EB] bg-white">
+                          <div className="relative aspect-video bg-slate-100">
+                            {item.thumbnail ? (
+                              <img src={item.thumbnail} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                            ) : (
+                              <div className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-400 font-bold uppercase">Thumbnail</div>
+                            )}
+                            <span className="absolute top-2 left-2 bg-white/95 px-2 py-0.5 rounded-full text-[8px] font-black uppercase text-[#EF3C23]">{item.platform}</span>
+                            <span className="absolute bottom-2 right-2 bg-black/70 text-white text-[8px] font-mono px-1.5 py-0.5 rounded">{item.duration || '0:00'}</span>
+                          </div>
+                          <div className="p-2.5 flex items-center gap-2">
+                            <img src={item.creatorAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50'} alt="" className="w-7 h-7 rounded-full object-cover" referrerPolicy="no-referrer" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[11px] font-bold text-[#1A1A2E] truncate">{item.title}</p>
+                              <p className="text-[9px] text-slate-500 truncate">@{item.creatorHandle} · {item.views} views</p>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -2855,6 +3042,191 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
         </div>
       </div>
 
+        {/* SECTION: PUBLIC REVIEWS (Customer-facing, separate from Creator/Influencer Reviews) */}
+        <div id="public-reviews-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left">
+
+          <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-3">
+            <div>
+              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
+                Customer Feedback
+              </span>
+              <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] flex items-center gap-2">
+                ⭐ PUBLIC REVIEWS
+                {enablePublicReviews && publicReviews.length > 0 && (
+                  <span className="text-[9px] px-2 py-0.5 bg-green-100 text-[#2B9B00] border border-green-200/50 rounded-full font-bold uppercase">
+                    {publicReviews.length} Reviews
+                  </span>
+                )}
+              </h2>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setEnablePublicReviews(!enablePublicReviews)}
+                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${
+                  enablePublicReviews
+                    ? "bg-green-100 text-green-700 border-green-200"
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}
+              >
+                {enablePublicReviews ? "ENABLED" : "DISABLED"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (editingSection === "public-reviews") {
+                    setEditingSection(null);
+                  } else {
+                    handleStartEdit("public-reviews");
+                  }
+                }}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm ${
+                  editingSection === "public-reviews"
+                    ? "bg-orange-500 text-white animate-pulse"
+                    : "bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500"
+                }`}
+                title="Configure public reviews"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {editingSection === "public-reviews" ? (
+            <div className="space-y-4">
+              <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Customer-submitted reviews</span>
+
+              <div className="space-y-3 pr-1 max-h-[400px] overflow-y-auto no-scrollbar">
+                {tempPublicReviews.map((item, idx) => (
+                  <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl relative text-left text-xs space-y-3">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                      <span className="font-extrabold text-orange-500 text-[10px] font-mono">Review #{idx + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => setTempPublicReviews(tempPublicReviews.filter((r) => r.id !== item.id))}
+                        className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                        title="Delete Review"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Reviewer Name</span>
+                        <input
+                          value={item.reviewerName}
+                          onChange={(e) => {
+                            const updated = tempPublicReviews.map((r) => (r.id === item.id ? { ...r, reviewerName: e.target.value } : r));
+                            setTempPublicReviews(updated);
+                          }}
+                          className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
+                          placeholder="e.g. Tahmid Alvi"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Rating (1-5)</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={5}
+                          value={item.rating}
+                          onChange={(e) => {
+                            const updated = tempPublicReviews.map((r) =>
+                              r.id === item.id ? { ...r, rating: Math.min(5, Math.max(1, parseInt(e.target.value) || 1)) } : r
+                            );
+                            setTempPublicReviews(updated);
+                          }}
+                          className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Comment</span>
+                      <input
+                        value={item.comment}
+                        onChange={(e) => {
+                          const updated = tempPublicReviews.map((r) => (r.id === item.id ? { ...r, comment: e.target.value } : r));
+                          setTempPublicReviews(updated);
+                        }}
+                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none"
+                        placeholder="e.g. Great build quality and fast delivery."
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const fresh: PublicReview = {
+                    id: `pr-${Date.now()}`,
+                    reviewerName: "Verified Buyer",
+                    rating: 5,
+                    comment: "Great product, highly recommended!",
+                  };
+                  setTempPublicReviews([...tempPublicReviews, fresh]);
+                }}
+                className="w-full py-3 bg-[#FAFAFA] border border-dashed border-[#E5E7EB] hover:bg-slate-100 rounded-2xl text-[10px] text-orange-500 font-extrabold uppercase tracking-wider cursor-pointer transition-colors"
+              >
+                + Add Public Review
+              </button>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4 w-full">
+                <button
+                  type="button"
+                  onClick={() => setEditingSection(null)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveSection("public-reviews")}
+                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {!enablePublicReviews ? (
+                <div className="py-8 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-400 font-medium">
+                  This section is disabled. Public reviews will remain hidden on the storefront page.
+                </div>
+              ) : publicReviews.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                  <p className="mb-3">No public reviews configured yet.</p>
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit("public-reviews")}
+                    className="px-4 py-2 bg-orange-500 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl hover:bg-orange-600 transition-colors cursor-pointer"
+                  >
+                    Add First Review
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {publicReviews.map((item) => (
+                    <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl p-4 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black uppercase text-[#1A1A2E]">{item.reviewerName}</span>
+                        <span className="text-[10px] font-black text-amber-500">{"★".repeat(item.rating)}{"☆".repeat(5 - item.rating)}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 font-light leading-snug">{item.comment}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
         {/* SECTION 3: SPECIFICATIONS PARAMETERS (45% left) + PHYSICAL STORES CARDS (55% right) */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
@@ -2913,38 +3285,17 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                   
                   <div className="space-y-2 max-h-[300px] overflow-y-auto no-scrollbar pr-1">
                     {tempSpecs.map((item, idx) => (
-                      <div key={idx} className="flex gap-2 items-center bg-[#FAFAFA] p-2 rounded-xl border border-[#E5E7EB] relative">
-                        <div className="grid grid-cols-2 gap-2 flex-grow text-xs font-mono">
-                          <input 
-                            value={item.key}
-                            onChange={(e) => {
-                              const copy = [...tempSpecs];
-                              copy[idx].key = e.target.value;
-                              setTempSpecs(copy);
-                            }}
-                            className="bg-transparent border-0 outline-none uppercase font-bold text-slate-500 py-1"
-                            placeholder="Attribute key"
-                          />
-                          <input 
-                            value={item.value}
-                            onChange={(e) => {
-                              const copy = [...tempSpecs];
-                              copy[idx].value = e.target.value;
-                              setTempSpecs(copy);
-                            }}
-                            className="bg-transparent border-0 outline-none font-bold text-[#1A1A2E] py-1"
-                            placeholder="Value"
-                          />
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setTempSpecs(tempSpecs.filter((_, i) => i !== idx))}
-                          className="text-slate-400 hover:text-red-500 p-1 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      <SpecEditRow
+                        key={idx}
+                        item={item}
+                        index={idx}
+                        onChange={(next) => {
+                          const copy = [...tempSpecs];
+                          copy[idx] = next;
+                          setTempSpecs(copy);
+                        }}
+                        onRemove={() => setTempSpecs(tempSpecs.filter((_, i) => i !== idx))}
+                      />
                     ))}
                   </div>
 
@@ -2978,20 +3329,11 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
               <div className="w-full flex-grow flex flex-col justify-between">
                 <div>
                   {enableSpecs ? (
-                    specs.length > 0 ? (
-                      <div className="divide-y divide-[#E5E7EB]">
-                        {specs.map((item, idx) => (
-                          <div key={idx} className="flex justify-between py-2 text-xs">
-                            <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px] font-mono shrink-0 w-28 text-left">{item.key}</span>
-                            <span className="text-[#1A1A2E] font-semibold text-right uppercase tracking-tight truncate max-w-[200px]">{item.value}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
-                        No attributes defined in this spec index structure.
-                      </div>
-                    )
+                    <ProductSpecsGrid
+                      specs={specs}
+                      productTitle={productName}
+                      emptyLabel="No attributes defined in this spec index structure."
+                    />
                   ) : (
                     <div className="py-12 bg-[#FAFAFA]/50 border border-dashed border-[#E5E7EB] rounded-2xl text-center text-slate-400 text-xs italic">
                       Specifications section is disabled and won't show on storefront.
@@ -3232,6 +3574,132 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
         </div>
 
+        {/* SECTION: ADDITIONAL SPECS (secondary spec table, independent of core Specifications) */}
+        <div id="additional-specs-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left">
+
+          <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-3">
+            <div>
+              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
+                Extended Technical Parameters
+              </span>
+              <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] flex items-center gap-2">
+                🔧 ADDITIONAL SPECS
+                {enableAdditionalSpecs && additionalSpecs.length > 0 && (
+                  <span className="text-[9px] px-2 py-0.5 bg-green-100 text-[#2B9B00] border border-green-200/50 rounded-full font-bold uppercase">
+                    {additionalSpecs.length} Attributes
+                  </span>
+                )}
+              </h2>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setEnableAdditionalSpecs(!enableAdditionalSpecs)}
+                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${
+                  enableAdditionalSpecs
+                    ? "bg-green-100 text-green-700 border-green-200"
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}
+              >
+                {enableAdditionalSpecs ? "ENABLED" : "DISABLED"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (editingSection === "additional-specs") {
+                    setEditingSection(null);
+                  } else {
+                    handleStartEdit("additional-specs");
+                  }
+                }}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm ${
+                  editingSection === "additional-specs"
+                    ? "bg-orange-500 text-white animate-pulse"
+                    : "bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500"
+                }`}
+                title="Configure additional specs"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {editingSection === "additional-specs" ? (
+            <div className="space-y-4 text-left w-full">
+              <div className="space-y-2">
+                <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Additional Parameters</span>
+
+                <div className="space-y-2 max-h-[300px] overflow-y-auto no-scrollbar pr-1">
+                  {tempAdditionalSpecs.map((item, idx) => (
+                    <SpecEditRow
+                      key={idx}
+                      item={item}
+                      index={idx}
+                      onChange={(next) => {
+                        const copy = [...tempAdditionalSpecs];
+                        copy[idx] = next;
+                        setTempAdditionalSpecs(copy);
+                      }}
+                      onRemove={() => setTempAdditionalSpecs(tempAdditionalSpecs.filter((_, i) => i !== idx))}
+                    />
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setTempAdditionalSpecs([...tempAdditionalSpecs, { key: "New Parameter", value: "New Value" }])}
+                  className="w-full py-2 border border-[#E5E7EB] bg-white text-slate-500 rounded-lg text-[10px] font-black uppercase hover:bg-slate-50 cursor-pointer"
+                >
+                  + ADD NEW ROW
+                </button>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4 w-full">
+                <button
+                  type="button"
+                  onClick={() => setEditingSection(null)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveSection("additional-specs")}
+                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {!enableAdditionalSpecs ? (
+                <div className="py-8 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-400 font-medium">
+                  This section is disabled. Additional specs will remain hidden on the storefront page.
+                </div>
+              ) : additionalSpecs.length > 0 ? (
+                <div className="bg-[#F4F7F9] rounded-[10px] p-4 text-left">
+                  <div className="text-[11px] font-extrabold text-[#1A1A2E] mb-2.5">PHYSICAL SPECS</div>
+                  {additionalSpecs.map((item, idx) => (
+                    <OverviewListItem
+                      key={idx}
+                      text={`${item.key}: ${item.value}`}
+                      className="text-[11.5px] text-[#4B5563] mb-1.5"
+                      iconClassName="text-emerald-500"
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
+                  No additional attributes defined yet.
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
         {/* SECTION: BOX CONTENTS / COMPLIMENTARY FEATURES */}
         <div id="box-contents-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left">
           
@@ -3334,6 +3802,13 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                             className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
                             placeholder="e.g. Premium TPU Case"
                           />
+                          {item.title ? (
+                            <OverviewListItem
+                              text={item.description ? `${item.title} — ${item.description}` : item.title}
+                              className="text-[11px] text-[#4B5563] mt-1.5"
+                              iconClassName="text-emerald-500"
+                            />
+                          ) : null}
                         </div>
 
                         <div className="space-y-1">
@@ -3476,7 +3951,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {boxContents.length === 0 ? (
+                  {boxContents.length === 0 && additionalSpecs.length === 0 ? (
                     <div className="py-12 text-center text-xs text-slate-400 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
                       <p className="mb-3">No box items configured yet. Click edit to define what is included with this listing.</p>
                       <button
@@ -3488,56 +3963,196 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                       </button>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                      {boxContents.map((item) => (
-                        <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl p-4 flex gap-3.5 items-start">
-                          <div className="text-2xl p-2.5 bg-white rounded-xl shadow-sm border border-slate-100 shrink-0">
-                            {(() => {
-                              switch (item.icon) {
-                                case "Box": return "📦";
-                                case "Cable": return "🔌";
-                                case "Battery": return "🔋";
-                                case "Sparkles": return "✨";
-                                case "Smartphone": return "📱";
-                                case "Heart": return "❤️";
-                                case "Shield": return "🛡️";
-                                case "Zap": return "⚡";
-                                case "Award": return "🏆";
-                                case "Clock": return "🕒";
-                                default: return "📦";
-                              }
-                            })()}
-                          </div>
-                          <div className="space-y-1 text-left min-w-0 flex-grow">
-                            <div className="flex flex-wrap items-center gap-1">
-                              <h4 className="text-xs font-black uppercase text-[#1A1A2E] tracking-wider truncate leading-tight">
-                                {item.title}
-                              </h4>
-                              {item.badge && (
-                                <span className="bg-orange-100 text-orange-700 text-[8px] font-black uppercase px-1.5 py-0.5 rounded-md">
-                                  {item.badge}
-                                </span>
-                              )}
-                            </div>
-                            {item.description && (
-                              <p className="text-[11px] text-slate-500 font-light leading-snug">
-                                {item.description}
-                              </p>
-                            )}
-                            <div className="pt-1 flex items-center gap-1.5 text-[9px] font-black uppercase font-mono">
-                              {item.isFree ? (
-                                <span className="text-emerald-600 bg-emerald-50 px-1 py-0.5 rounded">Free</span>
-                              ) : (
-                                <span className="text-slate-500 bg-slate-100 px-1 py-0.5 rounded">
-                                  +৳{item.price || 0}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    <BoxPhysicalSpecsPanel
+                      boxItems={boxContents}
+                      physicalSpecs={enableAdditionalSpecs ? additionalSpecs : []}
+                    />
                   )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* SECTION: ADD-ON ITEMS (standalone paid add-ons, separate from Box Contents free/paid items) */}
+        <div id="addon-items-card" className="bg-white border border-[#E5E7EB] rounded-3xl p-6 relative shadow-sm text-left">
+
+          <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-3">
+            <div>
+              <span className="text-[10px] text-slate-400 font-mono font-bold uppercase tracking-widest block mb-1">
+                Optional Paid Extras
+              </span>
+              <h2 className="text-base font-black uppercase tracking-wider text-[#1A1A2E] flex items-center gap-2">
+                ➕ ADD-ON ITEMS
+                {enableAddonItems && addonItems.length > 0 && (
+                  <span className="text-[9px] px-2 py-0.5 bg-green-100 text-[#2B9B00] border border-green-200/50 rounded-full font-bold uppercase">
+                    {addonItems.length} Items available
+                  </span>
+                )}
+              </h2>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setEnableAddonItems(!enableAddonItems)}
+                className={`px-3 py-1.5 text-[10px] font-black uppercase tracking-wider rounded-xl transition-all border cursor-pointer ${
+                  enableAddonItems
+                    ? "bg-green-100 text-green-700 border-green-200"
+                    : "bg-slate-100 text-slate-600 border border-slate-200"
+                }`}
+              >
+                {enableAddonItems ? "ENABLED" : "DISABLED"}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (editingSection === "addon-items") {
+                    setEditingSection(null);
+                  } else {
+                    handleStartEdit("addon-items");
+                  }
+                }}
+                className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 hover:scale-105 shadow-sm ${
+                  editingSection === "addon-items"
+                    ? "bg-orange-500 text-white animate-pulse"
+                    : "bg-orange-500/10 hover:bg-orange-500 hover:text-white border border-orange-500/20 text-orange-500"
+                }`}
+                title="Configure add-on items"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+
+          {editingSection === "addon-items" ? (
+            <div className="space-y-4">
+              <span className="text-[10px] uppercase font-black text-slate-400 block font-mono">Optional paid add-ons</span>
+              <p className="text-[10.5px] italic text-slate-500 leading-normal">
+                Add optional extras a buyer can pay for at checkout, separate from what's free in the box.
+              </p>
+
+              <div className="space-y-3 pr-1 max-h-[400px] overflow-y-auto no-scrollbar">
+                {tempAddonItems.map((item, idx) => (
+                  <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl relative text-left text-xs space-y-3">
+                    <div className="flex justify-between items-center pb-2 border-b border-slate-200">
+                      <span className="font-extrabold text-orange-500 text-[10px] font-mono">Add-on #{idx + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => setTempAddonItems(tempAddonItems.filter((a) => a.id !== item.id))}
+                        className="text-red-500 hover:text-red-700 font-bold cursor-pointer"
+                        title="Delete Add-on"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Item Title</span>
+                      <input
+                        value={item.title}
+                        onChange={(e) => {
+                          const updated = tempAddonItems.map((a) => (a.id === item.id ? { ...a, title: e.target.value } : a));
+                          setTempAddonItems(updated);
+                        }}
+                        className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none font-bold"
+                        placeholder="e.g. Extended Warranty (1 Year)"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Description (Optional)</span>
+                        <input
+                          value={item.description || ""}
+                          onChange={(e) => {
+                            const updated = tempAddonItems.map((a) => (a.id === item.id ? { ...a, description: e.target.value } : a));
+                            setTempAddonItems(updated);
+                          }}
+                          className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none"
+                          placeholder="e.g. Covers accidental damage"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Add-on Price (৳)</span>
+                        <input
+                          type="number"
+                          value={item.price || 0}
+                          onChange={(e) => {
+                            const updated = tempAddonItems.map((a) => (a.id === item.id ? { ...a, price: parseFloat(e.target.value) || 0 } : a));
+                            setTempAddonItems(updated);
+                          }}
+                          className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-xs text-[#1A1A2E] outline-none"
+                          placeholder="0"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const fresh: AddonItem = {
+                    id: `addon-${Date.now()}`,
+                    title: "Extended Warranty (1 Year)",
+                    description: "Covers accidental damage and hardware defects",
+                    price: 499,
+                  };
+                  setTempAddonItems([...tempAddonItems, fresh]);
+                }}
+                className="w-full py-3 bg-[#FAFAFA] border border-dashed border-[#E5E7EB] hover:bg-slate-100 rounded-2xl text-[10px] text-orange-500 font-extrabold uppercase tracking-wider cursor-pointer transition-colors"
+              >
+                + Add Add-on Item
+              </button>
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4 w-full">
+                <button
+                  type="button"
+                  onClick={() => setEditingSection(null)}
+                  className="px-4 py-2 border border-slate-200 text-slate-500 font-bold uppercase text-[10px] tracking-wider rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveSection("addon-items")}
+                  className="px-5 py-2 bg-orange-500 hover:bg-orange-600 text-white font-extrabold uppercase text-[10px] tracking-wider rounded-xl transition-all shadow-md shadow-orange-500/10 cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {!enableAddonItems ? (
+                <div className="py-8 bg-slate-50/50 rounded-2xl border border-dashed border-slate-200 text-center text-xs text-slate-400 font-medium">
+                  This section is disabled. Add-on items will remain hidden on the storefront page.
+                </div>
+              ) : addonItems.length === 0 ? (
+                <div className="py-12 text-center text-xs text-slate-400 italic bg-slate-50/50 rounded-2xl border border-dashed border-slate-200">
+                  <p className="mb-3">No add-on items configured yet.</p>
+                  <button
+                    type="button"
+                    onClick={() => handleStartEdit("addon-items")}
+                    className="px-4 py-2 bg-orange-500 text-white font-extrabold text-[10px] uppercase tracking-wider rounded-xl hover:bg-orange-600 transition-colors cursor-pointer"
+                  >
+                    Add First Add-on
+                  </button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {addonItems.map((item) => (
+                    <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl p-4 space-y-1">
+                      <h4 className="text-xs font-black uppercase text-[#1A1A2E] tracking-wider truncate leading-tight">{item.title}</h4>
+                      {item.description && <p className="text-[11px] text-slate-500 font-light leading-snug">{item.description}</p>}
+                      <div className="pt-1 text-[9px] font-black uppercase font-mono">
+                        <span className="text-slate-500 bg-slate-100 px-1 py-0.5 rounded">+৳{item.price || 0}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </>
@@ -3623,137 +4238,18 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                 </button>
               </div>
 
-              <div className="space-y-4 max-h-[400px] overflow-y-auto no-scrollbar pr-1">
+              <div className="space-y-4 max-h-[480px] overflow-y-auto no-scrollbar pr-1">
                 {tempOverview.map((blk, idx) => (
-                  <div key={blk.id || idx} className="bg-[#FAFAFA] border border-[#E5E7EB] p-4 rounded-2xl space-y-4 relative text-left text-xs">
-                    <div className="flex justify-between items-center bg-white p-2.5 rounded-xl border border-slate-200">
-                      <input
-                        value={blk.title}
-                        onChange={(e) => {
-                          const copy = [...tempOverview];
-                          copy[idx].title = e.target.value;
-                          setTempOverview(copy);
-                        }}
-                        className="font-extrabold text-orange-600 uppercase tracking-tight bg-transparent border-none outline-none py-0.5 focus:bg-slate-50 rounded px-1 flex-grow"
-                        placeholder="Block Title"
-                      />
-                      <div className="flex items-center gap-1.5 ml-2">
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            const copy = [...tempOverview];
-                            copy[idx].enabled = !copy[idx].enabled;
-                            setTempOverview(copy);
-                          }}
-                          className={`px-2 py-0.5 rounded text-[8px] font-black uppercase cursor-pointer ${
-                            blk.enabled ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
-                          }`}
-                        >
-                          {blk.enabled ? "ON" : "OFF"}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setTempOverview(tempOverview.filter((_, i) => i !== idx))}
-                          className="text-red-500 hover:text-red-700 font-bold ml-1 cursor-pointer"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    {blk.enabled && (
-                      <div className="space-y-3">
-                        <div className="space-y-1">
-                          <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Rich Text Content/Body Description</span>
-                          <textarea
-                            value={blk.content || ""}
-                            onChange={(e) => {
-                              const copy = [...tempOverview];
-                              copy[idx].content = e.target.value;
-                              setTempOverview(copy);
-                            }}
-                            rows={3}
-                            className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1.5 text-xs text-[#1A1A2E] outline-none"
-                            placeholder="Add rich description detail paragraphs here..."
-                          />
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1">
-                            <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Section List Style</span>
-                            <select
-                              value={blk.listStyle || 'bullet'}
-                              onChange={(e) => {
-                                const copy = [...tempOverview];
-                                copy[idx].listStyle = e.target.value as any;
-                                setTempOverview(copy);
-                              }}
-                              className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 text-xs text-[#1A1A2E] outline-none font-bold"
-                            >
-                              <option value="none">None (Paragraph only)</option>
-                              <option value="bullet">Bullet Checklist (✓)</option>
-                              <option value="numbered">Numbered Process (1, 2, 3)</option>
-                            </select>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Sort Rank</span>
-                            <input
-                              type="number"
-                              value={blk.sortOrder || 0}
-                              onChange={(e) => {
-                                const copy = [...tempOverview];
-                                copy[idx].sortOrder = parseInt(e.target.value) || 0;
-                                setTempOverview(copy);
-                              }}
-                              className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 text-xs text-[#1A1A2E] outline-none"
-                            />
-                          </div>
-                        </div>
-
-                        {blk.listStyle !== 'none' && (
-                          <div className="space-y-2 text-[10px] bg-slate-50 p-3 rounded-xl border border-slate-200">
-                            <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">List Elements / Bullet Items</span>
-                            {blk.bullets.map((bullet, bIdx) => (
-                              <div key={bIdx} className="flex gap-1.5">
-                                <input 
-                                  value={bullet}
-                                  onChange={(e) => {
-                                    const copy = [...tempOverview];
-                                    copy[idx].bullets[bIdx] = e.target.value;
-                                    setTempOverview(copy);
-                                  }}
-                                  className="flex-grow bg-white border border-[#E5E7EB] rounded-lg px-2.5 py-1 uppercase font-bold"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const copy = [...tempOverview];
-                                    copy[idx].bullets = copy[idx].bullets.filter((_, bSub) => bSub !== bIdx);
-                                    setTempOverview(copy);
-                                  }}
-                                  className="text-red-500 hover:text-red-700 font-bold font-mono px-1 cursor-pointer"
-                                >
-                                  x
-                                </button>
-                              </div>
-                            ))}
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const copy = [...tempOverview];
-                                copy[idx].bullets.push("NEW LIST POINTER VALUE");
-                                setTempOverview(copy);
-                              }}
-                              className="text-orange-500 hover:underline text-[9px] font-black uppercase tracking-wider block pt-1 text-left cursor-pointer bg-transparent border-0"
-                            >
-                              + Add List Line Item
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
+                  <OverviewQuadrantEditor
+                    key={blk.id || idx}
+                    block={blk}
+                    onChange={(next) => {
+                      const copy = [...tempOverview];
+                      copy[idx] = next;
+                      setTempOverview(copy);
+                    }}
+                    onRemove={() => setTempOverview(tempOverview.filter((_, i) => i !== idx))}
+                  />
                 ))}
               </div>
 
@@ -3800,46 +4296,18 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                   Spotlight overview section is disabled and won't show on storefront.
                 </div>
               ) : (
-                <>
-                  {overviewBlocks.filter(b => b.enabled).length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
-                      {overviewBlocks.filter(b => b.enabled).map((blk, idx) => (
-                        <div 
-                          key={blk.id || idx} 
-                          className="bg-[#FAFAFA] border border-[#E5E7EB] rounded-2xl p-5 text-left border-l-4 border-l-orange-500 hover:shadow-sm transition-all"
-                        >
-                          <h3 className="text-sm font-black text-[#1A1A2E] uppercase tracking-wider mb-4 border-b border-[#E5E7EB] pb-2 flex items-center gap-2">
-                            <Sparkles className="w-4 h-4 text-orange-500" />
-                            {blk.title}
-                          </h3>
-                          {blk.content && (
-                            <p className="text-xs text-slate-700 leading-relaxed font-medium mb-4 whitespace-pre-wrap">
-                              {blk.content}
-                            </p>
-                          )}
-                          {blk.listStyle !== 'none' && blk.bullets && blk.bullets.length > 0 && (
-                            <ul className="space-y-2">
-                              {blk.bullets.map((bullet, i) => (
-                                <li key={i} className="text-xs text-slate-600 font-bold flex items-start gap-2 uppercase tracking-tight">
-                                  {blk.listStyle === 'numbered' ? (
-                                    <span className="text-orange-500 mt-0.5 select-none shrink-0 font-black">{i + 1}.</span>
-                                  ) : (
-                                    <span className="text-emerald-500 mt-0.5 select-none shrink-0 font-bold">✓</span>
-                                  )}
-                                  <span>{bullet}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="py-12 border border-dashed border-[#E5E7EB] rounded-2xl bg-[#FAFAFA]/50 text-center text-slate-400 text-xs italic">
-                      No overview highlight blocks enabled.
-                    </div>
-                  )}
-                </>
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="text-[14px] font-extrabold text-[#1A1A2E] tracking-tight">
+                      {productType === 'service' ? 'Service' : 'Product'}{' '}
+                      <span className="text-[#EB4501]">Overview</span>
+                    </h3>
+                    <p className="text-[10px] font-bold text-[#9AA0AC] tracking-wide mt-1 uppercase">
+                      Benefits, quality structure & trust
+                    </p>
+                  </div>
+                  <OverviewBentoGrid blocks={overviewBlocks} />
+                </div>
               )}
             </>
           )}
@@ -3896,70 +4364,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
 
           {editingSection === "tags" ? (
             <div className="space-y-4">
-              
-              <div className="flex flex-wrap gap-2 mb-2 max-h-[150px] overflow-y-auto no-scrollbar pr-1">
-                {tempTagsList.map((tag, idx) => (
-                  <span 
-                    key={idx} 
-                    className="px-3 py-1.5 bg-orange-100 text-orange-700 border border-orange-200/50 rounded-lg text-[10.5px] font-bold uppercase tracking-widest flex items-center gap-1.5"
-                  >
-                    <span>{tag}</span>
-                    <button
-                      type="button"
-                      onClick={() => setTempTagsList(tempTagsList.filter((_, i) => i !== idx))}
-                      className="text-red-500 group-hover:text-red-700 font-bold text-xs cursor-pointer"
-                    >
-                      x
-                    </button>
-                  </span>
-                ))}
-              </div>
-
-              {/* Add dynamic capsule search */}
-              <div className="space-y-2 text-xs">
-                <label className="text-[10px] uppercase font-black text-slate-400 block font-mono">Input dynamic capsule tag</label>
-                <div className="flex gap-2">
-                  <input 
-                    value={newTagVal}
-                    onChange={(e) => setNewTagVal(e.target.value)}
-                    placeholder="e.g. durable leather casing, premium..."
-                    className="bg-white border border-[#E5E7EB] rounded-xl px-3 py-2 text-xs flex-grow outline-none focus:border-orange-500 uppercase font-bold"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (newTagVal.trim() && !tempTagsList.includes(newTagVal.trim().toLowerCase())) {
-                        setTempTagsList([...tempTagsList, newTagVal.trim().toLowerCase()]);
-                        setNewTagVal("");
-                      }
-                    }}
-                    className="px-4 bg-orange-500 text-white rounded-xl font-bold uppercase text-[10.5px] cursor-pointer"
-                  >
-                    Add tag
-                  </button>
-                </div>
-
-                {/* Autocomplete recommended list */}
-                <div className="pt-2 border-t border-[#E5E7EB]">
-                  <span className="text-[8.5px] uppercase font-bold text-slate-400 block tracking-widest font-mono mb-2">Recommended preset tags</span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {["eco-friendly packaging", "premium lifestyle", "modern classic apparel", "high benchmarks zoom"].map(preset => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => {
-                          if (!tempTagsList.includes(preset)) {
-                            setTempTagsList([...tempTagsList, preset]);
-                          }
-                        }}
-                        className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 rounded text-[9.5px] text-slate-600 uppercase font-semibold transition-colors cursor-pointer"
-                      >
-                        + {preset}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <BestForTagsChipField tags={tempTagsList} onChange={setTempTagsList} />
 
               <div className="flex justify-end gap-3 pt-4 border-t border-[#E5E7EB] mt-4 w-full">
                 <button
@@ -3986,15 +4391,16 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                   Best For Tags section is disabled and won't show on storefront.
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-2">
+                <div className="space-y-2.5">
+                  <div className="text-[11px] font-extrabold text-[#8A00C4]"># BEST FOR TAGS</div>
+                  <div className="flex flex-wrap gap-2">
                   {bestForTags.length > 0 ? (
                     bestForTags.map((tag, idx) => (
-                      <span 
-                        key={idx} 
-                        className="px-4 py-2.5 bg-transparent text-[#8A00C4] rounded-2xl text-[10.5px] font-black uppercase tracking-widest flex items-center gap-1.5"
+                      <span
+                        key={idx}
+                        className="choosify-best-for-tag text-[11px] font-bold px-3.5 py-1.5 rounded-full"
                       >
-                        <span>★</span>
-                        <span>{tag}</span>
+                        #{tag}
                       </span>
                     ))
                   ) : (
@@ -4002,6 +4408,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                       No taxonomy tagging configured. Click Edit on the top right to begin adding custom search tags.
                     </div>
                   )}
+                  </div>
                 </div>
               )}
             </>

@@ -14,11 +14,13 @@ interface MarketplaceAccessPanelProps {
   isProcessing?: boolean;
 }
 
+const CUSTOM_DATE_VALUE = -1;
+
 const DURATION_OPTIONS = [
   { label: '7 days', value: 7 },
   { label: '14 days', value: 14 },
   { label: '30 days', value: 30 },
-  { label: '90 days', value: 90 },
+  { label: 'Custom date', value: CUSTOM_DATE_VALUE },
   { label: 'Indefinite (manual reinstate)', value: 0 },
 ];
 
@@ -33,14 +35,24 @@ export const MarketplaceAccessPanel: React.FC<MarketplaceAccessPanelProps> = ({
   const [modalOpen, setModalOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [durationDays, setDurationDays] = useState<number>(7);
+  const [customDate, setCustomDate] = useState('');
   const [notify, setNotify] = useState(true);
 
   const handleConfirmSuspend = () => {
     if (!reason.trim()) return;
-    onSuspend({ reason: reason.trim(), durationDays: durationDays === 0 ? null : durationDays, notify });
+    if (durationDays === CUSTOM_DATE_VALUE && !customDate) return;
+
+    let resolvedDays: number | null = durationDays === 0 ? null : durationDays;
+    if (durationDays === CUSTOM_DATE_VALUE) {
+      const msDiff = new Date(customDate).setHours(23, 59, 59, 999) - Date.now();
+      resolvedDays = Math.max(1, Math.ceil(msDiff / (24 * 60 * 60 * 1000)));
+    }
+
+    onSuspend({ reason: reason.trim(), durationDays: resolvedDays, notify });
     setModalOpen(false);
     setReason('');
     setDurationDays(7);
+    setCustomDate('');
     setNotify(true);
   };
 
@@ -122,9 +134,23 @@ export const MarketplaceAccessPanel: React.FC<MarketplaceAccessPanelProps> = ({
                 </option>
               ))}
             </select>
+            {durationDays === CUSTOM_DATE_VALUE && (
+              <input
+                type="date"
+                value={customDate}
+                min={new Date().toISOString().slice(0, 10)}
+                onChange={(e) => setCustomDate(e.target.value)}
+                className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:border-app-accent focus:outline-none transition mt-1.5"
+              />
+            )}
             {durationDays > 0 && (
               <p className="text-[10px] text-app-text-secondary">
                 Auto-reinstates on {new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toLocaleDateString()}
+              </p>
+            )}
+            {durationDays === CUSTOM_DATE_VALUE && customDate && (
+              <p className="text-[10px] text-app-text-secondary">
+                Auto-reinstates on {new Date(customDate).toLocaleDateString()}
               </p>
             )}
           </div>
@@ -139,7 +165,7 @@ export const MarketplaceAccessPanel: React.FC<MarketplaceAccessPanelProps> = ({
           </label>
           <button
             onClick={handleConfirmSuspend}
-            disabled={!reason.trim()}
+            disabled={!reason.trim() || (durationDays === CUSTOM_DATE_VALUE && !customDate)}
             className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all disabled:opacity-50"
           >
             Confirm Suspension

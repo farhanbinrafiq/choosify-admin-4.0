@@ -26,11 +26,31 @@
   --color-navy-mid:        #1E293B;   /* Secondary Navy */
   --color-navy-light:      #334155;   /* Hover Navy highlight */
 
-  /* Sidebar-only gradient accent tokens (Theme Ticket brand swatch) — scoped to the sidebar, NOT the global accent color */
+  /*
+   * Storefront footer / dark-surface gradient parity
+   * (Choosify-Web --gradient-dark-surface / .footer-brand-gradient)
+   */
+  --gradient-dark-surface:
+    radial-gradient(1200px 500px at 15% 0%, hsla(22, 100%, 50%, 0.18), transparent 65%),
+    radial-gradient(900px 500px at 90% 20%, hsla(12, 92%, 45%, 0.14), transparent 65%),
+    rgba(10, 10, 31, 0.96);
+
+  /* Storefront chrome header (navbar / sticky dark bars) */
+  --gradient-chrome-header:
+    radial-gradient(900px 200px at 15% 0%, hsla(22, 100%, 50%, 0.16), transparent 70%),
+    radial-gradient(700px 200px at 90% 100%, hsla(12, 92%, 45%, 0.12), transparent 70%),
+    rgba(10, 10, 31, 0.94);
+
+  /* Storefront hero / dark brand linear */
+  --gradient-hero-chrome: linear-gradient(180deg, #3A1E22 0%, #000435 100%);
+
+  /* Storefront orange button gradient (not EMI) */
+  --gradient-orange-button: linear-gradient(90deg, #B4411C 0%, #D15E32 100%);
+
+  /* Sidebar + dark CMS chrome use footer dark-surface */
   --color-sidebar-gradient-orange: #FF5B00;
   --color-sidebar-gradient-orange-deep: #EB4501;
-  --gradient-sidebar: radial-gradient(ellipse 140% 55% at 50% 100%, rgba(255, 91, 0, 0.16) 0%, rgba(255, 91, 0, 0) 62%),
-                       linear-gradient(180deg, rgba(0, 4, 53, 0.85) 0%, rgba(0, 6, 46, 0.82) 80%, rgba(0, 2, 37, 0.85) 100%);
+  --gradient-sidebar: var(--gradient-dark-surface);
 
   --color-text-primary:    #111827;   /* Headings, titles, data values */
   --color-text-secondary:  #374151;   /* Descriptions, supporting content, form labels */
@@ -1329,19 +1349,19 @@ html.dark .sidebar .sidebar-nav-search input::placeholder {
 /* .sidebar itself carries the exact glass gradient + blur (see "SOLID CONTRAST
    FOR THE LEFT NAVIGATION SIDEBAR" rule above) — no separate class needed here. */
 
-/* Header glass bar — exact match to reference header style */
+/* Header glass bar — storefront chrome-header parity */
 .glass-header {
-  background: linear-gradient(180deg, rgba(0, 4, 53, 0.85), rgba(0, 4, 53, 0.8));
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
+  background: var(--gradient-chrome-header) !important;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   color: #FFFFFF;
 }
 
-/* Navy-glass bulk-action bar — exact match to reference bulk bar style */
+/* Navy-glass bulk-action bar — footer dark-surface */
 .navy-glass {
-  background: linear-gradient(180deg, rgba(0, 4, 53, 0.94) 0%, rgba(0, 6, 46, 0.92) 80%, rgba(0, 2, 37, 0.94) 100%);
+  background: var(--gradient-dark-surface) !important;
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
   border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1374,4 +1394,69 @@ html.dark .sidebar .sidebar-nav-search input::placeholder {
   backdrop-filter: blur(8px);
   border: 1px solid rgba(255, 255, 255, 0.15);
   color: #FFFFFF;
+}
+
+/* Dashboard KPI tiles: footer dark-surface (storefront parity) */
+.dash-kpi-tile {
+  background: var(--gradient-dark-surface) !important;
+  background-color: rgba(10, 10, 31, 0.96) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+}
+.dash-kpi-tile:hover {
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+.dash-kpi-label,
+.dash-kpi-sub {
+  color: rgba(255, 255, 255, 0.6) !important;
+}
+.dash-kpi-value {
+  color: #FFFFFF !important;
+}
+
+/** Storefront gradient utilities (admin parity — EMI excluded) */
+.footer-brand-gradient,
+.choosify-dark-surface {
+  background: var(--gradient-dark-surface) !important;
+}
+
+.choosify-dark-gradient,
+.dark-brand-gradient,
+.hero-gradient {
+  background: var(--gradient-hero-chrome) !important;
+}
+
+.choosify-chrome-header {
+  background: var(--gradient-chrome-header) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.button-gradient,
+.orange-brand-gradient,
+.btn-brand-gradient {
+  background: var(--gradient-orange-button) !important;
+  color: #fff !important;
+  border: none;
+}
+
+/* Solid primary CTAs → storefront orange button gradient (EMI excluded) */
+html:not(.dark) button[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
+html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
+html:not(.dark) button[class*="bg-app-accent"]:not([class*="bg-app-accent/"]),
+html:not(.dark) a[class*="bg-app-accent"]:not([class*="bg-app-accent/"]) {
+  background: var(--gradient-orange-button) !important;
+  background-image: var(--gradient-orange-button) !important;
+  color: #fff !important;
+}
+html:not(.dark) button[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover,
+html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover {
+  background: linear-gradient(90deg, #9a3818 0%, #c4542a 100%) !important;
+  background-image: linear-gradient(90deg, #9a3818 0%, #c4542a 100%) !important;
+}
+
+/** Best For #tag chips — purple text, no fill (storefront parity) */
+.choosify-best-for-tag {
+  background: transparent;
+  color: #8A00C4;
+  border-color: transparent;
 }

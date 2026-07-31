@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Layers,
   Megaphone,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   AreaChart,
@@ -27,6 +28,7 @@ import {
 import { operationsApi, type AnalyticsSummary } from '../../services/operationsApi';
 import { catalogApi } from '../../services/catalogApi';
 import type { HomepageConfig, SiteConfig } from '../../types/catalog';
+import { useTrust } from '../../contexts/TrustContext';
 
 type RangeKey = '7d' | '30d' | '90d';
 
@@ -53,17 +55,12 @@ const StatCard = ({
   href?: string;
 }) => {
   const body = (
-    <div className="bg-app-card border border-app-border rounded-2xl p-6 group hover:border-app-accent/50 transition-all shadow-xl relative overflow-hidden">
-      <div className="absolute top-0 right-0 p-2 opacity-5">
-        <TrendingUp className="w-12 h-12" />
-      </div>
-      <div className="text-[11px] text-app-text-secondary uppercase tracking-[0.15em] font-bold mb-3 opacity-60">
-        {label}
-      </div>
-      <div className="text-3xl font-extrabold text-app-text-primary tracking-tight mb-2">{value}</div>
-      <div className="text-[11px] text-app-text-secondary font-medium flex items-center gap-1">
+    <div className="dash-kpi-tile rounded-[18px] p-5 group transition-all relative overflow-hidden">
+      <div className="dash-kpi-label text-[11px] uppercase tracking-[0.15em] font-bold mb-3">{label}</div>
+      <div className="dash-kpi-value text-[28px] font-extrabold tracking-tight mb-2 leading-none">{value}</div>
+      <div className="dash-kpi-sub text-[11px] font-medium flex items-center gap-1">
         {sub}
-        {href && <ArrowUpRight className="w-3.5 h-3.5 text-app-accent opacity-0 group-hover:opacity-100 transition-opacity" />}
+        {href && <ArrowUpRight className="w-3.5 h-3.5 text-[#FF5B00] opacity-0 group-hover:opacity-100 transition-opacity" />}
       </div>
     </div>
   );
@@ -81,6 +78,7 @@ export default function Dashboard() {
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [catalog, setCatalog] = useState<CatalogSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
+  const { trustScores, trustAlerts } = useTrust();
 
   const load = async () => {
     setLoading(true);
@@ -138,6 +136,19 @@ export default function Dashboard() {
     catalog?.site?.announcementBarEnabled && catalog?.site?.announcementBarText?.trim(),
   );
 
+  const trustStats = useMemo(() => {
+    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const verifiedSellers = trustScores.filter((s) => s.entity_type === 'seller' && s.current_score >= 70).length;
+    const fraudReports = trustAlerts.filter(
+      (a) =>
+        (a.alert_type === 'Suspicious Seller Activity' || a.alert_type === 'Complaint Spike') &&
+        new Date(a.created_at).getTime() >= thirtyDaysAgo,
+    ).length;
+    const fakeReviewFlags = trustAlerts.filter((a) => a.alert_type === 'Fake Review Detection').length;
+    const criticalAlerts = trustAlerts.filter((a) => a.status === 'unresolved' && a.severity === 'Critical').length;
+    return { verifiedSellers, fraudReports, fakeReviewFlags, criticalAlerts };
+  }, [trustScores, trustAlerts]);
+
   const actionQueues = [
     {
       label: 'Seller Offer Queue',
@@ -182,7 +193,7 @@ export default function Dashboard() {
                 onClick={() => setRange(t)}
                 className={`px-4 py-1.5 text-[10px] font-bold rounded-lg transition-all ${
                   range === t
-                    ? 'active-filter-item bg-app-accent text-white shadow-lg'
+                    ? 'bg-app-accent text-white'
                     : 'text-app-text-secondary hover:text-app-text-primary'
                 }`}
               >
@@ -194,20 +205,22 @@ export default function Dashboard() {
             href="https://choosify.bd"
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2.5 bg-app-card border border-app-border rounded-xl text-app-accent hover:bg-app-accent/10 transition-all font-bold text-xs flex items-center gap-2"
+            title="View Live Site"
+            className="p-2.5 bg-app-card border border-app-border rounded-xl text-app-text-secondary hover:text-app-accent hover:border-app-accent/40 transition-all"
           >
-            <ExternalLink className="w-4 h-4" /> View Live Site
+            <ExternalLink className="w-4 h-4" />
           </a>
           <Link
             to="/admin/website-cms"
-            className="p-2.5 bg-app-accent hover:bg-app-accent-light text-white rounded-xl font-bold text-xs flex items-center gap-2 shadow-lg shadow-app-accent/20 transition-all"
+            className="px-4 py-2.5 bg-white border border-app-accent text-app-accent rounded-xl font-bold text-xs flex items-center gap-2 hover:bg-app-accent/10 transition-all"
           >
-            <LayoutTemplate className="w-4 h-4" /> Website CMS Studio
+            <LayoutTemplate className="w-4 h-4" /> Website Manager
           </Link>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="rounded-[20px] p-5" style={{ backgroundImage: 'linear-gradient(120deg, rgba(255,91,0,0.1), rgba(0,4,53,0.06))' }}>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard
           label="Storefront Orders"
           value={analytics ? String(analytics.orders.total) : loading ? '…' : '—'}
@@ -237,9 +250,10 @@ export default function Dashboard() {
           href="/admin/ads-sponsors"
         />
       </div>
+      </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2 bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
+        <div className="xl:col-span-2 bg-app-card border border-app-border rounded-2xl p-6 shadow-sm">
           <div className="flex justify-between items-center mb-8">
             <div>
               <h3 className="text-lg font-bold text-app-text-primary tracking-tight">Order & Revenue Trend</h3>
@@ -280,7 +294,7 @@ export default function Dashboard() {
         </div>
 
         <div className="space-y-6">
-          <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
+          <div className="bg-app-card border border-app-border rounded-2xl p-6 shadow-sm">
             <h3 className="text-sm font-bold text-app-text-primary mb-6 uppercase tracking-wider">Action Queues</h3>
             <div className="space-y-3">
               {actionQueues.map((item) => {
@@ -310,7 +324,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="bg-app-card border border-app-border rounded-[2rem] p-8 shadow-2xl">
+          <div className="bg-app-card border border-app-border rounded-2xl p-6 shadow-sm">
             <h3 className="text-sm font-bold text-app-text-primary mb-4 uppercase tracking-wider">CMS Publish Health</h3>
             <div className="space-y-3 text-[11px]">
               <div className="flex justify-between">
@@ -345,6 +359,37 @@ export default function Dashboard() {
               <Megaphone className="w-3.5 h-3.5" /> Publish to choosify.bd
             </Link>
           </div>
+
+          <div className="bg-app-card border border-app-border rounded-2xl p-6 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Trust & Safety</h3>
+              {trustStats.criticalAlerts > 0 && (
+                <span className="flex items-center gap-1 bg-rose-50 text-rose-600 border border-rose-200 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
+                  <ShieldAlert className="w-3 h-3" /> {trustStats.criticalAlerts} Alert{trustStats.criticalAlerts > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            <div className="space-y-3 text-[11px]">
+              <div className="flex justify-between">
+                <span className="text-app-text-secondary">Verified Sellers</span>
+                <span className="font-bold text-app-text-primary">{trustStats.verifiedSellers.toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-app-text-secondary">Fraud Reports (30d)</span>
+                <span className="font-bold text-app-text-primary">{trustStats.fraudReports}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-app-text-secondary">Fake Review Flags</span>
+                <span className="font-bold text-app-text-primary">{trustStats.fakeReviewFlags}</span>
+              </div>
+            </div>
+            <Link
+              to="/admin/trust-center"
+              className="mt-4 inline-flex items-center gap-1 text-[11px] font-bold text-app-accent hover:underline"
+            >
+              View Trust Center <ChevronRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -375,7 +420,7 @@ export default function Dashboard() {
         >
           <Layers className="w-8 h-8 text-emerald-500" />
           <div>
-            <div className="font-bold text-app-text-primary">Category Taxonomy</div>
+            <div className="font-bold text-app-text-primary">Category Management Studio</div>
             <div className="text-[11px] text-app-text-secondary">Navigation & discovery structure</div>
           </div>
         </Link>

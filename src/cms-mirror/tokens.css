@@ -1,0 +1,76 @@
+/* Choosify Admin CMS mirror tokens — storefront footer / chrome gradient parity */
+
+:root {
+  --cms-page-bg: #f0f2f5;
+  --cms-surface: #ffffff;
+  --cms-border: #e8edf2;
+  --cms-navy: #000435;
+  --cms-accent: #ff5b00;
+  --cms-accent-hover: #e64a00;
+  --cms-text: #111827;
+  --cms-text-secondary: #374151;
+  --cms-text-muted: #6b7280;
+  --cms-danger: #dc2626;
+  --cms-danger-bg: #fef2f2;
+  --cms-sidebar-width: 240px;
+
+  /* Storefront --gradient-dark-surface / .footer-brand-gradient */
+  --cms-gradient-dark-surface:
+    radial-gradient(1200px 500px at 15% 0%, hsla(22, 100%, 50%, 0.18), transparent 65%),
+    radial-gradient(900px 500px at 90% 20%, hsla(12, 92%, 45%, 0.14), transparent 65%),
+    rgba(10, 10, 31, 0.96);
+
+  /* Storefront .choosify-chrome-header */
+  --cms-gradient-chrome-header:
+    radial-gradient(900px 200px at 15% 0%, hsla(22, 100%, 50%, 0.16), transparent 70%),
+    radial-gradient(700px 200px at 90% 100%, hsla(12, 92%, 45%, 0.12), transparent 70%),
+    rgba(10, 10, 31, 0.94);
+
+  /* Storefront hero / dark-brand linear */
+  --cms-gradient-hero: linear-gradient(180deg, #3a1e22 0%, #000435 100%);
+
+  /* Storefront orange button (not EMI) */
+  --cms-gradient-orange-button: linear-gradient(90deg, #b4411c 0%, #d15e32 100%);
+
+  --cms-sidebar-bg: var(--cms-gradient-dark-surface);
+}
+
+.cms-mirror-host {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: var(--cms-page-bg);
+}
+
+.cms-mirror-host iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+  background: var(--cms-page-bg);
+}
+
+.cms-mirror-logout {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  z-index: 50;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: var(--cms-gradient-chrome-header);
+  color: #fff;
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 4, 53, 0.18);
+}
+
+.cms-mirror-logout:hover {
+  border-color: rgba(255, 91, 0, 0.55);
+  color: #ff5b00;
+}

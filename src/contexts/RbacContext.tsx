@@ -12,25 +12,43 @@ interface RbacContextType {
 
 const RbacContext = createContext<RbacContextType | undefined>(undefined);
 
+type PermissionsMap = Record<string, Record<PermissionKey, boolean>>;
+
+/** Keep seller/creator mirror routes usable even if API/localStorage still has legacy false flags. */
+function normalizePermissions(incoming: PermissionsMap | null | undefined): PermissionsMap {
+  const base = structuredClone(DEFAULT_ROLE_PERMISSIONS) as PermissionsMap;
+  if (!incoming) return base;
+  const merged: PermissionsMap = { ...base, ...incoming };
+  for (const role of ['seller', 'creator'] as const) {
+    const defaults = DEFAULT_ROLE_PERMISSIONS[role];
+    merged[role] = { ...defaults, ...(incoming[role] || {}) };
+    (Object.keys(defaults) as PermissionKey[]).forEach((key) => {
+      if (defaults[key]) merged[role][key] = true;
+    });
+  }
+  return merged;
+}
+
 export const RbacProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile } = useAuth();
-  const [permissions, setPermissions] = useState<Record<string, Record<PermissionKey, boolean>>>(() => {
+  const [permissions, setPermissions] = useState<PermissionsMap>(() => {
     const saved = localStorage.getItem('choosify_role_permissions');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        return normalizePermissions(JSON.parse(saved));
       } catch {
-        return DEFAULT_ROLE_PERMISSIONS;
+        return normalizePermissions(null);
       }
     }
-    return DEFAULT_ROLE_PERMISSIONS;
+    return normalizePermissions(null);
   });
 
   const refreshPermissions = async () => {
     try {
       const remote = await operationsApi.getPermissions();
-      setPermissions(remote);
-      localStorage.setItem('choosify_role_permissions', JSON.stringify(remote));
+      const normalized = normalizePermissions(remote);
+      setPermissions(normalized);
+      localStorage.setItem('choosify_role_permissions', JSON.stringify(normalized));
     } catch {
       // Keep local matrix when API unavailable
     }

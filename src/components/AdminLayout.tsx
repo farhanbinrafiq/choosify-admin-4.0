@@ -86,115 +86,125 @@ interface SearchResultItem {
 
 const roleMenus: Record<UserRole, SidebarItem[]> = {
   super_admin: [
-    { label: 'Admin Terminal', type: 'label' },
+    // Exact navDefs from Choosify Admin CMS (standalone).html
+    { label: 'Overview', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+
+    { label: 'People', type: 'label' },
     { label: 'Consumers', icon: Users, path: '/admin/consumers' },
-    { label: 'Brand Management Studio', icon: Building2, path: '/admin/sellers' },
-    { label: 'Products', icon: Package, path: '/admin/products' },
-    { label: 'Category Taxonomy', icon: FolderOpen, path: '/admin/categories' },
-    { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
-    { label: 'Ads & Deals Studio', icon: Megaphone, path: '/admin/ads-deals-studio' },
+    { label: 'Creators', icon: Award, path: '/admin/creators-hub' },
+    { label: 'Creator Studio', icon: Award, path: '/admin/creator-studio' },
+    { label: 'Creator Economy', icon: TrendingUp, path: '/admin/creator-hub' },
+
+    { label: 'Brand & Catalog', type: 'label' },
+    { label: 'Brand Management Studio', icon: Building2, path: '/admin/brand-studio' },
+    { label: 'Products & Inventory', icon: Package, path: '/admin/products' },
+    { label: 'Category Management Studio', icon: FolderOpen, path: '/admin/categories' },
+
+    { label: 'Commerce', type: 'label' },
     { label: 'Orders Hub', icon: ListOrdered, path: '/admin/orders' },
-    { label: 'Lead Inbox', icon: Mail, path: '/admin/leads' },
-    { label: 'Job Postings', icon: Briefcase, path: '/admin/jobs' },
-    { label: 'Seller Offer Queue', icon: Send, path: '/admin/seller-offers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
-    { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },
-    { label: 'Creators Hub', icon: Award, path: '/admin/creators-hub' },
+
+    { label: 'Marketing & Content', type: 'label' },
+    { label: 'Ads & Deals Studio', icon: Megaphone, path: '/admin/ads-deals-studio', badge: 'NEW' },
+    { label: 'Guide Management', icon: ClipboardList, path: '/admin/guides', badge: 'NEW' },
+
+    { label: 'Logistics Management', type: 'label' },
+    { label: 'Courier Providers', icon: Truck, path: '/admin/logistics/couriers' },
+    { label: 'Shipment Operations', icon: Send, path: '/admin/logistics/shipments' },
+    { label: 'Courier Analytics', icon: TrendingUp, path: '/admin/logistics/analytics' },
+
+    { label: 'Trust & Safety', type: 'label' },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Moderation Center', icon: ShieldCheck, path: '/admin/moderation' },
     { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
-    { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages', badge: 12 },
-    { label: 'Trust Center', icon: ShieldAlert, path: '/admin/trust-center' },
-    { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
-    { label: 'Finance', type: 'label' },
-    { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
-    { label: 'Settings', icon: Settings, path: '/admin/settings' },
-    
-    { label: 'Super Admin Core', type: 'label' },
-    { label: 'Admin Management', icon: UserCheck, path: '/admin/admins?viewMode=admins' },
-    { label: 'Role Management', icon: Lock, path: '/admin/settings?tab=roles' },
-    { label: 'Permissions', icon: KeyRound, path: '/admin/settings?tab=permissions' },
-    { label: 'Verification Center', icon: BadgeCheck, path: '/admin/brand-verification' },
-    { label: 'Subscription Plans', icon: CreditCard, path: '/admin/promotions?tab=plans' },
-    { label: 'Monetization Center', icon: CircleDollarSign, path: '/admin/payouts' },
-    { label: 'Fee & Charges Engine', icon: Percent, path: '/admin/fee-charges' },
-    { label: 'Promo Codes & Vouchers', icon: Ticket, path: '/admin/coupons' },
-    { label: 'Audit Logs', icon: History, path: '/admin/moderation?tab=reports' },
-    { label: 'Security Center', icon: FolderLock, path: '/admin/settings?tab=security' },
-    { label: 'Feature Flags', icon: Flag, path: '/admin/settings?tab=features' },
-    
-    { label: 'Logistics Management', type: 'label' },
-    { label: 'Courier Providers', icon: Truck, path: '/admin/logistics/couriers' },
-    { label: 'Shipment Console', icon: Send, path: '/admin/logistics/shipments' },
-    { label: 'Tracking Center', icon: MapPin, path: '/admin/logistics/tracking' },
-    { label: 'Shipping Labels', icon: FileText, path: '/admin/logistics/labels' },
-    { label: 'Courier Analytics', icon: TrendingUp, path: '/admin/logistics/analytics' },
+    { label: 'Trust & Analytics', icon: ShieldAlert, path: '/admin/trust-center' },
 
-    { label: 'Website CMS Studio', type: 'label' },
-    {
-      label: 'Website CMS Studio',
-      icon: LayoutTemplate,
-      path: '/admin/website-cms',
-      badge: 'NEW'
-    },
-    {
-      label: "Today's Deals Banners",
-      icon: ImageIcon,
-      path: '/admin/deals-banners',
-    },
+    { label: 'Communication', type: 'label' },
+    { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages', badge: 12 },
+    { label: 'Notifications', icon: Bell, path: '/admin/notifications' },
+
+    { label: 'Finance', type: 'label' },
+    { label: 'Finance', icon: BarChart3, path: '/admin/analytics' },
+    { label: 'Fee & Charges Engine', icon: Percent, path: '/admin/fee-charges', badge: 'NEW' },
+    { label: 'Payouts', icon: CircleDollarSign, path: '/admin/payouts' },
+    { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'PRIVATE' },
+
+    { label: 'Super Admin Core', type: 'label' },
+    { label: 'Admin Management', icon: UserCheck, path: '/admin/admins' },
+    { label: 'Verification Center', icon: BadgeCheck, path: '/admin/brand-verification' },
+    { label: 'Subscription Plans', icon: CreditCard, path: '/admin/promotions' },
+    { label: 'Monetization Center', icon: CircleDollarSign, path: '/admin/monetization' },
+    { label: 'Promo Codes & Vouchers', icon: Ticket, path: '/admin/coupons' },
+    { label: 'Audit Logs', icon: History, path: '/admin/audit-logs' },
+
+    { label: 'Website', type: 'label' },
+    { label: 'Website Manager', icon: LayoutTemplate, path: '/admin/website-cms', badge: 'NEW' },
+
+    { label: 'Settings', type: 'label' },
+    { label: 'Settings', icon: Settings, path: '/admin/settings' },
   ],
   admin: [
-    { label: 'Admin Workspace', type: 'label' },
+    { label: 'Overview', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+
+    { label: 'People', type: 'label' },
     { label: 'Consumers', icon: Users, path: '/admin/consumers' },
-    { label: 'Brand Management Studio', icon: Building2, path: '/admin/sellers' },
-    { label: 'Products', icon: Package, path: '/admin/products' },
-    { label: 'Category Taxonomy', icon: FolderOpen, path: '/admin/categories' },
-    { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
-    { label: 'Ads & Deals Studio', icon: Megaphone, path: '/admin/ads-deals-studio' },
+    { label: 'Creators', icon: Award, path: '/admin/creators-hub' },
+    { label: 'Creator Studio', icon: Award, path: '/admin/creator-studio' },
+
+    { label: 'Brand & Catalog', type: 'label' },
+    { label: 'Brand Management Studio', icon: Building2, path: '/admin/brand-studio' },
+    { label: 'Products & Inventory', icon: Package, path: '/admin/products' },
+    { label: 'Category Management Studio', icon: FolderOpen, path: '/admin/categories' },
+    { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },
+
+    { label: 'Commerce', type: 'label' },
     { label: 'Orders Hub', icon: ListOrdered, path: '/admin/orders' },
+    { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
     { label: 'Lead Inbox', icon: Mail, path: '/admin/leads' },
     { label: 'Job Postings', icon: Briefcase, path: '/admin/jobs' },
     { label: 'Seller Offer Queue', icon: Send, path: '/admin/seller-offers' },
-    { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
-    { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },
-    { label: 'Creators Hub', icon: Award, path: '/admin/creators-hub' },
-    { label: 'Reviews', icon: Star, path: '/admin/reviews' },
-    { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
-    { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages' },
-    { label: 'Trust Center', icon: ShieldAlert, path: '/admin/trust-center' },
-    { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
-    { label: 'Finance', type: 'label' },
-    { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
-    { label: 'Settings', icon: Settings, path: '/admin/settings' },
-    
+
+    { label: 'Marketing & Content', type: 'label' },
+    { label: 'Ads & Deals Studio', icon: Megaphone, path: '/admin/ads-deals-studio', badge: 'NEW' },
+    { label: "What's On / Brand Posts", icon: Megaphone, path: '/admin/brand-posts' },
+
     { label: 'Logistics Management', type: 'label' },
     { label: 'Courier Providers', icon: Truck, path: '/admin/logistics/couriers' },
-    { label: 'Shipment Console', icon: Send, path: '/admin/logistics/shipments' },
+    { label: 'Shipment Operations', icon: Send, path: '/admin/logistics/shipments' },
+    { label: 'Courier Analytics', icon: TrendingUp, path: '/admin/logistics/analytics' },
     { label: 'Tracking Center', icon: MapPin, path: '/admin/logistics/tracking' },
     { label: 'Shipping Labels', icon: FileText, path: '/admin/logistics/labels' },
-    { label: 'Courier Analytics', icon: TrendingUp, path: '/admin/logistics/analytics' },
 
-    { label: 'Website CMS Studio', type: 'label' },
-    {
-      label: 'Website CMS Studio',
-      icon: LayoutTemplate,
-      path: '/admin/website-cms',
-      badge: 'NEW'
-    },
-    {
-      label: "Today's Deals Banners",
-      icon: ImageIcon,
-      path: '/admin/deals-banners',
-    },
+    { label: 'Trust & Safety', type: 'label' },
+    { label: 'Reviews', icon: Star, path: '/admin/reviews' },
+    { label: 'Disputes', icon: AlertTriangle, path: '/admin/disputes' },
+    { label: 'Trust & Analytics', icon: ShieldAlert, path: '/admin/trust-center' },
+    { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+
+    { label: 'Communication', type: 'label' },
+    { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages' },
+
+    { label: 'Finance', type: 'label' },
+    { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
+
+    { label: 'Website', type: 'label' },
+    { label: 'Website Manager', icon: LayoutTemplate, path: '/admin/website-cms', badge: 'NEW' },
+    { label: "Today's Deals Banners", icon: ImageIcon, path: '/admin/deals-banners' },
+
+    { label: 'Settings', type: 'label' },
+    { label: 'Settings', icon: Settings, path: '/admin/settings' },
   ],
   seller: [
     { label: 'Seller Operations', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'My Profile', icon: UserCircle, path: '/admin/sellers/seller_001?tab=overview' },
-    { label: 'Order Console', icon: ListOrdered, path: '/admin/orders', badge: 4 },
+    { label: 'Brand Management Studio', icon: Building2, path: '/admin/brand-studio' },
+    { label: 'Brand Profile', icon: Store, path: '/admin/brand-profile' },
+    { label: 'Orders Hub', icon: ListOrdered, path: '/admin/orders', badge: 4 },
+    { label: 'Seller Customers', icon: Users, path: '/admin/customers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
+    { label: 'Promo Codes & Vouchers', icon: Ticket, path: '/admin/coupons' },
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'My Brand Studio', icon: Store, path: '/dashboard/content-studio/brands' },
@@ -214,11 +224,13 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
   creator: [
     { label: 'Creator Hub', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Creator Profile', icon: UserCircle, path: '/admin/creators/1' },
+    { label: 'Creator Studio', icon: Award, path: '/admin/creator-studio' },
+    { label: 'My Profile', icon: UserCircle, path: '/admin/creator-profile' },
     { label: 'Guides Studio', icon: FileText, path: '/dashboard/content-studio/guides' },
     { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
     { label: 'Collaborations', icon: Handshake, path: '/admin/creator-hub', badge: 1 },
     { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages' },
+    { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     { label: 'Finance', type: 'label' },
     { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
@@ -508,6 +520,29 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const sidebarItemsToRender = sidebarNavQuery.trim() ? filteredSidebarItems : sidebarItems;
 
+  const PAGE_SUBTITLES: Record<string, string> = {
+    '/admin/dashboard': 'Overview of store performance',
+    '/admin/consumers': 'Manage registered platform buyers',
+    '/admin/creators-hub': 'Monitor content curators and campaigns',
+    '/admin/creator-studio': 'Edit creator profile cards & media',
+    '/admin/sellers': 'Verified merchants & brand listings',
+    '/admin/products': 'Manage live storefront SKUs',
+    '/admin/categories': 'Navigation & discovery structure',
+    '/admin/orders': 'Platform-wide order lifecycle',
+    '/admin/returns': 'Return and refund workflows',
+    '/admin/reviews': 'Customer review moderation',
+    '/admin/moderation': 'Content & listing moderation queue',
+    '/admin/disputes': 'Buyer-seller dispute resolution',
+    '/admin/messages': 'Unified customer conversations',
+    '/admin/settings': 'Platform configuration',
+  };
+  const activeSidebarItem = sidebarItems.find(
+    (item) => item.path && item.path.split('?')[0] === location.pathname
+  );
+  const currentPageTitle = activeSidebarItem?.label || 'Dashboard';
+  const currentPageSubtitle = PAGE_SUBTITLES[location.pathname] || 'Manage and monitor this section';
+  const avatarInitial = (profile?.displayName || 'Admin User').trim().charAt(0).toUpperCase() || 'A';
+
   const sellerRelations = sellerBrands.filter(r => r.seller_user_id === profile?.id);
   const sellerBrandsList = allBrands.filter(b => sellerRelations.some(r => r.brand_id === b.id));
 
@@ -533,15 +568,22 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         '/dashboard/content-studio/products',
         '/dashboard/content-studio/brands',
         '/admin/brand-profiles',
+        '/admin/brand-profile',
+        '/admin/brand-studio',
+        '/admin/sellers',
         '/admin/ownership-claims',
         '/admin/messages',
         '/admin/reviews',
         '/admin/analytics',
         '/admin/settings',
         '/admin/customers',
+        '/admin/returns',
+        '/admin/coupons',
         '/admin/invoice',
         '/admin/cashbook',
+        '/admin/logistics/couriers',
         '/admin/logistics/shipments',
+        '/admin/logistics/analytics',
         '/admin/logistics/tracking',
         '/admin/logistics/labels'
       ];
@@ -556,6 +598,9 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       const allowedCreators = [
         '/admin/dashboard',
         '/admin/creators/1',
+        '/admin/creator-studio',
+        '/admin/creator-profile',
+        '/admin/creators-hub',
         '/creator/1',
         '/admin/products',
         '/products',
@@ -565,6 +610,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         '/admin/recommendations',
         '/admin/creator-hub',
         '/admin/messages',
+        '/admin/reviews',
         '/admin/analytics',
         '/admin/settings',
         '/admin/cashbook'
@@ -627,8 +673,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             return (
               <div
                 key={idx}
-                className={`text-[10px] font-bold px-3 pt-6 pb-2 uppercase tracking-widest truncate whitespace-nowrap ${
-                  isEmptyState ? 'text-white/40 normal-case tracking-normal font-medium' : 'text-white'
+                className={`text-[10px] font-bold px-3 pt-6 pb-2 uppercase tracking-[0.8px] truncate whitespace-nowrap ${
+                  isEmptyState ? 'text-white/40 normal-case tracking-normal font-medium' : 'text-white/35'
                 }`}
               >
                 {item.label}
@@ -682,61 +728,63 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
               {hasSub ? (
                 <button
                   onClick={() => !isCollapsed && toggleMenu(item.label)}
-                  className={`w-full group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 text-left cursor-pointer min-w-0 sidebar-nav-hover ${
-                    isActive 
-                      ? 'bg-[#F97316] text-white border-white' 
-                      : 'border-transparent text-white'
+                  className={`w-full group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3'} py-2.5 text-[13px] font-bold rounded-lg transition-all duration-300 text-left cursor-pointer min-w-0 sidebar-nav-hover ${
+                    isActive
+                      ? 'bg-[#FF5B00]/[0.16] text-[#FF5B00]'
+                      : 'text-white/90'
                   }`}
                   title={item.label}
                 >
-                  <Icon className="w-4 h-4 shrink-0 transition-all duration-300 text-white" />
+                  <Icon className={`w-4 h-4 shrink-0 transition-all duration-300 ${isActive ? 'text-[#FF5B00]' : 'text-white/70'}`} />
                   {!isCollapsed && (
                     <>
-                      <span className="transition-colors duration-300 flex-1 text-white font-semibold flex items-center gap-2 min-w-0">
+                      <span className="transition-colors duration-300 flex-1 font-semibold flex items-center gap-2 min-w-0">
                         <span className="truncate whitespace-nowrap flex-1 min-w-0">{item.label}</span>
                         {totalItemBadge > 0 && (
                           <span className={`text-[9.5px] px-1.5 py-0.2 rounded font-black shrink-0 ${
-                            isActive 
-                              ? 'bg-white text-[#F97316]' 
-                              : 'bg-[#F97316] text-white'
+                            isActive
+                              ? 'bg-[#FF5B00] text-white'
+                              : 'bg-white/10 text-white'
                           }`}>
                             {totalItemBadge}
                           </span>
                         )}
                       </span>
-                      <ChevronRight className={`w-3.5 h-3.5 text-white transition-transform shrink-0 ${isCurrentlyExpanded ? 'rotate-90' : ''}`} />
+                      <ChevronRight className={`w-3.5 h-3.5 transition-transform shrink-0 ${isActive ? 'text-[#FF5B00]' : 'text-white/60'} ${isCurrentlyExpanded ? 'rotate-90' : ''}`} />
                     </>
                   )}
                   {isCollapsed && totalItemBadge > 0 && (
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full" />
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#FF5B00] rounded-full" />
                   )}
                 </button>
               ) : (
                 <NavLink
                   to={item.path!}
                   onClick={() => setIsSidebarOpen(false)}
-                  className={`group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3.5'} py-3 text-[13px] font-medium rounded-r-lg border-l-4 transition-all duration-300 relative min-w-0 sidebar-nav-hover ${
-                    isActive 
-                      ? 'active-sidebar-item bg-[#F97316] text-white border-white shadow-[0_4px_16px_rgba(249,115,22,0.15)]' 
-                      : 'border-transparent text-white'
+                  className={`group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3'} py-2.5 text-[13px] font-bold rounded-lg transition-all duration-300 relative min-w-0 sidebar-nav-hover ${
+                    isActive
+                      ? 'bg-[#FF5B00]/[0.16] text-[#FF5B00]'
+                      : 'text-white/90'
                   }`}
                   title={item.label}
                 >
-                  <Icon className="w-4 h-4 shrink-0 transition-all duration-300 text-white" />
+                  <Icon className={`w-4 h-4 shrink-0 transition-all duration-300 ${isActive ? 'text-[#FF5B00]' : 'text-white/70'}`} />
                   {!isCollapsed && (
                     <>
-                      <span className="transition-colors duration-300 text-white font-semibold truncate whitespace-nowrap flex-1 min-w-0">
+                      <span className="transition-colors duration-300 font-semibold truncate whitespace-nowrap flex-1 min-w-0">
                         {item.label}
                       </span>
                       {item.badge && (
-                        <span className="ml-auto bg-white text-[#F97316] text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0">
+                        <span className={`ml-auto text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
+                          isActive ? 'bg-[#FF5B00] text-white' : 'bg-white/10 text-white'
+                        }`}>
                           {item.badge}
                         </span>
                       )}
                     </>
                   )}
                   {isCollapsed && item.badge && (
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#FF5B00] rounded-full animate-pulse" />
                   )}
                 </NavLink>
               )}
@@ -754,16 +802,16 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                         key={sIdx}
                         to={sub.path}
                         onClick={() => setIsSidebarOpen(false)}
-                        className={`flex items-center gap-2 py-2 px-3 text-[11px] font-medium rounded-md transition-all sidebar-nav-hover ${
-                          isSubActive 
-                            ? 'text-white font-bold bg-[#F97316]' 
+                        className={`flex items-center gap-2 py-2 px-3 text-[11px] font-medium rounded-lg transition-all sidebar-nav-hover ${
+                          isSubActive
+                            ? 'text-[#FF5B00] font-bold bg-[#FF5B00]/[0.16]'
                             : 'text-white/80'
                         }`}
                       >
-                        <ChevronRight className={`w-2.5 h-2.5 ${isSubActive ? 'text-white rotate-90 scale-110' : 'text-white/60 rotate-90'}`} />
+                        <ChevronRight className={`w-2.5 h-2.5 ${isSubActive ? 'text-[#FF5B00] rotate-90 scale-110' : 'text-white/60 rotate-90'}`} />
                         <span className="truncate whitespace-nowrap flex-1 min-w-0">{sub.label}</span>
                         {sub.badge && (
-                          <span className="ml-auto bg-[#F97316] text-white text-[8px] px-1 py-0.2 rounded font-black">
+                          <span className={`ml-auto text-[8px] px-1 py-0.2 rounded font-black ${isSubActive ? 'bg-[#FF5B00] text-white' : 'bg-white/10 text-white'}`}>
                             {sub.badge}
                           </span>
                         )}
@@ -913,10 +961,9 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             <Menu className="w-4 h-4" />
           </button>
 
-          <div className="flex flex-col">
-            <div className="text-[12px] text-white/60">
-              {currentRole.replace('_', ' ').toUpperCase()} / Dashboard / {location.pathname.split('/').pop()?.replace('-', ' ')}
-            </div>
+          <div className="flex flex-col min-w-0">
+            <h1 className="text-[15px] font-extrabold text-white leading-tight truncate">{currentPageTitle}</h1>
+            <p className="text-[11px] text-white/50 truncate">{currentPageSubtitle}</p>
           </div>
 
           {/* MIDDLE GLOBAL SEARCH ENGINE */}
@@ -983,15 +1030,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             )}
           </div>
           <div className="flex items-center gap-4">
-             <div className="flex items-center gap-3">
-               <span className="bg-app-accent text-white px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider">
-                 {currentRole.replace('_', ' ')}
-               </span>
-               <div className="text-right">
-                  <div className="text-[13px] font-semibold text-white">{profile?.displayName || 'Guest'}</div>
-                  <div className="text-[11px] text-white/60">{profile?.email}</div>
-               </div>
-             </div>
              <button
                onClick={() => triggerOpenInbox()}
                className="w-8 h-8 rounded-full glass-on-navy flex items-center justify-center hover:bg-white/20 active:scale-95 cursor-pointer relative shrink-0 transition-all"
@@ -1011,6 +1049,23 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                   <div className="absolute -top-1 -right-1 w-2 h-2 bg-app-accent rounded-full border-2 border-[#000435]" />
                 </div>
              </div>
+
+             <button
+               onClick={() => navigate('/admin/settings')}
+               className="flex items-center gap-2.5 pl-1 shrink-0 cursor-pointer group"
+               title={profile?.displayName || 'Admin User'}
+             >
+               <div className="hidden lg:block text-right">
+                  <div className="text-[12px] font-bold text-white leading-tight">{profile?.displayName || 'Admin User'}</div>
+                  <div className="text-[10px] text-white/50 leading-tight">{currentRole.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</div>
+               </div>
+               <div
+                 className="w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-bold text-white shrink-0 group-hover:scale-105 transition-transform"
+                 style={{ backgroundImage: 'linear-gradient(135deg, #FF5B00, #2323FF)' }}
+               >
+                 {avatarInitial}
+               </div>
+             </button>
           </div>
         </header>
 

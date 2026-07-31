@@ -136,6 +136,7 @@ export default function MessagesPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [replyText, setReplyText] = useState("");
   const [customMediaUrl, setCustomMediaUrl] = useState("");
+  const [composerMode, setComposerMode] = useState<"reply" | "note" | "internalNote">("reply");
   const [isTyping, setIsTyping] = useState(false);
   const [typingAgent, setTypingAgent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -539,6 +540,22 @@ export default function MessagesPage() {
 
     const currentConv = conversations.find(c => c.conversationId === selectedConvId);
     if (!currentConv) return;
+
+    if (composerMode === "note" || composerMode === "internalNote") {
+      const linkedOrderId = currentCommerce.linkedOrder?.id;
+      if (!linkedOrderId) {
+        setErrorNotice("This conversation has no linked order to attach a note to.");
+        return;
+      }
+      if (composerMode === "note") {
+        addCustomerNotes(linkedOrderId, replyText.trim());
+      } else {
+        addSellerNotes(linkedOrderId, replyText.trim());
+      }
+      setReplyText("");
+      setCustomMediaUrl("");
+      return;
+    }
 
     const payload = {
       conversationId: selectedConvId,
@@ -1179,11 +1196,37 @@ export default function MessagesPage() {
                 {/* Outbound inputs form */}
                 <form onSubmit={handleSendMessage} className="p-4 border-t border-app-border bg-app-card/35">
                   <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-1.5">
+                      {([
+                        { key: "reply", label: "Reply" },
+                        { key: "note", label: "Note" },
+                        { key: "internalNote", label: "Internal Note" },
+                      ] as const).map((tab) => (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setComposerMode(tab.key)}
+                          className={`px-2.5 py-1 rounded-full text-[9.5px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                            composerMode === tab.key
+                              ? "bg-app-accent text-white"
+                              : "bg-app-bg text-slate-400 border border-app-border hover:text-white"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
                     <div className="flex items-center gap-2 bg-app-bg border border-app-border rounded-xl p-2.5 focus-within:border-app-accent/60 transition-all">
-                      <textarea 
+                      <textarea
                         value={replyText}
                         onChange={(e) => setReplyText(e.target.value)}
-                        placeholder={`Reply to ${selectedConv.senderName}...`}
+                        placeholder={
+                          composerMode === "reply"
+                            ? `Reply to ${selectedConv.senderName}...`
+                            : composerMode === "note"
+                            ? "Add a note visible to the customer support team..."
+                            : "Add an internal note (seller-only, never sent to customer)..."
+                        }
                         rows={1}
                         className="flex-1 bg-transparent text-xs text-app-text-primary outline-none resize-none px-2 py-1 placeholder-slate-500"
                         onKeyDown={(e) => {
@@ -1195,19 +1238,21 @@ export default function MessagesPage() {
                       />
                       
                       <div className="flex items-center gap-1 shrink-0">
-                        <button 
-                          type="button"
-                          onClick={() => {
-                            const url = prompt("Enter complete image attachment link (Url):");
-                            if (url) setCustomMediaUrl(url);
-                          }}
-                          className={`p-2 rounded-lg transition-all cursor-pointer${customMediaUrl ? "bg-emerald-500/15 text-emerald-400" : "text-slate-500 hover:text-white"}`}
-                          title="Attach Image Link"
-                        >
-                          <Camera className="w-4 h-4" />
-                        </button>
+                        {composerMode === "reply" && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const url = prompt("Enter complete image attachment link (Url):");
+                              if (url) setCustomMediaUrl(url);
+                            }}
+                            className={`p-2 rounded-lg transition-all cursor-pointer${customMediaUrl ? "bg-emerald-500/15 text-emerald-400" : "text-slate-500 hover:text-white"}`}
+                            title="Attach Image Link"
+                          >
+                            <Camera className="w-4 h-4" />
+                          </button>
+                        )}
 
-                        <button 
+                        <button
                           type="submit"
                           disabled={!replyText.trim() && !customMediaUrl.trim()}
                           className="p-2.5 bg-app-accent hover:bg-orange-500 text-app-text-primary rounded-lg disabled:opacity-25 disabled:cursor-not-allowed transition-all cursor-pointer shadow"

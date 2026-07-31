@@ -246,13 +246,26 @@ const defaultPaymentOptionsConfig = (): OpsPaymentOptionsConfig => ({
 export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
   super_admin: { content: true, users: true, finance: true, brand: true, system: true, analytics: true },
   admin: { content: true, users: true, finance: false, brand: true, system: true, analytics: true },
-  seller: { content: true, users: false, finance: false, brand: false, system: false, analytics: true },
-  creator: { content: true, users: false, finance: false, brand: false, system: false, analytics: true },
+  // Aligned with src/lib/rbac.ts — seller/creator CMS mirror menus need these gates open
+  seller: { content: true, users: true, finance: true, brand: true, system: true, analytics: true },
+  creator: { content: true, users: true, finance: true, brand: false, system: true, analytics: true },
   moderator: { content: true, users: false, finance: false, brand: true, system: false, analytics: true },
   finance_manager: { content: false, users: false, finance: true, brand: false, system: false, analytics: true },
   support_agent: { content: false, users: true, finance: false, brand: false, system: false, analytics: true },
   marketing_manager: { content: true, users: false, finance: false, brand: false, system: false, analytics: true },
 };
+
+/** Ensure mirror roles keep required true-flags even when a legacy snapshot stripped them. */
+function mergeRolePermissions(
+  defaults: RolePermissionsMap[string],
+  incoming?: Partial<RolePermissionsMap[string]> | null,
+): RolePermissionsMap[string] {
+  const merged = { ...defaults, ...(incoming || {}) };
+  (Object.keys(defaults) as Array<keyof typeof defaults>).forEach((key) => {
+    if (defaults[key]) merged[key] = true;
+  });
+  return merged;
+}
 
 const state: {
   orders: OpsStorefrontOrder[];
@@ -315,7 +328,15 @@ export const operationsStore = {
     if (snapshot.leads) state.leads = snapshot.leads;
     if (snapshot.jobPostings?.length) state.jobPostings = snapshot.jobPostings;
     if (snapshot.jobApplications) state.jobApplications = snapshot.jobApplications;
-    if (snapshot.permissions) state.permissions = snapshot.permissions;
+    if (snapshot.permissions) {
+      // Merge so legacy snapshots cannot strip seller/creator CMS-mirror access
+      state.permissions = {
+        ...structuredClone(DEFAULT_ROLE_PERMISSIONS),
+        ...snapshot.permissions,
+        seller: mergeRolePermissions(DEFAULT_ROLE_PERMISSIONS.seller, snapshot.permissions.seller),
+        creator: mergeRolePermissions(DEFAULT_ROLE_PERMISSIONS.creator, snapshot.permissions.creator),
+      };
+    }
     if (snapshot.featureFlags) state.featureFlags = snapshot.featureFlags;
     if (snapshot.sellerOffers) state.sellerOffers = snapshot.sellerOffers;
     if (snapshot.feeCharges?.length) state.feeCharges = snapshot.feeCharges;
@@ -644,9 +665,22 @@ export const operationsStore = {
     return state.sellerOffers[idx];
   },
 
-  getPermissions: () => structuredClone(state.permissions),
+  getPermissions: () => {
+    const current = structuredClone(state.permissions);
+    return {
+      ...structuredClone(DEFAULT_ROLE_PERMISSIONS),
+      ...current,
+      seller: mergeRolePermissions(DEFAULT_ROLE_PERMISSIONS.seller, current.seller),
+      creator: mergeRolePermissions(DEFAULT_ROLE_PERMISSIONS.creator, current.creator),
+    };
+  },
   updatePermissions: (permissions: RolePermissionsMap) => {
-    state.permissions = structuredClone(permissions);
+    state.permissions = {
+      ...structuredClone(DEFAULT_ROLE_PERMISSIONS),
+      ...structuredClone(permissions),
+      seller: mergeRolePermissions(DEFAULT_ROLE_PERMISSIONS.seller, permissions.seller),
+      creator: mergeRolePermissions(DEFAULT_ROLE_PERMISSIONS.creator, permissions.creator),
+    };
     touch();
     return state.permissions;
   },

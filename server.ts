@@ -33,6 +33,13 @@ async function startServer() {
   const app = createApp();
   const PORT = Number(process.env.PORT) || 3001;
 
+  // Never let browsers keep a stale cms-mirror shell (Brand/Creator Studio blank pane).
+  app.use("/cms-mirror/app.html", (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    res.setHeader("Pragma", "no-cache");
+    next();
+  });
+
   // Vite middleware for development; static SPA in production
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");

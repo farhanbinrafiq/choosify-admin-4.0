@@ -9,6 +9,13 @@ import {
   normalizeHomepageInput,
   normalizeProductInput,
 } from './catalogContract';
+import {
+  normalizeCreatorInput,
+  normalizeGuideInput,
+  normalizePlacementInput,
+  normalizeProductDetailInput,
+} from '../lib/vercel-catalog/catalogEditorialContract';
+import { normalizeSiteInput } from '../lib/vercel-catalog/catalogContract';
 import type { CatalogBrandPost, CatalogProduct } from '../src/types/catalog';
 import { resolveDealsBannerHref } from '../lib/vercel-catalog/dealsBannerUtils';
 import { uploadImageToCloudinary } from '../lib/vercel-catalog/mediaUpload';
@@ -538,6 +545,17 @@ catalogRouter.get('/catalog/site', async (_req, res) => {
   }
 });
 
+catalogRouter.put('/catalog/site', ...requireAuth, async (req, res) => {
+  try {
+    const existing = await catalogStore.getSiteConfig();
+    const normalized = normalizeSiteInput(req.body, existing);
+    const saved = await catalogStore.upsertSiteConfig(normalized);
+    res.json({ success: true, site: saved });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid site config payload') });
+  }
+});
+
 catalogRouter.get('/catalog/creators', async (req, res) => {
   try {
     const creators = await catalogStore.listCreators();
@@ -546,6 +564,32 @@ catalogRouter.get('/catalog/creators', async (req, res) => {
     res.json({ data: filtered });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list creators' });
+  }
+});
+
+catalogRouter.put('/catalog/creators/:id', ...requireAuth, async (req, res) => {
+  try {
+    const existing = await catalogStore.getCreator(req.params.id);
+    const normalized = normalizeCreatorInput({ ...req.body, id: req.params.id }, existing || undefined);
+    const saved = await catalogStore.upsertCreator(normalized);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid creator payload') });
+  }
+});
+
+catalogRouter.patch('/catalog/creators/:id', ...requireAuth, async (req, res) => {
+  try {
+    const existing = await catalogStore.getCreator(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Creator not found' });
+      return;
+    }
+    const normalized = normalizeCreatorInput({ ...existing, ...req.body, id: req.params.id }, existing);
+    const saved = await catalogStore.upsertCreator(normalized);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid creator patch payload') });
   }
 });
 
@@ -572,6 +616,32 @@ catalogRouter.get('/catalog/guides/:id', async (req, res) => {
   }
 });
 
+catalogRouter.put('/catalog/guides/:id', ...requireAuth, async (req, res) => {
+  try {
+    const existing = await catalogStore.getGuide(req.params.id);
+    const normalized = normalizeGuideInput({ ...req.body, id: req.params.id }, existing || undefined);
+    const saved = await catalogStore.upsertGuide(normalized);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid guide payload') });
+  }
+});
+
+catalogRouter.patch('/catalog/guides/:id', ...requireAuth, async (req, res) => {
+  try {
+    const existing = await catalogStore.getGuide(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Guide not found' });
+      return;
+    }
+    const normalized = normalizeGuideInput({ ...existing, ...req.body, id: req.params.id }, existing);
+    const saved = await catalogStore.upsertGuide(normalized);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid guide patch payload') });
+  }
+});
+
 catalogRouter.get('/catalog/placements', async (req, res) => {
   try {
     const placements = await catalogStore.listPlacements();
@@ -585,6 +655,32 @@ catalogRouter.get('/catalog/placements', async (req, res) => {
     res.json({ data: filtered });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list placements' });
+  }
+});
+
+catalogRouter.put('/catalog/placements/:id', ...requireAuth, async (req, res) => {
+  try {
+    const existing = await catalogStore.getPlacement(req.params.id);
+    const normalized = normalizePlacementInput({ ...req.body, id: req.params.id }, existing || undefined);
+    const saved = await catalogStore.upsertPlacement(normalized);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid placement payload') });
+  }
+});
+
+catalogRouter.patch('/catalog/placements/:id', ...requireAuth, async (req, res) => {
+  try {
+    const existing = await catalogStore.getPlacement(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Placement not found' });
+      return;
+    }
+    const normalized = normalizePlacementInput({ ...existing, ...req.body, id: req.params.id }, existing);
+    const saved = await catalogStore.upsertPlacement(normalized);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid placement patch payload') });
   }
 });
 
@@ -624,6 +720,40 @@ catalogRouter.get('/catalog/product-details/:productId', async (req, res) => {
     res.json(detail);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get product detail' });
+  }
+});
+
+catalogRouter.put('/catalog/product-details/:productId', ...requireAuth, async (req, res) => {
+  try {
+    const existing = await catalogStore.getProductDetail(req.params.productId);
+    const normalized = normalizeProductDetailInput(
+      { ...req.body, productId: req.params.productId },
+      req.params.productId,
+      existing || undefined,
+    );
+    const saved = await catalogStore.upsertProductDetail(normalized);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid product detail payload') });
+  }
+});
+
+catalogRouter.patch('/catalog/product-details/:productId', ...requireAuth, async (req, res) => {
+  try {
+    const existing = await catalogStore.getProductDetail(req.params.productId);
+    if (!existing) {
+      res.status(404).json({ error: 'Product detail not found' });
+      return;
+    }
+    const normalized = normalizeProductDetailInput(
+      { ...existing, ...req.body, productId: req.params.productId },
+      req.params.productId,
+      existing,
+    );
+    const saved = await catalogStore.upsertProductDetail(normalized);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid product detail patch payload') });
   }
 });
 

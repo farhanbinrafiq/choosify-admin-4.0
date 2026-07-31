@@ -2,6 +2,8 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AdminLayout } from './components/AdminLayout';
+import { CmsMirrorHost } from './cms-mirror/CmsMirrorHost';
+import { TempRoleSwitcher } from './components/TempRoleSwitcher';
 import { OrdersProvider } from './contexts/OrdersContext';
 import { ReturnsProvider } from './contexts/ReturnsContext';
 import { TrustProvider } from './contexts/TrustContext';
@@ -103,6 +105,11 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+/** Admin / seller / creator all use the CMS mirror (role filters the left nav). */
+const AdminAreaEntry: React.FC = () => <CmsMirrorHost />;
+
+const ContentStudioEntry: React.FC = () => <CmsMirrorHost />;
+
 const RootRoute: React.FC = () => {
   const { profile, loading } = useAuth();
 
@@ -122,13 +129,7 @@ const RootRoute: React.FC = () => {
     );
   }
 
-  if (profile.role === 'seller') {
-    return <Navigate to="/seller/products" replace />;
-  } else if (profile.role === 'creator') {
-    return <Navigate to="/dashboard/content-studio/guides" replace />;
-  } else {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
+  return <Navigate to="/admin/dashboard" replace />;
 };
 
 const LoginRoute: React.FC = () => {
@@ -146,13 +147,7 @@ const LoginRoute: React.FC = () => {
   }
 
   if (profile) {
-    if (profile.role === 'seller') {
-      return <Navigate to="/seller/products" replace />;
-    } else if (profile.role === 'creator') {
-      return <Navigate to="/dashboard/content-studio/guides" replace />;
-    } else {
-      return <Navigate to="/admin/dashboard" replace />;
-    }
+    return <Navigate to="/admin/dashboard" replace />;
   }
   return (
     <Suspense fallback={null}>
@@ -166,7 +161,7 @@ const SignupRoute: React.FC = () => {
 
   if (loading) return null;
   if (profile?.role === 'seller') {
-    return <Navigate to="/seller/products" replace />;
+    return <Navigate to="/admin/dashboard" replace />;
   }
   if (profile) {
     return <Navigate to="/" replace />;
@@ -212,6 +207,7 @@ export default function App() {
               <CreatorProvider>
               <ReviewModerationProvider>
               <DisputeProvider>
+              <TempRoleSwitcher />
               <Routes>
             <Route path="/login" element={<LoginRoute />} />
             <Route path="/signup" element={<SignupRoute />} />
@@ -228,111 +224,16 @@ export default function App() {
             <Route path="/" element={<RootRoute />} />
             <Route path="/marketplace" element={<Navigate to="/login" replace />} />
             
-            <Route path="/admin/*" element={<ProtectedRoute><RoleGuard><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Platform Interface...</div>}><Routes>
-              <Route path="upe/:entityType/:entityId" element={<UnifiedProfileShell />} />
-              
-              {/* Nested admin aliases for unified profiles */}
-              <Route path="consumer/:id" element={<UnifiedProfileShell />} />
-              <Route path="seller/:id" element={<UnifiedProfileShell />} />
-              <Route path="brand/:id" element={<UnifiedProfileShell />} />
-              <Route path="order/:id" element={<UnifiedProfileShell />} />
-              <Route path="creator/:id" element={<UnifiedProfileShell />} />
-
-              <Route path="dashboard" element={<DashboardRouter />} />
-              <Route path="cms" element={<Navigate to="/admin/cms-studio" replace />} />
-              <Route path="cms-studio" element={<WebsiteCMSStudio />} />
-              <Route path="deals-banners" element={<DealsBannersStudio />} />
-              <Route path="ads-sponsors" element={<AdsSponsorsPage />} />
-              <Route path="promotions" element={<SponsoredPromotionsPage />} />
-              <Route path="consumers" element={<Consumers />} />
-              <Route path="consumers/:id" element={<UnifiedProfileShell />} />
-              <Route path="admins" element={<ViewModeWrapper mode="admins" />} />
-              <Route path="admins/:id" element={<AdminProfile />} />
-              <Route path="sellers" element={<Sellers />} />
-              <Route path="sellers/pending/:id" element={<SellerReview />} />
-              <Route path="sellers/:id" element={<UnifiedProfileShell />} />
-              <Route path="sellers/:id/dashboard" element={<SellerDashboardPreview />} />
-              <Route path="creators" element={<ViewModeWrapper mode="creators" />} />
-              <Route path="creators/:id" element={<UnifiedProfileShell />} />
-              <Route path="products" element={<Products />} />
-              <Route path="products/new" element={<ProductStudio mode="create" />} />
-              <Route path="products/:id" element={<ProductStudio mode="edit" />} />
-              <Route path="products/:id/edit" element={<ProductStudio mode="edit" />} />
-              <Route path="categories" element={<Categories />} />
-              <Route path="brand-posts" element={<BrandPostsPage />} />
-              <Route path="returns" element={<Returns />} />
-              <Route path="inventory" element={<Navigate to="/admin/products?tab=alerts" replace />} />
-              <Route path="brands" element={<Navigate to="/admin/sellers" replace />} />
-              <Route path="brands/:id" element={<UnifiedProfileShell />} />
-              <Route path="recommendations" element={<Recommendations />} />
-              <Route path="recommendations/:id" element={<RecommendationPreview />} />
-              <Route path="deals" element={<Deals />} />
-              <Route path="reviews" element={<Reviews />} />
-              <Route path="community-submissions" element={<Navigate to="/admin/seller-offers" replace />} />
-              <Route path="payouts" element={<Payouts />} />
-              <Route path="fee-charges" element={<FeeChargesEngine />} />
-              <Route path="ads-deals-studio" element={<AdsDealsStudio />} />
-              <Route path="creators-hub" element={<CreatorsHub />} />
-              <Route path="analytics" element={<Analytics />} />
-              <Route path="messages" element={<Messages />} />
-              <Route path="notifications" element={<NotificationsPage />} />
-              <Route path="settings" element={<SettingsPage />} />
-              <Route path="moderation" element={<Moderation />} />
-              <Route path="orders" element={<Orders />} />
-              <Route path="orders-overview" element={<Navigate to="/admin/orders" replace />} />
-              <Route path="platform-orders" element={<Navigate to="/admin/orders" replace />} />
-              <Route path="leads" element={<LeadsInboxPage />} />
-              <Route path="jobs" element={<JobPostingsPage />} />
-              <Route path="seller-offers" element={<SellerOffersPage />} />
-              <Route path="customers" element={<SellerCustomers />} />
-              <Route path="invoice/:id" element={<InvoiceView />} />
-              <Route path="brand-profiles" element={<Sellers />} />
-              <Route path="ownership-claims" element={<Sellers />} />
-              <Route path="cashbook" element={<CashBookHub />} />
-              <Route path="cashbook/:bookId" element={<CashBookHub />} />
-              <Route path="cashbook/reports" element={<CashBookHub />} />
-              
-              {/* Logistics Management Routes */}
-              <Route path="logistics/couriers" element={<CourierProviders />} />
-              <Route path="logistics/shipments" element={<ShipmentConsole />} />
-              <Route path="logistics/tracking" element={<TrackingCenter />} />
-              <Route path="logistics/labels" element={<ShippingLabels />} />
-              <Route path="logistics/analytics" element={<CourierAnalytics />} />
-              <Route path="website-cms" element={<WebsiteCMSStudio />} />
-              
-              {/* Trust & Safety Core Modular Paths */}
-              <Route path="trust-center" element={<TrustCenter />} />
-              <Route path="brand-verification" element={<BrandVerification />} />
-              <Route path="creator-hub" element={<CreatorEconomy />} />
-              <Route path="creator-earnings" element={<CreatorEarnings />} />
-              <Route path="moderation-v2" element={<Navigate to="/admin/moderation" replace />} />
-              <Route path="disputes" element={<DisputeCenter />} />
-              <Route path="coupons" element={<Coupons />} />
-            </Routes></Suspense></AdminLayout></RoleGuard></ProtectedRoute>} />
+            {/* Full CMS mirror for all roles (left nav filtered by role) */}
+            <Route path="/admin/*" element={<ProtectedRoute><RoleGuard><AdminAreaEntry /></RoleGuard></ProtectedRoute>} />
+            <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
             
-            {/* Direct match for requested /dashboard/content-studio routes */}
-            <Route path="/dashboard/content-studio/*" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Visual Content Studio...</div>}><Routes>
-              <Route path="products" element={<Products />} />
-              <Route path="products/new" element={<ProductStudio mode="create" />} />
-              <Route path="products/:id" element={<ProductStudio mode="edit" />} />
-              <Route path="products/:id/edit" element={<ProductStudio mode="edit" />} />
-              <Route path="brands" element={<BrandsStudioList />} />
-              <Route path="brands/new" element={<BrandEditStudio />} />
-              <Route path="brands/:id/edit" element={<BrandEditStudio />} />
-              <Route path="guides" element={<GuidesStudioList />} />
-              <Route path="guides/new" element={<GuideEditStudio />} />
-              <Route path="guides/:id/edit" element={<GuideEditStudio />} />
-            </Routes></Suspense></AdminLayout></ProtectedRoute>} />
+            <Route path="/dashboard/content-studio/*" element={<ProtectedRoute><ContentStudioEntry /></ProtectedRoute>} />
 
-            {/* Direct support for requested /seller products and root product listings */}
-            <Route path="/products" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><Products /></Suspense></AdminLayout></ProtectedRoute>} />
+            {/* Seller shortcuts → CMS mirror products */}
+            <Route path="/products" element={<Navigate to="/admin/products" replace />} />
             
-            <Route path="/seller/*" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Seller Interface...</div>}><Routes>
-              <Route path="products" element={<Products />} />
-              <Route path="products/new" element={<ProductStudio mode="create" />} />
-              <Route path="products/:id" element={<ProductStudio mode="edit" />} />
-              <Route path="products/:id/edit" element={<ProductStudio mode="edit" />} />
-            </Routes></Suspense></AdminLayout></ProtectedRoute>} />
+            <Route path="/seller/*" element={<Navigate to="/admin/products" replace />} />
             
             <Route path="*" element={<Navigate to="/" />} />
           </Routes>

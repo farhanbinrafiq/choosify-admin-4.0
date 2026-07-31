@@ -94,6 +94,44 @@ const brandSchema = z.object({
   category: z.string(),
   description: z.string(),
   logo: z.string(),
+  coverImage: z.string().optional(),
+  tagline: z.string().optional(),
+  website: z.string().optional(),
+  socialLinks: z
+    .object({
+      facebook: z.string().optional(),
+      instagram: z.string().optional(),
+      youtube: z.string().optional(),
+      tiktok: z.string().optional(),
+      linkedin: z.string().optional(),
+    })
+    .optional(),
+  story: z.string().optional(),
+  /** HTTPS URL for brand story / creator-review embed on storefront */
+  storyVideoUrl: z.string().optional(),
+  credentials: z.string().optional(),
+  overview: z
+    .object({
+      address: z.string().optional(),
+      email: z.string().optional(),
+      phone: z.string().optional(),
+      priceRange: z.string().optional(),
+      ageFocus: z.string().optional(),
+      audience: z.string().optional(),
+      services: z.array(z.string()).optional(),
+      tags: z.array(z.string()).optional(),
+    })
+    .optional(),
+  faq: z.array(z.object({ q: z.string(), a: z.string() })).optional(),
+  stores: z
+    .object({
+      authorized: z.array(z.object({ name: z.string(), sub: z.string().optional() })).optional(),
+      distributors: z.array(z.object({ name: z.string(), sub: z.string().optional() })).optional(),
+      serviceCenters: z
+        .array(z.object({ name: z.string(), sub: z.string().optional(), hours: z.string().optional() }))
+        .optional(),
+    })
+    .optional(),
   verifiedStatus: z.boolean(),
   claimStatus: z.enum(['community', 'pending', 'verified']),
   followers: z.number().nonnegative(),
@@ -237,6 +275,12 @@ export const normalizeBrandInput = (
     (slug) => !existing || slug !== existing.slug,
   );
   const slug = ensureUniqueSlug(requestedSlug, takenSlugs);
+  const socialRaw =
+    raw.socialLinks && typeof raw.socialLinks === 'object'
+      ? (raw.socialLinks as Record<string, unknown>)
+      : null;
+  const overviewRaw =
+    raw.overview && typeof raw.overview === 'object' ? (raw.overview as Record<string, unknown>) : null;
   const normalized: CatalogBrand = {
     id,
     slug,
@@ -244,6 +288,44 @@ export const normalizeBrandInput = (
     category: toString(raw.category, existing?.category ?? 'General'),
     description: toString(raw.description, existing?.description ?? ''),
     logo: toString(raw.logo, existing?.logo ?? ''),
+    coverImage: toString(raw.coverImage, existing?.coverImage ?? '') || undefined,
+    tagline: toString(raw.tagline, existing?.tagline ?? '') || undefined,
+    website: toString(raw.website, existing?.website ?? '') || undefined,
+    socialLinks:
+      socialRaw || existing?.socialLinks
+        ? {
+            facebook: toString(socialRaw?.facebook, existing?.socialLinks?.facebook ?? '') || undefined,
+            instagram: toString(socialRaw?.instagram, existing?.socialLinks?.instagram ?? '') || undefined,
+            youtube: toString(socialRaw?.youtube, existing?.socialLinks?.youtube ?? '') || undefined,
+            tiktok: toString(socialRaw?.tiktok, existing?.socialLinks?.tiktok ?? '') || undefined,
+            linkedin: toString(socialRaw?.linkedin, existing?.socialLinks?.linkedin ?? '') || undefined,
+          }
+        : undefined,
+    story: toString(raw.story, existing?.story ?? '') || undefined,
+    storyVideoUrl: toString(raw.storyVideoUrl, existing?.storyVideoUrl ?? '') || undefined,
+    credentials: toString(raw.credentials, existing?.credentials ?? '') || undefined,
+    overview:
+      overviewRaw || existing?.overview
+        ? {
+            address: toString(overviewRaw?.address, existing?.overview?.address ?? '') || undefined,
+            email: toString(overviewRaw?.email, existing?.overview?.email ?? '') || undefined,
+            phone: toString(overviewRaw?.phone, existing?.overview?.phone ?? '') || undefined,
+            priceRange: toString(overviewRaw?.priceRange, existing?.overview?.priceRange ?? '') || undefined,
+            ageFocus: toString(overviewRaw?.ageFocus, existing?.overview?.ageFocus ?? '') || undefined,
+            audience: toString(overviewRaw?.audience, existing?.overview?.audience ?? '') || undefined,
+            services: toStringArray(overviewRaw?.services).length
+              ? toStringArray(overviewRaw?.services)
+              : existing?.overview?.services,
+            tags: toStringArray(overviewRaw?.tags).length
+              ? toStringArray(overviewRaw?.tags)
+              : existing?.overview?.tags,
+          }
+        : undefined,
+    faq: Array.isArray(raw.faq) ? (raw.faq as CatalogBrand['faq']) : existing?.faq,
+    stores:
+      raw.stores && typeof raw.stores === 'object'
+        ? (raw.stores as CatalogBrand['stores'])
+        : existing?.stores,
     verifiedStatus: toBoolean(raw.verifiedStatus, existing?.verifiedStatus ?? false),
     claimStatus: claimStatusRaw === 'verified' || claimStatusRaw === 'pending' ? claimStatusRaw : 'community',
     followers: toNumber(raw.followers, existing?.followers ?? 0),

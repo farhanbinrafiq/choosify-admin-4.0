@@ -34,12 +34,20 @@ export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreato
   const name = toString(raw.name, existing?.name ?? 'Untitled Creator');
   const id = toString(raw.id, existing?.id ?? `creator-${Date.now()}`);
   const statusRaw = toString(raw.status, existing?.status ?? 'live').toLowerCase();
+  const socialRaw =
+    raw.socialLinks && typeof raw.socialLinks === 'object'
+      ? (raw.socialLinks as Record<string, unknown>)
+      : null;
   return {
     id,
     slug: toString(raw.slug, existing?.slug ?? slugify(name || id)),
     name,
     handle: toString(raw.handle, existing?.handle ?? `@${slugify(name)}`),
     avatar: toString(raw.avatar, existing?.avatar ?? ''),
+    coverImage: toString(raw.coverImage, existing?.coverImage ?? '') || undefined,
+    role: toString(raw.role, existing?.role ?? '') || undefined,
+    location: toString(raw.location, existing?.location ?? '') || undefined,
+    reviewVideoUrl: toString(raw.reviewVideoUrl, existing?.reviewVideoUrl ?? '') || undefined,
     score: toNumber(raw.score, existing?.score ?? 0),
     bestFor: toString(raw.bestFor, existing?.bestFor ?? 'General'),
     bestForTags: toStringArray(raw.bestForTags).length ? toStringArray(raw.bestForTags) : existing?.bestForTags ?? [],
@@ -49,6 +57,22 @@ export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreato
       raw.followers && typeof raw.followers === 'object'
         ? (raw.followers as Record<string, string>)
         : existing?.followers ?? {},
+    socialLinks:
+      socialRaw || existing?.socialLinks
+        ? {
+            facebook: toString(socialRaw?.facebook, existing?.socialLinks?.facebook ?? '') || undefined,
+            instagram: toString(socialRaw?.instagram, existing?.socialLinks?.instagram ?? '') || undefined,
+            youtube: toString(socialRaw?.youtube, existing?.socialLinks?.youtube ?? '') || undefined,
+            tiktok: toString(socialRaw?.tiktok, existing?.socialLinks?.tiktok ?? '') || undefined,
+            linkedin: toString(socialRaw?.linkedin, existing?.socialLinks?.linkedin ?? '') || undefined,
+          }
+        : undefined,
+    brandPartners: toStringArray(raw.brandPartners).length
+      ? toStringArray(raw.brandPartners)
+      : existing?.brandPartners,
+    collabTypes: toStringArray(raw.collabTypes).length ? toStringArray(raw.collabTypes) : existing?.collabTypes,
+    responseTime: toString(raw.responseTime, existing?.responseTime ?? '') || undefined,
+    preferredContact: toString(raw.preferredContact, existing?.preferredContact ?? '') || undefined,
     email: toString(raw.email, existing?.email),
     phone: toString(raw.phone, existing?.phone),
     category: toString(raw.category, existing?.category),
@@ -193,6 +217,10 @@ export const normalizeProductDetailInput = (
     seoTitle: toString(raw.seoTitle, existing?.seoTitle),
     seoDescription: toString(raw.seoDescription, existing?.seoDescription),
     seoKeywords: toString(raw.seoKeywords, existing?.seoKeywords),
+    sizeGuide:
+      raw.sizeGuide && typeof raw.sizeGuide === 'object'
+        ? (raw.sizeGuide as CatalogProductDetail['sizeGuide'])
+        : existing?.sizeGuide,
     updatedAt: nowIso(),
   };
 };
