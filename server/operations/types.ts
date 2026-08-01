@@ -78,6 +78,10 @@ export interface OpsStorefrontOrder {
   paymentDueAt?: string;
   paidAt?: string;
   invoiceGeneratedAt?: string;
+  /** Buyer (or staff) cancellation audit fields */
+  cancelledAt?: string;
+  cancelReason?: string;
+  cancelledBy?: 'buyer' | 'seller' | 'admin';
   /**
    * COD orders only: buyer prepays the delivery fee online at checkout so the order
    * confirms immediately; the product amount (`codRemainingAmount`) stays payable at
@@ -236,3 +240,49 @@ export interface OpsSellerBookingSettings {
 export type PermissionKey = 'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics';
 
 export type RolePermissionsMap = Record<string, Record<PermissionKey, boolean>>;
+
+/** Mirrors admin `ReturnRequest` in src/contexts/ReturnsContext.tsx */
+export type OpsReturnInitiatedBy = 'customer' | 'admin';
+export type OpsReturnReason =
+  | 'defective'
+  | 'damaged'
+  | 'wrong_item'
+  | 'not_as_described'
+  | 'customer_changed_mind';
+export type OpsReturnStatus =
+  | 'initiated'
+  | 'approved'
+  | 'rejected'
+  | 'returned_in_transit'
+  | 'received'
+  | 'refunded'
+  | 'dispute';
+export type OpsRefundStatus = 'pending' | 'processed' | 'failed';
+
+export interface OpsReturnRequest {
+  id: string;
+  orderId: string;
+  itemId: string;
+  initiatedBy: OpsReturnInitiatedBy;
+  reason: OpsReturnReason;
+  description: string;
+  evidencePhotos: string[];
+  status: OpsReturnStatus;
+  approvalDecision?: 'approved' | 'rejected';
+  approvalReason?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  refundAmount?: number;
+  refundStatus: OpsRefundStatus;
+  returnTrackingId?: string;
+  returnCourier?: string;
+  pickupDate?: string;
+  deliveryDate?: string;
+  notes: string[];
+  createdAt: string;
+  updatedAt: string;
+  sellerId: string;
+  buyerId: string;
+  /** Set when linked via dispute escalation */
+  disputeId?: string;
+}

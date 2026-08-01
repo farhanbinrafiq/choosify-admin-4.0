@@ -7,3 +7,6 @@ coverage/
 .env*
 !.env.example
 src/cms-mirror/_reference/
+
+.vercel
+.env*

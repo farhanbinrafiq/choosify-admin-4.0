@@ -7,6 +7,7 @@ import { getBookingRequest, listBookingRequests } from './bookingStore';
 import {
   acceptBookingRequest,
   buyerAcceptCounter,
+  buyerDeclineBookingRequest,
   counterBookingRequest,
   createBookingRequest,
   declineBookingRequest,
@@ -194,6 +195,22 @@ bookingRouter.post('/booking/requests/:id/buyer-accept', async (req, res) => {
     res.json({ success: true, data: result.offer, request: result.request, order: result.order });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to accept counter-offer' });
+  }
+});
+
+bookingRouter.post('/booking/requests/:id/buyer-decline', async (req, res) => {
+  try {
+    const buyerId = String(req.body?.buyerId || '');
+    if (!buyerId) {
+      res.status(400).json({ error: 'buyerId is required' });
+      return;
+    }
+    const declineReason =
+      req.body?.declineReason !== undefined ? String(req.body.declineReason) : undefined;
+    const result = await buyerDeclineBookingRequest(req.params.id, { buyerId }, declineReason);
+    res.json({ success: true, data: result.offer, request: result.request });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to decline offer' });
   }
 });
 

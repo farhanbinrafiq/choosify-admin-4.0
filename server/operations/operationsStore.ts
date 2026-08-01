@@ -6,6 +6,7 @@ import type {
   OpsJobPosting,
   OpsLead,
   OpsPaymentOptionsConfig,
+  OpsReturnRequest,
   OpsReview,
   OpsSellerBookingSettings,
   OpsStorefrontOrder,
@@ -281,6 +282,7 @@ const state: {
   feeCharges: OpsFeeCharge[];
   paymentOptionsConfig: OpsPaymentOptionsConfig;
   sellerBookingSettings: Record<string, OpsSellerBookingSettings>;
+  returns: OpsReturnRequest[];
 } = {
   orders: [],
   coupons: defaultCoupons(),
@@ -293,6 +295,7 @@ const state: {
   feeCharges: defaultFeeCharges(),
   paymentOptionsConfig: defaultPaymentOptionsConfig(),
   sellerBookingSettings: {},
+  returns: [],
   featureFlags: {
     creator_hub: true,
     compare_tool: true,
@@ -342,6 +345,7 @@ export const operationsStore = {
     if (snapshot.feeCharges?.length) state.feeCharges = snapshot.feeCharges;
     if (snapshot.paymentOptionsConfig) state.paymentOptionsConfig = snapshot.paymentOptionsConfig;
     if (snapshot.sellerBookingSettings) state.sellerBookingSettings = snapshot.sellerBookingSettings;
+    if (snapshot.returns) state.returns = snapshot.returns;
   },
 
   listCouponUsage: () => [...state.couponUsage],
@@ -736,5 +740,47 @@ export const operationsStore = {
     state.sellerBookingSettings[sellerId] = updated;
     touch();
     return updated;
+  },
+
+  listReturns: (filter?: { buyerId?: string; sellerId?: string; status?: string }) => {
+    let rows = [...state.returns].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    if (filter?.buyerId) {
+      rows = rows.filter((row) => row.buyerId === filter.buyerId);
+    }
+    if (filter?.sellerId) {
+      rows = rows.filter((row) => row.sellerId === filter.sellerId);
+    }
+    if (filter?.status) {
+      rows = rows.filter((row) => row.status.toLowerCase() === filter.status!.toLowerCase());
+    }
+    return rows;
+  },
+  getReturn: (id: string) => state.returns.find((row) => row.id === id) ?? null,
+  createReturn: (
+    payload: Omit<OpsReturnRequest, 'id' | 'createdAt' | 'updatedAt' | 'notes'> & {
+      id?: string;
+      notes?: string[];
+      createdAt?: string;
+      updatedAt?: string;
+    },
+  ) => {
+    const ts = nowIso();
+    const row: OpsReturnRequest = {
+      ...payload,
+      id: payload.id || `RET-${Date.now()}`,
+      notes: payload.notes ?? [],
+      createdAt: payload.createdAt || ts,
+      updatedAt: payload.updatedAt || ts,
+    };
+    state.returns.unshift(row);
+    touch();
+    return row;
+  },
+  updateReturn: (id: string, patch: Partial<OpsReturnRequest>) => {
+    const idx = state.returns.findIndex((row) => row.id === id);
+    if (idx < 0) return null;
+    state.returns[idx] = { ...state.returns[idx], ...patch, updatedAt: nowIso() };
+    touch();
+    return state.returns[idx];
   },
 };

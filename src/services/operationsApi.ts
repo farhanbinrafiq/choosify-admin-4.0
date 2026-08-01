@@ -40,6 +40,9 @@ export interface OpsStorefrontOrder {
   status: string;
   createdAt: string;
   updatedAt: string;
+  cancelledAt?: string;
+  cancelReason?: string;
+  cancelledBy?: 'buyer' | 'seller' | 'admin';
   isManual?: boolean;
   platformSource?: 'WhatsApp' | 'Facebook' | 'Instagram' | 'Offline';
   claimToken?: string;
@@ -410,6 +413,92 @@ export const operationsApi = {
   },
   updateSellerOffer: async (id: string, payload: Record<string, unknown>) => {
     const result = await request<{ data: unknown }>(`/operations/seller-offers/${id}`, 'PATCH', payload);
+    return result.data;
+  },
+
+  listReturns: async (filter?: {
+    buyerId?: string;
+    sellerId?: string;
+    status?: string;
+  }): Promise<import('../contexts/ReturnsContext').ReturnRequest[]> => {
+    const params = new URLSearchParams();
+    if (filter?.buyerId) params.set('buyerId', filter.buyerId);
+    if (filter?.sellerId) params.set('sellerId', filter.sellerId);
+    if (filter?.status) params.set('status', filter.status);
+    const qs = params.toString();
+    const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest[] }>(
+      `/operations/returns${qs ? `?${qs}` : ''}`,
+    );
+    return result.data;
+  },
+  createReturn: async (
+    payload: Partial<import('../contexts/ReturnsContext').ReturnRequest>,
+  ): Promise<import('../contexts/ReturnsContext').ReturnRequest> => {
+    const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest }>(
+      '/operations/returns',
+      'POST',
+      payload,
+    );
+    return result.data;
+  },
+  approveReturn: async (id: string, refundAmount: number, note?: string, approvedBy?: string) => {
+    const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest }>(
+      `/operations/returns/${encodeURIComponent(id)}/approve`,
+      'PATCH',
+      { refundAmount, note, approvedBy },
+    );
+    return result.data;
+  },
+  rejectReturn: async (id: string, reason: string, approvedBy?: string) => {
+    const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest }>(
+      `/operations/returns/${encodeURIComponent(id)}/reject`,
+      'PATCH',
+      { reason, approvedBy },
+    );
+    return result.data;
+  },
+  processReturnRefund: async (id: string) => {
+    const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest }>(
+      `/operations/returns/${encodeURIComponent(id)}/refund`,
+      'PATCH',
+      {},
+    );
+    return result.data;
+  },
+  updateReturnStatus: async (
+    id: string,
+    status: import('../contexts/ReturnsContext').ReturnRequest['status'],
+  ) => {
+    const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest }>(
+      `/operations/returns/${encodeURIComponent(id)}/status`,
+      'PATCH',
+      { status },
+    );
+    return result.data;
+  },
+  addReturnNote: async (id: string, note: string) => {
+    const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest }>(
+      `/operations/returns/${encodeURIComponent(id)}/note`,
+      'PATCH',
+      { note },
+    );
+    return result.data;
+  },
+  generateReturnLabel: async (id: string) => {
+    const result = await request<{
+      data: import('../contexts/ReturnsContext').ReturnRequest;
+      labelUrl: string;
+      trackingId: string;
+      courier: string;
+    }>(`/operations/returns/${encodeURIComponent(id)}/label`, 'POST', {});
+    return result;
+  },
+  linkReturnToDispute: async (id: string, disputeId: string) => {
+    const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest }>(
+      `/operations/returns/${encodeURIComponent(id)}/dispute`,
+      'PATCH',
+      { disputeId },
+    );
     return result.data;
   },
 };

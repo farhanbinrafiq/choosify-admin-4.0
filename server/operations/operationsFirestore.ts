@@ -5,6 +5,7 @@ import type {
   OpsFeeCharge,
   OpsLead,
   OpsPaymentOptionsConfig,
+  OpsReturnRequest,
   OpsReview,
   OpsSellerBookingSettings,
   OpsStorefrontOrder,
@@ -35,6 +36,7 @@ export interface OperationsSnapshot {
   feeCharges?: OpsFeeCharge[];
   paymentOptionsConfig?: OpsPaymentOptionsConfig;
   sellerBookingSettings?: Record<string, OpsSellerBookingSettings>;
+  returns?: OpsReturnRequest[];
 }
 
 export interface OpsSellerOfferRow {

@@ -9,8 +9,19 @@ import {
   submitPlatformMessage,
 } from './operations/platformMessagingBridge';
 import { scheduleOperationsPersist } from './operations/operationsPersistence';
-import type { OpsCoupon, OpsFeeCharge, OpsReview, OpsStorefrontOrder, PermissionKey } from './operations/types';
+import type {
+  OpsCoupon,
+  OpsFeeCharge,
+  OpsReturnRequest,
+  OpsReturnStatus,
+  OpsReview,
+  OpsStorefrontOrder,
+  PermissionKey,
+} from './operations/types';
 import { validate } from './middleware/validate';
+import { authenticateRequest } from './middleware/auth';
+import { hasRole } from './permissions/authorization';
+import { ROLES } from './permissions/roles';
 import { CouponValidateBodySchema } from './validation/operations/couponValidateSchema';
 import {
   evaluatePostOrderConversationExpiry,
@@ -18,6 +29,62 @@ import {
 } from '../shared/messaging/conversationExpiry';
 
 export const operationsRouter = Router();
+
+const requireAuth = [authenticateRequest];
+
+/**
+ * PATCH /operations/orders/:id field whitelist.
+ * Audited callers (Choosify-Web + admin): none currently hit this HTTP route —
+ * storefront `updateOrder` and admin Orders Hub mutate local state only; booking
+ * payment updates call `operationsStore.updateOrder` in-process. Keep this list
+ * empty until a real client is wired, then add only the fields that client sends.
+ * Cancel / returns get dedicated endpoints (not this generic PATCH).
+ */
+const ORDER_PATCH_ALLOWED_KEYS = [] as const;
+
+type OrderPatchBody = Partial<Pick<OpsStorefrontOrder, (typeof ORDER_PATCH_ALLOWED_KEYS)[number]>>;
+
+function pickOrderPatch(body: unknown): { patch: OrderPatchBody; rejected: string[] } {
+  const raw = body && typeof body === 'object' && !Array.isArray(body) ? (body as Record<string, unknown>) : {};
+  const rejected = Object.keys(raw).filter(
+    (key) => !(ORDER_PATCH_ALLOWED_KEYS as readonly string[]).includes(key),
+  );
+  const patch: OrderPatchBody = {};
+  for (const key of ORDER_PATCH_ALLOWED_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(raw, key)) {
+      (patch as Record<string, unknown>)[key] = raw[key];
+    }
+  }
+  return { patch, rejected };
+}
+
+function userCanMutateOrder(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  order: OpsStorefrontOrder,
+): boolean {
+  const userId = req.userId;
+  if (!userId) return false;
+  if (order.buyerId === userId) return true;
+
+  const role = req.userRole;
+  if (
+    role &&
+    (hasRole(role, ROLES.SUPER_ADMIN) ||
+      hasRole(role, ROLES.ADMIN) ||
+      hasRole(role, ROLES.SUPPORT_AGENT) ||
+      hasRole(role, ROLES.MODERATOR) ||
+      hasRole(role, ROLES.FINANCE_MANAGER))
+  ) {
+    return true;
+  }
+
+  if (role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER))) {
+    const subs = (order.subOrders || []) as Array<{ sellerId?: string }>;
+    return subs.some((sub) => sub.sellerId === userId);
+  }
+
+  return false;
+}
 
 function toExpiryOrder(order: OpsStorefrontOrder | OrderLikeForExpiry): OrderLikeForExpiry {
   return {
@@ -219,12 +286,350 @@ operationsRouter.post('/operations/orders/claim/:token/confirm', (req, res) => {
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/orders/:id', (req, res) => {
-  const saved = operationsStore.updateOrder(req.params.id, req.body);
+operationsRouter.patch('/operations/orders/:id', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getOrder(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+  if (!userCanMutateOrder(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to modify this order' });
+    return;
+  }
+
+  const { patch, rejected } = pickOrderPatch(req.body);
+  if (rejected.length > 0) {
+    res.status(400).json({
+      error: 'One or more fields are not allowed on this endpoint',
+      rejected,
+      allowed: [...ORDER_PATCH_ALLOWED_KEYS],
+    });
+    return;
+  }
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({
+      error: 'No updatable fields provided',
+      allowed: [...ORDER_PATCH_ALLOWED_KEYS],
+    });
+    return;
+  }
+
+  const saved = operationsStore.updateOrder(req.params.id, patch);
   if (!saved) {
     res.status(404).json({ error: 'Order not found' });
     return;
   }
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+operationsRouter.post('/operations/orders/:id/cancel', (req, res) => {
+  const buyerId = String(req.body?.buyerId || '').trim();
+  const reason = String(req.body?.reason || req.body?.cancelReason || '').trim();
+  if (!buyerId) {
+    res.status(400).json({ error: 'buyerId is required' });
+    return;
+  }
+  if (!reason) {
+    res.status(400).json({ error: 'reason is required' });
+    return;
+  }
+
+  const existing = operationsStore.getOrder(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+  if (existing.buyerId !== buyerId) {
+    res.status(403).json({ error: 'Only the order buyer can cancel this order' });
+    return;
+  }
+  if (existing.status === 'cancelled') {
+    res.status(400).json({ error: 'Order is already cancelled' });
+    return;
+  }
+  if (existing.status === 'completed') {
+    res.status(400).json({ error: 'Completed orders cannot be cancelled' });
+    return;
+  }
+
+  const BLOCKED_TRACKING = new Set([
+    'dispatched',
+    'transit',
+    'delivered',
+    'picked_up',
+    'in_transit',
+    'cancelled',
+  ]);
+  const subs = (existing.subOrders || []) as Array<{ trackingStatus?: string }>;
+  const alreadyMoving = subs.some((sub) => {
+    const tracking = String(sub.trackingStatus || 'pending').toLowerCase();
+    return BLOCKED_TRACKING.has(tracking);
+  });
+  if (alreadyMoving) {
+    res.status(400).json({
+      error: 'This order has already been dispatched and cannot be cancelled.',
+    });
+    return;
+  }
+
+  const ts = new Date().toISOString();
+  const saved = operationsStore.updateOrder(req.params.id, {
+    status: 'cancelled',
+    cancelledAt: ts,
+    cancelReason: reason,
+    cancelledBy: 'buyer',
+  });
+  if (!saved) {
+    res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+// ─── Returns ─────────────────────────────────────────────────────────────────
+
+operationsRouter.get('/operations/returns', (req, res) => {
+  const buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
+  const sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
+  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const rows = operationsStore.listReturns({ buyerId, sellerId, status });
+  res.json({ data: rows });
+});
+
+operationsRouter.get('/operations/returns/:id', (req, res) => {
+  const row = operationsStore.getReturn(req.params.id);
+  if (!row) {
+    res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  res.json({ data: row });
+});
+
+operationsRouter.post('/operations/returns', (req, res) => {
+  const body = req.body as Partial<OpsReturnRequest>;
+  const orderId = String(body.orderId || '').trim();
+  const buyerId = String(body.buyerId || '').trim();
+  const sellerId = String(body.sellerId || '').trim();
+  const reason = body.reason;
+  const description = String(body.description || '').trim();
+
+  if (!orderId || !buyerId || !sellerId || !reason || !description) {
+    res.status(400).json({
+      error: 'orderId, buyerId, sellerId, reason, and description are required',
+    });
+    return;
+  }
+
+  const saved = operationsStore.createReturn({
+    orderId,
+    itemId: String(body.itemId || '').trim(),
+    initiatedBy: body.initiatedBy === 'admin' ? 'admin' : 'customer',
+    reason,
+    description,
+    evidencePhotos: Array.isArray(body.evidencePhotos) ? body.evidencePhotos : [],
+    status: body.status || 'initiated',
+    refundStatus: body.refundStatus || 'pending',
+    notes: Array.isArray(body.notes) ? body.notes : [],
+    sellerId,
+    buyerId,
+    ...(body.id ? { id: body.id } : {}),
+    ...(body.approvalDecision ? { approvalDecision: body.approvalDecision } : {}),
+    ...(body.approvalReason ? { approvalReason: body.approvalReason } : {}),
+    ...(body.approvedAt ? { approvedAt: body.approvedAt } : {}),
+    ...(body.approvedBy ? { approvedBy: body.approvedBy } : {}),
+    ...(typeof body.refundAmount === 'number' ? { refundAmount: body.refundAmount } : {}),
+    ...(body.returnTrackingId ? { returnTrackingId: body.returnTrackingId } : {}),
+    ...(body.returnCourier ? { returnCourier: body.returnCourier } : {}),
+    ...(body.pickupDate ? { pickupDate: body.pickupDate } : {}),
+    ...(body.deliveryDate ? { deliveryDate: body.deliveryDate } : {}),
+    ...(body.disputeId ? { disputeId: body.disputeId } : {}),
+  });
+  scheduleOperationsPersist();
+  res.status(201).json({ success: true, data: saved });
+});
+
+operationsRouter.patch('/operations/returns/:id/approve', (req, res) => {
+  const existing = operationsStore.getReturn(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  const refundAmount = Number(req.body?.refundAmount);
+  if (!Number.isFinite(refundAmount)) {
+    res.status(400).json({ error: 'refundAmount is required' });
+    return;
+  }
+  const note = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+  const approvedBy =
+    typeof req.body?.approvedBy === 'string' && req.body.approvedBy.trim()
+      ? req.body.approvedBy.trim()
+      : 'Admin Main';
+
+  const adminNotes = [...existing.notes];
+  if (note) adminNotes.push(note);
+  adminNotes.push(`Return approved with refund of ৳${refundAmount}. Waiting for item return.`);
+
+  const saved = operationsStore.updateReturn(req.params.id, {
+    status: 'approved',
+    approvalDecision: 'approved',
+    approvedAt: new Date().toISOString(),
+    approvedBy,
+    refundAmount,
+    notes: adminNotes,
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+operationsRouter.patch('/operations/returns/:id/reject', (req, res) => {
+  const existing = operationsStore.getReturn(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  const reason = String(req.body?.reason || '').trim();
+  if (!reason) {
+    res.status(400).json({ error: 'reason is required' });
+    return;
+  }
+  const approvedBy =
+    typeof req.body?.approvedBy === 'string' && req.body.approvedBy.trim()
+      ? req.body.approvedBy.trim()
+      : 'Admin Main';
+
+  const adminNotes = [...existing.notes];
+  adminNotes.push(`Return rejected. Reason: "${reason}"`);
+
+  const saved = operationsStore.updateReturn(req.params.id, {
+    status: 'rejected',
+    approvalDecision: 'rejected',
+    approvalReason: reason,
+    approvedAt: new Date().toISOString(),
+    approvedBy,
+    notes: adminNotes,
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+operationsRouter.patch('/operations/returns/:id/refund', (req, res) => {
+  const existing = operationsStore.getReturn(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  const adminNotes = [...existing.notes];
+  adminNotes.push('Refund successfully processed back to customer payment channel.');
+
+  const saved = operationsStore.updateReturn(req.params.id, {
+    status: 'refunded',
+    refundStatus: 'processed',
+    notes: adminNotes,
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+operationsRouter.patch('/operations/returns/:id/status', (req, res) => {
+  const existing = operationsStore.getReturn(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  const status = String(req.body?.status || '').trim() as OpsReturnStatus;
+  const allowed: OpsReturnStatus[] = [
+    'initiated',
+    'approved',
+    'rejected',
+    'returned_in_transit',
+    'received',
+    'refunded',
+    'dispute',
+  ];
+  if (!allowed.includes(status)) {
+    res.status(400).json({ error: 'Invalid status', allowed });
+    return;
+  }
+
+  const adminNotes = [...existing.notes];
+  adminNotes.push(`Status transitioned to: ${status.toUpperCase()}`);
+
+  const saved = operationsStore.updateReturn(req.params.id, {
+    status,
+    notes: adminNotes,
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+operationsRouter.patch('/operations/returns/:id/note', (req, res) => {
+  const existing = operationsStore.getReturn(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  const note = String(req.body?.note || '').trim();
+  if (!note) {
+    res.status(400).json({ error: 'note is required' });
+    return;
+  }
+
+  const saved = operationsStore.updateReturn(req.params.id, {
+    notes: [...existing.notes, `[${new Date().toISOString()}] ${note}`],
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+operationsRouter.post('/operations/returns/:id/label', (req, res) => {
+  const existing = operationsStore.getReturn(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+
+  const trackingId = `PATHAO-RET-${Math.floor(100000 + Math.random() * 900000)}`;
+  const courier = 'Pathao Delivery';
+  const labelUrl = `https://api.choosify.bd/logistics/label/${trackingId}`;
+
+  const saved = operationsStore.updateReturn(req.params.id, {
+    returnTrackingId: trackingId,
+    returnCourier: courier,
+    notes: [...existing.notes, `Prepaid Return Label generated with tracking ID ${trackingId}.`],
+  });
+  scheduleOperationsPersist();
+  res.json({
+    success: true,
+    data: saved,
+    labelUrl,
+    trackingId,
+    courier,
+  });
+});
+
+operationsRouter.patch('/operations/returns/:id/dispute', (req, res) => {
+  const existing = operationsStore.getReturn(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  const disputeId = String(req.body?.disputeId || '').trim();
+  if (!disputeId) {
+    res.status(400).json({ error: 'disputeId is required' });
+    return;
+  }
+
+  const saved = operationsStore.updateReturn(req.params.id, {
+    status: 'dispute',
+    disputeId,
+    notes: [
+      ...existing.notes,
+      `Escalated to Dispute resolution system. Dispute ID: ${disputeId}`,
+    ],
+  });
+  scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
 

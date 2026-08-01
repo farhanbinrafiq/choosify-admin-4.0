@@ -151,6 +151,19 @@ async function notifyBuyer(buyerId: string, buyerName: string | undefined, body:
   }
 }
 
+async function notifySeller(sellerId: string, sellerName: string | undefined, body: string, orderId?: string) {
+  try {
+    await submitPlatformMessage({
+      buyerId: sellerId,
+      userName: sellerName || sellerId,
+      body,
+      orderId,
+    });
+  } catch (err) {
+    console.warn('[Booking] Seller notify failed:', err);
+  }
+}
+
 export async function createBookingRequest(
   input: CreateBookingRequestInput,
 ): Promise<{ request: BookingRequest; offer: BookingOfferCard; order?: OpsStorefrontOrder }> {
@@ -339,6 +352,60 @@ export async function declineBookingRequest(
     existing.buyerId,
     existing.buyerName,
     `${actor.sellerName || existing.sellerName} declined your booking request for "${existing.listingTitle}": ${reason}`,
+  );
+
+  return { request: updated, offer: toBookingOfferCard(updated) };
+}
+
+/**
+ * Buyer declines a seller counter-offer, or an already-seller-accepted offer before paying.
+ * Reuses status `declined` with `changedBy: 'buyer'` so history is distinguishable from seller declines.
+ */
+export async function buyerDeclineBookingRequest(
+  id: string,
+  actor: { buyerId: string },
+  declineReason?: string,
+): Promise<{ request: BookingRequest; offer: BookingOfferCard }> {
+  const reason = String(declineReason || '').trim();
+
+  const existing = await getBookingRequest(id);
+  if (!existing) throw new Error('Booking request not found');
+  if (existing.buyerId !== actor.buyerId) throw new Error('Only the buyer can decline this offer');
+  if (existing.status !== 'countered' && existing.status !== 'accepted') {
+    throw new Error(`Cannot buyer-decline booking in status ${existing.status}`);
+  }
+
+  const ts = nowIso();
+  const nextVersion = existing.version + 1;
+  const updated: BookingRequest = {
+    ...existing,
+    version: nextVersion,
+    status: 'declined',
+    ...(reason ? { declineReason: reason } : {}),
+    updatedAt: ts,
+    versions: [
+      ...existing.versions,
+      {
+        version: nextVersion,
+        price: existing.price,
+        fields: existing.fields,
+        notes: existing.notes,
+        status: 'declined',
+        changedAt: ts,
+        changedBy: 'buyer',
+        ...(reason ? { declineReason: reason } : {}),
+      },
+    ],
+  };
+
+  await saveBookingRequest(updated);
+  await notifySeller(
+    existing.sellerId,
+    existing.sellerName,
+    `${existing.buyerName || 'Buyer'} declined the booking offer for "${existing.listingTitle}"${
+      reason ? `: ${reason}` : ''
+    }.`,
+    existing.orderId,
   );
 
   return { request: updated, offer: toBookingOfferCard(updated) };

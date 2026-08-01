@@ -50,9 +50,15 @@ export function mapPlatformOrderToCmsOrder(row: OpsStorefrontOrder): Order[] {
           flagged: false,
           history: [],
         },
-        status: (row.status === 'completed' ? 'Delivered' : 'Confirmed') as OrderStatus,
+        status: (row.status === 'cancelled'
+          ? 'Cancelled'
+          : row.status === 'completed'
+            ? 'Delivered'
+            : 'Confirmed') as OrderStatus,
         paymentStatus: (row.isCOD ? 'Pending' : 'Paid') as PaymentStatus,
         timestamp: row.createdAt,
+        cancelReason: row.cancelReason,
+        cancelTime: row.cancelledAt,
         earnings: {
           totalRevenue: Number(row.overallTotal || 0),
           commissionPercent: 10,
@@ -94,6 +100,8 @@ export function mapPlatformOrderToCmsOrder(row: OpsStorefrontOrder): Order[] {
       status: (row.status === 'cancelled' ? 'Cancelled' : 'Confirmed') as OrderStatus,
       paymentStatus: (row.isCOD ? 'Pending' : 'Paid') as PaymentStatus,
       timestamp: row.createdAt,
+      cancelReason: row.cancelReason,
+      cancelTime: row.cancelledAt,
       earnings: {
         totalRevenue: Number(row.overallTotal || 0) / subOrders.length,
         commissionPercent: 10,
