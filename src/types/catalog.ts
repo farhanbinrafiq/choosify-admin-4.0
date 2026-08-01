@@ -43,6 +43,17 @@ export interface CatalogBrandStores {
   serviceCenters?: Array<{ name: string; sub?: string; hours?: string }>;
 }
 
+export interface CatalogBrandPromoCode {
+  id: string;
+  code: string;
+  discountType: 'Percentage' | 'Flat';
+  discountValue: number;
+  startDate: string;
+  endDate: string;
+  usageLimit: number;
+  enabled: boolean;
+}
+
 export interface CatalogBrand {
   id: string;
   slug: string;
@@ -60,6 +71,7 @@ export interface CatalogBrand {
   overview?: CatalogBrandOverview;
   faq?: CatalogBrandFaq[];
   stores?: CatalogBrandStores;
+  promoCodes?: CatalogBrandPromoCode[];
   verifiedStatus: boolean;
   claimStatus: 'community' | 'pending' | 'verified';
   followers: number;
@@ -461,6 +473,7 @@ export interface CatalogProductDetail {
     storeRating?: number;
     storeUrl?: string;
     storeLocation?: string;
+    isFeatured?: boolean;
   }>;
   physicalStores: Array<{
     id: string;
@@ -486,6 +499,7 @@ export interface CatalogProductDetail {
     stock?: number;
     options: Record<string, string>;
     images?: string[];
+    enabled?: boolean;
   }>;
   creatorContent: Array<{
     id: string;
@@ -501,14 +515,46 @@ export interface CatalogProductDetail {
   seoKeywords?: string;
   sizeGuide?: {
     enabled: boolean;
+    type?: 'table' | 'image' | 'html';
     title?: string;
     description?: string;
     imageUrl?: string;
+    htmlContent?: string;
     unitLabel?: string;
     columnHeaders?: string[];
     rows?: Array<{ size: string; [measurement: string]: string }>;
   };
   updatedAt: string;
+
+  // Studio section on/off toggles — each gates the corresponding storefront section.
+  enableSpecs?: boolean;
+  enableStoreComparison?: boolean;
+  enableInfluencerReviews?: boolean;
+  enableOverviewSection?: boolean;
+  enableBestForTags?: boolean;
+  enablePhysicalStores?: boolean;
+  enableBoxContents?: boolean;
+  enableOptions?: boolean;
+  enableActiveVariantSpecs?: boolean;
+  enableAdditionalSpecs?: boolean;
+  enablePublicReviews?: boolean;
+  enableAddonItems?: boolean;
+
+  boxContents?: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    icon?: string;
+    image?: string;
+    badge?: string;
+    price?: number;
+    isFree: boolean;
+    enabled: boolean;
+    sortOrder: number;
+  }>;
+  additionalSpecs?: { key: string; value: string }[];
+  publicReviews?: Array<{ id: string; reviewerName: string; rating: number; comment: string }>;
+  addonItems?: Array<{ id: string; title: string; description?: string; price: number }>;
 }
 
 export interface SiteSeoEntry {

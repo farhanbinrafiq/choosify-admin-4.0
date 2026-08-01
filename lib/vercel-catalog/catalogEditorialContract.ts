@@ -269,6 +269,40 @@ export const normalizeProductDetailInput = (
         ? (raw.sizeGuide as CatalogProductDetail['sizeGuide'])
         : existing?.sizeGuide,
     updatedAt: nowIso(),
+    enableSpecs: raw.enableSpecs !== undefined ? toBoolean(raw.enableSpecs) : existing?.enableSpecs,
+    enableStoreComparison:
+      raw.enableStoreComparison !== undefined ? toBoolean(raw.enableStoreComparison) : existing?.enableStoreComparison,
+    enableInfluencerReviews:
+      raw.enableInfluencerReviews !== undefined ? toBoolean(raw.enableInfluencerReviews) : existing?.enableInfluencerReviews,
+    enableOverviewSection:
+      raw.enableOverviewSection !== undefined ? toBoolean(raw.enableOverviewSection) : existing?.enableOverviewSection,
+    enableBestForTags:
+      raw.enableBestForTags !== undefined ? toBoolean(raw.enableBestForTags) : existing?.enableBestForTags,
+    enablePhysicalStores:
+      raw.enablePhysicalStores !== undefined ? toBoolean(raw.enablePhysicalStores) : existing?.enablePhysicalStores,
+    enableBoxContents:
+      raw.enableBoxContents !== undefined ? toBoolean(raw.enableBoxContents) : existing?.enableBoxContents,
+    enableOptions: raw.enableOptions !== undefined ? toBoolean(raw.enableOptions) : existing?.enableOptions,
+    enableActiveVariantSpecs:
+      raw.enableActiveVariantSpecs !== undefined ? toBoolean(raw.enableActiveVariantSpecs) : existing?.enableActiveVariantSpecs,
+    enableAdditionalSpecs:
+      raw.enableAdditionalSpecs !== undefined ? toBoolean(raw.enableAdditionalSpecs) : existing?.enableAdditionalSpecs,
+    enablePublicReviews:
+      raw.enablePublicReviews !== undefined ? toBoolean(raw.enablePublicReviews) : existing?.enablePublicReviews,
+    enableAddonItems:
+      raw.enableAddonItems !== undefined ? toBoolean(raw.enableAddonItems) : existing?.enableAddonItems,
+    boxContents: Array.isArray(raw.boxContents)
+      ? (raw.boxContents as CatalogProductDetail['boxContents'])
+      : existing?.boxContents ?? [],
+    additionalSpecs: Array.isArray(raw.additionalSpecs)
+      ? (raw.additionalSpecs as CatalogProductDetail['additionalSpecs'])
+      : existing?.additionalSpecs ?? [],
+    publicReviews: Array.isArray(raw.publicReviews)
+      ? (raw.publicReviews as CatalogProductDetail['publicReviews'])
+      : existing?.publicReviews ?? [],
+    addonItems: Array.isArray(raw.addonItems)
+      ? (raw.addonItems as CatalogProductDetail['addonItems'])
+      : existing?.addonItems ?? [],
   };
 };
 

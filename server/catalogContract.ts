@@ -132,6 +132,20 @@ const brandSchema = z.object({
         .optional(),
     })
     .optional(),
+  promoCodes: z
+    .array(
+      z.object({
+        id: nonEmpty,
+        code: z.string(),
+        discountType: z.enum(['Percentage', 'Flat']),
+        discountValue: z.number(),
+        startDate: z.string(),
+        endDate: z.string(),
+        usageLimit: z.number(),
+        enabled: z.boolean(),
+      }),
+    )
+    .optional(),
   verifiedStatus: z.boolean(),
   claimStatus: z.enum(['community', 'pending', 'verified']),
   followers: z.number().nonnegative(),
@@ -154,6 +168,16 @@ const productSchema = z.object({
   image: nonEmpty,
   gallery: z.array(z.string()),
   modeType: z.literal('retail'),
+  productType: z.enum(['physical', 'service']).optional(),
+  serviceCategory: z
+    .enum(['hotels', 'restaurants', 'travel', 'doctors', 'education', 'beauty', 'real_estate', 'transport'])
+    .optional(),
+  relatedInfoType: z.enum(['price_across_stores', 'whats_nearby', 'before_your_visit']).optional(),
+  priceAcrossStoresEnabled: z.boolean().optional(),
+  partialPaymentEnabled: z.boolean().optional(),
+  depositPercent: z.number().optional(),
+  requiredBookingFieldKeys: z.array(z.string()).optional(),
+  requiresApproval: z.boolean().optional(),
   price: z.number().nonnegative(),
   originalPrice: z.number().nonnegative().optional(),
   stock: z.number().int(),
@@ -326,6 +350,9 @@ export const normalizeBrandInput = (
       raw.stores && typeof raw.stores === 'object'
         ? (raw.stores as CatalogBrand['stores'])
         : existing?.stores,
+    promoCodes: Array.isArray(raw.promoCodes)
+      ? (raw.promoCodes as CatalogBrand['promoCodes'])
+      : existing?.promoCodes,
     verifiedStatus: toBoolean(raw.verifiedStatus, existing?.verifiedStatus ?? false),
     claimStatus: claimStatusRaw === 'verified' || claimStatusRaw === 'pending' ? claimStatusRaw : 'community',
     followers: toNumber(raw.followers, existing?.followers ?? 0),
@@ -416,6 +443,24 @@ export const normalizeProductInput = (
     image: toString(raw.image, existing?.image ?? ''),
     gallery: toStringArray(raw.gallery).length > 0 ? toStringArray(raw.gallery) : existing?.gallery ?? [],
     modeType: 'retail',
+    productType: toString(raw.productType, existing?.productType) as CatalogProduct['productType'],
+    serviceCategory: toString(raw.serviceCategory, existing?.serviceCategory) as CatalogProduct['serviceCategory'],
+    relatedInfoType: toString(raw.relatedInfoType, existing?.relatedInfoType) as CatalogProduct['relatedInfoType'],
+    priceAcrossStoresEnabled:
+      raw.priceAcrossStoresEnabled !== undefined
+        ? toBoolean(raw.priceAcrossStoresEnabled)
+        : existing?.priceAcrossStoresEnabled,
+    partialPaymentEnabled:
+      raw.partialPaymentEnabled !== undefined
+        ? toBoolean(raw.partialPaymentEnabled)
+        : existing?.partialPaymentEnabled,
+    depositPercent:
+      raw.depositPercent !== undefined ? toNumber(raw.depositPercent) : existing?.depositPercent,
+    requiredBookingFieldKeys: toStringArray(raw.requiredBookingFieldKeys).length
+      ? toStringArray(raw.requiredBookingFieldKeys)
+      : existing?.requiredBookingFieldKeys,
+    requiresApproval:
+      raw.requiresApproval !== undefined ? toBoolean(raw.requiresApproval) : existing?.requiresApproval,
     price: toNumber(raw.price, existing?.price ?? 0),
     originalPrice:
       raw.originalPrice !== undefined

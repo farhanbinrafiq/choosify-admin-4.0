@@ -398,17 +398,36 @@ export default function GuideEditStudio() {
   const [guide, setGuide] = useState<GuideData>(defaultNewGuide);
   const [viewportMode, setViewportMode] = useState<"desktop" | "mobile">("desktop");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [savingState, setSavingState] = useState<"Saved" | "Saving..." | "Changes pending">("Saved");
+  const [savingState, setSavingState] = useState<"Saved" | "Saving..." | "Changes pending" | "Save failed">("Saved");
 
   // RIGHT SIDE SYSTEM-SCOPED SLIDING DRAWER WIDTH: 480px
   const [activeDrawerSection, setActiveDrawerSection] = useState<string | null>(null);
 
-  const { saveDraft: persistDraft, versions, saveVersion } = useEntityDraft<GuideData>(
+  const {
+    saveDraft: persistDraft,
+    versions,
+    saveVersion,
+    error: draftError,
+    isSaving: isDraftSaving,
+    isLoading: isDraftLoading,
+  } = useEntityDraft<GuideData>(
     "guide",
     guide.id,
     { draftKey: `choosify_guide_draft_${guide.id}`, versionsKey: `choosify_guide_versions_${guide.id}` },
     (backendDraft) => setGuide((prev) => ({ ...defaultNewGuide, ...prev, ...backendDraft })),
   );
+
+  useEffect(() => {
+    if (isDraftSaving) {
+      setSavingState("Saving...");
+    } else if (draftError) {
+      setSavingState("Save failed");
+      triggerToast(`⚠ Save failed: ${draftError}`);
+    } else {
+      setSavingState((prev) => (prev === "Saving..." ? "Saved" : prev));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDraftSaving, draftError]);
 
   // Load from local storage or set defaults
   useEffect(() => {
@@ -528,10 +547,16 @@ export default function GuideEditStudio() {
     }
 
     localStorage.setItem(CHC_GUIDES_KEY, JSON.stringify(currentGuidesList));
-    setSavingState("Saved");
     persistDraft(guide);
-    syncGuideToCatalog(guide).catch(() => undefined);
-    triggerToast(`✓ Section [${sectionName.toUpperCase()}] saved independently & catalog updated.`);
+    syncGuideToCatalog(guide)
+      .then(() => {
+        setSavingState("Saved");
+        triggerToast(`✓ Section [${sectionName.toUpperCase()}] saved independently & catalog updated.`);
+      })
+      .catch((err) => {
+        setSavingState("Save failed");
+        triggerToast(`⚠ Section [${sectionName.toUpperCase()}] saved locally but catalog sync failed: ${err instanceof Error ? err.message : "unknown error"}`);
+      });
 
     // Auto backup checkpoint
     saveVersion(`Backup: Edited ${sectionName}`, guide);
@@ -568,6 +593,14 @@ export default function GuideEditStudio() {
   const winnerProduct = winnerProducts[0] || catalogProducts[0];
   const additionalTopPicks = winnerProducts.slice(1);
 
+  if (isDraftLoading) {
+    return (
+      <div className="min-h-[40vh] flex items-center justify-center text-xs font-mono text-slate-400 uppercase tracking-widest">
+        Loading guide studio…
+      </div>
+    );
+  }
+
   return (
     <div id="guide-edit-studio" className="pb-24 text-slate-800 min-h-screen bg-[#F8FAFC] -m-6 p-6 font-sans select-none relative overflow-x-hidden">
       
@@ -600,7 +633,16 @@ export default function GuideEditStudio() {
               <span className="bg-orange-500/20 text-orange-400 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded border border-orange-500/30">
                 Guide Studio V3
               </span>
-              <span className={`text-[10px] font-mono font-bold uppercase${guide.status === "Published" ? "text-emerald-400" : "text-amber-400"}`}>
+              <span
+                className={`text-[10px] font-mono font-bold uppercase${
+                  savingState === "Save failed"
+                    ? "text-red-400"
+                    : guide.status === "Published"
+                      ? "text-emerald-400"
+                      : "text-amber-400"
+                }`}
+                title={savingState === "Save failed" ? draftError || undefined : undefined}
+              >
                 ● {guide.status} ({savingState})
               </span>
             </div>
@@ -633,9 +675,11 @@ export default function GuideEditStudio() {
               handleFieldChange("status", "Published");
               try {
                 await syncGuideToCatalog({ ...guide, status: 'Published' }, true);
+                setSavingState("Saved");
                 triggerToast("✓ Guide published to catalog API successfully!");
-              } catch {
-                triggerToast("✓ Guide status updated locally (catalog sync failed).");
+              } catch (err) {
+                setSavingState("Save failed");
+                triggerToast(`⚠ Publish failed to sync to catalog: ${err instanceof Error ? err.message : "unknown error"}`);
               }
             }}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all"

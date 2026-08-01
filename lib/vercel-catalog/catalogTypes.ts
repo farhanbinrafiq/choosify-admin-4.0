@@ -43,6 +43,17 @@ export interface CatalogBrandStores {
   serviceCenters?: Array<{ name: string; sub?: string; hours?: string }>;
 }
 
+export interface CatalogBrandPromoCode {
+  id: string;
+  code: string;
+  discountType: 'Percentage' | 'Flat';
+  discountValue: number;
+  startDate: string;
+  endDate: string;
+  usageLimit: number;
+  enabled: boolean;
+}
+
 export interface CatalogBrand {
   id: string;
   slug: string;
@@ -63,6 +74,7 @@ export interface CatalogBrand {
   overview?: CatalogBrandOverview;
   faq?: CatalogBrandFaq[];
   stores?: CatalogBrandStores;
+  promoCodes?: CatalogBrandPromoCode[];
   verifiedStatus: boolean;
   claimStatus: 'community' | 'pending' | 'verified';
   followers: number;
@@ -98,7 +110,13 @@ export interface CatalogProduct {
   relatedInfoType?: 'price_across_stores' | 'whats_nearby' | 'before_your_visit';
   /** Physical products: opt-in toggle for showing Price Across Stores. */
   priceAcrossStoresEnabled?: boolean;
+  /** Seller opt-in toggle for accepting an advance/partial payment on this product. */
+  partialPaymentEnabled?: boolean;
+  /** Deposit percent required upfront when partialPaymentEnabled is true. */
+  depositPercent?: number;
   requiredBookingFieldKeys?: string[];
+  /** Service listings only. Whether a new booking request needs seller approval before pay. */
+  requiresApproval?: boolean;
   price: number;
   originalPrice?: number;
   stock: number;

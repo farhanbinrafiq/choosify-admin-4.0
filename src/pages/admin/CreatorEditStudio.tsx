@@ -66,17 +66,38 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
   const pubKey = `choosify_creator_published_${activeId}`;
   const versionsKey = `choosify_creator_versions_${activeId}`;
 
-  const { saveDraft: persistDraft, versions, saveVersion } = useEntityDraft<CreatorCMSModel>(
+  const {
+    saveDraft: persistDraft,
+    versions,
+    saveVersion,
+    error: draftError,
+    isSaving: isDraftSaving,
+    isLoading: isDraftLoading,
+  } = useEntityDraft<CreatorCMSModel>(
     'creator',
     activeId,
     { draftKey, versionsKey },
     (backendDraft) => setModel(backendDraft),
   );
 
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 4000);
   };
+
+  useEffect(() => {
+    if (isDraftSaving) {
+      setSyncStatus('saving');
+    } else if (draftError) {
+      setSyncStatus('error');
+      triggerToast(`⚠ Save failed: ${draftError}`);
+    } else if (syncStatus === 'saving') {
+      setSyncStatus('saved');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDraftSaving, draftError]);
 
   useEffect(() => {
     let loaded: CreatorCMSModel | null = null;
@@ -196,6 +217,7 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
     if (!model) return;
     persistDraft(model);
     setHasUnsavedChanges(false);
+    setSyncStatus('saving');
     saveVersion(`Draft Saved: ${model.name}`, model);
 
     // Keep list registry in sync
@@ -210,7 +232,7 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
       localStorage.setItem(CREATOR_STUDIO_LIST_KEY, JSON.stringify([model]));
     }
 
-    triggerToast('✓ Draft Saved!');
+    triggerToast('Saving draft…');
   };
 
   const handlePublishChanges = async () => {
@@ -218,8 +240,10 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
     setIsPublishing(true);
     setShowPublishModal(false);
 
+    let publishSucceeded = false;
     try {
       await catalogApi.upsertCreator(activeId, model);
+      publishSucceeded = true;
     } catch (error) {
       console.warn('Failed to publish creator to catalog API', error);
     }
@@ -241,7 +265,11 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
     }
 
     setIsPublishing(false);
-    triggerToast('Creator Profile Published Live!');
+    triggerToast(
+      publishSucceeded
+        ? 'Creator Profile Published Live!'
+        : '⚠ Publish failed to sync to catalog — draft saved locally, please retry.',
+    );
   };
 
   const restoreVersion = (snapshot: Record<string, unknown>) => {
@@ -256,7 +284,7 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
     else navigate('/admin/creator-studio');
   };
 
-  if (!model) {
+  if (!model || isDraftLoading) {
     return (
       <div className="min-h-[40vh] flex items-center justify-center text-xs font-mono text-slate-400 uppercase tracking-widest">
         Loading creator studio…
@@ -300,6 +328,22 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
           {hasUnsavedChanges && (
             <span className="flex items-center gap-1 text-[#FF5B00] text-[10px] font-mono font-bold animate-pulse">
               ● UNSAVED DRAFT CHANGES
+            </span>
+          )}
+
+          {syncStatus === 'saving' && (
+            <span className="flex items-center gap-1 text-blue-600 text-[10px] font-mono font-bold animate-pulse">
+              ● Saving…
+            </span>
+          )}
+          {syncStatus === 'saved' && (
+            <span className="flex items-center gap-1 text-emerald-600 text-[10px] font-mono font-bold">
+              ✓ Synced to server
+            </span>
+          )}
+          {syncStatus === 'error' && (
+            <span className="flex items-center gap-1 text-red-600 text-[10px] font-mono font-bold" title={draftError || undefined}>
+              ⚠ Save failed — retry
             </span>
           )}
 

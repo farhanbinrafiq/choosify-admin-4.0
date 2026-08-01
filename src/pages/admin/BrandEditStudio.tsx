@@ -147,12 +147,33 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   const pubKey = `choosify_brand_published_${activeId}`;
   const versionsKey = `choosify_brand_versions_${activeId}`;
 
-  const { saveDraft: persistDraft, versions, saveVersion } = useEntityDraft<BrandCMSModel>(
+  const {
+    saveDraft: persistDraft,
+    versions,
+    saveVersion,
+    error: draftError,
+    isSaving: isDraftSaving,
+    isLoading: isDraftLoading,
+  } = useEntityDraft<BrandCMSModel>(
     "brand",
     activeId,
     { draftKey, versionsKey },
     (backendDraft) => setModel(backendDraft),
   );
+
+  const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  useEffect(() => {
+    if (isDraftSaving) {
+      setSyncStatus("saving");
+    } else if (draftError) {
+      setSyncStatus("error");
+      triggerToast(`⚠ Save failed: ${draftError}`);
+    } else if (syncStatus === "saving") {
+      setSyncStatus("saved");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDraftSaving, draftError]);
 
   // Load state on mount
   useEffect(() => {
@@ -440,78 +461,85 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     if (!model) return;
     persistDraft(model);
     setHasUnsavedChanges(false);
+    setSyncStatus("saving");
     saveVersion(`Draft Saved: ${model.brandName}`, model);
-
-    triggerToast("✓ Draft Saved!");
+    triggerToast("Saving draft…");
   };
 
-  const handlePublishChanges = () => {
+  const handlePublishChanges = async () => {
     if (!model) return;
     setIsPublishing(true);
     setShowPublishModal(false);
 
-    setTimeout(() => {
-      const pubKey = `choosify_brand_published_${activeId}`;
-      localStorage.setItem(pubKey, JSON.stringify(model));
-      persistDraft(model);
-      setHasUnsavedChanges(false);
+    let publishSucceeded = false;
+    try {
+      await catalogApi.updateBrand(activeId, {
+        name: model.brandName,
+        category: model.category,
+        description: model.description,
+        logo: model.logo,
+        faq: model.faq,
+        stores: model.stores,
+        promoCodes: model.promoCodes,
+      });
+      publishSucceeded = true;
+    } catch (err) {
+      console.warn('[BrandEditStudio] Catalog brand sync failed', err);
+    }
 
-      catalogApi
-        .updateBrand(activeId, {
+    const pubKey = `choosify_brand_published_${activeId}`;
+    localStorage.setItem(pubKey, JSON.stringify(model));
+    persistDraft(model);
+    setHasUnsavedChanges(false);
+
+    // Write updates into standard dashboard brands registry
+    const cachedList = localStorage.getItem(COMPILATION_KEY);
+    if (cachedList) {
+      try {
+        const list = JSON.parse(cachedList);
+        const updatedList = list.map((item: any) => {
+          if (item.id === activeId) {
+            return {
+              ...item,
+              brandName: model.brandName,
+              category: model.category,
+              status: "Live" as const,
+              lastUpdated: "Just Now",
+              trustScore: model.choosifyScore
+            };
+          }
+          return item;
+        });
+        localStorage.setItem(COMPILATION_KEY, JSON.stringify(updatedList));
+      } catch (_) {}
+    }
+
+    // Also update BrandProfilesContext so the brands list reflects this edit
+    try {
+      const { updateProfile } = brandProfilesRef.current || {};
+      if (updateProfile && activeId) {
+        updateProfile(activeId, {
           name: model.brandName,
           category: model.category,
-          description: model.description,
-          logo: model.logoUrl,
-          faq: model.faq,
-          stores: model.stores,
-        })
-        .catch((err) => console.warn('[BrandEditStudio] Catalog brand sync failed', err));
-
-      // Write updates into standard dashboard brands registry
-      const cachedList = localStorage.getItem(COMPILATION_KEY);
-      if (cachedList) {
-        try {
-          const list = JSON.parse(cachedList);
-          const updatedList = list.map((item: any) => {
-            if (item.id === activeId) {
-              return {
-                ...item,
-                brandName: model.brandName,
-                category: model.category,
-                status: "Live" as const,
-                lastUpdated: "Just Now",
-                trustScore: model.choosifyScore
-              };
-            }
-            return item;
-          });
-          localStorage.setItem(COMPILATION_KEY, JSON.stringify(updatedList));
-        } catch (_) {}
+          logo: model.logo,
+          coverImage: model.coverImage,
+          websiteUrl: model.website,
+          facebookUrl: model.socialFbUrl,
+          instagramUrl: model.socialInstaUrl,
+          youtubeUrl: model.socialYtUrl,
+          description: model.tagline,
+        });
       }
+    } catch (err) {
+      // Context update is best-effort; localStorage is the source of truth for now
+    }
 
-      // Also update BrandProfilesContext so the brands list reflects this edit
-      try {
-        const { updateProfile } = brandProfilesRef.current || {};
-        if (updateProfile && activeId) {
-          updateProfile(activeId, {
-            name: model.brandName,
-            category: model.category,
-            logo: model.logo,
-            coverImage: model.coverImage,
-            websiteUrl: model.website,
-            facebookUrl: model.socialFbUrl,
-            instagramUrl: model.socialInstaUrl,
-            youtubeUrl: model.socialYtUrl,
-            description: model.tagline,
-          });
-        }
-      } catch (err) {
-        // Context update is best-effort; localStorage is the source of truth for now
-      }
-
-      setIsPublishing(false);
-      triggerToast("🚀 Brand Profile Published Live in Bangladesh!");
-    }, 1200);
+    setIsPublishing(false);
+    triggerToast(
+      publishSucceeded
+        ? "🚀 Brand Profile Published Live in Bangladesh!"
+        : "⚠ Publish failed to sync to catalog — draft saved locally, please retry.",
+    );
   };
 
   const restoreVersion = (snapshot: Record<string, unknown>) => {
@@ -650,7 +678,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     return filtered;
   }, [model, creatorFilter]);
 
-  if (!model) {
+  if (!model || isDraftLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-[500px] gap-3 text-slate-500">
         <RotateCw className="w-10 h-10 animate-spin text-[#FF5B00]" />
@@ -686,6 +714,22 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
           {hasUnsavedChanges && (
             <span className="flex items-center gap-1 text-[#FF5B00] text-[10px] font-mono font-bold animate-pulse">
               ● UNSAVED DRAFT CHANGES
+            </span>
+          )}
+
+          {syncStatus === "saving" && (
+            <span className="flex items-center gap-1 text-blue-600 text-[10px] font-mono font-bold animate-pulse">
+              ● Saving…
+            </span>
+          )}
+          {syncStatus === "saved" && (
+            <span className="flex items-center gap-1 text-emerald-600 text-[10px] font-mono font-bold">
+              ✓ Synced to server
+            </span>
+          )}
+          {syncStatus === "error" && (
+            <span className="flex items-center gap-1 text-red-600 text-[10px] font-mono font-bold" title={draftError || undefined}>
+              ⚠ Save failed — retry
             </span>
           )}
 

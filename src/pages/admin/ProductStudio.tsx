@@ -781,12 +781,33 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   type ProductDraftSnapshot = ReturnType<typeof buildDraftSnapshot>;
 
   const versionsKey = `choosify_product_versions_${activeId}`;
-  const { saveDraft: persistDraft, versions, saveVersion } = useEntityDraft<ProductDraftSnapshot>(
+  const {
+    saveDraft: persistDraft,
+    versions,
+    saveVersion,
+    error: draftError,
+    isSaving: isDraftSaving,
+    isLoading: isDraftLoading,
+  } = useEntityDraft<ProductDraftSnapshot>(
     "product",
     activeId,
     { draftKey, versionsKey },
     (backendDraft) => applyDraftSnapshot(backendDraft),
   );
+
+  const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  useEffect(() => {
+    if (isDraftSaving) {
+      setSyncStatus("saving");
+    } else if (draftError) {
+      setSyncStatus("error");
+      triggerToast(`⚠ Save failed: ${draftError}`);
+    } else {
+      setSyncStatus((prev) => (prev === "saving" ? "saved" : prev));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDraftSaving, draftError]);
 
   function applyDraftSnapshot(data: Partial<ProductDraftSnapshot>) {
     if (data.brandName !== undefined) setBrandName(data.brandName);
@@ -1080,6 +1101,32 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
         optionGroups: optionGroups || [],
         productVariants: productVariants || [],
         creatorContent: creatorContent || [],
+        // Section on/off toggles — previously only written into the localStorage-only
+        // `liveData` object below and never sent to the backend at all.
+        enableSpecs,
+        enableStoreComparison,
+        enableInfluencerReviews,
+        enableOverviewSection,
+        enableBestForTags,
+        enablePhysicalStores,
+        enableBoxContents,
+        enableOptions,
+        enableActiveVariantSpecs,
+        enableAdditionalSpecs,
+        enablePublicReviews,
+        enableAddonItems,
+        boxContents: boxContents || [],
+        additionalSpecs: additionalSpecs || [],
+        publicReviews: publicReviews || [],
+        addonItems: addonItems || [],
+        sizeGuide: {
+          enabled: enableSizeChart,
+          type: sizeChartType,
+          imageUrl: sizeChartType === 'image' ? sizeChartImage : undefined,
+          htmlContent: sizeChartType === 'html' ? sizeChartHtml : undefined,
+          columnHeaders: sizeChartColumns,
+          rows: sizeChartRows,
+        },
       });
 
       const liveData = {
@@ -1164,9 +1211,17 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   };
 
   // Helper calculation for discount
-  const savingsPercent = actualPrice > discountedPrice 
-    ? Math.round(((actualPrice - discountedPrice) / actualPrice) * 100) 
+  const savingsPercent = actualPrice > discountedPrice
+    ? Math.round(((actualPrice - discountedPrice) / actualPrice) * 100)
     : 0;
+
+  if (isDraftLoading && !isNewProduct) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-xs font-mono text-slate-400 uppercase tracking-widest">
+        Loading product studio…
+      </div>
+    );
+  }
 
   return (
     <div id="product-workspace-root" className="bg-[#F5F5F5] min-h-screen pb-24 text-[#1A1A2E] font-sans relative">
@@ -1243,12 +1298,27 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                 </button>
               )
             )}
+            {syncStatus === "saving" && (
+              <span className="flex items-center gap-1 text-blue-600 text-[10px] font-mono font-bold animate-pulse">
+                ● Saving…
+              </span>
+            )}
+            {syncStatus === "saved" && (
+              <span className="flex items-center gap-1 text-emerald-600 text-[10px] font-mono font-bold">
+                ✓ Synced to server
+              </span>
+            )}
+            {syncStatus === "error" && (
+              <span className="flex items-center gap-1 text-red-600 text-[10px] font-mono font-bold" title={draftError || undefined}>
+                ⚠ Save failed — retry
+              </span>
+            )}
             {!isNewProduct && (
               <button
                 type="button"
-                onClick={() => {
-                  saveVersion(`Draft Saved: ${productName || "Untitled Product"}`, buildDraftSnapshot());
-                  triggerToast(`✓ Snapshot saved (${versions.length + 1} total)`);
+                onClick={async () => {
+                  const saved = await saveVersion(`Draft Saved: ${productName || "Untitled Product"}`, buildDraftSnapshot());
+                  triggerToast(saved ? `✓ Snapshot saved (${versions.length + 1} total)` : "⚠ Failed to save snapshot — check connection and retry.");
                 }}
                 className="px-3 py-2.5 bg-white border border-[#E5E7EB] hover:bg-[#FAFAFA] text-slate-700 font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-sm"
               >
@@ -1259,7 +1329,8 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
               type="button"
               onClick={() => {
                 serializeState();
-                triggerToast(isNewProduct ? "✓ Save Draft successfully!" : "✓ Save Changes successfully!");
+                setSyncStatus("saving");
+                triggerToast(isNewProduct ? "Saving draft…" : "Saving changes…");
               }}
               id="draft-cache-btn"
               className="px-5 py-2.5 bg-white border border-[#E5E7EB] hover:bg-[#FAFAFA] text-slate-700 font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all hover:scale-102 active:scale-98 cursor-pointer shadow-sm"
