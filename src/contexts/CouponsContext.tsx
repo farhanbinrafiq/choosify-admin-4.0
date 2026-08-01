@@ -482,8 +482,13 @@ export const CouponsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     setCoupons(prev => [newCoupon, ...prev]);
-    operationsApi.upsertCoupon(newCoupon).catch(() => {});
-    toast.success(`Coupon code ${codeUpper} created successfully!`);
+    operationsApi.upsertCoupon(newCoupon).then(
+      () => toast.success(`Coupon code ${codeUpper} created successfully!`),
+      (err: unknown) => {
+        console.error('[Coupons] upsertCoupon failed:', err);
+        toast.error(`Failed to save coupon: ${err instanceof Error ? err.message : String(err)}`);
+      },
+    );
   };
 
   const updateCoupon = (id: string, updates: Partial<Coupon>) => {
@@ -497,7 +502,10 @@ export const CouponsProvider: React.FC<{ children: React.ReactNode }> = ({ child
           ...updates,
           updatedAt: new Date().toISOString()
         };
-        operationsApi.upsertCoupon(next).catch(() => {});
+        operationsApi.upsertCoupon(next).catch((err: unknown) => {
+          console.error('[Coupons] upsertCoupon failed:', err);
+          toast.error(`Failed to update coupon: ${err instanceof Error ? err.message : String(err)}`);
+        });
         return next;
       }
       return c;
@@ -516,7 +524,10 @@ export const CouponsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       return c;
     }));
-    operationsApi.deleteCoupon(id).catch(() => {});
+    operationsApi.deleteCoupon(id).catch((err: unknown) => {
+      console.error('[Coupons] deleteCoupon failed:', err);
+      toast.error(`Failed to delete coupon: ${err instanceof Error ? err.message : String(err)}`);
+    });
 
     toast.success(
       <div className="flex items-center gap-2">

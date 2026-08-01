@@ -20,6 +20,7 @@ import type {
 } from './operations/types';
 import { validate } from './middleware/validate';
 import { authenticateRequest } from './middleware/auth';
+import { requireRole } from './middleware/authorization';
 import { hasRole } from './permissions/authorization';
 import { ROLES } from './permissions/roles';
 import { CouponValidateBodySchema } from './validation/operations/couponValidateSchema';
@@ -31,6 +32,26 @@ import {
 export const operationsRouter = Router();
 
 const requireAuth = [authenticateRequest];
+/** Admin or super_admin (via ROLE_INHERITANCE). */
+const requireAdmin = [authenticateRequest, requireRole(ROLES.ADMIN)];
+
+/**
+ * Coupons UI (`/admin/coupons`, content gate) is available to admin and seller
+ * (and marketing_manager). Coupons are platform-wide today — not seller-scoped —
+ * so sellers who can open the page may CRUD them. Validate stays public for checkout.
+ */
+function userCanManageCoupons(req: {
+  userRole?: (typeof ROLES)[keyof typeof ROLES];
+}): boolean {
+  const role = req.userRole;
+  if (!role) return false;
+  return (
+    hasRole(role, ROLES.ADMIN) ||
+    hasRole(role, ROLES.SELLER) ||
+    hasRole(role, ROLES.VERIFIED_SELLER) ||
+    hasRole(role, ROLES.MARKETING_MANAGER)
+  );
+}
 
 /**
  * PATCH /operations/orders/:id field whitelist.
@@ -83,6 +104,136 @@ function userCanMutateOrder(
     return subs.some((sub) => sub.sellerId === userId);
   }
 
+  return false;
+}
+
+/** Cancel is buyer-only — authenticated uid must own the order (ignore body buyerId spoofing). */
+function userIsOrderBuyer(
+  req: { userId?: string },
+  order: OpsStorefrontOrder,
+): boolean {
+  return Boolean(req.userId && order.buyerId === req.userId);
+}
+
+function userIsStaff(req: { userRole?: (typeof ROLES)[keyof typeof ROLES] }): boolean {
+  const role = req.userRole;
+  if (!role) return false;
+  return (
+    hasRole(role, ROLES.SUPER_ADMIN) ||
+    hasRole(role, ROLES.ADMIN) ||
+    hasRole(role, ROLES.SUPPORT_AGENT) ||
+    hasRole(role, ROLES.MODERATOR) ||
+    hasRole(role, ROLES.FINANCE_MANAGER)
+  );
+}
+
+function userIsReturnSeller(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  row: OpsReturnRequest,
+): boolean {
+  if (!req.userId || row.sellerId !== req.userId) return false;
+  const role = req.userRole;
+  return Boolean(role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER)));
+}
+
+/** Approve / reject / refund / status / label / dispute — seller on the return or staff. */
+function userCanManageReturnAsSellerOrAdmin(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  row: OpsReturnRequest,
+): boolean {
+  if (userIsStaff(req)) return true;
+  return userIsReturnSeller(req, row);
+}
+
+/** Notes: Returns.tsx (admin) can add notes; MyReturnsSection has no note UI.
+ * Allow seller-or-admin only — not buyers.
+ */
+function userCanAddReturnNote(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  row: OpsReturnRequest,
+): boolean {
+  return userCanManageReturnAsSellerOrAdmin(req, row);
+}
+
+/** Shipment updates: staff or seller on the order — never the buyer. */
+function userCanUpdateShipment(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  shipmentOrderId: string,
+): boolean {
+  if (userIsStaff(req)) return true;
+  const role = req.userRole;
+  if (!(role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER)))) {
+    return false;
+  }
+  if (!req.userId) return false;
+  const order = operationsStore.getOrder(shipmentOrderId);
+  if (!order) return false;
+  const subs = (order.subOrders || []) as Array<{ sellerId?: string }>;
+  return subs.some((sub) => sub.sellerId === req.userId);
+}
+
+/**
+ * Buyer may review a product only after a delivered/completed purchase of that product.
+ * Mirrors storefront ProductDetailPage `reviewableOrders` (delivered sub-order item).
+ */
+function userHasPurchasedProductForReview(userId: string, productId: string): boolean {
+  if (!userId || !productId || productId === 'unknown') return false;
+  return operationsStore.listOrders().some((order) => {
+    if (order.buyerId !== userId) return false;
+    if (order.status === 'cancelled') return false;
+    const subs = (order.subOrders || []) as Array<{
+      trackingStatus?: string;
+      items?: Array<{ productId?: string }>;
+    }>;
+    const deliveredItem = subs.some(
+      (sub) =>
+        (sub.trackingStatus === 'delivered' || order.status === 'completed') &&
+        (sub.items || []).some((item) => String(item.productId) === String(productId)),
+    );
+    if (deliveredItem) return true;
+    // Flat item lists on some order shapes
+    const flatItems = (order as { items?: Array<{ productId?: string }> }).items || [];
+    return (
+      order.status === 'completed' &&
+      flatItems.some((item) => String(item.productId) === String(productId))
+    );
+  });
+}
+
+function userCanModerateOrEditReview(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  review: OpsReview,
+): boolean {
+  if (userIsStaff(req)) return true;
+  const role = req.userRole;
+  if (role && hasRole(role, ROLES.MODERATOR)) return true;
+  return Boolean(req.userId && review.userId === req.userId);
+}
+
+/** List returns: buyer may only query own buyerId; seller/admin may query by sellerId or list broadly if staff. */
+function userCanListReturns(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  filter: { buyerId?: string; sellerId?: string },
+): boolean {
+  if (userIsStaff(req)) return true;
+  const userId = req.userId;
+  if (!userId) return false;
+
+  if (filter.buyerId) {
+    if (filter.buyerId !== userId) return false;
+    // Buyer listing own returns — ok even without seller role
+    return true;
+  }
+
+  if (filter.sellerId) {
+    const role = req.userRole;
+    if (!(role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER)))) {
+      return false;
+    }
+    return filter.sellerId === userId;
+  }
+
+  // Unfiltered list — sellers see only their own (enforced by forcing sellerId); staff already returned
   return false;
 }
 
@@ -323,13 +474,8 @@ operationsRouter.patch('/operations/orders/:id', ...requireAuth, (req, res) => {
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.post('/operations/orders/:id/cancel', (req, res) => {
-  const buyerId = String(req.body?.buyerId || '').trim();
+operationsRouter.post('/operations/orders/:id/cancel', ...requireAuth, (req, res) => {
   const reason = String(req.body?.reason || req.body?.cancelReason || '').trim();
-  if (!buyerId) {
-    res.status(400).json({ error: 'buyerId is required' });
-    return;
-  }
   if (!reason) {
     res.status(400).json({ error: 'reason is required' });
     return;
@@ -340,8 +486,14 @@ operationsRouter.post('/operations/orders/:id/cancel', (req, res) => {
     res.status(404).json({ error: 'Order not found' });
     return;
   }
-  if (existing.buyerId !== buyerId) {
+  // Buyer-only: authenticated uid must own the order (body buyerId is not trusted).
+  if (!userIsOrderBuyer(req, existing)) {
     res.status(403).json({ error: 'Only the order buyer can cancel this order' });
+    return;
+  }
+  const bodyBuyerId = String(req.body?.buyerId || '').trim();
+  if (bodyBuyerId && bodyBuyerId !== req.userId) {
+    res.status(403).json({ error: 'buyerId does not match authenticated user' });
     return;
   }
   if (existing.status === 'cancelled') {
@@ -390,24 +542,50 @@ operationsRouter.post('/operations/orders/:id/cancel', (req, res) => {
 
 // ─── Returns ─────────────────────────────────────────────────────────────────
 
-operationsRouter.get('/operations/returns', (req, res) => {
-  const buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
-  const sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
+operationsRouter.get('/operations/returns', ...requireAuth, (req, res) => {
+  let buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
+  let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
   const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+
+  if (!userCanListReturns(req, { buyerId, sellerId })) {
+    // Sellers with no filter → scope to their own sellerId
+    if (
+      !buyerId &&
+      !sellerId &&
+      req.userId &&
+      req.userRole &&
+      (hasRole(req.userRole, ROLES.SELLER) || hasRole(req.userRole, ROLES.VERIFIED_SELLER))
+    ) {
+      sellerId = req.userId;
+    } else if (!buyerId && !sellerId && req.userId && !userIsStaff(req)) {
+      // Default buyers to their own list
+      buyerId = req.userId;
+    }
+    if (!userCanListReturns(req, { buyerId, sellerId })) {
+      res.status(403).json({ error: 'Not authorized to list these returns' });
+      return;
+    }
+  }
+
   const rows = operationsStore.listReturns({ buyerId, sellerId, status });
   res.json({ data: rows });
 });
 
-operationsRouter.get('/operations/returns/:id', (req, res) => {
+operationsRouter.get('/operations/returns/:id', ...requireAuth, (req, res) => {
   const row = operationsStore.getReturn(req.params.id);
   if (!row) {
     res.status(404).json({ error: 'Return not found' });
     return;
   }
+  const isBuyer = Boolean(req.userId && row.buyerId === req.userId);
+  if (!isBuyer && !userCanManageReturnAsSellerOrAdmin(req, row)) {
+    res.status(403).json({ error: 'Not authorized to view this return' });
+    return;
+  }
   res.json({ data: row });
 });
 
-operationsRouter.post('/operations/returns', (req, res) => {
+operationsRouter.post('/operations/returns', ...requireAuth, (req, res) => {
   const body = req.body as Partial<OpsReturnRequest>;
   const orderId = String(body.orderId || '').trim();
   const buyerId = String(body.buyerId || '').trim();
@@ -419,6 +597,10 @@ operationsRouter.post('/operations/returns', (req, res) => {
     res.status(400).json({
       error: 'orderId, buyerId, sellerId, reason, and description are required',
     });
+    return;
+  }
+  if (!req.userId || buyerId !== req.userId) {
+    res.status(403).json({ error: 'buyerId must match the authenticated user' });
     return;
   }
 
@@ -450,10 +632,14 @@ operationsRouter.post('/operations/returns', (req, res) => {
   res.status(201).json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/returns/:id/approve', (req, res) => {
+operationsRouter.patch('/operations/returns/:id/approve', ...requireAuth, (req, res) => {
   const existing = operationsStore.getReturn(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to approve this return' });
     return;
   }
   const refundAmount = Number(req.body?.refundAmount);
@@ -465,7 +651,7 @@ operationsRouter.patch('/operations/returns/:id/approve', (req, res) => {
   const approvedBy =
     typeof req.body?.approvedBy === 'string' && req.body.approvedBy.trim()
       ? req.body.approvedBy.trim()
-      : 'Admin Main';
+      : req.user?.displayName || req.userId || 'Admin Main';
 
   const adminNotes = [...existing.notes];
   if (note) adminNotes.push(note);
@@ -483,10 +669,14 @@ operationsRouter.patch('/operations/returns/:id/approve', (req, res) => {
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/returns/:id/reject', (req, res) => {
+operationsRouter.patch('/operations/returns/:id/reject', ...requireAuth, (req, res) => {
   const existing = operationsStore.getReturn(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to reject this return' });
     return;
   }
   const reason = String(req.body?.reason || '').trim();
@@ -497,7 +687,7 @@ operationsRouter.patch('/operations/returns/:id/reject', (req, res) => {
   const approvedBy =
     typeof req.body?.approvedBy === 'string' && req.body.approvedBy.trim()
       ? req.body.approvedBy.trim()
-      : 'Admin Main';
+      : req.user?.displayName || req.userId || 'Admin Main';
 
   const adminNotes = [...existing.notes];
   adminNotes.push(`Return rejected. Reason: "${reason}"`);
@@ -514,10 +704,14 @@ operationsRouter.patch('/operations/returns/:id/reject', (req, res) => {
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/returns/:id/refund', (req, res) => {
+operationsRouter.patch('/operations/returns/:id/refund', ...requireAuth, (req, res) => {
   const existing = operationsStore.getReturn(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to process this refund' });
     return;
   }
   const adminNotes = [...existing.notes];
@@ -532,10 +726,14 @@ operationsRouter.patch('/operations/returns/:id/refund', (req, res) => {
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/returns/:id/status', (req, res) => {
+operationsRouter.patch('/operations/returns/:id/status', ...requireAuth, (req, res) => {
   const existing = operationsStore.getReturn(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to update this return status' });
     return;
   }
   const status = String(req.body?.status || '').trim() as OpsReturnStatus;
@@ -564,10 +762,15 @@ operationsRouter.patch('/operations/returns/:id/status', (req, res) => {
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/returns/:id/note', (req, res) => {
+operationsRouter.patch('/operations/returns/:id/note', ...requireAuth, (req, res) => {
   const existing = operationsStore.getReturn(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  // Returns.tsx (admin) adds notes; MyReturnsSection has no note UI → seller/admin only.
+  if (!userCanAddReturnNote(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to add a note on this return' });
     return;
   }
   const note = String(req.body?.note || '').trim();
@@ -583,10 +786,14 @@ operationsRouter.patch('/operations/returns/:id/note', (req, res) => {
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.post('/operations/returns/:id/label', (req, res) => {
+operationsRouter.post('/operations/returns/:id/label', ...requireAuth, (req, res) => {
   const existing = operationsStore.getReturn(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to generate a return label' });
     return;
   }
 
@@ -609,10 +816,14 @@ operationsRouter.post('/operations/returns/:id/label', (req, res) => {
   });
 });
 
-operationsRouter.patch('/operations/returns/:id/dispute', (req, res) => {
+operationsRouter.patch('/operations/returns/:id/dispute', ...requireAuth, (req, res) => {
   const existing = operationsStore.getReturn(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Return not found' });
+    return;
+  }
+  if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to escalate this return' });
     return;
   }
   const disputeId = String(req.body?.disputeId || '').trim();
@@ -637,7 +848,11 @@ operationsRouter.get('/operations/coupons', (_req, res) => {
   res.json({ data: operationsStore.listCoupons() });
 });
 
-operationsRouter.post('/operations/coupons', (req, res) => {
+operationsRouter.post('/operations/coupons', ...requireAuth, (req, res) => {
+  if (!userCanManageCoupons(req)) {
+    res.status(403).json({ error: 'Not authorized to create coupons' });
+    return;
+  }
   const body = req.body as Partial<OpsCoupon>;
   if (!body.code?.trim()) {
     res.status(400).json({ error: 'Coupon code is required' });
@@ -665,25 +880,36 @@ operationsRouter.post('/operations/coupons', (req, res) => {
     createdAt: body.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
+  scheduleOperationsPersist();
   res.status(201).json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/coupons/:id', (req, res) => {
+operationsRouter.patch('/operations/coupons/:id', ...requireAuth, (req, res) => {
+  if (!userCanManageCoupons(req)) {
+    res.status(403).json({ error: 'Not authorized to update coupons' });
+    return;
+  }
   const existing = operationsStore.getCoupon(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Coupon not found' });
     return;
   }
   const saved = operationsStore.upsertCoupon({ ...existing, ...req.body, id: existing.id });
+  scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.delete('/operations/coupons/:id', (req, res) => {
+operationsRouter.delete('/operations/coupons/:id', ...requireAuth, (req, res) => {
+  if (!userCanManageCoupons(req)) {
+    res.status(403).json({ error: 'Not authorized to delete coupons' });
+    return;
+  }
   const ok = operationsStore.deleteCoupon(req.params.id);
   if (!ok) {
     res.status(404).json({ error: 'Coupon not found' });
     return;
   }
+  scheduleOperationsPersist();
   res.json({ success: true });
 });
 
@@ -691,7 +917,7 @@ operationsRouter.get('/operations/fee-charges', (_req, res) => {
   res.json({ data: operationsStore.listFeeCharges() });
 });
 
-operationsRouter.post('/operations/fee-charges', (req, res) => {
+operationsRouter.post('/operations/fee-charges', ...requireAdmin, (req, res) => {
   const body = req.body as Partial<OpsFeeCharge>;
   if (!body.name?.trim()) {
     res.status(400).json({ error: 'Fee/charge name is required' });
@@ -712,25 +938,28 @@ operationsRouter.post('/operations/fee-charges', (req, res) => {
     createdAt: body.createdAt || new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
+  scheduleOperationsPersist();
   res.status(201).json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/fee-charges/:id', (req, res) => {
+operationsRouter.patch('/operations/fee-charges/:id', ...requireAdmin, (req, res) => {
   const existing = operationsStore.getFeeCharge(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Fee/charge rule not found' });
     return;
   }
   const saved = operationsStore.upsertFeeCharge({ ...existing, ...req.body, id: existing.id });
+  scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.delete('/operations/fee-charges/:id', (req, res) => {
+operationsRouter.delete('/operations/fee-charges/:id', ...requireAdmin, (req, res) => {
   const ok = operationsStore.deleteFeeCharge(req.params.id);
   if (!ok) {
     res.status(404).json({ error: 'Fee/charge rule not found' });
     return;
   }
+  scheduleOperationsPersist();
   res.json({ success: true });
 });
 
@@ -738,7 +967,8 @@ operationsRouter.get('/operations/payment-options', (_req, res) => {
   res.json({ data: operationsStore.getPaymentOptionsConfig() });
 });
 
-operationsRouter.put('/operations/payment-options', (req, res) => {
+/** Platform-wide partial-payment config (not per-seller). */
+operationsRouter.put('/operations/payment-options', ...requireAdmin, (req, res) => {
   const body = req.body as Partial<{ partialPaymentEnabled: boolean; minDepositPercent: number; maxDepositPercent: number }>;
   if (
     body.minDepositPercent !== undefined &&
@@ -753,6 +983,7 @@ operationsRouter.put('/operations/payment-options', (req, res) => {
     ...(body.minDepositPercent !== undefined && { minDepositPercent: Number(body.minDepositPercent) }),
     ...(body.maxDepositPercent !== undefined && { maxDepositPercent: Number(body.maxDepositPercent) }),
   });
+  scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
 
@@ -801,44 +1032,79 @@ operationsRouter.get('/operations/reviews/public', (req, res) => {
   res.json({ data: reviews });
 });
 
-operationsRouter.post('/operations/reviews', (req, res) => {
+operationsRouter.post('/operations/reviews', ...requireAuth, (req, res) => {
   const body = req.body as Partial<OpsReview>;
   if (!body.productTitle?.trim() || !body.comment?.trim() || !body.rating) {
     res.status(400).json({ error: 'productTitle, rating, and comment are required' });
     return;
   }
+  const productId = body.productId || 'unknown';
+  // Always bind reviewer to authenticated uid — never trust body.userId.
+  const userId = req.userId!;
+  if (!userHasPurchasedProductForReview(userId, productId)) {
+    res.status(403).json({
+      error: 'A completed/delivered purchase of this product is required to leave a review',
+    });
+    return;
+  }
   const saved = operationsStore.createReview({
-    userId: body.userId || 'guest',
+    userId,
     userName: body.userName || 'Anonymous',
-    productId: body.productId || 'unknown',
+    productId,
     productTitle: body.productTitle,
     brandName: body.brandName || '',
     storeName: body.storeName || '',
     rating: Math.min(5, Math.max(1, Number(body.rating))),
     comment: body.comment.trim(),
   });
+  scheduleOperationsPersist();
   res.status(201).json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/reviews/:id', (req, res) => {
+operationsRouter.patch('/operations/reviews/:id', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getReview(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Review not found' });
+    return;
+  }
+  if (!userCanModerateOrEditReview(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to update this review' });
+    return;
+  }
   const patch = { ...req.body } as Partial<OpsReview>;
-  if (patch.status) {
+  // Authors may edit content; only staff/moderator may change moderation status.
+  if (patch.status && !userIsStaff(req) && !(req.userRole && hasRole(req.userRole, ROLES.MODERATOR))) {
+    delete patch.status;
+  } else if (patch.status) {
     patch.status = normalizeReviewStatus(String(patch.status));
   }
+  // Prevent authorship takeover via patch.
+  delete patch.userId;
   const saved = operationsStore.updateReview(req.params.id, patch);
   if (!saved) {
     res.status(404).json({ error: 'Review not found' });
     return;
   }
+  scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.delete('/operations/reviews/:id', (req, res) => {
+operationsRouter.delete('/operations/reviews/:id', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getReview(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Review not found' });
+    return;
+  }
+  if (!userCanModerateOrEditReview(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to delete this review' });
+    return;
+  }
   const ok = operationsStore.deleteReview(req.params.id);
   if (!ok) {
     res.status(404).json({ error: 'Review not found' });
     return;
   }
+  scheduleOperationsPersist();
   res.json({ success: true });
 });
 
@@ -898,7 +1164,7 @@ operationsRouter.get('/operations/jobs', (_req, res) => {
   res.json({ data: operationsStore.listJobPostings() });
 });
 
-operationsRouter.post('/operations/jobs', (req, res) => {
+operationsRouter.post('/operations/jobs', ...requireAdmin, (req, res) => {
   const body = req.body as {
     title?: string;
     department?: string;
@@ -933,33 +1199,37 @@ operationsRouter.post('/operations/jobs', (req, res) => {
     status,
     slug: body.slug?.trim(),
   });
+  scheduleOperationsPersist();
   res.status(201).json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/jobs/:id', (req, res) => {
+operationsRouter.patch('/operations/jobs/:id', ...requireAdmin, (req, res) => {
   const saved = operationsStore.updateJobPosting(req.params.id, req.body);
   if (!saved) {
     res.status(404).json({ error: 'Job posting not found' });
     return;
   }
+  scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.delete('/operations/jobs/:id', (req, res) => {
+operationsRouter.delete('/operations/jobs/:id', ...requireAdmin, (req, res) => {
   const ok = operationsStore.deleteJobPosting(req.params.id);
   if (!ok) {
     res.status(404).json({ error: 'Job posting not found' });
     return;
   }
+  scheduleOperationsPersist();
   res.json({ success: true });
 });
 
-operationsRouter.get('/operations/job-applications', (req, res) => {
+/** Applicant PII — hiring admin only. */
+operationsRouter.get('/operations/job-applications', ...requireAdmin, (req, res) => {
   const jobId = typeof req.query.jobId === 'string' ? req.query.jobId : undefined;
   res.json({ data: operationsStore.listJobApplications(jobId) });
 });
 
-operationsRouter.post('/operations/job-applications', (req, res) => {
+operationsRouter.post('/operations/job-applications', ...requireAuth, (req, res) => {
   const body = req.body as {
     jobId?: string;
     name?: string;
@@ -988,19 +1258,21 @@ operationsRouter.post('/operations/job-applications', (req, res) => {
     resumeFileName: body.resumeFileName?.trim(),
     coverLetter: (body.coverLetter || '').trim(),
   });
+  scheduleOperationsPersist();
   res.status(201).json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/job-applications/:id', (req, res) => {
+operationsRouter.patch('/operations/job-applications/:id', ...requireAdmin, (req, res) => {
   const saved = operationsStore.updateJobApplication(req.params.id, req.body);
   if (!saved) {
     res.status(404).json({ error: 'Application not found' });
     return;
   }
+  scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.post('/operations/media/upload-resume', async (req, res) => {
+operationsRouter.post('/operations/media/upload-resume', ...requireAuth, async (req, res) => {
   try {
     const { validateDocumentUploadInput } = await import('./lib/uploadValidation');
     const { uploadDocumentToCloudinary } = await import('../lib/vercel-catalog/mediaUpload');
@@ -1031,13 +1303,20 @@ operationsRouter.get('/operations/permissions', (_req, res) => {
   res.json({ permissions: operationsStore.getPermissions(), defaults: DEFAULT_ROLE_PERMISSIONS });
 });
 
-operationsRouter.put('/operations/permissions', (req, res) => {
+/**
+ * Updates the admin UI RBAC matrix (PermissionKey gates: content/users/finance/
+ * brand/system/analytics per role). Does NOT assign Firebase user roles — that
+ * lives in admin user profiles. Only admin/super_admin may write; callers cannot
+ * elevate themselves by rewriting this matrix without already being admin.
+ */
+operationsRouter.put('/operations/permissions', ...requireAdmin, (req, res) => {
   const permissions = req.body?.permissions;
   if (!permissions || typeof permissions !== 'object') {
     res.status(400).json({ error: 'permissions object is required' });
     return;
   }
   const saved = operationsStore.updatePermissions(permissions);
+  scheduleOperationsPersist();
   res.json({ success: true, permissions: saved });
 });
 
@@ -1102,7 +1381,16 @@ operationsRouter.get('/operations/shipments/:id', (req, res) => {
   res.json({ data: shipment });
 });
 
-operationsRouter.patch('/operations/shipments/:id', (req, res) => {
+operationsRouter.patch('/operations/shipments/:id', ...requireAuth, (req, res) => {
+  const existing = shipmentStore.getShipment(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Shipment not found' });
+    return;
+  }
+  if (!userCanUpdateShipment(req, existing.orderId)) {
+    res.status(403).json({ error: 'Not authorized to update this shipment' });
+    return;
+  }
   const saved = shipmentStore.updateShipment(req.params.id, req.body);
   if (!saved) {
     res.status(404).json({ error: 'Shipment not found' });
@@ -1231,13 +1519,14 @@ operationsRouter.get('/operations/feature-flags', (_req, res) => {
   res.json({ flags: operationsStore.getFeatureFlags() });
 });
 
-operationsRouter.put('/operations/feature-flags', (req, res) => {
+operationsRouter.put('/operations/feature-flags', ...requireAdmin, (req, res) => {
   const flags = req.body?.flags as Record<string, boolean> | undefined;
   if (!flags || typeof flags !== 'object') {
     res.status(400).json({ error: 'flags object is required' });
     return;
   }
   const saved = operationsStore.updateFeatureFlags(flags);
+  scheduleOperationsPersist();
   res.json({ success: true, flags: saved });
 });
 

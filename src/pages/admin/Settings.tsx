@@ -97,8 +97,13 @@ export default function SettingsPage() {
     const newVal = !maintenance;
     setMaintenance(newVal);
     localStorage.setItem('choosify_settings_maintenance', String(newVal));
-    operationsApi.updateFeatureFlags({ maintenance_mode: newVal }).catch(() => {});
-    showToast(`⚠️ Maintenance Mode set to: ${newVal ? 'ACTIVE (Offline)' : 'INACTIVE (Live)'}`);
+    operationsApi.updateFeatureFlags({ maintenance_mode: newVal }).then(
+      () => showToast(`⚠️ Maintenance Mode set to: ${newVal ? 'ACTIVE (Offline)' : 'INACTIVE (Live)'}`),
+      (err: unknown) => {
+        console.error('[Settings] updateFeatureFlags failed (need Firebase admin login — TempRoleSwitcher has no token):', err);
+        showToast(`✗ Failed to save maintenance mode: ${err instanceof Error ? err.message : String(err)}`);
+      },
+    );
   };
 
   // 2. Invite User form states
@@ -133,8 +138,18 @@ export default function SettingsPage() {
     };
     setRolePermissions(updated);
     localStorage.setItem('choosify_role_permissions', JSON.stringify(updated));
-    operationsApi.updatePermissions(updated as Record<string, Record<'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics', boolean>>).catch(() => {});
-    showToast(`✓ Updated [${role.replace('_', ' ')}] permission for [${permKey}]`);
+    operationsApi
+      .updatePermissions(updated as Record<string, Record<'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics', boolean>>)
+      .then(
+        () => showToast(`✓ Updated [${role.replace('_', ' ')}] permission for [${permKey}]`),
+        (err: unknown) => {
+          console.error(
+            '[Settings] updatePermissions failed — requires admin Firebase session. TempRoleSwitcher mock login cannot write permissions:',
+            err,
+          );
+          showToast(`✗ Failed to save permissions: ${err instanceof Error ? err.message : String(err)}`);
+        },
+      );
   };
 
   // 4. Feature Flags State
@@ -194,8 +209,13 @@ export default function SettingsPage() {
     }
     setFeatureFlags(updated);
     localStorage.setItem('choosify_feature_flags', JSON.stringify(updated));
-    operationsApi.updateFeatureFlags(updated).catch(() => {});
-    showToast(`✓ Flag '${key.toUpperCase()}' toggled to: ${updated[key] ? 'TRUE' : 'FALSE'}`);
+    operationsApi.updateFeatureFlags(updated).then(
+      () => showToast(`✓ Flag '${key.toUpperCase()}' toggled to: ${updated[key] ? 'TRUE' : 'FALSE'}`),
+      (err: unknown) => {
+        console.error('[Settings] updateFeatureFlags failed (need Firebase admin login):', err);
+        showToast(`✗ Failed to save feature flag: ${err instanceof Error ? err.message : String(err)}`);
+      },
+    );
   };
 
   // 5. Security Audit Trail (Read-only)

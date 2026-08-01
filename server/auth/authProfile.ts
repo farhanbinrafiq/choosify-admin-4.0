@@ -51,7 +51,19 @@ export async function resolveAuthenticatedUser(
       ? DEV_ROLE_MAP[decoded.email.toLowerCase()]
       : undefined;
 
-  if (!role) return null;
+  // Firebase-authenticated shoppers (no admin profile) are platform buyers.
+  // Without this fallback, requireAuth on buyer routes (reviews, cancel, returns)
+  // always 403s even with a valid ID token.
+  if (!role) {
+    return {
+      uid: decoded.uid,
+      email: decoded.email,
+      displayName: decoded.name || decoded.email,
+      role: ROLES.USER,
+      permissions: getPermissionsForRole(ROLES.USER),
+      emailVerified: decoded.email_verified,
+    };
+  }
 
   return {
     uid: decoded.uid,

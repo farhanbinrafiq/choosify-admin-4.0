@@ -183,7 +183,9 @@ authRouter.get('/auth/me', async (req, res) => {
 
   try {
     const user = await resolveAuthenticatedUserFromToken(token);
-    if (user) {
+    // Bare Firebase users (no admin/seller profile) resolve as role "user" for
+    // storefront operations auth. Admin /auth/me still requires a staff/seller profile.
+    if (user && user.role !== ROLES.USER) {
       recordLogin(req, {
         userId: user.uid,
         metadata: { mode: 'token', role: user.role },
