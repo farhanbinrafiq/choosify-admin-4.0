@@ -207,7 +207,7 @@ export default function App() {
               <CreatorProvider>
               <ReviewModerationProvider>
               <DisputeProvider>
-              <TempRoleSwitcher />
+              {import.meta.env.DEV && <TempRoleSwitcher />}
               <Routes>
             <Route path="/login" element={<LoginRoute />} />
             <Route path="/signup" element={<SignupRoute />} />

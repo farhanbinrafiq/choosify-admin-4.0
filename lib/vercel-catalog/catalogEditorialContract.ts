@@ -20,6 +20,16 @@ const toNumber = (value: unknown, fallback = 0): number => {
 const toBoolean = (value: unknown, fallback = false): boolean => (typeof value === 'boolean' ? value : fallback);
 const toStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+const toBrandPartners = (value: unknown): { name: string; color?: string }[] =>
+  Array.isArray(value)
+    ? value
+        .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+        .map((item) => ({
+          name: toString(item.name),
+          color: toString(item.color) || undefined,
+        }))
+        .filter((item) => item.name)
+    : [];
 
 export const slugify = (value: string): string =>
   value
@@ -67,8 +77,8 @@ export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreato
             linkedin: toString(socialRaw?.linkedin, existing?.socialLinks?.linkedin ?? '') || undefined,
           }
         : undefined,
-    brandPartners: toStringArray(raw.brandPartners).length
-      ? toStringArray(raw.brandPartners)
+    brandPartners: toBrandPartners(raw.brandPartners).length
+      ? toBrandPartners(raw.brandPartners)
       : existing?.brandPartners,
     collabTypes: toStringArray(raw.collabTypes).length ? toStringArray(raw.collabTypes) : existing?.collabTypes,
     responseTime: toString(raw.responseTime, existing?.responseTime ?? '') || undefined,
@@ -87,12 +97,44 @@ export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreato
   };
 };
 
+const GUIDE_FORMATS = ['buying_guide', 'product_review', 'comparison', 'live', 'tutorial', 'tips'] as const;
+const LIVE_STATUSES = ['live', 'upcoming', 'replay', 'ended'] as const;
+const LIVE_PLATFORMS = ['youtube', 'facebook', 'tiktok', 'instagram', 'vimeo', 'native'] as const;
+
+const toGuideSections = (value: unknown): CatalogGuide['sections'] => {
+  if (!Array.isArray(value)) return undefined;
+  const sections = value
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+    .map((item, i) => ({
+      id: toString(item.id),
+      enabled: item.enabled !== false,
+      order: typeof item.order === 'number' ? item.order : i,
+      data: item.data && typeof item.data === 'object' ? (item.data as Record<string, unknown>) : undefined,
+    }))
+    .filter((s) => s.id);
+  return sections.length ? sections : undefined;
+};
+
+const toGuideLive = (value: unknown): CatalogGuide['live'] => {
+  if (!value || typeof value !== 'object') return undefined;
+  const v = value as Record<string, unknown>;
+  const statusRaw = toString(v.status);
+  const platformRaw = toString(v.platform);
+  return {
+    status: (LIVE_STATUSES as readonly string[]).includes(statusRaw) ? (statusRaw as (typeof LIVE_STATUSES)[number]) : undefined,
+    platform: (LIVE_PLATFORMS as readonly string[]).includes(platformRaw) ? (platformRaw as (typeof LIVE_PLATFORMS)[number]) : undefined,
+    embedUrl: toString(v.embedUrl) || undefined,
+    scheduledAt: toString(v.scheduledAt) || undefined,
+  };
+};
+
 export const normalizeGuideInput = (payload: unknown, existing?: CatalogGuide): CatalogGuide => {
   const raw = (payload ?? {}) as Record<string, unknown>;
   const title = toString(raw.title, existing?.title ?? 'Untitled Guide');
   const id = toString(raw.id, existing?.id ?? `guide-${Date.now()}`);
   const typeRaw = toString(raw.type, existing?.type ?? 'article').toLowerCase();
   const statusRaw = toString(raw.status, existing?.status ?? 'live').toLowerCase();
+  const formatRaw = toString(raw.format, existing?.format ?? '');
   return {
     id,
     slug: toString(raw.slug, existing?.slug ?? slugify(title || id)),
@@ -124,6 +166,11 @@ export const normalizeGuideInput = (payload: unknown, existing?: CatalogGuide): 
     status: statusRaw === 'draft' || statusRaw === 'archived' ? statusRaw : 'live',
     publishedAt: toString(raw.publishedAt, existing?.publishedAt ?? nowIso()),
     updatedAt: nowIso(),
+    sections: toGuideSections(raw.sections) ?? existing?.sections,
+    format: (GUIDE_FORMATS as readonly string[]).includes(formatRaw)
+      ? (formatRaw as (typeof GUIDE_FORMATS)[number])
+      : existing?.format,
+    live: toGuideLive(raw.live) ?? existing?.live,
   };
 };
 

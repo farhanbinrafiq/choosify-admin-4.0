@@ -38,7 +38,7 @@ export interface CatalogCreator {
   bio: string;
   followers: Record<string, string>;
   socialLinks?: CatalogCreatorSocialLinks;
-  brandPartners?: string[];
+  brandPartners?: { name: string; color?: string }[];
   collabTypes?: string[];
   responseTime?: string;
   preferredContact?: string;
@@ -84,6 +84,19 @@ export interface CatalogGuide {
   status: 'draft' | 'live' | 'archived';
   publishedAt: string;
   updatedAt: string;
+  sections?: Array<{
+    id: string;
+    enabled: boolean;
+    order: number;
+    data?: Record<string, unknown>;
+  }>;
+  format?: 'buying_guide' | 'product_review' | 'comparison' | 'live' | 'tutorial' | 'tips';
+  live?: {
+    status?: 'live' | 'upcoming' | 'replay' | 'ended';
+    platform?: 'youtube' | 'facebook' | 'tiktok' | 'instagram' | 'vimeo' | 'native';
+    embedUrl?: string;
+    scheduledAt?: string;
+  };
 }
 
 export type CatalogPlacementSponsorType =

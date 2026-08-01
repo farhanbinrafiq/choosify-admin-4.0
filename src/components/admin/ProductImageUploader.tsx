@@ -10,6 +10,8 @@ type ProductImageUploaderProps = {
   compact?: boolean;
   onError?: (message: string) => void;
   onSuccess?: (message: string) => void;
+  /** Override the default product-folder upload (e.g. uploadCreatorImage for creator thumbnails). */
+  uploadFn?: (files: File[]) => Promise<string[]>;
 };
 
 export function ProductImageUploader({
@@ -20,6 +22,7 @@ export function ProductImageUploader({
   compact = false,
   onError,
   onSuccess,
+  uploadFn = uploadProductImages,
 }: ProductImageUploaderProps) {
   const inputId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -45,7 +48,7 @@ export function ProductImageUploader({
 
     setIsUploading(true);
     try {
-      const uploadedUrls = await uploadProductImages(files);
+      const uploadedUrls = await uploadFn(files);
       onImagesChange([...images, ...uploadedUrls].slice(0, maxImages));
       onSuccess?.(`Uploaded ${uploadedUrls.length} image${uploadedUrls.length === 1 ? '' : 's'}.`);
     } catch (error) {

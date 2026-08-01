@@ -8,11 +8,21 @@ import {
   Calendar, Users, Award, Play, Star, Sparkles as SparkleIcon, ArrowUp, ArrowDown, ShieldCheck, Video, CheckCircle2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { BrandCMSModel, CreatorVideoItem, PromoCodeItem, initialBrandSeeds } from "./brandSeeds";
+import {
+  BrandCMSModel,
+  CreatorVideoItem,
+  PromoCodeItem,
+  BrandStoreEntry,
+  BrandServiceCenterEntry,
+  BrandStoresModel,
+  BrandFaqItem,
+  initialBrandSeeds,
+} from "./brandSeeds";
 import { useAuth } from "../../contexts/AuthContext";
 import { useBrandProfiles } from "../../contexts/BrandProfilesContext";
 import { catalogApi } from "../../services/catalogApi";
 import { BrandImageUploadField } from "./BrandImageUploadField";
+import { useEntityDraft } from "../../hooks/useEntityDraft";
 
 const COMPILATION_KEY = "choosify_brand_studio_list";
 
@@ -59,7 +69,6 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Versions and historical rollbacks state
-  const [versions, setVersions] = useState<{ timestamp: string; label: string; snapshot: BrandCMSModel }[]>([]);
   const [showVersions, setShowVersions] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
@@ -67,7 +76,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   const [showExitModal, setShowExitModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [activeDrawer, setActiveDrawer] = useState<"header" | "creators" | "promos" | "overview" | null>(null);
+  const [activeDrawer, setActiveDrawer] = useState<"header" | "creators" | "promos" | "overview" | "stores" | "faq" | null>(null);
 
   // --- DRAWER WORKSPACE FORM STATES ---
   // Header editing temporal state
@@ -112,6 +121,12 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     targetAudience: "All Customers" as "New Customers" | "Existing Customers" | "All Customers"
   });
 
+  // Where to Buy stores temporal copy
+  const [tempStores, setTempStores] = useState<BrandStoresModel>({ authorized: [], distributors: [], serviceCenters: [] });
+
+  // FAQ list temporal copy
+  const [tempFaqs, setTempFaqs] = useState<BrandFaqItem[]>([]);
+
   // Brand Overview temporal state
   const [overviewForm, setOverviewForm] = useState({
     address: "",
@@ -128,12 +143,19 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     bestForTags: [] as string[]
   });
 
+  const draftKey = `choosify_brand_draft_${activeId}`;
+  const pubKey = `choosify_brand_published_${activeId}`;
+  const versionsKey = `choosify_brand_versions_${activeId}`;
+
+  const { saveDraft: persistDraft, versions, saveVersion } = useEntityDraft<BrandCMSModel>(
+    "brand",
+    activeId,
+    { draftKey, versionsKey },
+    (backendDraft) => setModel(backendDraft),
+  );
+
   // Load state on mount
   useEffect(() => {
-    const draftKey = `choosify_brand_draft_${activeId}`;
-    const pubKey = `choosify_brand_published_${activeId}`;
-    const versionsKey = `choosify_brand_versions_${activeId}`;
-    
     let loaded: BrandCMSModel | null = null;
     const cacheDraft = localStorage.getItem(draftKey);
     if (cacheDraft) {
@@ -167,11 +189,9 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     if (loaded) {
       setModel(loaded);
     }
-
-    const cachedVersions = localStorage.getItem(versionsKey);
-    if (cachedVersions) {
-      try { setVersions(JSON.parse(cachedVersions)); } catch (_) {}
-    }
+    // useEntityDraft fetches the backend draft in the background and, once it
+    // resolves, calls setModel again — the backend copy wins over this local seed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
   // Toast notifier trigger helper
@@ -181,7 +201,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   };
 
   // --- DRAWER SEED TRIGGER ACTIONS ---
-  const openEditDrawer = (type: "header" | "creators" | "promos" | "overview") => {
+  const openEditDrawer = (type: "header" | "creators" | "promos" | "overview" | "stores" | "faq") => {
     if (!model) return;
     setActiveDrawer(type);
 
@@ -230,6 +250,10 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
         services: [...(model.services || [])],
         bestForTags: [...(model.bestForTags || [])]
       });
+    } else if (type === "stores") {
+      setTempStores(JSON.parse(JSON.stringify(model.stores || { authorized: [], distributors: [], serviceCenters: [] })));
+    } else if (type === "faq") {
+      setTempFaqs(JSON.parse(JSON.stringify(model.faq || [])));
     }
   };
 
@@ -334,26 +358,91 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     triggerToast("Brand Overview Saved Successfully");
   };
 
+  const saveStoresSection = () => {
+    if (!model) return;
+    setModel({ ...model, stores: tempStores });
+    setHasUnsavedChanges(true);
+    setActiveDrawer(null);
+    triggerToast("Where to Buy Updated Successfully");
+  };
+
+  const saveFaqSection = () => {
+    if (!model) return;
+    setModel({ ...model, faq: tempFaqs });
+    setHasUnsavedChanges(true);
+    setActiveDrawer(null);
+    triggerToast("FAQ Updated Successfully");
+  };
+
+  // --- WHERE TO BUY: generic add/update/remove/reorder helpers for the 3 store columns ---
+  const addStoreEntry = (column: keyof BrandStoresModel) => {
+    const id = `${column}-${Date.now()}`;
+    setTempStores(prev => ({
+      ...prev,
+      [column]: [
+        ...prev[column],
+        column === "serviceCenters"
+          ? ({ id, name: "New Service Center", sub: "Location", hours: "10AM - 7PM" } as BrandServiceCenterEntry)
+          : ({ id, name: "New Entry", sub: "Location" } as BrandStoreEntry),
+      ],
+    }));
+  };
+
+  const updateStoreEntry = (column: keyof BrandStoresModel, id: string, patch: Partial<BrandServiceCenterEntry>) => {
+    setTempStores(prev => ({
+      ...prev,
+      [column]: prev[column].map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
+    }));
+  };
+
+  const removeStoreEntry = (column: keyof BrandStoresModel, id: string) => {
+    setTempStores(prev => ({
+      ...prev,
+      [column]: prev[column].filter((entry) => entry.id !== id),
+    }));
+  };
+
+  const moveStoreEntry = (column: keyof BrandStoresModel, index: number, direction: "up" | "down") => {
+    setTempStores(prev => {
+      const list = [...prev[column]];
+      const targetIdx = direction === "up" ? index - 1 : index + 1;
+      if (targetIdx < 0 || targetIdx >= list.length) return prev;
+      [list[index], list[targetIdx]] = [list[targetIdx], list[index]];
+      return { ...prev, [column]: list };
+    });
+  };
+
+  // --- FAQ: add/update/remove/reorder helpers ---
+  const addFaqEntry = () => {
+    setTempFaqs(prev => [...prev, { id: `fq-${Date.now()}`, q: "New question", a: "" }]);
+  };
+
+  const updateFaqEntry = (id: string, patch: Partial<BrandFaqItem>) => {
+    setTempFaqs(prev => prev.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)));
+  };
+
+  const removeFaqEntry = (id: string) => {
+    setTempFaqs(prev => prev.filter((entry) => entry.id !== id));
+  };
+
+  const moveFaqEntry = (index: number, direction: "up" | "down") => {
+    setTempFaqs(prev => {
+      const list = [...prev];
+      const targetIdx = direction === "up" ? index - 1 : index + 1;
+      if (targetIdx < 0 || targetIdx >= list.length) return prev;
+      [list[index], list[targetIdx]] = [list[targetIdx], list[index]];
+      return list;
+    });
+  };
+
   // --- PERSISTENCE: SAVE DRAFT & LIVE PUBLISH HANDLERS ---
   const handleSaveDraft = () => {
     if (!model) return;
-    const draftKey = `choosify_brand_draft_${activeId}`;
-    localStorage.setItem(draftKey, JSON.stringify(model));
+    persistDraft(model);
     setHasUnsavedChanges(false);
+    saveVersion(`Draft Saved: ${model.brandName}`, model);
 
-    // Save state version history snapshot
-    const timeStr = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    const nextVer = {
-      timestamp: timeStr,
-      label: `Draft Saved: ${model.brandName}`,
-      snapshot: model
-    };
-    const updatedVersions = [nextVer, ...versions.slice(0, 8)];
-    setVersions(updatedVersions);
-    const versionsKey = `choosify_brand_versions_${activeId}`;
-    localStorage.setItem(versionsKey, JSON.stringify(updatedVersions));
-
-    triggerToast("✓ Draft Saved Locally!");
+    triggerToast("✓ Draft Saved!");
   };
 
   const handlePublishChanges = () => {
@@ -363,9 +452,8 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
     setTimeout(() => {
       const pubKey = `choosify_brand_published_${activeId}`;
-      const draftKey = `choosify_brand_draft_${activeId}`;
       localStorage.setItem(pubKey, JSON.stringify(model));
-      localStorage.setItem(draftKey, JSON.stringify(model));
+      persistDraft(model);
       setHasUnsavedChanges(false);
 
       catalogApi
@@ -374,6 +462,8 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
           category: model.category,
           description: model.description,
           logo: model.logoUrl,
+          faq: model.faq,
+          stores: model.stores,
         })
         .catch((err) => console.warn('[BrandEditStudio] Catalog brand sync failed', err));
 
@@ -424,8 +514,8 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     }, 1200);
   };
 
-  const restoreVersion = (snapshot: BrandCMSModel) => {
-    setModel(JSON.parse(JSON.stringify(snapshot)));
+  const restoreVersion = (snapshot: Record<string, unknown>) => {
+    setModel(JSON.parse(JSON.stringify(snapshot)) as BrandCMSModel);
     setHasUnsavedChanges(true);
     setShowVersions(false);
     triggerToast("✓ Snapshot restored successfully!");
@@ -615,12 +705,12 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                   <p className="text-[11px] font-mono text-slate-400 py-4">No snapshots registered in this session.</p>
                 ) : (
                   <div className="space-y-2 max-h-52 overflow-y-auto mt-2 custom-scrollbar">
-                    {versions.map((ver, idx) => (
-                      <div key={idx} className="p-2 bg-slate-50 rounded-xl border border-slate-200 flex flex-col gap-1">
+                    {versions.map((ver) => (
+                      <div key={ver.id} className="p-2 bg-slate-50 rounded-xl border border-slate-200 flex flex-col gap-1">
                         <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono">
-                          <span>{ver.timestamp}</span>
-                          <button 
-                            onClick={() => setConfirmingId(ver.timestamp)}
+                          <span>{new Date(ver.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
+                          <button
+                            onClick={() => setConfirmingId(ver.id)}
                             className="font-bold text-[#FF5B00] hover:underline text-[10px]"
                           >
                             RESTORE
@@ -628,7 +718,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                         </div>
                         <span className="text-xs font-semibold truncate text-[#111827]">{ver.label}</span>
 
-                        {confirmingId === ver.timestamp && (
+                        {confirmingId === ver.id && (
                           <div className="mt-1 p-2 bg-red-50 border border-red-200 rounded-lg flex flex-col gap-1.5">
                             <span className="text-[9px] font-black text-red-600">Restore snapshot? Current draft will become unsaved.</span>
                             <div className="flex gap-1.5">
@@ -1119,6 +1209,82 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
         </div>
 
+        {/* ========================================================== */}
+        {/* SECTION 5: WHERE TO BUY (AUTHORIZED STORES / DISTRIBUTORS / SERVICE CENTERS) */}
+        {/* ========================================================== */}
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 relative group shadow-sm text-left">
+          <div className="absolute top-6 right-6 z-10">
+            <button
+              onClick={() => openEditDrawer("stores")}
+              className="p-2.5 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-xl transition duration-200 flex items-center gap-1.5 text-xs font-black uppercase shadow-sm cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>EDIT STORES</span>
+            </button>
+          </div>
+
+          <span className="text-[10px] font-black tracking-widest text-[#FF5B00] uppercase">STOREFRONT AVAILABILITY</span>
+          <h3 className="text-lg font-black text-[#111827] mt-1">WHERE TO BUY {model.brandName?.toUpperCase()}</h3>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mt-6">
+            {([
+              { key: "authorized" as const, label: "AUTHORIZED STORES" },
+              { key: "distributors" as const, label: "DISTRIBUTORS & RESELLERS" },
+              { key: "serviceCenters" as const, label: "SERVICE CENTERS" },
+            ]).map(col => (
+              <div key={col.key} className="bg-[#F9FAFB] border border-[#E8EDF2] rounded-[10px] overflow-hidden">
+                <div className="text-[11px] font-extrabold text-white bg-[#1A1A2E] px-2.5 py-1.5">{col.label}</div>
+                <div className="p-[14px] space-y-2">
+                  {(model.stores?.[col.key] || []).length === 0 && (
+                    <p className="text-[10px] text-slate-400 italic">No entries added.</p>
+                  )}
+                  {(model.stores?.[col.key] || []).map((entry) => (
+                    <div key={entry.id} className="flex justify-between items-center py-1.5 border-b border-[#F1F1F3] last:border-0 gap-2">
+                      <div>
+                        <span className="text-[11.5px] font-bold text-[#111827] block">{entry.name}</span>
+                        <span className="text-[10px] text-[#9AA0AC] block">
+                          {entry.sub}
+                          {"hours" in entry && entry.hours ? ` · ${entry.hours}` : ""}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ========================================================== */}
+        {/* SECTION 6: FREQUENTLY ASKED QUESTIONS */}
+        {/* ========================================================== */}
+        <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 relative group shadow-sm text-left">
+          <div className="absolute top-6 right-6 z-10">
+            <button
+              onClick={() => openEditDrawer("faq")}
+              className="p-2.5 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-xl transition duration-200 flex items-center gap-1.5 text-xs font-black uppercase shadow-sm cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>EDIT FAQ</span>
+            </button>
+          </div>
+
+          <span className="text-[10px] font-black tracking-widest text-[#FF5B00] uppercase">SHOPPER SUPPORT</span>
+          <h3 className="text-lg font-black text-[#111827] mt-1">FREQUENTLY ASKED QUESTIONS</h3>
+
+          <div className="mt-6 border border-[#E8EDF2] rounded-[10px] px-4">
+            {(model.faq || []).length === 0 && (
+              <p className="text-xs text-slate-400 italic py-4">No FAQ entries added.</p>
+            )}
+            {(model.faq || []).map((fq, idx) => (
+              <details key={fq.id} className="border-b border-[#F1F1F3] last:border-0 py-3" open={idx === 0}>
+                <summary className="text-[12.5px] font-semibold text-[#1A1A2E] cursor-pointer list-none">{fq.q}</summary>
+                <p className="text-[12px] text-[#4B5563] leading-relaxed pt-2 pr-6">{fq.a}</p>
+              </details>
+            ))}
+          </div>
+        </div>
+
       </main>
 
       {/* --- FLOATING MODULAR SLIDING DRAWER SYSTEM (480px) --- */}
@@ -1152,6 +1318,8 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                       {activeDrawer === "creators" && "Manage Creator Hub"}
                       {activeDrawer === "promos" && "Manage Vouchers"}
                       {activeDrawer === "overview" && "Edit Overview Specs"}
+                      {activeDrawer === "stores" && "Manage Where to Buy"}
+                      {activeDrawer === "faq" && "Manage FAQ"}
                     </h3>
                     <p className="text-[10px] font-mono text-slate-500">Live Workspace Profile Control Panel</p>
                   </div>
@@ -1835,6 +2003,111 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                   </div>
                 )}
 
+                {/* DRAWERS SECTON: 5. WHERE TO BUY (STORES / DISTRIBUTORS / SERVICE CENTERS) */}
+                {activeDrawer === "stores" && (
+                  <div className="space-y-5">
+                    {([
+                      { key: "authorized" as const, label: "AUTHORIZED STORES" },
+                      { key: "distributors" as const, label: "DISTRIBUTORS & RESELLERS" },
+                      { key: "serviceCenters" as const, label: "SERVICE CENTERS" },
+                    ]).map(col => (
+                      <div key={col.key} className="border p-4 rounded-xl space-y-3 text-left">
+                        <span className="text-[10px] font-black text-orange-600 block">{col.label}</span>
+                        <div className="space-y-2">
+                          {tempStores[col.key].map((entry, idx) => (
+                            <div key={entry.id} className="p-2.5 bg-slate-50 border rounded-xl space-y-1.5">
+                              <div className="flex gap-2">
+                                <input
+                                  type="text"
+                                  placeholder="Name"
+                                  value={entry.name}
+                                  onChange={e => updateStoreEntry(col.key, entry.id, { name: e.target.value })}
+                                  className="flex-1 p-2 border rounded-lg text-xs"
+                                />
+                                <div className="flex flex-col gap-0.5">
+                                  <button onClick={() => moveStoreEntry(col.key, idx, "up")} className="text-[10px] text-slate-400 hover:text-slate-700 leading-none">▲</button>
+                                  <button onClick={() => moveStoreEntry(col.key, idx, "down")} className="text-[10px] text-slate-400 hover:text-slate-700 leading-none">▼</button>
+                                </div>
+                              </div>
+                              <input
+                                type="text"
+                                placeholder="Location / subtitle"
+                                value={entry.sub}
+                                onChange={e => updateStoreEntry(col.key, entry.id, { sub: e.target.value })}
+                                className="w-full p-2 border rounded-lg text-xs"
+                              />
+                              {col.key === "serviceCenters" && (
+                                <input
+                                  type="text"
+                                  placeholder="Hours (e.g. 10AM - 7PM)"
+                                  value={(entry as BrandServiceCenterEntry).hours || ""}
+                                  onChange={e => updateStoreEntry(col.key, entry.id, { hours: e.target.value })}
+                                  className="w-full p-2 border rounded-lg text-xs"
+                                />
+                              )}
+                              <button
+                                onClick={() => removeStoreEntry(col.key, entry.id)}
+                                className="text-[10px] font-bold text-red-600 hover:underline"
+                              >
+                                REMOVE
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => addStoreEntry(col.key)}
+                            className="text-[10px] text-orange-600 font-bold hover:underline"
+                          >
+                            ＋ Add entry to {col.label.toLowerCase()}...
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* DRAWERS SECTON: 6. FREQUENTLY ASKED QUESTIONS */}
+                {activeDrawer === "faq" && (
+                  <div className="space-y-3">
+                    <span className="block text-[9px] font-black text-app-text-secondary uppercase">FAQ entries ({tempFaqs.length})</span>
+                    {tempFaqs.map((fq, idx) => (
+                      <div key={fq.id} className="p-3 bg-slate-50 border rounded-xl space-y-1.5">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Question"
+                            value={fq.q}
+                            onChange={e => updateFaqEntry(fq.id, { q: e.target.value })}
+                            className="flex-1 p-2 border rounded-lg text-xs font-semibold"
+                          />
+                          <div className="flex flex-col gap-0.5">
+                            <button onClick={() => moveFaqEntry(idx, "up")} className="text-[10px] text-slate-400 hover:text-slate-700 leading-none">▲</button>
+                            <button onClick={() => moveFaqEntry(idx, "down")} className="text-[10px] text-slate-400 hover:text-slate-700 leading-none">▼</button>
+                          </div>
+                        </div>
+                        <textarea
+                          rows={2}
+                          placeholder="Answer"
+                          value={fq.a}
+                          onChange={e => updateFaqEntry(fq.id, { a: e.target.value })}
+                          className="w-full p-2 border rounded-lg text-xs"
+                        />
+                        <button
+                          onClick={() => removeFaqEntry(fq.id)}
+                          className="text-[10px] font-bold text-red-600 hover:underline"
+                        >
+                          REMOVE
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      onClick={addFaqEntry}
+                      className="text-[10px] text-orange-600 font-bold hover:underline"
+                    >
+                      ＋ Add FAQ entry...
+                    </button>
+                  </div>
+                )}
+
               </div>
 
               {/* Drawer Save Section Bottom Action */}
@@ -1851,6 +2124,8 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     if (activeDrawer === "creators") saveCreatorsSection();
                     if (activeDrawer === "promos") savePromosSection();
                     if (activeDrawer === "overview") saveOverviewSection();
+                    if (activeDrawer === "stores") saveStoresSection();
+                    if (activeDrawer === "faq") saveFaqSection();
                   }}
                   className="flex-1 py-2.5 bg-[#FF5B00] hover:bg-[#E64A00] text-app-text-primary text-xs font-black uppercase tracking-wider rounded-xl transition shadow-lg"
                 >

@@ -74,6 +74,28 @@ export interface BrandReviewItem {
   flagged?: boolean;
 }
 
+export interface BrandStoreEntry {
+  id: string;
+  name: string;
+  sub: string;
+}
+
+export interface BrandServiceCenterEntry extends BrandStoreEntry {
+  hours: string;
+}
+
+export interface BrandStoresModel {
+  authorized: BrandStoreEntry[];
+  distributors: BrandStoreEntry[];
+  serviceCenters: BrandServiceCenterEntry[];
+}
+
+export interface BrandFaqItem {
+  id: string;
+  q: string;
+  a: string;
+}
+
 export interface BrandCMSModel {
   id: string;
   brandName: string;
@@ -114,6 +136,8 @@ export interface BrandCMSModel {
   creators: CreatorVideoItem[];
   reviews: BrandReviewItem[];
   team: TeamMemberItem[];
+  stores: BrandStoresModel;
+  faq: BrandFaqItem[];
   
   // General details
   address: string;
@@ -220,6 +244,24 @@ export const initialBrandSeeds: Record<string, BrandCMSModel> = {
       { id: "tm3", name: "Ayon Rahman", email: "ayon.mkt@samsung-dist.bd", role: "Marketing Manager", status: "Active" }
     ],
 
+    stores: {
+      authorized: [
+        { id: "st1", name: "Samsung Prestige Banani", sub: "Banani, Dhaka · Open Now" },
+        { id: "st2", name: "Samsung Experience Gulshan", sub: "Gulshan 2, Dhaka · Open Now" }
+      ],
+      distributors: [
+        { id: "ds1", name: "Fair Electronics Ltd", sub: "Official Distributor · Nationwide" }
+      ],
+      serviceCenters: [
+        { id: "sv1", name: "Samsung Service Center Dhanmondi", sub: "Dhanmondi 27, Dhaka", hours: "10AM - 7PM" }
+      ]
+    },
+
+    faq: [
+      { id: "fq1", q: "Is Samsung Bangladesh an officially verified brand on Choosify?", a: "Yes, Samsung Bangladesh is a Choosify-verified brand with official retail guarantees on every listing." },
+      { id: "fq2", q: "What is the warranty period on Samsung products?", a: "Most Samsung products carry a 2 year official brand panel and spare-parts warranty card." }
+    ],
+
     address: "Samsung Prestige Flagship Store, House 14, Road 11, Banani, Dhaka 1213",
     contactEmail: "support.bd@samsung.com",
     phone: "09612-300300",
@@ -309,6 +351,14 @@ export const initialBrandSeeds: Record<string, BrandCMSModel> = {
     team: [
       { id: "tm1", name: "Sajedul Hasan BRAC", email: "sajedul.hasan@brac-retail.com", role: "Owner", status: "Active" }
     ],
+
+    stores: {
+      authorized: [],
+      distributors: [],
+      serviceCenters: []
+    },
+
+    faq: [],
 
     address: "Aarong Centre, 34-36 Tejgaon Industrial Area, Dhaka 1208",
     contactEmail: "customerservice@aarong.com",

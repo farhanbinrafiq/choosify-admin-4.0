@@ -11,6 +11,8 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useAds } from "../../contexts/AdsContext";
 import { useInventory } from "../../contexts/InventoryContext";
 import { catalogApi } from "../../services/catalogApi";
+import { useEntityDraft } from "../../hooks/useEntityDraft";
+import { uploadCreatorImage } from "../../services/mediaUpload";
 import { useFeeCharges } from "../../contexts/FeeChargesContext";
 import type { CatalogBrand, CatalogCategory } from "../../types/catalog";
 import { CreatorExperienceSection, CreatorContentItem } from "../../components/CreatorExperienceSection";
@@ -767,17 +769,74 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
     }
   }, [category]);
 
-  // Sync draft edits to local storage incrementally upon changes
+  // Sync draft edits to local storage (and, debounced, to the backend) incrementally upon changes
+  const buildDraftSnapshot = () => ({
+    brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
+    storeComparisonList, priceAcrossStoresEnabled, whatsNearby, beforeYourVisit, overviewBlocks, overviewSectionLabel, bestForTags, physicalStores, creatorContent,
+    actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder,
+    enableSpecs, enableStoreComparison, enableInfluencerReviews, enableOverviewSection, enableBestForTags, enablePhysicalStores,
+    enableBoxContents, enableOptions, enableActiveVariantSpecs, boxContents, optionGroups, productVariants,
+    enableSizeChart, sizeChartType, sizeChartImage, sizeChartHtml, sizeChartColumns, sizeChartRows
+  });
+  type ProductDraftSnapshot = ReturnType<typeof buildDraftSnapshot>;
+
+  const versionsKey = `choosify_product_versions_${activeId}`;
+  const { saveDraft: persistDraft, versions, saveVersion } = useEntityDraft<ProductDraftSnapshot>(
+    "product",
+    activeId,
+    { draftKey, versionsKey },
+    (backendDraft) => applyDraftSnapshot(backendDraft),
+  );
+
+  function applyDraftSnapshot(data: Partial<ProductDraftSnapshot>) {
+    if (data.brandName !== undefined) setBrandName(data.brandName);
+    if (data.productName !== undefined) setProductName(data.productName);
+    if (data.category !== undefined) setCategory(data.category);
+    if (data.actualPrice !== undefined) setActualPrice(data.actualPrice);
+    if (data.discountedPrice !== undefined) setDiscountedPrice(data.discountedPrice);
+    if (data.images !== undefined) setImages(data.images);
+    if (data.about !== undefined) setAbout(data.about);
+    if (data.specs !== undefined) setSpecs(data.specs);
+    if (data.storeComparisonList !== undefined) setStoreComparisonList(data.storeComparisonList);
+    if (data.priceAcrossStoresEnabled !== undefined) setPriceAcrossStoresEnabled(data.priceAcrossStoresEnabled);
+    if (data.whatsNearby !== undefined) setWhatsNearby(data.whatsNearby);
+    if (data.beforeYourVisit !== undefined) setBeforeYourVisit(data.beforeYourVisit);
+    if (data.overviewBlocks !== undefined) setOverviewBlocks(data.overviewBlocks);
+    if (data.overviewSectionLabel !== undefined) setOverviewSectionLabel(data.overviewSectionLabel);
+    if (data.bestForTags !== undefined) setBestForTags(data.bestForTags);
+    if (data.physicalStores !== undefined) setPhysicalStores(data.physicalStores);
+    if (data.creatorContent !== undefined) setCreatorContent(data.creatorContent);
+    if (data.actionFindInStore !== undefined) setActionFindInStore(data.actionFindInStore);
+    if (data.actionBuyOnline !== undefined) setActionBuyOnline(data.actionBuyOnline);
+    if (data.actionLove !== undefined) setActionLove(data.actionLove);
+    if (data.actionWish !== undefined) setActionWish(data.actionWish);
+    if (data.actionContactSeller !== undefined) setActionContactSeller(data.actionContactSeller);
+    if (data.actionRequestQuote !== undefined) setActionRequestQuote(data.actionRequestQuote);
+    if (data.actionPreOrder !== undefined) setActionPreOrder(data.actionPreOrder);
+    if (data.enableSpecs !== undefined) setEnableSpecs(data.enableSpecs);
+    if (data.enableStoreComparison !== undefined) setEnableStoreComparison(data.enableStoreComparison);
+    if (data.enableInfluencerReviews !== undefined) setEnableInfluencerReviews(data.enableInfluencerReviews);
+    if (data.enableOverviewSection !== undefined) setEnableOverviewSection(data.enableOverviewSection);
+    if (data.enableBestForTags !== undefined) setEnableBestForTags(data.enableBestForTags);
+    if (data.enablePhysicalStores !== undefined) setEnablePhysicalStores(data.enablePhysicalStores);
+    if (data.enableBoxContents !== undefined) setEnableBoxContents(data.enableBoxContents);
+    if (data.enableOptions !== undefined) setEnableOptions(data.enableOptions);
+    if (data.enableActiveVariantSpecs !== undefined) setEnableActiveVariantSpecs(data.enableActiveVariantSpecs);
+    if (data.boxContents !== undefined) setBoxContents(data.boxContents);
+    if (data.optionGroups !== undefined) setOptionGroups(data.optionGroups);
+    if (data.productVariants !== undefined) setProductVariants(data.productVariants);
+    if (data.enableSizeChart !== undefined) setEnableSizeChart(data.enableSizeChart);
+    if (data.sizeChartType !== undefined) setSizeChartType(data.sizeChartType);
+    if (data.sizeChartImage !== undefined) setSizeChartImage(data.sizeChartImage);
+    if (data.sizeChartHtml !== undefined) setSizeChartHtml(data.sizeChartHtml);
+    if (data.sizeChartColumns !== undefined) setSizeChartColumns(data.sizeChartColumns);
+    if (data.sizeChartRows !== undefined) setSizeChartRows(data.sizeChartRows);
+  }
+
   const serializeState = () => {
-    const draftData = {
-      brandName, productName, category, actualPrice, discountedPrice, images, about, specs,
-      storeComparisonList, priceAcrossStoresEnabled, whatsNearby, beforeYourVisit, overviewBlocks, overviewSectionLabel, bestForTags, physicalStores, creatorContent,
-      actionFindInStore, actionBuyOnline, actionLove, actionWish, actionContactSeller, actionRequestQuote, actionPreOrder,
-      enableSpecs, enableStoreComparison, enableInfluencerReviews, enableOverviewSection, enableBestForTags, enablePhysicalStores,
-      enableBoxContents, enableOptions, enableActiveVariantSpecs, boxContents, optionGroups, productVariants,
-      enableSizeChart, sizeChartType, sizeChartImage, sizeChartHtml, sizeChartColumns, sizeChartRows
-    };
+    const draftData = buildDraftSnapshot();
     localStorage.setItem(draftKey, JSON.stringify(draftData));
+    persistDraft(draftData);
   };
 
   useEffect(() => {
@@ -1184,31 +1243,23 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                 </button>
               )
             )}
+            {!isNewProduct && (
+              <button
+                type="button"
+                onClick={() => {
+                  saveVersion(`Draft Saved: ${productName || "Untitled Product"}`, buildDraftSnapshot());
+                  triggerToast(`✓ Snapshot saved (${versions.length + 1} total)`);
+                }}
+                className="px-3 py-2.5 bg-white border border-[#E5E7EB] hover:bg-[#FAFAFA] text-slate-700 font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all cursor-pointer shadow-sm"
+              >
+                Save Version ({versions.length})
+              </button>
+            )}
             <button
               type="button"
-              onClick={async () => {
+              onClick={() => {
                 serializeState();
-                if (isNewProduct) {
-                  // Simulate POST to save draft
-                  try {
-                    await fetch("/api/products", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ productName, brandName, category, status: "draft" })
-                    });
-                  } catch (_) {}
-                  triggerToast("✓ Save Draft successfully!");
-                } else {
-                  // Simulate PATCH to update draft
-                  try {
-                    await fetch(`/api/products/${activeId}`, {
-                      method: "PATCH",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ productName, brandName, category, status: "draft" })
-                    });
-                  } catch (_) {}
-                  triggerToast("✓ Save Changes successfully!");
-                }
+                triggerToast(isNewProduct ? "✓ Save Draft successfully!" : "✓ Save Changes successfully!");
               }}
               id="draft-cache-btn"
               className="px-5 py-2.5 bg-white border border-[#E5E7EB] hover:bg-[#FAFAFA] text-slate-700 font-extrabold text-[10px] uppercase tracking-wider rounded-xl transition-all hover:scale-102 active:scale-98 cursor-pointer shadow-sm"
@@ -2720,6 +2771,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                               const updated = creatorContent.map(c => c.id === item.id ? { ...c, thumbnail: imgs[0] || '' } : c);
                               setCreatorContent(updated);
                             }}
+                            uploadFn={(files) => Promise.all(files.map(uploadCreatorImage))}
                             compact
                             maxImages={1}
                             showUrlInput
@@ -4601,120 +4653,6 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                           </div>
                         ))}
                       </div>
-
-                    </div>
-                  )}
-
-                  {/* FORM 2: CREATOR CONTENT SOURCING PANEL */}
-                  {activeDrawer === "creator" && (
-                    <div className="space-y-4">
-                      
-                      <p className="text-[10.5px] italic text-slate-500 leading-normal mb-2">
-                        Configure digital creators highlights list. Reorder, add creator clips reviews, remove items, or mark specific item as top spotlight features card.
-                      </p>
-
-                      <div className="space-y-4 pr-1">
-                        {creatorContent.map((item) => (
-                          <div key={item.id} className="bg-[#FAFAFA] border border-[#E5E7EB] p-3.5 rounded-2xl relative text-left text-xs space-y-2.5">
-                            <div className="flex justify-between items-center pb-2 border-b border-slate-200">
-                              <span className="font-extrabold text-orange-500 text-[10px] font-mono">@{item.creatorHandle}</span>
-                              <div className="flex items-center gap-1.5">
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const updated = creatorContent.map(c => ({
-                                      ...c,
-                                      isFeatured: c.id === item.id
-                                    }));
-                                    setCreatorContent(updated);
-                                  }}
-                                  className={`px-2 py-0.5 rounded text-[8.5px] font-black uppercase tracking-widest leading-none ${
-                                    item.isFeatured ? "bg-orange-500 text-white" : "bg-white hover:bg-slate-200 text-slate-500 border border-slate-200"
-                                  }`}
-                                >
-                                  {item.isFeatured ? "Spotlight" : "Feature"}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setCreatorContent(creatorContent.filter(c => c.id !== item.id))}
-                                  className="text-red-500 hover:text-red-700 font-bold"
-                                  title="Delete Review"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                            
-                            <div className="space-y-1">
-                              <span className="text-[8px] uppercase font-black text-slate-400 font-mono tracking-widest block">Review title</span>
-                              <input 
-                                value={item.title}
-                                onChange={(e) => {
-                                  const updated = creatorContent.map(c => c.id === item.id ? { ...c, title: e.target.value } : c);
-                                  setCreatorContent(updated);
-                                }}
-                                className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 text-[11px] text-[#1A1A2E] outline-none"
-                              />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-2 text-[10px]">
-                              <div>
-                                <span className="text-[7.5px] uppercase font-black text-slate-400 font-mono tracking-widest">Platform</span>
-                                <select
-                                  value={item.platform}
-                                  onChange={(e) => {
-                                    const updated = creatorContent.map(c => c.id === item.id ? { ...c, platform: e.target.value } : c);
-                                    setCreatorContent(updated);
-                                  }}
-                                  className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 outline-none font-bold"
-                                >
-                                  <option value="YOUTUBE">YouTube</option>
-                                  <option value="INSTAGRAM">Instagram</option>
-                                  <option value="TIKTOK">TikTok</option>
-                                  <option value="FACEBOOK">Facebook</option>
-                                </select>
-                              </div>
-                              <div>
-                                <span className="text-[7.5px] uppercase font-black text-slate-400 font-mono tracking-widest">Duration</span>
-                                <input 
-                                  value={item.duration}
-                                  onChange={(e) => {
-                                    const updated = creatorContent.map(c => c.id === item.id ? { ...c, duration: e.target.value } : c);
-                                    setCreatorContent(updated);
-                                  }}
-                                  className="w-full bg-white border border-[#E5E7EB] rounded-lg px-2 py-1 outline-none"
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Add Creator Clip trigger */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const fresh: CreatorContentItem = {
-                            id: `cc-${Date.now()}`,
-                            platform: "YOUTUBE",
-                            videoUrl: "https://youtube.com/watch?v=fresh",
-                            thumbnail: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400",
-                            title: "Brand New Unboxing Clip Review",
-                            description: "Review of the brand specs and details.",
-                            views: 1300,
-                            likes: 120,
-                            duration: "4:50",
-                            creatorHandle: "FreshTechMaker",
-                            creatorAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50",
-                            location: "Dhaka, BD",
-                            isFeatured: false
-                          };
-                          setCreatorContent([...creatorContent, fresh]);
-                        }}
-                        className="w-full py-3 border border-dashed border-[#E5E7EB] rounded-2xl text-[10px] text-orange-500 font-bold uppercase tracking-widest hover:bg-orange-50/10 hover:border-orange-500/50 transition-colors cursor-pointer"
-                      >
-                        + ADD CREATOR REVIEWS SLOT
-                      </button>
 
                     </div>
                   )}

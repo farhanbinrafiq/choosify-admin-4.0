@@ -5,11 +5,26 @@ import {
   Check,
   History,
   Pencil,
+  Facebook,
+  Instagram,
+  Youtube,
+  Linkedin,
+  Mail,
+  Phone,
+  Clock,
+  MapPin,
+  Trash2,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { BrandImageUploadField } from './BrandImageUploadField';
-import { CreatorCMSModel, initialCreatorSeeds, CREATOR_STUDIO_LIST_KEY } from './creatorSeeds';
+import { CreatorCMSModel, CreatorPlatform, initialCreatorSeeds, CREATOR_STUDIO_LIST_KEY } from './creatorSeeds';
 import { uploadCreatorImage } from '../../services/mediaUpload';
+import { catalogApi } from '../../services/catalogApi';
+import { useEntityDraft } from '../../hooks/useEntityDraft';
+import { BestForTagsChipField } from '../../components/admin/product-studio/OverviewBento';
+
+const ALL_PLATFORMS: CreatorPlatform[] = ['YouTube', 'Instagram', 'Facebook', 'TikTok'];
+const COLLAB_TYPE_PRESETS = ['Product Reviews', 'Buying Guides', 'Brand Stories', 'Tech Analysis', 'Comparisons', 'Live Sessions'];
 
 interface CreatorEditStudioProps {
   overrideId?: string;
@@ -24,15 +39,39 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
   const [model, setModel] = useState<CreatorCMSModel | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [versions, setVersions] = useState<{ timestamp: string; label: string; snapshot: CreatorCMSModel }[]>([]);
   const [showVersions, setShowVersions] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [showExitModal, setShowExitModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [activeDrawer, setActiveDrawer] = useState<'cover' | null>(null);
+  const [activeDrawer, setActiveDrawer] = useState<'cover' | 'identity' | 'social' | 'journey' | 'partnerships' | null>(null);
 
   const [coverForm, setCoverForm] = useState({ coverImage: '', avatar: '' });
+  const [identityForm, setIdentityForm] = useState({ title: '', location: '', bio: '' });
+  const [socialForm, setSocialForm] = useState({ facebook: '', instagram: '', youtube: '', linkedin: '', tiktok: '' });
+  const [journeyForm, setJourneyForm] = useState({
+    bestForTags: [] as string[],
+    platforms: [] as CreatorPlatform[],
+    email: '',
+    phone: '',
+    responseTime: '',
+    preferredContact: '',
+  });
+  const [partnershipsForm, setPartnershipsForm] = useState({
+    brandPartners: [] as { name: string; color?: string }[],
+    collabTypes: [] as string[],
+  });
+
+  const draftKey = `choosify_creator_draft_${activeId}`;
+  const pubKey = `choosify_creator_published_${activeId}`;
+  const versionsKey = `choosify_creator_versions_${activeId}`;
+
+  const { saveDraft: persistDraft, versions, saveVersion } = useEntityDraft<CreatorCMSModel>(
+    'creator',
+    activeId,
+    { draftKey, versionsKey },
+    (backendDraft) => setModel(backendDraft),
+  );
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -40,10 +79,6 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
   };
 
   useEffect(() => {
-    const draftKey = `choosify_creator_draft_${activeId}`;
-    const pubKey = `choosify_creator_published_${activeId}`;
-    const versionsKey = `choosify_creator_versions_${activeId}`;
-
     let loaded: CreatorCMSModel | null = null;
     const draftRaw = localStorage.getItem(draftKey);
     const pubRaw = localStorage.getItem(pubKey);
@@ -62,15 +97,9 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
     }
 
     setModel(loaded);
-
-    const cachedVersions = localStorage.getItem(versionsKey);
-    if (cachedVersions) {
-      try {
-        setVersions(JSON.parse(cachedVersions));
-      } catch {
-        /* ignore */
-      }
-    }
+    // useEntityDraft fetches the backend draft in the background and, once it
+    // resolves, calls setModel again — the backend copy wins over this local seed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
   const openCoverDrawer = () => {
@@ -91,21 +120,83 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
     triggerToast('Cover & Avatar Updated');
   };
 
+  const openIdentityDrawer = () => {
+    if (!model) return;
+    setIdentityForm({ title: model.title || '', location: model.location || '', bio: model.bio || '' });
+    setActiveDrawer('identity');
+  };
+
+  const saveIdentitySection = () => {
+    if (!model) return;
+    setModel({ ...model, ...identityForm });
+    setHasUnsavedChanges(true);
+    setActiveDrawer(null);
+    triggerToast('Identity Updated');
+  };
+
+  const openSocialDrawer = () => {
+    if (!model) return;
+    setSocialForm({
+      facebook: model.socialLinks?.facebook || '',
+      instagram: model.socialLinks?.instagram || '',
+      youtube: model.socialLinks?.youtube || '',
+      linkedin: model.socialLinks?.linkedin || '',
+      tiktok: model.socialLinks?.tiktok || '',
+    });
+    setActiveDrawer('social');
+  };
+
+  const saveSocialSection = () => {
+    if (!model) return;
+    setModel({ ...model, socialLinks: { ...socialForm } });
+    setHasUnsavedChanges(true);
+    setActiveDrawer(null);
+    triggerToast('Social Links Updated');
+  };
+
+  const openJourneyDrawer = () => {
+    if (!model) return;
+    setJourneyForm({
+      bestForTags: [...(model.bestForTags || [])],
+      platforms: [...(model.platforms || [])],
+      email: model.email || '',
+      phone: model.phone || '',
+      responseTime: model.responseTime || '',
+      preferredContact: model.preferredContact || '',
+    });
+    setActiveDrawer('journey');
+  };
+
+  const saveJourneySection = () => {
+    if (!model) return;
+    setModel({ ...model, ...journeyForm });
+    setHasUnsavedChanges(true);
+    setActiveDrawer(null);
+    triggerToast('Journey & Contact Updated');
+  };
+
+  const openPartnershipsDrawer = () => {
+    if (!model) return;
+    setPartnershipsForm({
+      brandPartners: JSON.parse(JSON.stringify(model.brandPartners || [])),
+      collabTypes: [...(model.collabTypes || [])],
+    });
+    setActiveDrawer('partnerships');
+  };
+
+  const savePartnershipsSection = () => {
+    if (!model) return;
+    setModel({ ...model, ...partnershipsForm });
+    setHasUnsavedChanges(true);
+    setActiveDrawer(null);
+    triggerToast('Partnerships Updated');
+  };
+
   const handleSaveDraft = () => {
     if (!model) return;
-    const draftKey = `choosify_creator_draft_${activeId}`;
-    localStorage.setItem(draftKey, JSON.stringify(model));
+    persistDraft(model);
     setHasUnsavedChanges(false);
-
-    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    const nextVer = {
-      timestamp: timeStr,
-      label: `Draft Saved: ${model.name}`,
-      snapshot: model,
-    };
-    const updatedVersions = [nextVer, ...versions.slice(0, 8)];
-    setVersions(updatedVersions);
-    localStorage.setItem(`choosify_creator_versions_${activeId}`, JSON.stringify(updatedVersions));
+    saveVersion(`Draft Saved: ${model.name}`, model);
 
     // Keep list registry in sync
       try {
@@ -119,37 +210,42 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
       localStorage.setItem(CREATOR_STUDIO_LIST_KEY, JSON.stringify([model]));
     }
 
-    triggerToast('✓ Draft Saved Locally!');
+    triggerToast('✓ Draft Saved!');
   };
 
-  const handlePublishChanges = () => {
+  const handlePublishChanges = async () => {
     if (!model) return;
     setIsPublishing(true);
     setShowPublishModal(false);
 
-    setTimeout(() => {
-      localStorage.setItem(`choosify_creator_published_${activeId}`, JSON.stringify(model));
-      localStorage.setItem(`choosify_creator_draft_${activeId}`, JSON.stringify(model));
-      setHasUnsavedChanges(false);
+    try {
+      await catalogApi.upsertCreator(activeId, model);
+    } catch (error) {
+      console.warn('Failed to publish creator to catalog API', error);
+    }
 
-      try {
-        const raw = localStorage.getItem(CREATOR_STUDIO_LIST_KEY);
-        const list: CreatorCMSModel[] = raw ? JSON.parse(raw) : [...initialCreatorSeeds];
-        const next = list.some((c) => c.id === model.id)
-          ? list.map((c) => (c.id === model.id ? model : c))
-          : [...list, model];
-        localStorage.setItem(CREATOR_STUDIO_LIST_KEY, JSON.stringify(next));
-      } catch {
-        /* ignore */
-      }
+    localStorage.setItem(`choosify_creator_published_${activeId}`, JSON.stringify(model));
+    localStorage.setItem(`choosify_creator_draft_${activeId}`, JSON.stringify(model));
+    persistDraft(model);
+    setHasUnsavedChanges(false);
 
-      setIsPublishing(false);
-      triggerToast('Creator Profile Published Live!');
-    }, 900);
+    try {
+      const raw = localStorage.getItem(CREATOR_STUDIO_LIST_KEY);
+      const list: CreatorCMSModel[] = raw ? JSON.parse(raw) : [...initialCreatorSeeds];
+      const next = list.some((c) => c.id === model.id)
+        ? list.map((c) => (c.id === model.id ? model : c))
+        : [...list, model];
+      localStorage.setItem(CREATOR_STUDIO_LIST_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+
+    setIsPublishing(false);
+    triggerToast('Creator Profile Published Live!');
   };
 
-  const restoreVersion = (snapshot: CreatorCMSModel) => {
-    setModel(snapshot);
+  const restoreVersion = (snapshot: Record<string, unknown>) => {
+    setModel(snapshot as unknown as CreatorCMSModel);
     setHasUnsavedChanges(true);
     setShowVersions(false);
     triggerToast('Snapshot restored into working draft');
@@ -225,20 +321,20 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
                   <p className="text-[11px] font-mono text-slate-400 py-4">No snapshots yet.</p>
                 ) : (
                   <div className="space-y-2 max-h-52 overflow-y-auto mt-2">
-                    {versions.map((ver, idx) => (
-                      <div key={idx} className="p-2 bg-slate-50 rounded-xl border border-slate-200">
+                    {versions.map((ver) => (
+                      <div key={ver.id} className="p-2 bg-slate-50 rounded-xl border border-slate-200">
                         <div className="flex justify-between items-center text-[10px] text-slate-500 font-mono">
-                          <span>{ver.timestamp}</span>
+                          <span>{new Date(ver.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           <button
                             type="button"
-                            onClick={() => setConfirmingId(ver.timestamp)}
+                            onClick={() => setConfirmingId(ver.id)}
                             className="font-bold text-[#FF5B00] hover:underline"
                           >
                             RESTORE
                           </button>
                         </div>
                         <span className="text-xs font-semibold truncate text-[#111827] block">{ver.label}</span>
-                        {confirmingId === ver.timestamp && (
+                        {confirmingId === ver.id && (
                           <div className="mt-1 p-2 bg-red-50 border border-red-200 rounded-lg flex gap-1.5">
                             <button
                               type="button"
@@ -327,7 +423,7 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
               </div>
             </div>
 
-            {/* Identity read-only placeholders (later slices edit these) */}
+            {/* Identity read-only preview */}
             <div className="pt-[72px] pb-8 text-center space-y-1.5">
               <div className="flex items-center justify-center gap-2 flex-wrap">
                 <h2 className="text-xl md:text-2xl font-black text-[#111827] tracking-tight">{model.name}</h2>
@@ -343,9 +439,190 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
               <div className="text-[12px] text-slate-500 font-medium">
                 {model.handle} · {model.location || 'Dhaka, Bangladesh'}
               </div>
-              <p className="text-[10px] text-slate-400 font-mono uppercase tracking-wider pt-2">
-                Identity / social / journey drawers come in later slices
-              </p>
+              {model.bio && (
+                <p className="text-[12px] text-slate-500 max-w-lg mx-auto pt-2 leading-relaxed">{model.bio}</p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* Identity */}
+        <section className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 relative shadow-sm text-left">
+          <div className="absolute top-6 right-6 z-10">
+            <button
+              type="button"
+              onClick={openIdentityDrawer}
+              className="p-2.5 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-xl transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold uppercase cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>EDIT IDENTITY</span>
+            </button>
+          </div>
+          <span className="text-[10px] font-black tracking-widest text-[#FF5B00] uppercase">PROFILE IDENTITY</span>
+          <h3 className="text-lg font-black text-[#111827] mt-1">TITLE, LOCATION & BIO</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+            <div className="bg-[#F9FAFB] border border-slate-200 p-4 rounded-2xl">
+              <span className="text-[9px] font-extrabold uppercase text-[#FF5B00] block mb-1">Title / Role</span>
+              <p className="text-xs font-semibold text-slate-700">{model.title || 'Not set'}</p>
+            </div>
+            <div className="bg-[#F9FAFB] border border-slate-200 p-4 rounded-2xl">
+              <span className="text-[9px] font-extrabold uppercase text-[#FF5B00] block mb-1">Location</span>
+              <p className="text-xs font-semibold text-slate-700">{model.location || 'Not set'}</p>
+            </div>
+            <div className="bg-[#F9FAFB] border border-slate-200 p-4 rounded-2xl md:col-span-1">
+              <span className="text-[9px] font-extrabold uppercase text-[#FF5B00] block mb-1">Short Bio</span>
+              <p className="text-xs font-semibold text-slate-700 line-clamp-3">{model.bio || 'Not set'}</p>
+            </div>
+          </div>
+        </section>
+
+        {/* Social */}
+        <section className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 relative shadow-sm text-left">
+          <div className="absolute top-6 right-6 z-10">
+            <button
+              type="button"
+              onClick={openSocialDrawer}
+              className="p-2.5 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-xl transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold uppercase cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>EDIT SOCIAL</span>
+            </button>
+          </div>
+          <span className="text-[10px] font-black tracking-widest text-[#FF5B00] uppercase">SOCIAL PROFILE PILLS</span>
+          <h3 className="text-lg font-black text-[#111827] mt-1">CONNECTED PLATFORMS</h3>
+          <div className="flex flex-wrap gap-2.5 mt-5">
+            {model.socialLinks?.facebook && (
+              <a href={model.socialLinks.facebook} target="_blank" rel="noreferrer" className="p-2 bg-[#F9FAFB] border border-slate-200 rounded-xl text-slate-600 hover:text-[#FF5B00] transition" title="Facebook">
+                <Facebook className="w-4 h-4" />
+              </a>
+            )}
+            {model.socialLinks?.instagram && (
+              <a href={model.socialLinks.instagram} target="_blank" rel="noreferrer" className="p-2 bg-[#F9FAFB] border border-slate-200 rounded-xl text-slate-600 hover:text-[#FF5B00] transition" title="Instagram">
+                <Instagram className="w-4 h-4" />
+              </a>
+            )}
+            {model.socialLinks?.youtube && (
+              <a href={model.socialLinks.youtube} target="_blank" rel="noreferrer" className="p-2 bg-[#F9FAFB] border border-slate-200 rounded-xl text-slate-600 hover:text-[#FF5B00] transition" title="YouTube">
+                <Youtube className="w-4 h-4" />
+              </a>
+            )}
+            {model.socialLinks?.linkedin && (
+              <a href={model.socialLinks.linkedin} target="_blank" rel="noreferrer" className="p-2 bg-[#F9FAFB] border border-slate-200 rounded-xl text-slate-600 hover:text-[#FF5B00] transition" title="LinkedIn">
+                <Linkedin className="w-4 h-4" />
+              </a>
+            )}
+            {model.socialLinks?.tiktok && (
+              <a href={model.socialLinks.tiktok} target="_blank" rel="noreferrer" className="p-2 bg-[#F9FAFB] border border-slate-200 rounded-xl text-slate-600 hover:text-[#FF5B00] transition text-[10px] font-black uppercase" title="TikTok">
+                TikTok
+              </a>
+            )}
+            {!model.socialLinks?.facebook && !model.socialLinks?.instagram && !model.socialLinks?.youtube && !model.socialLinks?.linkedin && !model.socialLinks?.tiktok && (
+              <p className="text-xs text-slate-400 italic">No social links added.</p>
+            )}
+          </div>
+        </section>
+
+        {/* Journey (Best For Tags, Platforms, Contact & Reach) */}
+        <section className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 relative shadow-sm text-left">
+          <div className="absolute top-6 right-6 z-10">
+            <button
+              type="button"
+              onClick={openJourneyDrawer}
+              className="p-2.5 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-xl transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold uppercase cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>EDIT JOURNEY</span>
+            </button>
+          </div>
+          <span className="text-[10px] font-black tracking-widest text-[#FF5B00] uppercase">JOURNEY & CONTACT</span>
+          <h3 className="text-lg font-black text-[#111827] mt-1">BEST FOR, PLATFORMS & REACH</h3>
+
+          <div className="mt-6 space-y-2">
+            <span className="text-[9px] font-extrabold uppercase text-[#FF5B00] block">Best For Tags</span>
+            <div className="flex flex-wrap gap-1.5">
+              {(model.bestForTags || []).map((tag) => (
+                <span key={tag} className="px-2.5 py-1 bg-[#F9FAFB] border border-slate-200 rounded-full text-[10px] font-bold text-slate-600">#{tag}</span>
+              ))}
+              {(!model.bestForTags || model.bestForTags.length === 0) && <p className="text-xs text-slate-400 italic">No tags added.</p>}
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-2">
+            <span className="text-[9px] font-extrabold uppercase text-[#FF5B00] block">Platforms</span>
+            <div className="flex flex-wrap gap-1.5">
+              {(model.platforms || []).map((p) => (
+                <span key={p} className="px-2.5 py-1 bg-[#F9FAFB] border border-slate-200 rounded-full text-[10px] font-bold text-slate-600">{p}</span>
+              ))}
+              {(!model.platforms || model.platforms.length === 0) && <p className="text-xs text-slate-400 italic">No platforms selected.</p>}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+            <div className="bg-[#F9FAFB] border border-slate-200 p-4 rounded-2xl flex items-start gap-2.5">
+              <Mail className="w-4 h-4 text-[#FF5B00] mt-0.5 shrink-0" />
+              <div>
+                <span className="text-[9px] font-extrabold uppercase text-slate-400 block">Business Email</span>
+                <p className="text-xs font-semibold text-slate-700">{model.email || 'Not set'}</p>
+              </div>
+            </div>
+            <div className="bg-[#F9FAFB] border border-slate-200 p-4 rounded-2xl flex items-start gap-2.5">
+              <Phone className="w-4 h-4 text-[#FF5B00] mt-0.5 shrink-0" />
+              <div>
+                <span className="text-[9px] font-extrabold uppercase text-slate-400 block">Phone</span>
+                <p className="text-xs font-semibold text-slate-700">{model.phone || 'Not set'}</p>
+              </div>
+            </div>
+            <div className="bg-[#F9FAFB] border border-slate-200 p-4 rounded-2xl flex items-start gap-2.5">
+              <Clock className="w-4 h-4 text-[#FF5B00] mt-0.5 shrink-0" />
+              <div>
+                <span className="text-[9px] font-extrabold uppercase text-slate-400 block">Response Time</span>
+                <p className="text-xs font-semibold text-slate-700">{model.responseTime || 'Not set'}</p>
+              </div>
+            </div>
+            <div className="bg-[#F9FAFB] border border-slate-200 p-4 rounded-2xl flex items-start gap-2.5">
+              <MapPin className="w-4 h-4 text-[#FF5B00] mt-0.5 shrink-0" />
+              <div>
+                <span className="text-[9px] font-extrabold uppercase text-slate-400 block">Preferred Contact</span>
+                <p className="text-xs font-semibold text-slate-700">{model.preferredContact || 'Not set'}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Partnerships & Collaborations */}
+        <section className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 relative shadow-sm text-left">
+          <div className="absolute top-6 right-6 z-10">
+            <button
+              type="button"
+              onClick={openPartnershipsDrawer}
+              className="p-2.5 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-xl transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold uppercase cursor-pointer"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              <span>EDIT PARTNERSHIPS</span>
+            </button>
+          </div>
+          <span className="text-[10px] font-black tracking-widest text-[#FF5B00] uppercase">BRAND RELATIONSHIPS</span>
+          <h3 className="text-lg font-black text-[#111827] mt-1">PARTNERSHIPS & COLLABORATIONS</h3>
+
+          <div className="mt-6 space-y-2">
+            <span className="text-[9px] font-extrabold uppercase text-[#FF5B00] block">Top Brand Partners</span>
+            <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5">
+              {(model.brandPartners || []).map((bp) => (
+                <div key={bp.name} className="border border-slate-200 rounded-md p-3 text-center text-[11px] font-extrabold" style={{ color: bp.color }}>
+                  {bp.name}
+                </div>
+              ))}
+              {(!model.brandPartners || model.brandPartners.length === 0) && <p className="text-xs text-slate-400 italic">No brand partners added.</p>}
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-2">
+            <span className="text-[9px] font-extrabold uppercase text-[#FF5B00] block">Collaboration Types</span>
+            <div className="flex flex-wrap gap-2">
+              {(model.collabTypes || []).map((ct) => (
+                <span key={ct} className="bg-[#F9FAFB] border border-slate-200 text-[10.5px] font-semibold text-slate-600 px-3 py-1.5 rounded-full">{ct}</span>
+              ))}
+              {(!model.collabTypes || model.collabTypes.length === 0) && <p className="text-xs text-slate-400 italic">No collaboration types added.</p>}
             </div>
           </div>
         </section>
@@ -479,6 +756,277 @@ export default function CreatorEditStudio({ overrideId, isNested }: CreatorEditS
                 <button
                   type="button"
                   onClick={saveCoverSection}
+                  className="flex-1 py-2.5 bg-[#FF5B00] hover:bg-[#E64A00] text-white text-xs font-black uppercase tracking-wider rounded-xl transition shadow-lg"
+                >
+                  Save Section
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* Identity / Social / Journey / Partnerships drawers */}
+      <AnimatePresence>
+        {(activeDrawer === 'identity' || activeDrawer === 'social' || activeDrawer === 'journey' || activeDrawer === 'partnerships') && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setActiveDrawer(null)}
+              className="fixed inset-0 bg-black z-40"
+            />
+            <motion.div
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'tween', duration: 0.3 }}
+              className="fixed top-0 right-0 h-full w-full sm:w-[480px] bg-white shadow-2xl z-50 overflow-y-auto px-6 py-6 text-left flex flex-col justify-between"
+            >
+              <div>
+                <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-5">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">
+                      {activeDrawer === 'identity' && 'Edit Identity'}
+                      {activeDrawer === 'social' && 'Edit Social Links'}
+                      {activeDrawer === 'journey' && 'Edit Journey & Contact'}
+                      {activeDrawer === 'partnerships' && 'Edit Partnerships'}
+                    </h3>
+                    <p className="text-[10px] font-mono text-slate-500">Live preview updates on save</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveDrawer(null)}
+                    className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                <div className="space-y-5">
+                  {activeDrawer === 'identity' && (
+                    <>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Title / Role</label>
+                        <input
+                          type="text"
+                          value={identityForm.title}
+                          onChange={(e) => setIdentityForm((prev) => ({ ...prev, title: e.target.value }))}
+                          placeholder="Creator & Product Researcher"
+                          className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Location</label>
+                        <input
+                          type="text"
+                          value={identityForm.location}
+                          onChange={(e) => setIdentityForm((prev) => ({ ...prev, location: e.target.value }))}
+                          placeholder="Dhaka, Bangladesh"
+                          className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">Short Bio</label>
+                        <textarea
+                          rows={4}
+                          value={identityForm.bio}
+                          onChange={(e) => setIdentityForm((prev) => ({ ...prev, bio: e.target.value }))}
+                          className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700"
+                        />
+                      </div>
+                      {/* Live preview against name/title block */}
+                      <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center space-y-1">
+                        <p className="text-sm font-black text-[#111827]">{model.name}</p>
+                        <p className="text-[12px] text-[#2323FF] font-semibold">{identityForm.title || 'Creator & Product Researcher'}</p>
+                        <p className="text-[11px] text-slate-500">{model.handle} · {identityForm.location || 'Dhaka, Bangladesh'}</p>
+                      </div>
+                    </>
+                  )}
+
+                  {activeDrawer === 'social' && (
+                    <>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase flex items-center gap-1.5"><Facebook className="w-3 h-3" /> Facebook</label>
+                        <input type="url" value={socialForm.facebook} onChange={(e) => setSocialForm((prev) => ({ ...prev, facebook: e.target.value }))} placeholder="https://facebook.com/…" className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase flex items-center gap-1.5"><Instagram className="w-3 h-3" /> Instagram</label>
+                        <input type="url" value={socialForm.instagram} onChange={(e) => setSocialForm((prev) => ({ ...prev, instagram: e.target.value }))} placeholder="https://instagram.com/…" className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase flex items-center gap-1.5"><Youtube className="w-3 h-3" /> YouTube</label>
+                        <input type="url" value={socialForm.youtube} onChange={(e) => setSocialForm((prev) => ({ ...prev, youtube: e.target.value }))} placeholder="https://youtube.com/@…" className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase flex items-center gap-1.5"><Linkedin className="w-3 h-3" /> LinkedIn</label>
+                        <input type="url" value={socialForm.linkedin} onChange={(e) => setSocialForm((prev) => ({ ...prev, linkedin: e.target.value }))} placeholder="https://linkedin.com/in/…" className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700" />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-500 uppercase">TikTok</label>
+                        <input type="url" value={socialForm.tiktok} onChange={(e) => setSocialForm((prev) => ({ ...prev, tiktok: e.target.value }))} placeholder="https://tiktok.com/@…" className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700" />
+                      </div>
+                    </>
+                  )}
+
+                  {activeDrawer === 'journey' && (
+                    <>
+                      <BestForTagsChipField
+                        tags={journeyForm.bestForTags}
+                        onChange={(tags) => setJourneyForm((prev) => ({ ...prev, bestForTags: tags }))}
+                        presets={['smartphones', 'laptops', 'gadget guides', 'tech reviews']}
+                      />
+
+                      <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                        <label className="text-[9px] font-black text-slate-500 block uppercase">Platforms</label>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                          {ALL_PLATFORMS.map((platform) => {
+                            const selected = journeyForm.platforms.includes(platform);
+                            return (
+                              <label key={platform} className="flex items-center gap-1.5 text-xs text-slate-800">
+                                <input
+                                  type="checkbox"
+                                  checked={selected}
+                                  onChange={(e) => {
+                                    if (e.target.checked) {
+                                      setJourneyForm((prev) => ({ ...prev, platforms: [...prev.platforms, platform] }));
+                                    } else {
+                                      setJourneyForm((prev) => ({ ...prev, platforms: prev.platforms.filter((p) => p !== platform) }));
+                                    }
+                                  }}
+                                  className="rounded text-orange-600 focus:ring-orange-500"
+                                />
+                                <span>{platform}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">Email</label>
+                          <input type="email" value={journeyForm.email} onChange={(e) => setJourneyForm((prev) => ({ ...prev, email: e.target.value }))} className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">Phone</label>
+                          <input type="text" value={journeyForm.phone} onChange={(e) => setJourneyForm((prev) => ({ ...prev, phone: e.target.value }))} className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">Response Time</label>
+                          <input type="text" value={journeyForm.responseTime} onChange={(e) => setJourneyForm((prev) => ({ ...prev, responseTime: e.target.value }))} placeholder="24 - 48 hours" className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700" />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] font-bold text-slate-500 uppercase">Preferred Contact</label>
+                          <input type="text" value={journeyForm.preferredContact} onChange={(e) => setJourneyForm((prev) => ({ ...prev, preferredContact: e.target.value }))} placeholder="Email" className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700" />
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {activeDrawer === 'partnerships' && (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black text-slate-500 block uppercase">Brand Partners</label>
+                        {partnershipsForm.brandPartners.map((bp, idx) => (
+                          <div key={idx} className="flex gap-2 items-center">
+                            <input
+                              type="text"
+                              placeholder="Brand name"
+                              value={bp.name}
+                              onChange={(e) => {
+                                const next = [...partnershipsForm.brandPartners];
+                                next[idx] = { ...next[idx], name: e.target.value };
+                                setPartnershipsForm((prev) => ({ ...prev, brandPartners: next }));
+                              }}
+                              className="flex-1 p-2 border rounded-lg text-xs"
+                            />
+                            <input
+                              type="color"
+                              value={bp.color || '#1A1A2E'}
+                              onChange={(e) => {
+                                const next = [...partnershipsForm.brandPartners];
+                                next[idx] = { ...next[idx], color: e.target.value };
+                                setPartnershipsForm((prev) => ({ ...prev, brandPartners: next }));
+                              }}
+                              className="w-9 h-9 border rounded-lg p-0.5 cursor-pointer"
+                              title="Brand chip color"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setPartnershipsForm((prev) => ({ ...prev, brandPartners: prev.brandPartners.filter((_, i) => i !== idx) }))}
+                              className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setPartnershipsForm((prev) => ({ ...prev, brandPartners: [...prev.brandPartners, { name: '', color: '#1A1A2E' }] }))}
+                          className="text-[10px] text-orange-600 font-bold hover:underline"
+                        >
+                          ＋ Add brand partner...
+                        </button>
+                        {/* Live preview */}
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          {partnershipsForm.brandPartners.filter((bp) => bp.name).map((bp) => (
+                            <span key={bp.name} className="border border-slate-200 rounded-md px-2.5 py-1 text-[11px] font-extrabold" style={{ color: bp.color }}>{bp.name}</span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-100 space-y-2">
+                        <label className="text-[9px] font-black text-slate-500 block uppercase">Collaboration Types</label>
+                        <div className="flex flex-wrap gap-1.5">
+                          {partnershipsForm.collabTypes.map((ct) => (
+                            <span key={ct} className="bg-slate-100 text-[10.5px] font-semibold text-slate-600 px-3 py-1.5 rounded-full inline-flex items-center gap-1.5">
+                              {ct}
+                              <button
+                                type="button"
+                                onClick={() => setPartnershipsForm((prev) => ({ ...prev, collabTypes: prev.collabTypes.filter((c) => c !== ct) }))}
+                                className="text-slate-400 hover:text-red-600"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {COLLAB_TYPE_PRESETS.filter((preset) => !partnershipsForm.collabTypes.includes(preset)).map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => setPartnershipsForm((prev) => ({ ...prev, collabTypes: [...prev.collabTypes, preset] }))}
+                              className="px-2.5 py-1 bg-slate-50 border hover:bg-slate-100 rounded-lg text-[9px] text-slate-600 font-semibold cursor-pointer"
+                            >
+                              ＋ {preset}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-4 mt-8 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setActiveDrawer(null)}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold rounded-xl transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (activeDrawer === 'identity') saveIdentitySection();
+                    if (activeDrawer === 'social') saveSocialSection();
+                    if (activeDrawer === 'journey') saveJourneySection();
+                    if (activeDrawer === 'partnerships') savePartnershipsSection();
+                  }}
                   className="flex-1 py-2.5 bg-[#FF5B00] hover:bg-[#E64A00] text-white text-xs font-black uppercase tracking-wider rounded-xl transition shadow-lg"
                 >
                   Save Section

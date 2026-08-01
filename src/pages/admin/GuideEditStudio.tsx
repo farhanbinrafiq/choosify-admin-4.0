@@ -10,11 +10,13 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { catalogApi } from "../../services/catalogApi";
+import { useEntityDraft } from "../../hooks/useEntityDraft";
+import type { EntityVersion } from "../../services/catalogApi";
+import type { CatalogBrand } from "../../types/catalog";
 
 const CHC_GUIDES_KEY = "choosify_guides_studio_list";
-const CHC_VERSIONS_KEY = "choosify_guides_versions";
 
-// Realistic Catalog Products 
+// Realistic Catalog Products
 interface CatalogProduct {
   id: string;
   name: string;
@@ -34,6 +36,33 @@ const catalogProducts: CatalogProduct[] = [
   { id: "p7", name: "Nothing Phone (2)", price: "৳68,000", rating: 4.5, image: "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?auto=format&fit=crop&w=400&q=80", badge: "POPULAR" }
 ];
 
+// Editorial format — drives SpotlightContentType resolution on the storefront
+// (Choosify-Web's mapGuideTypeToContent prefers this explicit field over category/tag inference).
+export type GuideFormat = "buying_guide" | "product_review" | "comparison" | "live" | "tutorial" | "tips";
+
+const GUIDE_FORMAT_LABELS: Record<GuideFormat, string> = {
+  buying_guide: "Buying Guide",
+  product_review: "Product Review",
+  comparison: "Comparison",
+  live: "Live Session",
+  tutorial: "Tutorial",
+  tips: "Tips",
+};
+
+// Mirrors Choosify-Web's DEFAULT_OPTIONAL_SECTIONS_BY_TYPE (resolveContentDetailSections.ts)
+// for the subset of Content Detail sections guides can author.
+const DEFAULT_OPTIONAL_SECTIONS_BY_TYPE: Record<GuideFormat, string[]> = {
+  buying_guide: ["winner", "why_it_won", "verdict", "takeaways", "items_mentioned", "brands_mentioned"],
+  product_review: ["winner", "why_it_won", "verdict", "takeaways", "items_mentioned", "how_review_was_made"],
+  comparison: ["winner", "why_it_won", "verdict", "takeaways", "items_mentioned", "brands_mentioned"],
+  live: ["items_mentioned"],
+  tutorial: ["takeaways", "items_mentioned"],
+  tips: ["takeaways", "items_mentioned"],
+};
+
+const sectionsFromFormat = (format: GuideFormat): GuideData["detailSections"] =>
+  (DEFAULT_OPTIONAL_SECTIONS_BY_TYPE[format] || []).map((id, order) => ({ id, enabled: true, order }));
+
 export interface ReasoningTag {
   id: string;
   label: string;
@@ -43,12 +72,6 @@ export interface ReasoningTag {
 export interface MetricScore {
   label: string;
   score: number; // 0 to 10
-}
-
-interface VersionSnapshot {
-  timestamp: string;
-  label: string;
-  data: string; // JSON String of GuideData
 }
 
 interface GuideData {
@@ -61,6 +84,17 @@ interface GuideData {
   audienceType: string;
   status: "Draft" | "Under Review" | "Scheduled" | "Published" | "Archived";
   lastUpdated: string;
+
+  // Editorial format — drives storefront content-type resolution + default sections
+  format: GuideFormat;
+
+  // Live session config — only meaningful when format === "live"
+  live: {
+    status: "live" | "upcoming" | "replay" | "ended";
+    platform: "youtube" | "facebook" | "tiktok" | "instagram" | "vimeo" | "native";
+    embedUrl: string;
+    scheduledAt: string;
+  };
 
   // HERO SECTION
   heroImage: string;
@@ -95,8 +129,8 @@ interface GuideData {
   methodologyDescription: string;
   methodologyChecklist: { id: string; text: string; checked: boolean }[];
 
-  // SECTION 3 CENTER: WINNER PRODUCT
-  winnerProductId: string;
+  // SECTION 3 CENTER: WINNER PRODUCT(S) — 1..N, ordered, first entry is the primary champion
+  winnerProductIds: string[];
   winnerPriceOverride: string;
   winnerCtaLabel: string;
   winnerCtaUrl: string;
@@ -129,6 +163,9 @@ interface GuideData {
   takeawayBody: string;
   takeawayBgStyle: "slate" | "navy" | "charcoal" | "amber";
   takeawayAccentTheme: "orange" | "cyan" | "emerald" | "purple";
+
+  // Brands Mentioned — powers the brands_mentioned Content Detail section
+  brandsMentionedIds: string[];
 
   // SECTION 8: OTHER PRODUCTS MENTIONED
   otherMentionedIds: string[];
@@ -181,6 +218,14 @@ const defaultNewGuide: GuideData = {
   status: "Draft",
   lastUpdated: "June 13, 2026 12:45 PM",
 
+  format: "buying_guide",
+  live: {
+    status: "upcoming",
+    platform: "youtube",
+    embedUrl: "",
+    scheduledAt: "",
+  },
+
   // Section 1: Hero
   heroImage: "https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=1200&q=80",
   galleryImages: [
@@ -224,7 +269,7 @@ const defaultNewGuide: GuideData = {
   ],
 
   // Winner section
-  winnerProductId: "p1",
+  winnerProductIds: ["p1"],
   winnerPriceOverride: "৳1,32,000",
   winnerCtaLabel: "Buy local official outlet",
   winnerCtaUrl: "https://shop.samsung.com/bd",
@@ -282,6 +327,9 @@ const defaultNewGuide: GuideData = {
   takeawayBody: "If your goal is absolute screen legibility in Bangladesh glare, complete productivity stylus tools, and heavy software upgrades that stretch until the next decade, the Galaxy S24 Ultra is your undisputed overall winner.",
   takeawayBgStyle: "charcoal",
   takeawayAccentTheme: "orange",
+
+  // Brands mentioned
+  brandsMentionedIds: [],
 
   // Other mentioned
   otherMentionedIds: ["p2", "p3", "p4", "p5"],
@@ -350,13 +398,17 @@ export default function GuideEditStudio() {
   const [guide, setGuide] = useState<GuideData>(defaultNewGuide);
   const [viewportMode, setViewportMode] = useState<"desktop" | "mobile">("desktop");
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  
-  // Versions state
-  const [versions, setVersions] = useState<VersionSnapshot[]>([]);
   const [savingState, setSavingState] = useState<"Saved" | "Saving..." | "Changes pending">("Saved");
-  
+
   // RIGHT SIDE SYSTEM-SCOPED SLIDING DRAWER WIDTH: 480px
   const [activeDrawerSection, setActiveDrawerSection] = useState<string | null>(null);
+
+  const { saveDraft: persistDraft, versions, saveVersion } = useEntityDraft<GuideData>(
+    "guide",
+    guide.id,
+    { draftKey: `choosify_guide_draft_${guide.id}`, versionsKey: `choosify_guide_versions_${guide.id}` },
+    (backendDraft) => setGuide((prev) => ({ ...defaultNewGuide, ...prev, ...backendDraft })),
+  );
 
   // Load from local storage or set defaults
   useEffect(() => {
@@ -383,18 +435,15 @@ export default function GuideEditStudio() {
       const tempId = "guide_" + Math.random().toString(36).substring(2, 9);
       setGuide({ ...defaultNewGuide, id: tempId, guideTitle: "NEW UNTITLED BUYING GUIDE STUDY" });
     }
-
-    // Load custom versions
-    const cachedVersions = localStorage.getItem(CHC_VERSIONS_KEY);
-    if (cachedVersions) {
-      try {
-        const parsed = JSON.parse(cachedVersions);
-        setVersions(parsed[id || "temp"] || []);
-      } catch (_) {
-        setVersions([]);
-      }
-    }
+    // useEntityDraft fetches the backend draft in the background and, once it
+    // resolves, calls setGuide again — the backend copy wins over this local seed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, isEditing]);
+
+  const [catalogBrandsList, setCatalogBrandsList] = useState<CatalogBrand[]>([]);
+  useEffect(() => {
+    catalogApi.listBrands().then(setCatalogBrandsList).catch(() => setCatalogBrandsList([]));
+  }, []);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -425,10 +474,21 @@ export default function GuideEditStudio() {
       productIds: guideData.rankedProductIds || [],
       whatWeLike: guideData.verdictPros || [],
       whatToConsider: guideData.verdictCons || [],
+      format: guideData.format,
+      live: guideData.format === "live" ? guideData.live : undefined,
       sections: (guideData.detailSections || []).map((s, i) => ({
         id: s.id,
         enabled: s.enabled !== false,
         order: typeof s.order === "number" ? s.order : i,
+        data: {
+          winnerIds: guideData.winnerProductIds || [],
+          topPickIds: (guideData.winnerProductIds || []).slice(0, 3),
+          itemIds: guideData.rankedProductIds || [],
+          brandIds: guideData.brandsMentionedIds || [],
+          whatWeLike: guideData.verdictPros || [],
+          whatToConsider: guideData.verdictCons || [],
+          takeawayBody: guideData.takeawayBody || guideData.verdictValueBody,
+        },
       })),
       seoTitle: guideData.seoTitle,
       seoDescription: guideData.seoDescription,
@@ -469,41 +529,19 @@ export default function GuideEditStudio() {
 
     localStorage.setItem(CHC_GUIDES_KEY, JSON.stringify(currentGuidesList));
     setSavingState("Saved");
+    persistDraft(guide);
     syncGuideToCatalog(guide).catch(() => undefined);
     triggerToast(`✓ Section [${sectionName.toUpperCase()}] saved independently & catalog updated.`);
-    
+
     // Auto backup checkpoint
-    createCheckpointVersion(`Backup: Edited ${sectionName}`);
+    saveVersion(`Backup: Edited ${sectionName}`, guide);
     setActiveDrawerSection(null);
   };
 
-  const createCheckpointVersion = (label: string) => {
-    const freshVersion: VersionSnapshot = {
-      timestamp: new Date().toLocaleTimeString() + " " + new Date().toLocaleDateString(),
-      label: label,
-      data: JSON.stringify(guide)
-    };
-    const updatedVersions = [freshVersion, ...versions].slice(0, 8); // cap size
-    setVersions(updatedVersions);
-
-    const cachedVersions = localStorage.getItem(CHC_VERSIONS_KEY);
-    let vMap: Record<string, VersionSnapshot[]> = {};
-    if (cachedVersions) {
-      try { vMap = JSON.parse(cachedVersions); } catch (_) {}
-    }
-    vMap[guide.id] = updatedVersions;
-    localStorage.setItem(CHC_VERSIONS_KEY, JSON.stringify(vMap));
-  };
-
-  const restoreVersionSnapshot = (snap: VersionSnapshot) => {
-    try {
-      const parsed = JSON.parse(snap.data);
-      setGuide(parsed);
-      triggerToast("✓ Restored successfully from snapshot revision.");
-      setSavingState("Changes pending");
-    } catch (_) {
-      triggerToast("❌ Failed parsing snapshot content.");
-    }
+  const restoreVersionSnapshot = (snap: EntityVersion) => {
+    setGuide({ ...defaultNewGuide, ...(snap.snapshot as Partial<GuideData>) });
+    triggerToast("✓ Restored successfully from snapshot revision.");
+    setSavingState("Changes pending");
   };
 
   // Helpers
@@ -522,8 +560,13 @@ export default function GuideEditStudio() {
     }
   };
 
-  // Dynamic products reference
-  const winnerProduct = getProductById(guide.winnerProductId) || catalogProducts[0];
+  // Dynamic products reference — winnerProductIds[0] is the primary champion,
+  // the rest render as additional Top Picks.
+  const winnerProducts = (guide.winnerProductIds?.length ? guide.winnerProductIds : [catalogProducts[0].id])
+    .map(getProductById)
+    .filter((p): p is CatalogProduct => !!p);
+  const winnerProduct = winnerProducts[0] || catalogProducts[0];
+  const additionalTopPicks = winnerProducts.slice(1);
 
   return (
     <div id="guide-edit-studio" className="pb-24 text-slate-800 min-h-screen bg-[#F8FAFC] -m-6 p-6 font-sans select-none relative overflow-x-hidden">
@@ -608,6 +651,15 @@ export default function GuideEditStudio() {
             className="px-4 py-2 bg-white/10 hover:bg-white/20 text-app-text-primary rounded-xl text-xs font-bold uppercase tracking-wider border border-app-border transition-all"
           >
             Save Draft
+          </button>
+
+          <button
+            onClick={() => setActiveDrawerSection("format")}
+            className="px-3 py-2.5 bg-white/10 hover:bg-white/20 rounded-xl border border-app-border text-app-text-primary flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider"
+            title="Guide Format"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            {GUIDE_FORMAT_LABELS[guide.format] || "Format"}
           </button>
 
           <button
@@ -867,15 +919,28 @@ export default function GuideEditStudio() {
                 </div>
 
                 <div className="pt-2">
-                  <a 
-                    href={guide.winnerCtaUrl} 
-                    target="_blank" 
+                  <a
+                    href={guide.winnerCtaUrl}
+                    target="_blank"
                     rel="noreferrer"
                     className="w-full py-2.5 block text-center bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-transform shadow-lg shadow-orange-500/10"
                   >
                     {guide.winnerCtaLabel} ↗
                   </a>
                 </div>
+
+                {additionalTopPicks.length > 0 && (
+                  <div className="pt-1">
+                    <span className="text-[8px] font-mono text-app-text-secondary uppercase tracking-widest block mb-1.5">Additional Top Picks</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {additionalTopPicks.map((p, idx) => (
+                        <span key={p.id} className="bg-[#0F0F1D] border border-app-border text-app-text-secondary text-[9px] font-bold px-2 py-1 rounded-lg">
+                          #{idx + 2} {p.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1182,21 +1247,56 @@ export default function GuideEditStudio() {
                       {labels[section.id] || section.id}
                     </span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const next = [...(guide.detailSections || [])];
-                      next[idx] = { ...next[idx], enabled: !next[idx].enabled };
-                      handleFieldChange("detailSections", next);
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors ${
-                      section.enabled
-                        ? "bg-emerald-500/15 text-emerald-700"
-                        : "bg-slate-200 text-slate-500"
-                    }`}
-                  >
-                    {section.enabled ? "On" : "Off"}
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {section.id === "brands_mentioned" && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveDrawerSection("brands")}
+                        className="px-2.5 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wide bg-slate-200 text-slate-600 hover:bg-slate-300"
+                      >
+                        Edit ({guide.brandsMentionedIds?.length || 0})
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={idx === 0}
+                      onClick={() => {
+                        const next = [...(guide.detailSections || [])];
+                        [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                        handleFieldChange("detailSections", next.map((s, i) => ({ ...s, order: i })));
+                      }}
+                      className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+                    >
+                      ▲
+                    </button>
+                    <button
+                      type="button"
+                      disabled={idx === (guide.detailSections || []).length - 1}
+                      onClick={() => {
+                        const next = [...(guide.detailSections || [])];
+                        [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                        handleFieldChange("detailSections", next.map((s, i) => ({ ...s, order: i })));
+                      }}
+                      className="p-1 text-slate-400 hover:text-slate-700 disabled:opacity-30"
+                    >
+                      ▼
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = [...(guide.detailSections || [])];
+                        next[idx] = { ...next[idx], enabled: !next[idx].enabled };
+                        handleFieldChange("detailSections", next);
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wide transition-colors ${
+                        section.enabled
+                          ? "bg-emerald-500/15 text-emerald-700"
+                          : "bg-slate-200 text-slate-500"
+                      }`}
+                    >
+                      {section.enabled ? "On" : "Off"}
+                    </button>
+                  </div>
                 </li>
               );
             })}
@@ -1352,6 +1452,86 @@ export default function GuideEditStudio() {
               {/* Drawer Scroll body inputs */}
               <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar bg-slate-905">
                 
+                {/* GUIDE FORMAT SELECTOR */}
+                {activeDrawerSection === "format" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">GUIDE FORMAT</label>
+                      <select
+                        value={guide.format}
+                        onChange={(e) => {
+                          const nextFormat = e.target.value as GuideFormat;
+                          handleFieldChange("format", nextFormat);
+                          handleFieldChange("detailSections", sectionsFromFormat(nextFormat));
+                        }}
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none"
+                      >
+                        {(Object.keys(GUIDE_FORMAT_LABELS) as GuideFormat[]).map((fmt) => (
+                          <option key={fmt} value={fmt}>{GUIDE_FORMAT_LABELS[fmt]}</option>
+                        ))}
+                      </select>
+                      <p className="text-[9px] text-app-text-secondary mt-1.5 leading-relaxed">
+                        Changing format resets the Content Detail section list below to that format's defaults.
+                      </p>
+                    </div>
+
+                    {guide.format === "live" && (
+                      <div className="p-3 bg-app-bg/10 rounded-xl border border-app-border space-y-3">
+                        <span className="text-[9px] font-mono text-app-text-secondary uppercase tracking-wider block">Live Session Config</span>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] text-app-text-secondary font-mono block mb-1">STATUS</label>
+                            <select
+                              value={guide.live.status}
+                              onChange={(e) => handleFieldChange("live", { ...guide.live, status: e.target.value })}
+                              className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2 rounded-lg text-xs text-app-text-secondary outline-none"
+                            >
+                              <option value="upcoming">Upcoming</option>
+                              <option value="live">Live Now</option>
+                              <option value="replay">Replay</option>
+                              <option value="ended">Ended</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-app-text-secondary font-mono block mb-1">PLATFORM</label>
+                            <select
+                              value={guide.live.platform}
+                              onChange={(e) => handleFieldChange("live", { ...guide.live, platform: e.target.value })}
+                              className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2 rounded-lg text-xs text-app-text-secondary outline-none"
+                            >
+                              <option value="youtube">YouTube</option>
+                              <option value="facebook">Facebook</option>
+                              <option value="tiktok">TikTok</option>
+                              <option value="instagram">Instagram</option>
+                              <option value="vimeo">Vimeo</option>
+                              <option value="native">Native</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-app-text-secondary font-mono block mb-1">EMBED URL</label>
+                          <input
+                            type="text"
+                            value={guide.live.embedUrl}
+                            onChange={(e) => handleFieldChange("live", { ...guide.live, embedUrl: e.target.value })}
+                            placeholder="https://youtube.com/embed/…"
+                            className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-app-text-secondary font-mono block mb-1">SCHEDULED TIME</label>
+                          <input
+                            type="datetime-local"
+                            value={guide.live.scheduledAt}
+                            onChange={(e) => handleFieldChange("live", { ...guide.live, scheduledAt: e.target.value })}
+                            className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* SECTION 1: HERO CONFIG */}
                 {activeDrawerSection === "hero" && (
                   <div className="space-y-4">
@@ -1408,11 +1588,11 @@ export default function GuideEditStudio() {
                       <div className="p-4 text-center text-xs text-slate-500 italic bg-app-bg rounded-xl border border-app-border">No backup records. Revisions auto capture during sectional saves.</div>
                     ) : (
                       <div className="space-y-2">
-                        {versions.map((snap, idx) => (
-                          <div key={idx} className="p-3.5 bg-app-bg border border-app-border hover:border-slate-700 rounded-xl transition-all flex items-center justify-between">
+                        {versions.map((snap) => (
+                          <div key={snap.id} className="p-3.5 bg-app-bg border border-app-border hover:border-slate-700 rounded-xl transition-all flex items-center justify-between">
                             <div className="text-left max-w-[280px]">
                               <span className="text-xs font-black text-app-text-secondary block">{snap.label}</span>
-                              <span className="text-[9px] font-mono text-slate-500 block">{snap.timestamp}</span>
+                              <span className="text-[9px] font-mono text-slate-500 block">{new Date(snap.createdAt).toLocaleString()}</span>
                             </div>
                             <button
                               onClick={() => {
@@ -1485,13 +1665,62 @@ export default function GuideEditStudio() {
                 {activeDrawerSection === "winner" && (
                   <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">SELECT EXPERT WINNER PRODUCT</label>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">WINNER / TOP PICKS (ORDERED, 1–N)</label>
+                      <div className="space-y-2">
+                        {(guide.winnerProductIds || []).map((pid, idx) => {
+                          const prod = getProductById(pid);
+                          return (
+                            <div key={pid} className="flex items-center gap-2 p-2 bg-app-bg/10 border border-app-border rounded-xl">
+                              <span className="w-5 h-5 bg-slate-700 rounded-md text-[10px] font-bold text-center flex items-center justify-center text-orange-400 font-mono shrink-0">#{idx + 1}</span>
+                              <span className="flex-1 text-xs text-app-text-secondary truncate font-semibold">{prod?.name || pid}</span>
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => {
+                                  const next = [...guide.winnerProductIds];
+                                  [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                                  handleFieldChange("winnerProductIds", next);
+                                }}
+                                className="p-1 text-app-text-secondary hover:text-white disabled:opacity-30"
+                              >
+                                ▲
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === guide.winnerProductIds.length - 1}
+                                onClick={() => {
+                                  const next = [...guide.winnerProductIds];
+                                  [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                                  handleFieldChange("winnerProductIds", next);
+                                }}
+                                className="p-1 text-app-text-secondary hover:text-white disabled:opacity-30"
+                              >
+                                ▼
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleFieldChange("winnerProductIds", guide.winnerProductIds.filter(id => id !== pid))}
+                                className="p-1 text-rose-500 hover:text-rose-400"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          );
+                        })}
+                        {(!guide.winnerProductIds || guide.winnerProductIds.length === 0) && (
+                          <p className="text-[10px] text-app-text-secondary italic">No winners selected yet.</p>
+                        )}
+                      </div>
                       <select
-                        value={guide.winnerProductId}
-                        onChange={(e) => handleFieldChange("winnerProductId", e.target.value)}
-                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none"
+                        value=""
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          handleFieldChange("winnerProductIds", [...(guide.winnerProductIds || []), e.target.value]);
+                        }}
+                        className="w-full mt-2 bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none"
                       >
-                        {catalogProducts.map(cp => (
+                        <option value="">+ Add a winner / top pick…</option>
+                        {catalogProducts.filter(cp => !(guide.winnerProductIds || []).includes(cp.id)).map(cp => (
                           <option key={cp.id} value={cp.id}>{cp.name}</option>
                         ))}
                       </select>
@@ -1549,6 +1778,51 @@ export default function GuideEditStudio() {
                           <span className="font-mono text-orange-500 font-bold w-12 text-right">{met.score.toFixed(1)}/10</span>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* BRANDS MENTIONED */}
+                {activeDrawerSection === "brands" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] text-app-text-secondary font-mono block mb-1">BRANDS MENTIONED</label>
+                      <div className="flex flex-wrap gap-1.5 mb-2">
+                        {(guide.brandsMentionedIds || []).map((bid) => {
+                          const brand = catalogBrandsList.find(b => b.id === bid);
+                          return (
+                            <span key={bid} className="bg-app-bg/10 border border-app-border text-app-text-secondary text-[10px] font-bold px-2.5 py-1 rounded-full inline-flex items-center gap-1.5">
+                              {brand?.name || bid}
+                              <button
+                                type="button"
+                                onClick={() => handleFieldChange("brandsMentionedIds", guide.brandsMentionedIds.filter(id => id !== bid))}
+                                className="text-app-text-secondary hover:text-rose-400"
+                              >
+                                ×
+                              </button>
+                            </span>
+                          );
+                        })}
+                        {(!guide.brandsMentionedIds || guide.brandsMentionedIds.length === 0) && (
+                          <p className="text-[10px] text-app-text-secondary italic">No brands selected yet.</p>
+                        )}
+                      </div>
+                      <select
+                        value=""
+                        onChange={(e) => {
+                          if (!e.target.value) return;
+                          handleFieldChange("brandsMentionedIds", [...(guide.brandsMentionedIds || []), e.target.value]);
+                        }}
+                        className="w-full bg-app-bg border border-app-border focus:border-orange-500 p-2.5 rounded-xl text-xs text-app-text-secondary outline-none"
+                      >
+                        <option value="">+ Add a brand…</option>
+                        {catalogBrandsList.filter(b => !(guide.brandsMentionedIds || []).includes(b.id)).map(b => (
+                          <option key={b.id} value={b.id}>{b.name}</option>
+                        ))}
+                      </select>
+                      {catalogBrandsList.length === 0 && (
+                        <p className="text-[9px] text-app-text-secondary italic mt-1.5">Loading brands from catalog…</p>
+                      )}
                     </div>
                   </div>
                 )}

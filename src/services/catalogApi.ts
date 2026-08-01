@@ -13,6 +13,28 @@ import type {
   SiteConfig,
 } from '../types/catalog';
 
+export type DraftEntityType = 'brand' | 'product' | 'creator' | 'guide';
+
+export interface EntityDraft {
+  id: string;
+  entityType: DraftEntityType;
+  entityId: string;
+  data: Record<string, unknown>;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export interface EntityVersion {
+  id: string;
+  entityType: DraftEntityType;
+  entityId: string;
+  label: string;
+  snapshot: Record<string, unknown>;
+  createdAt: string;
+  createdBy: string;
+  createdByName?: string;
+}
+
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
 const AUTH_TOKEN_KEY = 'choosify_auth_token';
 
@@ -35,12 +57,12 @@ async function request<T>(path: string, method: HttpMethod = 'GET', body?: unkno
     'Content-Type': 'application/json',
   };
 
-  // Write routes require Firebase Bearer token (authenticateRequest).
-  if (method !== 'GET') {
-    const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (token) {
-      headers.Authorization = `Bearer ${token}`;
-    }
+  // Write routes require a Firebase Bearer token (authenticateRequest); some GET
+  // routes (draft/version endpoints) are admin-only too, so attach it whenever
+  // present — public GET routes simply ignore the header.
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
 
   const response = await fetch(`${API_BASE}${path}`, {
@@ -237,5 +259,34 @@ export const catalogApi = {
   },
   deleteBrandPost: async (id: string): Promise<void> => {
     await request<{ success: boolean }>(`/catalog/brand-posts/${id}`, 'DELETE');
+  },
+
+  getDraft: async (entityType: DraftEntityType, id: string): Promise<EntityDraft | null> => {
+    const result = await request<{ data: EntityDraft | null }>(`/catalog/${entityType}/${id}/draft`);
+    return result.data;
+  },
+  saveDraft: async (
+    entityType: DraftEntityType,
+    id: string,
+    data: Record<string, unknown>,
+  ): Promise<EntityDraft> => {
+    const result = await request<{ data: EntityDraft }>(`/catalog/${entityType}/${id}/draft`, 'PUT', { data });
+    return result.data;
+  },
+  listVersions: async (entityType: DraftEntityType, id: string): Promise<EntityVersion[]> => {
+    const result = await request<{ data: EntityVersion[] }>(`/catalog/${entityType}/${id}/versions`);
+    return result.data;
+  },
+  createVersion: async (
+    entityType: DraftEntityType,
+    id: string,
+    label: string,
+    snapshot: Record<string, unknown>,
+  ): Promise<EntityVersion> => {
+    const result = await request<{ data: EntityVersion }>(`/catalog/${entityType}/${id}/versions`, 'POST', {
+      label,
+      snapshot,
+    });
+    return result.data;
   },
 };

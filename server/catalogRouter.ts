@@ -23,7 +23,13 @@ import { recordProductView, recordSearch } from './analytics/eventHooks';
 import { validateImageUploadInput } from './lib/uploadValidation';
 import { validate } from './middleware/validate';
 import { CatalogProductParamsSchema } from './validation/catalog/productSchemas';
+import {
+  EntityDraftBodySchema,
+  EntityDraftParamsSchema,
+  EntityVersionBodySchema,
+} from './validation/catalog/draftSchemas';
 import { authenticateRequest } from './middleware/auth';
+import { draftStore, type DraftEntityType } from '../lib/vercel-catalog/draftStore';
 
 export const catalogRouter = Router();
 
@@ -641,6 +647,73 @@ catalogRouter.patch('/catalog/guides/:id', ...requireAuth, async (req, res) => {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid guide patch payload') });
   }
 });
+
+catalogRouter.get(
+  '/catalog/:entityType/:id/draft',
+  ...requireAuth,
+  validate({ params: EntityDraftParamsSchema }),
+  async (req, res) => {
+    try {
+      const { entityType, id } = req.params as unknown as { entityType: DraftEntityType; id: string };
+      const draft = await draftStore.getDraft(entityType, id);
+      res.json({ data: draft });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load draft' });
+    }
+  },
+);
+
+catalogRouter.put(
+  '/catalog/:entityType/:id/draft',
+  ...requireAuth,
+  validate({ params: EntityDraftParamsSchema, body: EntityDraftBodySchema }),
+  async (req, res) => {
+    try {
+      const { entityType, id } = req.params as unknown as { entityType: DraftEntityType; id: string };
+      const saved = await draftStore.upsertDraft(entityType, id, req.body.data, req.userId ?? 'unknown');
+      res.json({ success: true, data: saved });
+    } catch (error) {
+      res.status(400).json({ error: validationErrorMessage(error, 'Invalid draft payload') });
+    }
+  },
+);
+
+catalogRouter.get(
+  '/catalog/:entityType/:id/versions',
+  ...requireAuth,
+  validate({ params: EntityDraftParamsSchema }),
+  async (req, res) => {
+    try {
+      const { entityType, id } = req.params as unknown as { entityType: DraftEntityType; id: string };
+      const versions = await draftStore.listVersions(entityType, id);
+      res.json({ data: versions });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list versions' });
+    }
+  },
+);
+
+catalogRouter.post(
+  '/catalog/:entityType/:id/versions',
+  ...requireAuth,
+  validate({ params: EntityDraftParamsSchema, body: EntityVersionBodySchema }),
+  async (req, res) => {
+    try {
+      const { entityType, id } = req.params as unknown as { entityType: DraftEntityType; id: string };
+      const version = await draftStore.createVersion(
+        entityType,
+        id,
+        req.body.label,
+        req.body.snapshot,
+        req.userId ?? 'unknown',
+        req.user?.displayName,
+      );
+      res.status(201).json({ success: true, data: version });
+    } catch (error) {
+      res.status(400).json({ error: validationErrorMessage(error, 'Invalid version payload') });
+    }
+  },
+);
 
 catalogRouter.get('/catalog/placements', async (req, res) => {
   try {

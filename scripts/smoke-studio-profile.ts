@@ -84,7 +84,7 @@ async function main() {
       location: 'Dhaka, Bangladesh',
       bio: 'Smoke bio ' + Date.now(),
       socialLinks: { youtube: 'https://youtube.com/@techtalksbd-smoke' },
-      brandPartners: ['Samsung', 'Xiaomi', 'SmokeBrand'],
+      brandPartners: [{ name: 'Samsung' }, { name: 'Xiaomi' }, { name: 'SmokeBrand' }],
       collabTypes: ['Product Reviews'],
       score: 4.9,
       bestFor: 'Tech',
@@ -101,7 +101,7 @@ async function main() {
   );
   await catalogStore.upsertCreator(creatorPayload);
   const creatorReload = await catalogStore.getCreator(creatorPayload.id);
-  if (!creatorReload?.coverImage || !creatorReload.socialLinks?.youtube || !creatorReload.brandPartners?.includes('SmokeBrand')) {
+  if (!creatorReload?.coverImage || !creatorReload.socialLinks?.youtube || !creatorReload.brandPartners?.some((bp) => bp.name === 'SmokeBrand')) {
     throw new Error('Creator profile fields did not persist: ' + JSON.stringify(creatorReload));
   }
   console.log('OK creator', creatorReload.id, creatorReload.coverImage, creatorReload.brandPartners);
