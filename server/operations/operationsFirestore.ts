@@ -9,6 +9,7 @@ import type {
   OpsReview,
   OpsSellerBookingSettings,
   OpsStorefrontOrder,
+  OpsVerificationRequest,
   RolePermissionsMap,
 } from './types';
 import type { OpsShipment } from './shipmentStore';
@@ -37,6 +38,7 @@ export interface OperationsSnapshot {
   paymentOptionsConfig?: OpsPaymentOptionsConfig;
   sellerBookingSettings?: Record<string, OpsSellerBookingSettings>;
   returns?: OpsReturnRequest[];
+  verifications?: OpsVerificationRequest[];
 }
 
 export interface OpsSellerOfferRow {

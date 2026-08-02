@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import { toast } from 'react-hot-toast';
+import { operationsApi } from '../services/operationsApi';
 
 // ============================================================================
 // PHASE 1: TRUST ENGINE ENTITIES
@@ -109,10 +111,15 @@ export interface VerificationReview {
 
 export interface VerificationRequest {
   id: string;
+  /** brand | creator ? optional for legacy localStorage rows */
+  entityType?: 'brand' | 'creator';
+  entityId?: string;
+  entityName?: string;
   brand_id: string;
   brand_name: string;
   logo_url: string;
   submitted_by: string;
+  submitted_by_name?: string;
   status: 'Draft' | 'Submitted' | 'Under Review' | 'Approved' | 'Rejected';
   documents: VerificationDocument[];
   reviews: VerificationReview[];
@@ -449,75 +456,33 @@ export const TrustProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     ];
   });
 
-  // 5. BRAND VERIFICATION SYSTEM PIPELINE
-  const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>(() => {
-    const saved = localStorage.getItem('choosify_verifications');
-    if (saved) return JSON.parse(saved);
-    return [
-      {
-        id: 'vr_001',
-        brand_id: 'brand_aarong',
-        brand_name: 'Aarong Handcrafts',
-        logo_url: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=100',
-        submitted_by: 'Azizul Islam, Brand Manager',
-        status: 'Approved',
-        documents: [
-          { id: 'doc_101', type: 'Trade License', name: 'Aarong_Trade_License_2026.pdf', doc_url: '#', status: 'approved', notes: 'Trade License TL-4829910 is active and audited' },
-          { id: 'doc_102', type: 'Tax Certificate', name: 'Aarong_BIN_TIN_Auth.pdf', doc_url: '#', status: 'approved', notes: 'Tax Certificate fully verified by NBR database' },
-          { id: 'doc_103', type: 'Brand Ownership Proof', name: 'Aarong_Copyright_BRAC.pdf', doc_url: '#', status: 'approved', notes: 'Genuine BRAC enterprise certificate matches registered domain' }
-        ],
-        reviews: [
-          { id: 'rvw_101', reviewer_id: 'usr_admin_001', reviewer_name: 'Principal Auditor', status: 'approved', feedback: 'Verified physical retail and intellectual holding credentials. Excellent compliance record.', reviewed_at: '2026-06-02T10:00:00Z' }
-        ],
-        audit_trail: [
-          { timestamp: '2026-06-01T09:00:00Z', action: 'Draft Created', actor: 'Azizul Islam', details: 'Initialized trade application metadata.' },
-          { timestamp: '2026-06-01T12:00:00Z', action: 'Submitted Request', actor: 'Azizul Islam', details: 'Files dispatched for administrative verification review.' },
-          { timestamp: '2026-06-02T10:00:00Z', action: 'Approved Application', actor: 'Principal Auditor', details: 'Status promoted to Verified. Trust Badge published on Choosify catalog.' }
-        ],
-        created_at: '2026-06-01T09:00:00Z',
-        updated_at: '2026-06-02T10:00:00Z'
-      },
-      {
-        id: 'vr_002',
-        brand_id: 'brand_apex',
-        brand_name: 'Apex Footwear',
-        logo_url: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=100',
-        submitted_by: 'Ziaul Haq, Director Retail',
-        status: 'Under Review',
-        documents: [
-          { id: 'doc_201', type: 'Trade License', name: 'Apex_TradeLicense_2026.pdf', doc_url: '#', status: 'approved', notes: 'Verified active status.' },
-          { id: 'doc_202', type: 'Tax Certificate', name: 'Apex_BIN_VAT_2026.pdf', doc_url: '#', status: 'pending' },
-          { id: 'doc_203', type: 'Identity Verification', name: 'Ziaul_NID_Card.png', doc_url: '#', status: 'pending' }
-        ],
-        reviews: [],
-        audit_trail: [
-          { timestamp: '2026-06-08T11:00:00Z', action: 'Files Uploaded', actor: 'Ziaul Haq', details: 'Registered business and VAT profile assets.' },
-          { timestamp: '2026-06-10T14:00:00Z', action: 'Status Update', actor: 'Admin Assistant', details: 'Marked under administrative review queue.' }
-        ],
-        created_at: '2026-06-08T11:00:00Z',
-        updated_at: '2026-06-10T14:00:00Z'
-      },
-      {
-        id: 'vr_003',
-        brand_id: 'brand_walton',
-        brand_name: 'Walton Appliances',
-        logo_url: 'https://images.unsplash.com/photo-1571175432247-fe0320b5da22?w=100',
-        submitted_by: 'M. S. Zaman, Walton Compliance',
-        status: 'Submitted',
-        documents: [
-          { id: 'doc_301', type: 'Trade License', name: 'Walton_PLC_Industrial_License.pdf', doc_url: '#', status: 'pending' },
-          { id: 'doc_302', type: 'Tax Certificate', name: 'Walton_Corporate_NBR_VAT.pdf', doc_url: '#', status: 'pending' }
-        ],
-        reviews: [],
-        audit_trail: [
-          { timestamp: '2026-06-11T16:00:00Z', action: 'Request Submitted', actor: 'M. S. Zaman', details: 'Filing corporate documents for Walton electrical segment.' }
-        ],
-        created_at: '2026-06-11T16:00:00Z',
-        updated_at: '2026-06-11T16:00:00Z'
-      }
-    ];
-  });
+  // 5. BRAND / CREATOR VERIFICATION ? backed by /operations/verifications
+  const [verificationRequests, setVerificationRequests] = useState<VerificationRequest[]>([]);
 
+  const refreshVerifications = useCallback(() => {
+    operationsApi
+      .listVerifications()
+      .then((rows) => {
+        setVerificationRequests(
+          (rows as VerificationRequest[]).map((row) => ({
+            ...row,
+            entityType: row.entityType || 'brand',
+            entityId: row.entityId || row.brand_id,
+            entityName: row.entityName || row.brand_name,
+            documents: row.documents || [],
+            reviews: row.reviews || [],
+            audit_trail: row.audit_trail || [],
+          })),
+        );
+      })
+      .catch((err) => {
+        console.error('[Trust] listVerifications failed:', err);
+      });
+  }, []);
+
+  useEffect(() => {
+    refreshVerifications();
+  }, [refreshVerifications]);
   // 6. RECOMMENDATION ATTRIBUTION DATA
   const [recommendationMetrics, setRecommendationMetrics] = useState<RecommendationMetric[]>(() => {
     const saved = localStorage.getItem('choosify_recommendations');
@@ -656,10 +621,6 @@ export const TrustProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   useEffect(() => {
     localStorage.setItem('choosify_trust_alerts', JSON.stringify(trustAlerts));
   }, [trustAlerts]);
-
-  useEffect(() => {
-    localStorage.setItem('choosify_verifications', JSON.stringify(verificationRequests));
-  }, [verificationRequests]);
 
   useEffect(() => {
     localStorage.setItem('choosify_recommendations', JSON.stringify(recommendationMetrics));
@@ -864,106 +825,107 @@ export const TrustProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
 
   // ============================================================================
-  // PHASE 3: BRAND VERIFICATION PROCESS PIPELINE CODES
+  // PHASE 3: BRAND / CREATOR VERIFICATION (operations API)
   // ============================================================================
+  const upsertVerificationLocal = (row: VerificationRequest) => {
+    setVerificationRequests((prev) => {
+      const idx = prev.findIndex((r) => r.id === row.id);
+      if (idx < 0) return [row, ...prev];
+      const next = [...prev];
+      next[idx] = row;
+      return next;
+    });
+  };
+
   const createVerificationRequest = (brand_id: string, brand_name: string, logo: string) => {
-    const newReq: VerificationRequest = {
-      id: 'vr_' + Math.floor(100000 + Math.random() * 900000),
-      brand_id,
-      brand_name,
-      logo_url: logo,
-      submitted_by: 'Authorized Brand Agent',
-      status: 'Draft',
-      documents: [
-        { id: 'doc_u_' + Math.random(), type: 'Trade License', name: 'Trade_License_Upload.pdf', doc_url: '#', status: 'pending' },
-        { id: 'doc_u_' + Math.random(), type: 'Business Registration', name: 'Registration_Cert.pdf', doc_url: '#', status: 'pending' }
-      ],
-      reviews: [],
-      audit_trail: [
-        { timestamp: new Date().toISOString(), action: 'Draft Created', actor: 'Brand Manager', details: 'Initialized a draft verification dossier' }
-      ],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-    setVerificationRequests(prev => [newReq, ...prev]);
+    operationsApi
+      .createVerification({
+        entityType: 'brand',
+        entityId: brand_id,
+        entityName: brand_name,
+        brand_id,
+        brand_name,
+        logo_url: logo,
+        status: 'Draft',
+        documents: [
+          { id: `doc_u_${Date.now()}_1`, type: 'Trade License', name: 'Trade_License_Upload.pdf', doc_url: '#', status: 'pending' },
+          { id: `doc_u_${Date.now()}_2`, type: 'Business Registration', name: 'Registration_Cert.pdf', doc_url: '#', status: 'pending' },
+        ],
+      })
+      .then((saved) => {
+        upsertVerificationLocal(saved as VerificationRequest);
+        toast.success('Draft verification request created.');
+      })
+      .catch((err) => {
+        console.error('[Trust] createVerification failed:', err);
+        toast.error(`Failed to create verification: ${err instanceof Error ? err.message : String(err)}`);
+      });
   };
 
   const submitVerificationRequest = (request_id: string) => {
-    setVerificationRequests(prev => prev.map(r => {
-      if (r.id === request_id) {
-        return {
-          ...r,
-          status: 'Submitted',
-          audit_trail: [
-            ...r.audit_trail,
-            { timestamp: new Date().toISOString(), action: 'Form Submitted', actor: 'Brand Agent', details: 'Dossier dispatched to lead auditor verification queue' }
-          ],
-          updated_at: new Date().toISOString()
-        };
-      }
-      return r;
-    }));
+    operationsApi
+      .submitVerification(request_id)
+      .then((saved) => {
+        upsertVerificationLocal(saved as VerificationRequest);
+        toast.success('Verification submitted for review.');
+      })
+      .catch((err) => {
+        console.error('[Trust] submitVerification failed:', err);
+        toast.error(`Failed to submit verification: ${err instanceof Error ? err.message : String(err)}`);
+      });
   };
 
-  const updateDocumentStatus = (request_id: string, doc_id: string, status: 'approved' | 'rejected', notes?: string) => {
-    setVerificationRequests(prev => prev.map(r => {
-      if (r.id === request_id) {
-        const docs = r.documents.map(d => d.id === doc_id ? { ...d, status, notes } : d);
-        return {
-          ...r,
-          documents: docs,
-          audit_trail: [
-            ...r.audit_trail,
-            { timestamp: new Date().toISOString(), action: 'Document Audited', actor: 'Administrative Auditor', details: `Document item state updated to ${status}. Notes: ${notes || 'none'}` }
-          ],
-          updated_at: new Date().toISOString()
-        };
-      }
-      return r;
-    }));
+  const updateDocumentStatus = (
+    request_id: string,
+    doc_id: string,
+    status: 'approved' | 'rejected',
+    notes?: string,
+  ) => {
+    operationsApi
+      .updateVerificationDocument(request_id, doc_id, { status, notes })
+      .then((saved) => {
+        upsertVerificationLocal(saved as VerificationRequest);
+      })
+      .catch((err) => {
+        console.error('[Trust] updateVerificationDocument failed:', err);
+        toast.error(`Failed to update document: ${err instanceof Error ? err.message : String(err)}`);
+      });
   };
 
   const reviewVerificationRequest = (
     request_id: string,
-    reviewer_id: string,
+    _reviewer_id: string,
     reviewer_name: string,
     status: 'approved' | 'rejected',
-    feedback: string
+    feedback: string,
   ) => {
-    const rvwId = 'rvw_' + Math.floor(10000 + Math.random() * 90000);
-    const newRvw: VerificationReview = {
-      id: rvwId,
-      reviewer_id,
-      reviewer_name,
-      status,
-      feedback,
-      reviewed_at: new Date().toISOString()
-    };
-
-    setVerificationRequests(prev => prev.map(r => {
-      if (r.id === request_id) {
-        const finalStatus = status === 'approved' ? 'Approved' : 'Rejected';
-        
-        // If approved, trigger brand's base reputation score addition!
+    operationsApi
+      .reviewVerification(request_id, { status, feedback, reviewer_name })
+      .then((result) => {
+        const saved = result.data as VerificationRequest;
+        upsertVerificationLocal(saved);
         if (status === 'approved') {
-          addTrustEvent('brand', r.brand_id, r.brand_name, 'review_verified', 15, { reason: 'Passed Enterprise Brand Verification Audit.' });
+          addTrustEvent(
+            saved.entityType === 'creator' ? 'creator' : 'brand',
+            saved.entityId || saved.brand_id,
+            saved.entityName || saved.brand_name,
+            'review_verified',
+            15,
+            { reason: 'Passed Enterprise Brand Verification Audit.' },
+          );
         }
-
-        return {
-          ...r,
-          status: finalStatus,
-          reviews: [...r.reviews, newRvw],
-          audit_trail: [
-            ...r.audit_trail,
-            { timestamp: new Date().toISOString(), action: status === 'approved' ? 'Audit Approved' : 'Audit Rejected', actor: reviewer_name, details: `Verification finalized: ${feedback}` }
-          ],
-          updated_at: new Date().toISOString()
-        };
-      }
-      return r;
-    }));
+        toast.success(
+          status === 'approved'
+            ? 'Approved ? catalog claimStatus/verifiedStatus updated.'
+            : 'Rejected ? catalog claim updated.',
+        );
+        refreshVerifications();
+      })
+      .catch((err) => {
+        console.error('[Trust] reviewVerification failed:', err);
+        toast.error(`Failed to finalize review: ${err instanceof Error ? err.message : String(err)}`);
+      });
   };
-
 
   // ============================================================================
   // PHASE 4: RECOMMENDATION ATTRIBUTION LOGGERS

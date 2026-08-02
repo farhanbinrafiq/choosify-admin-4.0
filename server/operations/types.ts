@@ -286,3 +286,65 @@ export interface OpsReturnRequest {
   /** Set when linked via dispute escalation */
   disputeId?: string;
 }
+
+/** Mirrors admin TrustContext VerificationRequest (+ entityType for brand|creator). */
+export type OpsVerificationEntityType = 'brand' | 'creator';
+export type OpsVerificationStatus =
+  | 'Draft'
+  | 'Submitted'
+  | 'Under Review'
+  | 'Approved'
+  | 'Rejected';
+export type OpsDocumentType =
+  | 'Trade License'
+  | 'Business Registration'
+  | 'Tax Certificate'
+  | 'Brand Ownership Proof'
+  | 'Identity Verification';
+export type OpsDocumentStatus = 'pending' | 'approved' | 'rejected';
+
+export interface OpsVerificationDocument {
+  id: string;
+  type: OpsDocumentType;
+  name: string;
+  doc_url: string;
+  status: OpsDocumentStatus;
+  notes?: string;
+}
+
+export interface OpsVerificationReview {
+  id: string;
+  reviewer_id: string;
+  reviewer_name: string;
+  status: 'approved' | 'rejected';
+  feedback: string;
+  reviewed_at: string;
+}
+
+export interface OpsVerificationAuditEntry {
+  timestamp: string;
+  action: string;
+  actor: string;
+  details: string;
+}
+
+export interface OpsVerificationRequest {
+  id: string;
+  /** Generalized entity — brand or creator claim */
+  entityType: OpsVerificationEntityType;
+  entityId: string;
+  entityName: string;
+  /** Kept for BrandVerification.tsx compatibility (mirrors entity* when brand). */
+  brand_id: string;
+  brand_name: string;
+  logo_url: string;
+  /** Firebase uid of the submitter — never trust client override on create. */
+  submitted_by: string;
+  submitted_by_name?: string;
+  status: OpsVerificationStatus;
+  documents: OpsVerificationDocument[];
+  reviews: OpsVerificationReview[];
+  audit_trail: OpsVerificationAuditEntry[];
+  created_at: string;
+  updated_at: string;
+}

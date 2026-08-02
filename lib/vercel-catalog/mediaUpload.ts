@@ -119,3 +119,68 @@ export async function uploadDocumentToCloudinary(input: UploadInput): Promise<st
 
   return payload.secure_url;
 }
+
+/**
+ * Brand/creator claim assets: images → image/upload, PDFs/docs → raw/upload.
+ * Folder: choosify/verifications.
+ */
+export async function uploadVerificationAssetToCloudinary(
+  input: UploadInput & { kind?: 'image' | 'document' },
+): Promise<string> {
+  const mime = (input.mimeType || '').toLowerCase();
+  const kind = input.kind || (mime.startsWith('image/') ? 'image' : 'document');
+  const cloudName = getCloudName();
+  if (!cloudName) {
+    throw new Error(
+      'Upload is not configured. Set CLOUDINARY_CLOUD_NAME (or VITE_CLOUDINARY_CLOUD_NAME) on the server.',
+    );
+  }
+
+  const uploadPreset = getUploadPreset();
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+  const mimeType = input.mimeType || (kind === 'image' ? 'image/jpeg' : 'application/pdf');
+  const dataUri = `data:${mimeType};base64,${input.base64Data}`;
+  const folder = 'choosify/verifications';
+
+  const form = new FormData();
+  form.append('file', dataUri);
+  form.append('folder', folder);
+
+  if (uploadPreset) {
+    form.append('upload_preset', uploadPreset);
+  } else if (apiKey && apiSecret) {
+    const timestamp = Math.round(Date.now() / 1000);
+    const paramsToSign = `folder=${folder}&timestamp=${timestamp}`;
+    const signature = crypto.createHash('sha1').update(paramsToSign + apiSecret).digest('hex');
+    form.append('api_key', apiKey);
+    form.append('timestamp', String(timestamp));
+    form.append('signature', signature);
+  } else {
+    throw new Error(
+      'Upload is not configured. Set CLOUDINARY_UPLOAD_PRESET or CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET on the server.',
+    );
+  }
+
+  const endpoint =
+    kind === 'image'
+      ? `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`
+      : `https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`;
+
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    body: form,
+  });
+
+  if (!response.ok) {
+    const raw = await response.text();
+    throw new Error(raw || `Cloudinary verification upload failed with ${response.status}`);
+  }
+
+  const payload = (await response.json()) as { secure_url?: string };
+  if (!payload.secure_url) {
+    throw new Error('Cloudinary upload succeeded but no secure_url was returned.');
+  }
+
+  return payload.secure_url;
+}

@@ -27,6 +27,7 @@ export function buildOperationsSnapshot(): OperationsSnapshot {
     paymentOptionsConfig: operationsStore.getPaymentOptionsConfig(),
     sellerBookingSettings: operationsStore.getAllSellerBookingSettings(),
     returns: operationsStore.listReturns(),
+    verifications: operationsStore.listVerifications(),
   };
 }
 

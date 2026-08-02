@@ -78,6 +78,17 @@ const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
 const ALLOWED_DOCUMENT_EXTENSIONS = new Set(['.pdf', '.doc', '.docx']);
 const DEFAULT_RESUME_MAX_BYTES = 8 * 1024 * 1024;
 
+/** PDF/DOC + images for brand/creator claim verification (trade license, NID, face photo). */
+const ALLOWED_VERIFICATION_MIME_TYPES = new Set([
+  ...ALLOWED_DOCUMENT_MIME_TYPES,
+  ...ALLOWED_MIME_TYPES,
+]);
+
+const ALLOWED_VERIFICATION_EXTENSIONS = new Set([
+  ...ALLOWED_DOCUMENT_EXTENSIONS,
+  ...ALLOWED_EXTENSIONS,
+]);
+
 export function validateDocumentUploadInput(input: UploadValidationInput): {
   ok: true;
   mimeType: string;
@@ -110,4 +121,46 @@ export function validateDocumentUploadInput(input: UploadValidationInput): {
   }
 
   return { ok: true, mimeType, fileName, estimatedBytes };
+}
+
+export function validateVerificationUploadInput(input: UploadValidationInput): {
+  ok: true;
+  mimeType: string;
+  fileName: string;
+  estimatedBytes: number;
+  kind: 'image' | 'document';
+} | {
+  ok: false;
+  error: string;
+} {
+  const base64Data = input.base64Data?.trim();
+  if (!base64Data) {
+    return { ok: false, error: 'Missing verification file data' };
+  }
+
+  const mimeType = (input.mimeType || 'application/pdf').trim().toLowerCase();
+  if (!ALLOWED_VERIFICATION_MIME_TYPES.has(mimeType)) {
+    return {
+      ok: false,
+      error: 'Unsupported file type. Upload PDF/DOC/DOCX or JPEG/PNG/WebP/GIF.',
+    };
+  }
+
+  const fileName = (input.fileName || 'verification-doc').trim();
+  const extension = extensionFromFileName(fileName);
+  if (!extension || !ALLOWED_VERIFICATION_EXTENSIONS.has(extension)) {
+    return {
+      ok: false,
+      error: 'Unsupported file extension. Use .pdf, .doc, .docx, .jpg, .jpeg, .png, .webp, or .gif.',
+    };
+  }
+
+  const estimatedBytes = estimateBase64Bytes(base64Data);
+  const maxBytes = Math.max(readMaxUploadBytes(), DEFAULT_RESUME_MAX_BYTES);
+  if (estimatedBytes > maxBytes) {
+    return { ok: false, error: `File exceeds maximum upload size of ${maxBytes} bytes` };
+  }
+
+  const kind = ALLOWED_MIME_TYPES.has(mimeType) ? 'image' : 'document';
+  return { ok: true, mimeType, fileName, estimatedBytes, kind };
 }

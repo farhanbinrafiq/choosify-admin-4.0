@@ -513,4 +513,53 @@ export const operationsApi = {
     );
     return result.data;
   },
+
+  listVerifications: async (params?: { status?: string; entityType?: string; entityId?: string }) => {
+    const qs = new URLSearchParams();
+    if (params?.status) qs.set('status', params.status);
+    if (params?.entityType) qs.set('entityType', params.entityType);
+    if (params?.entityId) qs.set('entityId', params.entityId);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    const result = await request<{ data: unknown[] }>(`/operations/verifications${suffix}`);
+    return result.data;
+  },
+  getVerification: async (id: string) => {
+    const result = await request<{ data: unknown }>(`/operations/verifications/${encodeURIComponent(id)}`);
+    return result.data;
+  },
+  createVerification: async (payload: Record<string, unknown>) => {
+    const result = await request<{ data: unknown }>('/operations/verifications', 'POST', payload);
+    return result.data;
+  },
+  submitVerification: async (id: string) => {
+    const result = await request<{ data: unknown }>(
+      `/operations/verifications/${encodeURIComponent(id)}/submit`,
+      'PATCH',
+      {},
+    );
+    return result.data;
+  },
+  updateVerificationDocument: async (
+    id: string,
+    docId: string,
+    payload: { status: 'approved' | 'rejected'; notes?: string },
+  ) => {
+    const result = await request<{ data: unknown }>(
+      `/operations/verifications/${encodeURIComponent(id)}/document/${encodeURIComponent(docId)}`,
+      'PATCH',
+      payload,
+    );
+    return result.data;
+  },
+  reviewVerification: async (
+    id: string,
+    payload: { status: 'approved' | 'rejected'; feedback: string; reviewer_name?: string },
+  ) => {
+    const result = await request<{ data: unknown; catalogSideEffect?: unknown }>(
+      `/operations/verifications/${encodeURIComponent(id)}/review`,
+      'PATCH',
+      payload,
+    );
+    return result;
+  },
 };

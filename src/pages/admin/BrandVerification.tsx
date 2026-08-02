@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useTrust, VerificationRequest, VerificationDocument, DocumentType } from '../../contexts/TrustContext';
 import { 
   ShieldCheck, 
@@ -32,11 +32,16 @@ export default function BrandVerification() {
   } = useTrust();
 
   // Selected Brand Request for Detail view
-  const [selectedRequestId, setSelectedRequestId] = useState<string>('vr_002');
+  const [selectedRequestId, setSelectedRequestId] = useState<string>('');
   
   // Tab filters
   const [activeQueueTab, setActiveQueueTab] = useState<'All' | 'Submitted' | 'Under Review' | 'Approved' | 'Rejected' | 'Draft'>('All');
-  
+
+  useEffect(() => {
+    if (!selectedRequestId && verificationRequests[0]) {
+      setSelectedRequestId(verificationRequests[0].id);
+    }
+  }, [verificationRequests, selectedRequestId]); 
   // Document Review Popup Modal states
   const [showDocModal, setShowDocModal] = useState(false);
   const [activeDocForModal, setActiveDocForModal] = useState<VerificationDocument | null>(null);
@@ -114,7 +119,7 @@ export default function BrandVerification() {
         </div>
 
         <div className="flex items-center gap-2 bg-app-card border border-app-border rounded-[4px] p-2 text-[10px] font-bold uppercase tracking-widest text-[#8E9BAE] font-mono select-none">
-          <span>Verification Queue: {verificationRequests.length} Brands</span>
+          <span>Verification Queue: {verificationRequests.length} requests (brands + creators)</span>
         </div>
       </div>
 
@@ -174,13 +179,15 @@ export default function BrandVerification() {
 
                     <div className="flex-1 min-w-0 space-y-0.5">
                       <div className="flex items-center justify-between gap-2">
-                        <h4 className="font-bold text-app-text-primary text-xs truncate">{req.brand_name}</h4>
+                        <h4 className="font-bold text-app-text-primary text-xs truncate">{req.brand_name || req.entityName}</h4>
                         <span className={`px-1.5 py-0.5 rounded-[2px] text-[8px] tracking-wider uppercase border${getStatusBadge(req.status)}`}>
                           {req.status}
                         </span>
                       </div>
 
-                      <p className="text-[10px] text-app-text-secondary truncate">By {req.submitted_by}</p>
+                      <p className="text-[10px] text-app-text-secondary truncate">
+                        {(req.entityType || 'brand').toUpperCase()} · By {req.submitted_by}
+                      </p>
                       
                       <div className="flex items-center justify-between text-[9px] text-slate-500 font-mono">
                         <span>Documents: {req.documents.length}</span>

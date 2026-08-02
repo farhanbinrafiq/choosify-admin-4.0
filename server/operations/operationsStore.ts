@@ -10,6 +10,9 @@ import type {
   OpsReview,
   OpsSellerBookingSettings,
   OpsStorefrontOrder,
+  OpsVerificationDocument,
+  OpsVerificationRequest,
+  OpsVerificationReview,
   RolePermissionsMap,
 } from './types';
 
@@ -283,6 +286,7 @@ const state: {
   paymentOptionsConfig: OpsPaymentOptionsConfig;
   sellerBookingSettings: Record<string, OpsSellerBookingSettings>;
   returns: OpsReturnRequest[];
+  verifications: OpsVerificationRequest[];
 } = {
   orders: [],
   coupons: defaultCoupons(),
@@ -296,6 +300,7 @@ const state: {
   paymentOptionsConfig: defaultPaymentOptionsConfig(),
   sellerBookingSettings: {},
   returns: [],
+  verifications: [],
   featureFlags: {
     creator_hub: true,
     compare_tool: true,
@@ -346,6 +351,7 @@ export const operationsStore = {
     if (snapshot.paymentOptionsConfig) state.paymentOptionsConfig = snapshot.paymentOptionsConfig;
     if (snapshot.sellerBookingSettings) state.sellerBookingSettings = snapshot.sellerBookingSettings;
     if (snapshot.returns) state.returns = snapshot.returns;
+    if (snapshot.verifications) state.verifications = snapshot.verifications as OpsVerificationRequest[];
   },
 
   listCouponUsage: () => [...state.couponUsage],
@@ -782,5 +788,85 @@ export const operationsStore = {
     state.returns[idx] = { ...state.returns[idx], ...patch, updatedAt: nowIso() };
     touch();
     return state.returns[idx];
+  },
+
+  listVerifications: (filter?: {
+    submittedBy?: string;
+    status?: string;
+    entityType?: string;
+    entityId?: string;
+  }) => {
+    let rows = [...state.verifications].sort((a, b) => b.created_at.localeCompare(a.created_at));
+    if (filter?.submittedBy) {
+      rows = rows.filter((row) => row.submitted_by === filter.submittedBy);
+    }
+    if (filter?.status) {
+      rows = rows.filter((row) => row.status.toLowerCase() === filter.status!.toLowerCase());
+    }
+    if (filter?.entityType) {
+      rows = rows.filter((row) => row.entityType === filter.entityType);
+    }
+    if (filter?.entityId) {
+      rows = rows.filter((row) => row.entityId === filter.entityId || row.brand_id === filter.entityId);
+    }
+    return rows;
+  },
+  getVerification: (id: string) => state.verifications.find((row) => row.id === id) ?? null,
+  createVerification: (
+    payload: Omit<OpsVerificationRequest, 'id' | 'created_at' | 'updated_at' | 'reviews' | 'audit_trail'> & {
+      id?: string;
+      reviews?: OpsVerificationReview[];
+      audit_trail?: OpsVerificationRequest['audit_trail'];
+      created_at?: string;
+      updated_at?: string;
+    },
+  ) => {
+    const ts = nowIso();
+    const entityType = payload.entityType || 'brand';
+    const entityId = payload.entityId || payload.brand_id;
+    const entityName = payload.entityName || payload.brand_name;
+    const row: OpsVerificationRequest = {
+      ...payload,
+      entityType,
+      entityId,
+      entityName,
+      brand_id: payload.brand_id || entityId,
+      brand_name: payload.brand_name || entityName,
+      logo_url: payload.logo_url || '',
+      id: payload.id || `vr_${Date.now()}`,
+      reviews: payload.reviews ?? [],
+      audit_trail: payload.audit_trail ?? [],
+      created_at: payload.created_at || ts,
+      updated_at: payload.updated_at || ts,
+    };
+    state.verifications.unshift(row);
+    touch();
+    return row;
+  },
+  updateVerification: (id: string, patch: Partial<OpsVerificationRequest>) => {
+    const idx = state.verifications.findIndex((row) => row.id === id);
+    if (idx < 0) return null;
+    state.verifications[idx] = {
+      ...state.verifications[idx],
+      ...patch,
+      updated_at: nowIso(),
+    };
+    touch();
+    return state.verifications[idx];
+  },
+  updateVerificationDocument: (
+    requestId: string,
+    docId: string,
+    patch: Partial<OpsVerificationDocument>,
+  ) => {
+    const idx = state.verifications.findIndex((row) => row.id === requestId);
+    if (idx < 0) return null;
+    const row = state.verifications[idx];
+    const docIdx = row.documents.findIndex((d) => d.id === docId);
+    if (docIdx < 0) return null;
+    const documents = row.documents.map((d, i) => (i === docIdx ? { ...d, ...patch } : d));
+    state.verifications[idx] = { ...row, documents, updated_at: nowIso() };
+    touch();
+    return state.verifications[idx];
   },
 };

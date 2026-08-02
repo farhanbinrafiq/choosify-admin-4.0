@@ -16,6 +16,8 @@ import type {
   OpsReturnStatus,
   OpsReview,
   OpsStorefrontOrder,
+  OpsVerificationDocument,
+  OpsVerificationRequest,
   PermissionKey,
 } from './operations/types';
 import { validate } from './middleware/validate';
@@ -28,6 +30,9 @@ import {
   evaluatePostOrderConversationExpiry,
   type OrderLikeForExpiry,
 } from '../shared/messaging/conversationExpiry';
+import { catalogStore } from '../lib/vercel-catalog/catalogStore';
+import { normalizeBrandInput } from './catalogContract';
+import { normalizeCreatorInput } from '../lib/vercel-catalog/catalogEditorialContract';
 
 export const operationsRouter = Router();
 
@@ -208,6 +213,83 @@ function userCanModerateOrEditReview(
   const role = req.userRole;
   if (role && hasRole(role, ROLES.MODERATOR)) return true;
   return Boolean(req.userId && review.userId === req.userId);
+}
+
+function userCanManageVerifications(req: {
+  userRole?: (typeof ROLES)[keyof typeof ROLES];
+}): boolean {
+  const role = req.userRole;
+  if (!role) return false;
+  return (
+    hasRole(role, ROLES.ADMIN) ||
+    hasRole(role, ROLES.SUPER_ADMIN) ||
+    hasRole(role, ROLES.MODERATOR)
+  );
+}
+
+function userCanViewVerification(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  row: OpsVerificationRequest,
+): boolean {
+  if (userCanManageVerifications(req)) return true;
+  return Boolean(req.userId && row.submitted_by === req.userId);
+}
+
+async function applyEntityVerificationSideEffect(
+  row: OpsVerificationRequest,
+  decision: 'approved' | 'rejected',
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    if (row.entityType === 'brand') {
+      const existing = await catalogStore.getBrand(row.entityId);
+      if (!existing) {
+        return { ok: false, error: `Brand ${row.entityId} not found in catalog` };
+      }
+      if (decision === 'approved') {
+        const normalized = normalizeBrandInput(
+          { ...existing, claimStatus: 'verified', verifiedStatus: true },
+          existing,
+        );
+        await catalogStore.upsertBrand(normalized);
+      } else {
+        // Rejected claims fall back to community (unverified listing).
+        const normalized = normalizeBrandInput(
+          { ...existing, claimStatus: 'community', verifiedStatus: false },
+          existing,
+        );
+        await catalogStore.upsertBrand(normalized);
+      }
+      return { ok: true };
+    }
+
+    const existing = await catalogStore.getCreator(row.entityId);
+    if (!existing) {
+      return { ok: false, error: `Creator ${row.entityId} not found in catalog` };
+    }
+    const normalized = normalizeCreatorInput(
+      { ...existing, verifiedStatus: decision === 'approved' },
+      existing,
+    );
+    await catalogStore.upsertCreator(normalized);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : 'Failed to update catalog entity',
+    };
+  }
+}
+
+async function markEntityClaimPending(row: {
+  entityType: 'brand' | 'creator';
+  entityId: string;
+}): Promise<void> {
+  if (row.entityType !== 'brand') return;
+  const existing = await catalogStore.getBrand(row.entityId);
+  if (!existing) return;
+  if (existing.claimStatus === 'verified') return;
+  const normalized = normalizeBrandInput({ ...existing, claimStatus: 'pending' }, existing);
+  await catalogStore.upsertBrand(normalized);
 }
 
 /** List returns: buyer may only query own buyerId; seller/admin may query by sellerId or list broadly if staff. */
@@ -1282,7 +1364,7 @@ operationsRouter.post('/operations/media/upload-resume', ...requireAuth, async (
       mimeType: body.mimeType,
       fileName: body.fileName,
     });
-    if (!validation.ok) {
+    if (validation.ok === false) {
       res.status(400).json({ error: validation.error });
       return;
     }
@@ -1573,4 +1655,311 @@ operationsRouter.patch('/operations/seller-offers/:id', (req, res) => {
     return;
   }
   res.json({ success: true, data: saved });
+});
+
+// ---------------------------------------------------------------------------
+// Brand / creator verification (Trust / claim pipeline)
+// ---------------------------------------------------------------------------
+
+operationsRouter.post('/operations/media/upload-verification', ...requireAuth, async (req, res) => {
+  try {
+    const { validateVerificationUploadInput } = await import('./lib/uploadValidation');
+    const { uploadVerificationAssetToCloudinary } = await import('../lib/vercel-catalog/mediaUpload');
+    const body = req.body as { data?: string; mimeType?: string; fileName?: string };
+    const validation = validateVerificationUploadInput({
+      base64Data: body.data || '',
+      mimeType: body.mimeType,
+      fileName: body.fileName,
+    });
+    if (validation.ok === false) {
+      res.status(400).json({ error: validation.error });
+      return;
+    }
+    const url = await uploadVerificationAssetToCloudinary({
+      base64Data: body.data!,
+      mimeType: validation.mimeType,
+      fileName: validation.fileName,
+      kind: validation.kind,
+    });
+    res.status(201).json({ success: true, url, fileName: validation.fileName, kind: validation.kind });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Verification upload failed',
+    });
+  }
+});
+
+operationsRouter.post('/operations/verifications', ...requireAuth, async (req, res) => {
+  const body = req.body as {
+    entityType?: string;
+    entityId?: string;
+    entityName?: string;
+    brand_id?: string;
+    brand_name?: string;
+    logo_url?: string;
+    submitted_by?: string;
+    submitted_by_name?: string;
+    status?: string;
+    documents?: OpsVerificationDocument[];
+  };
+
+  const entityType = body.entityType === 'creator' ? 'creator' : 'brand';
+  const entityId = String(body.entityId || body.brand_id || '').trim();
+  const entityName = String(body.entityName || body.brand_name || '').trim();
+  if (!entityId || !entityName) {
+    res.status(400).json({ error: 'entityId/entityName (or brand_id/brand_name) are required' });
+    return;
+  }
+
+  // Never trust client-supplied submitted_by — bind to authenticated uid.
+  if (body.submitted_by && body.submitted_by !== req.userId) {
+    res.status(403).json({ error: 'submitted_by does not match authenticated user' });
+    return;
+  }
+
+  const documents = Array.isArray(body.documents) ? body.documents : [];
+  for (const doc of documents) {
+    if (!doc?.type || !doc?.name || !doc?.doc_url) {
+      res.status(400).json({ error: 'Each document requires type, name, and doc_url' });
+      return;
+    }
+  }
+
+  const status =
+    body.status === 'Draft' ||
+    body.status === 'Submitted' ||
+    body.status === 'Under Review'
+      ? body.status
+      : 'Submitted';
+
+  const actorName = body.submitted_by_name?.trim() || req.user?.displayName || req.userId || 'Claimant';
+  const saved = operationsStore.createVerification({
+    entityType,
+    entityId,
+    entityName,
+    brand_id: entityType === 'brand' ? entityId : body.brand_id || entityId,
+    brand_name: entityType === 'brand' ? entityName : body.brand_name || entityName,
+    logo_url: body.logo_url || '',
+    submitted_by: req.userId!,
+    submitted_by_name: actorName,
+    status,
+    documents: documents.map((doc, index) => ({
+      id: doc.id || `doc_${Date.now()}_${index}`,
+      type: doc.type,
+      name: doc.name,
+      doc_url: doc.doc_url,
+      status: doc.status === 'approved' || doc.status === 'rejected' ? doc.status : 'pending',
+      notes: doc.notes,
+    })),
+    audit_trail: [
+      {
+        timestamp: new Date().toISOString(),
+        action: status === 'Draft' ? 'Draft Created' : 'Request Submitted',
+        actor: actorName,
+        details:
+          status === 'Draft'
+            ? 'Initialized a draft verification dossier'
+            : 'Claim documents submitted for administrative review',
+      },
+    ],
+  });
+
+  if (status === 'Submitted' || status === 'Under Review') {
+    try {
+      await markEntityClaimPending(saved);
+    } catch (err) {
+      console.warn('[Verification] Failed to mark claim pending on catalog entity:', err);
+    }
+  }
+
+  scheduleOperationsPersist();
+  res.status(201).json({ success: true, data: saved });
+});
+
+operationsRouter.get('/operations/verifications', ...requireAuth, (req, res) => {
+  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const entityType = typeof req.query.entityType === 'string' ? req.query.entityType : undefined;
+  const entityId = typeof req.query.entityId === 'string' ? req.query.entityId : undefined;
+
+  if (userCanManageVerifications(req)) {
+    res.json({
+      data: operationsStore.listVerifications({ status, entityType, entityId }),
+    });
+    return;
+  }
+
+  // Regular users: only their own submissions.
+  res.json({
+    data: operationsStore.listVerifications({
+      submittedBy: req.userId,
+      status,
+      entityType,
+      entityId,
+    }),
+  });
+});
+
+operationsRouter.get('/operations/verifications/:id', ...requireAuth, (req, res) => {
+  const row = operationsStore.getVerification(req.params.id);
+  if (!row) {
+    res.status(404).json({ error: 'Verification request not found' });
+    return;
+  }
+  if (!userCanViewVerification(req, row)) {
+    res.status(403).json({ error: 'Not authorized to view this verification request' });
+    return;
+  }
+  res.json({ data: row });
+});
+
+/** Submitter or admin may move Draft → Submitted (and into Under Review queue). */
+operationsRouter.patch('/operations/verifications/:id/submit', ...requireAuth, async (req, res) => {
+  const existing = operationsStore.getVerification(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Verification request not found' });
+    return;
+  }
+  if (!userCanViewVerification(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to submit this verification request' });
+    return;
+  }
+  if (existing.status !== 'Draft' && existing.status !== 'Submitted') {
+    res.status(400).json({ error: `Cannot submit from status ${existing.status}` });
+    return;
+  }
+  const actor = req.user?.displayName || req.userId || 'Claimant';
+  const saved = operationsStore.updateVerification(req.params.id, {
+    status: 'Submitted',
+    audit_trail: [
+      ...existing.audit_trail,
+      {
+        timestamp: new Date().toISOString(),
+        action: 'Form Submitted',
+        actor,
+        details: 'Dossier dispatched to lead auditor verification queue',
+      },
+    ],
+  });
+  try {
+    if (saved) await markEntityClaimPending(saved);
+  } catch (err) {
+    console.warn('[Verification] mark pending failed:', err);
+  }
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+operationsRouter.patch(
+  '/operations/verifications/:id/document/:docId',
+  ...requireAuth,
+  (req, res) => {
+    if (!userCanManageVerifications(req)) {
+      res.status(403).json({ error: 'Not authorized to audit verification documents' });
+      return;
+    }
+    const existing = operationsStore.getVerification(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Verification request not found' });
+      return;
+    }
+    const status = req.body?.status === 'rejected' ? 'rejected' : req.body?.status === 'approved' ? 'approved' : '';
+    if (!status) {
+      res.status(400).json({ error: 'status must be approved or rejected' });
+      return;
+    }
+    const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim() : undefined;
+    const actor = req.user?.displayName || req.userId || 'Administrative Auditor';
+    const saved = operationsStore.updateVerificationDocument(req.params.id, req.params.docId, {
+      status,
+      notes,
+    });
+    if (!saved) {
+      res.status(404).json({ error: 'Document not found on this verification request' });
+      return;
+    }
+    const withAudit = operationsStore.updateVerification(req.params.id, {
+      status: saved.status === 'Draft' || saved.status === 'Submitted' ? 'Under Review' : saved.status,
+      audit_trail: [
+        ...saved.audit_trail,
+        {
+          timestamp: new Date().toISOString(),
+          action: 'Document Audited',
+          actor,
+          details: `Document item state updated to ${status}. Notes: ${notes || 'none'}`,
+        },
+      ],
+    });
+    scheduleOperationsPersist();
+    res.json({ success: true, data: withAudit || saved });
+  },
+);
+
+operationsRouter.patch('/operations/verifications/:id/review', ...requireAuth, async (req, res) => {
+  if (!userCanManageVerifications(req)) {
+    res.status(403).json({ error: 'Not authorized to review verification requests' });
+    return;
+  }
+  const existing = operationsStore.getVerification(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Verification request not found' });
+    return;
+  }
+  const decision = req.body?.status === 'rejected' ? 'rejected' : req.body?.status === 'approved' ? 'approved' : '';
+  if (!decision) {
+    res.status(400).json({ error: 'status must be approved or rejected' });
+    return;
+  }
+  const feedback = String(req.body?.feedback || '').trim();
+  if (!feedback) {
+    res.status(400).json({ error: 'feedback is required' });
+    return;
+  }
+
+  const sideEffect = await applyEntityVerificationSideEffect(existing, decision);
+  if (sideEffect.ok === false) {
+    res.status(409).json({ error: sideEffect.error });
+    return;
+  }
+
+  const reviewerId = req.userId!;
+  const reviewerName =
+    String(req.body?.reviewer_name || '').trim() ||
+    req.user?.displayName ||
+    reviewerId;
+  const reviewedAt = new Date().toISOString();
+  const review = {
+    id: `rvw_${Date.now()}`,
+    reviewer_id: reviewerId,
+    reviewer_name: reviewerName,
+    status: decision as 'approved' | 'rejected',
+    feedback,
+    reviewed_at: reviewedAt,
+  };
+
+  const finalStatus = decision === 'approved' ? 'Approved' : 'Rejected';
+  const saved = operationsStore.updateVerification(req.params.id, {
+    status: finalStatus,
+    reviews: [...existing.reviews, review],
+    audit_trail: [
+      ...existing.audit_trail,
+      {
+        timestamp: reviewedAt,
+        action: decision === 'approved' ? 'Audit Approved' : 'Audit Rejected',
+        actor: reviewerName,
+        details: `Verification finalized: ${feedback}. Catalog ${existing.entityType} claimStatus/verifiedStatus updated.`,
+      },
+    ],
+  });
+
+  scheduleOperationsPersist();
+  res.json({
+    success: true,
+    data: saved,
+    catalogSideEffect: {
+      entityType: existing.entityType,
+      entityId: existing.entityId,
+      decision,
+      applied: true,
+    },
+  });
 });
