@@ -1399,7 +1399,7 @@ export default function GuideEditStudio() {
               Affiliate Links
             </div>
             <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase${guide.disclosureSponsored ? "bg-[#d4b200]/10 border-[#d4b200]/20 text-yellow-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
-              Sponsored content
+              Promoted content
             </div>
             <div className={`p-2.5 rounded-xl border text-center font-mono text-[9px] font-black uppercase${guide.disclosureSampleReceived ? "bg-indigo-50/10 border-indigo-200 text-indigo-700" : "bg-slate-50 border-slate-200 text-slate-400"}`}>
               Sample Received
@@ -2235,7 +2235,7 @@ export default function GuideEditStudio() {
                           onChange={(e) => handleFieldChange("disclosureSponsored", e.target.checked)}
                           className="accent-orange-500 w-4 h-4 rounded"
                         />
-                        <span>Brand Sponsored / Paid post</span>
+                        <span>Brand Promoted / Paid post</span>
                       </label>
 
                       <label className="flex items-center gap-3 text-xs text-app-text-secondary font-medium cursor-pointer py-1 block">

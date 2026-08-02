@@ -55,7 +55,8 @@ export const PATH_TO_PAGE_KEY: Record<string, string> = Object.fromEntries(
   Object.entries(PAGE_KEY_TO_PATH).map(([k, v]) => [v, k]),
 );
 
-export function pathToPageKey(pathname: string): string {
+/** Resolve CMS page key, or `null` when the path is unknown (show storefront-parity 404). */
+export function resolveAdminPageKey(pathname: string): string | null {
   const exact = PATH_TO_PAGE_KEY[pathname];
   if (exact) return exact;
 
@@ -79,16 +80,34 @@ export function pathToPageKey(pathname: string): string {
   if (pathname.startsWith('/admin/cashbook')) return 'myCashbook';
   if (pathname.startsWith('/admin/settings')) return 'settings';
   if (pathname.startsWith('/admin/recommendations')) return 'contentStudio';
+  if (pathname.startsWith('/admin/guides')) return 'contentStudio';
+  if (pathname.startsWith('/admin/categories')) return 'categories';
+  if (pathname.startsWith('/admin/ads-deals-studio')) return 'adsDealsStudio';
   if (pathname.startsWith('/admin/logistics/couriers')) return 'courierProviders';
   if (pathname.startsWith('/admin/logistics/shipments') || pathname.startsWith('/admin/logistics/tracking') || pathname.startsWith('/admin/logistics/labels')) {
     return 'shipmentOperations';
   }
   if (pathname.startsWith('/admin/logistics')) return 'shipmentOperations';
   if (pathname.startsWith('/admin/website-cms') || pathname.startsWith('/admin/cms')) return 'websiteCmsStudio';
+  if (pathname.startsWith('/admin/moderation')) return 'moderationCenter';
+  if (pathname.startsWith('/admin/disputes')) return 'disputes';
+  if (pathname.startsWith('/admin/trust-center')) return 'trustCenter';
+  if (pathname.startsWith('/admin/notifications')) return 'notifications';
+  if (pathname.startsWith('/admin/fee-charges')) return 'feeCharges';
+  if (pathname.startsWith('/admin/payouts')) return 'payouts';
+  if (pathname.startsWith('/admin/admins')) return 'adminManagement';
+  if (pathname.startsWith('/admin/brand-verification')) return 'verificationCenter';
+  if (pathname.startsWith('/admin/promotions')) return 'subscriptionPlans';
+  if (pathname.startsWith('/admin/monetization')) return 'monetizationCenter';
+  if (pathname.startsWith('/admin/audit-logs')) return 'auditLogs';
   if (pathname.startsWith('/dashboard/content-studio')) return 'contentStudio';
   if (pathname.startsWith('/seller')) return 'products';
 
-  return 'dashboard';
+  return null;
+}
+
+export function pathToPageKey(pathname: string): string {
+  return resolveAdminPageKey(pathname) ?? 'dashboard';
 }
 
 /**
@@ -244,7 +263,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   customers: ['Consumers', 'View and manage customer accounts'],
   settings: ['Settings', 'Store configuration'],
   websiteCmsStudio: ['Website Manager', 'Manage homepage banners, pages, and site content'],
-  adsDealsStudio: ['Ads & Deals Studio', 'Manage sponsored ads, deals, coupons, and paid placements'],
+  adsDealsStudio: ['Ads & Deals Studio', 'Manage promoted ads, deals, coupons, and paid placements'],
   contentStudio: ['Guide Management', 'Manage videos, reels, blogs, and live sessions'],
   messages: ['Messages', 'Unified channels routing hub'],
   returnsRefunds: ['Returns & Refunds', 'Audit customer return complaints and process refunds'],
@@ -282,7 +301,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   adminManagement: ['Admin Management', 'Manage admin accounts and access'],
   verificationCenter: ['Verification Center', 'Seller & brand identity verification queue'],
   subscriptionPlans: ['Subscription Plans', 'Seller & brand subscription tiers'],
-  monetizationCenter: ['Monetization Center', 'Ad placements and sponsored listings'],
+  monetizationCenter: ['Monetization Center', 'Ad placements and promoted listings'],
   courierProviders: ['Courier Providers', 'Manage integrated delivery partners'],
   shipmentOperations: ['Shipment Operations', 'Active shipments across all couriers'],
   courierAnalytics: ['Courier Analytics', 'Delivery performance by courier partner'],

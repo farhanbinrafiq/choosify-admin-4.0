@@ -244,7 +244,7 @@ export default function Dashboard() {
           href="/admin/website-cms"
         />
         <StatCard
-          label="Sponsored Placements"
+          label="Promoted Placements"
           value={catalog ? String(catalog.placements) : loading ? '…' : '—'}
           sub={`${catalog?.deals ?? 0} active deals in catalog`}
           href="/admin/ads-sponsors"

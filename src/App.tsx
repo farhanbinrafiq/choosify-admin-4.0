@@ -181,6 +181,9 @@ import { BrandProfilesProvider } from './contexts/BrandProfilesContext';
 import { CreatorProvider } from './contexts/CreatorContext';
 import { RbacProvider } from './contexts/RbacContext';
 import { RoleGuard } from './components/RoleGuard';
+import ErrorBoundary from './components/ErrorBoundary';
+
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 export default function App() {
   React.useEffect(() => {
@@ -208,6 +211,7 @@ export default function App() {
               <ReviewModerationProvider>
               <DisputeProvider>
               {import.meta.env.DEV && <TempRoleSwitcher />}
+              <ErrorBoundary>
               <Routes>
             <Route path="/login" element={<LoginRoute />} />
             <Route path="/signup" element={<SignupRoute />} />
@@ -235,8 +239,16 @@ export default function App() {
             
             <Route path="/seller/*" element={<Navigate to="/admin/products" replace />} />
             
-            <Route path="*" element={<Navigate to="/" />} />
+            <Route
+              path="*"
+              element={
+                <Suspense fallback={null}>
+                  <NotFoundPage />
+                </Suspense>
+              }
+            />
           </Routes>
+              </ErrorBoundary>
           </DisputeProvider>
               </ReviewModerationProvider>
               </CreatorProvider>

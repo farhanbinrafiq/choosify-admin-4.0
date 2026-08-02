@@ -1419,6 +1419,14 @@ html.dark .sidebar .sidebar-nav-search input::placeholder {
   background: var(--gradient-dark-surface) !important;
 }
 
+/** Square flex shell for portrait Emi mascot — avoids side clipping (Choosify-Web parity) */
+.choosify-emi-logo-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: visible;
+}
+
 .choosify-dark-gradient,
 .dark-brand-gradient,
 .hero-gradient {

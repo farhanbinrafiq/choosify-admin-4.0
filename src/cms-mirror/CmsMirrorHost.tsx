@@ -1,8 +1,10 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { PAGE_KEY_TO_PATH, allowedPageKeysForRole, pathToPageKey } from './nav';
+import { PAGE_KEY_TO_PATH, allowedPageKeysForRole, pathToPageKey, resolveAdminPageKey } from './nav';
 import './tokens.css';
+
+const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 
 /** Bump when public/cms-mirror/app.html behavior changes so the iframe never serves a stale 304. */
 const CMS_MIRROR_ASSET_VERSION = '20260731-brand-logo-1';
@@ -20,6 +22,7 @@ export const CmsMirrorHost: React.FC = () => {
   const navigate = useNavigate();
   const { logout, profile } = useAuth();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const knownPageKey = useMemo(() => resolveAdminPageKey(location.pathname), [location.pathname]);
   const pageKey = useMemo(() => pathToPageKey(location.pathname), [location.pathname]);
   const role = profile?.role || 'super_admin';
 
@@ -49,8 +52,9 @@ export const CmsMirrorHost: React.FC = () => {
   );
 
   useEffect(() => {
+    if (!knownPageKey) return;
     postMirrorState(pageKey, role);
-  }, [pageKey, role, postMirrorState]);
+  }, [knownPageKey, pageKey, role, postMirrorState]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -78,11 +82,20 @@ export const CmsMirrorHost: React.FC = () => {
   );
 
   useEffect(() => {
+    if (!knownPageKey) return;
     const allowed = allowedPageKeysForRole(role);
     if (allowed && !allowed.includes(pageKey)) {
       navigate('/admin/dashboard', { replace: true });
     }
-  }, [role, pageKey, navigate]);
+  }, [knownPageKey, role, pageKey, navigate]);
+
+  if (!knownPageKey) {
+    return (
+      <Suspense fallback={null}>
+        <NotFoundPage />
+      </Suspense>
+    );
+  }
 
   return (
     <div className="cms-mirror-host">

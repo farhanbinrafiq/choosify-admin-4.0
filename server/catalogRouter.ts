@@ -16,7 +16,7 @@ import {
   normalizeProductDetailInput,
 } from '../lib/vercel-catalog/catalogEditorialContract';
 import { normalizeSiteInput } from '../lib/vercel-catalog/catalogContract';
-import type { CatalogBrandPost, CatalogProduct } from '../src/types/catalog';
+import type { CatalogProduct } from '../src/types/catalog';
 import { resolveDealsBannerHref } from '../lib/vercel-catalog/dealsBannerUtils';
 import { uploadImageToCloudinary } from '../lib/vercel-catalog/mediaUpload';
 import { recordProductView, recordSearch } from './analytics/eventHooks';
@@ -29,11 +29,149 @@ import {
   EntityVersionBodySchema,
 } from './validation/catalog/draftSchemas';
 import { authenticateRequest } from './middleware/auth';
+import { requireAnyPermission } from './middleware/authorization';
+import { hasPermission, hasRole } from './permissions/authorization';
+import { PERMISSIONS } from './permissions/permissions';
+import { ROLES } from './permissions/roles';
 import { draftStore, type DraftEntityType } from '../lib/vercel-catalog/draftStore';
+import type { Request, Response } from 'express';
 
 export const catalogRouter = Router();
 
 const requireAuth = [authenticateRequest];
+/** Platform admin (ADMIN inherits via ROLE_INHERITANCE; SUPER_ADMIN too). */
+const requireCmsWrite = [authenticateRequest, requireAnyPermission([PERMISSIONS.CMS_EDIT])];
+const requireProductCreate = [
+  authenticateRequest,
+  requireAnyPermission([PERMISSIONS.PRODUCT_CREATE]),
+];
+const requireProductEdit = [
+  authenticateRequest,
+  requireAnyPermission([PERMISSIONS.PRODUCT_EDIT]),
+];
+const requireProductDelete = [
+  authenticateRequest,
+  requireAnyPermission([PERMISSIONS.PRODUCT_DELETE]),
+];
+const requireCatalogMedia = [
+  authenticateRequest,
+  requireAnyPermission([
+    PERMISSIONS.PRODUCT_CREATE,
+    PERMISSIONS.PRODUCT_EDIT,
+    PERMISSIONS.CMS_EDIT,
+  ]),
+];
+/** Drafts/versions: sellers editing own listings or CMS editors. */
+const requireCatalogDraftWrite = [
+  authenticateRequest,
+  requireAnyPermission([PERMISSIONS.PRODUCT_EDIT, PERMISSIONS.CMS_EDIT]),
+];
+
+function userIsPlatformAdmin(req: {
+  userRole?: (typeof ROLES)[keyof typeof ROLES];
+}): boolean {
+  const role = req.userRole;
+  if (!role) return false;
+  return hasRole(role, ROLES.ADMIN) || hasRole(role, ROLES.SUPER_ADMIN);
+}
+
+function userIsSellerRole(req: {
+  userRole?: (typeof ROLES)[keyof typeof ROLES];
+}): boolean {
+  const role = req.userRole;
+  if (!role) return false;
+  return hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER);
+}
+
+/**
+ * Seller-scoped product ownership. Legacy products without sellerId are admin-only
+ * until an admin assigns ownership. Sellers may only mutate rows they own.
+ */
+function userCanMutateOwnedProduct(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  product: CatalogProduct,
+): boolean {
+  if (userIsPlatformAdmin(req)) return true;
+  if (!req.userId || !userIsSellerRole(req)) return false;
+  return Boolean(product.sellerId && product.sellerId === req.userId);
+}
+
+function stampSellerOwnershipOnCreate(
+  req: Request,
+  product: CatalogProduct,
+): CatalogProduct {
+  if (userIsPlatformAdmin(req)) {
+    // Allow admin to set sellerId explicitly; otherwise leave unset (platform listing).
+    return product;
+  }
+  if (userIsSellerRole(req) && req.userId) {
+    return { ...product, sellerId: req.userId };
+  }
+  return product;
+}
+
+/** Sellers cannot reassign sellerId; admins may. */
+function preserveProductOwnershipOnUpdate(
+  req: Request,
+  existing: CatalogProduct,
+  normalized: CatalogProduct,
+): CatalogProduct {
+  if (userIsPlatformAdmin(req)) return normalized;
+  return { ...normalized, sellerId: existing.sellerId };
+}
+
+function forbidUnlessOwnsProduct(
+  req: Request,
+  res: Response,
+  product: CatalogProduct | null | undefined,
+): product is CatalogProduct {
+  if (!product) {
+    res.status(404).json({ error: 'Product not found' });
+    return false;
+  }
+  if (!userCanMutateOwnedProduct(req, product)) {
+    res.status(403).json({ error: 'Not authorized to modify this product' });
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Draft/version writes: product drafts are seller-owned; brand/creator/guide need CMS_EDIT.
+ */
+async function assertCatalogDraftWriteAllowed(
+  req: Request,
+  res: Response,
+  entityType: DraftEntityType,
+  entityId: string,
+): Promise<boolean> {
+  if (entityType === 'product') {
+    const product = await catalogStore.getProduct(entityId);
+    if (!product) {
+      // Draft before first publish: sellers/admins with product edit may stage a new id.
+      if (userIsPlatformAdmin(req)) return true;
+      if (userIsSellerRole(req) && hasPermission(req.userRole, PERMISSIONS.PRODUCT_EDIT)) {
+        return true;
+      }
+      res.status(404).json({ error: 'Product not found' });
+      return false;
+    }
+    if (!userCanMutateOwnedProduct(req, product)) {
+      res.status(403).json({ error: 'Not authorized to modify drafts for this product' });
+      return false;
+    }
+    return true;
+  }
+
+  if (
+    userIsPlatformAdmin(req) ||
+    hasPermission(req.userRole, PERMISSIONS.CMS_EDIT)
+  ) {
+    return true;
+  }
+  res.status(403).json({ error: 'Not authorized to modify this catalog draft' });
+  return false;
+}
 
 const parseLimit = (value: unknown, fallback: number, max = 100): number => {
   const num = Number(value);
@@ -142,7 +280,7 @@ catalogRouter.get('/catalog/home', async (_req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/home', ...requireAuth, async (req, res) => {
+catalogRouter.put('/catalog/home', ...requireCmsWrite, async (req, res) => {
   try {
     const current = await catalogStore.getHomepage().catch(() => defaultHomepage());
     const normalized = normalizeHomepageInput(req.body, current);
@@ -203,10 +341,13 @@ catalogRouter.get(
   },
 );
 
-catalogRouter.post('/catalog/products', ...requireAuth, async (req, res) => {
+catalogRouter.post('/catalog/products', ...requireProductCreate, async (req, res) => {
   try {
     const context = await buildProductNormalizeContext();
-    const normalized = normalizeProductInput(req.body, undefined, context);
+    const normalized = stampSellerOwnershipOnCreate(
+      req,
+      normalizeProductInput(req.body, undefined, context),
+    );
     const saved = await catalogStore.upsertProduct(normalized);
     res.status(201).json({ success: true, data: saved });
   } catch (error) {
@@ -214,15 +355,16 @@ catalogRouter.post('/catalog/products', ...requireAuth, async (req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/products/:id', ...requireAuth, async (req, res) => {
+catalogRouter.put('/catalog/products/:id', ...requireProductEdit, async (req, res) => {
   try {
     const existing = await catalogStore.getProduct(req.params.id);
-    if (!existing) {
-      res.status(404).json({ error: 'Product not found' });
-      return;
-    }
+    if (!forbidUnlessOwnsProduct(req, res, existing)) return;
     const context = await buildProductNormalizeContext(req.params.id);
-    const normalized = normalizeProductInput({ ...req.body, id: req.params.id }, existing, context);
+    const normalized = preserveProductOwnershipOnUpdate(
+      req,
+      existing,
+      normalizeProductInput({ ...req.body, id: req.params.id }, existing, context),
+    );
     const saved = await catalogStore.upsertProduct(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
@@ -230,15 +372,16 @@ catalogRouter.put('/catalog/products/:id', ...requireAuth, async (req, res) => {
   }
 });
 
-catalogRouter.patch('/catalog/products/:id', ...requireAuth, async (req, res) => {
+catalogRouter.patch('/catalog/products/:id', ...requireProductEdit, async (req, res) => {
   try {
     const existing = await catalogStore.getProduct(req.params.id);
-    if (!existing) {
-      res.status(404).json({ error: 'Product not found' });
-      return;
-    }
+    if (!forbidUnlessOwnsProduct(req, res, existing)) return;
     const context = await buildProductNormalizeContext(req.params.id);
-    const normalized = normalizeProductInput({ ...existing, ...req.body, id: req.params.id }, existing, context);
+    const normalized = preserveProductOwnershipOnUpdate(
+      req,
+      existing,
+      normalizeProductInput({ ...existing, ...req.body, id: req.params.id }, existing, context),
+    );
     const saved = await catalogStore.upsertProduct(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
@@ -246,8 +389,10 @@ catalogRouter.patch('/catalog/products/:id', ...requireAuth, async (req, res) =>
   }
 });
 
-catalogRouter.delete('/catalog/products/:id', ...requireAuth, async (req, res) => {
+catalogRouter.delete('/catalog/products/:id', ...requireProductDelete, async (req, res) => {
   try {
+    const existing = await catalogStore.getProduct(req.params.id);
+    if (!forbidUnlessOwnsProduct(req, res, existing)) return;
     await catalogStore.deleteProduct(req.params.id);
     res.json({ success: true });
   } catch (error) {
@@ -264,7 +409,7 @@ catalogRouter.get('/catalog/categories', async (_req, res) => {
   }
 });
 
-catalogRouter.post('/catalog/categories', ...requireAuth, async (req, res) => {
+catalogRouter.post('/catalog/categories', ...requireCmsWrite, async (req, res) => {
   try {
     const normalized = normalizeCategoryInput(req.body);
     const saved = await catalogStore.upsertCategory(normalized);
@@ -274,7 +419,7 @@ catalogRouter.post('/catalog/categories', ...requireAuth, async (req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/categories/:id', ...requireAuth, async (req, res) => {
+catalogRouter.put('/catalog/categories/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getCategory(req.params.id);
     if (!existing) {
@@ -289,7 +434,7 @@ catalogRouter.put('/catalog/categories/:id', ...requireAuth, async (req, res) =>
   }
 });
 
-catalogRouter.patch('/catalog/categories/:id', ...requireAuth, async (req, res) => {
+catalogRouter.patch('/catalog/categories/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getCategory(req.params.id);
     if (!existing) {
@@ -304,7 +449,7 @@ catalogRouter.patch('/catalog/categories/:id', ...requireAuth, async (req, res) 
   }
 });
 
-catalogRouter.delete('/catalog/categories/:id', ...requireAuth, async (req, res) => {
+catalogRouter.delete('/catalog/categories/:id', ...requireCmsWrite, async (req, res) => {
   try {
     await catalogStore.deleteCategory(req.params.id);
     res.json({ success: true });
@@ -322,7 +467,7 @@ catalogRouter.get('/catalog/brands', async (_req, res) => {
   }
 });
 
-catalogRouter.post('/catalog/brands', ...requireAuth, async (req, res) => {
+catalogRouter.post('/catalog/brands', ...requireCmsWrite, async (req, res) => {
   try {
     const context = await buildBrandNormalizeContext();
     const normalized = normalizeBrandInput(req.body, undefined, context);
@@ -333,7 +478,7 @@ catalogRouter.post('/catalog/brands', ...requireAuth, async (req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/brands/:id', ...requireAuth, async (req, res) => {
+catalogRouter.put('/catalog/brands/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getBrand(req.params.id);
     if (!existing) {
@@ -349,7 +494,7 @@ catalogRouter.put('/catalog/brands/:id', ...requireAuth, async (req, res) => {
   }
 });
 
-catalogRouter.patch('/catalog/brands/:id', ...requireAuth, async (req, res) => {
+catalogRouter.patch('/catalog/brands/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getBrand(req.params.id);
     if (!existing) {
@@ -365,7 +510,7 @@ catalogRouter.patch('/catalog/brands/:id', ...requireAuth, async (req, res) => {
   }
 });
 
-catalogRouter.delete('/catalog/brands/:id', ...requireAuth, async (req, res) => {
+catalogRouter.delete('/catalog/brands/:id', ...requireCmsWrite, async (req, res) => {
   try {
     await catalogStore.deleteBrand(req.params.id);
     res.json({ success: true });
@@ -383,7 +528,7 @@ catalogRouter.get('/catalog/deals', async (_req, res) => {
   }
 });
 
-catalogRouter.post('/catalog/deals', ...requireAuth, async (req, res) => {
+catalogRouter.post('/catalog/deals', ...requireCmsWrite, async (req, res) => {
   try {
     const normalized = normalizeDealInput(req.body);
     const saved = await catalogStore.upsertDeal(normalized);
@@ -393,7 +538,7 @@ catalogRouter.post('/catalog/deals', ...requireAuth, async (req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/deals/:id', ...requireAuth, async (req, res) => {
+catalogRouter.put('/catalog/deals/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getDeal(req.params.id);
     if (!existing) {
@@ -408,7 +553,7 @@ catalogRouter.put('/catalog/deals/:id', ...requireAuth, async (req, res) => {
   }
 });
 
-catalogRouter.patch('/catalog/deals/:id', ...requireAuth, async (req, res) => {
+catalogRouter.patch('/catalog/deals/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getDeal(req.params.id);
     if (!existing) {
@@ -423,7 +568,7 @@ catalogRouter.patch('/catalog/deals/:id', ...requireAuth, async (req, res) => {
   }
 });
 
-catalogRouter.delete('/catalog/deals/:id', ...requireAuth, async (req, res) => {
+catalogRouter.delete('/catalog/deals/:id', ...requireCmsWrite, async (req, res) => {
   try {
     await catalogStore.deleteDeal(req.params.id);
     res.json({ success: true });
@@ -432,9 +577,32 @@ catalogRouter.delete('/catalog/deals/:id', ...requireAuth, async (req, res) => {
   }
 });
 
+/** Max active banners in the homepage Today's Deals horizontal carousel. */
+const MAX_ACTIVE_DEALS_BANNERS = 5;
+
 async function readHomepageWithDealsBanners() {
   const current = await catalogStore.getHomepage().catch(() => defaultHomepage());
   return normalizeHomepageInput(current, current);
+}
+
+function activeDealsBannerCount(
+  banners: { id: string; isActive: boolean }[],
+  excludeId?: string,
+): number {
+  return banners.filter((b) => b.isActive && b.id !== excludeId).length;
+}
+
+function rejectIfTooManyActiveDeals(
+  res: { status: (code: number) => { json: (body: unknown) => void } },
+  banners: { id: string; isActive: boolean }[],
+  next: { id: string; isActive: boolean },
+): boolean {
+  if (!next.isActive) return false;
+  if (activeDealsBannerCount(banners, next.id) < MAX_ACTIVE_DEALS_BANNERS) return false;
+  res.status(400).json({
+    error: `At most ${MAX_ACTIVE_DEALS_BANNERS} active Today's Deals banners are allowed. Deactivate another first.`,
+  });
+  return true;
 }
 
 /** Public: active Today's Deals carousel banners in display order */
@@ -442,7 +610,7 @@ catalogRouter.get('/catalog/deals-banners', async (req, res) => {
   try {
     const homepage = await readHomepageWithDealsBanners();
     const activeOnly = String(req.query.active || 'true').toLowerCase() !== 'false';
-    const banners = (homepage.dealsBanners || [])
+    let banners = (homepage.dealsBanners || [])
       .filter((b) => (activeOnly ? b.isActive : true))
       .slice()
       .sort((a, b) => a.order - b.order)
@@ -450,13 +618,16 @@ catalogRouter.get('/catalog/deals-banners', async (req, res) => {
         ...b,
         href: resolveDealsBannerHref(b),
       }));
+    if (activeOnly) {
+      banners = banners.slice(0, MAX_ACTIVE_DEALS_BANNERS);
+    }
     res.json({ data: banners });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list deals banners' });
   }
 });
 
-catalogRouter.post('/catalog/deals-banners', ...requireAuth, async (req, res) => {
+catalogRouter.post('/catalog/deals-banners', ...requireCmsWrite, async (req, res) => {
   try {
     const homepage = await readHomepageWithDealsBanners();
     const nextOrder =
@@ -469,6 +640,7 @@ catalogRouter.post('/catalog/deals-banners', ...requireAuth, async (req, res) =>
       res.status(400).json({ error: 'image is required' });
       return;
     }
+    if (rejectIfTooManyActiveDeals(res, homepage.dealsBanners, banner)) return;
     const dealsBanners = [...homepage.dealsBanners, banner].sort((a, b) => a.order - b.order);
     const saved = await catalogStore.upsertHomepage(
       normalizeHomepageInput({ ...homepage, dealsBanners }, homepage),
@@ -480,7 +652,7 @@ catalogRouter.post('/catalog/deals-banners', ...requireAuth, async (req, res) =>
   }
 });
 
-catalogRouter.put('/catalog/deals-banners/:id', ...requireAuth, async (req, res) => {
+catalogRouter.put('/catalog/deals-banners/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const homepage = await readHomepageWithDealsBanners();
     const existing = homepage.dealsBanners.find((b) => b.id === req.params.id);
@@ -490,6 +662,7 @@ catalogRouter.put('/catalog/deals-banners/:id', ...requireAuth, async (req, res)
     }
     const idx = homepage.dealsBanners.findIndex((b) => b.id === req.params.id);
     const banner = normalizeDealsBannerInput({ ...req.body, id: req.params.id }, idx, existing);
+    if (rejectIfTooManyActiveDeals(res, homepage.dealsBanners, banner)) return;
     const dealsBanners = homepage.dealsBanners
       .map((b) => (b.id === banner.id ? banner : b))
       .sort((a, b) => a.order - b.order);
@@ -503,7 +676,7 @@ catalogRouter.put('/catalog/deals-banners/:id', ...requireAuth, async (req, res)
   }
 });
 
-catalogRouter.patch('/catalog/deals-banners/:id', ...requireAuth, async (req, res) => {
+catalogRouter.patch('/catalog/deals-banners/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const homepage = await readHomepageWithDealsBanners();
     const existing = homepage.dealsBanners.find((b) => b.id === req.params.id);
@@ -513,6 +686,7 @@ catalogRouter.patch('/catalog/deals-banners/:id', ...requireAuth, async (req, re
     }
     const idx = homepage.dealsBanners.findIndex((b) => b.id === req.params.id);
     const banner = normalizeDealsBannerInput({ ...existing, ...req.body, id: req.params.id }, idx, existing);
+    if (rejectIfTooManyActiveDeals(res, homepage.dealsBanners, banner)) return;
     const dealsBanners = homepage.dealsBanners
       .map((b) => (b.id === banner.id ? banner : b))
       .sort((a, b) => a.order - b.order);
@@ -526,7 +700,7 @@ catalogRouter.patch('/catalog/deals-banners/:id', ...requireAuth, async (req, re
   }
 });
 
-catalogRouter.delete('/catalog/deals-banners/:id', ...requireAuth, async (req, res) => {
+catalogRouter.delete('/catalog/deals-banners/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const homepage = await readHomepageWithDealsBanners();
     if (!homepage.dealsBanners.some((b) => b.id === req.params.id)) {
@@ -551,7 +725,7 @@ catalogRouter.get('/catalog/site', async (_req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/site', ...requireAuth, async (req, res) => {
+catalogRouter.put('/catalog/site', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getSiteConfig();
     const normalized = normalizeSiteInput(req.body, existing);
@@ -573,7 +747,7 @@ catalogRouter.get('/catalog/creators', async (req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/creators/:id', ...requireAuth, async (req, res) => {
+catalogRouter.put('/catalog/creators/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getCreator(req.params.id);
     const normalized = normalizeCreatorInput({ ...req.body, id: req.params.id }, existing || undefined);
@@ -584,7 +758,7 @@ catalogRouter.put('/catalog/creators/:id', ...requireAuth, async (req, res) => {
   }
 });
 
-catalogRouter.patch('/catalog/creators/:id', ...requireAuth, async (req, res) => {
+catalogRouter.patch('/catalog/creators/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getCreator(req.params.id);
     if (!existing) {
@@ -622,7 +796,7 @@ catalogRouter.get('/catalog/guides/:id', async (req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/guides/:id', ...requireAuth, async (req, res) => {
+catalogRouter.put('/catalog/guides/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getGuide(req.params.id);
     const normalized = normalizeGuideInput({ ...req.body, id: req.params.id }, existing || undefined);
@@ -633,7 +807,7 @@ catalogRouter.put('/catalog/guides/:id', ...requireAuth, async (req, res) => {
   }
 });
 
-catalogRouter.patch('/catalog/guides/:id', ...requireAuth, async (req, res) => {
+catalogRouter.patch('/catalog/guides/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getGuide(req.params.id);
     if (!existing) {
@@ -665,11 +839,12 @@ catalogRouter.get(
 
 catalogRouter.put(
   '/catalog/:entityType/:id/draft',
-  ...requireAuth,
+  ...requireCatalogDraftWrite,
   validate({ params: EntityDraftParamsSchema, body: EntityDraftBodySchema }),
   async (req, res) => {
     try {
       const { entityType, id } = req.params as unknown as { entityType: DraftEntityType; id: string };
+      if (!(await assertCatalogDraftWriteAllowed(req, res, entityType, id))) return;
       const saved = await draftStore.upsertDraft(entityType, id, req.body.data, req.userId ?? 'unknown');
       res.json({ success: true, data: saved });
     } catch (error) {
@@ -695,11 +870,12 @@ catalogRouter.get(
 
 catalogRouter.post(
   '/catalog/:entityType/:id/versions',
-  ...requireAuth,
+  ...requireCatalogDraftWrite,
   validate({ params: EntityDraftParamsSchema, body: EntityVersionBodySchema }),
   async (req, res) => {
     try {
       const { entityType, id } = req.params as unknown as { entityType: DraftEntityType; id: string };
+      if (!(await assertCatalogDraftWriteAllowed(req, res, entityType, id))) return;
       const version = await draftStore.createVersion(
         entityType,
         id,
@@ -731,7 +907,7 @@ catalogRouter.get('/catalog/placements', async (req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/placements/:id', ...requireAuth, async (req, res) => {
+catalogRouter.put('/catalog/placements/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getPlacement(req.params.id);
     const normalized = normalizePlacementInput({ ...req.body, id: req.params.id }, existing || undefined);
@@ -742,7 +918,7 @@ catalogRouter.put('/catalog/placements/:id', ...requireAuth, async (req, res) =>
   }
 });
 
-catalogRouter.patch('/catalog/placements/:id', ...requireAuth, async (req, res) => {
+catalogRouter.patch('/catalog/placements/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getPlacement(req.params.id);
     if (!existing) {
@@ -757,7 +933,7 @@ catalogRouter.patch('/catalog/placements/:id', ...requireAuth, async (req, res) 
   }
 });
 
-catalogRouter.post('/catalog/media/upload', ...requireAuth, async (req, res) => {
+catalogRouter.post('/catalog/media/upload', ...requireCatalogMedia, async (req, res) => {
   try {
     const { data, mimeType, fileName } = req.body as { data?: string; mimeType?: string; fileName?: string };
     const validation = validateImageUploadInput({
@@ -796,8 +972,10 @@ catalogRouter.get('/catalog/product-details/:productId', async (req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/product-details/:productId', ...requireAuth, async (req, res) => {
+catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, async (req, res) => {
   try {
+    const product = await catalogStore.getProduct(req.params.productId);
+    if (!forbidUnlessOwnsProduct(req, res, product)) return;
     const existing = await catalogStore.getProductDetail(req.params.productId);
     const normalized = normalizeProductDetailInput(
       { ...req.body, productId: req.params.productId },
@@ -811,8 +989,10 @@ catalogRouter.put('/catalog/product-details/:productId', ...requireAuth, async (
   }
 });
 
-catalogRouter.patch('/catalog/product-details/:productId', ...requireAuth, async (req, res) => {
+catalogRouter.patch('/catalog/product-details/:productId', ...requireProductEdit, async (req, res) => {
   try {
+    const product = await catalogStore.getProduct(req.params.productId);
+    if (!forbidUnlessOwnsProduct(req, res, product)) return;
     const existing = await catalogStore.getProductDetail(req.params.productId);
     if (!existing) {
       res.status(404).json({ error: 'Product detail not found' });
@@ -861,7 +1041,7 @@ catalogRouter.get('/catalog/brand-posts/:id', async (req, res) => {
   }
 });
 
-catalogRouter.post('/catalog/brand-posts', ...requireAuth, async (req, res) => {
+catalogRouter.post('/catalog/brand-posts', ...requireCmsWrite, async (req, res) => {
   try {
     const normalized = normalizeBrandPostInput(req.body);
     const saved = await catalogStore.upsertBrandPost(normalized);
@@ -871,7 +1051,7 @@ catalogRouter.post('/catalog/brand-posts', ...requireAuth, async (req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/brand-posts/:id', ...requireAuth, async (req, res) => {
+catalogRouter.put('/catalog/brand-posts/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getBrandPost(req.params.id);
     if (!existing) {
@@ -886,7 +1066,7 @@ catalogRouter.put('/catalog/brand-posts/:id', ...requireAuth, async (req, res) =
   }
 });
 
-catalogRouter.patch('/catalog/brand-posts/:id', ...requireAuth, async (req, res) => {
+catalogRouter.patch('/catalog/brand-posts/:id', ...requireCmsWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getBrandPost(req.params.id);
     if (!existing) {
@@ -901,7 +1081,7 @@ catalogRouter.patch('/catalog/brand-posts/:id', ...requireAuth, async (req, res)
   }
 });
 
-catalogRouter.delete('/catalog/brand-posts/:id', ...requireAuth, async (req, res) => {
+catalogRouter.delete('/catalog/brand-posts/:id', ...requireCmsWrite, async (req, res) => {
   try {
     await catalogStore.deleteBrandPost(req.params.id);
     res.json({ success: true });

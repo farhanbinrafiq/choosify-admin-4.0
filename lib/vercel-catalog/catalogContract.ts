@@ -217,6 +217,8 @@ const dealsBannerSchema = z.object({
   destinationRef: z.string(),
   order: z.number().int(),
   isActive: z.boolean(),
+  brandName: z.string().optional(),
+  brandLogoUrl: z.string().optional(),
   createdAt: isoDate,
   updatedAt: isoDate,
 });
@@ -498,6 +500,8 @@ export const normalizeDealsBannerInput = (
     destinationRef: toString(raw.destinationRef, existing?.destinationRef ?? ''),
     order: Math.floor(toNumber(raw.order, existing?.order ?? idx)),
     isActive: toBoolean(raw.isActive, existing?.isActive ?? true),
+    brandName: toString(raw.brandName, existing?.brandName ?? '') || undefined,
+    brandLogoUrl: toString(raw.brandLogoUrl, existing?.brandLogoUrl ?? '') || undefined,
     createdAt: existingOrNow(existing?.createdAt),
     updatedAt: nowIso(),
   });

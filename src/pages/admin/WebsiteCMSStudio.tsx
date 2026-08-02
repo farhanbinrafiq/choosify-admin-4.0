@@ -654,7 +654,7 @@ export default function WebsiteCMSStudio() {
       localStorage.setItem('choosify_cms_featured_recs', JSON.stringify(featuredRecommendations));
       syncToWebCampaigns();
       setHasDraftChanges(false);
-      showToast('✓ All featured sections and sponsored placements published!', 'success');
+      showToast('✓ All featured sections and promoted placements published!', 'success');
     } catch (err) {
       showToast('Publish failed. Please try again.', 'error');
     } finally {
@@ -686,12 +686,12 @@ export default function WebsiteCMSStudio() {
       ]
     },
     {
-      label: 'SPONSORED',
+      label: 'PROMOTED',
       items: [
         { id: 'spotlight-brands', label: 'Spotlight Brands', icon: Sparkles },
-        { id: 'sponsored-ads', label: 'Sponsored Ads', icon: Megaphone },
-        { id: 'sponsored-brands', label: 'Sponsored Brands', icon: Building2 },
-        { id: 'sponsored-products', label: 'Sponsored Products', icon: ShoppingBag },
+        { id: 'sponsored-ads', label: 'Promoted Ads', icon: Megaphone },
+        { id: 'sponsored-brands', label: 'Promoted Brands', icon: Building2 },
+        { id: 'sponsored-products', label: 'Promoted Products', icon: ShoppingBag },
       ]
     },
     {

@@ -85,7 +85,7 @@ export default function BrandPostsPage() {
             What&apos;s On — Brand Posts
           </h1>
           <p className="text-sm text-app-text-secondary mt-1">
-            Manage sponsored brand moments, launches, and events shown on the public storefront.
+            Manage promoted brand moments, launches, and events shown on the public storefront.
           </p>
         </div>
         <button

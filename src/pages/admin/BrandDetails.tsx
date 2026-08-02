@@ -368,9 +368,9 @@ export default function BrandDetails() {
   ];
 
   const sponsoredAds = [
-    { id: 'ad-01', name: 'Eid Grand Apparel Campaign 2026', type: 'Sponsored Products', budget: '৳ 50,000', spend: '৳ 32,400', impressions: '142.5k', clicks: '8.9k', status: 'Active' },
-    { id: 'ad-02', name: 'Summer Kurta Banner Showcase', type: 'Sponsored Banner', budget: '৳ 20,000', spend: '৳ 20,000', impressions: '84.1k', clicks: '4.2k', status: 'Expired' },
-    { id: 'ad-03', name: 'Monsoon Heritage Decor Blitz', type: 'Sponsored Products', budget: '৳ 30,000', spend: '৳ 0', impressions: '0', clicks: '0', status: 'Scheduled' }
+    { id: 'ad-01', name: 'Eid Grand Apparel Campaign 2026', type: 'Promoted Products', budget: '৳ 50,000', spend: '৳ 32,400', impressions: '142.5k', clicks: '8.9k', status: 'Active' },
+    { id: 'ad-02', name: 'Summer Kurta Banner Showcase', type: 'Promoted Banner', budget: '৳ 20,000', spend: '৳ 20,000', impressions: '84.1k', clicks: '4.2k', status: 'Expired' },
+    { id: 'ad-03', name: 'Monsoon Heritage Decor Blitz', type: 'Promoted Products', budget: '৳ 30,000', spend: '৳ 0', impressions: '0', clicks: '0', status: 'Scheduled' }
   ];
 
   const couponsList = [

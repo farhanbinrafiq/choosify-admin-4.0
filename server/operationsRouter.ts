@@ -24,6 +24,7 @@ import type {
 import { validate } from './middleware/validate';
 import { authenticateRequest } from './middleware/auth';
 import { requireRole } from './middleware/authorization';
+import { requireModerator as requireModeratorRole } from './middleware/requireModerator';
 import { hasRole } from './permissions/authorization';
 import { ROLES } from './permissions/roles';
 import { CouponValidateBodySchema } from './validation/operations/couponValidateSchema';
@@ -43,6 +44,8 @@ export const operationsRouter = Router();
 const requireAuth = [authenticateRequest];
 /** Admin or super_admin (via ROLE_INHERITANCE). */
 const requireAdmin = [authenticateRequest, requireRole(ROLES.ADMIN)];
+/** Moderator+ (admin/super_admin inherit moderator). */
+const requireModerator = [authenticateRequest, requireModeratorRole];
 
 /**
  * Coupons UI (`/admin/coupons`, content gate) is available to admin and seller
@@ -548,6 +551,12 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
       depositPercent: body.depositPercent,
       depositAmount: body.depositAmount,
       remainingAmount: body.remainingAmount,
+      paymentProvider: body.paymentProvider,
+      paymentStatus: body.paymentStatus,
+      paymentTranId: body.paymentTranId,
+      paymentValId: body.paymentValId,
+      paidAmount: body.paidAmount,
+      paymentValidatedAt: body.paymentValidatedAt,
     });
 
     if (body.promoCode && body.promoDiscount) {
@@ -1705,7 +1714,7 @@ operationsRouter.get('/operations/platform-messages', ...requireAuth, async (req
   }
 });
 
-operationsRouter.post('/operations/platform-messages', async (req, res) => {
+operationsRouter.post('/operations/platform-messages', ...requireAuth, async (req, res) => {
   try {
     const { buyerId, userName, body, orderId, bookingOffer, conversationId, isComplaint, sellerId, orderSnapshot } =
       req.body as {
@@ -1721,8 +1730,21 @@ operationsRouter.post('/operations/platform-messages', async (req, res) => {
         /** Support complaints bypass post-order reply lock (they go to platform inbox, not seller thread). */
         isComplaint?: boolean;
       };
-    if (!buyerId?.trim() || !body?.trim()) {
+    if (!body?.trim()) {
       res.status(400).json({ error: 'buyerId and body are required' });
+      return;
+    }
+
+    // Never trust client buyerId for shoppers — staff may post on behalf of a buyer.
+    const effectiveBuyerId = userIsStaff(req)
+      ? (buyerId?.trim() || req.userId || '')
+      : (req.userId || '');
+    if (!effectiveBuyerId) {
+      res.status(400).json({ error: 'buyerId and body are required' });
+      return;
+    }
+    if (!userIsStaff(req) && buyerId?.trim() && buyerId.trim() !== effectiveBuyerId) {
+      res.status(403).json({ error: 'Not authorized to post as another user' });
       return;
     }
 
@@ -1742,8 +1764,8 @@ operationsRouter.post('/operations/platform-messages', async (req, res) => {
         './booking/bookingService'
       );
       const listingId = String(bookingOffer.listingId || '');
-      const sellerId = String(bookingOffer.sellerId || '');
-      const autoApprove = await resolveAutoApprove(sellerId, listingId).catch(() => false);
+      const offerSellerId = String(bookingOffer.sellerId || '');
+      const autoApprove = await resolveAutoApprove(offerSellerId, listingId).catch(() => false);
       const partialPayment = await resolvePartialPaymentSettings(listingId).catch(() => ({
         partialPaymentEnabled: false,
         depositPercent: undefined as number | undefined,
@@ -1753,9 +1775,9 @@ operationsRouter.post('/operations/platform-messages', async (req, res) => {
         listingTitle: String(bookingOffer.listingTitle || 'Service listing'),
         listingImage: bookingOffer.listingImage as string | undefined,
         listingHref: bookingOffer.listingHref as string | undefined,
-        sellerId,
+        sellerId: offerSellerId,
         sellerName: String(bookingOffer.sellerName || 'Seller'),
-        buyerId: buyerId.trim(),
+        buyerId: effectiveBuyerId,
         buyerName: userName?.trim(),
         serviceCategory: bookingOffer.serviceCategory as string | undefined,
         isService: bookingOffer.isService !== false,
@@ -1766,7 +1788,7 @@ operationsRouter.post('/operations/platform-messages', async (req, res) => {
           bookingOffer.originalPrice !== undefined
             ? Number(bookingOffer.originalPrice)
             : undefined,
-        conversationId: `conv_platform_${buyerId.trim()}`,
+        conversationId: `conv_platform_${effectiveBuyerId}`,
         autoApprove,
         partialPaymentEnabled: partialPayment.partialPaymentEnabled,
         depositPercent: partialPayment.depositPercent,
@@ -1779,8 +1801,8 @@ operationsRouter.post('/operations/platform-messages', async (req, res) => {
       : '';
 
     const result = await submitPlatformMessage({
-      buyerId: buyerId.trim(),
-      userName: userName?.trim() || buyerId.trim(),
+      buyerId: effectiveBuyerId,
+      userName: userName?.trim() || effectiveBuyerId,
       body: `${complaintPrefix}${body.trim()}`,
       orderId: orderId?.trim(),
       bookingOffer: attachedOffer,
@@ -2080,7 +2102,7 @@ operationsRouter.patch('/operations/verifications/:id/submit', ...requireAuth, a
 
 operationsRouter.patch(
   '/operations/verifications/:id/document/:docId',
-  ...requireAuth,
+  ...requireModerator,
   (req, res) => {
     if (!userCanManageVerifications(req)) {
       res.status(403).json({ error: 'Not authorized to audit verification documents' });
@@ -2123,7 +2145,7 @@ operationsRouter.patch(
   },
 );
 
-operationsRouter.patch('/operations/verifications/:id/review', ...requireAuth, async (req, res) => {
+operationsRouter.patch('/operations/verifications/:id/review', ...requireModerator, async (req, res) => {
   if (!userCanManageVerifications(req)) {
     res.status(403).json({ error: 'Not authorized to review verification requests' });
     return;

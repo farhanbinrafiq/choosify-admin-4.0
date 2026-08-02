@@ -377,7 +377,7 @@ export default function SellerDashboard() {
                     onChange={(e: any) => setRequestedPromoType(e.target.value)}
                     className="w-full bg-app-bg border border-app-border rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-app-accent"
                   >
-                    <option value="Sponsored">Sponsored Tag</option>
+                    <option value="Sponsored">Promoted Tag</option>
                     <option value="Featured">Featured Spotlight</option>
                     <option value="Hot">Hot Deal Tag</option>
                     <option value="Verified">Verified Merchant Tag</option>

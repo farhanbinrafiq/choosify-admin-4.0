@@ -166,7 +166,7 @@ export const AdsProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         type: 'PRODUCT',
         targetId: 'p1',
         title: 'iPhone 15 Pro (Aarong Certified)',
-        subtitle: 'Exclusive flagship product featured under sponsored spotlight this week.',
+        subtitle: 'Exclusive flagship product featured under promoted spotlight this week.',
         imageUrl: 'https://images.unsplash.com/photo-1696446701796-da61225697cc?w=400&q=80',
         status: 'ACTIVE',
         placement: 'trending_section',

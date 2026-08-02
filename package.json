@@ -9,6 +9,9 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "smoke": "tsx scripts/smoke-test.ts",
+    "verify:payments": "tsx scripts/verify-payment-flow.ts",
+    "check:prod-env": "tsx scripts/check-production-env.ts",
     "seed:catalog": "tsx scripts/seedCatalog.ts",
     "build:cms-mirror": "node scripts/build-cms-mirror.mjs"
   },

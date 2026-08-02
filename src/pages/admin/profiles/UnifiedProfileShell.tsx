@@ -2731,7 +2731,7 @@ export default function UnifiedProfileShell() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 font-sans">
               <div className="lg:col-span-2 bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
                 <div className="border-b border-app-border pb-3">
-                  <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Promotion Campaigns (Sponsored Ads)</h3>
+                  <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Promotion Campaigns (Promoted Ads)</h3>
                   <p className="text-[11px] text-app-text-secondary mt-1">Scheduled visibility caps, budget allocations, and conversion margins.</p>
                 </div>
                 <div className="overflow-x-auto rounded border border-app-border bg-app-bg/50 text-xs font-mono">

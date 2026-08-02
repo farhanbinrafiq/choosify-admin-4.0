@@ -175,9 +175,9 @@ export default function CreatorDashboard() {
                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-app-border">
                   <div>
                      <h3 className="text-lg font-bold">📢 Boost Recommendation Guides</h3>
-                     <p className="text-xs text-app-text-secondary">Request featured placement, visibility boosts or sponsored guide ranks across Bangladesh.</p>
+                     <p className="text-xs text-app-text-secondary">Request featured placement, visibility boosts or promoted guide ranks across Bangladesh.</p>
                   </div>
-                  <span className="px-3 py-1 bg-app-accent/15 border border-app-accent/20 rounded-full text-[9px] font-black uppercase text-app-accent-light self-start">Organic & Sponsored Mix</span>
+                  <span className="px-3 py-1 bg-app-accent/15 border border-app-accent/20 rounded-full text-[9px] font-black uppercase text-app-accent-light self-start">Organic & Promoted Mix</span>
                </div>
 
                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -323,7 +323,7 @@ export default function CreatorDashboard() {
                     className="w-full bg-app-bg border border-app-border rounded-xl px-3 py-2.5 text-xs text-white outline-none focus:border-app-accent"
                   >
                     <option value="Featured">Featured Guides Slot</option>
-                    <option value="Sponsored">Sponsored Tag</option>
+                    <option value="Sponsored">Promoted Tag</option>
                     <option value="Trending">Trending Boost</option>
                     <option value="Editor Pick">Editor's Choice Highlight</option>
                   </select>

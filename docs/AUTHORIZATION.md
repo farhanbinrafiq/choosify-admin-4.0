@@ -89,7 +89,9 @@ Current definitions:
 - `ANALYTICS_VIEW`
 - `ROLE_MANAGE`
 
-These definitions are available for future APIs. Existing APIs were not rewritten to enforce every permission in this sprint.
+These definitions back role→permission maps and are enforced on catalog write
+routes (and selected operations routes) via `requireAnyPermission` / role
+middleware. Remaining APIs may still use custom in-handler checks.
 
 ## Permission Helpers
 
@@ -151,65 +153,85 @@ Status codes:
 
 ## Route Audit Summary
 
-No existing API contracts or route behavior were changed in this sprint.
+Catalog and operations write routes were audited against live handlers in
+`server/catalogRouter.ts` and `server/operationsRouter.ts`. Middleware confirms
+role/permission; seller-scoped resources also enforce ownership in the handler
+(`req.userId` must own the row). Public routes below are intentionally
+unauthenticated or auth-only customer flows.
 
-### Protected Routes
+### Catalog (`/api/v1/catalog/*`)
 
-- `GET /api/v1/auth/me` verifies the Firebase bearer token and resolves the admin profile.
-- `POST /api/webhooks/meta` is protected by Meta webhook signature verification.
-- `GET /api/webhooks/meta` is protected by Meta verify token challenge behavior.
-- `POST /api/v1/auth/dev-login` is disabled in production unless `ALLOW_DEV_LOGIN=true`.
+Mounted under the v1 API prefix. Public **GET** list/detail routes are unchanged
+(no auth). Writes:
 
-### Routes Missing Protection
+| Route | Classification | Protection |
+| --- | --- | --- |
+| `PUT /catalog/home` | Admin / CMS | `authenticateRequest` + `requireAnyPermission([CMS_EDIT])` |
+| `POST/PUT/PATCH/DELETE /catalog/products` | Seller-scoped (+ admin) | Product create/edit/delete permissions; sellers stamped with `sellerId = req.userId` on create; mutate/delete only when `product.sellerId === req.userId` (legacy rows without `sellerId` are admin-only) |
+| `PUT/PATCH /catalog/product-details/:productId` | Seller-scoped (+ admin) | `PRODUCT_EDIT` + ownership of parent product |
+| `POST/PUT/PATCH/DELETE /catalog/categories` | CMS | `CMS_EDIT` |
+| `POST/PUT/PATCH/DELETE /catalog/brands` | CMS | `CMS_EDIT` |
+| `POST/PUT/PATCH/DELETE /catalog/deals` | CMS (platform) | `CMS_EDIT` |
+| `POST/PUT/PATCH/DELETE /catalog/deals-banners` | CMS | `CMS_EDIT` |
+| `PUT /catalog/site` | CMS | `CMS_EDIT` |
+| `PUT/PATCH /catalog/creators/:id` | CMS | `CMS_EDIT` |
+| `PUT/PATCH /catalog/guides/:id` | CMS | `CMS_EDIT` |
+| `PUT/PATCH /catalog/placements/:id` | CMS | `CMS_EDIT` |
+| `POST/PUT/PATCH/DELETE /catalog/brand-posts` | CMS | `CMS_EDIT` |
+| `POST /catalog/media/upload` | Staff / seller media | `PRODUCT_CREATE` \| `PRODUCT_EDIT` \| `CMS_EDIT` |
+| `PUT …/draft`, `POST …/versions` | Mixed | `PRODUCT_EDIT` \| `CMS_EDIT`; product drafts require ownership (or admin); brand/creator/guide drafts require `CMS_EDIT` |
+| `GET …/draft`, `GET …/versions` | Auth | `authenticateRequest` only (read staging data) |
 
-These routes currently do not require Firebase authentication in the Express layer and should be candidates for future authorization work:
+### Operations (`/api/v1/operations/*`)
 
-- Catalog management routes under `/api/v1/catalog/*`, including product, category, brand, deal, homepage, media, and brand post mutations.
-- Operations routes under `/api/v1/operations/*`, including orders, coupons, reviews, leads, permissions, analytics, shipments, feature flags, users, and seller offers.
-- Messaging console routes under `/api/conversations`, `/api/messages/*`, `/api/conversation/*`, and `/api/agents`.
-- Logistics simulator route `POST /api/logistics/simulate-webhook`.
-- Deprecated product compatibility routes under `/api/products`.
-- Admin stats route `GET /api/admin/stats`.
+| Route | Classification | Protection |
+| --- | --- | --- |
+| `POST /operations/orders` | Customer (+ staff manual) | Auth; buyer bound to `req.userId` (manual orders: staff only, `buyerId=unclaimed`) |
+| `POST /operations/orders/claim/:token/confirm` | Customer | Auth + claim-token ownership |
+| `PATCH /operations/orders/:id` | Buyer / seller / staff | Auth + `userCanMutateOrder` (buyer, order seller, or staff) |
+| `POST /operations/orders/:id/cancel` | Buyer / seller / staff | Auth + cancel eligibility helpers |
+| `POST /operations/returns` | Customer | Auth; `buyerId` must equal `req.userId` |
+| `PATCH/POST …/returns/:id/*` | Seller-scoped / staff | Auth + return seller/admin helpers (`userCanManageReturnAsSellerOrAdmin` / note helper) |
+| `POST/PATCH/DELETE /operations/coupons` | Admin / seller / marketing | Auth + `userCanManageCoupons` (platform-wide coupons, not seller-owned rows) |
+| `POST /operations/coupons/validate` | Public | No auth (checkout) |
+| `POST/PATCH/DELETE /operations/fee-charges` | Admin | `requireAdmin` |
+| `PUT /operations/payment-options` | Admin | `requireAdmin` |
+| `POST /operations/reviews` | Customer | Auth; purchase check; `userId` from token |
+| `PATCH/DELETE /operations/reviews/:id` | Author / moderator / staff | Auth + `userCanModerateOrEditReview` |
+| `POST /operations/leads` | Public | Rate-limited; no auth |
+| `PATCH /operations/leads/:id` | Admin | `requireAdmin` |
+| `POST/PATCH/DELETE /operations/jobs` | Admin | `requireAdmin` |
+| `POST /operations/job-applications` | Customer | Auth |
+| `PATCH /operations/job-applications/:id` | Admin | `requireAdmin` |
+| `POST /operations/media/upload-resume` | Customer | Auth |
+| `PUT /operations/permissions` | Admin | `requireAdmin` |
+| `PATCH /operations/shipments/:id` | Seller / staff | Auth + `userCanUpdateShipment` |
+| `POST /operations/platform-messages` | Customer (+ staff) | Auth; non-staff `buyerId` forced to `req.userId` |
+| `PUT /operations/feature-flags` | Admin | `requireAdmin` |
+| `POST /operations/seller-offers` | Public | Rate-limited intake; no auth |
+| `PATCH /operations/seller-offers/:id` | Admin | `requireAdmin` |
+| `POST /operations/media/upload-verification` | Applicant | Auth |
+| `POST /operations/verifications` | Applicant | Auth; submitter bound to token |
+| `PATCH /operations/verifications/:id/submit` | Applicant | Auth + ownership of request |
+| `PATCH …/verifications/:id/document/:docId` | Moderator+ | `requireModerator` + `userCanManageVerifications` |
+| `PATCH …/verifications/:id/review` | Moderator+ | `requireModerator` + `userCanManageVerifications` |
 
-### Admin Routes
+### Other routes (outside this audit’s write pass)
 
-Likely future admin or super-admin candidates:
+Still candidates for separate hardening (not changed here):
 
-- Catalog write operations.
-- CMS/homepage write operations.
-- Operations permissions endpoints.
-- Feature flag writes.
-- Admin stats and analytics endpoints.
-- User management endpoints.
+- Messaging console (`/api/conversations`, `/api/messages/*`, etc.)
+- Logistics simulator / webhooks
+- Deprecated `/api/products` compatibility routes
+- `GET /api/admin/stats` and some analytics GETs
 
-### Seller Routes
+### Intentionally public / customer-facing
 
-Likely future seller candidates:
+- `GET /health`, public catalog GETs, `GET /operations/reviews/public`
+- `POST /operations/coupons/validate`, `POST /operations/leads`, `POST /operations/seller-offers`
+- Authenticated customer writes: checkout orders, reviews, returns create, claim confirm, job applications, verification submit, platform messages (own inbox)
 
-- Product create/edit operations scoped to seller ownership.
-- Seller offers.
-- Seller order and shipment views scoped to seller ownership.
-- Seller analytics scoped to seller ownership.
+### Ownership notes
 
-### Moderator Routes
-
-Likely future moderator candidates:
-
-- Review moderation endpoints.
-- Messaging assignment/status endpoints.
-- Seller approval/suspension workflows.
-- CMS moderation workflows.
-
-### Public Routes
-
-Routes that currently appear intentionally public or integration-facing:
-
-- `GET /health`
-- Public catalog read routes.
-- Public review submission and public review listing routes.
-- Coupon validation.
-- Storefront order creation.
-- Meta webhook verification endpoints.
-- Logistics webhook receiver endpoints.
-
-Future hardening should apply middleware route-by-route to avoid breaking the current frontend or third-party integrations.
+- **Products** use optional `sellerId` on `CatalogProduct`. Sellers always get `sellerId = req.userId` on create. Updates cannot reassign `sellerId` except by admin. Products without `sellerId` are treated as platform/legacy and are admin-only to mutate.
+- **Orders / returns / shipments / reviews / verifications** keep existing in-handler ownership helpers; middleware alone is not sufficient for seller scoping.

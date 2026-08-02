@@ -154,7 +154,7 @@ export default function AdsDealsStudio() {
 
   const tabs: TabItem[] = [
     { key: 'requests', label: 'Feature Requests', icon: Inbox, badge: pendingCount },
-    { key: 'ads', label: 'Sponsored Ads', icon: Megaphone },
+    { key: 'ads', label: 'Promoted Ads', icon: Megaphone },
     { key: 'deals', label: 'Deals & Coupons', icon: Tag },
     { key: 'placements', label: 'Placements & Featured', icon: LayoutTemplate },
   ];
@@ -164,7 +164,7 @@ export default function AdsDealsStudio() {
       <div>
         <h1 className="text-xl font-bold text-app-text-primary tracking-tight">Ads & Deals Studio</h1>
         <p className="text-app-text-secondary text-[12px]">
-          Unified approval queue for seller/creator feature &amp; sponsor requests, plus sponsored ads, deals, and placement management.
+          Unified approval queue for seller/creator feature &amp; sponsor requests, plus promoted ads, deals, and placement management.
         </p>
       </div>
 

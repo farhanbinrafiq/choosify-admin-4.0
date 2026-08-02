@@ -130,6 +130,8 @@ export interface CatalogProduct {
   featuredFlag: boolean;
   isNewArrival: boolean;
   isBestseller: boolean;
+  /** Firebase uid of owning seller when listing is seller-managed; omitted for legacy/admin rows. */
+  sellerId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -204,6 +206,9 @@ export interface CatalogDealsBanner {
   destinationRef: string;
   order: number;
   isActive: boolean;
+  /** Optional sponsor mark for carousel logo pagination / PROMOTED chrome */
+  brandName?: string;
+  brandLogoUrl?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -61,7 +61,7 @@ export interface OpsStorefrontOrder {
   promoDiscount?: number;
   promoType?: string;
   sourceMode?: 'retail';
-  paymentMethod?: 'cod' | 'credit';
+  paymentMethod?: 'cod' | 'credit' | 'online';
   shipping?: {
     fullName: string;
     phone: string;
@@ -99,6 +99,13 @@ export interface OpsStorefrontOrder {
   depositPercent?: number;
   depositAmount?: number;
   remainingAmount?: number;
+  /** SSLCommerz (or future gateways) — granular payment lifecycle alongside `status`. */
+  paymentProvider?: 'sslcommerz';
+  paymentStatus?: 'unpaid' | 'pending' | 'paid' | 'failed' | 'cancelled';
+  paymentTranId?: string;
+  paymentValId?: string;
+  paidAmount?: number;
+  paymentValidatedAt?: string;
   createdAt: string;
   updatedAt: string;
   /** Manual orders created from a seller's Meta inbox chat, awaiting the customer's confirmation */

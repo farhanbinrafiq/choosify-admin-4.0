@@ -207,7 +207,7 @@ export const GENERIC_PAGES = {
       {plan:'Brand Partner',price:'৳9,999/mo',subscribers:64,status:'Active'},
       {plan:'Enterprise',price:'Custom',subscribers:12,status:'Active'},
     ]},
-    monetizationCenter: {title:'Monetization Center', subtitle:'Ad placements and sponsored listings', columns:[{key:'campaign',label:'Campaign'},{key:'brand',label:'Brand'},{key:'spend',label:'Spend'},{key:'impressions',label:'Impressions'},{key:'status',label:'Status'}], rows:[
+    monetizationCenter: {title:'Monetization Center', subtitle:'Ad placements and promoted listings', columns:[{key:'campaign',label:'Campaign'},{key:'brand',label:'Brand'},{key:'spend',label:'Spend'},{key:'impressions',label:'Impressions'},{key:'status',label:'Status'}], rows:[
       {campaign:'Homepage Hero Takeover',brand:'Xiaomi',spend:'৳180,000',impressions:'2.4M',status:'Active'},
       {campaign:'Search Boost',brand:'Walton',spend:'৳64,000',impressions:'980K',status:'Active'},
       {campaign:'Category Spotlight',brand:'Aarong',spend:'৳42,000',impressions:'610K',status:'Ended'},

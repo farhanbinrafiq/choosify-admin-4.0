@@ -1,8 +1,70 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * DEFAULT DENY - every path that is not listed below.
+     * Firebase Admin SDK (Express / ops / catalog / messaging) bypasses these rules.
+     * Direct client SDK access from the public web config cannot read or write anything
+     * unless an explicit match below grants it.
+     */
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+
+    /**
+     * Authenticated read-only exceptions for the admin SPA.
+     *
+     * Choosify-Web (storefront) never imports firebase/firestore - no public-read
+     * exceptions are required for catalog_*, ops_*, omni_*, booking_*, etc.
+     *
+     * These collections are currently subscribed via the client SDK in:
+     *   - src/contexts/AdsContext.tsx       -> promotions, promotion_requests
+     *   - src/contexts/CMSContext.tsx       -> settings/cms
+     *   - src/contexts/LogisticsContext.tsx -> courier_configs, warehouses, shipping_rules
+     *   - src/contexts/ShipmentContext.tsx  -> shipments
+     *   - src/services/logistics/LogisticsService.ts -> same logistics collections
+     *
+     * Writes from those modules MUST fail under these rules. Migrate them to
+     * Express + Admin SDK in a follow-up; do not re-open client write here.
+     */
+    match /promotions/{id} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /promotion_requests/{id} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /settings/{id} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /courier_configs/{id} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /shipments/{id} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /warehouses/{id} {
+      allow read: if isSignedIn();
+      allow write: if false;
+    }
+
+    match /shipping_rules/{id} {
+      allow read: if isSignedIn();
+      allow write: if false;
     }
   }
 }

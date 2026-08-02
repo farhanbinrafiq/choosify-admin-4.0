@@ -41,7 +41,7 @@ export interface OpsStorefrontOrder {
   promoDiscount?: number;
   promoType?: string;
   sourceMode?: 'retail';
-  paymentMethod?: 'cod' | 'credit';
+  paymentMethod?: 'cod' | 'credit' | 'online';
   shipping?: {
     fullName: string;
     phone: string;
@@ -61,6 +61,14 @@ export interface OpsStorefrontOrder {
   claimTokenExpiresAt?: string;
   claimedAt?: string;
   claimedByName?: string;
+  paymentProvider?: 'sslcommerz';
+  paymentStatus?: 'unpaid' | 'pending' | 'paid' | 'failed' | 'cancelled';
+  paymentTranId?: string;
+  paymentValId?: string;
+  paidAmount?: number;
+  paymentValidatedAt?: string;
+  paidAt?: string;
+  paymentDueAt?: string;
 }
 
 export interface OpsCouponRule {

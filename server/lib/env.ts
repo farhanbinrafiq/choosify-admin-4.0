@@ -10,6 +10,13 @@ const ENV_RULES: EnvRule[] = [
   { key: 'APP_NAME', description: 'Application display name' },
   { key: 'APP_VERSION', description: 'Application version' },
   { key: 'ALLOWED_ORIGINS', requiredInProduction: true, description: 'Comma-separated CORS origins' },
+  // Payment gateway — optional until merchant credentials exist; status endpoint stays configured:false.
+  { key: 'SSLCOMMERZ_STORE_ID', description: 'SSLCommerz store id (enables live/sandbox payments)' },
+  { key: 'SSLCOMMERZ_STORE_PASSWORD', description: 'SSLCommerz store password' },
+  { key: 'SSLCOMMERZ_MODE', description: 'sandbox | live (default sandbox)' },
+  { key: 'CHOOSIFY_WEB_URL', description: 'Storefront base URL for payment return redirects' },
+  { key: 'PUBLIC_API_BASE_URL', description: 'Public API base for SSLCommerz callback URLs' },
+  { key: 'PAYMENT_GATEWAY_MOCK', description: 'true enables mock provider for harness only' },
 ];
 
 function isProduction(): boolean {
