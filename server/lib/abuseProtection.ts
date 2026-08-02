@@ -67,6 +67,28 @@ export function recordSuspiciousRequest(ip: string | undefined, path: string): {
   };
 }
 
+const DEFAULT_CLAIM_CONFIRM_THRESHOLD = 20;
+
+/** Per-IP + per-token throttle for order claim confirm attempts (brute-force guard). */
+export function recordClaimConfirmAttempt(ip: string | undefined, token: string): {
+  count: number;
+  thresholdExceeded: boolean;
+} {
+  const windowMs = Number(process.env.ABUSE_CLAIM_CONFIRM_WINDOW_MS || DEFAULT_WINDOW_MS);
+  const threshold = Number(process.env.ABUSE_CLAIM_CONFIRM_THRESHOLD || DEFAULT_CLAIM_CONFIRM_THRESHOLD);
+  const safeToken = (token || 'unknown').slice(0, 64);
+  const record = increment(
+    suspiciousRequestCounts,
+    getClientKey(ip, `order-claim-confirm:${safeToken}`),
+    windowMs,
+  );
+
+  return {
+    count: record.count,
+    thresholdExceeded: record.count >= threshold,
+  };
+}
+
 export function getAbuseProtectionSnapshot() {
   return {
     failedAuthAttempts: failedAuthAttempts.size,

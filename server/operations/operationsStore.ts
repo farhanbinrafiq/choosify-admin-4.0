@@ -441,10 +441,14 @@ export const operationsStore = {
       (usage) => usage.couponId === couponId && usage.userId === userId && usage.status === 'redeemed',
     ).length,
 
-  listReviews: (filters?: { productId?: string; status?: string }) => {
+  listReviews: (filters?: { productId?: string; brandName?: string; status?: string }) => {
     let rows = [...state.reviews].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     if (filters?.productId) {
       rows = rows.filter((review) => review.productId === filters.productId);
+    }
+    if (filters?.brandName) {
+      const needle = filters.brandName.trim().toLowerCase();
+      rows = rows.filter((review) => (review.brandName || '').trim().toLowerCase() === needle);
     }
     if (filters?.status) {
       rows = rows.filter((review) => review.status.toLowerCase() === filters.status!.toLowerCase());

@@ -58,6 +58,7 @@ export interface OpsStorefrontOrder {
   isManual?: boolean;
   platformSource?: 'WhatsApp' | 'Facebook' | 'Instagram' | 'Offline';
   claimToken?: string;
+  claimTokenExpiresAt?: string;
   claimedAt?: string;
   claimedByName?: string;
 }
@@ -267,9 +268,15 @@ export const operationsApi = {
     const result = await request<{ data: OpsStorefrontOrder[] }>('/operations/orders');
     return result.data;
   },
-  createOrder: async (payload: Partial<OpsStorefrontOrder>): Promise<OpsStorefrontOrder> => {
-    const result = await request<{ data: OpsStorefrontOrder }>('/operations/orders', 'POST', payload);
-    return result.data;
+  createOrder: async (
+    payload: Partial<OpsStorefrontOrder>,
+  ): Promise<OpsStorefrontOrder & { confirmOrderUrl?: string }> => {
+    const result = await request<{ data: OpsStorefrontOrder; confirmOrderUrl?: string }>(
+      '/operations/orders',
+      'POST',
+      payload,
+    );
+    return { ...result.data, confirmOrderUrl: result.confirmOrderUrl };
   },
 
   listCoupons: async (): Promise<OpsCoupon[]> => {

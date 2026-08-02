@@ -104,8 +104,10 @@ export interface OpsStorefrontOrder {
   /** Manual orders created from a seller's Meta inbox chat, awaiting the customer's confirmation */
   isManual?: boolean;
   platformSource?: 'WhatsApp' | 'Facebook' | 'Instagram' | 'Offline';
-  /** Random token embedded in the customer-facing confirm link — set until the order is claimed */
+  /** Server-generated token embedded in the customer-facing confirm link — set until the order is claimed */
   claimToken?: string;
+  /** ISO expiry for claimToken; confirm/lookup reject after this time */
+  claimTokenExpiresAt?: string;
   claimedAt?: string;
   claimedByName?: string;
 }

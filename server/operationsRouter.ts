@@ -1,3 +1,4 @@
+import { randomBytes } from 'crypto';
 import { Router } from 'express';
 import { operationsStore, DEFAULT_ROLE_PERMISSIONS } from './operations/operationsStore';
 import { validateCoupon } from './operations/couponValidator';
@@ -33,6 +34,9 @@ import {
 import { catalogStore } from '../lib/vercel-catalog/catalogStore';
 import { normalizeBrandInput } from './catalogContract';
 import { normalizeCreatorInput } from '../lib/vercel-catalog/catalogEditorialContract';
+import { recordSuspiciousRequest, recordClaimConfirmAttempt } from './lib/abuseProtection';
+import { createNotification } from './communication/notificationService';
+import { COMMUNICATION_TYPES, DELIVERY_CHANNELS } from './communication/communicationTypes';
 
 export const operationsRouter = Router();
 
@@ -130,6 +134,37 @@ function userIsStaff(req: { userRole?: (typeof ROLES)[keyof typeof ROLES] }): bo
     hasRole(role, ROLES.MODERATOR) ||
     hasRole(role, ROLES.FINANCE_MANAGER)
   );
+}
+
+/** Manual / Meta-inbox orders: staff or seller may create an unclaimed order with a claim link. */
+function userCanCreateManualOrder(req: {
+  userRole?: (typeof ROLES)[keyof typeof ROLES];
+}): boolean {
+  if (userIsStaff(req)) return true;
+  const role = req.userRole;
+  return Boolean(role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER)));
+}
+
+const CLAIM_TOKEN_TTL_MS = Number(process.env.ORDER_CLAIM_TOKEN_TTL_MS || 7 * 24 * 60 * 60 * 1000);
+
+function generateOrderClaimToken(): string {
+  return randomBytes(32).toString('hex');
+}
+
+function buildClaimConfirmUrl(token: string): string {
+  const base = (
+    process.env.CHOOSIFY_WEB_URL ||
+    process.env.VITE_CHOOSIFY_WEB_URL ||
+    'http://localhost:5173'
+  ).replace(/\/$/, '');
+  return `${base}/orders/confirm/${encodeURIComponent(token)}`;
+}
+
+function isClaimTokenExpired(order: OpsStorefrontOrder): boolean {
+  if (!order.claimTokenExpiresAt) return true;
+  const expires = Date.parse(order.claimTokenExpiresAt);
+  if (Number.isNaN(expires)) return true;
+  return Date.now() > expires;
 }
 
 function userIsReturnSeller(
@@ -388,13 +423,32 @@ operationsRouter.get('/operations/orders/:id', (req, res) => {
   res.json({ data: order });
 });
 
-operationsRouter.post('/operations/orders', async (req, res) => {
+operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => {
   try {
     const body = req.body as Partial<OpsStorefrontOrder>;
     if (!body.orderId) {
       res.status(400).json({ error: 'orderId is required' });
       return;
     }
+
+    const wantsManual = Boolean(body.isManual);
+    let buyerId: string;
+    if (wantsManual) {
+      if (!userCanCreateManualOrder(req)) {
+        res.status(403).json({ error: 'Not authorized to create manual orders' });
+        return;
+      }
+      // Unclaimed until the customer confirms via claim link — never trust client buyerId.
+      buyerId = 'unclaimed';
+    } else {
+      const bodyBuyerId = String(body.buyerId || '').trim();
+      if (bodyBuyerId && bodyBuyerId !== req.userId) {
+        res.status(403).json({ error: 'buyerId does not match authenticated user' });
+        return;
+      }
+      buyerId = req.userId!;
+    }
+
     const status =
       body.status === 'pending_payment' ||
       body.status === 'confirmed' ||
@@ -402,9 +456,18 @@ operationsRouter.post('/operations/orders', async (req, res) => {
       body.status === 'completed'
         ? body.status
         : 'active';
+
+    // claimToken is server-generated only — never accept client-supplied tokens.
+    let claimToken: string | undefined;
+    let claimTokenExpiresAt: string | undefined;
+    if (wantsManual) {
+      claimToken = generateOrderClaimToken();
+      claimTokenExpiresAt = new Date(Date.now() + CLAIM_TOKEN_TTL_MS).toISOString();
+    }
+
     const saved = operationsStore.createOrder({
       orderId: body.orderId,
-      buyerId: body.buyerId || 'guest',
+      buyerId,
       isCOD: Boolean(body.isCOD),
       isSplit: Boolean(body.isSplit),
       overallTotal: Number(body.overallTotal || 0),
@@ -426,9 +489,10 @@ operationsRouter.post('/operations/orders', async (req, res) => {
       paidAt: body.paidAt,
       invoiceGeneratedAt: body.invoiceGeneratedAt,
       createdAt: body.createdAt || new Date().toISOString(),
-      isManual: body.isManual,
+      isManual: wantsManual || undefined,
       platformSource: body.platformSource,
-      claimToken: body.claimToken,
+      claimToken,
+      claimTokenExpiresAt,
       codDeliveryFeePaid: body.codDeliveryFeePaid,
       codDeliveryFeePaidAt: body.codDeliveryFeePaidAt,
       codRemainingAmount: body.codRemainingAmount,
@@ -465,17 +529,44 @@ operationsRouter.post('/operations/orders', async (req, res) => {
       console.warn('[Order] Platform conversation bridge failed:', err);
     }
 
-    res.status(201).json({ success: true, data: saved, shipmentId: shipment?.id });
+    let confirmOrderUrl: string | undefined;
+    if (saved.claimToken && req.userId) {
+      confirmOrderUrl = buildClaimConfirmUrl(saved.claimToken);
+      try {
+        await createNotification({
+          userId: req.userId,
+          type: COMMUNICATION_TYPES.ORDER_UPDATE,
+          category: 'seller',
+          title: `Order claim link ready — ${saved.orderId}`,
+          summary: `Share this link so the customer can confirm order ${saved.orderId} on Choosify.bd.`,
+          actionUrl: confirmOrderUrl,
+          channels: [DELIVERY_CHANNELS.IN_APP],
+          metadata: {
+            orderId: saved.orderId,
+            claimTokenExpiresAt: saved.claimTokenExpiresAt,
+          },
+        }, req);
+      } catch (err) {
+        console.warn('[Order] Claim-link notification failed:', err);
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      data: saved,
+      shipmentId: shipment?.id,
+      confirmOrderUrl,
+    });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid order payload' });
   }
 });
 
-// Public — no staff auth. Powers the customer-facing "View & Confirm Order" page on
-// Choosify-Web, reached via the confirm link a seller sends from a manually-created order.
+// Public GET — powers the customer-facing "View & Confirm Order" page preview.
+// Confirm POST requires auth (buyerId from token).
 operationsRouter.get('/operations/orders/claim/:token', (req, res) => {
   const order = operationsStore.getOrderByClaimToken(req.params.token);
-  if (!order) {
+  if (!order || isClaimTokenExpired(order)) {
     res.status(404).json({ error: 'This order link is invalid or has expired.' });
     return;
   }
@@ -492,28 +583,42 @@ operationsRouter.get('/operations/orders/claim/:token', (req, res) => {
       createdAt: order.createdAt,
       claimed: Boolean(order.claimedAt),
       claimedByName: order.claimedByName,
+      claimTokenExpiresAt: order.claimTokenExpiresAt,
     },
   });
 });
 
-operationsRouter.post('/operations/orders/claim/:token/confirm', (req, res) => {
-  const { buyerId, buyerName } = req.body as { buyerId?: string; buyerName?: string };
-  if (!buyerId?.trim()) {
-    res.status(400).json({ error: 'buyerId is required' });
+operationsRouter.post('/operations/orders/claim/:token/confirm', ...requireAuth, (req, res) => {
+  const token = req.params.token;
+  const abuse = recordClaimConfirmAttempt(req.ip, token);
+  if (abuse.thresholdExceeded) {
+    res.status(429).json({ error: 'Too many confirmation attempts. Please try again later.' });
     return;
   }
-  const existing = operationsStore.getOrderByClaimToken(req.params.token);
-  if (!existing) {
+
+  const bodyBuyerId = String((req.body as { buyerId?: string })?.buyerId || '').trim();
+  if (bodyBuyerId && bodyBuyerId !== req.userId) {
+    res.status(403).json({ error: 'buyerId does not match authenticated user' });
+    return;
+  }
+  const buyerId = req.userId!;
+  const buyerName =
+    String((req.body as { buyerName?: string })?.buyerName || '').trim() ||
+    req.user?.displayName ||
+    undefined;
+
+  const existing = operationsStore.getOrderByClaimToken(token);
+  if (!existing || isClaimTokenExpired(existing)) {
     res.status(404).json({ error: 'This order link is invalid or has expired.' });
     return;
   }
-  if (existing.claimedAt && existing.buyerId !== buyerId.trim()) {
+  if (existing.claimedAt && existing.buyerId !== buyerId) {
     res.status(409).json({ error: 'This order has already been confirmed by another account.' });
     return;
   }
-  const saved = operationsStore.claimOrder(req.params.token, {
-    buyerId: buyerId.trim(),
-    buyerName: buyerName?.trim(),
+  const saved = operationsStore.claimOrder(token, {
+    buyerId,
+    buyerName,
   });
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
@@ -1097,18 +1202,26 @@ operationsRouter.get('/operations/reviews', (req, res) => {
 
 operationsRouter.get('/operations/reviews/public', (req, res) => {
   const productId = typeof req.query.productId === 'string' ? req.query.productId : '';
-  if (!productId) {
-    res.status(400).json({ error: 'productId is required' });
+  const brandName = typeof req.query.brandName === 'string' ? req.query.brandName.trim() : '';
+  if (!productId && !brandName) {
+    res.status(400).json({ error: 'productId or brandName is required' });
     return;
   }
   const reviews = operationsStore
-    .listReviews({ productId, status: 'published' })
+    .listReviews({
+      productId: productId || undefined,
+      brandName: brandName || undefined,
+      status: 'published',
+    })
     .map((review) => ({
       id: review.id,
       userName: review.userName,
       rating: review.rating,
       comment: review.comment,
       createdAt: review.createdAt,
+      productId: review.productId,
+      productTitle: review.productTitle,
+      brandName: review.brandName,
       response: review.response,
     }));
   res.json({ data: reviews });
@@ -1195,6 +1308,11 @@ operationsRouter.get('/operations/leads', (_req, res) => {
 });
 
 operationsRouter.post('/operations/leads', (req, res) => {
+  const abuse = recordSuspiciousRequest(req.ip, req.originalUrl);
+  if (abuse.thresholdExceeded) {
+    res.status(429).json({ error: 'Too many submissions. Please try again later.' });
+    return;
+  }
   const body = req.body as {
     brandName?: string;
     contactPerson?: string;
@@ -1220,7 +1338,7 @@ operationsRouter.post('/operations/leads', (req, res) => {
   res.status(201).json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/leads/:id', (req, res) => {
+operationsRouter.patch('/operations/leads/:id', ...requireAdmin, (req, res) => {
   const saved = operationsStore.updateLead(req.params.id, req.body);
   if (!saved) {
     res.status(404).json({ error: 'Lead not found' });
@@ -1621,6 +1739,11 @@ operationsRouter.get('/operations/seller-offers', (_req, res) => {
 });
 
 operationsRouter.post('/operations/seller-offers', (req, res) => {
+  const abuse = recordSuspiciousRequest(req.ip, req.originalUrl);
+  if (abuse.thresholdExceeded) {
+    res.status(429).json({ error: 'Too many submissions. Please try again later.' });
+    return;
+  }
   const body = req.body as {
     productName?: string;
     category?: string;
@@ -1648,7 +1771,7 @@ operationsRouter.post('/operations/seller-offers', (req, res) => {
   res.status(201).json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/seller-offers/:id', (req, res) => {
+operationsRouter.patch('/operations/seller-offers/:id', ...requireAdmin, (req, res) => {
   const saved = operationsStore.updateSellerOffer(req.params.id, req.body);
   if (!saved) {
     res.status(404).json({ error: 'Seller offer not found' });

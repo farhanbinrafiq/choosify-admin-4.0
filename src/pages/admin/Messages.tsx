@@ -267,7 +267,7 @@ export default function MessagesPage() {
 
   const currentCommerce = getActiveConversationCommerce();
 
-  const handleSubmitManualOrder = (e: React.FormEvent) => {
+  const handleSubmitManualOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!manualCustomerName || !manualCustomerPhone || !manualCustomerAddress) {
       alert("Please fill in Customer Name, Customer Phone, and Customer Address!");
@@ -284,7 +284,7 @@ export default function MessagesPage() {
     const selectedProd = catalog.find(p => p.id === manualProductSelection) || catalog[0];
     const rawOverrideValue = manualPriceOverride ? parseFloat(manualPriceOverride) : undefined;
 
-    createManualOrder({
+    const created = await createManualOrder({
       customerName: manualCustomerName,
       customerEmail: manualCustomerEmail || `${manualCustomerName.toLowerCase().replace(/\s+/g, '')}@sourced.com`,
       customerPhone: manualCustomerPhone,
@@ -297,9 +297,12 @@ export default function MessagesPage() {
       notes: manualNotes || undefined
     });
 
-    const generatedOrderId = 'CSS-' + Math.floor(1000 + Math.random() * 9000);
-    const generatedInvoiceId = 'INV-' + Math.floor(100000 + Math.random() * 900000);
-    setManualSuccessOrderInfo({ orderId: generatedOrderId, invoiceId: generatedInvoiceId });
+    if (!created) {
+      alert('Could not create the manual order on the server. Sign in with a real account token and try again.');
+      return;
+    }
+
+    setManualSuccessOrderInfo({ orderId: created.orderId, invoiceId: created.invoiceId });
   };
 
   const handleResetManualForm = () => {

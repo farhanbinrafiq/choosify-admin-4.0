@@ -151,7 +151,7 @@ interface OrdersContextType {
     notes?: string;
     promoCode?: string;
     promoDiscount?: number;
-  }) => void;
+  }) => Promise<{ orderId: string; invoiceId: string; confirmOrderUrl?: string } | null>;
   markAllThreadsAsRead: () => void;
   markThreadAsRead: (threadId: string) => void;
   updateOrderTrackingStatus: (orderId: string, sellerId: string, newStatus: 'pending' | 'dispatched' | 'transit' | 'delivered' | 'cancelled') => void;
@@ -755,7 +755,7 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }));
   };
 
-  const createManualOrder = (params: {
+  const createManualOrder = async (params: {
     customerName: string;
     customerEmail: string;
     customerPhone: string;
@@ -768,24 +768,70 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     notes?: string;
     promoCode?: string;
     promoDiscount?: number;
-  }) => {
+  }): Promise<{ orderId: string; invoiceId: string; confirmOrderUrl?: string } | null> => {
     const orderId = 'CSS-' + Math.floor(1000 + Math.random() * 9000);
     const invoiceId = 'INV-' + Math.floor(100000 + Math.random() * 900000);
     const timestampStr = new Date().toISOString();
-    const claimToken =
-      (typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(36).slice(2)}`
-      ).replace(/-/g, '');
-    const choosifyWebBase =
-      (import.meta as any).env?.VITE_CHOOSIFY_WEB_URL || 'http://localhost:5173';
-    const confirmOrderUrl = `${choosifyWebBase.replace(/\/$/, '')}/orders/confirm/${claimToken}`;
 
     const productPrice = params.priceOverride !== undefined ? params.priceOverride : params.product.price;
     const finalProductPrice = productPrice * params.quantity;
     const deliveryCharge = 120;
     const discount = params.promoDiscount || 0;
     const totalPayable = Math.max(0, finalProductPrice + deliveryCharge - discount);
+
+    // Server generates claimToken (crypto.randomBytes) — never client-supplied.
+    let synced: Awaited<ReturnType<typeof operationsApi.createOrder>>;
+    try {
+      synced = await operationsApi.createOrder({
+        orderId,
+        buyerId: 'unclaimed',
+        isCOD: true,
+        isSplit: false,
+        overallTotal: totalPayable,
+        subtotal: finalProductPrice,
+        deliveryTotal: deliveryCharge,
+        subOrders: [
+          {
+            sellerId: params.product.sellerId,
+            sellerBusinessName: params.product.sellerName,
+            items: [
+              {
+                productId: Number(params.product.id) || 0,
+                productTitle: params.product.name,
+                quantity: params.quantity,
+                price: productPrice,
+                productType: params.product.productType,
+                serviceCategory: params.product.serviceCategory,
+              },
+            ],
+            deliveryFee: deliveryCharge,
+            invoiceId,
+            trackingStatus: 'pending',
+          },
+        ],
+        promoCode: params.promoCode,
+        promoDiscount: discount,
+        status: 'pending_payment',
+        createdAt: timestampStr,
+        isManual: true,
+        platformSource: params.platformSource,
+      } as any);
+    } catch (err) {
+      console.error('Failed to sync manual order to storefront order store:', err);
+      return null;
+    }
+
+    const claimToken = synced.claimToken;
+    const confirmOrderUrl =
+      synced.confirmOrderUrl ||
+      (claimToken
+        ? `${((import.meta as any).env?.VITE_CHOOSIFY_WEB_URL || 'http://localhost:5173').replace(/\/$/, '')}/orders/confirm/${claimToken}`
+        : undefined);
+
+    if (!claimToken || !confirmOrderUrl) {
+      console.error('Manual order created without a server claim token');
+      return null;
+    }
 
     const newCustomer: Customer = {
       id: 'cust_' + Math.floor(1000 + Math.random() * 9000),
@@ -803,7 +849,6 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ]
     };
 
-    // Attach phone and address for consistency
     (newCustomer as any).phone = params.customerPhone;
     (newCustomer as any).address = params.customerAddress;
 
@@ -858,7 +903,6 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.error('Failed to allocate stock for manual order:', e);
     }
 
-    // Create immediate inbox message thread linked to this manually generated order
     const newThread: MessageThread = {
       id: `thread_${orderId}`,
       orderId,
@@ -890,48 +934,7 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     setMessageThreads(prev => [newThread, ...prev]);
-
-    // Mirror this manual order into the real storefront order store — unclaimed until the
-    // customer signs in on Choosify-Web and confirms it via confirmOrderUrl.
-    operationsApi
-      .createOrder({
-        orderId,
-        buyerId: 'unclaimed',
-        isCOD: true,
-        isSplit: false,
-        overallTotal: totalPayable,
-        subtotal: finalProductPrice,
-        deliveryTotal: deliveryCharge,
-        subOrders: [
-          {
-            sellerId: params.product.sellerId,
-            sellerBusinessName: params.product.sellerName,
-            items: [
-              {
-                productId: Number(params.product.id) || 0,
-                productTitle: params.product.name,
-                quantity: params.quantity,
-                price: productPrice,
-                productType: params.product.productType,
-                serviceCategory: params.product.serviceCategory,
-              },
-            ],
-            deliveryFee: deliveryCharge,
-            invoiceId,
-            trackingStatus: 'pending',
-          },
-        ],
-        promoCode: params.promoCode,
-        promoDiscount: discount,
-        status: 'pending_payment',
-        createdAt: timestampStr,
-        isManual: true,
-        platformSource: params.platformSource,
-        claimToken,
-      } as any)
-      .catch((err) => {
-        console.error('Failed to sync manual order to storefront order store:', err);
-      });
+    return { orderId, invoiceId, confirmOrderUrl };
   };
 
   const markAllThreadsAsRead = () => {
