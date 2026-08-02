@@ -355,7 +355,24 @@ export const operationsStore = {
   },
 
   listCouponUsage: () => [...state.couponUsage],
-  listOrders: () => [...state.orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+  listOrders: (filter?: { buyerId?: string; sellerId?: string; status?: string }) => {
+    let rows = [...state.orders].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    if (filter?.buyerId) {
+      rows = rows.filter((order) => order.buyerId === filter.buyerId);
+    }
+    if (filter?.sellerId) {
+      const sellerId = filter.sellerId;
+      rows = rows.filter((order) =>
+        (order.subOrders || []).some(
+          (sub) => (sub as { sellerId?: string })?.sellerId === sellerId,
+        ),
+      );
+    }
+    if (filter?.status) {
+      rows = rows.filter((order) => order.status.toLowerCase() === filter.status!.toLowerCase());
+    }
+    return rows;
+  },
   getOrder: (id: string) => state.orders.find((order) => order.id === id || order.orderId === id) ?? null,
   createOrder: (payload: Omit<OpsStorefrontOrder, 'id' | 'updatedAt'>) => {
     const order: OpsStorefrontOrder = {
@@ -441,7 +458,12 @@ export const operationsStore = {
       (usage) => usage.couponId === couponId && usage.userId === userId && usage.status === 'redeemed',
     ).length,
 
-  listReviews: (filters?: { productId?: string; brandName?: string; status?: string }) => {
+  listReviews: (filters?: {
+    productId?: string;
+    brandName?: string;
+    status?: string;
+    userId?: string;
+  }) => {
     let rows = [...state.reviews].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     if (filters?.productId) {
       rows = rows.filter((review) => review.productId === filters.productId);
@@ -449,6 +471,9 @@ export const operationsStore = {
     if (filters?.brandName) {
       const needle = filters.brandName.trim().toLowerCase();
       rows = rows.filter((review) => (review.brandName || '').trim().toLowerCase() === needle);
+    }
+    if (filters?.userId) {
+      rows = rows.filter((review) => review.userId === filters.userId);
     }
     if (filters?.status) {
       rows = rows.filter((review) => review.status.toLowerCase() === filters.status!.toLowerCase());

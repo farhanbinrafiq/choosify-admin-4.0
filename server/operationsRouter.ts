@@ -354,6 +354,28 @@ function userCanListReturns(
   return false;
 }
 
+/** List orders: same scoping pattern as returns (buyer own / seller own / staff all). */
+function userCanListOrders(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  filter: { buyerId?: string; sellerId?: string },
+): boolean {
+  return userCanListReturns(req, filter);
+}
+
+/** Internal reviews list: own reviews via userId, or staff/moderator for everything. */
+function userCanListReviews(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  filter: { userId?: string },
+): boolean {
+  if (userIsStaff(req)) return true;
+  const role = req.userRole;
+  if (role && hasRole(role, ROLES.MODERATOR)) return true;
+  const userId = req.userId;
+  if (!userId) return false;
+  if (filter.userId) return filter.userId === userId;
+  return false;
+}
+
 function toExpiryOrder(order: OpsStorefrontOrder | OrderLikeForExpiry): OrderLikeForExpiry {
   return {
     orderId: order.orderId,
@@ -410,14 +432,40 @@ const normalizeReviewStatus = (status: string): OpsReview['status'] => {
   return map[status] ?? 'pending';
 };
 
-operationsRouter.get('/operations/orders', (_req, res) => {
-  res.json({ data: operationsStore.listOrders() });
+operationsRouter.get('/operations/orders', ...requireAuth, (req, res) => {
+  let buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
+  let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
+  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+
+  if (!userCanListOrders(req, { buyerId, sellerId })) {
+    if (
+      !buyerId &&
+      !sellerId &&
+      req.userId &&
+      req.userRole &&
+      (hasRole(req.userRole, ROLES.SELLER) || hasRole(req.userRole, ROLES.VERIFIED_SELLER))
+    ) {
+      sellerId = req.userId;
+    } else if (!buyerId && !sellerId && req.userId && !userIsStaff(req)) {
+      buyerId = req.userId;
+    }
+    if (!userCanListOrders(req, { buyerId, sellerId })) {
+      res.status(403).json({ error: 'Not authorized to list these orders' });
+      return;
+    }
+  }
+
+  res.json({ data: operationsStore.listOrders({ buyerId, sellerId, status }) });
 });
 
-operationsRouter.get('/operations/orders/:id', (req, res) => {
+operationsRouter.get('/operations/orders/:id', ...requireAuth, (req, res) => {
   const order = operationsStore.getOrder(req.params.id);
   if (!order) {
     res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+  if (!userCanMutateOrder(req, order)) {
+    res.status(403).json({ error: 'Not authorized to view this order' });
     return;
   }
   res.json({ data: order });
@@ -1190,12 +1238,25 @@ operationsRouter.post(
   },
 );
 
-operationsRouter.get('/operations/reviews', (req, res) => {
+operationsRouter.get('/operations/reviews', ...requireAuth, (req, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : '';
   const productId = typeof req.query.productId === 'string' ? req.query.productId : '';
+  let userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
+
+  if (!userCanListReviews(req, { userId })) {
+    if (!userId && req.userId && !userIsStaff(req) && !(req.userRole && hasRole(req.userRole, ROLES.MODERATOR))) {
+      userId = req.userId;
+    }
+    if (!userCanListReviews(req, { userId })) {
+      res.status(403).json({ error: 'Not authorized to list these reviews' });
+      return;
+    }
+  }
+
   const reviews = operationsStore.listReviews({
     status: status || undefined,
     productId: productId || undefined,
+    userId: userId || undefined,
   });
   res.json({ data: reviews });
 });
@@ -1597,6 +1658,51 @@ operationsRouter.patch('/operations/shipments/:id', ...requireAuth, (req, res) =
     return;
   }
   res.json({ success: true, data: saved });
+});
+
+operationsRouter.get('/operations/platform-messages', ...requireAuth, async (req, res) => {
+  try {
+    const conversationIdRaw =
+      typeof req.query.conversationId === 'string'
+        ? req.query.conversationId.trim()
+        : typeof req.query.threadId === 'string'
+          ? req.query.threadId.trim()
+          : '';
+    let userId = typeof req.query.userId === 'string' ? req.query.userId.trim() : '';
+
+    // Resolve conversation: explicit id, or conv_platform_<userId>, or caller's own inbox.
+    let conversationId = conversationIdRaw;
+    if (!conversationId) {
+      if (!userId) userId = req.userId || '';
+      if (!userId) {
+        res.status(400).json({ error: 'conversationId, threadId, or userId is required' });
+        return;
+      }
+      conversationId = `conv_platform_${userId}`;
+    }
+
+    const ownConversation = req.userId ? `conv_platform_${req.userId}` : '';
+    const isOwnInbox = Boolean(req.userId && conversationId === ownConversation);
+    const requestedUserId = userId || (conversationId.startsWith('conv_platform_')
+      ? conversationId.slice('conv_platform_'.length)
+      : '');
+    if (userId && userId !== req.userId && !userIsStaff(req)) {
+      res.status(403).json({ error: 'Not authorized to list these messages' });
+      return;
+    }
+    if (!isOwnInbox && !(requestedUserId && requestedUserId === req.userId) && !userIsStaff(req)) {
+      res.status(403).json({ error: 'Not authorized to list these messages' });
+      return;
+    }
+
+    const { listMessages } = await import('./messaging/omniStore');
+    const messages = await listMessages(conversationId);
+    res.json({ data: messages, conversationId });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to list platform messages',
+    });
+  }
 });
 
 operationsRouter.post('/operations/platform-messages', async (req, res) => {
