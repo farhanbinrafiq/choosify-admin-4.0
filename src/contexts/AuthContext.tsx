@@ -71,7 +71,7 @@ interface AuthContextType {
   setActiveBrandId: (id: string | null) => void;
   sellerBrands: SellerBrandRelation[];
   allBrands: { id: string; name: string; category: string }[];
-  requestNewBrand: (name: string, category: string) => void;
+  requestNewBrand: (name: string, category: string) => { id: string; name: string; category: string };
   
   // Categories Management System Integration
   categories: CategoryType[];
@@ -188,7 +188,7 @@ const AuthContext = createContext<AuthContextType>({
   setActiveBrandId: () => {},
   sellerBrands: [],
   allBrands: [],
-  requestNewBrand: () => {},
+  requestNewBrand: () => ({ id: '', name: '', category: '' }),
   categories: [],
   createCategory: () => ({ id: '', parentId: null, name: '', slug: '', icon: '', description: '', displayOrder: 0, enabled: true }),
   updateCategory: () => {},
@@ -456,6 +456,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Set active to newly created brand
       setActiveBrandId(brandId);
     }
+    return newBrand;
   };
 
   // Categories Management System Implementation

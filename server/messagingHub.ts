@@ -1,6 +1,5 @@
-import express, { Request, Response, Router } from 'express';
-import { Server as SocketIOServer } from 'socket.io';
-import type { Conversation, UnifiedMessage } from '../src/types';
+import { Request, Response, Router } from 'express';
+import type { UnifiedMessage } from '../src/types';
 import { getChannelAdapter } from './messaging/adapters';
 import type { SendMessageResult } from './messaging/adapters/channelAdapter';
 import { extractRecipientId, getMessagingStatus, getMetaVerifyToken } from './messaging/config';
@@ -16,87 +15,27 @@ import {
   saveConversation,
   saveMessage,
 } from './messaging/omniStore';
+import { upsertOmniStaff } from './messaging/omniStaff';
 import { seedOmnichannelData } from './messaging/seedData';
+import { drainPendingWebhookJobs, enqueueMetaWebhookJob } from './messaging/webhookJobs';
 import { verifyMetaWebhookSignature } from './messaging/webhookVerify';
+import { authenticateRequest } from './middleware/auth';
 import { validate } from './middleware/validate';
+import { ROLES, type UserRole } from './permissions/roles';
 import { SendMessageBodySchema } from './validation/messaging/sendMessageSchema';
-
-export function emitOmniEvents(message: UnifiedMessage, conversation: Conversation) {
-  emitMessageEvents(message, conversation);
-}
 
 export { seedOmnichannelData };
 
 export const messagingRouter = Router();
-let ioInstance: SocketIOServer | null = null;
 
-class MockBullQueue {
-  private queue: Array<{ name: string; data: unknown; retries: number }> = [];
-  private processing = false;
-
-  async add(jobName: string, data: unknown) {
-    this.queue.push({ name: jobName, data, retries: 3 });
-    console.log(`[Bull Queue] Job added: ${jobName}. Queue size: ${this.queue.length}`);
-    this.processNext();
-  }
-
-  private async processNext() {
-    if (this.processing || this.queue.length === 0) return;
-    this.processing = true;
-
-    const job = this.queue.shift()!;
-    try {
-      await this.worker(job);
-    } catch (err) {
-      console.error(`[Bull Queue] Failed Job ${job.name}:`, err);
-      if (job.retries > 0) {
-        job.retries -= 1;
-        this.queue.push(job);
-      }
-    } finally {
-      this.processing = false;
-      setTimeout(() => this.processNext(), 100);
-    }
-  }
-
-  private async worker(job: { name: string; data: unknown }) {
-    if (job.name === 'process-meta-webhook') {
-      await handleNormalizedMetaMessage(job.data as Record<string, unknown>);
-    }
-  }
-}
-
-const webhookQueue = new MockBullQueue();
-
-export function setSocketIO(io: SocketIOServer) {
-  ioInstance = io;
-  io.on('connection', (socket) => {
-    console.log(`[Socket.io] Client connected: ${socket.id}`);
-
-    socket.on('join:conversation', (conversationId: string) => {
-      socket.join(conversationId);
-    });
-
-    socket.on('leave:conversation', (conversationId: string) => {
-      socket.leave(conversationId);
-    });
-
-    socket.on('typing:start', ({ conversationId, agentName }: { conversationId: string; agentName: string }) => {
-      socket.to(conversationId).emit('typing:start', { agentName });
-    });
-
-    socket.on('typing:stop', ({ conversationId }: { conversationId: string }) => {
-      socket.to(conversationId).emit('typing:stop');
-    });
-  });
-}
-
-function emitMessageEvents(message: UnifiedMessage, conversation: Conversation) {
-  if (!ioInstance) return;
-  ioInstance.emit('message:received', message);
-  ioInstance.to(message.conversationId).emit('message:new', message);
-  ioInstance.emit('conversation:updated', conversation);
-}
+const MESSAGING_LISTENER_ROLES = new Set<UserRole>([
+  ROLES.SUPER_ADMIN,
+  ROLES.ADMIN,
+  ROLES.MODERATOR,
+  ROLES.SUPPORT_AGENT,
+  ROLES.FINANCE_MANAGER,
+  ROLES.MARKETING_MANAGER,
+]);
 
 async function handleNormalizedMetaMessage(webhookData: Record<string, unknown>) {
   const normalized = normalizeMetaWebhookPayload(webhookData);
@@ -117,12 +56,49 @@ async function handleNormalizedMetaMessage(webhookData: Record<string, unknown>)
 
   await saveMessage(message);
   await saveConversation(conversation);
-  emitMessageEvents(message, conversation);
+}
+
+/** Drain leftover Meta webhook jobs after process start (cold-start safety). */
+export async function bootstrapMessagingJobs() {
+  try {
+    const count = await drainPendingWebhookJobs(handleNormalizedMetaMessage);
+    if (count > 0) {
+      console.log(`[webhook_jobs] Drained ${count} pending Meta webhook job(s).`);
+    }
+  } catch (err) {
+    console.error('[webhook_jobs] Bootstrap drain failed:', err);
+  }
 }
 
 messagingRouter.get('/messaging/status', (_req: Request, res: Response) => {
   return res.status(200).json(getMessagingStatus());
 });
+
+/**
+ * Registers the signed-in staff uid in omni_staff so Firestore rules can allow
+ * client onSnapshot reads of omni_conversations / omni_messages.
+ */
+messagingRouter.post(
+  '/messaging/register-listener',
+  authenticateRequest,
+  async (req: Request, res: Response) => {
+    try {
+      const role = req.userRole;
+      if (!role || !MESSAGING_LISTENER_ROLES.has(role)) {
+        return res.status(403).json({ error: 'Messaging listener registration requires staff role.' });
+      }
+      const uid = req.userId || req.user?.uid;
+      if (!uid) {
+        return res.status(401).json({ error: 'Missing authenticated user.' });
+      }
+      await upsertOmniStaff(uid, { email: req.user?.email, role });
+      return res.status(200).json({ status: 'ok', uid });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      return res.status(500).json({ error: message });
+    }
+  },
+);
 
 messagingRouter.get('/webhooks/meta', (req: Request, res: Response) => {
   const mode = req.query['hub.mode'];
@@ -156,7 +132,10 @@ export async function handleMetaWebhookPost(req: Request, res: Response) {
     return res.status(400).json({ error: 'Invalid meta webhook payload structure' });
   }
 
-  webhookQueue.add('process-meta-webhook', body);
+  // Acknowledge quickly; job record survives cold starts if processing is interrupted.
+  void enqueueMetaWebhookJob(body, handleNormalizedMetaMessage).catch((err) => {
+    console.error('[webhook_jobs] Failed to enqueue/process Meta webhook:', err);
+  });
   return res.status(200).json({ status: 'EVENT_RECEIVED', object: body.object });
 }
 
@@ -264,10 +243,7 @@ messagingRouter.post(
     };
 
     await saveMessage(outboundMsg);
-    const updatedConv = await patchConversation(conversationId, { lastMessage: content.body });
-    if (updatedConv) {
-      emitMessageEvents(outboundMsg, updatedConv);
-    }
+    await patchConversation(conversationId, { lastMessage: content.body });
 
     return res.status(200).json({
       status: 'success',
@@ -296,7 +272,6 @@ messagingRouter.patch('/conversation/status', async (req: Request, res: Response
       return res.status(404).json({ error: 'Conversation context not found.' });
     }
 
-    ioInstance?.emit('conversation:updated', updatedConv);
     return res.status(200).json({ status: 'success', conversation: updatedConv });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
@@ -316,7 +291,6 @@ messagingRouter.patch('/conversation/assign-agent', async (req: Request, res: Re
       return res.status(404).json({ error: 'Conversation thread not found' });
     }
 
-    ioInstance?.emit('conversation:updated', updatedConv);
     return res.status(200).json({ status: 'success', conversation: updatedConv });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';

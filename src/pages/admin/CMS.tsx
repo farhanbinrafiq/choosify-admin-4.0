@@ -201,6 +201,7 @@ export default function CMSPage() {
     return cmsData[selectedSectionId] || {
       id: selectedSectionId,
       title: 'Section',
+      subtitle: '',
       itemIds: [],
       isActive: true,
       order: 1,

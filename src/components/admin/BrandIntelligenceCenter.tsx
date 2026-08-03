@@ -364,7 +364,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                 {currentStatus === 'UNCLAIMED' ? 'TIER 3 STANDBY' : 'TIER 1 PARTNER'}
               </span>
             </div>
-            <p className="text-xs text-app-text-secondary font-semibold">{matchedProfile?.companyName || `Unregistered Brand Identity Entity`}</p>
+            <p className="text-xs text-app-text-secondary font-semibold">{matchedProfile?.name || `Unregistered Brand Identity Entity`}</p>
           </div>
         </div>
 

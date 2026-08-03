@@ -41,7 +41,7 @@ function writeVersions(versions: CmsVersionSnapshot[]) {
 }
 
 export function saveCmsVersion(
-  snapshot: Omit<CmsVersionSnapshot, 'id' | 'savedAt'>,
+  snapshot: Omit<CmsVersionSnapshot, 'id' | 'savedAt' | 'label'>,
   label = 'CMS publish',
 ): string {
   const id = `v-${Date.now()}`;

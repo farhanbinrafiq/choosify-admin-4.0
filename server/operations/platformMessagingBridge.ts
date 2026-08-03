@@ -1,7 +1,6 @@
 import type { Conversation, UnifiedMessage } from '../../src/types';
 import type { OpsStorefrontOrder } from './types';
 import { getConversation, saveConversation, saveMessage } from '../messaging/omniStore';
-import { emitOmniEvents } from '../messagingHub';
 
 const nowIso = () => new Date().toISOString();
 
@@ -38,7 +37,6 @@ export async function ensurePlatformOrderConversation(order: OpsStorefrontOrder)
   };
 
   await saveMessage(message);
-  emitOmniEvents(message, conversation);
   return conversation;
 }
 
@@ -81,6 +79,5 @@ export async function submitPlatformMessage(payload: {
 
   await saveConversation(conversation);
   await saveMessage(message);
-  emitOmniEvents(message, conversation);
   return { conversation, message };
 }

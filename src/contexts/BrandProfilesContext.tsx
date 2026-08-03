@@ -41,6 +41,8 @@ export interface BrandProfile {
   visibilityStatus: VisibilityStatus;
   status: BrandStatus;
   ownerSellerId: string | null;
+  /** Optional display name of the owning storefront (profile UIs) */
+  ownerStore?: string;
   badge: BrandBadge;
   
   // Visibility

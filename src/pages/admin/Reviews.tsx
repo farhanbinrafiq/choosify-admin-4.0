@@ -208,7 +208,7 @@ export default function ReviewsPage() {
   const handleSellerReply = (id: string) => {
     const text = sellerReplyText[id]?.trim();
     if (!text) return;
-    addSellerResponse(id, profile?.name || 'Authorized Merchant Manager', text);
+    addSellerResponse(id, profile?.displayName || 'Authorized Merchant Manager', text);
     setSellerReplyText(prev => ({ ...prev, [id]: '' }));
   };
 

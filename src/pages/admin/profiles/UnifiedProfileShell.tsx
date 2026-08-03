@@ -67,7 +67,9 @@ import {
 import ProfileLayout from '../../../components/profile/ProfileLayout';
 import ContentTable from '../../../components/profile/ContentTable';
 import BrandEditStudio from '../BrandEditStudio';
-import GuideStudioCMS from '../../../components/profile/GuideStudioCMS';
+import GuideStudioCMS, { GuideStudioItem } from '../../../components/profile/GuideStudioCMS';
+
+type ProfileEntityKind = 'consumer' | 'seller' | 'brand' | 'order' | 'creator';
 
 const getMockProductId = (title: string): string => {
   const t = title.toLowerCase();
@@ -318,10 +320,11 @@ const FALLBACK_CREATORS = {
   }
 };
 
-const INITIAL_GUIDES = [
+const INITIAL_GUIDES: GuideStudioItem[] = [
   {
     id: 'GUIDE-991',
     guideTitle: 'The Ultimate Handloom Saree Buyer Guide 2026',
+    slug: 'ultimate-handloom-saree-buyer-guide-2026',
     category: 'Traditional Fabrics',
     audienceType: 'General Wedding Seekers',
     readTime: '6m read',
@@ -330,12 +333,17 @@ const INITIAL_GUIDES = [
     flaggedByModerator: false,
     verifiedContributor: true,
     authorName: 'Rifat Hasan',
+    authorAvatar: '',
+    contributorBadgeLevel: 'Gold',
+    productsReviewed: 8,
     status: 'Live',
+    publishDate: '14 June, 2026',
     lastUpdated: '14 June, 2026'
   },
   {
     id: 'GUIDE-992',
     guideTitle: 'Budget Gadgets: Best Budget Phones under ৳15,000',
+    slug: 'budget-gadgets-phones-under-15000',
     category: 'Mobile Phones',
     audienceType: 'Students & Budget Sourcing',
     readTime: '8m read',
@@ -344,7 +352,11 @@ const INITIAL_GUIDES = [
     flaggedByModerator: false,
     verifiedContributor: true,
     authorName: 'Rifat Hasan',
+    authorAvatar: '',
+    contributorBadgeLevel: 'Gold',
+    productsReviewed: 12,
     status: 'Live',
+    publishDate: '12 June, 2026',
     lastUpdated: '12 June, 2026'
   }
 ];
@@ -377,8 +389,11 @@ export default function UnifiedProfileShell() {
   const { triggerMessage, triggerPhone } = useContact();
 
   // Derive active type and id, supporting legacy upe paths and direct /consumer/:id routes
-  const typeKey = useMemo(() => {
-    if (entityType) return entityType.toLowerCase();
+  const typeKey = useMemo((): ProfileEntityKind => {
+    const raw = entityType?.toLowerCase();
+    if (raw === 'consumer' || raw === 'seller' || raw === 'brand' || raw === 'order' || raw === 'creator') {
+      return raw;
+    }
     const path = location.pathname.toLowerCase();
     if (path.includes('/consumer/')) return 'consumer';
     if (path.includes('/seller/')) return 'seller';
@@ -497,9 +512,22 @@ export default function UnifiedProfileShell() {
     if (!idKey) return null;
 
     if (typeKey === 'consumer') {
-      const cust = customers.find(c => c.id === idKey) || FALLBACK_CONSUMERS.find(c => c.id === idKey) || FALLBACK_CONSUMERS[0];
+      const orderCust = customers.find(c => c.id === idKey);
+      const fallback = FALLBACK_CONSUMERS.find(c => c.id === idKey) || FALLBACK_CONSUMERS[0];
+      const cust = {
+        ...fallback,
+        ...(orderCust
+          ? {
+              id: orderCust.id,
+              name: orderCust.name,
+              email: orderCust.email,
+              avatarUrl: orderCust.avatar || fallback.avatarUrl,
+            }
+          : {}),
+      };
       const associatedList = orders.filter(o => o.customer.name === cust.name || o.customer.id === cust.id);
       return {
+        kind: 'consumer' as const,
         ...cust,
         initials: cust.initials || cust.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2),
         totalSpent: cust.totalSpent || `৳ ${associatedList.reduce((sum, o) => sum + (o.product.price * o.quantity), 0).toLocaleString()}`,
@@ -518,6 +546,7 @@ export default function UnifiedProfileShell() {
       const match = FALLBACK_SELLERS.find(s => s.id === idKey) || FALLBACK_SELLERS[0];
       const items = orders.filter(o => o.product.sellerId === match.id || o.product.sellerName === match.storeName);
       return {
+        kind: 'seller' as const,
         ...match,
         ordersCount: items.length || match.ordersCount,
         orders: items
@@ -530,6 +559,7 @@ export default function UnifiedProfileShell() {
       
       const relatedOrders = orders.filter(o => o.product.brand.toLowerCase() === b.name.toLowerCase());
       return {
+        kind: 'brand' as const,
         id: b.id,
         name: b.name,
         slug: b.slug,
@@ -552,7 +582,9 @@ export default function UnifiedProfileShell() {
     if (typeKey === 'creator') {
       const backup = FALLBACK_CREATORS[idKey as keyof typeof FALLBACK_CREATORS] || FALLBACK_CREATORS['1'];
       return {
+        kind: 'creator' as const,
         ...backup,
+        verifiedContributor: true,
         contentGroups: backup.contentGroups || []
       };
     }
@@ -564,21 +596,25 @@ export default function UnifiedProfileShell() {
       const rawQty = ord.quantity || 1;
       const rawPrice = ord.product.price || 0;
       const rawRevenue = rawPrice * rawQty;
-      const finalDel = ord.deliveryCharge || 120;
+      const finalDel = ord.delivery_charge || 120;
       const totalCostSum = rawRevenue + finalDel;
 
-      const commPercent = ord.commissionPercent || 6.5;
+      const commPercent = ord.earnings?.commissionPercent || 6.5;
       const commValue = Math.round((rawRevenue * commPercent) / 100);
       const sNetEarn = totalCostSum - commValue;
 
-      const logsList = ord.orderLogs?.map((l: string) => ({ txt: l })) || [];
-      const sellerNotesList = ord.sellerNotes?.map((n: string) => ({ txt: n })) || [];
+      const logsList = (ord.adminNotes || []).map((l: string) => ({ txt: l }));
+      const sellerNotesList = (ord.sellerNotes || []).map((n: string) => ({ txt: n }));
 
       const mSeller = FALLBACK_SELLERS.find(s => s.id === ord.product.sellerId || s.storeName === ord.product.sellerName) || FALLBACK_SELLERS[0];
       const mBrand = brandProfiles.find(b => b.name.toLowerCase() === ord.product.brand.toLowerCase()) || brandProfiles[0];
-      const mCust = customers.find(c => c.id === ord.customer.id || c.name === ord.customer.name) || FALLBACK_CONSUMERS[0];
+      const orderCust = customers.find(c => c.id === ord.customer.id || c.name === ord.customer.name);
+      const mCust = orderCust
+        ? { ...FALLBACK_CONSUMERS[0], id: orderCust.id, name: orderCust.name, email: orderCust.email, avatarUrl: orderCust.avatar }
+        : FALLBACK_CONSUMERS[0];
 
       return {
+        kind: 'order' as const,
         id: ord.id,
         product: ord.product,
         status: ord.status,
@@ -676,20 +712,20 @@ export default function UnifiedProfileShell() {
 
   // Action overrides
   const handleUserBanStatusToggle = () => {
-    if (typeKey === 'consumer' && entityData) {
+    if (entityData?.kind === 'consumer') {
       showToast(`🛡️ SEC SECURITY ENG: Banning audit toggled for consumer: ${entityData.name}`, 'info');
       entityData.status = entityData.status === 'Active' ? 'Banned' : 'Active';
     }
   };
 
   const handleSellerSuspensionToggle = () => {
-    if (typeKey === 'seller' && entityData) {
+    if (entityData?.kind === 'seller') {
       showToast(`⚙️ EOS POLICY: Seller suspension state updated for store: ${entityData.storeName}`, 'info');
     }
   };
 
   const handleBrandClaimStatusToggle = () => {
-    if (typeKey === 'brand' && entityData) {
+    if (entityData?.kind === 'brand') {
       showToast(`🏬 REGISTRY SWEEP: Checked and locked secure verification keys for ${entityData.name}.`, 'success');
     }
   };
@@ -705,7 +741,7 @@ export default function UnifiedProfileShell() {
     e.preventDefault();
     if (!chatMessageText.trim()) return;
     if (typeKey === 'order' && entityData) {
-      sendChatMessage(entityData.id, chatMessageText, 'admin', loggedInProfile?.name || 'Admin Audit');
+      sendChatMessage(entityData.id, chatMessageText, 'admin', loggedInProfile?.displayName || 'Admin Audit');
       showToast(`💬 ERP MESSAGING: Synced WhatsApp channel wireframe for client thread.`, 'success');
       chatMessageText && entityData.chatHistory.push({ sender: 'Admin Audit', text: chatMessageText, time: 'Just Now' });
       setChatMessageText('');
@@ -763,6 +799,13 @@ export default function UnifiedProfileShell() {
     );
   }
 
+  // Narrow by discriminant so type-specific fields type-check
+  const consumer = entityData.kind === 'consumer' ? entityData : null;
+  const seller = entityData.kind === 'seller' ? entityData : null;
+  const brand = entityData.kind === 'brand' ? entityData : null;
+  const creator = entityData.kind === 'creator' ? entityData : null;
+  const orderEnt = entityData.kind === 'order' ? entityData : null;
+
   // 1. Map Breadcrumbs
   const breadcrumbs = [
     { label: 'Dashboard', path: '/admin/dashboard' },
@@ -771,7 +814,7 @@ export default function UnifiedProfileShell() {
     typeKey === 'brand' ? { label: 'Brands', path: '/admin/sellers' } :
     typeKey === 'order' ? { label: 'Orders', path: '/admin/orders' } :
     { label: 'Creators', path: '/admin/consumers?tab=creators' },
-    { label: `${typeKey === 'order' ? `Order #${entityData.id}` : typeKey === 'seller' ? entityData.storeName : entityData.name}` }
+    { label: `${orderEnt ? `Order #${orderEnt.id}` : seller ? seller.storeName : entityData.name}` }
   ];
 
   // 2. Map Titles and Metadata
@@ -821,58 +864,68 @@ export default function UnifiedProfileShell() {
                               typeKey === 'order' ? 'from-yellow-600/30 via-app-card to-app-gradient-end' :
                               'from-emerald-600/30 via-app-card to-app-gradient-end';
 
-  const avatarUrl = typeKey === 'brand' ? entityData.logo : (entityData as any).avatarUrl;
-  const initials = (entityData as any).initials || (typeKey === 'order' ? 'ORD' : typeKey === 'seller' ? 'SLR' : 'BRD');
-  const name = typeKey === 'order' ? `ORDER #${entityData.id}` : typeKey === 'seller' ? entityData.storeName : entityData.name;
-  const handle = typeKey === 'creator' ? entityData.handle :
-                 typeKey === 'seller' ? entityData.name :
-                 typeKey === 'brand' ? `@brand_${entityData.slug}` :
-                 typeKey === 'consumer' ? entityData.email :
-                 `Purchased via: ${entityData.platformSource}`;
+  const avatarUrl = brand ? brand.logo : (creator?.avatarUrl || consumer?.avatarUrl || (entityData as { avatarUrl?: string }).avatarUrl);
+  const initials = consumer?.initials || seller?.name?.slice(0, 2).toUpperCase() || (orderEnt ? 'ORD' : brand ? 'BRD' : 'CR');
+  const name = orderEnt
+    ? `ORDER #${orderEnt.id}`
+    : seller
+      ? seller.storeName
+      : entityData.name;
+  const handle = creator
+    ? creator.handle
+    : seller
+      ? seller.name
+      : brand
+        ? `@brand_${brand.slug}`
+        : consumer
+          ? consumer.email
+          : orderEnt
+            ? `Purchased via: ${orderEnt.platformSource}`
+            : '';
 
-  const persona = typeKey === 'brand' ? entityData.description : (entityData as any).persona;
+  const persona = brand ? brand.description : creator?.persona || consumer?.persona;
 
-  const identityBadges = typeKey === 'creator' ? [
-    { label: entityData.verificationStatus },
-    { label: entityData.status, colorClass: entityData.status === 'Banned' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20' }
-  ] : typeKey === 'consumer' ? [
-    { label: entityData.status, colorClass: entityData.status === 'Banned' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20' }
-  ] : typeKey === 'seller' ? [
-    { label: (entityData as any).verificationStatus, colorClass: 'bg-green-500/10 text-green-400 border border-green-500/20' },
-    { label: (entityData as any).applicationStatus, colorClass: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' }
-  ] : typeKey === 'brand' ? [
-    { label: entityData.status === 'VERIFIED_OWNER' ? 'Verified Owner' : entityData.status, colorClass: 'bg-green-500/10 text-green-400 border border-green-500/20' }
-  ] : [
-    { label: entityData.status, colorClass: entityData.status === 'Delivered' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20' },
-    { label: entityData.paymentStatus, colorClass: entityData.paymentStatus === 'Paid' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20' }
-  ];
+  const identityBadges = creator ? [
+    { label: creator.verificationStatus },
+    { label: creator.status, colorClass: creator.status === 'Banned' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20' }
+  ] : consumer ? [
+    { label: consumer.status, colorClass: consumer.status === 'Banned' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20' }
+  ] : seller ? [
+    { label: seller.verificationStatus, colorClass: 'bg-green-500/10 text-green-400 border border-green-500/20' },
+    { label: seller.applicationStatus, colorClass: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' }
+  ] : brand ? [
+    { label: brand.status === 'VERIFIED_OWNER' ? 'Verified Owner' : String(brand.status), colorClass: 'bg-green-500/10 text-green-400 border border-green-500/20' }
+  ] : orderEnt ? [
+    { label: orderEnt.status, colorClass: orderEnt.status === 'Delivered' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20' },
+    { label: orderEnt.paymentStatus, colorClass: orderEnt.paymentStatus === 'Paid' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20' }
+  ] : [];
 
-  const identityFields = typeKey === 'creator' ? [
-    { label: 'Email address', value: entityData.email },
-    { label: 'Geography Base', value: entityData.address },
-    { label: 'Primary Phone', value: entityData.phone },
-    { label: 'Last active timestamp', value: entityData.lastActive, icon: <Clock className="w-3.5 h-3.5 text-app-accent-light" /> }
-  ] : typeKey === 'consumer' ? [
-    { label: 'Email account', value: entityData.email },
-    { label: 'Geography Base', value: entityData.address },
-    { label: 'Primary Phone', value: entityData.phone },
-    { label: 'Connection Standing', value: entityData.lastActive, icon: <Clock className="w-3.5 h-3.5 text-app-accent-light" /> }
-  ] : typeKey === 'seller' ? [
-    { label: 'Corporate Email', value: entityData.email },
-    { label: 'Contact Phone', value: entityData.phone },
-    { label: 'Settlement Plan', value: entityData.settlementPlan },
-    { label: 'Corporate Address', value: entityData.address, icon: <MapPin className="w-3.5 h-3.5 text-app-accent-light" /> }
-  ] : typeKey === 'brand' ? [
-    { label: 'Owner Store Name', value: entityData.ownerStore },
-    { label: 'Creative Industry', value: entityData.industry },
-    { label: 'Creative Segment', value: entityData.category },
-    { label: 'Official Website', value: entityData.websiteUrl, icon: <Globe className="w-3.5 h-3.5 text-app-accent-light" /> }
-  ] : [
-    { label: 'Cargo Carrier', value: entityData.deliveryPartner },
-    { label: 'Buyer Contact', value: entityData.customer.name },
-    { label: 'Linked merchant', value: entityData.seller.storeName },
-    { label: 'Purchase Date', value: new Date(entityData.timestamp).toLocaleString(), icon: <Calendar className="w-3.5 h-3.5 text-app-accent-light" /> }
-  ];
+  const identityFields = creator ? [
+    { label: 'Email address', value: creator.email },
+    { label: 'Geography Base', value: creator.address },
+    { label: 'Primary Phone', value: creator.phone },
+    { label: 'Last active timestamp', value: creator.lastActive, icon: <Clock className="w-3.5 h-3.5 text-app-accent-light" /> }
+  ] : consumer ? [
+    { label: 'Email account', value: consumer.email },
+    { label: 'Geography Base', value: consumer.address },
+    { label: 'Primary Phone', value: consumer.phone },
+    { label: 'Connection Standing', value: consumer.lastActive, icon: <Clock className="w-3.5 h-3.5 text-app-accent-light" /> }
+  ] : seller ? [
+    { label: 'Corporate Email', value: seller.email },
+    { label: 'Contact Phone', value: seller.phone },
+    { label: 'Settlement Plan', value: seller.settlementPlan },
+    { label: 'Corporate Address', value: seller.address, icon: <MapPin className="w-3.5 h-3.5 text-app-accent-light" /> }
+  ] : brand ? [
+    { label: 'Owner Store Name', value: brand.ownerStore },
+    { label: 'Creative Industry', value: brand.industry },
+    { label: 'Creative Segment', value: brand.category },
+    { label: 'Official Website', value: brand.websiteUrl, icon: <Globe className="w-3.5 h-3.5 text-app-accent-light" /> }
+  ] : orderEnt ? [
+    { label: 'Cargo Carrier', value: orderEnt.deliveryPartner },
+    { label: 'Buyer Contact', value: orderEnt.customer.name },
+    { label: 'Linked merchant', value: orderEnt.seller.storeName },
+    { label: 'Purchase Date', value: new Date(orderEnt.timestamp).toLocaleString(), icon: <Calendar className="w-3.5 h-3.5 text-app-accent-light" /> }
+  ] : [];
 
   // specialties tags mapping for Creators
   const tagsTitle = typeKey === 'creator' ? 'Primary Category Tags' : undefined;
@@ -3098,7 +3151,7 @@ export default function UnifiedProfileShell() {
                 </div>
                 <div className="shrink-0 space-y-1 text-right">
                   <span className="text-xs text-app-text-secondary block font-mono">Total Reach Metrics</span>
-                  <span className="text-sm font-black text-app-text-primary block">{entityData.totalViews || '45.2K views'}</span>
+                  <span className="text-sm font-black text-app-text-primary block">{creator?.totalViews || '45.2K views'}</span>
                 </div>
               </div>
 
@@ -3106,7 +3159,7 @@ export default function UnifiedProfileShell() {
                 <div className="space-y-2 text-xs">
                   <span className="text-[10px] text-[#F4631E] uppercase block font-bold font-mono">Biography Pitch</span>
                   <p className="text-app-text-secondary leading-relaxed">
-                    {entityData.persona || 'Bespoke review writer and lifestyle creator based in Dhaka, Bangladesh. Curates the finest Traditional Jamdani and Boutique dresses since 2022.'}
+                    {creator?.persona || 'Bespoke review writer and lifestyle creator based in Dhaka, Bangladesh. Curates the finest Traditional Jamdani and Boutique dresses since 2022.'}
                   </p>
                 </div>
                 <div className="space-y-2 text-xs">
@@ -3128,11 +3181,11 @@ export default function UnifiedProfileShell() {
               </div>
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-md text-left font-sans">
                 <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Total Views</span>
-                <span className="text-base font-black text-[#F4631E] block mt-1">{entityData.totalViews || '45.2K'}</span>
+                <span className="text-base font-black text-[#F4631E] block mt-1">{creator?.totalViews || '45.2K'}</span>
               </div>
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-md text-left font-sans">
                 <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Total Followers</span>
-                <span className="text-base font-black text-indigo-400 block mt-1">{entityData.followers || '42.5k'}</span>
+                <span className="text-base font-black text-indigo-400 block mt-1">{creator?.followers || '42.5k'}</span>
               </div>
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-md text-left font-sans">
                 <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Total Recs</span>
@@ -3151,8 +3204,8 @@ export default function UnifiedProfileShell() {
               guides={creatorGuides} 
               onChange={setCreatorGuides} 
               authorName={entityData.name} 
-              authorAvatar={entityData.avatarUrl} 
-              authorVerified={entityData.verifiedContributor || true} 
+              authorAvatar={creator?.avatarUrl} 
+              authorVerified={creator?.verifiedContributor || true} 
             />
           </div>
         )}
@@ -3395,11 +3448,11 @@ export default function UnifiedProfileShell() {
                 <div className="grid grid-cols-3 gap-4 text-xs text-center font-sans">
                   <div className="p-3.5 bg-white/5 border border-app-border rounded">
                     <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Followers</span>
-                    <span className="text-sm font-black text-app-text-primary block mt-1.5">{entityData.followers || '42.5k'}</span>
+                    <span className="text-sm font-black text-app-text-primary block mt-1.5">{creator?.followers || '42.5k'}</span>
                   </div>
                   <div className="p-3.5 bg-white/5 border border-app-border rounded">
                     <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Total Views</span>
-                    <span className="text-sm font-black text-app-text-primary block mt-1.5">{entityData.totalViews || '45.2K'}</span>
+                    <span className="text-sm font-black text-app-text-primary block mt-1.5">{creator?.totalViews || '45.2K'}</span>
                   </div>
                   <div className="p-3.5 bg-white/5 border border-app-border rounded">
                     <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Total Likes</span>
@@ -3435,11 +3488,11 @@ export default function UnifiedProfileShell() {
                 </div>
                 <div className="p-4 bg-white/5 border border-app-border rounded">
                   <span className="text-[10px] text-app-text-secondary uppercase block">Conversion Rate</span>
-                  <span className="text-base font-black text-[#F4631E] block mt-1">{entityData.conversionRate || '5.8%'} avg</span>
+                  <span className="text-base font-black text-[#F4631E] block mt-1">{creator?.conversionRate || '5.8%'} avg</span>
                 </div>
                 <div className="p-4 bg-white/5 border border-app-border rounded">
                   <span className="text-[10px] text-app-text-secondary uppercase block">Revenue Generated</span>
-                  <span className="text-base font-black text-indigo-400 block mt-1">{entityData.revenueGenerated || '৳ 382,200'}</span>
+                  <span className="text-base font-black text-indigo-400 block mt-1">{creator?.revenueGenerated || '৳ 382,200'}</span>
                 </div>
                 <div className="p-4 bg-white/5 border border-white/15 rounded">
                   <span className="text-[10px] text-emerald-400 font-bold uppercase block">Affiliate Earnings</span>

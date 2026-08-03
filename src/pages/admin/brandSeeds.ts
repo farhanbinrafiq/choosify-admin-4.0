@@ -127,6 +127,8 @@ export interface BrandCMSModel {
   returnRate: string;
   complaintRate: string;
   responseTime: string;
+  followersCount?: string | number;
+  logoUrl?: string;
   recentTrustAlerts: AuditAlertItem[];
 
   // Catalog and promos

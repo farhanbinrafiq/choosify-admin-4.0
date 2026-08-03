@@ -212,6 +212,7 @@ export const defaultHomepage = (): HomepageConfig => {
         order: 0,
       },
     ],
+    dealsBanners: [],
     sections: [
       { id: 'featured-products', label: 'Featured Products', isVisible: true, order: 0, itemIds: ['prod-s24-ultra', 'prod-macbook-air-m3'] },
       { id: 'featured-brands', label: 'Featured Brands', isVisible: true, order: 1, itemIds: ['brand-samsung', 'brand-apple'] },

@@ -908,8 +908,8 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
                       ) : (
                         <div className="space-y-3.5 flex flex-col justify-end">
                           {currentMessagesUnified.map((msg: any) => {
-                            // Direct profile has sender 'me' / 'them', Orders message has senderRole 'customer'/'seller'/'admin'
-                            const isMe = msg.sender === 'me' || (msg.senderRole && msg.senderRole !== 'customer' && profile?.role !== 'customer') || (msg.senderRole === 'customer' && profile?.role === 'customer');
+                            // Admin profiles are never role "customer"; treat non-customer senderRole as "me"
+                            const isMe = msg.sender === 'me' || (msg.senderRole && msg.senderRole !== 'customer');
                             const timeStr = msg.timestamp ? (msg.timestamp.includes('T') ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : msg.timestamp) : 'recent';
                             
                             return (

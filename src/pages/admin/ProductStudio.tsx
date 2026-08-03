@@ -1839,7 +1839,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                       actionRequestQuote,
                     }}
                     price={discountedPrice || actualPrice}
-                    stockLimit={stockLimit}
+                    stockLimit={productStock ?? 0}
                     productName={productName}
                     isService={productType === 'service'}
                   />
@@ -2007,7 +2007,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                       actionRequestQuote,
                     }}
                     price={discountedPrice || actualPrice}
-                    stockLimit={stockLimit}
+                    stockLimit={productStock ?? 0}
                     productName={productName}
                     isService={productType === 'service'}
                   />
@@ -4368,7 +4368,12 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                     block={blk}
                     onChange={(next) => {
                       const copy = [...tempOverview];
-                      copy[idx] = next;
+                      copy[idx] = {
+                        ...next,
+                        content: next.content ?? '',
+                        listStyle: next.listStyle ?? 'bullet',
+                        sortOrder: next.sortOrder ?? idx,
+                      };
                       setTempOverview(copy);
                     }}
                     onRemove={() => setTempOverview(tempOverview.filter((_, i) => i !== idx))}

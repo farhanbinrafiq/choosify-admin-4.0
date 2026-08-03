@@ -1,8 +1,7 @@
 import path from "path";
 import express from "express";
 import { createServer } from "http";
-import { Server as SocketIOServer } from "socket.io";
-import { setSocketIO, seedOmnichannelData } from "./server/messagingHub";
+import { bootstrapMessagingJobs, seedOmnichannelData } from "./server/messagingHub";
 import { attachOperationsPersistence, ensureOperationsHydrated } from "./server/operations/operationsPersistence";
 import { ensureCatalogSeedData } from "./lib/vercel-catalog/catalogStore";
 import { Logger } from "./server/lib/logger";
@@ -61,18 +60,12 @@ async function startServer() {
   attachOperationsPersistence();
   await ensureOperationsHydrated();
   await seedOmnichannelData();
+  await bootstrapMessagingJobs();
   await ensureCatalogSeedData();
   markApplicationReady();
 
+  // Plain HTTP server (no Socket.IO) — realtime messaging uses Firestore onSnapshot.
   const httpServer = createServer(app);
-  const io = new SocketIOServer(httpServer, {
-    cors: {
-      origin: getAllowedOrigins(),
-      methods: ["GET", "POST", "PATCH", "DELETE"],
-    },
-  });
-
-  setSocketIO(io);
   setupGracefulShutdown(httpServer);
 
   httpServer.listen(PORT, "0.0.0.0", () => {

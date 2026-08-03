@@ -393,7 +393,7 @@ export default function BrandsStudioList() {
                         ];
                         const color = colors[Math.abs(newBrandName.length + newId.length) % colors.length];
                         
-                        const updated = [
+                        const updated: BrandStudioItem[] = [
                           {
                             id: newId,
                             brandName: newBrandName.trim(),
