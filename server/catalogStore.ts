@@ -13,7 +13,7 @@ import {
   defaultProducts,
 } from './catalogDefaults';
 import { catalogStore as memoryStore } from './catalogMemoryStore';
-import { hasFirebaseAdminCredentials } from './firebaseAdmin';
+import { hasFirebaseAdminCredentials } from './firestoreAdmin';
 
 export { defaultHomepage } from './catalogDefaults';
 

@@ -1,4 +1,4 @@
-import { getAdminFirestore } from '../firebaseAdmin';
+import { getAdminFirestore } from '../firestoreAdmin';
 import { getDocumentById } from '../lib/firestore/queryHelpers';
 import type { BookingRequest } from '../../shared/booking/bookingTypes';
 

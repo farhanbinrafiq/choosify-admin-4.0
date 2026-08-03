@@ -5,7 +5,7 @@ import {
   saveOperationsSnapshot,
   useOperationsFirestore,
   type OperationsSnapshot,
-} from './operationsFirestore';
+} from './operationsDb';
 
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let hydrated = false;

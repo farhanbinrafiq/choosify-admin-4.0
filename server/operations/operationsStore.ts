@@ -281,7 +281,7 @@ const state: {
   jobApplications: OpsJobApplication[];
   permissions: RolePermissionsMap;
   featureFlags: Record<string, boolean>;
-  sellerOffers: import('./operationsFirestore').OpsSellerOfferRow[];
+  sellerOffers: import('./operationsDb').OpsSellerOfferRow[];
   feeCharges: OpsFeeCharge[];
   paymentOptionsConfig: OpsPaymentOptionsConfig;
   sellerBookingSettings: Record<string, OpsSellerBookingSettings>;
@@ -683,9 +683,9 @@ export const operationsStore = {
   listSellerOffers: () =>
     [...state.sellerOffers].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
   createSellerOffer: (
-    payload: Omit<import('./operationsFirestore').OpsSellerOfferRow, 'id' | 'status' | 'createdAt' | 'updatedAt'>,
+    payload: Omit<import('./operationsDb').OpsSellerOfferRow, 'id' | 'status' | 'createdAt' | 'updatedAt'>,
   ) => {
-    const row: import('./operationsFirestore').OpsSellerOfferRow = {
+    const row: import('./operationsDb').OpsSellerOfferRow = {
       ...payload,
       id: `offer-${Date.now()}`,
       status: 'new',
@@ -696,7 +696,7 @@ export const operationsStore = {
     touch();
     return row;
   },
-  updateSellerOffer: (id: string, patch: Partial<import('./operationsFirestore').OpsSellerOfferRow>) => {
+  updateSellerOffer: (id: string, patch: Partial<import('./operationsDb').OpsSellerOfferRow>) => {
     const idx = state.sellerOffers.findIndex((row) => row.id === id);
     if (idx < 0) return null;
     state.sellerOffers[idx] = { ...state.sellerOffers[idx], ...patch, updatedAt: nowIso() };

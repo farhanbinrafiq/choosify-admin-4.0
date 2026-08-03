@@ -5,7 +5,7 @@ import type {
   Query,
   WhereFilterOp,
 } from 'firebase-admin/firestore';
-import { getAdminFirestore } from '../../firebaseAdmin';
+import { getAdminFirestore } from '../../firestoreAdmin';
 import { mapDocsToData, snapToData } from './documentHelpers';
 import { decodeCursor } from './pagination';
 

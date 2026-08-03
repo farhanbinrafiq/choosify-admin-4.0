@@ -11,6 +11,7 @@ import {
   resolveAuthenticatedUser,
   verifyFirebaseToken,
 } from '../auth/authProfile';
+import { isExpiredJwtError } from '../auth/jwtTokens';
 
 export async function authenticateRequest(
   req: Request,
@@ -46,7 +47,7 @@ export async function authenticateRequest(
 
     next();
   } catch (error) {
-    const expired = isExpiredFirebaseTokenError(error);
+    const expired = isExpiredFirebaseTokenError(error) || isExpiredJwtError(error);
     const reason = expired ? AUTH_ERROR_CODES.EXPIRED_TOKEN : AUTH_ERROR_CODES.INVALID_TOKEN;
 
     operationalEvents.authenticationFailure({

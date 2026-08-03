@@ -36,8 +36,9 @@ export function sendAuthError(
 
 export function isExpiredFirebaseTokenError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
-  const candidate = error as { code?: unknown; message?: unknown };
+  const candidate = error as { code?: unknown; message?: unknown; name?: unknown };
   return (
+    candidate.name === 'TokenExpiredError' ||
     candidate.code === 'auth/id-token-expired' ||
     (typeof candidate.message === 'string' &&
       candidate.message.toLowerCase().includes('expired'))

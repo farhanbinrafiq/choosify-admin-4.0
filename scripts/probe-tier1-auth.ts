@@ -1,70 +1,36 @@
 /**
  * One-off Tier 1 auth probe. Does not print secrets.
  * Usage: npx tsx scripts/probe-tier1-auth.ts
+ *
+ * Requires seeded Postgres users (npx tsx server/db/seedDevUsers.ts)
+ * and a running local server (npm run dev on :3001).
  */
 import dotenv from 'dotenv';
-import { readFileSync, existsSync } from 'fs';
-import { getAdminAuth } from '../server/firebaseAdmin';
-import firebaseConfig from '../firebase-applet-config.json';
+import { existsSync } from 'fs';
 
 dotenv.config({ path: '.env' });
 if (existsSync('.env.local')) {
   dotenv.config({ path: '.env.local', override: true });
 }
 
-const hasSa = Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_JSON?.trim());
-const apiKey =
-  process.env.VITE_FIREBASE_API_KEY ||
-  process.env.FIREBASE_API_KEY ||
-  process.env.VITE_FIREBASE_WEB_API_KEY ||
-  firebaseConfig.apiKey ||
-  '';
+const DEV_PASSWORD = process.env.DEV_SEED_PASSWORD || 'ChoosifyDev!2026';
+const base = process.env.PROBE_BASE_URL || 'http://localhost:3001/api/v1';
 
-if (!hasSa) {
-  console.error('SKIP: FIREBASE_SERVICE_ACCOUNT_JSON not configured');
-  process.exit(2);
-}
-if (!apiKey) {
-  console.error('SKIP: Firebase web API key not configured for custom-token exchange');
-  process.exit(2);
-}
-
-const auth = await getAdminAuth();
-if (!auth) {
-  console.error('SKIP: getAdminAuth returned null');
-  process.exit(3);
-}
-
-async function idTokenForEmail(email: string, roleHint: string) {
-  let user;
-  try {
-    user = await auth!.getUserByEmail(email);
-  } catch {
-    user = await auth!.createUser({
-      email,
-      emailVerified: true,
-      password: `TempProbe!${Date.now()}`,
-    });
+async function loginForEmail(email: string) {
+  const resp = await fetch(`${base}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: DEV_PASSWORD }),
+  });
+  const data = (await resp.json()) as { accessToken?: string; error?: string; uid?: string };
+  if (!resp.ok || !data.accessToken) {
+    throw new Error(`login failed for ${email}: ${resp.status} ${JSON.stringify(data)}`);
   }
-  const custom = await auth!.createCustomToken(user.uid, { role: roleHint });
-  const resp = await fetch(
-    `https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=${apiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: custom, returnSecureToken: true }),
-    },
-  );
-  const data = (await resp.json()) as { idToken?: string };
-  if (!data.idToken) {
-    throw new Error(`exchange failed for ${email}: ${JSON.stringify(data)}`);
-  }
-  return { email, uid: user.uid, idToken: data.idToken };
+  return { email, uid: data.uid || '', accessToken: data.accessToken };
 }
 
-const seller = await idTokenForEmail('seller@choosify.com.bd', 'seller');
-const admin = await idTokenForEmail('admin@choosify.com.bd', 'super_admin');
-const base = 'http://localhost:3001/api/v1';
+const seller = await loginForEmail('seller@choosify.com.bd');
+const admin = await loginForEmail('admin@choosify.com.bd');
 
 async function probe(
   label: string,
@@ -85,7 +51,7 @@ async function probe(
   console.log(label, '->', res.status, text.slice(0, 140).replace(/\s+/g, ' '));
 }
 
-await probe('seller PUT permissions', 'PUT', '/operations/permissions', seller.idToken, {
+await probe('seller PUT permissions', 'PUT', '/operations/permissions', seller.accessToken, {
   permissions: {
     seller: {
       content: true,
@@ -97,22 +63,22 @@ await probe('seller PUT permissions', 'PUT', '/operations/permissions', seller.i
     },
   },
 });
-await probe('seller POST fee', 'POST', '/operations/fee-charges', seller.idToken, {
+await probe('seller POST fee', 'POST', '/operations/fee-charges', seller.accessToken, {
   name: 'seller-probe-fee',
 });
-await probe('seller PUT payment', 'PUT', '/operations/payment-options', seller.idToken, {
+await probe('seller PUT payment', 'PUT', '/operations/payment-options', seller.accessToken, {
   partialPaymentEnabled: true,
 });
-await probe('seller PUT flags', 'PUT', '/operations/feature-flags', seller.idToken, {
+await probe('seller PUT flags', 'PUT', '/operations/feature-flags', seller.accessToken, {
   flags: { maintenance_mode: false },
 });
-await probe('seller POST coupon', 'POST', '/operations/coupons', seller.idToken, {
+await probe('seller POST coupon', 'POST', '/operations/coupons', seller.accessToken, {
   code: `SELLER_T1_${Date.now()}`,
   type: 'percentage',
   discountValue: 5,
 });
 
-await probe('admin PUT permissions', 'PUT', '/operations/permissions', admin.idToken, {
+await probe('admin PUT permissions', 'PUT', '/operations/permissions', admin.accessToken, {
   permissions: {
     admin: {
       content: true,
@@ -124,19 +90,19 @@ await probe('admin PUT permissions', 'PUT', '/operations/permissions', admin.idT
     },
   },
 });
-await probe('admin POST fee', 'POST', '/operations/fee-charges', admin.idToken, {
+await probe('admin POST fee', 'POST', '/operations/fee-charges', admin.accessToken, {
   name: `admin-probe-fee-${Date.now()}`,
   rateValue: 1,
 });
-await probe('admin PUT payment', 'PUT', '/operations/payment-options', admin.idToken, {
+await probe('admin PUT payment', 'PUT', '/operations/payment-options', admin.accessToken, {
   partialPaymentEnabled: true,
   minDepositPercent: 10,
   maxDepositPercent: 50,
 });
-await probe('admin PUT flags', 'PUT', '/operations/feature-flags', admin.idToken, {
+await probe('admin PUT flags', 'PUT', '/operations/feature-flags', admin.accessToken, {
   flags: { maintenance_mode: false },
 });
-await probe('admin POST coupon', 'POST', '/operations/coupons', admin.idToken, {
+await probe('admin POST coupon', 'POST', '/operations/coupons', admin.accessToken, {
   code: `ADMIN_T1_${Date.now()}`,
   type: 'percentage',
   discountValue: 10,

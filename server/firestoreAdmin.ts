@@ -1,6 +1,10 @@
 import type { Firestore } from 'firebase-admin/firestore';
 import type { App } from 'firebase-admin/app';
-import type { Auth } from 'firebase-admin/auth';
+
+/**
+ * Firestore Admin SDK helpers (ops snapshot, messaging, catalog).
+ * Auth no longer uses Firebase — see server/auth/authProfile.ts.
+ */
 
 let adminDb: Firestore | null = null;
 let adminApp: App | null = null;
@@ -34,13 +38,6 @@ async function ensureAdminApp(): Promise<App | null> {
 
 export async function getAdminApp(): Promise<App | null> {
   return ensureAdminApp();
-}
-
-export async function getAdminAuth(): Promise<Auth | null> {
-  const app = await ensureAdminApp();
-  if (!app) return null;
-  const { getAuth } = await import('firebase-admin/auth');
-  return getAuth(app);
 }
 
 export async function getAdminFirestore(): Promise<Firestore | null> {

@@ -1,5 +1,5 @@
 import type { Agent, Conversation, Customer, UnifiedMessage } from '../../src/types';
-import { getAdminFirestore } from '../firebaseAdmin';
+import { getAdminFirestore } from '../firestoreAdmin';
 import type { OrderedListOptions } from '../lib/firestore/queryHelpers';
 import {
   collectionHasDocuments,

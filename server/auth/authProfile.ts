@@ -1,9 +1,8 @@
-import type { DecodedIdToken } from 'firebase-admin/auth';
-import { getAdminAuth, hasFirebaseAdminCredentials } from '../firebaseAdmin';
-import { loadAdminUser, loadAdminUserByEmail } from '../operations/operationsFirestore';
 import { ROLES, toUserRole, type UserRole } from '../permissions/roles';
 import { getPermissionsForRole } from '../permissions/authorization';
 import type { Permission } from '../permissions/permissions';
+import { loadAdminUser, loadAdminUserByEmail } from '../operations/operationsDb';
+import { verifyAccessToken, type AccessTokenClaims } from './jwtTokens';
 
 export type AuthenticatedUser = {
   uid: string;
@@ -29,17 +28,13 @@ export function getBearerToken(authorizationHeader: string | undefined): string 
   return header.startsWith('Bearer ') ? header.slice(7).trim() : '';
 }
 
-export async function verifyFirebaseToken(token: string): Promise<DecodedIdToken | null> {
-  if (!hasFirebaseAdminCredentials()) return null;
-
-  const auth = await getAdminAuth();
-  if (!auth) return null;
-
-  return auth.verifyIdToken(token);
+/** Verify a self-hosted access JWT. Replaces Firebase ID-token verification. */
+export async function verifyFirebaseToken(token: string): Promise<AccessTokenClaims | null> {
+  return verifyAccessToken(token);
 }
 
 export async function resolveAuthenticatedUser(
-  decoded: DecodedIdToken,
+  decoded: AccessTokenClaims,
 ): Promise<AuthenticatedUser | null> {
   const profile =
     (await loadAdminUser(decoded.uid)) ||
@@ -51,34 +46,32 @@ export async function resolveAuthenticatedUser(
       ? DEV_ROLE_MAP[decoded.email.toLowerCase()]
       : undefined;
 
-  // Firebase-authenticated shoppers (no admin profile) are platform buyers.
-  // Without this fallback, requireAuth on buyer routes (reviews, cancel, returns)
-  // always 403s even with a valid ID token.
+  // Authenticated shoppers (no staff/seller profile) are platform buyers.
   if (!role) {
     return {
       uid: decoded.uid,
       email: decoded.email,
-      displayName: decoded.name || decoded.email,
+      displayName: decoded.email,
       role: ROLES.USER,
       permissions: getPermissionsForRole(ROLES.USER),
-      emailVerified: decoded.email_verified,
+      emailVerified: decoded.emailVerified,
     };
   }
 
   return {
     uid: decoded.uid,
     email: profile?.email || decoded.email,
-    displayName: profile?.displayName || decoded.name || decoded.email,
+    displayName: profile?.displayName || decoded.email,
     role,
     permissions: getPermissionsForRole(role),
-    emailVerified: decoded.email_verified,
+    emailVerified: decoded.emailVerified,
   };
 }
 
 export async function resolveAuthenticatedUserFromToken(
   token: string,
 ): Promise<AuthenticatedUser | null> {
-  const decoded = await verifyFirebaseToken(token);
+  const decoded = verifyAccessToken(token);
   if (!decoded) return null;
   return resolveAuthenticatedUser(decoded);
 }

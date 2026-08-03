@@ -1,21 +1,32 @@
+import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
+import { eq } from 'drizzle-orm';
 import {
   DEV_ROLE_MAP,
   getBearerToken,
   resolveAuthenticatedUserFromToken,
 } from './auth/authProfile';
+import {
+  clearRefreshTokenCookie,
+  hashPassword,
+  issueRefreshToken,
+  readRefreshTokenCookie,
+  revokeRefreshToken,
+  rotateRefreshToken,
+  setRefreshTokenCookie,
+  signAccessToken,
+  verifyPassword,
+} from './auth/jwtTokens';
 import { recordLogin } from './analytics/eventHooks';
 import { recordFailedAuthAttempt } from './lib/abuseProtection';
 import { Logger } from './lib/logger';
 import { validate } from './middleware/validate';
 import { DevLoginBodySchema } from './validation/auth/devLoginSchema';
+import { LoginBodySchema } from './validation/auth/loginSchema';
 import { SellerRegisterBodySchema } from './validation/auth/sellerRegisterSchema';
-import {
-  loadAdminUserByEmail,
-  upsertAdminUserProfile,
-  useOperationsFirestore,
-} from './operations/operationsFirestore';
-import { getAdminAuth, hasFirebaseAdminCredentials } from './firebaseAdmin';
+import { loadAdminUserByEmail } from './operations/operationsDb';
+import { db } from './db/client';
+import { sellerProfiles, users } from './db/schema';
 import { ROLES, toUserRole } from './permissions/roles';
 
 export const authRouter = Router();
@@ -54,9 +65,59 @@ authRouter.get('/auth/seller-status', async (req, res) => {
   }
 });
 
+authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, res) => {
+  const { email, password } = req.body as { email: string; password: string };
+  const normalizedEmail = email.trim().toLowerCase();
+
+  try {
+    const rows = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+    const user = rows[0];
+    if (!user?.passwordHash) {
+      recordFailedAuthAttempt(req.ip, req.originalUrl);
+      res.status(401).json({ error: 'Invalid email or password' });
+      return;
+    }
+
+    const ok = await verifyPassword(user.passwordHash, password);
+    if (!ok) {
+      recordFailedAuthAttempt(req.ip, req.originalUrl);
+      res.status(401).json({ error: 'Invalid email or password' });
+      return;
+    }
+
+    const accessToken = signAccessToken({
+      id: user.id,
+      email: user.email,
+      emailVerified: user.emailVerified,
+    });
+    const refreshToken = await issueRefreshToken(user.id);
+    setRefreshTokenCookie(res, refreshToken);
+
+    recordLogin(req, {
+      userId: user.id,
+      metadata: { mode: 'password', role: user.role },
+    });
+
+    res.json({
+      uid: user.id,
+      email: user.email,
+      displayName: user.displayName,
+      role: user.role,
+      accessToken,
+    });
+  } catch (error) {
+    Logger.warn('login failed', {
+      requestId: req.requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ error: 'Unable to sign in' });
+  }
+});
+
 /**
  * Create a seller dashboard account for storefront "Join Now" users.
- * Returns a Firebase custom token so the client can auto-sign-in after signup.
+ * Response shape preserved: `customToken` now carries the access JWT
+ * (frontend still expects this key — see Phase-1 follow-up flag).
  */
 authRouter.post('/auth/seller-register', validate({ body: SellerRegisterBodySchema }), async (req, res) => {
   const { email, password, displayName, storeName, phone, category, city, website } = req.body as {
@@ -90,64 +151,41 @@ authRouter.post('/auth/seller-register', validate({ body: SellerRegisterBodySche
       return;
     }
 
-    if (!hasFirebaseAdminCredentials() || !useOperationsFirestore) {
-      res.status(503).json({
-        error: 'Seller registration is temporarily unavailable.',
-        code: 'FIREBASE_UNAVAILABLE',
-      });
-      return;
-    }
-
-    const auth = await getAdminAuth();
-    if (!auth) {
-      res.status(503).json({
-        error: 'Seller registration is temporarily unavailable.',
-        code: 'FIREBASE_UNAVAILABLE',
-      });
-      return;
-    }
-
-    let uid: string;
-    try {
-      const existingAuthUser = await auth.getUserByEmail(normalizedEmail);
-      res.status(409).json({
-        error: 'An account with this email already exists. Sign in to link your seller dashboard.',
-        code: 'EMAIL_EXISTS',
-        loginPath: `/login?email=${encodeURIComponent(normalizedEmail)}&role=seller`,
-        uid: existingAuthUser.uid,
-      });
-      return;
-    } catch (error: unknown) {
-      const code = typeof error === 'object' && error && 'code' in error ? String((error as { code?: string }).code) : '';
-      if (code !== 'auth/user-not-found') {
-        throw error;
-      }
-    }
-
     const { randomBytes } = await import('node:crypto');
     const resolvedPassword = password || `Chz!${randomBytes(18).toString('base64url')}`;
+    const passwordHash = await hashPassword(resolvedPassword);
+    const uid = randomUUID();
+    const now = new Date();
 
-    const created = await auth.createUser({
+    await db.transaction(async (tx) => {
+      await tx.insert(users).values({
+        id: uid,
+        email: normalizedEmail,
+        passwordHash,
+        displayName: displayName.trim(),
+        role: ROLES.SELLER,
+        emailVerified: false,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await tx.insert(sellerProfiles).values({
+        userId: uid,
+        storeName: storeName.trim(),
+        phone: phone.trim(),
+        category: category.trim(),
+        city: city.trim(),
+        website: website?.trim() || null,
+        createdAt: now,
+      });
+    });
+
+    const accessToken = signAccessToken({
+      id: uid,
       email: normalizedEmail,
-      password: resolvedPassword,
-      displayName: displayName.trim(),
       emailVerified: false,
     });
-    uid = created.uid;
-
-    await upsertAdminUserProfile({
-      uid,
-      email: normalizedEmail,
-      displayName: displayName.trim(),
-      role: ROLES.SELLER,
-      storeName,
-      phone,
-      category,
-      city,
-      website,
-    });
-
-    const customToken = await auth.createCustomToken(uid, { role: ROLES.SELLER });
+    const refreshToken = await issueRefreshToken(uid);
+    setRefreshTokenCookie(res, refreshToken);
 
     Logger.info('seller account registered', {
       requestId: req.requestId,
@@ -160,7 +198,7 @@ authRouter.post('/auth/seller-register', validate({ body: SellerRegisterBodySche
       email: normalizedEmail,
       displayName: displayName.trim(),
       role: ROLES.SELLER,
-      customToken,
+      customToken: accessToken,
       dashboardPath: '/seller/products',
     });
   } catch (error) {
@@ -169,6 +207,50 @@ authRouter.post('/auth/seller-register', validate({ body: SellerRegisterBodySche
       error: error instanceof Error ? error.message : String(error),
     });
     res.status(500).json({ error: 'Unable to create seller account' });
+  }
+});
+
+authRouter.post('/auth/refresh', async (req, res) => {
+  try {
+    const raw = readRefreshTokenCookie(req.headers.cookie);
+    if (!raw) {
+      res.status(401).json({ error: 'Missing refresh token' });
+      return;
+    }
+
+    const rotated = await rotateRefreshToken(raw);
+    if (!rotated) {
+      clearRefreshTokenCookie(res);
+      res.status(401).json({ error: 'Invalid or expired refresh token' });
+      return;
+    }
+
+    setRefreshTokenCookie(res, rotated.refreshToken);
+    res.json({ accessToken: rotated.accessToken });
+  } catch (error) {
+    Logger.warn('refresh failed', {
+      requestId: req.requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ error: 'Unable to refresh session' });
+  }
+});
+
+authRouter.post('/auth/logout', async (req, res) => {
+  try {
+    const raw = readRefreshTokenCookie(req.headers.cookie);
+    if (raw) {
+      await revokeRefreshToken(raw);
+    }
+    clearRefreshTokenCookie(res);
+    res.json({ ok: true });
+  } catch (error) {
+    Logger.warn('logout failed', {
+      requestId: req.requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    clearRefreshTokenCookie(res);
+    res.status(500).json({ error: 'Unable to log out' });
   }
 });
 
@@ -183,8 +265,7 @@ authRouter.get('/auth/me', async (req, res) => {
 
   try {
     const user = await resolveAuthenticatedUserFromToken(token);
-    // Bare Firebase users (no admin/seller profile) resolve as role "user" for
-    // storefront operations auth. Admin /auth/me still requires a staff/seller profile.
+    // Bare buyers resolve as role "user". Admin /auth/me still requires a staff/seller profile.
     if (user && user.role !== ROLES.USER) {
       recordLogin(req, {
         userId: user.uid,
