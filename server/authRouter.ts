@@ -23,6 +23,7 @@ import { Logger } from './lib/logger';
 import { validate } from './middleware/validate';
 import { DevLoginBodySchema } from './validation/auth/devLoginSchema';
 import { LoginBodySchema } from './validation/auth/loginSchema';
+import { RegisterBodySchema } from './validation/auth/registerSchema';
 import { SellerRegisterBodySchema } from './validation/auth/sellerRegisterSchema';
 import { loadAdminUserByEmail } from './operations/operationsDb';
 import { db } from './db/client';
@@ -122,7 +123,7 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
 authRouter.post('/auth/seller-register', validate({ body: SellerRegisterBodySchema }), async (req, res) => {
   const { email, password, displayName, storeName, phone, category, city, website } = req.body as {
     email: string;
-    password?: string;
+    password: string;
     displayName: string;
     storeName: string;
     phone: string;
@@ -151,9 +152,7 @@ authRouter.post('/auth/seller-register', validate({ body: SellerRegisterBodySche
       return;
     }
 
-    const { randomBytes } = await import('node:crypto');
-    const resolvedPassword = password || `Chz!${randomBytes(18).toString('base64url')}`;
-    const passwordHash = await hashPassword(resolvedPassword);
+    const passwordHash = await hashPassword(password);
     const uid = randomUUID();
     const now = new Date();
 
@@ -207,6 +206,74 @@ authRouter.post('/auth/seller-register', validate({ body: SellerRegisterBodySche
       error: error instanceof Error ? error.message : String(error),
     });
     res.status(500).json({ error: 'Unable to create seller account' });
+  }
+});
+
+/**
+ * Create a standard customer account. Creates a users row only (role=user) —
+ * no seller_profiles row, no business fields collected or fabricated.
+ */
+authRouter.post('/auth/register', validate({ body: RegisterBodySchema }), async (req, res) => {
+  const { email, password, fullName } = req.body as {
+    email: string;
+    password: string;
+    fullName: string;
+  };
+  const normalizedEmail = email.trim().toLowerCase();
+
+  try {
+    const existingProfile = await loadAdminUserByEmail(normalizedEmail);
+    if (existingProfile) {
+      res.status(409).json({
+        error: 'An account already exists for this email. Sign in instead.',
+        code: 'EMAIL_EXISTS',
+      });
+      return;
+    }
+
+    const passwordHash = await hashPassword(password);
+    const uid = randomUUID();
+    const now = new Date();
+
+    await db.insert(users).values({
+      id: uid,
+      email: normalizedEmail,
+      passwordHash,
+      displayName: fullName.trim(),
+      role: ROLES.USER,
+      emailVerified: false,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const accessToken = signAccessToken({
+      id: uid,
+      email: normalizedEmail,
+      emailVerified: false,
+    });
+    const refreshToken = await issueRefreshToken(uid);
+    setRefreshTokenCookie(res, refreshToken);
+
+    Logger.info('customer account registered', {
+      requestId: req.requestId,
+      uid,
+      email: normalizedEmail,
+    });
+
+    res.status(201).json({
+      uid,
+      email: normalizedEmail,
+      displayName: fullName.trim(),
+      role: ROLES.USER,
+      customToken: accessToken,
+      dashboardPath: null,
+    });
+  } catch (error) {
+    Logger.warn('register failed', {
+      requestId: req.requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ error: 'Unable to create account' });
   }
 });
 

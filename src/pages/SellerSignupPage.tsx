@@ -87,6 +87,7 @@ export default function SellerSignupPage() {
   const [displayName, setDisplayName] = useState('');
   const [phoneLocal, setPhoneLocal] = useState('');
   const [email, setEmail] = useState(prefillEmail);
+  const [password, setPassword] = useState('');
   const [category, setCategory] = useState('');
   const [city, setCity] = useState('');
   const [website, setWebsite] = useState('');
@@ -124,6 +125,10 @@ export default function SellerSignupPage() {
       setError('Please enter a valid business email.');
       return;
     }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters.');
+      return;
+    }
     if (!category.trim()) {
       setError('Please select a category.');
       return;
@@ -143,6 +148,7 @@ export default function SellerSignupPage() {
     try {
       const result = await registerSeller({
         email,
+        password,
         displayName,
         storeName,
         phone,
@@ -292,6 +298,19 @@ export default function SellerSignupPage() {
                     placeholder="you@brand.com"
                     required
                     autoComplete="email"
+                  />
+                </div>
+
+                <div>
+                  <FieldLabel>Password</FieldLabel>
+                  <TextInput
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={setPassword}
+                    placeholder="At least 8 characters"
+                    required
+                    autoComplete="new-password"
                   />
                 </div>
 
