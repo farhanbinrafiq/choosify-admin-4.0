@@ -51,6 +51,8 @@ interface UndoAction {
 }
 
 interface InventoryContextType {
+  /** Alias used by storefront Home — same as inventoryItems */
+  inventory: InventoryItem[];
   inventoryItems: InventoryItem[];
   auditLog: StockAuditLog[];
   stockAlerts: StockAlert[];
@@ -546,6 +548,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     <InventoryContext.Provider
       value={{
         inventoryItems,
+        inventory: inventoryItems,
         auditLog,
         stockAlerts,
         getStockLevel,

@@ -1,6 +1,4 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { signInWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged } from 'firebase/auth';
-import { auth } from '../lib/firebase';
 import { CategoryType } from '../types';
 import {
   fetchCategoriesFromApi,
@@ -62,7 +60,7 @@ interface AuthContextType {
     category: string;
     city: string;
     website?: string;
-    password?: string;
+    password: string;
   }) => Promise<{ role: UserRole; dashboardPath: string }>;
   logout: () => void;
   switchRole: (role: UserRole) => void;
@@ -71,7 +69,7 @@ interface AuthContextType {
   setActiveBrandId: (id: string | null) => void;
   sellerBrands: SellerBrandRelation[];
   allBrands: { id: string; name: string; category: string }[];
-  requestNewBrand: (name: string, category: string) => void;
+  requestNewBrand: (name: string, category: string) => { id: string; name: string; category: string };
   
   // Categories Management System Integration
   categories: CategoryType[];
@@ -136,16 +134,6 @@ const mockProfiles: Record<UserRole, UserProfile> = {
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
 
-const EMAIL_ROLE_MAP: Record<string, UserRole> = {
-  'admin@choosify.com.bd': 'super_admin',
-  'finance@choosify.com.bd': 'finance_manager',
-  'support@choosify.com.bd': 'support_agent',
-  'marketing@choosify.com.bd': 'marketing_manager',
-  'moderator@choosify.com.bd': 'moderator',
-  'seller@choosify.com.bd': 'seller',
-  'creator@choosify.com.bd': 'creator',
-};
-
 function toUserRole(role: string, fallback: UserRole = 'admin'): UserRole {
   const allowed: UserRole[] = [
     'super_admin',
@@ -160,13 +148,56 @@ function toUserRole(role: string, fallback: UserRole = 'admin'): UserRole {
   return allowed.includes(role as UserRole) ? (role as UserRole) : fallback;
 }
 
+const AUTH_TOKEN_KEY = 'choosify_auth_token';
+
 async function fetchAuthProfile(token: string) {
-  const response = await fetch(`${API_BASE}/auth/me`, {
+  return fetch(`${API_BASE}/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
+}
+
+// Refresh is reactive only: called after a 401, never proactively/on a timer.
+async function refreshAccessToken(): Promise<string | null> {
+  console.info('[Auth] 401 received — attempting token refresh');
+  try {
+    const response = await fetch(`${API_BASE}/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+    if (!response.ok) {
+      console.warn('[Auth] Refresh failed', { status: response.status });
+      return null;
+    }
+    const data = (await response.json().catch(() => ({}))) as { accessToken?: string };
+    if (!data.accessToken) {
+      console.warn('[Auth] Refresh response missing accessToken');
+      return null;
+    }
+    localStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
+    console.info('[Auth] Token refreshed successfully');
+    return data.accessToken;
+  } catch (error) {
+    console.warn('[Auth] Refresh request threw', error);
+    return null;
+  }
+}
+
+// Fetches /auth/me; on a 401 it refreshes the access token exactly once and
+// retries the same request exactly once before giving up.
+async function resolveAuthProfile(token: string) {
+  let response = await fetchAuthProfile(token);
+
+  if (response.status === 401) {
+    const refreshedToken = await refreshAccessToken();
+    if (refreshedToken) {
+      response = await fetchAuthProfile(refreshedToken);
+    }
+  }
+
   if (!response.ok) {
     throw new Error('Unable to resolve admin profile');
   }
+
   return response.json() as Promise<{
     uid: string;
     email: string;
@@ -188,7 +219,7 @@ const AuthContext = createContext<AuthContextType>({
   setActiveBrandId: () => {},
   sellerBrands: [],
   allBrands: [],
-  requestNewBrand: () => {},
+  requestNewBrand: () => ({ id: '', name: '', category: '' }),
   categories: [],
   createCategory: () => ({ id: '', parentId: null, name: '', slug: '', icon: '', description: '', displayOrder: 0, enabled: true }),
   updateCategory: () => {},
@@ -246,22 +277,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
+    let cancelled = false;
+
+    async function restoreSession() {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+
+      if (token) {
+        console.info('[Auth] Restoring session from stored token');
         try {
-          const token = await firebaseUser.getIdToken();
-          localStorage.setItem('choosify_auth_token', token);
-          const remote = await fetchAuthProfile(token);
-          setProfile({
-            id: remote.uid,
-            displayName: remote.displayName,
-            email: remote.email,
-            role: toUserRole(remote.role),
-          });
-        } catch {
-          const savedRole = localStorage.getItem('choosify_mock_role') as UserRole;
-          if (savedRole && mockProfiles[savedRole]) {
-            setProfile(mockProfiles[savedRole]);
+          const remote = await resolveAuthProfile(token);
+          if (!cancelled) {
+            setProfile({
+              id: remote.uid,
+              displayName: remote.displayName,
+              email: remote.email,
+              role: toUserRole(remote.role),
+            });
+            console.info('[Auth] Session restored', { uid: remote.uid, role: remote.role });
+          }
+        } catch (error) {
+          console.warn('[Auth] Session restore failed, clearing stored token', error);
+          localStorage.removeItem(AUTH_TOKEN_KEY);
+          if (!cancelled) {
+            const savedRole = localStorage.getItem('choosify_mock_role') as UserRole;
+            if (savedRole && mockProfiles[savedRole]) {
+              setProfile(mockProfiles[savedRole]);
+            }
           }
         }
       } else {
@@ -270,9 +311,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setProfile(mockProfiles[savedRole]);
         }
       }
-      setLoading(false);
-    });
-    return unsubscribe;
+
+      if (!cancelled) {
+        setLoading(false);
+      }
+    }
+
+    restoreSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // When profile loads or changes, manage activeBrandId
@@ -299,26 +347,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const loginWithEmail = async (email: string, password: string, fallbackRole: UserRole = 'super_admin') => {
-    try {
-      const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
-      const token = await credential.user.getIdToken();
-      localStorage.setItem('choosify_auth_token', token);
-      const remote = await fetchAuthProfile(token);
-      const role = toUserRole(remote.role, fallbackRole);
-      const nextProfile: UserProfile = {
-        id: remote.uid,
-        displayName: remote.displayName,
-        email: remote.email,
-        role,
-      };
-      setProfile(nextProfile);
-      localStorage.setItem('choosify_mock_role', role);
-      return role;
-    } catch {
-      const mappedRole = EMAIL_ROLE_MAP[email.trim().toLowerCase()] || fallbackRole;
-      login(mappedRole);
-      return mappedRole;
+    console.info('[Auth] Login attempt', { email: email.trim().toLowerCase() });
+
+    const response = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email: email.trim(), password }),
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      uid?: string;
+      email?: string;
+      displayName?: string;
+      role?: string;
+      accessToken?: string;
+    };
+
+    if (!response.ok || !payload.accessToken) {
+      console.warn('[Auth] Login failed', { status: response.status, error: payload.error });
+      throw new Error(payload.error || 'Invalid email or password');
     }
+
+    localStorage.setItem(AUTH_TOKEN_KEY, payload.accessToken);
+    const role = toUserRole(payload.role || '', fallbackRole);
+    const nextProfile: UserProfile = {
+      id: payload.uid || '',
+      displayName: payload.displayName || email.trim(),
+      email: payload.email || email.trim(),
+      role,
+    };
+    setProfile(nextProfile);
+    localStorage.setItem('choosify_mock_role', role);
+    console.info('[Auth] Login succeeded', { uid: payload.uid, role });
+    return role;
   };
 
   const registerSeller = async (input: {
@@ -329,8 +392,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     category: string;
     city: string;
     website?: string;
-    password?: string;
+    password: string;
   }) => {
+    console.info('[Auth] Seller registration attempt', { email: input.email.trim().toLowerCase() });
     const response = await fetch(`${API_BASE}/auth/seller-register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -359,19 +423,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
 
     if (!response.ok) {
-      // Local/dev without Firebase Admin: complete the UX path with a mock seller session.
-      if (payload.code === 'FIREBASE_UNAVAILABLE' && import.meta.env.DEV) {
-        const nextProfile: UserProfile = {
-          id: `seller_local_${Date.now()}`,
-          displayName: input.displayName.trim(),
-          email: input.email.trim().toLowerCase(),
-          role: 'seller',
-        };
-        setProfile(nextProfile);
-        localStorage.setItem('choosify_mock_role', 'seller');
-        return { role: 'seller' as UserRole, dashboardPath: '/seller/products' };
-      }
-
+      console.warn('[Auth] Seller registration failed', { status: response.status, code: payload.code });
       const err = new Error(payload.error || 'Unable to create seller account') as Error & {
         code?: string;
         loginPath?: string;
@@ -385,20 +437,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw new Error('Seller account created but sign-in token was missing.');
     }
 
-    const credential = await signInWithCustomToken(auth, payload.customToken);
-    const token = await credential.user.getIdToken();
-    localStorage.setItem('choosify_auth_token', token);
+    // customToken carries the backend access JWT directly (see server/authRouter.ts) —
+    // it is not a Firebase custom auth token.
+    localStorage.setItem(AUTH_TOKEN_KEY, payload.customToken);
 
     let role: UserRole = 'seller';
     let nextProfile: UserProfile = {
-      id: payload.uid || credential.user.uid,
+      id: payload.uid || '',
       displayName: payload.displayName || input.displayName.trim(),
       email: payload.email || input.email.trim().toLowerCase(),
       role,
     };
 
     try {
-      const remote = await fetchAuthProfile(token);
+      const remote = await resolveAuthProfile(payload.customToken);
       role = toUserRole(remote.role, 'seller');
       nextProfile = {
         id: remote.uid,
@@ -406,12 +458,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: remote.email,
         role,
       };
-    } catch {
-      // Profile write may lag; use registration payload.
+    } catch (error) {
+      console.warn('[Auth] Post-registration profile fetch failed, using registration payload', error);
     }
 
     setProfile(nextProfile);
     localStorage.setItem('choosify_mock_role', role);
+    console.info('[Auth] Seller registration succeeded', { uid: nextProfile.id, role });
     return {
       role,
       dashboardPath: payload.dashboardPath || '/seller/products',
@@ -419,11 +472,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const logout = () => {
+    console.info('[Auth] Logout');
+    const hadToken = Boolean(localStorage.getItem(AUTH_TOKEN_KEY));
     setProfile(null);
     localStorage.removeItem('choosify_mock_role');
     localStorage.removeItem('choosify_active_brand_id');
-    localStorage.removeItem('choosify_auth_token');
-    signOut(auth).catch(() => {});
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    if (hadToken) {
+      fetch(`${API_BASE}/auth/logout`, { method: 'POST', credentials: 'include' }).catch((error) => {
+        console.warn('[Auth] Logout request failed', error);
+      });
+    }
   };
 
   const switchRole = (role: UserRole) => {
@@ -456,6 +515,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Set active to newly created brand
       setActiveBrandId(brandId);
     }
+    return newBrand;
   };
 
   // Categories Management System Implementation

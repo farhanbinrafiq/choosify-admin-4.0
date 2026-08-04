@@ -94,7 +94,8 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
   const handleToggleProductStatus = (prodId: string) => {
     const updated = model.products.map(p => {
       if (p.id === prodId) {
-        const nextStatus = p.status === "Live" ? "Hidden" : p.status === "Hidden" ? "Draft" : "Live";
+        const nextStatus: BrandProductItem['status'] =
+          p.status === "Live" ? "Hidden" : p.status === "Hidden" ? "Draft" : "Live";
         return { ...p, status: nextStatus };
       }
       return p;

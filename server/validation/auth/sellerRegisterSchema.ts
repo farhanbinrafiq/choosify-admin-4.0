@@ -3,8 +3,7 @@ import { emailValidator, passwordValidator } from '../shared/validators';
 
 export const SellerRegisterBodySchema = z.object({
   email: emailValidator,
-  /** Optional — application form uses custom-token sign-in; server generates one if omitted. */
-  password: passwordValidator.optional(),
+  password: passwordValidator,
   displayName: z.string().trim().min(2, 'Your name is required').max(120),
   storeName: z.string().trim().min(2, 'Business/brand name is required').max(160),
   phone: z

@@ -426,6 +426,7 @@ export default function WebsiteCMSStudio() {
           isActive: banner.isActive !== false,
           order: typeof banner.order === 'number' ? banner.order : idx,
         })),
+        dealsBanners: [],
         sections: localHomepageSections.map((section: any, idx: number) => {
           const sectionId = String(section.id || `section-${idx + 1}`);
           return {

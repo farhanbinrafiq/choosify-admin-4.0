@@ -106,7 +106,15 @@ export interface CatalogProduct {
     | 'education'
     | 'beauty'
     | 'real_estate'
-    | 'transport';
+    | 'transport'
+    | 'events'
+    | 'tickets'
+    | 'home_services'
+    | 'gov_services'
+    | 'recruitment'
+    | 'b2b'
+    | 'rental'
+    | 'donation';
   relatedInfoType?: 'price_across_stores' | 'whats_nearby' | 'before_your_visit';
   /** Physical products: opt-in toggle for showing Price Across Stores. */
   priceAcrossStoresEnabled?: boolean;

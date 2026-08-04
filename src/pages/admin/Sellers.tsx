@@ -490,7 +490,6 @@ export default function SellersPage() {
     }
 
     createProfile({
-      slug: '',
       name: profileForm.name,
       logo: profileForm.logo,
       coverImage: profileForm.coverImage,
@@ -899,7 +898,7 @@ export default function SellersPage() {
                         {/* 4. Ownership Status tag */}
                         <td className="p-5">
                           <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[9px] font-black uppercase tracking-wider${
-                            brand.status === 'VERIFIED_OWNER' || brand.status === 'VERIFIED'
+                            brand.status === 'VERIFIED_OWNER'
                               ? 'bg-green-500/10 text-emerald-400 border border-green-500/15'
                               : brand.status === 'OWNERSHIP_PENDING'
                               ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/15'
@@ -908,7 +907,7 @@ export default function SellersPage() {
                               : 'bg-white/5 text-slate-400 border border-white/5'
                           }`}>
                             <span className={`w-1.5 h-1.5 rounded-full${
-                              brand.status === 'VERIFIED_OWNER' || brand.status === 'VERIFIED' ? 'bg-green-400' :
+                              brand.status === 'VERIFIED_OWNER' ? 'bg-green-400' :
                               brand.status === 'OWNERSHIP_PENDING' ? 'bg-amber-400 animate-pulse' :
                               brand.status === 'SUSPENDED' ? 'bg-red-500' : 'bg-slate-400'
                             }`} />

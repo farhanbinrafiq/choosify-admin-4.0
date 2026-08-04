@@ -231,7 +231,8 @@ export default function Coupons() {
         validUntil: formValidUntil,
         active: true,
         rules: rulesObj,
-        description: formDescription || `Promo code BDT discount code ${formCode.toUpperCase()}`
+        description: formDescription || `Promo code BDT discount code ${formCode.toUpperCase()}`,
+        createdBy: 'admin',
       });
 
       // Reset form fields

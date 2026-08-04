@@ -483,7 +483,7 @@ export const RightPreviewPanel: React.FC<RightPreviewPanelProps> = ({
                         <span className="font-mono">{model.contactEmail}</span>
                       </div>
                       <div 
-                        onClick={() => triggerPhone({ id: model.brandName || 'brand', name: model.brandName || 'Brand Support', avatarUrl: model.logoUrl || '', phone: model.phone, role: 'Brand Support' })}
+                        onClick={() => triggerPhone({ id: model.brandName || 'brand', name: model.brandName || 'Brand Support', avatarUrl: model.logoUrl || model.logo || '', phone: model.phone, role: 'Brand Support' })}
                         className="flex items-center gap-2 cursor-pointer hover:text-[#F97316] transition-colors"
                         title="Click to copy & call"
                       >

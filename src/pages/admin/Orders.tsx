@@ -1288,7 +1288,7 @@ Thank you for using Choosify Commerce Network.
             {/* 5. Bulk Cancel */}
             <button 
               onClick={() => {
-                selectedOrders.forEach(id => cancelOrder(id));
+                selectedOrders.forEach(id => cancelOrder(id, 'Bulk cancellation'));
                 setSelectedOrders([]);
                 showInlineToast(`✓ Bulk cancellation registered for ${selectedOrders.length} orders.`);
               }}

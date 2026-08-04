@@ -445,7 +445,7 @@ export const CashBookProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const newBookId = `book_orders_${Date.now()}`;
     const newBook: CashBook = {
       userId: profile?.id || 'unknown',
-      userName: profile?.displayName || profile?.name || 'User',
+      userName: profile?.displayName || 'User',
       role: (profile?.role as CashBook['role']) || 'seller',
       businessName: `Order Export — ${new Date().toLocaleDateString('en-BD', { month: 'long', year: 'numeric' })}`,
       currency: 'BDT',
@@ -463,7 +463,7 @@ export const CashBookProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       remarks: `Order #${order.id}`,
       paymentMode: order.paymentMethod === 'COD' ? 'Cash' : 'Bank Transfer',
       attachments: [],
-      createdBy: { id: profile?.id || 'system', name: profile?.displayName || profile?.name || 'System', role: profile?.role || 'seller' },
+      createdBy: { id: profile?.id || 'system', name: profile?.displayName || 'System', role: profile?.role || 'seller' },
       deleted: false,
     }));
     setEntries(prev => ({ ...prev, [newBookId]: newEntries }));

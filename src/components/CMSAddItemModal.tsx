@@ -90,7 +90,7 @@ export default function CMSAddItemModal({
   }, [sectionType]);
 
   // Fetch candidate items based on section type and selected seller
-  const candidates = useMemo(() => {
+  const candidates = useMemo((): Array<{ id: string; label: string; sublabel: string; seller?: string }> => {
     if (sectionType === 'products') {
       let list = PRODUCT_REGISTRY;
       if (selectedSeller !== 'all') {

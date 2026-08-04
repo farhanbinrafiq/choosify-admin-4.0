@@ -693,8 +693,8 @@ export default function CashBookHub() {
       remarks: formRemarks,
       paymentMode: formPaymentMode,
       attachments: formAttachments,
-      createdBy: editingEntry?.createdBy || { id: profile?.id || 'system', name: profile?.displayName || profile?.name || 'System', role: profile?.role || 'seller' },
-      ...(isEdit ? { lastEditedBy: { id: profile?.id || 'system', name: profile?.displayName || profile?.name || 'System', role: profile?.role || 'seller' } } : {})
+      createdBy: editingEntry?.createdBy || { id: profile?.id || 'system', name: profile?.displayName || 'System', role: profile?.role || 'seller' },
+      ...(isEdit ? { lastEditedBy: { id: profile?.id || 'system', name: profile?.displayName || 'System', role: profile?.role || 'seller' } } : {})
     };
 
     const currentBookEntries = entries[bookId] || [];
@@ -805,7 +805,7 @@ export default function CashBookHub() {
       remarks: `Platform Order #${ord.id} - status: ${ord.status || 'approved'}`,
       paymentMode: 'Bank Transfer',
       attachments: [],
-      createdBy: { id: profile?.id || 'system', name: profile?.displayName || profile?.name || 'System', role: profile?.role || 'seller' }
+      createdBy: { id: profile?.id || 'system', name: profile?.displayName || 'System', role: profile?.role || 'seller' }
     }));
 
     const filteredNewEntries = newEntries.filter(
@@ -848,9 +848,10 @@ export default function CashBookHub() {
   const handleBulkToggleType = () => {
     if (!bookId) return;
     const currentBookEntries = entries[bookId] || [];
-    const updatedList = currentBookEntries.map(e => {
+    const updatedList: BookEntry[] = currentBookEntries.map(e => {
       if (selectedEntryIds.has(e.id)) {
-        return { ...e, type: e.type === 'Cash In' ? 'Cash Out' : 'Cash In' as const };
+        const nextType: BookEntry['type'] = e.type === 'Cash In' ? 'Cash Out' : 'Cash In';
+        return { ...e, type: nextType };
       }
       return e;
     });

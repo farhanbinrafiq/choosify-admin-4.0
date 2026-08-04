@@ -25,6 +25,7 @@ export interface GuideStudioItem {
   bestBudgetPick: string;
   productsReviewed: number;
   lastUpdated: string;
+  flaggedByModerator?: boolean;
 }
 
 interface GuideStudioCMSProps {

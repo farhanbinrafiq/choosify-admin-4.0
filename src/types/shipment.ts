@@ -6,6 +6,8 @@ export type ShipmentStatus =
   | 'in_transit'
   | 'delivered'
   | 'failed_delivery'
+  | 'delivery_failed' // alias used by some courier payloads / UI checks
+  | 'failed' // alias used by some courier payloads / UI checks
   | 'returned'
   | 'cancelled';
 

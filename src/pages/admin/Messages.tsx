@@ -40,7 +40,8 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { useOrders, MessageThread, ThreadMessage, Order } from "../../contexts/OrdersContext";
 import { UnifiedMessage, Conversation, Agent, Customer as TypesCustomer } from "../../types";
-import { io, Socket } from "socket.io-client";
+import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
+import { db } from "../../lib/firebase";
 import { SplitLayout } from "../../components/Layout/SplitLayout";
 import { BookingOfferAdminCard } from "../../components/admin/BookingOfferAdminCard";
 import type { BookingOfferCard } from "../../../shared/booking/bookingTypes";
@@ -202,8 +203,7 @@ export default function MessagesPage() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const platformMessagesEndRef = useRef<HTMLDivElement>(null);
-  const socketRef = useRef<Socket | null>(null);
-  const [socketConnected, setSocketConnected] = useState(false);
+  const [realtimeConnected, setRealtimeConnected] = useState(false);
 
   // -------------------------------------------------------------
   // DYNAMIC COMMERCE UTILITIES: Sourcing mentions and auto-linking
@@ -320,67 +320,106 @@ export default function MessagesPage() {
     setIsManualModalOpen(false);
   };
 
-  // Initialize socket.io & fetch first batches
+  // Firestore realtime listeners (replaces Socket.IO — serverless cannot hold sockets).
   useEffect(() => {
-    const socketUrl = `${window.location.protocol}//${window.location.host}`;
-    console.log("[Socket.io-Meta] Connecting to target host:", socketUrl);
-    
-    const socket = io(socketUrl, {
-      transports: ["websocket", "polling"]
-    });
-    socketRef.current = socket;
+    let cancelled = false;
+    let unsubConversations: (() => void) | undefined;
 
-    socket.on("connect", () => {
-      console.log("[Socket.io-Meta] Client established connection to messaging hub.");
-      setSocketConnected(true);
-    });
-
-    socket.on("disconnect", () => {
-      setSocketConnected(false);
-    });
-
-    socket.on("connect_error", () => {
-      setSocketConnected(false);
-    });
-
-    socket.on("message:received", (msg: UnifiedMessage) => {
-      console.log("[Socket.io-Meta] Received realtime message payload.", msg);
-      if (msg.conversationId === selectedConvId) {
-        setMessages(prev => {
-          if (prev.some(m => m.id === msg.id)) return prev;
-          return [...prev, msg];
+    const registerStaffListener = async () => {
+      const token = localStorage.getItem("choosify_auth_token");
+      if (!token) return;
+      try {
+        await fetch("/api/messaging/register-listener", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
         });
-        scrollToBottom();
+      } catch {
+        // REST bootstrap still works if registration fails.
       }
-      fetchConversations(false);
-    });
+    };
 
-    socket.on("conversation:updated", (conv: Conversation) => {
-      setConversations(prev => {
-        const index = prev.findIndex(item => item.conversationId === conv.conversationId);
-        if (index === -1) return [conv, ...prev];
-        const updated = [...prev];
-        updated[index] = conv;
-        return updated.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-      });
-    });
+    const startListeners = async () => {
+      await registerStaffListener();
+      if (cancelled) return;
 
-    socket.on("typing:start", ({ agentName }) => {
-      setTypingAgent(agentName);
-      setIsTyping(true);
-    });
+      try {
+        const convQuery = query(collection(db, "omni_conversations"), orderBy("updatedAt", "desc"));
+        unsubConversations = onSnapshot(
+          convQuery,
+          (snapshot) => {
+            const list = snapshot.docs.map((d) => d.data() as Conversation);
+            setConversations(list);
+            setRealtimeConnected(true);
+          },
+          (err) => {
+            console.warn("[Messages] Conversation listener failed; falling back to REST poll.", err);
+            setRealtimeConnected(false);
+          },
+        );
+      } catch (err) {
+        console.warn("[Messages] Could not attach conversation listener.", err);
+        setRealtimeConnected(false);
+      }
+    };
 
-    socket.on("typing:stop", () => {
-      setIsTyping(false);
-      setTypingAgent(null);
-    });
+    void startListeners();
 
     return () => {
-      if (socketRef.current) {
-        socketRef.current.disconnect();
-      }
-      setSocketConnected(false);
+      cancelled = true;
+      unsubConversations?.();
+      setRealtimeConnected(false);
     };
+  }, []);
+
+  // Selected conversation message stream
+  useEffect(() => {
+    if (!selectedConvId) {
+      setMessages([]);
+      return;
+    }
+
+    // Initial REST hydrate, then live updates via onSnapshot.
+    void fetchMessages(selectedConvId);
+
+    const msgQuery = query(
+      collection(db, "omni_messages"),
+      where("conversationId", "==", selectedConvId),
+    );
+
+    const unsub = onSnapshot(
+      msgQuery,
+      (snapshot) => {
+        const list = snapshot.docs
+          .map((d) => d.data() as UnifiedMessage)
+          .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        setMessages(list);
+        setRealtimeConnected(true);
+        scrollToBottom();
+
+        const activeConv = conversations.find((c) => c.conversationId === selectedConvId);
+        if (activeConv?.platform === "whatsapp") {
+          const lastInbound = [...list].reverse().find((m) => m.direction === "inbound");
+          if (lastInbound) {
+            const hours = (Date.now() - new Date(lastInbound.timestamp).getTime()) / (1000 * 60 * 60);
+            setWhatsappWarning(
+              hours > 24
+                ? "⚠️ Warning: Outbound messaging window (24h) expired. Native Meta templates recommended."
+                : null,
+            );
+          } else {
+            setWhatsappWarning(null);
+          }
+        } else {
+          setWhatsappWarning(null);
+        }
+      },
+      (err) => {
+        console.warn("[Messages] Message listener failed; using REST.", err);
+        setRealtimeConnected(false);
+      },
+    );
+
+    return () => unsub();
   }, [selectedConvId]);
 
   // Bootstraps
@@ -412,18 +451,6 @@ export default function MessagesPage() {
       setSelectedConvId("");
     }
   }, [activePlatform]);
-
-  // When conversation changes, get history
-  useEffect(() => {
-    if (selectedConvId) {
-      fetchMessages(selectedConvId);
-      if (socketRef.current) {
-        socketRef.current.emit("join:conversation", selectedConvId);
-      }
-    } else {
-      setMessages([]);
-    }
-  }, [selectedConvId]);
 
   // Auto select first platform thread on swap
   useEffect(() => {
@@ -519,11 +546,9 @@ export default function MessagesPage() {
     }
   };
 
-  // Poll REST messaging endpoints when Socket.IO is unavailable (e.g. Vercel serverless)
-  // or always in production builds where persistent sockets are unreliable.
+  // REST poll fallback when Firestore listeners are denied / unavailable.
   useEffect(() => {
-    const shouldPoll = import.meta.env.PROD || !socketConnected;
-    if (!shouldPoll) return;
+    if (realtimeConnected) return;
 
     const POLL_MS = 7_000;
     const tick = () => {
@@ -535,7 +560,7 @@ export default function MessagesPage() {
 
     const intervalId = window.setInterval(tick, POLL_MS);
     return () => window.clearInterval(intervalId);
-  }, [socketConnected, selectedConvId]);
+  }, [realtimeConnected, selectedConvId]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -568,7 +593,7 @@ export default function MessagesPage() {
         mediaUrl: customMediaUrl || undefined
       },
       senderId: profile?.id || "agent_farhan",
-      senderName: profile?.name || "Kazi Farhan (Supervisor)"
+      senderName: profile?.displayName || "Kazi Farhan (Supervisor)"
     };
 
     // Optimistic payload injection
@@ -735,7 +760,7 @@ export default function MessagesPage() {
     e.preventDefault();
     if (!platformReplyText.trim()) return;
 
-    sendChatMessage(selectedThreadId, platformReplyText, "admin", profile?.name || "Kazi Farhan (Admin)");
+    sendChatMessage(selectedThreadId, platformReplyText, "admin", profile?.displayName || "Kazi Farhan (Admin)");
     setPlatformReplyText("");
     scrollPlatformThreadToBottom();
   };
@@ -1311,10 +1336,10 @@ export default function MessagesPage() {
                     
                     {/* Activated line */}
                     <div className={`absolute top-[7px] left-0 h-[2px] bg-emerald-500 z-0 transition-all`} style={{
-                      width: currentCommerce.linkedOrder.status === 'PENDING' ? '0%' :
-                             currentCommerce.linkedOrder.status === 'DECLINED' ? '0%' :
-                             currentCommerce.linkedOrder.status === 'CONFIRMED' ? '33.3%' :
-                             currentCommerce.linkedOrder.status === 'DISPATCHED' ? '66.6%' : '100%'
+                      width: currentCommerce.linkedOrder.status === 'Pending' ? '0%' :
+                             currentCommerce.linkedOrder.status === 'Rejected' || currentCommerce.linkedOrder.status === 'Cancelled' ? '0%' :
+                             currentCommerce.linkedOrder.status === 'Confirmed' ? '33.3%' :
+                             currentCommerce.linkedOrder.status === 'Dispatched' ? '66.6%' : '100%'
                     }} />
 
                     {/* Milestone steps */}
@@ -1324,14 +1349,14 @@ export default function MessagesPage() {
                       let isCurrent = false;
 
                       if (idx === 0) isPassed = true; // Placed is always passed
-                      if (idx === 1 && ["CONFIRMED", "DISPATCHED", "DELIVERED"].includes(orderStatus || "")) isPassed = true;
-                      if (idx === 2 && ["DISPATCHED", "DELIVERED"].includes(orderStatus || "")) isPassed = true;
-                      if (idx === 3 && orderStatus === "DELIVERED") isPassed = true;
+                      if (idx === 1 && (["Confirmed", "Dispatched", "Delivered"] as const).includes(orderStatus as 'Confirmed' | 'Dispatched' | 'Delivered')) isPassed = true;
+                      if (idx === 2 && (["Dispatched", "Delivered"] as const).includes(orderStatus as 'Dispatched' | 'Delivered')) isPassed = true;
+                      if (idx === 3 && orderStatus === "Delivered") isPassed = true;
 
-                      if (idx === 0 && orderStatus === "PENDING") isCurrent = true;
-                      if (idx === 1 && orderStatus === "CONFIRMED") isCurrent = true;
-                      if (idx === 2 && orderStatus === "DISPATCHED") isCurrent = true;
-                      if (idx === 3 && orderStatus === "DELIVERED") isCurrent = true;
+                      if (idx === 0 && orderStatus === "Pending") isCurrent = true;
+                      if (idx === 1 && orderStatus === "Confirmed") isCurrent = true;
+                      if (idx === 2 && orderStatus === "Dispatched") isCurrent = true;
+                      if (idx === 3 && orderStatus === "Delivered") isCurrent = true;
 
                       return (
                         <div key={step} className="flex flex-col items-center relative z-10">
@@ -1353,10 +1378,10 @@ export default function MessagesPage() {
                   <div className="mt-4 pt-3.5 border-t border-app-border text-[10px] text-app-text-secondary flex items-center justify-between">
                     <span>Status:</span>
                     <span className={`font-black uppercase tracking-wide px-1.5 py-0.5 rounded text-[9px]${
-                      currentCommerce.linkedOrder.status === 'DELIVERED' ? 'bg-green-500/10 text-emerald-400' :
-                      currentCommerce.linkedOrder.status === 'PENDING' ? 'bg-amber-500/10 text-amber-400' :
-                      currentCommerce.linkedOrder.status === 'CONFIRMED' ? 'bg-sky-500/10 text-sky-400' :
-                      currentCommerce.linkedOrder.status === 'DISPATCHED' ? 'bg-fuchsia-500/10 text-fuchsia-400' :
+                      currentCommerce.linkedOrder.status === 'Delivered' ? 'bg-green-500/10 text-emerald-400' :
+                      currentCommerce.linkedOrder.status === 'Pending' ? 'bg-amber-500/10 text-amber-400' :
+                      currentCommerce.linkedOrder.status === 'Confirmed' ? 'bg-sky-500/10 text-sky-400' :
+                      currentCommerce.linkedOrder.status === 'Dispatched' ? 'bg-fuchsia-500/10 text-fuchsia-400' :
                       'bg-red-500/10 text-red-400'
                     }`}>
                       {currentCommerce.linkedOrder.status}
@@ -1368,7 +1393,7 @@ export default function MessagesPage() {
                 <div className="space-y-2">
                   <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block">Authorized Quick Actions</span>
                   
-                  {currentCommerce.linkedOrder.status === "PENDING" && (
+                  {currentCommerce.linkedOrder.status === "Pending" && (
                     <div className="space-y-2">
                       {!showApproveForm && !showDeclineForm ? (
                         <div className="grid grid-cols-2 gap-2">
@@ -1460,7 +1485,7 @@ export default function MessagesPage() {
                     </div>
                   )}
 
-                  {currentCommerce.linkedOrder.status === "CONFIRMED" && (
+                  {currentCommerce.linkedOrder.status === "Confirmed" && (
                     <div className="space-y-2">
                       {!showDispatchForm ? (
                         <button
@@ -1512,10 +1537,10 @@ export default function MessagesPage() {
                     </div>
                   )}
 
-                  {currentCommerce.linkedOrder.status === "DISPATCHED" && (
+                  {currentCommerce.linkedOrder.status === "Dispatched" && (
                     <div className="space-y-1.5">
                       <button
-                        onClick={() => updateOrderStatus(currentCommerce.linkedOrder!.id, "DELIVERED")}
+                        onClick={() => updateOrderStatus(currentCommerce.linkedOrder!.id, "Delivered")}
                         className="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold uppercase py-2 px-3 rounded-lg text-[9px] tracking-wider transition-all cursor-pointer shadow flex items-center justify-center gap-1"
                       >
                         <CheckCircle2 className="w-3.5 h-3.5" /> Mark Delivered & Settle BDT
@@ -1884,7 +1909,7 @@ export default function MessagesPage() {
                               profile?.id ||
                               'seller'
                             }
-                            sellerName={profile?.name || 'Seller'}
+                            sellerName={profile?.displayName || 'Seller'}
                             onUpdated={(next: BookingOfferCard) => {
                               // Local UI refresh — thread messages are client-state; mutate offer snapshot in place.
                               m.bookingOffer = next;
@@ -2345,10 +2370,10 @@ export default function MessagesPage() {
                     onClick={() => {
                       if (setSelectedOrderDetails) {
                         const productsMock = [
-                          { id: "101", name: "Aarong Silk Panjabi", sellerName: "Aarong", price: 4200, image: "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80" },
-                          { id: "102", name: "Apex Mens Formal Leather", sellerName: "Apex Brands", price: 3500, image: "https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&q=80" },
-                          { id: "103", name: "Samsung S25 Ultra", sellerName: "Samsung Co", price: 139999, image: "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400&q=80" },
-                          { id: "104", name: "Walton 2-Door Fridge", sellerName: "Walton Corp", price: 29990, image: "https://images.unsplash.com/photo-1571175432247-5c86c5a4c0c4?w=400&q=80" }
+                          { id: "101", name: "Aarong Jamdani Saree", brand: "Aarong", sellerId: "sel_v3", sellerName: "Aarong Digital", price: 4200, image: "https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=400&q=80" },
+                          { id: "102", name: "Vision Smart TV 55\"", brand: "Vision", sellerId: "sel_v2", sellerName: "ElectroBD", price: 68500, image: "https://images.unsplash.com/photo-1593359678770-2c4db4417ea3?w=400&q=80" },
+                          { id: "103", name: "Samsung S25 Ultra", brand: "Samsung", sellerId: "sel_v1", sellerName: "Samsung Co", price: 139999, image: "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400&q=80" },
+                          { id: "104", name: "Walton 2-Door Fridge", brand: "Walton", sellerId: "sel_v1", sellerName: "Walton Corp", price: 29990, image: "https://images.unsplash.com/photo-1571175432247-5c86c5a4c0c4?w=400&q=80" }
                         ];
                         const matchedProd = productsMock.find(p => p.id === manualProductSelection) || productsMock[0];
                         setSelectedOrderDetails({
@@ -2356,13 +2381,25 @@ export default function MessagesPage() {
                           invoice_id: manualSuccessOrderInfo.invoiceId,
                           timestamp: new Date().toISOString(),
                           invoice_status: "Unpaid",
+                          status: "Pending",
+                          paymentStatus: "Pending",
                           total_payable: (manualPriceOverride ? parseFloat(manualPriceOverride) || 0 : matchedProd.price) * manualQuantity,
                           delivery_charge: 120,
+                          earnings: {
+                            totalRevenue: matchedProd.price * manualQuantity,
+                            commissionPercent: 10,
+                            futureAutomatedDeduction: 0,
+                            sellerNet: matchedProd.price * manualQuantity,
+                          },
                           product: matchedProd,
                           customer: {
                             id: "C-MANUAL-" + manualSuccessOrderInfo.orderId.substring(4),
                             name: manualCustomerName,
-                            flagged: false
+                            email: '',
+                            avatar: '',
+                            behavior: 'Good',
+                            flagged: false,
+                            history: [],
                           }
                         });
                       }

@@ -602,7 +602,11 @@ export default function BrandDetails() {
                     productSearch={productSearch}
                     setProductSearch={setProductSearch}
                     productFilterStatus={productFilterStatus}
-                    setProductFilterStatus={setProductFilterStatus}
+                    setProductFilterStatus={(val) =>
+                      setProductFilterStatus(
+                        val as 'All' | 'Active' | 'Draft' | 'Pending' | 'Rejected' | 'Archived'
+                      )
+                    }
                     filteredProducts={filteredProducts}
                     toggleProductStatus={toggleProductStatus}
                     removeProduct={removeProduct}
