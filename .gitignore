@@ -10,3 +10,4 @@ src/cms-mirror/_reference/
 
 .vercel
 .env*
+api/index.js

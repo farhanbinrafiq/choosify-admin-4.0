@@ -2,11 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "functions": {
-    "api/index.ts": {
-      "includeFiles": "{server,lib,shared}/**"
-    }
-  },
   "crons": [
     {
       "path": "/api/v1/booking/expire",
