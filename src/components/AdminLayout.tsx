@@ -66,6 +66,7 @@ import { useBrandProfiles } from '../contexts/BrandProfilesContext';
 import { ResizableSidebar } from './Layout/ResizableSidebar';
 import { useLayoutPreferences } from '../hooks/useLayoutPreferences';
 import { ChoosifyLogo } from './common/ChoosifyLogo';
+import { UserProfileDropdown } from './account/UserProfileDropdown';
 
 interface SidebarItem {
   label: string;
@@ -541,8 +542,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   );
   const currentPageTitle = activeSidebarItem?.label || 'Dashboard';
   const currentPageSubtitle = PAGE_SUBTITLES[location.pathname] || 'Manage and monitor this section';
-  const avatarInitial = (profile?.displayName || 'Admin User').trim().charAt(0).toUpperCase() || 'A';
-
   const sellerRelations = sellerBrands.filter(r => r.seller_user_id === profile?.id);
   const sellerBrandsList = allBrands.filter(b => sellerRelations.some(r => r.brand_id === b.id));
 
@@ -1050,22 +1049,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                 </div>
              </div>
 
-             <button
-               onClick={() => navigate('/admin/settings')}
-               className="flex items-center gap-2.5 pl-1 shrink-0 cursor-pointer group"
-               title={profile?.displayName || 'Admin User'}
-             >
-               <div className="hidden lg:block text-right">
-                  <div className="text-[12px] font-bold text-white leading-tight">{profile?.displayName || 'Admin User'}</div>
-                  <div className="text-[10px] text-white/50 leading-tight">{currentRole.replace('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase())}</div>
-               </div>
-               <div
-                 className="w-8 h-8 rounded-full flex items-center justify-center text-[13px] font-bold text-white shrink-0 group-hover:scale-105 transition-transform"
-                 style={{ backgroundImage: 'linear-gradient(135deg, #FF5B00, #2323FF)' }}
-               >
-                 {avatarInitial}
-               </div>
-             </button>
+             <UserProfileDropdown variant="header" />
           </div>
         </header>
 

@@ -84,6 +84,7 @@ const BrandEditStudio = lazy(() => import('./pages/admin/BrandEditStudio'));
 
 const GuidesStudioList = lazy(() => import('./pages/admin/GuidesStudioList'));
 const GuideEditStudio = lazy(() => import('./pages/admin/GuideEditStudio'));
+const AccountComingSoon = lazy(() => import('./pages/account/AccountComingSoon'));
 
 const ViewModeWrapper: React.FC<{ mode: 'consumers' | 'creators' | 'admins' }> = ({ mode }) => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -224,6 +225,52 @@ export default function App() {
             <Route path="/brand/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
             <Route path="/order/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
             <Route path="/creator/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
+
+            <Route
+              path="/admin/account/profile"
+              element={
+                <ProtectedRoute>
+                  <AdminLayout>
+                    <Suspense fallback={null}>
+                      <AccountComingSoon
+                        title="My Profile"
+                        description="View and edit your personal profile, public display name, and workspace identity."
+                      />
+                    </Suspense>
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/account/settings"
+              element={
+                <ProtectedRoute>
+                  <AdminLayout>
+                    <Suspense fallback={null}>
+                      <AccountComingSoon
+                        title="Account Settings"
+                        description="Manage your personal account preferences, contact details, and notification defaults."
+                      />
+                    </Suspense>
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/account/security"
+              element={
+                <ProtectedRoute>
+                  <AdminLayout>
+                    <Suspense fallback={null}>
+                      <AccountComingSoon
+                        title="Security"
+                        description="Update your password, review active sessions, and manage account security controls."
+                      />
+                    </Suspense>
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
             
             <Route path="/" element={<RootRoute />} />
             <Route path="/marketplace" element={<Navigate to="/login" replace />} />

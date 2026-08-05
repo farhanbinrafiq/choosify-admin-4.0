@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef } from '
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { PAGE_KEY_TO_PATH, allowedPageKeysForRole, pathToPageKey, resolveAdminPageKey } from './nav';
+import { UserProfileDropdown } from '../components/account/UserProfileDropdown';
 import './tokens.css';
 
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
@@ -20,7 +21,7 @@ const CMS_MIRROR_ASSET_VERSION = '20260731-brand-logo-1';
 export const CmsMirrorHost: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout, profile } = useAuth();
+  const { profile } = useAuth();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const knownPageKey = useMemo(() => resolveAdminPageKey(location.pathname), [location.pathname]);
   const pageKey = useMemo(() => pathToPageKey(location.pathname), [location.pathname]);
@@ -99,16 +100,7 @@ export const CmsMirrorHost: React.FC = () => {
 
   return (
     <div className="cms-mirror-host">
-      <button
-        type="button"
-        className="cms-mirror-logout"
-        onClick={() => {
-          logout();
-          navigate('/login');
-        }}
-      >
-        Log out
-      </button>
+      <UserProfileDropdown variant="overlay" />
       <iframe
         key={`${role}::${CMS_MIRROR_ASSET_VERSION}`}
         ref={iframeRef}

@@ -50,6 +50,31 @@
   background: var(--cms-page-bg);
 }
 
+.cms-mirror-profile-anchor {
+  position: fixed;
+  top: 14px;
+  right: 18px;
+  z-index: 60;
+}
+
+.cms-mirror-profile-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  padding: 2px;
+  background: var(--cms-gradient-chrome-header);
+  box-shadow: 0 8px 24px rgba(0, 4, 53, 0.18);
+  cursor: pointer;
+  outline: none;
+}
+
+.cms-mirror-profile-trigger:hover,
+.cms-mirror-profile-trigger:focus-visible {
+  border-color: rgba(255, 91, 0, 0.55);
+}
+
 .cms-mirror-logout {
   position: fixed;
   top: 14px;

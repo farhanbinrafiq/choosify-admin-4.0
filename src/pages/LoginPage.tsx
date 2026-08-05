@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { ArrowRight, Lock, Mail } from 'lucide-react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
 import { ChoosifyLogo } from '../components/common/ChoosifyLogo';
+import { authLoginErrorMessage } from '../lib/authLoginErrorMessage';
 
 const ALLOWED_ROLES: UserRole[] = ['super_admin', 'seller', 'creator', 'moderator'];
 
@@ -20,14 +21,16 @@ export default function LoginPage() {
   const [email, setEmail] = useState(prefillEmail || 'admin@choosify.bd');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
   const { loginWithEmail } = useAuth();
   const navigate = useNavigate();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     setSubmitting(true);
     try {
-    const role = await loginWithEmail(email, password, roleFromQuery || 'super_admin');
+      const role = await loginWithEmail(email, password, roleFromQuery || 'super_admin');
       void role;
 
       let redirectPath = '/admin/dashboard';
@@ -36,6 +39,8 @@ export default function LoginPage() {
       }
 
       navigate(redirectPath);
+    } catch (err) {
+      setError(authLoginErrorMessage(err));
     } finally {
       setSubmitting(false);
     }
@@ -118,6 +123,12 @@ export default function LoginPage() {
                 Forgot your password?
               </button>
             </div>
+
+            {error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-[12.5px] text-red-700 mb-[18px]">
+                {error}
+              </div>
+            )}
 
             <button
               type="submit"
