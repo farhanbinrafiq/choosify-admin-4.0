@@ -28,6 +28,23 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Verify CI secrets for smoke
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
+        run: |
+          missing=()
+          [ -z "$DATABASE_URL" ] && missing+=("DATABASE_URL")
+          [ -z "$JWT_ACCESS_SECRET" ] && missing+=("JWT_ACCESS_SECRET")
+          [ -z "$JWT_REFRESH_SECRET" ] && missing+=("JWT_REFRESH_SECRET")
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error::Missing required GitHub Actions secrets for smoke: ${missing[*]}"
+            echo "Add these repository secrets (Settings → Secrets and variables → Actions): DATABASE_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET"
+            exit 1
+          fi
+          echo "Required smoke secrets are present."
+
       - name: Smoke test
         run: npm run smoke
         env:
@@ -38,3 +55,6 @@ jobs:
           ALLOW_DEV_LOGIN: 'true'
           ALLOWED_ORIGINS: http://127.0.0.1,http://localhost
           PAYMENT_GATEWAY_MOCK: 'false'
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+          JWT_REFRESH_SECRET: ${{ secrets.JWT_REFRESH_SECRET }}
