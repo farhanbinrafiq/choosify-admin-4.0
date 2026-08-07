@@ -10,6 +10,7 @@ import {
   clearRefreshTokenCookie,
   hashPassword,
   issueRefreshToken,
+  isExpiredJwtError,
   readRefreshTokenCookie,
   revokeRefreshToken,
   rotateRefreshToken,
@@ -17,9 +18,11 @@ import {
   signAccessToken,
   verifyPassword,
 } from './auth/jwtTokens';
+import { AUTH_ERROR_CODES, sendAuthError } from './auth/authErrors';
 import { recordLogin } from './analytics/eventHooks';
 import { recordFailedAuthAttempt } from './lib/abuseProtection';
 import { Logger } from './lib/logger';
+import { operationalEvents } from './logging/operationalEvents';
 import { validate } from './middleware/validate';
 import { DevLoginBodySchema } from './validation/auth/devLoginSchema';
 import { LoginBodySchema } from './validation/auth/loginSchema';
@@ -75,6 +78,12 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
     const user = rows[0];
     if (!user?.passwordHash) {
       recordFailedAuthAttempt(req.ip, req.originalUrl);
+      operationalEvents.authenticationFailure({
+        requestId: req.requestId,
+        path: req.originalUrl,
+        message: 'Unknown account',
+        metadata: { reason: 'unknown_account' },
+      });
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
@@ -82,6 +91,12 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
     const ok = await verifyPassword(user.passwordHash, password);
     if (!ok) {
       recordFailedAuthAttempt(req.ip, req.originalUrl);
+      operationalEvents.authenticationFailure({
+        requestId: req.requestId,
+        path: req.originalUrl,
+        message: 'Incorrect password',
+        metadata: { reason: 'wrong_password', userId: user.id },
+      });
       res.status(401).json({ error: 'Invalid email or password' });
       return;
     }
@@ -97,6 +112,11 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
     recordLogin(req, {
       userId: user.id,
       metadata: { mode: 'password', role: user.role },
+    });
+    operationalEvents.authenticationSuccess({
+      requestId: req.requestId,
+      path: req.originalUrl,
+      metadata: { mode: 'password', userId: user.id, role: user.role },
     });
 
     res.json({
@@ -281,6 +301,12 @@ authRouter.post('/auth/refresh', async (req, res) => {
   try {
     const raw = readRefreshTokenCookie(req.headers.cookie);
     if (!raw) {
+      operationalEvents.authenticationFailure({
+        requestId: req.requestId,
+        path: req.originalUrl,
+        message: 'Missing refresh token',
+        metadata: { reason: 'refresh_missing' },
+      });
       res.status(401).json({ error: 'Missing refresh token' });
       return;
     }
@@ -288,6 +314,12 @@ authRouter.post('/auth/refresh', async (req, res) => {
     const rotated = await rotateRefreshToken(raw);
     if (!rotated) {
       clearRefreshTokenCookie(res);
+      operationalEvents.authenticationFailure({
+        requestId: req.requestId,
+        path: req.originalUrl,
+        message: 'Invalid or expired refresh token',
+        metadata: { reason: 'refresh_invalid_or_expired' },
+      });
       res.status(401).json({ error: 'Invalid or expired refresh token' });
       return;
     }
@@ -310,6 +342,11 @@ authRouter.post('/auth/logout', async (req, res) => {
       await revokeRefreshToken(raw);
     }
     clearRefreshTokenCookie(res);
+    operationalEvents.logout({
+      requestId: req.requestId,
+      path: req.originalUrl,
+      metadata: { hadRefreshToken: Boolean(raw) },
+    });
     res.json({ ok: true });
   } catch (error) {
     Logger.warn('logout failed', {
@@ -326,14 +363,25 @@ authRouter.get('/auth/me', async (req, res) => {
 
   if (!token) {
     recordFailedAuthAttempt(req.ip, req.originalUrl);
-    res.status(401).json({ error: 'Missing bearer token' });
+    sendAuthError(res, 401, AUTH_ERROR_CODES.MISSING_TOKEN, 'Missing bearer token');
     return;
   }
 
   try {
     const user = await resolveAuthenticatedUserFromToken(token);
-    // Bare buyers resolve as role "user". Admin /auth/me still requires a staff/seller profile.
-    if (user && user.role !== ROLES.USER) {
+
+    // Token failed to parse/verify (malformed, bad signature, unknown claims shape) —
+    // this is an invalid credential, not an authorization decision. 401, not 403.
+    if (!user) {
+      recordFailedAuthAttempt(req.ip, req.originalUrl);
+      sendAuthError(res, 401, AUTH_ERROR_CODES.INVALID_TOKEN, 'Invalid token');
+      return;
+    }
+
+    // Successfully authenticated. Bare buyers resolve as role "user" — that's a real,
+    // valid session that simply lacks the admin/seller/staff role this endpoint requires.
+    // Insufficient role on a valid credential is exactly what 403 is for.
+    if (user.role !== ROLES.USER) {
       recordLogin(req, {
         userId: user.uid,
         metadata: { mode: 'token', role: user.role },
@@ -347,7 +395,7 @@ authRouter.get('/auth/me', async (req, res) => {
       return;
     }
 
-    res.status(403).json({ error: 'User is not registered as an admin.' });
+    sendAuthError(res, 403, AUTH_ERROR_CODES.FORBIDDEN, 'User is not registered as an admin.');
   } catch (error) {
     const abuse = recordFailedAuthAttempt(req.ip, req.originalUrl);
     if (abuse.thresholdExceeded) {
@@ -357,13 +405,41 @@ authRouter.get('/auth/me', async (req, res) => {
         count: abuse.count,
       });
     }
-    res.status(401).json({ error: error instanceof Error ? error.message : 'Invalid token' });
+    const expired = isExpiredJwtError(error);
+    sendAuthError(
+      res,
+      401,
+      expired ? AUTH_ERROR_CODES.EXPIRED_TOKEN : AUTH_ERROR_CODES.INVALID_TOKEN,
+      expired ? 'Expired token' : 'Invalid token',
+    );
   }
 });
 
+/** NODE_ENV must match one of these exactly for dev-login to ever be reachable. */
+const DEV_LOGIN_ALLOWED_ENVIRONMENTS = new Set(['development', 'test']);
+
+/**
+ * Fail-closed by construction and by allowlist, not by exclusion: NODE_ENV
+ * must be explicitly "development" or "test" — production, staging, preview,
+ * an empty string, and a missing/undefined NODE_ENV are all denied, not just
+ * "production". Exported so it can be regression tested directly (see
+ * scripts/probe-dev-login-isolation.ts) without booting a server.
+ */
+export function isDevLoginAllowed(env?: {
+  NODE_ENV?: string;
+  ALLOW_DEV_LOGIN?: string;
+}): boolean {
+  const source = env ?? process.env;
+  return (
+    source.ALLOW_DEV_LOGIN === 'true' &&
+    typeof source.NODE_ENV === 'string' &&
+    DEV_LOGIN_ALLOWED_ENVIRONMENTS.has(source.NODE_ENV)
+  );
+}
+
 authRouter.post('/auth/dev-login', validate({ body: DevLoginBodySchema }), (req, res) => {
-  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEV_LOGIN !== 'true') {
-    res.status(403).json({ error: 'Dev login disabled in production' });
+  if (!isDevLoginAllowed()) {
+    res.status(403).json({ error: 'Dev login disabled' });
     return;
   }
   const { email, role } = req.body as { email?: string; role?: string };

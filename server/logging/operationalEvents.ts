@@ -76,4 +76,18 @@ export const operationalEvents = {
       ...context,
     });
   },
+
+  authenticationSuccess(context: FailureContext) {
+    Logger.audit('Authentication success', {
+      event: 'authentication_success',
+      ...context,
+    });
+  },
+
+  logout(context: FailureContext) {
+    Logger.audit('Logout', {
+      event: 'logout',
+      ...context,
+    });
+  },
 };
