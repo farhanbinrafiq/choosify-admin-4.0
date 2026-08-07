@@ -92,6 +92,7 @@ export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreato
     reels: Array.isArray(raw.reels) ? (raw.reels as CatalogCreator['reels']) : existing?.reels ?? [],
     blogs: Array.isArray(raw.blogs) ? (raw.blogs as CatalogCreator['blogs']) : existing?.blogs ?? [],
     status: statusRaw === 'draft' || statusRaw === 'archived' ? statusRaw : 'live',
+    userId: toString(raw.userId, existing?.userId ?? '') || undefined,
     createdAt: existing?.createdAt ?? nowIso(),
     updatedAt: nowIso(),
   };

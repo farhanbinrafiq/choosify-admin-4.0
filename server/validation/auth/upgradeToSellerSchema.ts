@@ -1,0 +1,19 @@
+import { z } from 'zod';
+
+export const UpgradeToSellerBodySchema = z.object({
+  storeName: z.string().trim().min(2, 'Business/brand name is required').max(160),
+  phone: z
+    .string()
+    .trim()
+    .min(8, 'Phone number is required')
+    .max(24)
+    .regex(/^\+?[0-9][0-9\s-]{6,22}$/, 'Invalid phone number'),
+  category: z.string().trim().min(1, 'Category is required').max(120),
+  city: z.string().trim().min(2, 'City is required').max(80),
+  website: z
+    .string()
+    .trim()
+    .max(320)
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined)),
+});

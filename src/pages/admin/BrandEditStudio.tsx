@@ -24,7 +24,81 @@ import { catalogApi } from "../../services/catalogApi";
 import { BrandImageUploadField } from "./BrandImageUploadField";
 import { useEntityDraft } from "../../hooks/useEntityDraft";
 
-const COMPILATION_KEY = "choosify_brand_studio_list";
+/**
+ * Blank scaffold for a real (non-seeded) Brand with no draft/published cache
+ * yet. Never falls back to a demo seed's content (e.g. Samsung Bangladesh's
+ * products/team/reviews) — only name/category are known from the real
+ * catalog record; everything else starts genuinely empty.
+ */
+function createBlankBrandModel(id: string, name: string, category: string): BrandCMSModel {
+  return {
+    id,
+    brandName: name,
+    slug: "",
+    logo: "",
+    coverImage: "",
+    tagline: "",
+    category,
+    socialFbUrl: "",
+    socialInstaUrl: "",
+    socialTiktokUrl: "",
+    socialYtUrl: "",
+    website: "",
+    description: "",
+    missionStatement: "",
+    brandStory: "",
+    values: "",
+    verificationStatus: "Standard",
+    status: "DRAFT",
+    choosifyScore: 0,
+    qualityScore: 0,
+    serviceScore: 0,
+    deliveryScore: 0,
+    packagingScore: 0,
+    recommendationScore: 0,
+    verifiedPurchasePercentage: 0,
+    returnRate: "0%",
+    complaintRate: "0%",
+    responseTime: "N/A",
+    followersCount: 0,
+    logoUrl: "",
+    recentTrustAlerts: [],
+    products: [],
+    deals: [],
+    promoCodes: [],
+    creators: [],
+    reviews: [],
+    team: [],
+    stores: { authorized: [], distributors: [], serviceCenters: [] },
+    faq: [],
+    address: "",
+    contactEmail: "",
+    phone: "",
+    mapLink: "",
+    audienceType: "",
+    ageRange: "",
+    genderFocus: "",
+    priceRange: "",
+    services: [],
+    specialties: [],
+    bestForTags: [],
+    returnPolicy: "",
+    warrantyInfo: "",
+    deliveryCoverage: "",
+    customerServiceHours: "",
+    visibility: {
+      overview: true,
+      products: true,
+      featuredProducts: true,
+      deals: true,
+      promoCodes: true,
+      creatorReviews: true,
+      publicReviews: true,
+      trustSection: true,
+      brandInformation: true,
+    },
+  };
+}
 
 /** Soft URL check — empty is fine; only warn when non-empty looks invalid. */
 function softUrlError(value: string): string | null {
@@ -189,22 +263,17 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
       }
     }
     if (!loaded) {
+      // Exact-id match against the seeded demo catalog ("1".."5") is legitimate —
+      // those are intentional platform dev-data records an Admin may still edit.
+      // Any other id is a real Brand: never scaffold its content from a demo
+      // seed's products/team/reviews — start blank and let the real backend
+      // draft (fetched by useEntityDraft below) fill it in.
       const seed = initialBrandSeeds[activeId];
       if (seed) {
         loaded = JSON.parse(JSON.stringify(seed));
       } else {
-        const fallSeed = initialBrandSeeds["1"] || Object.values(initialBrandSeeds)[0];
-        if (fallSeed) {
-          loaded = JSON.parse(JSON.stringify(fallSeed));
-          if (loaded) {
-            loaded.id = activeId;
-            const matchedBrand = allBrands.find(b => b.id === activeId);
-            if (matchedBrand) {
-              loaded.brandName = matchedBrand.name;
-              loaded.category = matchedBrand.category;
-            }
-          }
-        }
+        const matchedBrand = allBrands.find(b => b.id === activeId);
+        loaded = createBlankBrandModel(activeId, matchedBrand?.name || "", matchedBrand?.category || "");
       }
     }
     if (loaded) {
@@ -492,28 +561,6 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     persistDraft(model);
     setHasUnsavedChanges(false);
 
-    // Write updates into standard dashboard brands registry
-    const cachedList = localStorage.getItem(COMPILATION_KEY);
-    if (cachedList) {
-      try {
-        const list = JSON.parse(cachedList);
-        const updatedList = list.map((item: any) => {
-          if (item.id === activeId) {
-            return {
-              ...item,
-              brandName: model.brandName,
-              category: model.category,
-              status: "Live" as const,
-              lastUpdated: "Just Now",
-              trustScore: model.choosifyScore
-            };
-          }
-          return item;
-        });
-        localStorage.setItem(COMPILATION_KEY, JSON.stringify(updatedList));
-      } catch (_) {}
-    }
-
     // Also update BrandProfilesContext so the brands list reflects this edit
     try {
       const { updateProfile } = brandProfilesRef.current || {};
@@ -694,7 +741,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
       <header className="h-16 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between z-30 shadow-sm">
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => hasUnsavedChanges ? setShowExitModal(true) : navigate(isNested ? "/dashboard/content-studio/brands" : "/admin/brands")}
+            onClick={() => hasUnsavedChanges ? setShowExitModal(true) : navigate("/admin/brand-studio")}
             className="p-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors flex items-center gap-1 text-[#111827]"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -2220,7 +2267,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                 onClick={() => {
                   setHasUnsavedChanges(false);
                   setShowExitModal(false);
-                  navigate(isNested ? "/dashboard/content-studio/brands" : "/admin/brands");
+                  navigate("/admin/brand-studio");
                 }}
                 className="w-full py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl font-bold text-xs"
               >
@@ -2230,7 +2277,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                 onClick={() => {
                   handleSaveDraft();
                   setShowExitModal(false);
-                  navigate(isNested ? "/dashboard/content-studio/brands" : "/admin/brands");
+                  navigate("/admin/brand-studio");
                 }}
                 className="w-full py-2 bg-green-600 text-app-text-primary hover:bg-green-700 rounded-xl font-bold text-xs"
               >

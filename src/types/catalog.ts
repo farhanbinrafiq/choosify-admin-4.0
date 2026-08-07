@@ -78,9 +78,27 @@ export interface CatalogBrand {
   ratings: number;
   featuredFlag: boolean;
   sponsoredFlag: boolean;
+  /** Owning seller user id when brand is seller-managed; omitted for platform/legacy rows. */
+  sellerId?: string;
+  /**
+   * Public storefront visibility. Seller drafts default false until Marketplace Access is ON.
+   * Seeded / platform brands default true. Kept in sync with marketplaceStatus:
+   * true for 'granted'/'restored', false for every other status.
+   */
+  marketplaceAccess?: boolean;
+  /** ES-005 Marketplace Access lifecycle. Controls public visibility only — never ownership/editing. */
+  marketplaceStatus?: CatalogMarketplaceStatus;
   createdAt: string;
   updatedAt: string;
 }
+
+export type CatalogMarketplaceStatus =
+  | 'not_granted'
+  | 'granted'
+  | 'restricted'
+  | 'suspended'
+  | 'restored'
+  | 'revoked';
 
 export interface CatalogProduct {
   id: string;
@@ -378,6 +396,8 @@ export interface CatalogCreator {
   reels: CatalogMediaItem[];
   blogs: CatalogMediaItem[];
   status: 'draft' | 'live' | 'archived';
+  /** Owning creator user id — creator workspace is scoped to this. */
+  userId?: string;
   createdAt: string;
   updatedAt: string;
 }

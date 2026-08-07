@@ -28,19 +28,34 @@ import {
   EntityDraftParamsSchema,
   EntityVersionBodySchema,
 } from './validation/catalog/draftSchemas';
-import { authenticateRequest } from './middleware/auth';
+import { authenticateRequest, softAuthenticateRequest } from './middleware/auth';
 import { requireAnyPermission } from './middleware/authorization';
+import { requireBrandStudioWrite } from './middleware/brandStudioAuth';
+import { requireCreatorStudioWrite } from './middleware/creatorStudioAuth';
 import { hasPermission, hasRole } from './permissions/authorization';
 import { PERMISSIONS } from './permissions/permissions';
 import { ROLES } from './permissions/roles';
 import { draftStore, type DraftEntityType } from '../lib/vercel-catalog/draftStore';
+import type { CatalogBrand } from '../src/types/catalog';
 import type { Request, Response } from 'express';
+import {
+  brandIsMarketplaceVisible,
+  ensureCreatorWorkspace,
+  ensureSellerBrandWorkspace,
+  listOwnedProducts,
+  listSellerCustomersFromOrders,
+} from './catalog/sellerWorkspace';
+import { sellerOwnsBrand } from './catalog/brandOwnership';
+import { publishEvent } from './events/eventBus';
+import { operationsStore } from './operations/operationsStore';
 
 export const catalogRouter = Router();
 
 const requireAuth = [authenticateRequest];
 /** Platform admin (ADMIN inherits via ROLE_INHERITANCE; SUPER_ADMIN too). */
 const requireCmsWrite = [authenticateRequest, requireAnyPermission([PERMISSIONS.CMS_EDIT])];
+/** Brand Studio profile writes: cms:edit OR owning seller. */
+const requireBrandStudioBrandWrite = [authenticateRequest, requireBrandStudioWrite];
 const requireProductCreate = [
   authenticateRequest,
   requireAnyPermission([PERMISSIONS.PRODUCT_CREATE]),
@@ -83,6 +98,85 @@ function userIsSellerRole(req: {
   return hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER);
 }
 
+function userIsCreatorRole(req: {
+  userRole?: (typeof ROLES)[keyof typeof ROLES];
+}): boolean {
+  const role = req.userRole;
+  if (!role) return false;
+  return hasRole(role, ROLES.CREATOR);
+}
+
+/**
+ * Sellers may edit Brand Studio profile fields and Marketplace Access.
+ * Verification / claim / ownership / featured flags stay locked without cms:edit.
+ */
+function preserveBrandPrivilegedFieldsOnUpdate(
+  req: Request,
+  existing: CatalogBrand,
+  normalized: CatalogBrand,
+): CatalogBrand {
+  if (hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)) {
+    return normalized;
+  }
+  // Admin-imposed restriction/suspension/revocation can only be lifted by an
+  // admin transition (PATCH .../marketplace-access), never by the seller's
+  // own boolean toggle here.
+  const adminLocked =
+    existing.marketplaceStatus === 'restricted' ||
+    existing.marketplaceStatus === 'suspended' ||
+    existing.marketplaceStatus === 'revoked';
+  return {
+    ...normalized,
+    sellerId: existing.sellerId,
+    verifiedStatus: existing.verifiedStatus,
+    claimStatus: existing.claimStatus,
+    featuredFlag: existing.featuredFlag,
+    sponsoredFlag: existing.sponsoredFlag,
+    followers: existing.followers,
+    ratings: existing.ratings,
+    marketplaceStatus: existing.marketplaceStatus,
+    // Sellers may toggle marketplaceAccess on their own brand (Granted <-> Not Granted),
+    // unless an admin-imposed status is currently in force.
+    marketplaceAccess: adminLocked
+      ? existing.marketplaceAccess
+      : typeof normalized.marketplaceAccess === 'boolean'
+        ? normalized.marketplaceAccess
+        : existing.marketplaceAccess,
+  };
+}
+
+async function scopeBrandsForRequest(req: Request, brands: CatalogBrand[]): Promise<CatalogBrand[]> {
+  if (userIsPlatformAdmin(req) || hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)) {
+    return brands;
+  }
+  if (userIsSellerRole(req) && req.userId) {
+    return brands.filter((b) => b.sellerId === req.userId);
+  }
+  return brands.filter(brandIsMarketplaceVisible);
+}
+
+async function scopeProductsForRequest(req: Request, products: CatalogProduct[]) {
+  if (userIsPlatformAdmin(req) || hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)) {
+    return products;
+  }
+  if (userIsSellerRole(req) && req.userId) {
+    return products.filter((p) => p.sellerId === req.userId);
+  }
+  const brands = await catalogStore.listBrands();
+  const visibleIds = new Set(brands.filter(brandIsMarketplaceVisible).map((b) => b.id));
+  return products.filter((p) => visibleIds.has(p.brandId) && p.status === 'live');
+}
+
+async function scopeCreatorsForRequest(req: Request, creators: Awaited<ReturnType<typeof catalogStore.listCreators>>) {
+  if (userIsPlatformAdmin(req) || hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)) {
+    return creators;
+  }
+  if (userIsCreatorRole(req) && req.userId) {
+    return creators.filter((c) => c.userId === req.userId);
+  }
+  return creators.filter((c) => c.status === 'live');
+}
+
 /**
  * Seller-scoped product ownership. Legacy products without sellerId are admin-only
  * until an admin assigns ownership. Sellers may only mutate rows they own.
@@ -101,7 +195,6 @@ function stampSellerOwnershipOnCreate(
   product: CatalogProduct,
 ): CatalogProduct {
   if (userIsPlatformAdmin(req)) {
-    // Allow admin to set sellerId explicitly; otherwise leave unset (platform listing).
     return product;
   }
   if (userIsSellerRole(req) && req.userId) {
@@ -240,14 +333,18 @@ function validationErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-catalogRouter.get('/catalog/snapshot', async (_req, res) => {
+catalogRouter.get('/catalog/snapshot', softAuthenticateRequest, async (req, res) => {
   try {
-    const [products, categories, brands, deals, homepage] = await Promise.all([
+    const [productsRaw, categories, brandsRaw, deals, homepage] = await Promise.all([
       catalogStore.listProducts(),
       catalogStore.listCategories(),
       catalogStore.listBrands(),
       catalogStore.listDeals(),
       catalogStore.getHomepage(),
+    ]);
+    const [products, brands] = await Promise.all([
+      scopeProductsForRequest(req, productsRaw),
+      scopeBrandsForRequest(req, brandsRaw),
     ]);
 
     res.json({ products, categories, brands, deals, homepage });
@@ -256,15 +353,20 @@ catalogRouter.get('/catalog/snapshot', async (_req, res) => {
   }
 });
 
-catalogRouter.get('/catalog/home', async (_req, res) => {
+catalogRouter.get('/catalog/home', softAuthenticateRequest, async (req, res) => {
   try {
-    const [homepage, products, brands, deals, creators, guides] = await Promise.all([
+    const [homepage, productsRaw, brandsRaw, deals, creatorsRaw, guides] = await Promise.all([
       catalogStore.getHomepage(),
       catalogStore.listProducts(),
       catalogStore.listBrands(),
       catalogStore.listDeals(),
       catalogStore.listCreators(),
       catalogStore.listGuides(),
+    ]);
+    const [products, brands, creators] = await Promise.all([
+      scopeProductsForRequest(req, productsRaw),
+      scopeBrandsForRequest(req, brandsRaw),
+      scopeCreatorsForRequest(req, creatorsRaw),
     ]);
 
     res.json({
@@ -291,9 +393,10 @@ catalogRouter.put('/catalog/home', ...requireCmsWrite, async (req, res) => {
   }
 });
 
-catalogRouter.get('/catalog/products', async (req, res) => {
+catalogRouter.get('/catalog/products', softAuthenticateRequest, async (req, res) => {
   try {
-    const products = await catalogStore.listProducts();
+    const productsRaw = await catalogStore.listProducts();
+    const products = await scopeProductsForRequest(req, productsRaw);
     const filtered = filterProducts(products, req.query as Record<string, unknown>);
     const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
     if (q) {
@@ -317,11 +420,17 @@ catalogRouter.get('/catalog/products', async (req, res) => {
 
 catalogRouter.get(
   '/catalog/products/:id',
+  softAuthenticateRequest,
   validate({ params: CatalogProductParamsSchema }),
   async (req, res) => {
   try {
     const product = await catalogStore.getProduct(req.params.id);
     if (!product) {
+      res.status(404).json({ error: 'Product not found' });
+      return;
+    }
+    const scoped = await scopeProductsForRequest(req, [product]);
+    if (!scoped.length) {
       res.status(404).json({ error: 'Product not found' });
       return;
     }
@@ -348,6 +457,15 @@ catalogRouter.post('/catalog/products', ...requireProductCreate, async (req, res
       req,
       normalizeProductInput(req.body, undefined, context),
     );
+    // Sellers may only create products under a brand they own — never auto-claim seeded brands.
+    if (userIsSellerRole(req) && req.userId && !userIsPlatformAdmin(req)) {
+      if (!normalized.brandId || !(await sellerOwnsBrand(req.userId, normalized.brandId))) {
+        res.status(403).json({
+          error: 'Products must belong to a brand you own. Open Brand Studio or claim a brand first.',
+        });
+        return;
+      }
+    }
     const saved = await catalogStore.upsertProduct(normalized);
     res.status(201).json({ success: true, data: saved });
   } catch (error) {
@@ -458,27 +576,122 @@ catalogRouter.delete('/catalog/categories/:id', ...requireCmsWrite, async (req, 
   }
 });
 
-catalogRouter.get('/catalog/brands', async (_req, res) => {
+catalogRouter.get('/catalog/brands', softAuthenticateRequest, async (req, res) => {
   try {
-    const brands = await catalogStore.listBrands();
+    const brands = await scopeBrandsForRequest(req, await catalogStore.listBrands());
     res.json({ data: brands });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list brands' });
   }
 });
 
-catalogRouter.post('/catalog/brands', ...requireCmsWrite, async (req, res) => {
+/** Seller Brand Studio boot: return owned brands only (never auto-create, never seeded Walton/etc.). */
+catalogRouter.post('/catalog/workspace/seller/ensure', ...requireAuth, async (req, res) => {
+  try {
+    if (!req.userId || (!userIsSellerRole(req) && !userIsPlatformAdmin(req))) {
+      res.status(403).json({ error: 'Seller authentication required' });
+      return;
+    }
+    if (userIsPlatformAdmin(req) && !userIsSellerRole(req)) {
+      const brands = await catalogStore.listBrands();
+      const products = await catalogStore.listProducts();
+      res.json({ brands, products, customers: [], created: false });
+      return;
+    }
+    const { brands, created } = await ensureSellerBrandWorkspace(req.userId!);
+    const products = await listOwnedProducts(req.userId!);
+    const customers = listSellerCustomersFromOrders(req.userId!);
+    res.json({ brands, products, customers, created });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to ensure seller workspace',
+    });
+  }
+});
+
+/** Creator Studio boot: own profile only (auto-create draft if missing). */
+catalogRouter.post('/catalog/workspace/creator/ensure', ...requireAuth, async (req, res) => {
+  try {
+    if (!req.userId || (!userIsCreatorRole(req) && !userIsPlatformAdmin(req))) {
+      res.status(403).json({ error: 'Creator authentication required' });
+      return;
+    }
+    if (userIsPlatformAdmin(req) && !userIsCreatorRole(req)) {
+      const creators = await catalogStore.listCreators();
+      res.json({ creators, created: false });
+      return;
+    }
+    const displayName =
+      req.user?.displayName ||
+      (typeof req.body?.displayName === 'string' ? req.body.displayName : undefined);
+    const email =
+      req.user?.email ||
+      (typeof req.body?.email === 'string' ? req.body.email : undefined);
+    const { creators, created } = await ensureCreatorWorkspace(req.userId!, {
+      displayName,
+      email,
+    });
+    res.json({ creators, created });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Failed to ensure creator workspace',
+    });
+  }
+});
+
+catalogRouter.get('/catalog/workspace/seller/customers', ...requireAuth, async (req, res) => {
+  try {
+    if (!req.userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    if (userIsPlatformAdmin(req)) {
+      res.json({ data: listSellerCustomersFromOrders(typeof req.query.sellerId === 'string' ? req.query.sellerId : req.userId) });
+      return;
+    }
+    if (!userIsSellerRole(req)) {
+      res.status(403).json({ error: 'Seller authentication required' });
+      return;
+    }
+    res.json({ data: listSellerCustomersFromOrders(req.userId) });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list customers' });
+  }
+});
+
+catalogRouter.post('/catalog/brands', ...requireBrandStudioBrandWrite, async (req, res) => {
   try {
     const context = await buildBrandNormalizeContext();
-    const normalized = normalizeBrandInput(req.body, undefined, context);
+    const payload =
+      userIsSellerRole(req) &&
+      req.userId &&
+      !hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)
+        ? {
+            ...req.body,
+            sellerId: req.userId,
+            marketplaceAccess:
+              typeof req.body?.marketplaceAccess === 'boolean' ? req.body.marketplaceAccess : false,
+            claimStatus: req.body?.claimStatus || 'pending',
+            verifiedStatus: false,
+          }
+        : req.body;
+    const normalized = normalizeBrandInput(payload, undefined, context);
     const saved = await catalogStore.upsertBrand(normalized);
+    publishEvent({
+      eventName: 'BrandCreated',
+      domain: 'Marketplace',
+      producer: 'catalogRouter',
+      aggregateId: saved.id,
+      actor: req.userId || 'system',
+      payload: { brandId: saved.id, sellerId: saved.sellerId },
+    });
     res.status(201).json({ success: true, data: saved });
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid brand payload') });
   }
 });
 
-catalogRouter.put('/catalog/brands/:id', ...requireCmsWrite, async (req, res) => {
+catalogRouter.put('/catalog/brands/:id', ...requireBrandStudioBrandWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getBrand(req.params.id);
     if (!existing) {
@@ -486,15 +699,27 @@ catalogRouter.put('/catalog/brands/:id', ...requireCmsWrite, async (req, res) =>
       return;
     }
     const context = await buildBrandNormalizeContext(req.params.id);
-    const normalized = normalizeBrandInput({ ...req.body, id: req.params.id }, existing, context);
+    const normalized = preserveBrandPrivilegedFieldsOnUpdate(
+      req,
+      existing,
+      normalizeBrandInput({ ...req.body, id: req.params.id }, existing, context),
+    );
     const saved = await catalogStore.upsertBrand(normalized);
+    publishEvent({
+      eventName: 'BrandUpdated',
+      domain: 'Marketplace',
+      producer: 'catalogRouter',
+      aggregateId: saved.id,
+      actor: req.userId || 'system',
+      payload: { brandId: saved.id },
+    });
     res.json({ success: true, data: saved });
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid brand payload') });
   }
 });
 
-catalogRouter.patch('/catalog/brands/:id', ...requireCmsWrite, async (req, res) => {
+catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, async (req, res) => {
   try {
     const existing = await catalogStore.getBrand(req.params.id);
     if (!existing) {
@@ -502,13 +727,96 @@ catalogRouter.patch('/catalog/brands/:id', ...requireCmsWrite, async (req, res) 
       return;
     }
     const context = await buildBrandNormalizeContext(req.params.id);
-    const normalized = normalizeBrandInput({ ...existing, ...req.body, id: req.params.id }, existing, context);
+    const normalized = preserveBrandPrivilegedFieldsOnUpdate(
+      req,
+      existing,
+      normalizeBrandInput({ ...existing, ...req.body, id: req.params.id }, existing, context),
+    );
     const saved = await catalogStore.upsertBrand(normalized);
+    publishEvent({
+      eventName: 'BrandUpdated',
+      domain: 'Marketplace',
+      producer: 'catalogRouter',
+      aggregateId: saved.id,
+      actor: req.userId || 'system',
+      payload: { brandId: saved.id },
+    });
     res.json({ success: true, data: saved });
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid brand patch payload') });
   }
 });
+
+/**
+ * Admin-only Marketplace Access lifecycle transition (ES-005). Controls public
+ * visibility only — never ownership/editing (Seller keeps full Brand Studio
+ * access regardless of status). Restricted/Suspended/Revoked can only be
+ * lifted here, not via the seller's own marketplaceAccess boolean toggle.
+ */
+catalogRouter.patch(
+  '/catalog/brands/:id/marketplace-access',
+  ...requireCmsWrite,
+  async (req, res) => {
+    try {
+      const existing = await catalogStore.getBrand(req.params.id);
+      if (!existing) {
+        res.status(404).json({ error: 'Brand not found' });
+        return;
+      }
+      const status = req.body?.status;
+      const validStatuses = ['not_granted', 'granted', 'restricted', 'suspended', 'restored', 'revoked'];
+      if (typeof status !== 'string' || !validStatuses.includes(status)) {
+        res.status(400).json({ error: `status must be one of: ${validStatuses.join(', ')}` });
+        return;
+      }
+
+      let activeOrderWarning: string | null = null;
+      if ((status === 'suspended' || status === 'revoked' || status === 'restricted') && existing.sellerId) {
+        const activeOrders = operationsStore
+          .listOrders({ sellerId: existing.sellerId })
+          .filter((order) => !['completed', 'cancelled'].includes(order.status.toLowerCase()));
+        if (activeOrders.length > 0) {
+          activeOrderWarning = `This seller has ${activeOrders.length} active order(s)/booking(s) in progress. They will remain fulfillable after this change, but confirm before proceeding.`;
+        }
+      }
+
+      const context = await buildBrandNormalizeContext(req.params.id);
+      const normalized = normalizeBrandInput(
+        {
+          ...existing,
+          marketplaceStatus: status,
+          marketplaceAccess: status === 'granted' || status === 'restored',
+        },
+        existing,
+        context,
+      );
+      const saved = await catalogStore.upsertBrand(normalized);
+
+      const eventByStatus: Record<string, string> = {
+        granted: 'MarketplaceEnabled',
+        restricted: 'MarketplaceRestricted',
+        suspended: 'MarketplaceSuspended',
+        restored: 'MarketplaceRestored',
+        revoked: 'MarketplaceRevoked',
+      };
+      const eventName = eventByStatus[status];
+      if (eventName) {
+        publishEvent({
+          eventName,
+          domain: 'Marketplace',
+          producer: 'catalogRouter',
+          aggregateId: saved.id,
+          actor: req.userId || 'system',
+          payload: { brandId: saved.id, status },
+        });
+      }
+
+      res.json({ success: true, data: saved, warning: activeOrderWarning });
+    } catch (error) {
+      res.status(400).json({ error: validationErrorMessage(error, 'Invalid marketplace access transition') });
+    }
+  },
+);
 
 catalogRouter.delete('/catalog/brands/:id', ...requireCmsWrite, async (req, res) => {
   try {
@@ -736,9 +1044,9 @@ catalogRouter.put('/catalog/site', ...requireCmsWrite, async (req, res) => {
   }
 });
 
-catalogRouter.get('/catalog/creators', async (req, res) => {
+catalogRouter.get('/catalog/creators', softAuthenticateRequest, async (req, res) => {
   try {
-    const creators = await catalogStore.listCreators();
+    const creators = await scopeCreatorsForRequest(req, await catalogStore.listCreators());
     const status = typeof req.query.status === 'string' ? req.query.status : '';
     const filtered = status ? creators.filter((c) => c.status === status) : creators;
     res.json({ data: filtered });
@@ -747,10 +1055,18 @@ catalogRouter.get('/catalog/creators', async (req, res) => {
   }
 });
 
-catalogRouter.put('/catalog/creators/:id', ...requireCmsWrite, async (req, res) => {
+const requireCreatorStudioWriteMw = [authenticateRequest, requireCreatorStudioWrite];
+
+catalogRouter.put('/catalog/creators/:id', ...requireCreatorStudioWriteMw, async (req, res) => {
   try {
     const existing = await catalogStore.getCreator(req.params.id);
-    const normalized = normalizeCreatorInput({ ...req.body, id: req.params.id }, existing || undefined);
+    const payload =
+      userIsCreatorRole(req) &&
+      req.userId &&
+      !hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)
+        ? { ...req.body, userId: existing?.userId || req.userId }
+        : req.body;
+    const normalized = normalizeCreatorInput({ ...payload, id: req.params.id }, existing || undefined);
     const saved = await catalogStore.upsertCreator(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {
@@ -758,14 +1074,20 @@ catalogRouter.put('/catalog/creators/:id', ...requireCmsWrite, async (req, res) 
   }
 });
 
-catalogRouter.patch('/catalog/creators/:id', ...requireCmsWrite, async (req, res) => {
+catalogRouter.patch('/catalog/creators/:id', ...requireCreatorStudioWriteMw, async (req, res) => {
   try {
     const existing = await catalogStore.getCreator(req.params.id);
     if (!existing) {
       res.status(404).json({ error: 'Creator not found' });
       return;
     }
-    const normalized = normalizeCreatorInput({ ...existing, ...req.body, id: req.params.id }, existing);
+    const payload =
+      userIsCreatorRole(req) &&
+      req.userId &&
+      !hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)
+        ? { ...req.body, userId: existing.userId }
+        : req.body;
+    const normalized = normalizeCreatorInput({ ...existing, ...payload, id: req.params.id }, existing);
     const saved = await catalogStore.upsertCreator(normalized);
     res.json({ success: true, data: saved });
   } catch (error) {

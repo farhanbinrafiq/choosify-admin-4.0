@@ -152,6 +152,14 @@ const brandSchema = z.object({
   ratings: z.number().min(0).max(5),
   featuredFlag: z.boolean(),
   sponsoredFlag: z.boolean(),
+  /** Owning seller user id when brand is seller-managed; omitted for platform/legacy rows. */
+  sellerId: z.string().optional(),
+  /** Public storefront visibility. Seller drafts default false. */
+  marketplaceAccess: z.boolean().optional(),
+  /** ES-005 Marketplace Access lifecycle state; marketplaceAccess is kept in sync with it. */
+  marketplaceStatus: z
+    .enum(['not_granted', 'granted', 'restricted', 'suspended', 'restored', 'revoked'])
+    .optional(),
   createdAt: isoDate,
   updatedAt: isoDate,
 });
@@ -363,6 +371,17 @@ export const normalizeBrandInput = (
     ratings: Math.max(0, Math.min(5, toNumber(raw.ratings, existing?.ratings ?? 0))),
     featuredFlag: toBoolean(raw.featuredFlag, existing?.featuredFlag ?? false),
     sponsoredFlag: toBoolean(raw.sponsoredFlag, existing?.sponsoredFlag ?? false),
+    sellerId: toString(raw.sellerId, existing?.sellerId ?? '') || undefined,
+    marketplaceAccess:
+      typeof raw.marketplaceAccess === 'boolean'
+        ? raw.marketplaceAccess
+        : typeof existing?.marketplaceAccess === 'boolean'
+          ? existing.marketplaceAccess
+          : undefined,
+    marketplaceStatus:
+      typeof raw.marketplaceStatus === 'string'
+        ? (raw.marketplaceStatus as CatalogBrand['marketplaceStatus'])
+        : existing?.marketplaceStatus,
     createdAt: existingOrNow(existing?.createdAt),
     updatedAt: nowIso(),
   };

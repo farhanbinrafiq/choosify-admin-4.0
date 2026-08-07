@@ -81,6 +81,10 @@ export interface CatalogBrand {
   ratings: number;
   featuredFlag: boolean;
   sponsoredFlag: boolean;
+  /** Owning seller user id when brand is seller-managed; omitted for platform/legacy rows. */
+  sellerId?: string;
+  /** Public storefront visibility. Seller drafts default false. */
+  marketplaceAccess?: boolean;
   createdAt: string;
   updatedAt: string;
 }

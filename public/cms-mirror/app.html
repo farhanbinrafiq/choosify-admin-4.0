@@ -8,7 +8,7 @@
 <script src="/cms-mirror/react-dom.production.min.js"></script>
 <script src="/cms-mirror/dc-runtime.js"></script>
 <script src="/cms-mirror/omelette.js"></script>
-  <script src="./studio-profile-api.js?v=20260731-uploads-1"></script>
+  <script src="./studio-profile-api.js?v=20260805-workspace-tenant-1"></script>
 <script>
 window.addEventListener('message', function(ev) {
   var data = ev && ev.data;
@@ -228,8 +228,8 @@ window.addEventListener('message', function(ev) {
     <div style="{{ sidebarFooterStyle }}">
       <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#FF5B00,#2323FF);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0">A</div>
       <div style="min-width:0">
-        <div style="{{ footerNameStyle }}">Admin User</div>
-        <div style="{{ footerRoleStyle }}">Super Admin</div>
+        <div style="{{ footerNameStyle }}">{{ footerName }}</div>
+        <div style="{{ footerRoleStyle }}">{{ footerRole }}</div>
       </div>
     </div>
   </div>
@@ -447,6 +447,14 @@ window.addEventListener('message', function(ev) {
           </div>
         </sc-if>
 
+        <sc-if value="{{ productsEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center;color:#9CA3AF;font-size:12px;font-weight:600;font-style:italic;padding:40px 0;background:#fff;border:1px solid #E8EDF2;border-radius:5px;margin-bottom:12px">
+            <div style="margin-bottom:14px">No products yet</div>
+            <button sc-camel-on-click="{{ openNewProduct }}" style="background:linear-gradient(90deg,#B4411C,#D15E32);color:#fff;border:none;border-radius:8px;padding:10px 18px;font-size:12.5px;font-weight:700;cursor:pointer;font-style:normal">+ Add Product</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ !productsEmpty }}" hint-placeholder-val="{{ true }}">
         <div style="background:#fff;border:1px solid #E8EDF2;border-radius:5px;overflow-x:auto">
           <sc-raw-table style="width:100%;min-width:900px;border-collapse:collapse">
             <sc-raw-thead>
@@ -528,6 +536,7 @@ window.addEventListener('message', function(ev) {
             </sc-raw-tbody>
           </sc-raw-table>
         </div>
+        </sc-if>
       </sc-if>
 
       <!-- ===== PRODUCT STUDIO (create/edit product, frontend-mirrored sections) ===== -->
@@ -1818,25 +1827,32 @@ window.addEventListener('message', function(ev) {
               <span style="font-size:14.5px;font-weight:800">{{ selectedBrand.name }}</span>
               <span style="background:rgba(21,128,61,0.12);color:#15803D;font-size:9.5px;font-weight:800;padding:3px 9px;border-radius:20px;letter-spacing:0.03em">● LIVE PROFILE</span>
             </div>
-            <div style="font-size:11px;color:#9CA3AF;font-weight:600;margin-top:2px">Brand Studio · Cover → Story → Stores → FAQ</div>
+            <div style="font-size:11px;color:#9CA3AF;font-weight:600;margin-top:2px">Brand Management Studio · powers your public Brand Page</div>
           </div>
           <div style="display:flex;gap:10px;align-items:center">
-            <sc-if value="{{ !brandStudioEditing }}" hint-placeholder-val="{{ true }}">
-              <button sc-camel-on-click="{{ startBrandStudioEdit }}" style="background:linear-gradient(90deg,#B4411C,#D15E32);border:none;border-radius:8px;padding:9px 16px;font-size:11.5px;font-weight:800;color:#fff;cursor:pointer">Edit</button>
-            </sc-if>
-            <sc-if value="{{ brandStudioEditing }}" hint-placeholder-val="{{ false }}">
-              <button style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:9px 14px;font-size:11.5px;font-weight:700;color:#374151;cursor:pointer">⟲ Snapshots (0)</button>
-              <button sc-camel-on-click="{{ selectedBrand.onSaveDraft }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:9px 14px;font-size:11.5px;font-weight:700;color:#374151;cursor:pointer">Save Draft</button>
-              <button sc-camel-on-click="{{ selectedBrand.onPublish }}" style="background:linear-gradient(90deg,#B4411C,#D15E32);border:none;border-radius:8px;padding:9px 16px;font-size:11.5px;font-weight:800;color:#fff;cursor:pointer">Publish Live Profile</button>
-              <button sc-camel-on-click="{{ stopBrandStudioEdit }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:9px 14px;font-size:11.5px;font-weight:700;color:#374151;cursor:pointer">Done</button>
-            </sc-if>
+            <span style="font-size:11px;color:#9CA3AF;font-weight:600">Edit each section individually · mirrors your public Brand Page</span>
           </div>
         </div>
 
         <!-- 1. Cover & Logo -->
         <div style="background:#fff;border:1px solid #E8EDF2;border-radius:12px;padding:20px;margin-bottom:16px">
-          <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">1. COVER &amp; LOGO</div>
-          <div style="font-size:14.5px;font-weight:800;margin-bottom:14px">Brand banner and logo</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px">
+            <div style="min-width:0">
+              <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">1. COVER &amp; LOGO</div>
+              <div style="font-size:14.5px;font-weight:800;margin-bottom:4px">Cover &amp; Logo</div>
+              <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-bottom:10px">This content appears at the top of your public Brand Page.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+              <sc-if value="{{ !selectedBrand.isEditingCover }}" hint-placeholder-val="{{ true }}">
+                <button sc-camel-on-click="{{ selectedBrand.startEditCover }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Edit</button>
+              </sc-if>
+              <sc-if value="{{ selectedBrand.isEditingCover }}" hint-placeholder-val="{{ false }}">
+                <button sc-camel-on-click="{{ selectedBrand.cancelEditCover }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:700;color:#374151;cursor:pointer">Cancel</button>
+                <button sc-camel-on-click="{{ selectedBrand.saveEditCover }}" style="background:linear-gradient(90deg,#B4411C,#D15E32);border:none;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#fff;cursor:pointer">Save</button>
+              </sc-if>
+            </div>
+          </div>
+
           <div style="margin-bottom:16px">
             <div style="font-size:10.5px;font-weight:800;color:#6B7280;margin-bottom:8px">BANNER / COVER</div>
             <div style="height:190px;border-radius:10px;border:1px solid #E8EDF2;overflow:hidden;background:#F9FAFB;margin-bottom:10px;display:flex;align-items:center;justify-content:center">
@@ -1847,7 +1863,12 @@ window.addEventListener('message', function(ev) {
                 <span style="font-size:12px;color:#9CA3AF;font-weight:600">No banner uploaded yet</span>
               </sc-if>
             </div>
-            <button sc-camel-on-click="{{ selectedBrand.onUploadCover }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:9px 14px;font-size:11.5px;font-weight:800;color:#111827;cursor:pointer">Choose file</button>
+            <sc-if value="{{ selectedBrand.isEditingCover }}" hint-placeholder-val="{{ false }}">
+              <button sc-camel-on-click="{{ selectedBrand.onUploadCover }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:9px 14px;font-size:11.5px;font-weight:800;color:#111827;cursor:pointer">Choose file</button>
+            </sc-if>
+            <sc-if value="{{ !selectedBrand.isEditingCover }}" hint-placeholder-val="{{ true }}">
+              <button type="button" disabled style="background:#F9FAFB;border:1px solid #E8EDF2;border-radius:8px;padding:9px 14px;font-size:11.5px;font-weight:800;color:#9CA3AF;cursor:not-allowed">Choose file</button>
+            </sc-if>
           </div>
           <div>
             <div style="font-size:10.5px;font-weight:800;color:#6B7280;margin-bottom:8px">LOGO</div>
@@ -1860,15 +1881,34 @@ window.addEventListener('message', function(ev) {
                   <span style="font-size:11px;color:#9CA3AF;font-weight:700">Logo</span>
                 </sc-if>
               </div>
-              <button sc-camel-on-click="{{ selectedBrand.onUploadLogo }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:9px 14px;font-size:11.5px;font-weight:800;color:#111827;cursor:pointer">Choose file</button>
+              <sc-if value="{{ selectedBrand.isEditingCover }}" hint-placeholder-val="{{ false }}">
+                <button sc-camel-on-click="{{ selectedBrand.onUploadLogo }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:9px 14px;font-size:11.5px;font-weight:800;color:#111827;cursor:pointer">Choose file</button>
+              </sc-if>
+              <sc-if value="{{ !selectedBrand.isEditingCover }}" hint-placeholder-val="{{ true }}">
+                <button type="button" disabled style="background:#F9FAFB;border:1px solid #E8EDF2;border-radius:8px;padding:9px 14px;font-size:11.5px;font-weight:800;color:#9CA3AF;cursor:not-allowed">Choose file</button>
+              </sc-if>
             </div>
           </div>
         </div>
 
         <!-- 2. Identity -->
         <div style="background:#fff;border:1px solid #E8EDF2;border-radius:12px;padding:20px;margin-bottom:16px">
-          <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">2. IDENTITY</div>
-          <div style="font-size:14.5px;font-weight:800;margin-bottom:14px">Tagline &amp; website under brand name</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px">
+            <div style="min-width:0">
+              <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">2. IDENTITY</div>
+              <div style="font-size:14.5px;font-weight:800;margin-bottom:4px">Tagline &amp; Website</div>
+              <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-bottom:10px">This content appears under your brand name on the public Brand Page.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+              <sc-if value="{{ !selectedBrand.isEditingIdentity }}" hint-placeholder-val="{{ true }}">
+                <button sc-camel-on-click="{{ selectedBrand.startEditIdentity }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Edit</button>
+              </sc-if>
+              <sc-if value="{{ selectedBrand.isEditingIdentity }}" hint-placeholder-val="{{ false }}">
+                <button sc-camel-on-click="{{ selectedBrand.cancelEditIdentity }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:700;color:#374151;cursor:pointer">Cancel</button>
+                <button sc-camel-on-click="{{ selectedBrand.saveEditIdentity }}" style="background:linear-gradient(90deg,#B4411C,#D15E32);border:none;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#fff;cursor:pointer">Save</button>
+              </sc-if>
+            </div>
+          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
             <div>
               <div style="font-size:10.5px;font-weight:800;color:#6B7280;margin-bottom:6px">TAGLINE</div>
@@ -1883,8 +1923,22 @@ window.addEventListener('message', function(ev) {
 
         <!-- 3. Social Links -->
         <div style="background:#fff;border:1px solid #E8EDF2;border-radius:12px;padding:20px;margin-bottom:16px">
-          <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">3. SOCIAL LINKS</div>
-          <div style="font-size:14.5px;font-weight:800;margin-bottom:14px">Profile social icons</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px">
+            <div style="min-width:0">
+              <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">3. SOCIAL LINKS</div>
+              <div style="font-size:14.5px;font-weight:800;margin-bottom:4px">Social Links</div>
+              <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-bottom:10px">These icons appear on your public Brand Page hero.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+              <sc-if value="{{ !selectedBrand.isEditingSocial }}" hint-placeholder-val="{{ true }}">
+                <button sc-camel-on-click="{{ selectedBrand.startEditSocial }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Edit</button>
+              </sc-if>
+              <sc-if value="{{ selectedBrand.isEditingSocial }}" hint-placeholder-val="{{ false }}">
+                <button sc-camel-on-click="{{ selectedBrand.cancelEditSocial }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:700;color:#374151;cursor:pointer">Cancel</button>
+                <button sc-camel-on-click="{{ selectedBrand.saveEditSocial }}" style="background:linear-gradient(90deg,#B4411C,#D15E32);border:none;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#fff;cursor:pointer">Save</button>
+              </sc-if>
+            </div>
+          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <input value="{{ selectedBrand.socialFacebook }}" sc-camel-on-change="{{ selectedBrand.setSocialFacebook }}" placeholder="Facebook URL" style="width:100%;box-sizing:border-box;height:36px;border-radius:8px;border:1px solid #E8EDF2;padding:0 12px;font-size:12px">
             <input value="{{ selectedBrand.socialInstagram }}" sc-camel-on-change="{{ selectedBrand.setSocialInstagram }}" placeholder="Instagram URL" style="width:100%;box-sizing:border-box;height:36px;border-radius:8px;border:1px solid #E8EDF2;padding:0 12px;font-size:12px">
@@ -1896,14 +1950,27 @@ window.addEventListener('message', function(ev) {
 
         <!-- 4. Brand Story & Overview -->
         <div style="background:#fff;border:1px solid #E8EDF2;border-radius:12px;padding:20px;margin-bottom:16px">
-          <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">4. BRAND STORY &amp; OVERVIEW</div>
-          <div style="font-size:14.5px;font-weight:800;margin-bottom:6px">About the brand + contact / HQ details</div>
-          <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-bottom:14px">Ratings, fans, orders, and “What Our Customers Say” update on the storefront automatically — not edited here.</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px">
+            <div style="min-width:0">
+              <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">4. OVERVIEW &amp; BRAND STORY</div>
+              <div style="font-size:14.5px;font-weight:800;margin-bottom:4px">Overview &amp; Brand Story</div>
+              <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-bottom:10px">Overview fields appear in Overview; Brand Story appears in Brand Story on your public Brand Page. Ratings, Public Review, and follower counts are read-only.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+              <sc-if value="{{ !selectedBrand.isEditingOverview }}" hint-placeholder-val="{{ true }}">
+                <button sc-camel-on-click="{{ selectedBrand.startEditOverview }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Edit</button>
+              </sc-if>
+              <sc-if value="{{ selectedBrand.isEditingOverview }}" hint-placeholder-val="{{ false }}">
+                <button sc-camel-on-click="{{ selectedBrand.cancelEditOverview }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:700;color:#374151;cursor:pointer">Cancel</button>
+                <button sc-camel-on-click="{{ selectedBrand.saveEditOverview }}" style="background:linear-gradient(90deg,#B4411C,#D15E32);border:none;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#fff;cursor:pointer">Save</button>
+              </sc-if>
+            </div>
+          </div>
           <div style="margin-bottom:14px">
-            <div style="font-size:10.5px;font-weight:800;color:#6B7280;margin-bottom:6px">BRAND STORY / ABOUT</div>
+            <div style="font-size:10.5px;font-weight:800;color:#6B7280;margin-bottom:6px">BRAND STORY</div>
             <textarea value="{{ selectedBrand.profileStory }}" sc-camel-on-change="{{ selectedBrand.setProfileStory }}" rows="4" placeholder="About the brand, founding story, expansion…" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid #E8EDF2;padding:10px 12px;font-size:12.5px;resize:vertical"></textarea>
           </div>
-          <div style="font-size:10.5px;font-weight:800;color:#6B7280;margin-bottom:8px">OVERVIEW FIELDS</div>
+          <div style="font-size:10.5px;font-weight:800;color:#6B7280;margin-bottom:8px">CONTACT &amp; OVERVIEW</div>
           <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
             <div>
               <div style="font-size:10px;font-weight:800;color:#9CA3AF;margin-bottom:4px">ADDRESS / HQ</div>
@@ -1934,11 +2001,25 @@ window.addEventListener('message', function(ev) {
 
         <!-- 5. Services & Tags -->
         <div style="background:#fff;border:1px solid #E8EDF2;border-radius:12px;padding:20px;margin-bottom:16px">
-          <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">5. SERVICES &amp; TAGS</div>
-          <div style="font-size:14.5px;font-weight:800;margin-bottom:14px">Brand benefits and category tags</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px">
+            <div style="min-width:0">
+              <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">5. BENEFITS &amp; TAGS</div>
+              <div style="font-size:14.5px;font-weight:800;margin-bottom:4px">Benefits &amp; Tags</div>
+              <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-bottom:10px">This content appears in the Overview section of your public Brand Page.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+              <sc-if value="{{ !selectedBrand.isEditingBenefits }}" hint-placeholder-val="{{ true }}">
+                <button sc-camel-on-click="{{ selectedBrand.startEditBenefits }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Edit</button>
+              </sc-if>
+              <sc-if value="{{ selectedBrand.isEditingBenefits }}" hint-placeholder-val="{{ false }}">
+                <button sc-camel-on-click="{{ selectedBrand.cancelEditBenefits }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:700;color:#374151;cursor:pointer">Cancel</button>
+                <button sc-camel-on-click="{{ selectedBrand.saveEditBenefits }}" style="background:linear-gradient(90deg,#B4411C,#D15E32);border:none;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#fff;cursor:pointer">Save</button>
+              </sc-if>
+            </div>
+          </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
             <div>
-              <div style="font-size:10.5px;font-weight:800;color:#6B7280;margin-bottom:6px">SERVICES / BENEFITS (one per line)</div>
+              <div style="font-size:10.5px;font-weight:800;color:#6B7280;margin-bottom:6px">BENEFITS (one per line)</div>
               <textarea value="{{ selectedBrand.profileServicesText }}" sc-camel-on-change="{{ selectedBrand.setProfileServicesText }}" rows="3" placeholder="100% Authentic products&#10;Easy Returns&#10;Warranty Policy" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid #E8EDF2;padding:8px 10px;font-size:12px;resize:vertical"></textarea>
             </div>
             <div>
@@ -1950,9 +2031,22 @@ window.addEventListener('message', function(ev) {
 
         <!-- 6. Video Embed -->
         <div style="background:#fff;border:1px solid #E8EDF2;border-radius:12px;padding:20px;margin-bottom:16px">
-          <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">6. SOCIAL / STORY VIDEO EMBED</div>
-          <div style="font-size:14.5px;font-weight:800;margin-bottom:6px">Brand story or creator review video (URL only)</div>
-          <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-bottom:12px">Images use Choose file above. Paste YouTube / MP4 HTTPS URL for embeds in story or review sections.</div>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:4px">
+            <div style="min-width:0">
+              <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">6. BRAND STORY VIDEO</div>
+              <div style="font-size:14.5px;font-weight:800;margin-bottom:4px">Brand Story Video</div>
+              <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-bottom:10px">This embed appears with Brand Story on your public Brand Page.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-shrink:0">
+              <sc-if value="{{ !selectedBrand.isEditingVideo }}" hint-placeholder-val="{{ true }}">
+                <button sc-camel-on-click="{{ selectedBrand.startEditVideo }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Edit</button>
+              </sc-if>
+              <sc-if value="{{ selectedBrand.isEditingVideo }}" hint-placeholder-val="{{ false }}">
+                <button sc-camel-on-click="{{ selectedBrand.cancelEditVideo }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:700;color:#374151;cursor:pointer">Cancel</button>
+                <button sc-camel-on-click="{{ selectedBrand.saveEditVideo }}" style="background:linear-gradient(90deg,#B4411C,#D15E32);border:none;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#fff;cursor:pointer">Save</button>
+              </sc-if>
+            </div>
+          </div>
           <input value="{{ selectedBrand.storyVideoUrl }}" sc-camel-on-change="{{ selectedBrand.setStoryVideoUrl }}" placeholder="Paste YouTube / MP4 HTTPS URL" style="width:100%;box-sizing:border-box;height:38px;border-radius:8px;border:1px solid #E8EDF2;padding:0 12px;font-size:12.5px">
         </div>
 
@@ -1961,10 +2055,10 @@ window.addEventListener('message', function(ev) {
           <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:20px">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
               <div>
-                <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">7. CREATOR / SOCIAL FEED</div>
+                <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">7. CREATOR REVIEWS</div>
                 <div style="font-size:14.5px;font-weight:800">Creator Experiences with {{ selectedBrand.name }}</div>
+                <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-top:4px">Managed collection — opens the creator workflow. Not inline-edited here.</div>
               </div>
-              <button style="width:30px;height:30px;border-radius:7px;border:1px solid #E8EDF2;background:#fff;cursor:pointer;font-size:12px">✎</button>
             </div>
             <sc-if value="{{ selectedBrand.hasCreators }}" hint-placeholder-val="{{ false }}">
               <div style="border:1px solid #E8EDF2;border-radius:10px;padding:16px;display:flex;gap:16px;margin-bottom:14px;flex-wrap:wrap">
@@ -2001,13 +2095,16 @@ window.addEventListener('message', function(ev) {
             <sc-if value="{{ !selectedBrand.hasCreators }}" hint-placeholder-val="{{ false }}">
               <div style="border:1px dashed #E8EDF2;border-radius:10px;padding:32px;text-align:center;color:#9CA3AF;font-size:12px;font-weight:600;margin-bottom:14px">No creator campaigns yet for this brand.</div>
             </sc-if>
-            <button style="width:100%;background:#fff;border:1px solid #FF5B00;color:#FF5B00;border-radius:8px;padding:12px;font-size:12px;font-weight:800;cursor:pointer">+ ADD / MANAGE CREATOR REVIEW</button>
+            <button sc-camel-on-click="{{ selectedBrand.onManageReviews }}" style="width:100%;background:#fff;border:1px solid #FF5B00;color:#FF5B00;border-radius:8px;padding:12px;font-size:12px;font-weight:800;cursor:pointer">Manage Creator Reviews</button>
           </div>
 
           <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:20px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-              <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em">PROMO VOUCHERS</div>
-              <button style="width:28px;height:28px;border-radius:7px;border:1px solid #E8EDF2;background:#fff;cursor:pointer;font-size:11px">✎</button>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+              <div>
+                <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em">PROMO VOUCHERS</div>
+                <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-top:4px">Appears in Deals &amp; Coupons on your public Brand Page.</div>
+              </div>
+              <button sc-camel-on-click="{{ selectedBrand.onManageCoupons }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Manage Coupons</button>
             </div>
             <div style="font-size:14.5px;font-weight:800;margin-bottom:14px">Promo Codes <span style="background:rgba(21,128,61,0.12);color:#15803D;font-size:9.5px;font-weight:800;padding:3px 8px;border-radius:20px;margin-left:4px">{{ selectedBrand.promoCodesCount }} verified</span></div>
             <sc-if value="{{ selectedBrand.hasPromo }}" hint-placeholder-val="{{ false }}">
@@ -2030,10 +2127,11 @@ window.addEventListener('message', function(ev) {
         <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:20px;margin-top:16px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
             <div>
-              <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em">PRODUCTS / BEST SELLERS</div>
+              <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em">PRODUCTS</div>
               <div style="font-size:14.5px;font-weight:800;margin-top:2px">{{ selectedBrand.name }} Products</div>
+              <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-top:4px">This content appears in the Products section of your public Brand Page.</div>
             </div>
-            <button sc-camel-on-click="{{ selectedBrand.onAddProduct }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:8px 14px;font-size:11.5px;font-weight:800;color:#FF5B00;cursor:pointer">+ Manage in Catalog</button>
+            <button sc-camel-on-click="{{ selectedBrand.onAddProduct }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:8px 14px;font-size:11.5px;font-weight:800;color:#FF5B00;cursor:pointer">Manage Products</button>
           </div>
           <sc-if value="{{ selectedBrand.hasProducts }}" hint-placeholder-val="{{ false }}">
             <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px">
@@ -2055,8 +2153,14 @@ window.addEventListener('message', function(ev) {
 
         <div style="display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-top:16px;align-items:start">
           <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:20px">
-            <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">OFFERS</div>
-            <div style="font-size:14.5px;font-weight:800;margin-bottom:14px">Top Deals on {{ selectedBrand.name }}</div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+              <div>
+                <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">DEALS &amp; COUPONS</div>
+                <div style="font-size:14.5px;font-weight:800;margin-bottom:4px">Top Deals on {{ selectedBrand.name }}</div>
+                <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-bottom:10px">Appears in Deals &amp; Coupons on your public Brand Page.</div>
+              </div>
+              <button sc-camel-on-click="{{ selectedBrand.onManageDeals }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Manage Deals</button>
+            </div>
             <sc-if value="{{ selectedBrand.hasDeals }}" hint-placeholder-val="{{ false }}">
               <sc-for list="{{ selectedBrand.deals }}" as="dl" hint-placeholder-count="3">
                 <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-top:1px solid #F1F3F5">
@@ -2073,8 +2177,14 @@ window.addEventListener('message', function(ev) {
             </sc-if>
           </div>
           <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:20px">
-            <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">COUPONS</div>
-            <div style="font-size:14.5px;font-weight:800;margin-bottom:14px">{{ selectedBrand.name }} Coupons</div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+              <div>
+                <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em;margin-bottom:4px">COUPONS</div>
+                <div style="font-size:14.5px;font-weight:800;margin-bottom:4px">{{ selectedBrand.name }} Coupons</div>
+                <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-bottom:10px">Appears in Deals &amp; Coupons on your public Brand Page.</div>
+              </div>
+              <button sc-camel-on-click="{{ selectedBrand.onManageCoupons }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Manage Coupons</button>
+            </div>
             <sc-if value="{{ selectedBrand.hasPromo }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;flex-wrap:wrap;gap:8px">
                 <sc-for list="{{ selectedBrand.couponChips }}" as="cc" hint-placeholder-count="3">
@@ -2093,10 +2203,11 @@ window.addEventListener('message', function(ev) {
           <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:20px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
               <div>
-                <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em">8. STORES</div>
+                <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em">8. WHERE TO BUY</div>
                 <div style="font-size:14.5px;font-weight:800;margin-top:2px">Where to Buy</div>
+                <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-top:4px">This content appears in Where to Buy on your public Brand Page.</div>
               </div>
-              <button sc-camel-on-click="{{ selectedBrand.onManageStores }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Manage</button>
+              <button sc-camel-on-click="{{ selectedBrand.onManageStores }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Manage Stores</button>
             </div>
             <sc-if value="{{ selectedBrand.hasStores }}" hint-placeholder-val="{{ false }}">
               <sc-for list="{{ selectedBrand.storesAuthorized }}" as="st" hint-placeholder-count="3">
@@ -2110,7 +2221,7 @@ window.addEventListener('message', function(ev) {
           <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:20px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
               <div style="font-size:14.5px;font-weight:800">Distributors &amp; Resellers</div>
-              <button sc-camel-on-click="{{ selectedBrand.onManageStores }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Manage</button>
+              <button sc-camel-on-click="{{ selectedBrand.onManageStores }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Manage Stores</button>
             </div>
             <sc-if value="{{ selectedBrand.hasDistributors }}" hint-placeholder-val="{{ false }}">
               <sc-for list="{{ selectedBrand.storesDistributors }}" as="ds" hint-placeholder-count="3">
@@ -2124,7 +2235,7 @@ window.addEventListener('message', function(ev) {
           <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:20px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
               <div style="font-size:14.5px;font-weight:800">Service Centers</div>
-              <button sc-camel-on-click="{{ selectedBrand.onManageStores }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Manage</button>
+              <button sc-camel-on-click="{{ selectedBrand.onManageStores }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:7px 12px;font-size:11px;font-weight:800;color:#111827;cursor:pointer">Manage Stores</button>
             </div>
             <sc-if value="{{ selectedBrand.hasServiceCenters }}" hint-placeholder-val="{{ false }}">
               <sc-for list="{{ selectedBrand.storesServiceCenters }}" as="sc" hint-placeholder-count="2">
@@ -2142,9 +2253,10 @@ window.addEventListener('message', function(ev) {
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
             <div>
               <div style="font-size:10px;font-weight:800;color:#FF5B00;letter-spacing:0.05em">9. FAQ</div>
-              <div style="font-size:14.5px;font-weight:800;margin-top:2px">Frequently Asked Questions</div>
+              <div style="font-size:14.5px;font-weight:800;margin-top:2px">FAQ</div>
+              <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-top:4px">This content appears in the FAQ section of your public Brand Page.</div>
             </div>
-            <button sc-camel-on-click="{{ selectedBrand.onManageFaqs }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:8px 14px;font-size:11.5px;font-weight:800;color:#111827;cursor:pointer">Manage</button>
+            <button sc-camel-on-click="{{ selectedBrand.onManageFaqs }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:8px 14px;font-size:11.5px;font-weight:800;color:#111827;cursor:pointer">Manage FAQ</button>
           </div>
           <sc-if value="{{ selectedBrand.hasFaqs }}" hint-placeholder-val="{{ false }}">
             <sc-for list="{{ selectedBrand.faqs }}" as="fq" hint-placeholder-count="4">
@@ -8236,7 +8348,8 @@ class Component extends DCLogic {
     cmsFeaturedBrandNames: Component.BRANDS.slice(0,4).map(b=>b.name),
     brandProfileDrafts: {},
     creatorProfileDrafts: {},
-    brandStudioEditing: false,
+    brandStudioEditSection: null,
+    brandStudioSectionSnapshot: null,
     creatorStudioEditing: false,
     productStudioEditing: false,
     cmsFeaturedCreatorNames: Component.CREATORS.slice(0,4).map(c=>c.name),
@@ -8380,6 +8493,30 @@ class Component extends DCLogic {
     };
   });
   reactivateAccess = (name, type) => (e) => { if (e) e.stopPropagation(); const overrideKey = type==='creator' ? 'creatorAccessOverrides' : type==='customer' ? 'customerAccessOverrides' : 'brandAccessOverrides'; this.setState(s => ({[overrideKey]: {...s[overrideKey], [name]: {marketplaceActive:true, suspended:false, suspensionInfo:null}}})); this.showToast(`${name} marketplace access reactivated`); };
+  toggleBrandMarketplaceAccess = (name) => async (e) => {
+    if (e) e.stopPropagation();
+    const b = Component.BRANDS.find(x => x.name === name);
+    if (!b) return;
+    const override = this.state.brandAccessOverrides[name];
+    const currentlyOn = override ? !!override.marketplaceActive : (typeof b.marketplaceAccess === 'boolean' ? b.marketplaceAccess : true);
+    const next = !currentlyOn;
+    this.setState(s => ({
+      brandAccessOverrides: {
+        ...s.brandAccessOverrides,
+        [name]: { marketplaceActive: next, suspended: false, suspensionInfo: null },
+      },
+    }));
+    Component.BRANDS = Component.BRANDS.map(row => row.name !== name ? row : ({ ...row, marketplaceAccess: next }));
+    const api = window.CmsStudioProfileApi;
+    if (api && b.catalogId) {
+      try {
+        await api.patchBrand(b.catalogId, { marketplaceAccess: next });
+        this.showToast(next ? `${name} Marketplace Access ON` : `${name} Marketplace Access OFF`);
+      } catch (err) {
+        this.showToast('Marketplace Access update failed: ' + (err && err.message ? err.message : err));
+      }
+    }
+  };
   reactivateBrand = (name) => this.reactivateAccess(name, 'brand');
   computeProfileAccess = (name, type) => {
     const overrideKey = type==='creator' ? 'creatorAccessOverrides' : type==='customer' ? 'customerAccessOverrides' : 'brandAccessOverrides';
@@ -8399,9 +8536,110 @@ class Component extends DCLogic {
     };
   };
   selectBrandFromClaim = (name, claimId) => this.setState({selectedBrandName: name, brandProfileTab: 'account', viewingClaimId: claimId});
-  setBrandProfileTab = (t) => this.setState({brandProfileTab: t, brandStudioEditing: t === 'portfolio' ? this.state.brandStudioEditing : false});
-  startBrandStudioEdit = () => this.setState({brandStudioEditing: true});
-  stopBrandStudioEdit = () => this.setState({brandStudioEditing: false});
+  setBrandProfileTab = (t) => this.setState({brandProfileTab: t, brandStudioEditSection: t === 'portfolio' ? this.state.brandStudioEditSection : null, brandStudioSectionSnapshot: t === 'portfolio' ? this.state.brandStudioSectionSnapshot : null});
+  BRAND_SECTION_FIELDS = {
+    cover: ['logo', 'coverImage'],
+    identity: ['tagline', 'website'],
+    social: ['socialFacebook', 'socialInstagram', 'socialYoutube', 'socialTiktok', 'socialLinkedin'],
+    overview: ['story', 'address', 'email', 'phone', 'priceRange', 'ageFocus', 'audience'],
+    benefits: ['servicesText', 'tagsText'],
+    video: ['storyVideoUrl'],
+  };
+  FIELD_TO_BRAND_SECTION = {
+    logo: 'cover', coverImage: 'cover',
+    tagline: 'identity', website: 'identity',
+    socialFacebook: 'social', socialInstagram: 'social', socialYoutube: 'social', socialTiktok: 'social', socialLinkedin: 'social',
+    story: 'overview', address: 'overview', email: 'overview', phone: 'overview', priceRange: 'overview', ageFocus: 'overview', audience: 'overview',
+    servicesText: 'benefits', tagsText: 'benefits',
+    storyVideoUrl: 'video',
+  };
+  startBrandSectionEdit = (section) => () => {
+    const brandName = this.state.selectedBrandName || (Component.BRANDS[0] && Component.BRANDS[0].name);
+    if (!brandName || !section) return;
+    if (this.state.brandStudioEditSection && this.state.brandStudioEditSection !== section) {
+      this.showToast('Finish or cancel the open section first');
+      return;
+    }
+    const draft = (this.state.brandProfileDrafts && this.state.brandProfileDrafts[brandName]) || {};
+    const fields = this.BRAND_SECTION_FIELDS[section] || [];
+    const snap = {};
+    fields.forEach((k) => { snap[k] = draft[k]; });
+    this.setState({ brandStudioEditSection: section, brandStudioSectionSnapshot: { brandName, section, fields: snap } });
+  };
+  cancelBrandSectionEdit = (section) => () => {
+    const snap = this.state.brandStudioSectionSnapshot;
+    if (!snap || snap.section !== section) {
+      this.setState({ brandStudioEditSection: null, brandStudioSectionSnapshot: null });
+      return;
+    }
+    this.setState((s) => {
+      const prev = (s.brandProfileDrafts && s.brandProfileDrafts[snap.brandName]) || {};
+      const next = { ...prev };
+      Object.keys(snap.fields || {}).forEach((k) => {
+        if (snap.fields[k] === undefined) delete next[k];
+        else next[k] = snap.fields[k];
+      });
+      return {
+        brandProfileDrafts: { ...(s.brandProfileDrafts || {}), [snap.brandName]: next },
+        brandStudioEditSection: null,
+        brandStudioSectionSnapshot: null,
+      };
+    });
+  };
+  saveBrandSection = (brandName, section) => async () => {
+    const api = window.CmsStudioProfileApi;
+    if (!api) { this.showToast('Profile API unavailable'); return; }
+    const b = Component.BRANDS.find(x => x.name === brandName);
+    if (!b) return;
+    const draft = (this.state.brandProfileDrafts && this.state.brandProfileDrafts[brandName]) || {};
+    try {
+      let catalogId = b.catalogId || draft.catalogId;
+      if (!catalogId) {
+        const brands = await api.listBrands();
+        const match = brands.find(x => x.name === brandName || x.slug === api.slugify(brandName));
+        if (match) catalogId = match.id;
+      }
+      if (!catalogId) {
+        this.showToast('No catalog brand found for ' + brandName + ' — seed catalog first');
+        return;
+      }
+      const payload = api.brandSectionPayloadFromMirror
+        ? api.brandSectionPayloadFromMirror(b, draft, section)
+        : api.brandPayloadFromMirror(b, draft);
+      const saved = await api.patchBrand(catalogId, payload);
+      const ov = saved.overview || {};
+      Component.BRANDS = Component.BRANDS.map(row => row.name !== brandName ? row : ({
+        ...row,
+        catalogId: saved.id,
+        logo: saved.logo != null ? saved.logo : row.logo,
+        coverImage: saved.coverImage != null ? saved.coverImage : row.coverImage,
+        tagline: saved.tagline != null ? saved.tagline : row.tagline,
+        website: saved.website != null ? saved.website : row.website,
+        story: saved.story != null ? saved.story : row.story,
+        storyVideoUrl: saved.storyVideoUrl != null ? saved.storyVideoUrl : row.storyVideoUrl,
+        socialLinks: saved.socialLinks || row.socialLinks,
+        address: ov.address != null ? ov.address : row.address,
+        email: ov.email != null ? ov.email : row.email,
+        phone: ov.phone != null ? ov.phone : row.phone,
+        priceRange: ov.priceRange != null ? ov.priceRange : row.priceRange,
+        ageFocus: ov.ageFocus != null ? ov.ageFocus : row.ageFocus,
+        audience: ov.audience != null ? ov.audience : row.audience,
+        services: ov.services || row.services,
+        tags: ov.tags || row.tags,
+      }));
+      this.setState(s => ({
+        brandProfileDrafts: {
+          ...(s.brandProfileDrafts || {}),
+          [brandName]: { ...(s.brandProfileDrafts && s.brandProfileDrafts[brandName] || {}), catalogId: saved.id },
+        },
+        brandStudioEditSection: null,
+        brandStudioSectionSnapshot: null,
+      }));
+      this.showToast('Saved — reflected on your public Brand Page after refresh');
+    } catch (err) {
+      this.showToast('Save failed: ' + (err && err.message ? err.message : err));
+    }
+  };
   startCreatorStudioEdit = () => this.setState({creatorStudioEditing: true});
   stopCreatorStudioEdit = () => this.setState({creatorStudioEditing: false});
   startProductStudioEdit = () => this.setState({productStudioEditing: true});
@@ -9134,8 +9372,10 @@ class Component extends DCLogic {
   backToProductCatalog = () => this.setState({productsView: 'catalog'});
   setProductsView = (v) => () => this.setState({productsView: v});
   setProductSort = (e) => this.setState({productSort: e.target.value});
-  openNewProduct = () => this.setState({productStudioEditing: false, editingProduct:{
-    id:null,name:'',brand:'',category:'',price:'',salePrice:'',stock:'',rating:0,status:'Draft',description:'',
+  openNewProduct = () => {
+    const sellerBrand = ((window.__CMS_MIRROR_ROLE__ || '') === 'seller' && Component.BRANDS[0] && Component.BRANDS[0].name) || '';
+    this.setState({productStudioEditing: false, editingProduct:{
+    id:null,name:'',brand:sellerBrand,category:'',price:'',salePrice:'',stock:'',rating:0,status:'Draft',description:'',
     checkout:{findInStore:true,buyOnline:true,heartLove:true,wishlist:true,chatSeller:true,bulkQuote:false,preOrder:false},
     partialPaymentEnabled:false, partialPaymentPct:30,
     variantsEnabled:true, variantGroupsText:'Color: Platinum Silver #E5C9A8, Midnight Black #1A1A1A\nStorage: 8GB/128GB, 12GB/256GB, 12GB/512GB, 16GB/1TB',
@@ -9155,6 +9395,7 @@ class Component extends DCLogic {
     addonsEnabled:true, addonsText:'Extended Warranty | +৳500\nPremium Case | +৳650\nScreen Protector | +৳250 · recommended\nGift Wrap | +৳150',
     reviewsEnabled:true, reviewsText:'Tanvir Hasan | 5 | 2 weeks ago | The material quality is top-notch, worth every taka.\nNusrat Jahan | 4.8 | 1 month ago | Beautiful design, delivered on time, sizing chart accurate.',
   }, isNew:true});
+  };
   openEditProduct = (p) => this.setState({productStudioEditing: false, editingProduct:{
     ...p, salePrice:p.price,
     checkout:{findInStore:true,buyOnline:true,heartLove:true,wishlist:true,chatSeller:true,bulkQuote:false,preOrder:false},
@@ -9192,6 +9433,11 @@ class Component extends DCLogic {
 
 
   uploadBrandImage = (brandName, key) => async () => {
+    const section = this.FIELD_TO_BRAND_SECTION[key] || 'cover';
+    if (this.state.brandStudioEditSection !== section) {
+      this.showToast('Click Edit on Cover & Logo before uploading');
+      return;
+    }
     const api = window.CmsStudioProfileApi;
     if (!api) { this.showToast('Upload API unavailable'); return; }
     try {
@@ -9239,6 +9485,8 @@ class Component extends DCLogic {
   };
 
   setBrandProfileField = (brandName, key) => (e) => {
+    const section = this.FIELD_TO_BRAND_SECTION[key];
+    if (section && this.state.brandStudioEditSection !== section) return;
     const value = e && e.target ? (e.target.type === 'checkbox' ? e.target.checked : e.target.value) : e;
     this.setState(s => ({
       brandProfileDrafts: {
@@ -11167,9 +11415,10 @@ class Component extends DCLogic {
     const activeCount = products.filter(p=>p.status==='Active').length;
     const draftCount = products.filter(p=>p.status==='Draft').length;
     const oosCount = products.filter(p=>p.status==='Out of Stock').length;
+    const productsEmpty = productCount === 0;
     const productStats = [
       {label:'Total Products', value: String(productCount), sub:'Full catalog', barColor:'#3B82F6'},
-      {label:'Active Products', value: String(activeCount), sub:`${Math.round(activeCount/productCount*100)}% of catalog`, barColor:'#22C55E'},
+      {label:'Active Products', value: String(activeCount), sub:`${productCount ? Math.round(activeCount/productCount*100) : 0}% of catalog`, barColor:'#22C55E'},
       {label:'Pending Approval', value: String(draftCount), sub:'Awaiting review', barColor:'#FF5B00'},
       {label:'Flagged / OOS', value: String(oosCount), sub:'Needs attention', barColor:'#EF4444'},
       {label:'Conversion Avg', value:'3.42%', sub:'+0.15% trend', barColor:'#9333EA'},
@@ -11282,7 +11531,9 @@ class Component extends DCLogic {
       };
       const override = this.state.brandAccessOverrides[b.name];
       const seedInactive = i === 11 || i === 12;
-      const marketplaceActive = override ? override.marketplaceActive : !seedInactive;
+      const marketplaceActive = override
+        ? override.marketplaceActive
+        : (typeof b.marketplaceAccess === 'boolean' ? b.marketplaceAccess : !seedInactive);
       const suspended = override ? override.suspended : i === 9;
       record2.marketplaceActive = marketplaceActive;
       record2.isSuspended = suspended;
@@ -11298,7 +11549,10 @@ class Component extends DCLogic {
         : 'width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:2px;left:2px;box-shadow:0 1px 3px rgba(0,0,0,0.2)';
       record2.accessStatusLabel = suspended ? 'Suspended' : (marketplaceActive ? 'Active' : 'Inactive');
       record2.accessStatusColor = suspended ? '#DC2626' : (marketplaceActive ? '#16A34A' : '#9CA3AF');
-      record2.onToggleAccess = marketplaceActive ? this.openSuspendModal(b.name, 'brand') : this.reactivateAccess(b.name, 'brand');
+      const isSellerMirrorToggle = (window.__CMS_MIRROR_ROLE__ || '') === 'seller';
+      record2.onToggleAccess = isSellerMirrorToggle
+        ? this.toggleBrandMarketplaceAccess(b.name)
+        : (marketplaceActive ? this.openSuspendModal(b.name, 'brand') : this.reactivateAccess(b.name, 'brand'));
       return record2;
     });
     const brandTab = this.state.brandTab || 'all';
@@ -11474,9 +11728,9 @@ class Component extends DCLogic {
         faqs, hasFaqs: faqs.length > 0,
         compareRows, hasCompare: compareRows.length > 0,
         onAddProduct: () => this.setPage('products'),
-        onManageReviews: () => this.showToast('Opening review moderation'),
-        onManageStores: () => this.showToast('Opening store locations editor'),
-        onManageFaqs: () => this.showToast('Opening FAQ editor'),
+        onManageReviews: () => this.setPage('creators'),
+        onManageStores: () => this.showToast('Store editor: use Overview Save for contact details, or manage locations from catalog Stores when available'),
+        onManageFaqs: () => this.showToast('FAQ editor coming soon — FAQ items still display from catalog'),
       };
 
       const __sellerViewEarly = ((window.__CMS_MIRROR_ROLE__||'')==='seller')
@@ -11618,6 +11872,33 @@ class Component extends DCLogic {
       selectedBrand.onUploadCover = this.uploadBrandImage(b.name, 'coverImage');
       selectedBrand.onUploadLogo = this.uploadBrandImage(b.name, 'logo');
 
+      const __editSec = this.state.brandStudioEditSection || null;
+      selectedBrand.isEditingCover = __editSec === 'cover';
+      selectedBrand.isEditingIdentity = __editSec === 'identity';
+      selectedBrand.isEditingSocial = __editSec === 'social';
+      selectedBrand.isEditingOverview = __editSec === 'overview';
+      selectedBrand.isEditingBenefits = __editSec === 'benefits';
+      selectedBrand.isEditingVideo = __editSec === 'video';
+      selectedBrand.startEditCover = this.startBrandSectionEdit('cover');
+      selectedBrand.startEditIdentity = this.startBrandSectionEdit('identity');
+      selectedBrand.startEditSocial = this.startBrandSectionEdit('social');
+      selectedBrand.startEditOverview = this.startBrandSectionEdit('overview');
+      selectedBrand.startEditBenefits = this.startBrandSectionEdit('benefits');
+      selectedBrand.startEditVideo = this.startBrandSectionEdit('video');
+      selectedBrand.cancelEditCover = this.cancelBrandSectionEdit('cover');
+      selectedBrand.cancelEditIdentity = this.cancelBrandSectionEdit('identity');
+      selectedBrand.cancelEditSocial = this.cancelBrandSectionEdit('social');
+      selectedBrand.cancelEditOverview = this.cancelBrandSectionEdit('overview');
+      selectedBrand.cancelEditBenefits = this.cancelBrandSectionEdit('benefits');
+      selectedBrand.cancelEditVideo = this.cancelBrandSectionEdit('video');
+      selectedBrand.saveEditCover = this.saveBrandSection(b.name, 'cover');
+      selectedBrand.saveEditIdentity = this.saveBrandSection(b.name, 'identity');
+      selectedBrand.saveEditSocial = this.saveBrandSection(b.name, 'social');
+      selectedBrand.saveEditOverview = this.saveBrandSection(b.name, 'overview');
+      selectedBrand.saveEditBenefits = this.saveBrandSection(b.name, 'benefits');
+      selectedBrand.saveEditVideo = this.saveBrandSection(b.name, 'video');
+      selectedBrand.onManageCoupons = () => this.setPage('promoCodes');
+      selectedBrand.onManageDeals = () => this.setPage('adsDealsStudio');
 
       selectedBrand.verificationStatusLabel = b.verified ? '✓ VERIFICATION PASSED' : 'VERIFICATION PENDING';
       selectedBrand.escrowStatusLabel = b.verified ? '✓ Escrow account linked & verified' : 'No escrow account linked yet';
@@ -12088,6 +12369,12 @@ class Component extends DCLogic {
       sidebarFooterStyle: `display:flex;align-items:center;gap:10px;padding:16px 20px;border-top:1px solid rgba(255,255,255,0.08)`,
       footerNameStyle: `font-size:12.5px;font-weight:700;color:#fff`,
       footerRoleStyle: `font-size:10.5px;font-weight:600;color:rgba(255,255,255,0.4)`,
+      footerName: window.__CMS_MIRROR_DISPLAY_NAME__ || window.__CMS_MIRROR_EMAIL__ || 'Loading…',
+      footerRole: ({
+        super_admin: 'Super Admin', admin: 'Admin', seller: 'Seller', creator: 'Creator',
+        moderator: 'Moderator', finance_manager: 'Finance Manager', support_agent: 'Support Agent',
+        marketing_manager: 'Marketing Manager',
+      })[window.__CMS_MIRROR_ROLE__ || ''] || (window.__CMS_MIRROR_ROLE__ || ''),
       navGroups, navSearchValue, setNavSearch, clearNavSearch, navSearchInputStyle, pageTitle: topBarTitle, pageSubtitle: topBarSubtitle,
       isDashboard: page==='dashboard', isProductsPage: page==='products' && !this.state.editingProduct, isProducts: page==='products' && !this.state.editingProduct && (this.state.productsView||'catalog')==='catalog', isBrands: page==='brands',
       isProductStudio: !!this.state.editingProduct, productStudioEditing: !!this.state.productStudioEditing, startProductStudioEdit: this.startProductStudioEdit, stopProductStudioEdit: this.stopProductStudioEdit, goToInventoryStock: this.goToInventoryStock, backToProductCatalog: this.backToProductCatalog,
@@ -12306,7 +12593,7 @@ class Component extends DCLogic {
       trackingQueryValue, setTrackingQuery, runTracking, trackingSearched, trackingResult,
       labelSearchValue, setLabelSearch, labelsFiltered, labelAllSelected, toggleLabelSelectAll, resetLabels,
       analyticsRangeTabs, analyticsCarriers, analyticsHubs,
-      isBrandList, isBrandDetail, isSellerBrandStudio, showBrandPortfolio: !!(selectedBrand && (isSellerBrandStudio || selectedBrand.isPortfolioTab)), showBrandProfileChrome: !!(selectedBrand && !isSellerBrandStudio), brandDetailGridCols: isSellerBrandStudio ? '1fr' : '260px 1fr', brandStudioEditing: !!this.state.brandStudioEditing, startBrandStudioEdit: this.startBrandStudioEdit, stopBrandStudioEdit: this.stopBrandStudioEdit, selectedBrand, flaggedUsersCount,
+      isBrandList, isBrandDetail, isSellerBrandStudio, showBrandPortfolio: !!(selectedBrand && (isSellerBrandStudio || selectedBrand.isPortfolioTab)), showBrandProfileChrome: !!(selectedBrand && !isSellerBrandStudio), brandDetailGridCols: isSellerBrandStudio ? '1fr' : '260px 1fr', brandStudioEditSection: this.state.brandStudioEditSection || null, selectedBrand, flaggedUsersCount,
       brandSort, brandSortOptions, setBrandSort: this.setBrandSort,
       brandsSorted, brandSelectedCount, brandAllSelected, clearBrandSelection: this.clearBrandSelection,
       toggleBrandSelectAllHandler: this.toggleBrandSelectAll(brandsSorted.map(b=>b.name)),
@@ -12369,7 +12656,7 @@ class Component extends DCLogic {
       trustDashboardMetrics, trustAlertCount, trustAlertCountPlural, goToTrustCenter,
       productFilters, products, productCount, brands, categories, creators, deals, orders, users,
       productStats, combinedProductStats, popularityInsights, topPerformingCategories, conversionSparkline,
-      productSort, productSortOptions, setProductSort: this.setProductSort, productsSorted,
+      productSort, productSortOptions, setProductSort: this.setProductSort, productsSorted, productsEmpty,
       categoryOptions, statusFilterOptions, selectedCount, toast: this.state.toast,
       toggleSelectAll: this.toggleSelectAll, clearSelection: this.clearSelection,
       bulkApprove: this.bulkApprove, bulkReject: this.bulkReject, bulkDelete: this.bulkDelete, exportCSV: this.exportCSV,
@@ -12454,6 +12741,167 @@ class Component extends DCLogic {
 }
 
 ; (function(){
+  function mapCatalogBrandToMirror(b) {
+    var ov = b.overview || {};
+    return {
+      catalogId: b.id,
+      name: b.name,
+      category: b.category || 'General',
+      productsCount: 0,
+      status: b.verifiedStatus ? 'Active' : (b.claimStatus === 'pending' ? 'Pending' : 'Draft'),
+      joined: (b.createdAt || '').slice(0, 4) || new Date().getFullYear().toString(),
+      verified: !!b.verifiedStatus,
+      trustScore: Math.round((b.ratings || 0) * 20) || 0,
+      loves: b.followers || 0,
+      followers: b.followers || 0,
+      tagline: b.tagline || b.description || '',
+      description: b.description || '',
+      dealsListed: 0,
+      address: ov.address || '',
+      email: ov.email || '',
+      phone: ov.phone || '',
+      priceRange: ov.priceRange || '',
+      ageFocus: ov.ageFocus || '',
+      audience: ov.audience || '',
+      services: ov.services || [],
+      tags: ov.tags || [],
+      logo: b.logo || '',
+      coverImage: b.coverImage || '',
+      website: b.website || '',
+      story: b.story || '',
+      storyVideoUrl: b.storyVideoUrl || '',
+      credentials: b.credentials || '',
+      socialLinks: b.socialLinks || {},
+      sellerId: b.sellerId || null,
+      marketplaceAccess: typeof b.marketplaceAccess === 'boolean' ? b.marketplaceAccess : !b.sellerId,
+      claimStatus: b.claimStatus || 'community',
+      ratingOverall: b.ratings || 0,
+    };
+  }
+
+  function mapCatalogProductToMirror(p, idx) {
+    var statusMap = { live: 'Active', draft: 'Draft', archived: 'Out of Stock' };
+    return {
+      id: idx + 1,
+      catalogId: p.id,
+      name: p.title || p.name || 'Untitled',
+      brand: p.brandName || '',
+      brandId: p.brandId || '',
+      category: p.categoryName || 'General',
+      price: typeof p.price === 'number' ? p.price : Number(p.price) || 0,
+      stock: typeof p.stock === 'number' ? p.stock : Number(p.stock) || 0,
+      rating: typeof p.rating === 'number' ? p.rating : 4.0,
+      status: statusMap[p.status] || (p.status === 'Active' ? 'Active' : 'Draft'),
+      description: p.description || '',
+      sku: p.sku || p.id,
+      minThreshold: 10,
+      sellerId: p.sellerId || null,
+      partialPaymentEnabled: false,
+      partialPaymentPct: 30,
+    };
+  }
+
+  function mapCatalogCreatorToMirror(c) {
+    return {
+      catalogId: c.id,
+      name: c.name,
+      platform: (c.platforms && c.platforms[0]) || 'YouTube',
+      followers: (c.followers && (c.followers.YouTube || Object.values(c.followers)[0])) || '0',
+      videoCount: (c.videos && c.videos.length) || 0,
+      status: c.status === 'live' ? 'Active' : (c.status === 'draft' ? 'Pending' : 'Suspended'),
+      role: c.role || 'Creator',
+      handle: c.handle || '',
+      location: c.location || '',
+      verified: !!c.verifiedStatus,
+      bio: c.bio || '',
+      trustScore: c.score || 0,
+      deliveries: '0',
+      ratings: { accuracy: c.score || 0, depth: c.score || 0, clarity: c.score || 0, trust: c.score || 0, value: c.score || 0 },
+      reelsCount: (c.reels && c.reels.length) || 0,
+      blogsCount: (c.blogs && c.blogs.length) || 0,
+      reviewsCount: 0,
+      bestFor: c.bestFor || 'General',
+      bestForTags: c.bestForTags || [],
+      expertiseTopics: [],
+      latestReviews: [],
+      backgroundBio: c.bio || '',
+      areasOfExpertise: (c.bestForTags || []).join(', '),
+      contentPlatforms: (c.platforms || []).join(', '),
+      brandPartners: (c.brandPartners || []).map(function(bp) { return typeof bp === 'string' ? bp : bp.name; }),
+      collabTypes: c.collabTypes || [],
+      contactEmail: c.email || '',
+      email: c.email || '',
+      phone: c.phone || '',
+      responseTime: c.responseTime || '',
+      preferredContact: c.preferredContact || '',
+      communityReviews: [],
+      avatar: c.avatar || '',
+      coverImage: c.coverImage || '',
+      reviewVideoUrl: c.reviewVideoUrl || '',
+      socialLinks: c.socialLinks || {},
+      userId: c.userId || null,
+      featuredFlag: !!c.featuredFlag,
+      videos: c.videos || [],
+      reels: c.reels || [],
+      blogs: c.blogs || [],
+    };
+  }
+
+  Component.prototype.hydrateTenantWorkspace = async function() {
+    var api = window.CmsStudioProfileApi;
+    if (!api) return;
+    var role = window.__CMS_MIRROR_ROLE__ || 'super_admin';
+    var userId = window.__CMS_MIRROR_USER_ID__ || '';
+    var hydrateKey = role + '::' + userId;
+    if (window.__CMS_MIRROR_HYDRATED__ === hydrateKey) {
+      return;
+    }
+    var self = this;
+    try {
+      if (role === 'seller') {
+        var sellerWs = await api.ensureSellerWorkspace();
+        var brands = (sellerWs.brands || []).map(mapCatalogBrandToMirror);
+        var products = (sellerWs.products || []).map(mapCatalogProductToMirror);
+        var customers = sellerWs.customers || [];
+        Component.BRANDS = brands;
+        Component.PRODUCTS = products;
+        window.__CMS_MIRROR_HYDRATED__ = hydrateKey;
+        self.setState({
+          products: products.map(function(p) { return Object.assign({}, p); }),
+          sellerCustomersList: customers.map(function(c) { return Object.assign({}, c); }),
+          selectedBrandName: brands[0] ? brands[0].name : null,
+          brandProfileDrafts: brands.reduce(function(acc, b) {
+            acc[b.name] = Object.assign({}, self.state.brandProfileDrafts && self.state.brandProfileDrafts[b.name], { catalogId: b.catalogId });
+            return acc;
+          }, {}),
+        });
+        return;
+      }
+      if (role === 'creator') {
+        var creatorWs = await api.ensureCreatorWorkspace({
+          displayName: window.__CMS_MIRROR_DISPLAY_NAME__ || undefined,
+          email: window.__CMS_MIRROR_EMAIL__ || undefined,
+        });
+        var creators = (creatorWs.creators || []).map(mapCatalogCreatorToMirror);
+        Component.CREATORS = creators;
+        window.__CMS_MIRROR_HYDRATED__ = hydrateKey;
+        self.setState({
+          selectedCreatorName: creators[0] ? creators[0].name : null,
+        });
+        return;
+      }
+      if (role === 'super_admin' || role === 'admin') {
+        var allBrands = await api.listBrands();
+        if (allBrands && allBrands.length) {
+          Component.BRANDS = allBrands.map(mapCatalogBrandToMirror);
+        }
+        window.__CMS_MIRROR_HYDRATED__ = hydrateKey;
+      }
+    } catch (err) {
+      try { console.warn('[cms-mirror] workspace hydrate failed', err); } catch (_) {}
+    }
+  };
+
   try {
     var prev = Component.prototype.componentDidMount;
     Component.prototype.componentDidMount = function(){
@@ -12462,6 +12910,10 @@ class Component extends DCLogic {
       var pending = window.__CMS_MIRROR_PENDING__ || window.__CMS_MIRROR_LANDING__;
       if (pending) this.setPage(pending, { silent: true });
       window.__CMS_MIRROR_PENDING__ = null;
+      var self = this;
+      setTimeout(function() {
+        if (typeof self.hydrateTenantWorkspace === 'function') self.hydrateTenantWorkspace();
+      }, 50);
     };
   } catch (e) {}
 })();
@@ -12555,6 +13007,9 @@ window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
     if (e.data.type === 'cms-mirror-set-state') {
       if (e.data.role) window.__CMS_MIRROR_ROLE__ = e.data.role;
       if (e.data.allowedKeys) window.__CMS_MIRROR_ALLOWED_KEYS__ = e.data.allowedKeys;
+      if (e.data.userId) window.__CMS_MIRROR_USER_ID__ = e.data.userId;
+      if (e.data.displayName) window.__CMS_MIRROR_DISPLAY_NAME__ = e.data.displayName;
+      if (e.data.email) window.__CMS_MIRROR_EMAIL__ = e.data.email;
       var page = e.data.page;
       if (page) {
         window.__CMS_MIRROR_PENDING__ = page;
@@ -12567,6 +13022,9 @@ window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
         }
       } else if (window.__CMS_MIRROR_INSTANCE__ && window.__CMS_MIRROR_INSTANCE__.forceUpdate) {
         try { window.__CMS_MIRROR_INSTANCE__.forceUpdate(); } catch (err) {}
+      }
+      if (window.__CMS_MIRROR_INSTANCE__ && typeof window.__CMS_MIRROR_INSTANCE__.hydrateTenantWorkspace === 'function') {
+        try { window.__CMS_MIRROR_INSTANCE__.hydrateTenantWorkspace(); } catch (err) {}
       }
       return;
     }

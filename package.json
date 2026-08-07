@@ -11,6 +11,7 @@
     "lint": "tsc --noEmit",
     "smoke": "tsx scripts/smoke-test.ts",
     "test:auth": "tsx scripts/probe-dev-login-isolation.ts && tsx scripts/probe-tier1-roles.ts && tsx scripts/probe-auth-regression.ts",
+    "test:brands": "tsx scripts/probe-brand-ownership.ts",
     "verify:payments": "tsx scripts/verify-payment-flow.ts",
     "check:prod-env": "tsx scripts/check-production-env.ts",
     "seed:catalog": "tsx scripts/seedCatalog.ts",

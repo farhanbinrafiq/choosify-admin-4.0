@@ -69,7 +69,8 @@ interface AuthContextType {
   setActiveBrandId: (id: string | null) => void;
   sellerBrands: SellerBrandRelation[];
   allBrands: { id: string; name: string; category: string }[];
-  requestNewBrand: (name: string, category: string) => { id: string; name: string; category: string };
+  requestNewBrand: (name: string, category: string) => Promise<{ id: string; name: string; category: string }>;
+  brandsLoading: boolean;
   
   // Categories Management System Integration
   categories: CategoryType[];
@@ -219,7 +220,8 @@ const AuthContext = createContext<AuthContextType>({
   setActiveBrandId: () => {},
   sellerBrands: [],
   allBrands: [],
-  requestNewBrand: () => ({ id: '', name: '', category: '' }),
+  requestNewBrand: async () => ({ id: '', name: '', category: '' }),
+  brandsLoading: false,
   categories: [],
   createCategory: () => ({ id: '', parentId: null, name: '', slug: '', icon: '', description: '', displayOrder: 0, enabled: true }),
   updateCategory: () => {},
@@ -235,35 +237,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Initialize seller_brands and allBrands in localStorage
-  const [sellerBrands, setSellerBrands] = useState<SellerBrandRelation[]>(() => {
-    const saved = localStorage.getItem('choosify_seller_brands');
-    if (saved) return JSON.parse(saved);
-    const initialSellerBrands: SellerBrandRelation[] = [
-      { id: 'sb_1', seller_user_id: 'seller_001', brand_id: 'brand_apex', role: 'Owner', created_at: '2026-06-14T03:54:11-07:00' },
-      { id: 'sb_2', seller_user_id: 'seller_001', brand_id: 'brand_urban_fit', role: 'Owner', created_at: '2026-06-14T03:54:11-07:00' },
-      { id: 'sb_3', seller_user_id: 'seller_001', brand_id: 'brand_tech_core', role: 'Owner', created_at: '2026-06-14T03:54:11-07:00' },
-    ];
-    localStorage.setItem('choosify_seller_brands', JSON.stringify(initialSellerBrands));
-    return initialSellerBrands;
-  });
-
-  const [allBrands, setAllBrands] = useState<{ id: string; name: string; category: string }[]>(() => {
-    const saved = localStorage.getItem('choosify_all_brands');
-    if (saved) return JSON.parse(saved);
-    const initialAllBrands = [
-      { id: 'brand_apex', name: 'Apex', category: 'Footwear & Apparel' },
-      { id: 'brand_urban_fit', name: 'Urban Fit', category: 'Active Wear' },
-      { id: 'brand_tech_core', name: 'TechCore', category: 'Consumer Tech' },
-      { id: '1', name: 'Samsung Bangladesh', category: 'Electronics & Mobile' },
-      { id: '2', name: 'Aarong', category: 'Fashion & Lifestyle' },
-      { id: '3', name: 'Walton', category: 'Electronics & Home' },
-      { id: '4', name: 'Xiaomi', category: 'Mobile & Smart Home' },
-      { id: '5', name: 'Unilever BD', category: 'Beauty & FMCG' },
-    ];
-    localStorage.setItem('choosify_all_brands', JSON.stringify(initialAllBrands));
-    return initialAllBrands;
-  });
+  // Brands come from the real catalog backend only — never seeded/mocked here.
+  // GET /catalog/brands is already ownership-scoped server-side: an authenticated
+  // Seller only ever receives brands where sellerId === their own uid.
+  const [sellerBrands, setSellerBrands] = useState<SellerBrandRelation[]>([]);
+  const [allBrands, setAllBrands] = useState<{ id: string; name: string; category: string }[]>([]);
+  const [brandsLoading, setBrandsLoading] = useState(false);
 
   const [activeBrandId, setActiveBrandIdState] = useState<string | null>(null);
 
@@ -287,6 +266,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           const remote = await resolveAuthProfile(token);
           if (!cancelled) {
+            // Real JWT session — never keep a TempRole mock key alongside it.
+            localStorage.removeItem('choosify_mock_role');
             setProfile({
               id: remote.uid,
               displayName: remote.displayName,
@@ -296,16 +277,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             console.info('[Auth] Session restored', { uid: remote.uid, role: remote.role });
           }
         } catch (error) {
-          console.warn('[Auth] Session restore failed, clearing stored token', error);
-          localStorage.removeItem(AUTH_TOKEN_KEY);
+          console.warn('[Auth] Session restore failed — clearing JWT, remaining unauthenticated', error);
+          // StrictMode: a cancelled mount must not erase a token still needed by the remount.
           if (!cancelled) {
-            const savedRole = localStorage.getItem('choosify_mock_role') as UserRole;
-            if (savedRole && mockProfiles[savedRole]) {
-              setProfile(mockProfiles[savedRole]);
-            }
+            localStorage.removeItem(AUTH_TOKEN_KEY);
+            // Never resurrect mockProfiles after a failed real session.
+            localStorage.removeItem('choosify_mock_role');
+            setProfile(null);
           }
         }
       } else {
+        // TempRoleSwitcher-only path: no JWT, optional mock role for local QA.
         const savedRole = localStorage.getItem('choosify_mock_role') as UserRole;
         if (savedRole && mockProfiles[savedRole]) {
           setProfile(mockProfiles[savedRole]);
@@ -323,25 +305,76 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // When profile loads or changes, manage activeBrandId
+  // Fetch this account's real owned Brands from the catalog backend whenever
+  // the profile changes. Zero brands is a real, valid state — no auto-create,
+  // no fallback to a first/seeded brand (BP-004 §7).
   useEffect(() => {
-    if (profile && profile.role === 'seller') {
-      const savedBrandId = localStorage.getItem('choosify_active_brand_id');
-      const userBrandRelations = sellerBrands.filter(b => b.seller_user_id === profile.id);
-      
-      if (savedBrandId && userBrandRelations.some(r => r.brand_id === savedBrandId)) {
-        setActiveBrandIdState(savedBrandId);
-      } else if (userBrandRelations.length > 0) {
-        setActiveBrandId(userBrandRelations[0].brand_id);
-      } else {
+    let cancelled = false;
+
+    async function loadOwnedBrands() {
+      const token = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (!profile || !token) {
+        setAllBrands([]);
+        setSellerBrands([]);
         setActiveBrandIdState(null);
+        return;
       }
-    } else {
-      setActiveBrandIdState(null);
+
+      setBrandsLoading(true);
+      try {
+        const response = await fetch(`${API_BASE}/catalog/brands`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!response.ok) throw new Error('Failed to load brands');
+        const payload = (await response.json().catch(() => ({}))) as {
+          data?: Array<{ id: string; name: string; category: string }>;
+        };
+        const brands = Array.isArray(payload.data) ? payload.data : [];
+        if (cancelled) return;
+
+        setAllBrands(brands.map((b) => ({ id: b.id, name: b.name, category: b.category })));
+        setSellerBrands(
+          brands.map((b) => ({
+            id: `sb_${b.id}`,
+            seller_user_id: profile.id,
+            brand_id: b.id,
+            role: 'Owner',
+            created_at: new Date().toISOString(),
+          })),
+        );
+
+        const savedBrandId = localStorage.getItem('choosify_active_brand_id');
+        if (savedBrandId && brands.some((b) => b.id === savedBrandId)) {
+          setActiveBrandIdState(savedBrandId);
+        } else if (brands.length > 0) {
+          setActiveBrandId(brands[0].id);
+        } else {
+          setActiveBrandIdState(null);
+        }
+      } catch (error) {
+        console.warn('[Auth] Failed to load owned brands', error);
+        if (!cancelled) {
+          setAllBrands([]);
+          setSellerBrands([]);
+          setActiveBrandIdState(null);
+        }
+      } finally {
+        if (!cancelled) setBrandsLoading(false);
+      }
     }
-  }, [profile, sellerBrands]);
+
+    loadOwnedBrands();
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
 
   const login = (role: UserRole) => {
+    // TempRoleSwitcher must not overlay a real JWT session.
+    if (localStorage.getItem(AUTH_TOKEN_KEY)) {
+      console.warn('[Auth] Ignoring TempRole login — real JWT session is active');
+      return;
+    }
     setProfile(mockProfiles[role]);
     localStorage.setItem('choosify_mock_role', role);
   };
@@ -371,6 +404,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     localStorage.setItem(AUTH_TOKEN_KEY, payload.accessToken);
+    // choosify_mock_role is TempRoleSwitcher-only — never share it with real auth.
+    localStorage.removeItem('choosify_mock_role');
     const role = toUserRole(payload.role || '', fallbackRole);
     const nextProfile: UserProfile = {
       id: payload.uid || '',
@@ -379,7 +414,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       role,
     };
     setProfile(nextProfile);
-    localStorage.setItem('choosify_mock_role', role);
     console.info('[Auth] Login succeeded', { uid: payload.uid, role });
     return role;
   };
@@ -463,7 +497,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     setProfile(nextProfile);
-    localStorage.setItem('choosify_mock_role', role);
+    // choosify_mock_role is TempRoleSwitcher-only — never share it with real auth.
+    localStorage.removeItem('choosify_mock_role');
     console.info('[Auth] Seller registration succeeded', { uid: nextProfile.id, role });
     return {
       role,
@@ -486,35 +521,49 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchRole = (role: UserRole) => {
+    // TempRoleSwitcher must not replace a real authenticated profile.
+    if (localStorage.getItem(AUTH_TOKEN_KEY)) {
+      console.warn('[Auth] Ignoring TempRole switch — real JWT session is active');
+      return;
+    }
     setProfile(mockProfiles[role]);
     localStorage.setItem('choosify_mock_role', role);
   };
 
-  const requestNewBrand = (name: string, category: string) => {
-    const brandId = 'brand_' + name.toLowerCase().replace(/[^a-z0-9]/g, '_');
-    
-    // 1. Add to allBrands
-    const newBrand = { id: brandId, name, category };
-    const updatedBrands = [...allBrands, newBrand];
-    setAllBrands(updatedBrands);
-    localStorage.setItem('choosify_all_brands', JSON.stringify(updatedBrands));
-
-    // 2. Add relation for current seller
-    if (profile && profile.role === 'seller') {
-      const newRelation: SellerBrandRelation = {
-        id: 'sb_' + Date.now(),
-        seller_user_id: profile.id,
-        brand_id: brandId,
-        role: 'Owner',
-        created_at: new Date().toISOString()
-      };
-      const updatedRelations = [...sellerBrands, newRelation];
-      setSellerBrands(updatedRelations);
-      localStorage.setItem('choosify_seller_brands', JSON.stringify(updatedRelations));
-      
-      // Set active to newly created brand
-      setActiveBrandId(brandId);
+  const requestNewBrand = async (name: string, category: string) => {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!token) {
+      throw new Error('Sign in required to create a Brand');
     }
+
+    const response = await fetch(`${API_BASE}/catalog/brands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ name, category }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      data?: { id: string; name: string; category: string };
+    };
+    if (!response.ok || !payload.data) {
+      throw new Error(payload.error || 'Unable to create brand');
+    }
+
+    const newBrand = { id: payload.data.id, name: payload.data.name, category: payload.data.category };
+    setAllBrands((prev) => [...prev, newBrand]);
+    if (profile) {
+      setSellerBrands((prev) => [
+        ...prev,
+        {
+          id: `sb_${newBrand.id}`,
+          seller_user_id: profile.id,
+          brand_id: newBrand.id,
+          role: 'Owner',
+          created_at: new Date().toISOString(),
+        },
+      ]);
+    }
+    setActiveBrandId(newBrand.id);
     return newBrand;
   };
 
@@ -735,6 +784,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       sellerBrands,
       allBrands,
       requestNewBrand,
+      brandsLoading,
       categories,
       createCategory,
       updateCategory,

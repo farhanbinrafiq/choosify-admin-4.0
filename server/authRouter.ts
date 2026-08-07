@@ -28,10 +28,12 @@ import { DevLoginBodySchema } from './validation/auth/devLoginSchema';
 import { LoginBodySchema } from './validation/auth/loginSchema';
 import { RegisterBodySchema } from './validation/auth/registerSchema';
 import { SellerRegisterBodySchema } from './validation/auth/sellerRegisterSchema';
+import { UpgradeToSellerBodySchema } from './validation/auth/upgradeToSellerSchema';
 import { loadAdminUserByEmail } from './operations/operationsDb';
 import { db } from './db/client';
 import { sellerProfiles, users } from './db/schema';
 import { ROLES, toUserRole } from './permissions/roles';
+import { publishEvent } from './events/eventBus';
 
 export const authRouter = Router();
 
@@ -296,6 +298,135 @@ authRouter.post('/auth/register', validate({ body: RegisterBodySchema }), async 
     res.status(500).json({ error: 'Unable to create account' });
   }
 });
+
+/**
+ * Consumer -> Seller upgrade. Same user id/email, same session identity —
+ * this only changes the users.role and attaches a seller_profiles row.
+ * Consumer order history/wishlist/reviews/trust score stay intact because
+ * they are keyed by this same userId and nothing here touches them.
+ * Creators remain a separate account type per Blueprint — this endpoint
+ * only accepts upgrades from plain "user" (Consumer) accounts.
+ */
+authRouter.post(
+  '/auth/upgrade-to-seller',
+  validate({ body: UpgradeToSellerBodySchema }),
+  async (req, res) => {
+    const token = getBearerToken(req.headers.authorization);
+    if (!token) {
+      recordFailedAuthAttempt(req.ip, req.originalUrl);
+      sendAuthError(res, 401, AUTH_ERROR_CODES.MISSING_TOKEN, 'Missing bearer token');
+      return;
+    }
+
+    const authed = await resolveAuthenticatedUserFromToken(token);
+    if (!authed) {
+      recordFailedAuthAttempt(req.ip, req.originalUrl);
+      sendAuthError(res, 401, AUTH_ERROR_CODES.INVALID_TOKEN, 'Invalid token');
+      return;
+    }
+
+    const { storeName, phone, category, city, website } = req.body as {
+      storeName: string;
+      phone: string;
+      category: string;
+      city: string;
+      website?: string;
+    };
+
+    try {
+      const rows = await db.select().from(users).where(eq(users.id, authed.uid)).limit(1);
+      const user = rows[0];
+      if (!user) {
+        sendAuthError(res, 401, AUTH_ERROR_CODES.INVALID_TOKEN, 'Invalid token');
+        return;
+      }
+
+      const currentRole = toUserRole(user.role);
+      if (currentRole === ROLES.SELLER || currentRole === ROLES.VERIFIED_SELLER) {
+        res.status(409).json({
+          error: 'This account already has a Seller Workspace.',
+          code: 'ALREADY_SELLER',
+          dashboardPath: '/seller/products',
+        });
+        return;
+      }
+      if (currentRole !== ROLES.USER) {
+        res.status(409).json({
+          error: 'Only Consumer accounts can upgrade to a Seller Workspace.',
+          code: 'UPGRADE_NOT_ALLOWED',
+        });
+        return;
+      }
+
+      const now = new Date();
+      await db.transaction(async (tx) => {
+        await tx
+          .update(users)
+          .set({ role: ROLES.SELLER, updatedAt: now })
+          .where(eq(users.id, user.id));
+        await tx
+          .insert(sellerProfiles)
+          .values({
+            userId: user.id,
+            storeName: storeName.trim(),
+            phone: phone.trim(),
+            category: category.trim(),
+            city: city.trim(),
+            website: website?.trim() || null,
+            createdAt: now,
+          })
+          .onConflictDoUpdate({
+            target: sellerProfiles.userId,
+            set: {
+              storeName: storeName.trim(),
+              phone: phone.trim(),
+              category: category.trim(),
+              city: city.trim(),
+              website: website?.trim() || null,
+            },
+          });
+      });
+
+      const accessToken = signAccessToken({
+        id: user.id,
+        email: user.email,
+        emailVerified: user.emailVerified,
+      });
+      const refreshToken = await issueRefreshToken(user.id);
+      setRefreshTokenCookie(res, refreshToken);
+
+      publishEvent({
+        eventName: 'SellerUpgraded',
+        domain: 'Marketplace',
+        producer: 'authRouter',
+        aggregateId: user.id,
+        actor: user.id,
+        payload: { userId: user.id, email: user.email, storeName: storeName.trim() },
+      });
+
+      Logger.info('consumer upgraded to seller', {
+        requestId: req.requestId,
+        uid: user.id,
+        email: user.email,
+      });
+
+      res.json({
+        uid: user.id,
+        email: user.email,
+        displayName: user.displayName,
+        role: ROLES.SELLER,
+        accessToken,
+        dashboardPath: '/seller/products',
+      });
+    } catch (error) {
+      Logger.warn('upgrade-to-seller failed', {
+        requestId: req.requestId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      res.status(500).json({ error: 'Unable to upgrade to a Seller Workspace' });
+    }
+  },
+);
 
 authRouter.post('/auth/refresh', async (req, res) => {
   try {

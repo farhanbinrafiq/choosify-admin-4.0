@@ -73,3 +73,38 @@ export async function authenticateRequest(
     }
   }
 }
+
+/**
+ * Attach user when a valid bearer is present; otherwise continue anonymously.
+ * Used for catalog list scoping (seller workspace vs public marketplace).
+ */
+export async function softAuthenticateRequest(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+) {
+  const token = getBearerToken(req.headers.authorization);
+  if (!token) {
+    next();
+    return;
+  }
+  try {
+    const decoded = await verifyFirebaseToken(token);
+    if (!decoded) {
+      next();
+      return;
+    }
+    const user = await resolveAuthenticatedUser(decoded);
+    if (!user) {
+      next();
+      return;
+    }
+    req.user = user;
+    req.userId = user.uid;
+    req.userRole = user.role;
+    req.permissions = user.permissions;
+  } catch {
+    // ignore — treat as anonymous
+  }
+  next();
+}

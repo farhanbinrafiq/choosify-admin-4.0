@@ -16,8 +16,8 @@ import BrandEditStudio from "./BrandEditStudio";
 import { DataTable, DataTableColumn } from "../../components/ui/DataTable";
 import { BulkActionBar, BulkAction } from "../../components/ui/BulkActionBar";
 
-// Local storage key for persistent brands list in visual brand studio
-const COMPILATION_KEY = "choosify_brand_studio_list";
+const AUTH_TOKEN_KEY = "choosify_auth_token";
+const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || "/api/v1";
 
 interface BrandStudioItem {
   id: string;
@@ -32,16 +32,44 @@ interface BrandStudioItem {
   lastUpdated: string;
 }
 
-const defaultBrands: BrandStudioItem[] = [
-  { id: "1", brandName: "Samsung Bangladesh", category: "Electronics & Mobile", status: "Live", followersCount: "12,400", loveCount: "8,900", trustScore: 4.8, initials: "SB", color: "bg-[#0A2540] text-[#00D4B2]", lastUpdated: "June 12, 2026" },
-  { id: "2", brandName: "Aarong", category: "Fashion & Lifestyle", status: "Live", followersCount: "8,920", loveCount: "6,540", trustScore: 4.9, initials: "AB", color: "bg-orange-950 text-orange-400", lastUpdated: "June 13, 2026" },
-  { id: "3", brandName: "Walton", category: "Electronics & Home Appliances", status: "Live", followersCount: "7,310", loveCount: "4,120", trustScore: 4.6, initials: "WB", color: "bg-blue-950 text-blue-400", lastUpdated: "June 11, 2026" },
-  { id: "4", brandName: "Xiaomi Bangladesh", category: "Mobile & Smart Home", status: "Draft", followersCount: "3,840", loveCount: "2,200", trustScore: 4.7, initials: "XM", color: "bg-amber-950 text-amber-500", lastUpdated: "June 10, 2026" },
-  { id: "5", brandName: "Unilever BD", category: "Beauty & FMCG", status: "Live", followersCount: "5,200", loveCount: "3,950", trustScore: 4.8, initials: "UB", color: "bg-green-950 text-green-400", lastUpdated: "June 08, 2026" },
+const BRAND_COLORS = [
+  "bg-[#0A2540] text-[#00D4B2]",
+  "bg-orange-950 text-orange-400",
+  "bg-blue-950 text-blue-400",
+  "bg-purple-950 text-purple-400",
+  "bg-green-950 text-emerald-400",
 ];
 
+type ApiCatalogBrand = {
+  id: string;
+  name: string;
+  category: string;
+  followers?: number;
+  ratings?: number;
+  verifiedStatus?: boolean;
+  marketplaceAccess?: boolean;
+  updatedAt?: string;
+};
+
+function mapCatalogBrandToItem(b: ApiCatalogBrand): BrandStudioItem {
+  const initials = b.name.split(" ").map((w) => w[0]).join("").substring(0, 2).toUpperCase() || "B";
+  const color = BRAND_COLORS[Math.abs(b.name.length + b.id.length) % BRAND_COLORS.length];
+  return {
+    id: b.id,
+    brandName: b.name,
+    category: b.category,
+    status: b.marketplaceAccess ? "Live" : "Draft",
+    followersCount: (b.followers ?? 0).toLocaleString(),
+    loveCount: "0",
+    trustScore: typeof b.ratings === "number" ? b.ratings : 0,
+    initials,
+    color,
+    lastUpdated: b.updatedAt ? new Date(b.updatedAt).toLocaleDateString() : "—",
+  };
+}
+
 export default function BrandsStudioList() {
-  const { profile, activeBrandId, setActiveBrandId, allBrands, sellerBrands, requestNewBrand } = useAuth();
+  const { profile, activeBrandId, setActiveBrandId, allBrands, sellerBrands, requestNewBrand, brandsLoading } = useAuth();
   const { verificationRequests, trustScores, trustAlerts, submitVerificationRequest } = useTrust();
 
   // Sub-tab selection state for Seller Dashboard context
@@ -70,83 +98,82 @@ export default function BrandsStudioList() {
   const [newBrandCategory, setNewBrandCategory] = useState('Retail & Lifestyle');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  const [brandsFetchLoading, setBrandsFetchLoading] = useState(false);
+
+  const fetchBrands = React.useCallback(async () => {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    setBrandsFetchLoading(true);
+    try {
+      const response = await fetch(`${API_BASE}/catalog/brands`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!response.ok) throw new Error("Failed to load brands");
+      const payload = (await response.json().catch(() => ({}))) as { data?: ApiCatalogBrand[] };
+      const rows = Array.isArray(payload.data) ? payload.data : [];
+      setBrands(rows.map(mapCatalogBrandToItem));
+    } catch (error) {
+      console.warn("[BrandsStudioList] Failed to load brands from catalog API", error);
+      setBrands([]);
+    } finally {
+      setBrandsFetchLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const cached = localStorage.getItem(COMPILATION_KEY);
-    let loaded: BrandStudioItem[] = [];
-    if (cached) {
-      try {
-        loaded = JSON.parse(cached);
-      } catch (_) {
-        loaded = defaultBrands;
-      }
-    } else {
-      loaded = defaultBrands;
-      localStorage.setItem(COMPILATION_KEY, JSON.stringify(defaultBrands));
-    }
-
-    // Enrich with any brands missing from allBrands
-    let updated = [...loaded];
-    let changed = false;
-    allBrands.forEach(b => {
-      if (!updated.some(u => u.id === b.id)) {
-        const initials = b.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
-        const colors = [
-          "bg-[#0A2540] text-[#00D4B2]",
-          "bg-orange-950 text-orange-400",
-          "bg-blue-950 text-blue-400",
-          "bg-purple-950 text-purple-400",
-          "bg-green-950 text-emerald-400"
-        ];
-        // simple hash code or random selection
-        const color = colors[Math.abs(b.name.length + b.id.length) % colors.length];
-        updated.push({
-          id: b.id,
-          brandName: b.name,
-          category: b.category,
-          status: "Live",
-          followersCount: b.id.startsWith('brand_') ? "2,120" : "8,500",
-          loveCount: b.id.startsWith('brand_') ? "1,450" : "6,200",
-          trustScore: 4.8,
-          initials: initials || "B",
-          color: color,
-          lastUpdated: "June 14, 2026"
-        });
-        changed = true;
-      }
-    });
-
-    if (changed) {
-      localStorage.setItem(COMPILATION_KEY, JSON.stringify(updated));
-    }
-    setBrands(updated);
-  }, [allBrands]);
+    fetchBrands();
+  }, [fetchBrands]);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleDeleteBrand = (id: string) => {
-    const updated = brands.filter((b) => b.id !== id);
-    setBrands(updated);
-    localStorage.setItem(COMPILATION_KEY, JSON.stringify(updated));
-    triggerToast("✓ Brand visual blueprint removed from CMS registry.");
+  const handleDeleteBrand = async (id: string) => {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    try {
+      const response = await fetch(`${API_BASE}/catalog/brands/${id}`, {
+        method: "DELETE",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload?.error || "Delete failed");
+      }
+      setBrands((prev) => prev.filter((b) => b.id !== id));
+      triggerToast("✓ Brand removed from CMS registry.");
+    } catch (error) {
+      triggerToast(`✕ ${error instanceof Error ? error.message : "Unable to delete brand"}`);
+    }
   };
 
   const handleBulkSetStatus = (status: BrandStudioItem["status"]) => {
+    // Bulk status here reflects Marketplace Access visibility (Live = granted, Draft = not
+    // granted). Archived isn't a real backend state yet — left as a local-only display value.
     const ids = [...selectedIds];
-    const updated = brands.map((b) => (ids.includes(b.id) ? { ...b, status } : b));
-    setBrands(updated);
-    localStorage.setItem(COMPILATION_KEY, JSON.stringify(updated));
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    Promise.all(
+      ids.map((id) =>
+        status === "Live" || status === "Draft"
+          ? fetch(`${API_BASE}/catalog/brands/${id}`, {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({ marketplaceAccess: status === "Live" }),
+            })
+          : Promise.resolve(),
+      ),
+    )
+      .then(() => fetchBrands())
+      .catch((error) => console.warn("[BrandsStudioList] Bulk status update failed", error));
     triggerToast(`✓ ${ids.length} brand(s) marked as ${status}.`);
     setSelectedIds(new Set());
   };
 
   const handleBulkDeleteBrands = () => {
     const ids = [...selectedIds];
-    const updated = brands.filter((b) => !ids.includes(b.id));
-    setBrands(updated);
-    localStorage.setItem(COMPILATION_KEY, JSON.stringify(updated));
+    Promise.all(ids.map((id) => handleDeleteBrand(id))).catch(() => {});
     triggerToast(`✓ ${ids.length} brand(s) removed from CMS registry.`);
     setSelectedIds(new Set());
   };
@@ -186,19 +213,12 @@ export default function BrandsStudioList() {
     triggerToast("✓ Contact alterations successfully saved & cached in seller registry.");
   };
 
-  const sellerRelations = sellerBrands.filter(r => r.seller_user_id === profile?.id);
-  const ownedBrandIds = sellerRelations.map(r => r.brand_id);
-  const ownedBrandNames = allBrands.filter(b => ownedBrandIds.includes(b.id)).map(b => b.name.toLowerCase());
+  // GET /catalog/brands is already ownership-scoped server-side (Sellers only ever
+  // receive brands they own), so no client-side ownership re-filtering is needed here.
+  const ownedBrandIds = sellerBrands.filter(r => r.seller_user_id === profile?.id).map(r => r.brand_id);
 
   const filteredBrands = brands.filter((brand) => {
-    if (profile?.role === 'seller') {
-      const bName = brand.brandName.toLowerCase();
-      const isOwnedName = ownedBrandNames.some(name => bName === name || bName.includes(name) || name.includes(bName));
-      const isOwnedId = ownedBrandIds.includes(brand.id);
-      if (!isOwnedId && !isOwnedName) return false;
-    }
-
-    const matchesSearch = brand.brandName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    const matchesSearch = brand.brandName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           brand.category.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "All" || brand.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -216,7 +236,7 @@ export default function BrandsStudioList() {
           </div>
           <div>
             <div className="text-xs font-bold text-app-text-primary flex items-center gap-1.5">
-              <Link to={`/admin/brands/${brand.id}`} className="hover:text-app-accent hover:underline flex items-center gap-1">
+              <Link to={`/admin/brand-studio/${brand.id}/edit`} className="hover:text-app-accent hover:underline flex items-center gap-1">
                 {brand.brandName}
               </Link>
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
@@ -274,7 +294,7 @@ export default function BrandsStudioList() {
           <div className="flex flex-col items-end">
             <div className="flex justify-end gap-2">
               <Link
-                to={`/dashboard/content-studio/brands/${brand.id}/edit`}
+                to={`/admin/brand-studio/${brand.id}/edit`}
                 className="p-1.5 bg-app-accent/10 hover:bg-app-accent/20 text-app-accent hover:text-white rounded-lg transition-colors border border-transparent"
                 title="Edit Experience"
               >
@@ -378,43 +398,18 @@ export default function BrandsStudioList() {
 
                   <div className="flex gap-2">
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (!newBrandName.trim()) return;
-                        const newBrandRef = requestNewBrand(newBrandName.trim(), newBrandCategory.trim());
-                        const newId = newBrandRef?.id || `brand_${Math.random().toString(36).substr(2, 9)}`;
-                        
-                        const initials = newBrandName.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
-                        const colors = [
-                          "bg-[#0A2540] text-[#00D4B2]",
-                          "bg-orange-950 text-orange-400",
-                          "bg-blue-950 text-blue-400",
-                          "bg-purple-950 text-purple-400",
-                          "bg-green-950 text-emerald-400"
-                        ];
-                        const color = colors[Math.abs(newBrandName.length + newId.length) % colors.length];
-                        
-                        const updated: BrandStudioItem[] = [
-                          {
-                            id: newId,
-                            brandName: newBrandName.trim(),
-                            category: newBrandCategory.trim() || "Retail & Lifestyle",
-                            status: "Live",
-                            followersCount: "0",
-                            loveCount: "0",
-                            trustScore: 5.0,
-                            initials: initials || "B",
-                            color: color,
-                            lastUpdated: "June 26, 2026"
-                          },
-                          ...brands
-                        ];
-                        setBrands(updated);
-                        localStorage.setItem(COMPILATION_KEY, JSON.stringify(updated));
-                        triggerToast("✓ New brand profile template generated successfully.");
-                        
-                        setShowCreateForm(false);
-                        setNewBrandName('');
-                        setNewBrandCategory('Retail & Lifestyle');
+                        try {
+                          await requestNewBrand(newBrandName.trim(), newBrandCategory.trim() || "Retail & Lifestyle");
+                          await fetchBrands();
+                          triggerToast("✓ New brand created successfully.");
+                          setShowCreateForm(false);
+                          setNewBrandName('');
+                          setNewBrandCategory('Retail & Lifestyle');
+                        } catch (error) {
+                          triggerToast(`✕ ${error instanceof Error ? error.message : "Unable to create brand"}`);
+                        }
                       }}
                       disabled={!newBrandName.trim()}
                       className="px-3 py-1.5 bg-app-accent text-app-text-primary text-[10px] font-black uppercase rounded-lg hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -429,7 +424,7 @@ export default function BrandsStudioList() {
             </div>
           ) : (
             <Link
-              to="/dashboard/content-studio/brands/new"
+              to="/admin/brand-studio/new"
               className="flex items-center gap-2 bg-[#F4631E] hover:bg-orange-500 text-white px-5 py-3 rounded-xl text-xs font-bold transition-all shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-95"
             >
               <Plus className="w-4 h-4" /> Create Brand Experience
@@ -481,7 +476,21 @@ export default function BrandsStudioList() {
                 </div>
               </div>
             )}
-            <BrandEditStudio overrideId={activeBrandId || undefined} isNested={true} />
+            {brandsLoading ? null : allBrands.length === 0 ? (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="bg-app-card border border-app-border rounded-3xl p-16 text-center text-app-text-secondary flex flex-col items-center justify-center gap-4"
+              >
+                <Globe className="w-12 h-12 text-slate-600" />
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">No Brands Yet</h4>
+                  <p className="text-[11px] text-slate-500 max-w-sm">Create your first Brand using the "Create Brand Experience" button above to open the Visual Builder.</p>
+                </div>
+              </motion.div>
+            ) : (
+              <BrandEditStudio overrideId={activeBrandId || undefined} isNested={true} />
+            )}
           </div>
         ) : (
           <>
@@ -612,7 +621,7 @@ export default function BrandsStudioList() {
                     {brand.initials}
                   </div>
                   <div className="space-y-1 text-left">
-                    <Link to={`/admin/brands/${brand.id}`} className="group/title block">
+                    <Link to={`/admin/brand-studio/${brand.id}/edit`} className="group/title block">
                       <h3 className="font-bold text-sm text-app-text-primary group-hover/title:text-app-accent transition-colors flex items-center gap-1.5 pr-12">
                         {brand.brandName}
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
@@ -668,8 +677,8 @@ export default function BrandsStudioList() {
 
                 {/* Edit Controls */}
                 <div className="flex gap-2 border-t border-[#202030] pt-4.5 mt-2">
-                  <Link 
-                    to={`/dashboard/content-studio/brands/${brand.id}/edit`}
+                  <Link
+                    to={`/admin/brand-studio/${brand.id}/edit`}
                     className="flex-1 py-2.5 bg-app-accent hover:bg-orange-500 text-app-text-primary rounded-xl text-[10px] font-black uppercase tracking-widest text-center flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Edit3 className="w-3.5 h-3.5" /> Visual Builder

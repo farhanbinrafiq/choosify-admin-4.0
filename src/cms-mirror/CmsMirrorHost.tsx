@@ -8,7 +8,7 @@ import './tokens.css';
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 
 /** Bump when public/cms-mirror/app.html behavior changes so the iframe never serves a stale 304. */
-const CMS_MIRROR_ASSET_VERSION = '20260731-brand-logo-1';
+const CMS_MIRROR_ASSET_VERSION = '20260805-workspace-tenant-1';
 
 /**
  * Full-viewport 1:1 host for the Choosify Admin CMS standalone prototype.
@@ -25,10 +25,15 @@ export const CmsMirrorHost: React.FC = () => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const knownPageKey = useMemo(() => resolveAdminPageKey(location.pathname), [location.pathname]);
   const pageKey = useMemo(() => pathToPageKey(location.pathname), [location.pathname]);
-  const role = profile?.role || 'super_admin';
+  // Never synthesize a privileged role. ProtectedRoute already guarantees `profile`
+  // is resolved before this component mounts — `role` stays undefined only in the
+  // brief window (if any) before that resolves, and every effect below treats an
+  // undefined role as "do nothing" rather than falling back to 'super_admin'.
+  const role = profile?.role;
 
   const postMirrorState = useCallback(
-    (page: string, nextRole: string) => {
+    (page: string, nextRole: string | undefined) => {
+      if (!nextRole) return;
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
       try {
@@ -38,6 +43,9 @@ export const CmsMirrorHost: React.FC = () => {
             page,
             role: nextRole,
             allowedKeys: allowedPageKeysForRole(nextRole),
+            userId: profile?.id || null,
+            displayName: profile?.displayName || null,
+            email: profile?.email || null,
           },
           '*',
         );
@@ -49,17 +57,39 @@ export const CmsMirrorHost: React.FC = () => {
         /* ignore */
       }
     },
-    [],
+    [profile?.id, profile?.displayName, profile?.email],
   );
 
+  const postAuthTokenToMirror = useCallback(() => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    const token = localStorage.getItem('choosify_auth_token');
+    if (!token) return;
+    try {
+      win.postMessage({ type: 'cms-mirror-auth-token', token }, '*');
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   useEffect(() => {
-    if (!knownPageKey) return;
+    if (!knownPageKey || !role) return;
     postMirrorState(pageKey, role);
   }, [knownPageKey, pageKey, role, postMirrorState]);
+
+  // Re-push JWT whenever the authenticated profile changes (login after iframe boot).
+  useEffect(() => {
+    if (!profile) return;
+    postAuthTokenToMirror();
+  }, [profile?.id, postAuthTokenToMirror]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const data = event.data;
+      if (data?.type === 'cms-mirror-auth-token-request') {
+        postAuthTokenToMirror();
+        return;
+      }
       if (!data || data.type !== 'cms-mirror-page' || typeof data.page !== 'string') return;
       const target = PAGE_KEY_TO_PATH[data.page] || '/admin/dashboard';
       if (target !== location.pathname) {
@@ -68,27 +98,36 @@ export const CmsMirrorHost: React.FC = () => {
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [location.pathname, navigate]);
+  }, [location.pathname, navigate, postAuthTokenToMirror]);
 
   const onIframeLoad = () => {
     postMirrorState(pageKey, role);
+    postAuthTokenToMirror();
   };
 
   const iframeSrc = useMemo(
     () =>
-      `/cms-mirror/app.html?v=${CMS_MIRROR_ASSET_VERSION}#page=${encodeURIComponent(pageKey)}&role=${encodeURIComponent(role)}`,
+      `/cms-mirror/app.html?v=${CMS_MIRROR_ASSET_VERSION}#page=${encodeURIComponent(pageKey)}&role=${encodeURIComponent(role || '')}`,
     // role in src + key forces a clean boot when switching Admin/Seller/Creator
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pageKey applied via postMessage after load
     [role],
   );
 
   useEffect(() => {
-    if (!knownPageKey) return;
+    if (!knownPageKey || !role) return;
     const allowed = allowedPageKeysForRole(role);
     if (allowed && !allowed.includes(pageKey)) {
       navigate('/admin/dashboard', { replace: true });
     }
   }, [knownPageKey, role, pageKey, navigate]);
+
+  // Never mount the iframe (or any of its privileged content) before the real
+  // profile/role has resolved. ProtectedRoute already redirects unauthenticated
+  // users to /login before this component renders at all — this is defense in
+  // depth against ever booting the standalone app with a synthesized role.
+  if (!profile || !role) {
+    return null;
+  }
 
   if (!knownPageKey) {
     return (

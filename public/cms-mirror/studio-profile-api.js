@@ -7,44 +7,126 @@
   var AUTH_KEY = 'choosify_auth_token';
 
   function authToken() {
+    // Prefer the token posted by CmsMirrorHost (avoids storage-partition / parent access issues).
     try {
       if (global.__CMS_MIRROR_AUTH_TOKEN__) return global.__CMS_MIRROR_AUTH_TOKEN__;
-      var fromParent = global.parent && global.parent.localStorage
-        ? global.parent.localStorage.getItem(AUTH_KEY)
-        : null;
-      if (fromParent) return fromParent;
-      return global.localStorage ? global.localStorage.getItem(AUTH_KEY) : null;
-    } catch (_) {
-      return null;
-    }
+    } catch (_) { /* ignore */ }
+
+    // Same-origin iframe shares localStorage with the parent SPA — try the iframe first.
+    // Do not wrap parent access in the same try/catch: a SecurityError on parent.localStorage
+    // would otherwise skip own localStorage and return null.
+    try {
+      if (global.localStorage) {
+        var own = global.localStorage.getItem(AUTH_KEY);
+        if (own) return own;
+      }
+    } catch (_) { /* ignore */ }
+
+    try {
+      if (global.parent && global.parent !== global && global.parent.localStorage) {
+        var fromParent = global.parent.localStorage.getItem(AUTH_KEY);
+        if (fromParent) return fromParent;
+      }
+    } catch (_) { /* ignore */ }
+
+    return null;
+  }
+
+  /** Ask the parent SPA to re-post the access token if we do not have one yet. */
+  function ensureAuthToken() {
+    return new Promise(function (resolve) {
+      var existing = authToken();
+      if (existing) {
+        resolve(existing);
+        return;
+      }
+      if (!global.parent || global.parent === global || typeof global.parent.postMessage !== 'function') {
+        resolve(null);
+        return;
+      }
+      var settled = false;
+      function finish(token) {
+        if (settled) return;
+        settled = true;
+        try { global.removeEventListener('message', onMsg); } catch (_) { /* ignore */ }
+        resolve(token || null);
+      }
+      function onMsg(ev) {
+        var data = ev && ev.data;
+        if (!data || data.type !== 'cms-mirror-auth-token') return;
+        if (typeof data.token === 'string' && data.token) {
+          global.__CMS_MIRROR_AUTH_TOKEN__ = data.token;
+          finish(data.token);
+        }
+      }
+      global.addEventListener('message', onMsg);
+      try {
+        global.parent.postMessage({ type: 'cms-mirror-auth-token-request' }, '*');
+      } catch (_) { /* ignore */ }
+      setTimeout(function () {
+        finish(authToken());
+      }, 400);
+    });
   }
 
   function request(path, method, body) {
     method = method || 'GET';
-    var headers = { 'Content-Type': 'application/json' };
-    if (method !== 'GET') {
-      var token = authToken();
+    var needsAuth = method !== 'GET';
+
+    function send(token) {
+      var headers = { 'Content-Type': 'application/json' };
+      // Match catalogApi: attach Bearer whenever present (writes require it).
       if (token) headers.Authorization = 'Bearer ' + token;
-    }
-    return fetch(API_BASE + path, {
-      method: method,
-      headers: headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    }).then(function (res) {
-      return res.text().then(function (text) {
-        var parsed = null;
-        try { parsed = text ? JSON.parse(text) : null; } catch (_) { parsed = { error: text }; }
-        if (!res.ok) {
-          var msg = (parsed && (parsed.error || parsed.message)) || ('Request failed (' + res.status + ')');
-          throw new Error(msg);
-        }
-        return parsed;
+      return fetch(API_BASE + path, {
+        method: method,
+        headers: headers,
+        credentials: 'include',
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      }).then(function (res) {
+        return res.text().then(function (text) {
+          var parsed = null;
+          try { parsed = text ? JSON.parse(text) : null; } catch (_) { parsed = { error: text }; }
+          if (!res.ok) {
+            var msg = (parsed && (parsed.error || parsed.message)) || ('Request failed (' + res.status + ')');
+            throw new Error(msg);
+          }
+          return parsed;
+        });
       });
+    }
+
+    if (!needsAuth) {
+      return send(authToken());
+    }
+
+    return ensureAuthToken().then(function (token) {
+      if (!token) {
+        throw new Error('Missing bearer token');
+      }
+      return send(token);
     });
   }
 
   function listBrands() {
     return request('/catalog/brands').then(function (r) { return (r && r.data) || []; });
+  }
+
+  function ensureSellerWorkspace() {
+    return request('/catalog/workspace/seller/ensure', 'POST', {}).then(function (r) {
+      return r || { brands: [], products: [], customers: [], created: false };
+    });
+  }
+
+  function ensureCreatorWorkspace(hints) {
+    return request('/catalog/workspace/creator/ensure', 'POST', hints || {}).then(function (r) {
+      return r || { creators: [], created: false };
+    });
+  }
+
+  function listSellerCustomers() {
+    return request('/catalog/workspace/seller/customers').then(function (r) {
+      return (r && r.data) || [];
+    });
   }
 
   function patchBrand(id, payload) {
@@ -225,7 +307,35 @@
       verifiedStatus: !!b.verified,
       featuredFlag: false,
       sponsoredFlag: false,
+      marketplaceAccess: typeof b.marketplaceAccess === 'boolean'
+        ? b.marketplaceAccess
+        : (typeof draft.marketplaceAccess === 'boolean' ? draft.marketplaceAccess : undefined),
     };
+  }
+
+  /** Section-scoped PATCH body so one CMS card can save without wiping others. */
+  function brandSectionPayloadFromMirror(b, draft, section) {
+    var full = brandPayloadFromMirror(b, draft);
+    switch (section) {
+      case 'cover':
+        return { logo: full.logo, coverImage: full.coverImage };
+      case 'identity':
+        return { tagline: full.tagline, website: full.website };
+      case 'social':
+        return { socialLinks: full.socialLinks };
+      case 'overview':
+        return {
+          story: full.story,
+          description: full.description,
+          overview: full.overview,
+        };
+      case 'benefits':
+        return { overview: full.overview };
+      case 'video':
+        return { storyVideoUrl: full.storyVideoUrl };
+      default:
+        return full;
+    }
   }
 
   function creatorPayloadFromMirror(c, draft) {
@@ -357,6 +467,9 @@
   global.CmsStudioProfileApi = {
     request: request,
     listBrands: listBrands,
+    ensureSellerWorkspace: ensureSellerWorkspace,
+    ensureCreatorWorkspace: ensureCreatorWorkspace,
+    listSellerCustomers: listSellerCustomers,
     patchBrand: patchBrand,
     listCreators: listCreators,
     patchCreator: patchCreator,
@@ -374,6 +487,7 @@
     optionGroupsFromText: optionGroupsFromText,
     sizeGuideFromStudio: sizeGuideFromStudio,
     brandPayloadFromMirror: brandPayloadFromMirror,
+    brandSectionPayloadFromMirror: brandSectionPayloadFromMirror,
     creatorPayloadFromMirror: creatorPayloadFromMirror,
     guidePayloadFromDraft: guidePayloadFromDraft,
     uploadImage: uploadImage,

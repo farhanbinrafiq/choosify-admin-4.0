@@ -38,6 +38,7 @@ import { normalizeCreatorInput } from '../lib/vercel-catalog/catalogEditorialCon
 import { recordSuspiciousRequest, recordClaimConfirmAttempt } from './lib/abuseProtection';
 import { createNotification } from './communication/notificationService';
 import { COMMUNICATION_TYPES, DELIVERY_CHANNELS } from './communication/communicationTypes';
+import { publishEvent } from './events/eventBus';
 
 export const operationsRouter = Router();
 
@@ -285,7 +286,12 @@ async function applyEntityVerificationSideEffect(
       }
       if (decision === 'approved') {
         const normalized = normalizeBrandInput(
-          { ...existing, claimStatus: 'verified', verifiedStatus: true },
+          {
+            ...existing,
+            claimStatus: 'verified',
+            verifiedStatus: true,
+            sellerId: row.submitted_by || existing.sellerId,
+          },
           existing,
         );
         await catalogStore.upsertBrand(normalized);
@@ -2021,6 +2027,19 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
     } catch (err) {
       console.warn('[Verification] Failed to mark claim pending on catalog entity:', err);
     }
+
+    if (entityType === 'brand') {
+      const existingBrand = await catalogStore.getBrand(entityId).catch(() => null);
+      const isOwnershipClaim = !existingBrand || existingBrand.sellerId !== req.userId;
+      publishEvent({
+        eventName: isOwnershipClaim ? 'BrandClaimSubmitted' : 'BrandVerificationSubmitted',
+        domain: 'Marketplace',
+        producer: 'operationsRouter',
+        aggregateId: entityId,
+        actor: req.userId!,
+        payload: { verificationId: saved.id, entityId, entityName },
+      });
+    }
   }
 
   scheduleOperationsPersist();
@@ -2166,10 +2185,29 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
     return;
   }
 
+  const brandBeforeDecision =
+    existing.entityType === 'brand'
+      ? await catalogStore.getBrand(existing.entityId).catch(() => null)
+      : null;
+  const wasOwnershipClaim = Boolean(
+    brandBeforeDecision && brandBeforeDecision.sellerId !== existing.submitted_by,
+  );
+
   const sideEffect = await applyEntityVerificationSideEffect(existing, decision);
   if (sideEffect.ok === false) {
     res.status(409).json({ error: sideEffect.error });
     return;
+  }
+
+  if (existing.entityType === 'brand' && wasOwnershipClaim) {
+    publishEvent({
+      eventName: decision === 'approved' ? 'BrandClaimApproved' : 'BrandClaimRejected',
+      domain: 'Marketplace',
+      producer: 'operationsRouter',
+      aggregateId: existing.entityId,
+      actor: req.userId!,
+      payload: { verificationId: existing.id, sellerId: existing.submitted_by },
+    });
   }
 
   const reviewerId = req.userId!;

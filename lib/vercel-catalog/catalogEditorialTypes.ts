@@ -51,6 +51,8 @@ export interface CatalogCreator {
   reels: CatalogMediaItem[];
   blogs: CatalogMediaItem[];
   status: 'draft' | 'live' | 'archived';
+  /** Owning creator user id — creator workspace is scoped to this. */
+  userId?: string;
   createdAt: string;
   updatedAt: string;
 }

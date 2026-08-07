@@ -106,6 +106,23 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
   return <>{children}</>;
 };
 
+/**
+ * Architecture Sprint A: role gate for the React Brand Studio cutover.
+ * Seller, Admin, Super Admin allowed. Creator and Consumer denied — Creators
+ * remain a separate identity per Blueprint (BP-004) with no Brand ownership,
+ * and Consumers have no dashboard access at all. Anything unresolved/unknown
+ * is denied (fail closed), mirroring RoleGuard/AdminLayout's existing pattern
+ * of redirecting to /admin/dashboard rather than rendering.
+ */
+const BRAND_STUDIO_ALLOWED_ROLES = new Set(['seller', 'admin', 'super_admin']);
+const BrandStudioRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile } = useAuth();
+  if (!profile || !BRAND_STUDIO_ALLOWED_ROLES.has(profile.role)) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+  return <>{children}</>;
+};
+
 /** Admin / seller / creator all use the CMS mirror (role filters the left nav). */
 const AdminAreaEntry: React.FC = () => <CmsMirrorHost />;
 
@@ -274,8 +291,60 @@ export default function App() {
             
             <Route path="/" element={<RootRoute />} />
             <Route path="/marketplace" element={<Navigate to="/login" replace />} />
-            
-            {/* Full CMS mirror for all roles (left nav filtered by role) */}
+
+            {/*
+              Architecture Sprint A — surgical cutover: Brand Studio only.
+              Registered BEFORE the /admin/* CMS-mirror catch-all so React
+              Router's exact/static-path ranking picks these first; every
+              other /admin/* path still falls through to CmsMirrorHost below.
+              Rollback: delete these three routes (or comment them out) and
+              /admin/brand-studio* falls straight back to CmsMirrorHost —
+              no backend change required.
+            */}
+            <Route
+              path="/admin/brand-studio"
+              element={
+                <ProtectedRoute>
+                  <BrandStudioRoleGate>
+                    <AdminLayout>
+                      <Suspense fallback={null}>
+                        <BrandsStudioList />
+                      </Suspense>
+                    </AdminLayout>
+                  </BrandStudioRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/brand-studio/new"
+              element={
+                <ProtectedRoute>
+                  <BrandStudioRoleGate>
+                    <AdminLayout>
+                      <Suspense fallback={null}>
+                        <BrandEditStudio />
+                      </Suspense>
+                    </AdminLayout>
+                  </BrandStudioRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/brand-studio/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <BrandStudioRoleGate>
+                    <AdminLayout>
+                      <Suspense fallback={null}>
+                        <BrandEditStudio />
+                      </Suspense>
+                    </AdminLayout>
+                  </BrandStudioRoleGate>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* Full CMS mirror for all other /admin/* routes (left nav filtered by role) */}
             <Route path="/admin/*" element={<ProtectedRoute><RoleGuard><AdminAreaEntry /></RoleGuard></ProtectedRoute>} />
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
             
