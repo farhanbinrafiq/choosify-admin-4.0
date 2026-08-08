@@ -23,3 +23,11 @@ IS-004 / BP-006 require inventory validation at checkout and discuss reservation
 - Orders enter commerce state `pending` (payment lifecycle owned by later sprint).
 - Existing SSLCommerz / `paymentsRouter` untouched.
 - Full Order lifecycle (dispatch, delivery, returns, refunds) remains Sprint 6 / IS-010 Sprint 9+.
+
+## Sprint 6 / IS-010 Sprint 9 addendum
+
+- **Cancel before consumption:** release `reservedQuantity` for product lines (idempotent via `inventoryReserved`).
+- **At Packed:** convert reservation into sold stock (`quantity` and `reservedQuantity` decrease); idempotent via `inventoryConsumed`.
+- **Cancel after Packed:** restock `quantity` (seller may cancel until dispatch per ES-005 §33).
+- **Payment-failure reservation release:** still Sprint 10. Confirm is Seller/Admin status path until Payments hardens payment-gated Confirm.
+- **Do not emit** `PaymentCaptured` / escrow / refund events in Orders sprint.

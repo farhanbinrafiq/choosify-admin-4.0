@@ -1,6 +1,7 @@
 /**
- * Commerce domain types — IS-004 §5–§14 / Sprint 5 (IS-010 Sprint 8).
+ * Commerce domain types — IS-004 / Sprint 5–6 (IS-010 Sprint 8–9).
  * Split Order Engine splits by Brand (IS-004 §9, §335).
+ * Product lifecycle: ES-005 §27. Cancellation: ES-005 §33. Shipping: ES-005 §39.
  */
 
 export type CommerceListingType = 'product' | 'service';
@@ -20,7 +21,6 @@ export type CommerceCartItem = {
   currency: string;
   image?: string;
   selectedOptions?: Record<string, string>;
-  /** Service booking hints (minimal). */
   requestedAt?: string;
   serviceArea?: string;
   notes?: string;
@@ -57,8 +57,15 @@ export type CommerceOrderItemSnapshot = {
   deliveryShare?: number;
 };
 
-/** Initial commerce order state only (full lifecycle = next sprint). */
-export type CommerceOrderStatus = 'pending';
+/** Product Order lifecycle (ES-005 §27) + cancelled branch (ES-005 §33). */
+export type CommerceOrderStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'packed'
+  | 'shipped'
+  | 'delivered'
+  | 'completed'
+  | 'cancelled';
 
 export type CommerceOrderSource =
   | 'checkout'
@@ -67,6 +74,44 @@ export type CommerceOrderSource =
   | 'external_facebook'
   | 'external_instagram'
   | 'external_offline';
+
+export type CommerceCancelActor = 'consumer' | 'seller' | 'admin';
+
+export type CommerceFulfilmentMethod =
+  | 'self_delivery'
+  | 'pickup'
+  | 'third_party_courier'
+  | 'platform_courier';
+
+/** ES-005 §39 shipping lifecycle (normalized snake_case). */
+export type CommerceShipmentStatus =
+  | 'pending_fulfilment'
+  | 'packed'
+  | 'courier_assigned'
+  | 'picked_up'
+  | 'in_transit'
+  | 'out_for_delivery'
+  | 'delivered'
+  | 'delivery_failed'
+  | 'returned_to_seller'
+  | 'cancelled';
+
+export type CommerceShipment = {
+  id: string;
+  orderId: string;
+  checkoutId: string;
+  consumerId: string;
+  sellerId: string;
+  brandId: string;
+  fulfilmentMethod: CommerceFulfilmentMethod;
+  courierProvider?: string | null;
+  trackingNumber?: string | null;
+  status: CommerceShipmentStatus;
+  shippedAt?: string;
+  deliveredAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type CommerceOrder = {
   id: string;
@@ -95,6 +140,15 @@ export type CommerceOrder = {
     region?: string;
     deliveryNotes?: string;
   };
+  shipmentId?: string;
+  /** Product lines reserved at checkout (ADR-003). */
+  inventoryReserved?: boolean;
+  /** Product stock consumed at Packed (Sprint 6). */
+  inventoryConsumed?: boolean;
+  cancelledBy?: CommerceCancelActor;
+  cancelReason?: string;
+  cancelledAt?: string;
+  statusBeforeCancel?: CommerceOrderStatus;
   createdAt: string;
   updatedAt: string;
 };
@@ -116,10 +170,6 @@ export type CommerceCheckout = {
   updatedAt: string;
 };
 
-/**
- * Minimal Service → Commerce booking bridge (IS-004 §12).
- * Full calendar/counter-offer deferred.
- */
 export type CommerceBookingRequestStatus = 'pending_seller_review';
 
 export type CommerceBookingRequest = {

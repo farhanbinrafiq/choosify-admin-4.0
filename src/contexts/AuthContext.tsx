@@ -18,7 +18,8 @@ export type UserRole =
   | 'super_admin' 
   | 'admin' 
   | 'seller' 
-  | 'creator' 
+  | 'creator'
+  | 'consumer'
   | 'moderator' 
   | 'finance_manager' 
   | 'support_agent' 
@@ -107,6 +108,12 @@ const mockProfiles: Record<UserRole, UserProfile> = {
     email: 'sumaiya@creators.bd',
     role: 'creator',
   },
+  consumer: {
+    id: 'consumer_001',
+    displayName: 'Farhan Bin Rafiq',
+    email: 'farhan@example.com',
+    role: 'consumer',
+  },
   moderator: {
     id: 'mod_001',
     displayName: 'Afsana Mimi',
@@ -141,6 +148,7 @@ function toUserRole(role: string, fallback: UserRole = 'admin'): UserRole {
     'admin',
     'seller',
     'creator',
+    'consumer',
     'moderator',
     'finance_manager',
     'support_agent',

@@ -7,6 +7,7 @@ export const COMMERCE_CHECKOUTS = 'commerce_checkouts';
 export const COMMERCE_ORDERS = 'commerce_orders';
 export const COMMERCE_BOOKING_REQUESTS = 'commerce_booking_requests';
 export const COMMERCE_IDEMPOTENCY = 'commerce_idempotency';
+export const COMMERCE_SHIPMENTS = 'commerce_shipments';
 
 export type CommerceIdempotencyRecord = {
   id: string;

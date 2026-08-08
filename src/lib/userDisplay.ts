@@ -5,6 +5,7 @@ const ROLE_LABELS: Record<UserRole, string> = {
   admin: 'Admin',
   seller: 'Seller',
   creator: 'Creator',
+  consumer: 'Consumer',
   moderator: 'Moderator',
   finance_manager: 'Finance Manager',
   support_agent: 'Support Agent',

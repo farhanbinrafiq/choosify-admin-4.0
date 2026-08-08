@@ -25,6 +25,7 @@ import {
   getOrCreateCart,
   refreshCartPrices,
 } from './cartService';
+import { listOrdersGroupedByCheckout } from './orderService';
 import type {
   CommerceBookingRequest,
   CommerceCart,
@@ -34,6 +35,8 @@ import type {
   CommerceOrderItemSnapshot,
   CommerceOrderSource,
 } from './types';
+
+export { listOrdersGroupedByCheckout };
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -344,6 +347,8 @@ export async function executeCheckout(input: CheckoutInput): Promise<CheckoutRes
         taxTotal: 0,
         grandTotal: subtotal,
         shipping: input.shipping,
+        inventoryReserved: items.some((i) => i.listingType === 'product'),
+        inventoryConsumed: false,
         createdAt: nowIso(),
         updatedAt: nowIso(),
       };
@@ -541,6 +546,8 @@ export async function createManualOrder(input: {
     claimToken,
     claimTokenExpiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     shipping: input.shipping,
+    inventoryReserved: false,
+    inventoryConsumed: false,
     createdAt: nowIso(),
     updatedAt: nowIso(),
   };
@@ -640,15 +647,11 @@ export async function listOrdersForActor(actor: {
   userId: string;
   role?: string;
   as?: 'consumer' | 'seller';
+  brandId?: string;
+  status?: string;
 }): Promise<CommerceOrder[]> {
-  const all = await commerceStore.listOrders();
-  const isAdmin =
-    actor.role === 'admin' || actor.role === 'super_admin' || actor.role === 'moderator';
-  if (isAdmin && !actor.as) return all;
-  if (actor.as === 'seller' || (!actor.as && actor.role?.includes('seller'))) {
-    return all.filter((o) => o.sellerId === actor.userId);
-  }
-  return all.filter((o) => o.consumerId === actor.userId);
+  const grouped = await listOrdersGroupedByCheckout(actor);
+  return grouped.orders;
 }
 
 export async function getCheckoutForConsumer(

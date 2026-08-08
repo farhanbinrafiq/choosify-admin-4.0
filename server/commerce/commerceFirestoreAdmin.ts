@@ -17,6 +17,7 @@ import {
   COMMERCE_CHECKOUTS,
   COMMERCE_IDEMPOTENCY,
   COMMERCE_ORDERS,
+  COMMERCE_SHIPMENTS,
   idempotencyDocId,
   type CommerceIdempotencyRecord,
 } from './commerceCollections';
@@ -25,6 +26,7 @@ import type {
   CommerceCart,
   CommerceCheckout,
   CommerceOrder,
+  CommerceShipment,
 } from './types';
 
 export type CommerceCheckoutBundle = {
@@ -33,6 +35,11 @@ export type CommerceCheckoutBundle = {
   bookingRequests: CommerceBookingRequest[];
   idempotency?: Omit<CommerceIdempotencyRecord, 'id'>;
   clearedCart?: CommerceCart;
+};
+
+export type CommerceOrderMutationBundle = {
+  order: CommerceOrder;
+  shipment?: CommerceShipment;
 };
 
 export const commerceFirestoreAdmin = {
@@ -91,6 +98,29 @@ export const commerceFirestoreAdmin = {
     return upsertDocument(COMMERCE_BOOKING_REQUESTS, row);
   },
 
+  async getShipment(id: string): Promise<CommerceShipment | null> {
+    return getDocumentById<CommerceShipment>(COMMERCE_SHIPMENTS, id);
+  },
+
+  async getShipmentByOrderId(orderId: string): Promise<CommerceShipment | null> {
+    const db = await requireAdminFirestore();
+    const snap = await db
+      .collection(COMMERCE_SHIPMENTS)
+      .where('orderId', '==', orderId)
+      .limit(1)
+      .get();
+    if (snap.empty) return null;
+    return snap.docs[0].data() as CommerceShipment;
+  },
+
+  async listShipments(): Promise<CommerceShipment[]> {
+    return listCollection<CommerceShipment>(COMMERCE_SHIPMENTS);
+  },
+
+  async upsertShipment(row: CommerceShipment): Promise<CommerceShipment> {
+    return upsertDocument(COMMERCE_SHIPMENTS, row);
+  },
+
   async getIdempotency(
     key: string,
     consumerId: string,
@@ -138,6 +168,21 @@ export const commerceFirestoreAdmin = {
       set(COMMERCE_CARTS, bundle.clearedCart.id, bundle.clearedCart);
     }
 
+    await batch.commit();
+  },
+
+  /** Atomic order + optional shipment update. */
+  async commitOrderMutation(bundle: CommerceOrderMutationBundle): Promise<void> {
+    const db = await requireAdminFirestore();
+    const batch = db.batch();
+    batch.set(db.collection(COMMERCE_ORDERS).doc(bundle.order.id), bundle.order, {
+      merge: true,
+    });
+    if (bundle.shipment) {
+      batch.set(db.collection(COMMERCE_SHIPMENTS).doc(bundle.shipment.id), bundle.shipment, {
+        merge: true,
+      });
+    }
     await batch.commit();
   },
 };

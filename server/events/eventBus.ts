@@ -93,6 +93,19 @@ export function subscribeAll(handler: Subscriber): () => void {
  * interrupts the caller's already-completed business transaction — this
  * function never throws.
  */
+const RECENT_EVENT_RING: DomainEvent[] = [];
+const RECENT_EVENT_RING_MAX = 400;
+
+export function getRecentPublishedEvents(opts?: {
+  domain?: DomainEventCategory;
+  limit?: number;
+}): DomainEvent[] {
+  let rows = RECENT_EVENT_RING;
+  if (opts?.domain) rows = rows.filter((e) => e.domain === opts.domain);
+  const limit = opts?.limit ?? 100;
+  return rows.slice(-limit);
+}
+
 export function publishEvent<TPayload = Record<string, unknown>>(
   input: PublishEventInput<TPayload>,
 ): DomainEvent<TPayload> {
@@ -103,6 +116,11 @@ export function publishEvent<TPayload = Record<string, unknown>>(
     version: input.version ?? 1,
     ...input,
   };
+
+  RECENT_EVENT_RING.push(event as DomainEvent);
+  if (RECENT_EVENT_RING.length > RECENT_EVENT_RING_MAX) {
+    RECENT_EVENT_RING.splice(0, RECENT_EVENT_RING.length - RECENT_EVENT_RING_MAX);
+  }
 
   Logger.audit(`event.${event.eventName}`, {
     eventId: event.eventId,

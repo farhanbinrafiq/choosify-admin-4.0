@@ -5,6 +5,7 @@ const SuperAdminDashboard = lazy(() => import('../../pages/admin/Dashboard'));
 const SellerDashboard = lazy(() => import('./SellerDashboard'));
 const CreatorDashboard = lazy(() => import('./CreatorDashboard'));
 const RoleOpsDashboard = lazy(() => import('./RoleOpsDashboard'));
+const ConsumerDashboard = lazy(() => import('./ConsumerDashboard'));
 
 const OPS_ROLES = new Set([
   'admin',
@@ -29,8 +30,9 @@ export default function DashboardRouter() {
       {role === 'super_admin' && <SuperAdminDashboard />}
       {role === 'seller' && <SellerDashboard />}
       {role === 'creator' && <CreatorDashboard />}
+      {role === 'consumer' && <ConsumerDashboard />}
       {OPS_ROLES.has(role) && <RoleOpsDashboard roleKey={role} />}
-      {!['super_admin', 'seller', 'creator'].includes(role) && !OPS_ROLES.has(role) && (
+      {!['super_admin', 'seller', 'creator', 'consumer'].includes(role) && !OPS_ROLES.has(role) && (
         <RoleOpsDashboard roleKey="admin" />
       )}
     </Suspense>

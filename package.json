@@ -16,6 +16,8 @@
     "test:catalog-persist": "tsx scripts/probe-catalog-persistence.ts",
     "test:categories": "tsx scripts/probe-category-schema.ts",
     "test:commerce": "tsx scripts/probe-commerce.ts",
+    "test:orders": "tsx scripts/probe-orders.ts",
+    "test:orders-wiring": "tsx scripts/probe-orders-wiring.ts",
     "verify:payments": "tsx scripts/verify-payment-flow.ts",
     "check:prod-env": "tsx scripts/check-production-env.ts",
     "seed:catalog": "tsx scripts/seedCatalog.ts",

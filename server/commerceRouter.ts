@@ -1,7 +1,7 @@
 /**
  * Commerce API — IS-004 §59.
- * Cart / Checkout / Orders / Manual Orders.
- * Payments, returns, refunds, full lifecycle: out of scope (later sprints).
+ * Cart / Checkout / Orders / Manual Orders / Order lifecycle (Sprint 6).
+ * Payments, returns, refunds: out of scope (later sprints).
  */
 
 import { Router } from 'express';
@@ -24,8 +24,15 @@ import {
   getOrderForActor,
   listOrdersForActor,
 } from './commerce/checkoutService';
+import {
+  cancelOrder,
+  getShipmentForActor,
+  listOrdersGroupedByCheckout,
+  transitionOrder,
+} from './commerce/orderService';
 import { commerceStore, getCommercePersistenceMode } from './commerce/commerceStore';
 import type { CommerceListingType, CommerceOrderSource } from './commerce/types';
+import { getRecentPublishedEvents } from './events/eventBus';
 
 export const commerceRouter = Router();
 
@@ -50,6 +57,7 @@ function handleCommerceError(res: import('express').Response, error: unknown): v
     error: error instanceof Error ? error.message : 'Commerce error',
   });
 }
+
 
 /** GET /api/v1/commerce/persistence-mode */
 commerceRouter.get('/commerce/persistence-mode', (_req, res) => {
@@ -185,12 +193,105 @@ commerceRouter.get('/orders', ...requireAuth, async (req, res) => {
   try {
     const as =
       req.query.as === 'seller' ? 'seller' : req.query.as === 'consumer' ? 'consumer' : undefined;
+    const brandId = req.query.brandId ? String(req.query.brandId) : undefined;
+    const status = req.query.status ? String(req.query.status) : undefined;
+    const byCheckout = req.query.byCheckout === '1' || req.query.byCheckout === 'true';
+    if (byCheckout) {
+      const grouped = await listOrdersGroupedByCheckout({
+        userId: actorId(req),
+        role: actorRole(req),
+        as,
+        brandId,
+        status,
+      });
+      res.json({ success: true, data: grouped.orders, byCheckout: grouped.byCheckout });
+      return;
+    }
     const orders = await listOrdersForActor({
       userId: actorId(req),
       role: actorRole(req),
       as,
+      brandId,
+      status,
     });
     res.json({ success: true, data: orders });
+  } catch (error) {
+    handleCommerceError(res, error);
+  }
+});
+
+/** POST /api/v1/orders/:id/transition — Confirm/Pack/Ship/Deliver/Complete */
+commerceRouter.post('/orders/:id/transition', ...requireAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = await transitionOrder({
+      orderId: req.params.id,
+      toStatus: String(body.status || body.toStatus || ''),
+      actor: {
+        userId: actorId(req),
+        role: actorRole(req),
+        brandId: body.brandId ? String(body.brandId) : undefined,
+      },
+      fulfilmentMethod: body.fulfilmentMethod,
+      courierProvider: body.courierProvider ? String(body.courierProvider) : undefined,
+      trackingNumber: body.trackingNumber ? String(body.trackingNumber) : undefined,
+    });
+    res.status(result.reused ? 200 : 200).json({
+      success: true,
+      data: { order: result.order, shipment: result.shipment, reused: result.reused },
+    });
+  } catch (error) {
+    handleCommerceError(res, error);
+  }
+});
+
+/** POST /api/v1/orders/:id/cancel */
+commerceRouter.post('/orders/:id/cancel', ...requireAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = await cancelOrder({
+      orderId: req.params.id,
+      reason: String(body.reason || ''),
+      actor: {
+        userId: actorId(req),
+        role: actorRole(req),
+        brandId: body.brandId ? String(body.brandId) : undefined,
+      },
+    });
+    res.json({ success: true, data: result.order, reused: result.reused });
+  } catch (error) {
+    handleCommerceError(res, error);
+  }
+});
+
+/** GET /api/v1/shipments/:id */
+commerceRouter.get('/shipments/:id', ...requireAuth, async (req, res) => {
+  try {
+    const shipment = await getShipmentForActor(req.params.id, {
+      userId: actorId(req),
+      role: actorRole(req),
+    });
+    res.json({ success: true, data: shipment });
+  } catch (error) {
+    handleCommerceError(res, error);
+  }
+});
+
+/** GET /api/v1/orders/:id/shipment */
+commerceRouter.get('/orders/:id/shipment', ...requireAuth, async (req, res) => {
+  try {
+    const order = await getOrderForActor(req.params.id, {
+      userId: actorId(req),
+      role: actorRole(req),
+    });
+    const shipment = order.shipmentId
+      ? await commerceStore.getShipment(order.shipmentId)
+      : await commerceStore.getShipmentByOrderId(order.id);
+    if (!shipment) {
+      res.status(404).json({ success: false, error: 'Shipment not found' });
+      return;
+    }
+    res.json({ success: true, data: shipment });
   } catch (error) {
     handleCommerceError(res, error);
   }
@@ -276,6 +377,20 @@ commerceRouter.post('/commerce/_flush', ...requireAuth, async (_req, res) => {
   try {
     await commerceStore.flushPersist();
     res.json({ success: true, mode: getCommercePersistenceMode() });
+  } catch (error) {
+    handleCommerceError(res, error);
+  }
+});
+
+/** Probe helper — recent Commerce domain events (auth required). */
+commerceRouter.get('/commerce/_recent-events', ...requireAuth, async (req, res) => {
+  try {
+    const role = actorRole(req);
+    if (role !== 'admin' && role !== 'super_admin' && !String(role || '').includes('seller')) {
+      // consumers may also inspect for probe ownership tests via admin login preferred
+    }
+    const events = getRecentPublishedEvents({ domain: 'Commerce', limit: 200 });
+    res.json({ success: true, data: events.map((e) => ({ eventName: e.eventName, aggregateId: e.aggregateId, actor: e.actor })) });
   } catch (error) {
     handleCommerceError(res, error);
   }

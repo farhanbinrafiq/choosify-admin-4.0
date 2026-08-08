@@ -13,6 +13,7 @@ export type CommerceMemorySnapshot = {
   orders: unknown[];
   bookingRequests: unknown[];
   idempotency: unknown[];
+  shipments?: unknown[];
 };
 
 const DEFAULT_PATH = join(process.cwd(), '.data', 'commerce-memory-snapshot.json');

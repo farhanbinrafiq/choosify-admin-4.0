@@ -495,7 +495,63 @@ export default function App() {
               }
             />
 
-            {/* Full CMS mirror for all other /admin/* routes (left nav filtered by role) */}
+            {/* Orders Hub — React surfaces (Commerce API SoT). Remaining /admin/* → CmsMirror. */}
+            <Route
+              path="/admin/orders"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminLayout>
+                      <Suspense fallback={null}>
+                        <Orders />
+                      </Suspense>
+                    </AdminLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/orders-overview"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminLayout>
+                      <Suspense fallback={null}>
+                        <OrdersOverview />
+                      </Suspense>
+                    </AdminLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/platform-orders"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminLayout>
+                      <Suspense fallback={null}>
+                        <PlatformOrdersPage />
+                      </Suspense>
+                    </AdminLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/invoice/:id"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminLayout>
+                      <Suspense fallback={null}>
+                        <InvoiceView />
+                      </Suspense>
+                    </AdminLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
             <Route path="/admin/*" element={<ProtectedRoute><RoleGuard><AdminAreaEntry /></RoleGuard></ProtectedRoute>} />
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
 

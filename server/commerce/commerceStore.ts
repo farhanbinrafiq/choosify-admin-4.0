@@ -11,13 +11,14 @@
 
 import { hasFirebaseAdminCredentials } from '../firestoreAdmin';
 import { commerceMemoryBackend, ensureCommerceMemoryHydrated } from './commerceMemoryBackend';
-import type { CommerceCheckoutBundle } from './commerceFirestoreAdmin';
+import type { CommerceCheckoutBundle, CommerceOrderMutationBundle } from './commerceFirestoreAdmin';
 import type { CommerceIdempotencyRecord } from './commerceCollections';
 import type {
   CommerceBookingRequest,
   CommerceCart,
   CommerceCheckout,
   CommerceOrder,
+  CommerceShipment,
 } from './types';
 
 /**
@@ -157,6 +158,30 @@ export const commerceStore = {
     return commerceMemoryBackend.upsertBookingRequest(row);
   },
 
+  async getShipment(id: string): Promise<CommerceShipment | null> {
+    assertCommercePersistenceReady();
+    if (useAdminFirestore) return (await getAdmin()).getShipment(id);
+    return commerceMemoryBackend.getShipment(id);
+  },
+
+  async getShipmentByOrderId(orderId: string): Promise<CommerceShipment | null> {
+    assertCommercePersistenceReady();
+    if (useAdminFirestore) return (await getAdmin()).getShipmentByOrderId(orderId);
+    return commerceMemoryBackend.getShipmentByOrderId(orderId);
+  },
+
+  async listShipments(): Promise<CommerceShipment[]> {
+    assertCommercePersistenceReady();
+    if (useAdminFirestore) return (await getAdmin()).listShipments();
+    return commerceMemoryBackend.listShipments();
+  },
+
+  async upsertShipment(row: CommerceShipment): Promise<CommerceShipment> {
+    assertCommercePersistenceReady();
+    if (useAdminFirestore) return (await getAdmin()).upsertShipment(row);
+    return commerceMemoryBackend.upsertShipment(row);
+  },
+
   async getIdempotency(
     key: string,
     consumerId: string,
@@ -183,8 +208,17 @@ export const commerceStore = {
     commerceMemoryBackend.commitCheckoutBundle(bundle);
   },
 
+  async commitOrderMutation(bundle: CommerceOrderMutationBundle): Promise<void> {
+    assertCommercePersistenceReady();
+    if (useAdminFirestore) {
+      await (await getAdmin()).commitOrderMutation(bundle);
+      return;
+    }
+    commerceMemoryBackend.commitOrderMutation(bundle);
+  },
+
   async flushPersist(): Promise<void> {
-    if (useAdminFirestore) return; // Firestore is durable immediately
+    if (useAdminFirestore) return;
     commerceMemoryBackend.flushPersist();
   },
 };

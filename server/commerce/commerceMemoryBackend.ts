@@ -17,8 +17,9 @@ import type {
   CommerceCart,
   CommerceCheckout,
   CommerceOrder,
+  CommerceShipment,
 } from './types';
-import type { CommerceCheckoutBundle } from './commerceFirestoreAdmin';
+import type { CommerceCheckoutBundle, CommerceOrderMutationBundle } from './commerceFirestoreAdmin';
 
 const state: {
   carts: CommerceCart[];
@@ -26,12 +27,14 @@ const state: {
   orders: CommerceOrder[];
   bookingRequests: CommerceBookingRequest[];
   idempotency: CommerceIdempotencyRecord[];
+  shipments: CommerceShipment[];
 } = {
   carts: [],
   checkouts: [],
   orders: [],
   bookingRequests: [],
   idempotency: [],
+  shipments: [],
 };
 
 let hydrated = false;
@@ -45,6 +48,7 @@ function buildSnapshot(): CommerceMemorySnapshot {
     orders: state.orders,
     bookingRequests: state.bookingRequests,
     idempotency: state.idempotency,
+    shipments: state.shipments,
   };
 }
 
@@ -70,8 +74,9 @@ export function ensureCommerceMemoryHydrated(): boolean {
   state.orders = (snapshot.orders as CommerceOrder[]) || [];
   state.bookingRequests = (snapshot.bookingRequests as CommerceBookingRequest[]) || [];
   state.idempotency = (snapshot.idempotency as CommerceIdempotencyRecord[]) || [];
+  state.shipments = (snapshot.shipments as CommerceShipment[]) || [];
   console.log(
-    `[CommerceMemoryPersist] Hydrated (${state.carts.length} carts, ${state.orders.length} orders, ${state.bookingRequests.length} bookings).`,
+    `[CommerceMemoryPersist] Hydrated (${state.carts.length} carts, ${state.orders.length} orders, ${state.shipments.length} shipments).`,
   );
   return true;
 }
@@ -126,6 +131,22 @@ export const commerceMemoryBackend = {
     ensureCommerceMemoryHydrated();
     return upsertById(state.bookingRequests, row);
   },
+  getShipment(id: string): CommerceShipment | null {
+    ensureCommerceMemoryHydrated();
+    return state.shipments.find((s) => s.id === id) ?? null;
+  },
+  getShipmentByOrderId(orderId: string): CommerceShipment | null {
+    ensureCommerceMemoryHydrated();
+    return state.shipments.find((s) => s.orderId === orderId) ?? null;
+  },
+  listShipments(): CommerceShipment[] {
+    ensureCommerceMemoryHydrated();
+    return [...state.shipments];
+  },
+  upsertShipment(row: CommerceShipment): CommerceShipment {
+    ensureCommerceMemoryHydrated();
+    return upsertById(state.shipments, row);
+  },
   getIdempotency(key: string, consumerId: string): CommerceIdempotencyRecord | null {
     ensureCommerceMemoryHydrated();
     return (
@@ -155,6 +176,11 @@ export const commerceMemoryBackend = {
     if (bundle.clearedCart) {
       upsertById(state.carts, bundle.clearedCart);
     }
+  },
+  commitOrderMutation(bundle: CommerceOrderMutationBundle): void {
+    ensureCommerceMemoryHydrated();
+    upsertById(state.orders, bundle.order);
+    if (bundle.shipment) upsertById(state.shipments, bundle.shipment);
   },
   flushPersist(): void {
     flushCommerceMemoryPersist();

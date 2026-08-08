@@ -1,8 +1,21 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useInventory } from './InventoryContext';
 import { useCoupons } from './CouponsContext';
-import { operationsApi } from '../services/operationsApi';
-import { mergePlatformOrders } from '../lib/platformOrderAdapter';
+import { commerceApi } from '../services/commerceApi';
+import {
+  getAuthToken,
+  mapCommerceOrderToUi,
+  type CommerceOrderDto,
+  type CommerceShipmentDto,
+} from '../lib/commerceOrderAdapter';
+
+/**
+ * OrdersContext — presentation/cache layer for Order Hub UI.
+ *
+ * Sprint 6: When the user is authenticated, Commerce Order API is the
+ * authoritative source. localStorage `choosify_orders` is legacy/demo only and
+ * is not written while commerceAuthoritative is true.
+ */
 
 export type OrderStatus = 'Pending' | 'Confirmed' | 'Dispatched' | 'In Transit' | 'Delivered' | 'Cancelled' | 'Rejected' | 'Returned' | 'Exchange' | 'Processing';
 export type PaymentStatus = 'Pending' | 'Paid' | 'Refunded';
@@ -97,6 +110,12 @@ export interface Order {
   codCollected?: boolean;
   promoCode?: string;
   promoDiscount?: number;
+  /** Commerce checkout grouping (presentation); SoT remains server Order.checkoutId */
+  checkoutId?: string;
+  brandId?: string;
+  commerceStatus?: string;
+  commerceSource?: string;
+  shipmentId?: string;
   /** Set on manual orders — the token embedded in confirmOrderUrl, cleared once claimed */
   claimToken?: string;
   /** Customer-facing "View & Confirm Order" link sent to the buyer's chat (Choosify-Web) */
@@ -128,6 +147,11 @@ interface OrdersContextType {
   orders: Order[];
   customers: Customer[];
   messageThreads: MessageThread[];
+  /** True when list is loaded from Commerce API (not localStorage demo). */
+  commerceAuthoritative: boolean;
+  ordersLoading: boolean;
+  ordersError: string | null;
+  refreshOrders: () => Promise<void>;
   approveOrder: (orderId: string, deliveryChargeNum?: number, note?: string) => void;
   declineOrder: (orderId: string, reason: string) => void;
   cancelOrder: (orderId: string, reason: string) => void;
@@ -244,31 +268,129 @@ const initialOrders: Order[] = [];
 export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { allocateStock, deallocateStock, logStockChange } = useInventory();
   const { applyCoupon } = useCoupons();
+  const [commerceAuthoritative, setCommerceAuthoritative] = useState(false);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>(() => {
+    // Demo/legacy bootstrap only — replaced by Commerce API when authenticated.
     const saved = localStorage.getItem('choosify_orders');
-    const parsed = saved ? JSON.parse(saved) : initialOrders;
-    return parsed.map((o: any) => ({
-      ...o,
-      subOrders: o.subOrders || [
-        {
-          sellerId: o.product.sellerId,
-          sellerName: o.product.sellerName,
-          trackingStatus: o.trackingStatus || 'pending'
-        }
-      ],
-      adminNotes: o.adminNotes || [],
-      codCollected: o.codCollected !== undefined ? o.codCollected : false
-    }));
+    if (!saved) return initialOrders;
+    try {
+      const parsed = JSON.parse(saved);
+      return (Array.isArray(parsed) ? parsed : []).map((o: any) => ({
+        ...o,
+        subOrders: o.subOrders || [
+          {
+            sellerId: o.product?.sellerId,
+            sellerName: o.product?.sellerName,
+            trackingStatus: o.trackingStatus || 'pending',
+          },
+        ],
+        adminNotes: o.adminNotes || [],
+        codCollected: o.codCollected !== undefined ? o.codCollected : false,
+      }));
+    } catch {
+      return initialOrders;
+    }
   });
 
-  useEffect(() => {
-    operationsApi
-      .listOrders()
-      .then((rows) => {
-        setOrders((prev) => mergePlatformOrders(prev, rows));
-      })
-      .catch(() => {});
+  const refreshOrders = useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) {
+      setCommerceAuthoritative(false);
+      return;
+    }
+    setOrdersLoading(true);
+    setOrdersError(null);
+    try {
+      const listed = await commerceApi.listOrders(token, { byCheckout: true });
+      if (!listed.ok) {
+        setOrdersError(
+          (listed.body as { error?: string })?.error || `Failed to load orders (${listed.status})`,
+        );
+        setOrdersLoading(false);
+        return;
+      }
+      const rows = (listed.body as { data?: CommerceOrderDto[] }).data || [];
+      const mapped: Order[] = rows.map((row) => mapCommerceOrderToUi(row, null));
+      setOrders(mapped);
+      setCommerceAuthoritative(true);
+      try {
+        localStorage.removeItem('choosify_orders');
+      } catch {
+        /* ignore */
+      }
+    } catch (err) {
+      setOrdersError(err instanceof Error ? err.message : 'Failed to load Commerce Orders');
+    } finally {
+      setOrdersLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    void refreshOrders();
+    const onFocus = () => {
+      void refreshOrders();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refreshOrders]);
+
+  const patchOrderFromCommerce = async (orderId: string) => {
+    const token = getAuthToken();
+    if (!token) return;
+    const res = await commerceApi.getOrder(token, orderId);
+    if (!res.ok) return;
+    const row = (res.body as { data?: CommerceOrderDto }).data;
+    if (!row) return;
+    let shipment: CommerceShipmentDto | null = null;
+    const shipRes = await commerceApi.getOrderShipment(token, orderId);
+    if (shipRes.ok) shipment = (shipRes.body as { data?: CommerceShipmentDto }).data || null;
+    const mapped = mapCommerceOrderToUi(row, shipment);
+    setOrders((prev) => {
+      const idx = prev.findIndex((o) => o.id === orderId);
+      if (idx < 0) return [mapped, ...prev];
+      const next = [...prev];
+      next[idx] = { ...prev[idx], ...mapped, adminNotes: prev[idx].adminNotes, customerNotes: prev[idx].customerNotes, sellerNotes: prev[idx].sellerNotes };
+      return next;
+    });
+  };
+
+  const runCommerceTransition = async (
+    orderId: string,
+    status: string,
+    extra?: Record<string, unknown>,
+  ): Promise<{ ok: boolean; error?: string }> => {
+    const token = getAuthToken();
+    if (!token) return { ok: false, error: 'Not authenticated' };
+    const res = await commerceApi.transitionOrder(token, orderId, {
+      status: status as 'confirmed' | 'packed' | 'shipped' | 'delivered' | 'completed',
+      ...extra,
+    });
+    if (!res.ok) {
+      const err = (res.body as { error?: string })?.error || `Transition failed (${res.status})`;
+      setOrdersError(err);
+      return { ok: false, error: err };
+    }
+    await patchOrderFromCommerce(orderId);
+    return { ok: true };
+  };
+
+  const runCommerceCancel = async (
+    orderId: string,
+    reason: string,
+  ): Promise<{ ok: boolean; error?: string }> => {
+    const token = getAuthToken();
+    if (!token) return { ok: false, error: 'Not authenticated' };
+    const res = await commerceApi.cancelOrder(token, orderId, reason);
+    if (!res.ok) {
+      const err = (res.body as { error?: string })?.error || `Cancel failed (${res.status})`;
+      setOrdersError(err);
+      return { ok: false, error: err };
+    }
+    await patchOrderFromCommerce(orderId);
+    return { ok: true };
+  };
 
   const [customers, setCustomers] = useState<Customer[]>(() => {
     const saved = localStorage.getItem('choosify_customers');
@@ -311,10 +433,11 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     ];
   });
 
-  // Track to local storage
+  // Persist demo orders only when Commerce is not authoritative
   useEffect(() => {
+    if (commerceAuthoritative) return;
     localStorage.setItem('choosify_orders', JSON.stringify(orders));
-  }, [orders]);
+  }, [orders, commerceAuthoritative]);
 
   useEffect(() => {
     localStorage.setItem('choosify_customers', JSON.stringify(customers));
@@ -326,6 +449,23 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Actions
   const approveOrder = (orderId: string, deliveryChargeNum?: number, note?: string) => {
+    if (commerceAuthoritative || getAuthToken()) {
+      void (async () => {
+        const result = await runCommerceTransition(orderId, 'confirmed');
+        if (!result.ok) return;
+        if (note) {
+          setOrders((prev) =>
+            prev.map((o) =>
+              o.id === orderId
+                ? { ...o, sellerNotes: [...(o.sellerNotes || []), note] }
+                : o,
+            ),
+          );
+        }
+      })();
+      return;
+    }
+
     try {
       const orderToApprove = orders.find(o => o.id === orderId);
       if (orderToApprove) {
@@ -373,7 +513,7 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           delivery_charge: resolvedDeliveryCharge,
           total_payable: totalPayableNum,
           invoice_id: invoiceIdGenerated,
-          invoice_status: o.paymentStatus === 'Paid' ? 'Paid' : 'Unpaid',
+          invoice_status: 'Unpaid',
           confirmation_timestamp: timestampStr,
           earnings: {
             totalRevenue: totalPayableNum,
@@ -420,6 +560,11 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const declineOrder = (orderId: string, reason: string) => {
+    if (commerceAuthoritative || getAuthToken()) {
+      void runCommerceCancel(orderId, reason || 'Declined by seller');
+      return;
+    }
+
     try {
       const orderToDecline = orders.find(o => o.id === orderId);
       if (orderToDecline) {
@@ -478,6 +623,11 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const cancelOrder = (orderId: string, reason: string) => {
+    if (commerceAuthoritative || getAuthToken()) {
+      void runCommerceCancel(orderId, reason || 'Cancelled');
+      return;
+    }
+
     try {
       const orderToCancel = orders.find(o => o.id === orderId);
       if (orderToCancel) {
@@ -526,6 +676,35 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const dispatchOrder = (orderId: string, deliveryPartner: string, trackingUrl: string) => {
+    if (commerceAuthoritative || getAuthToken()) {
+      void (async () => {
+        const current = orders.find((o) => o.id === orderId);
+        const commerceStatus = current?.commerceStatus;
+        if (commerceStatus === 'confirmed' || current?.status === 'Confirmed') {
+          const packed = await runCommerceTransition(orderId, 'packed');
+          if (!packed.ok) return;
+        } else if (commerceStatus === 'pending' || current?.status === 'Pending') {
+          const conf = await runCommerceTransition(orderId, 'confirmed');
+          if (!conf.ok) return;
+          const packed = await runCommerceTransition(orderId, 'packed');
+          if (!packed.ok) return;
+        } else if (commerceStatus !== 'packed' && current?.status !== 'Processing') {
+          // already packed/shipped — continue to ship
+        }
+        const trackingNumber =
+          trackingUrl?.replace(/^tracking:/, '') ||
+          trackingUrl?.split('/').pop() ||
+          trackingUrl ||
+          undefined;
+        await runCommerceTransition(orderId, 'shipped', {
+          fulfilmentMethod: 'self_delivery',
+          courierProvider: deliveryPartner || 'self',
+          trackingNumber,
+        });
+      })();
+      return;
+    }
+
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
         return {
@@ -573,12 +752,87 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateOrderStatus = (orderId: string, status: OrderStatus) => {
+    if (commerceAuthoritative || getAuthToken()) {
+      void (async () => {
+        const current = orders.find((o) => o.id === orderId);
+        // Intermediate UI-only step after ship
+        if (status === 'In Transit' && (current?.commerceStatus === 'shipped' || current?.status === 'Dispatched')) {
+          setOrders((prev) =>
+            prev.map((o) => (o.id === orderId ? { ...o, status: 'In Transit' } : o)),
+          );
+          return;
+        }
+        if (status === 'Processing') {
+          await runCommerceTransition(orderId, 'packed');
+          return;
+        }
+        if (status === 'Dispatched' || status === 'In Transit') {
+          if (current?.commerceStatus === 'confirmed' || current?.status === 'Confirmed') {
+            const packed = await runCommerceTransition(orderId, 'packed');
+            if (!packed.ok) return;
+          }
+          await runCommerceTransition(orderId, 'shipped', { fulfilmentMethod: 'self_delivery' });
+          if (status === 'In Transit') {
+            setOrders((prev) =>
+              prev.map((o) => (o.id === orderId ? { ...o, status: 'In Transit' } : o)),
+            );
+          }
+          return;
+        }
+        if (status === 'Delivered') {
+          const cs = current?.commerceStatus;
+          if (cs === 'confirmed' || current?.status === 'Confirmed') {
+            const packed = await runCommerceTransition(orderId, 'packed');
+            if (!packed.ok) return;
+          }
+          if (cs !== 'shipped' && cs !== 'delivered' && cs !== 'completed' && current?.status !== 'Dispatched' && current?.status !== 'In Transit') {
+            // after pack may need ship
+            const after = orders.find((o) => o.id === orderId);
+            if (after?.commerceStatus === 'packed' || after?.status === 'Processing') {
+              const shipped = await runCommerceTransition(orderId, 'shipped', {
+                fulfilmentMethod: 'self_delivery',
+              });
+              if (!shipped.ok) return;
+            }
+          }
+          // re-read via transition path: if still packed, ship first
+          let latest = await (async () => {
+            const token = getAuthToken();
+            if (!token) return null;
+            const res = await commerceApi.getOrder(token, orderId);
+            return (res.body as { data?: CommerceOrderDto })?.data;
+          })();
+          if (latest?.status === 'packed') {
+            const shipped = await runCommerceTransition(orderId, 'shipped', {
+              fulfilmentMethod: 'self_delivery',
+            });
+            if (!shipped.ok) return;
+            latest = { ...latest, status: 'shipped' };
+          }
+          if (latest?.status === 'shipped' || current?.status === 'Dispatched' || current?.status === 'In Transit') {
+            const del = await runCommerceTransition(orderId, 'delivered');
+            if (!del.ok) return;
+          }
+          await runCommerceTransition(orderId, 'completed');
+          return;
+        }
+        if (status === 'Confirmed') {
+          await runCommerceTransition(orderId, 'confirmed');
+          return;
+        }
+        if (status === 'Cancelled' || status === 'Rejected') {
+          await runCommerceCancel(orderId, 'Status set to ' + status);
+        }
+      })();
+      return;
+    }
+
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
         const updateObj: Partial<Order> = { status };
         if (status === 'Delivered') {
           updateObj.deliverTime = new Date().toISOString();
-          updateObj.paymentStatus = 'Paid';
+          // Do not invent Paid — Payments are Sprint 10
         }
         return {
           ...o,
@@ -769,6 +1023,46 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     promoCode?: string;
     promoDiscount?: number;
   }): Promise<{ orderId: string; invoiceId: string; confirmOrderUrl?: string } | null> => {
+    const token = getAuthToken();
+    if (token) {
+      const sourceMap: Record<string, string> = {
+        WhatsApp: 'external_whatsapp',
+        Facebook: 'external_facebook',
+        Instagram: 'external_instagram',
+        Offline: 'external_offline',
+      };
+      const res = await commerceApi.createManualOrder(token, {
+        sellerId: params.product.sellerId,
+        brandId: (params.product as { brandId?: string }).brandId,
+        listingType: params.product.productType === 'service' ? 'service' : 'product',
+        listingId: params.product.id,
+        quantity: params.quantity,
+        source: sourceMap[params.platformSource] || 'manual',
+        shipping: {
+          fullName: params.customerName,
+          phone: params.customerPhone,
+          address: params.customerAddress,
+        },
+        notes: params.notes,
+      });
+      if (!res.ok) {
+        console.error('Commerce manual order failed', res.body);
+        setOrdersError((res.body as { error?: string })?.error || 'Manual order failed');
+        return null;
+      }
+      const data = (res.body as { data?: CommerceOrderDto }).data;
+      const claimToken = (res.body as { claimToken?: string }).claimToken;
+      if (!data?.id) return null;
+      await refreshOrders();
+      return {
+        orderId: data.id,
+        invoiceId: data.orderNumber,
+        confirmOrderUrl: claimToken
+          ? `${((import.meta as any).env?.VITE_CHOOSIFY_WEB_URL || 'http://localhost:5173').replace(/\/$/, '')}/orders/confirm/${claimToken}`
+          : undefined,
+      };
+    }
+
     const orderId = 'CSS-' + Math.floor(1000 + Math.random() * 9000);
     const invoiceId = 'INV-' + Math.floor(100000 + Math.random() * 900000);
     const timestampStr = new Date().toISOString();
@@ -779,59 +1073,10 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const discount = params.promoDiscount || 0;
     const totalPayable = Math.max(0, finalProductPrice + deliveryCharge - discount);
 
-    // Server generates claimToken (crypto.randomBytes) — never client-supplied.
-    let synced: Awaited<ReturnType<typeof operationsApi.createOrder>>;
-    try {
-      synced = await operationsApi.createOrder({
-        orderId,
-        buyerId: 'unclaimed',
-        isCOD: true,
-        isSplit: false,
-        overallTotal: totalPayable,
-        subtotal: finalProductPrice,
-        deliveryTotal: deliveryCharge,
-        subOrders: [
-          {
-            sellerId: params.product.sellerId,
-            sellerBusinessName: params.product.sellerName,
-            items: [
-              {
-                productId: Number(params.product.id) || 0,
-                productTitle: params.product.name,
-                quantity: params.quantity,
-                price: productPrice,
-                productType: params.product.productType,
-                serviceCategory: params.product.serviceCategory,
-              },
-            ],
-            deliveryFee: deliveryCharge,
-            invoiceId,
-            trackingStatus: 'pending',
-          },
-        ],
-        promoCode: params.promoCode,
-        promoDiscount: discount,
-        status: 'pending_payment',
-        createdAt: timestampStr,
-        isManual: true,
-        platformSource: params.platformSource,
-      } as any);
-    } catch (err) {
-      console.error('Failed to sync manual order to storefront order store:', err);
-      return null;
-    }
-
-    const claimToken = synced.claimToken;
-    const confirmOrderUrl =
-      synced.confirmOrderUrl ||
-      (claimToken
-        ? `${((import.meta as any).env?.VITE_CHOOSIFY_WEB_URL || 'http://localhost:5173').replace(/\/$/, '')}/orders/confirm/${claimToken}`
-        : undefined);
-
-    if (!claimToken || !confirmOrderUrl) {
-      console.error('Manual order created without a server claim token');
-      return null;
-    }
+    // Demo-only path without auth token — no operationsApi SoT
+    const claimToken = `demo-claim-${orderId}`;
+    const confirmOrderUrl = `${((import.meta as any).env?.VITE_CHOOSIFY_WEB_URL || 'http://localhost:5173').replace(/\/$/, '')}/orders/confirm/${claimToken}`;
+    const synced = { claimToken, confirmOrderUrl };
 
     const newCustomer: Customer = {
       id: 'cust_' + Math.floor(1000 + Math.random() * 9000),
@@ -946,10 +1191,52 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateOrderTrackingStatus = (
-    orderId: string, 
-    sellerId: string, 
+    orderId: string,
+    sellerId: string,
     newStatus: 'pending' | 'dispatched' | 'transit' | 'delivered' | 'cancelled'
   ) => {
+    if (commerceAuthoritative || getAuthToken()) {
+      void (async () => {
+        if (newStatus === 'dispatched' || newStatus === 'transit') {
+          const current = orders.find((o) => o.id === orderId);
+          if (current?.commerceStatus === 'confirmed' || current?.status === 'Confirmed') {
+            const packed = await runCommerceTransition(orderId, 'packed');
+            if (!packed.ok) return;
+          }
+          if (current?.commerceStatus !== 'shipped' && current?.commerceStatus !== 'delivered') {
+            await runCommerceTransition(orderId, 'shipped', {
+              fulfilmentMethod: 'self_delivery',
+              courierProvider: 'self',
+            });
+          }
+          if (newStatus === 'transit') {
+            setOrders((prev) =>
+              prev.map((o) =>
+                o.id === orderId
+                  ? {
+                      ...o,
+                      status: 'In Transit',
+                      subOrders: o.subOrders?.map((so) =>
+                        so.sellerId === sellerId ? { ...so, trackingStatus: 'transit' } : so,
+                      ),
+                    }
+                  : o,
+              ),
+            );
+          }
+          return;
+        }
+        if (newStatus === 'delivered') {
+          await updateOrderStatus(orderId, 'Delivered');
+          return;
+        }
+        if (newStatus === 'cancelled') {
+          await runCommerceCancel(orderId, 'Cancelled via shipment tracking');
+        }
+      })();
+      return;
+    }
+
     setOrders(prev => prev.map(o => {
       if (o.id === orderId) {
         const subOrders = o.subOrders ? [...o.subOrders] : [];
@@ -993,6 +1280,10 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       orders,
       customers,
       messageThreads,
+      commerceAuthoritative,
+      ordersLoading,
+      ordersError,
+      refreshOrders,
       approveOrder,
       declineOrder,
       cancelOrder,

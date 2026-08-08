@@ -73,7 +73,11 @@ export default function OrdersPage() {
     updateOrderStatus,
     updateOrderTrackingStatus,
     addAdminNote,
-    updateCodCollected
+    updateCodCollected,
+    ordersLoading,
+    ordersError,
+    refreshOrders,
+    commerceAuthoritative,
   } = useOrders();
 
   // Unified 12 Core Filter Tabs state 
@@ -208,14 +212,26 @@ export default function OrdersPage() {
       return true;
     }
     if (profile?.role === 'seller') {
-      const brandNameLower = o.product.brand.toLowerCase();
-      // If a specific brand context is selected, strict filter by that brand context
+      if (o.product.sellerId && profile.id && o.product.sellerId !== profile.id) {
+        return false;
+      }
+      const brandId = (o as Order).brandId;
       if (activeBrand) {
+        if (brandId) return brandId === activeBrand.id;
         const activeBrandNameLower = activeBrand.name.toLowerCase();
+        const brandNameLower = o.product.brand.toLowerCase();
         return brandNameLower === activeBrandNameLower || brandNameLower.includes(activeBrandNameLower) || activeBrandNameLower.includes(brandNameLower);
       }
-      // If "All Brands" (null context) is selected, show orders of ALL of this seller's owned brands
-      return ownedBrandNames.some(name => brandNameLower === name || brandNameLower.includes(name) || name.includes(brandNameLower));
+      if (brandId && ownedBrandIds.length) {
+        return ownedBrandIds.includes(brandId);
+      }
+      const brandNameLower = o.product.brand.toLowerCase();
+      return ownedBrandNames.some(name => brandNameLower === name || brandNameLower.includes(name) || name.includes(brandNameLower))
+        || o.product.sellerId === profile.id;
+    }
+    // Consumer: own orders only
+    if (profile?.id) {
+      return o.customer.id === profile.id;
     }
     return o.product.sellerId === sellerId;
   });
@@ -1322,6 +1338,20 @@ Thank you for using Choosify Commerce Network.
           <p className="text-xs text-[#6B7280]">
             Process active customer orders, print statements, track logistics couriers, and explore historic shipments.
           </p>
+          {ordersLoading && (
+            <p className="text-[10px] text-app-text-muted mt-2 font-mono uppercase tracking-wider">Loading orders…</p>
+          )}
+          {ordersError && (
+            <p className="text-[10px] text-rose-400 mt-2">
+              {ordersError}{' '}
+              <button type="button" className="underline" onClick={() => void refreshOrders()}>
+                Retry
+              </button>
+            </p>
+          )}
+          {commerceAuthoritative && !ordersLoading && sellerOrders.length === 0 && (
+            <p className="text-[10px] text-app-text-muted mt-2">No Commerce Orders in this scope yet.</p>
+          )}
         </div>
 
         {/* Dynamic status stats indicators */}
@@ -1891,8 +1921,34 @@ Thank you for using Choosify Commerce Network.
                           {order.status === 'Confirmed' && (
                             <>
                               <button 
+                                onClick={() => {
+                                  updateOrderStatus(order.id, 'Processing');
+                                  showInlineToast(`Order ${order.id} marked Packed`);
+                                }}
+                                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-app-bg hover:bg-app-border/40 text-app-text-primary border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                              >
+                                <Package className="w-3.5 h-3.5" /> Pack
+                              </button>
+                              <button 
                                 onClick={() => openAction(order, 'dispatch')}
                                 className="flex items-gradient-to-r from-[#FF5B00] to-orange-500 text-app-text-primary rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg shadow-[#FF5B00]/20 transition-all active:scale-95 cursor-pointer flex items-center gap-1.5 px-3.5 py-2.5"
+                              >
+                                <Truck className="w-3.5 h-3.5" /> Mark Dispatched
+                              </button>
+                              <button 
+                                onClick={() => openAction(order, 'cancel')}
+                                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-app-bg hover:bg-app-border/40 text-app-text-secondary border border-app-border rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
+                              >
+                                Cancel Order
+                              </button>
+                            </>
+                          )}
+
+                          {order.status === 'Processing' && (
+                            <>
+                              <button 
+                                onClick={() => openAction(order, 'dispatch')}
+                                className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-[#FF5B00] to-orange-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider shadow-lg shadow-[#FF5B00]/20 transition-all active:scale-95 cursor-pointer"
                               >
                                 <Truck className="w-3.5 h-3.5" /> Mark Dispatched
                               </button>

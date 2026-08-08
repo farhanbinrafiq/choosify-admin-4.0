@@ -237,6 +237,12 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
   ],
+  consumer: [
+    { label: 'My Shopping', type: 'label' },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { label: 'My Orders', icon: ListOrdered, path: '/admin/orders' },
+    { label: 'Settings', icon: Settings, path: '/admin/settings' },
+  ],
   moderator: [
     { label: 'Moderation Workspace', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
