@@ -8,6 +8,7 @@ import { operationsRouter } from "./operationsRouter";
 import { bookingRouter } from "./booking/bookingRouter";
 import { authRouter } from "./authRouter";
 import { paymentsRouter } from "./payments/paymentsRouter";
+import { commerceRouter } from "./commerceRouter";
 import { getAnalyticsSummary } from "./operations/analyticsService";
 import { Logger } from "./lib/logger";
 import { validateEnvironment } from "./lib/env";
@@ -92,6 +93,7 @@ export function createApp(): Express {
   app.use("/api", messagingRouter);
   app.use("/api", logisticsRouter);
   app.use("/api/v1", catalogRouter);
+  app.use("/api/v1", commerceRouter);
   app.use("/api/v1", operationsRouter);
   app.use("/api/v1", bookingRouter);
   app.use("/api/v1", paymentsRouter);
