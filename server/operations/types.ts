@@ -246,7 +246,14 @@ export interface OpsSellerBookingSettings {
   updatedAt: string;
 }
 
-export type PermissionKey = 'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics';
+export type PermissionKey =
+  | 'content'
+  | 'users'
+  | 'finance'
+  | 'brand'
+  | 'system'
+  | 'analytics'
+  | 'taxonomy';
 
 export type RolePermissionsMap = Record<string, Record<PermissionKey, boolean>>;
 

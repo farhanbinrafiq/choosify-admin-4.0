@@ -139,7 +139,7 @@ export default function SettingsPage() {
     setRolePermissions(updated);
     localStorage.setItem('choosify_role_permissions', JSON.stringify(updated));
     operationsApi
-      .updatePermissions(updated as Record<string, Record<'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics', boolean>>)
+      .updatePermissions(updated as Record<string, Record<'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics' | 'taxonomy', boolean>>)
       .then(
         () => showToast(`✓ Updated [${role.replace('_', ' ')}] permission for [${permKey}]`),
         (err: unknown) => {
@@ -461,7 +461,7 @@ export default function SettingsPage() {
                             <td className="p-4 pl-6 font-extrabold text-[12px] capitalize text-[#0D1B2A]">
                                {role.replace(/_/g, ' ')}
                             </td>
-                            {['content', 'users', 'finance', 'brand', 'system', 'analytics'].map((permKey) => (
+                            {['content', 'users', 'finance', 'brand', 'system', 'analytics', 'taxonomy'].map((permKey) => (
                                <td key={permKey} className="p-4 text-center">
                                   <input 
                                     id={`chk-permission-${role}-${permKey}`}

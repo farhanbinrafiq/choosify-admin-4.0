@@ -28,4 +28,5 @@ IS-003 path examples are treated as conceptual resource names, not a mandatory U
 
 - No `/api/v1/products` migration in Sprint 3.
 - New inventory and service foundation endpoints extend the existing catalog family.
+- Sprint 4 (IS-010 Sprint 7): category hierarchy + attribute/variant schema endpoints extend `/api/v1/catalog/categories` (including `.../attributes` and `.../schema`). IS-003 bare `/api/v1/categories` examples remain conceptual mappings only.
 - Documentation may later be amended to show `/catalog` paths explicitly; this ADR records the compatibility choice.

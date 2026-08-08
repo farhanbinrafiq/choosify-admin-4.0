@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { CategoryType } from '../../types';
+import { catalogApi } from '../../services/catalogApi';
+import type { CatalogCategoryAttribute } from '../../types/catalog';
 import { 
   Folder, FolderPlus, FolderOpen, ChevronRight, ChevronDown, Plus, Trash2, 
   Save, X, Search, ArrowUp, ArrowDown, Upload, Download, ToggleLeft, 
@@ -93,6 +95,15 @@ export default function CategoriesPage() {
   // Confirmation modal state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
+  // Attribute schema editor (logic-only; existing design language)
+  const [schemaAttrs, setSchemaAttrs] = useState<CatalogCategoryAttribute[]>([]);
+  const [schemaLoading, setSchemaLoading] = useState(false);
+  const [attrName, setAttrName] = useState('');
+  const [attrType, setAttrType] = useState<'text' | 'number' | 'boolean' | 'select' | 'multi_select'>('text');
+  const [attrRequired, setAttrRequired] = useState(false);
+  const [attrVariant, setAttrVariant] = useState(false);
+  const [attrOptions, setAttrOptions] = useState('');
+
   // Initialize History state
   useEffect(() => {
     if (categories && history.length === 0) {
@@ -100,6 +111,95 @@ export default function CategoriesPage() {
       setHistoryPointer(0);
     }
   }, [categories]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedId || editorMode !== 'edit') {
+      setSchemaAttrs([]);
+      return;
+    }
+    setSchemaLoading(true);
+    catalogApi
+      .listCategoryAttributes(selectedId)
+      .then((rows) => {
+        if (!cancelled) setSchemaAttrs(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setSchemaAttrs([]);
+      })
+      .finally(() => {
+        if (!cancelled) setSchemaLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, editorMode]);
+
+  const refreshSchema = async () => {
+    if (!selectedId) return;
+    try {
+      const rows = await catalogApi.listCategoryAttributes(selectedId);
+      setSchemaAttrs(rows);
+    } catch {
+      /* keep prior */
+    }
+  };
+
+  const handleAddAttribute = async () => {
+    if (!selectedId || !attrName.trim()) {
+      showToast('Attribute name is required', 'error');
+      return;
+    }
+    try {
+      await catalogApi.createCategoryAttribute(selectedId, {
+        name: attrName.trim(),
+        type: attrType,
+        required: attrRequired,
+        variantEligible: attrVariant,
+        options:
+          attrType === 'select' || attrType === 'multi_select'
+            ? attrOptions
+                .split(',')
+                .map((o) => o.trim())
+                .filter(Boolean)
+            : [],
+      });
+      setAttrName('');
+      setAttrOptions('');
+      setAttrRequired(false);
+      setAttrVariant(false);
+      setAttrType('text');
+      await refreshSchema();
+      showToast('Attribute saved', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to save attribute', 'error');
+    }
+  };
+
+  const handleToggleAttrFlag = async (
+    attr: CatalogCategoryAttribute,
+    patch: Partial<CatalogCategoryAttribute>,
+  ) => {
+    if (!selectedId) return;
+    try {
+      await catalogApi.updateCategoryAttribute(selectedId, attr.id, patch);
+      await refreshSchema();
+      showToast('Attribute updated', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to update attribute', 'error');
+    }
+  };
+
+  const handleRemoveAttribute = async (attr: CatalogCategoryAttribute) => {
+    if (!selectedId) return;
+    try {
+      await catalogApi.deleteCategoryAttribute(selectedId, attr.id);
+      await refreshSchema();
+      showToast('Attribute removed', 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to remove attribute', 'error');
+    }
+  };
 
   /**
    * Helper to trigger elegant auto-dismissing toast alerts
@@ -906,6 +1006,128 @@ export default function CategoriesPage() {
                 <div className="flex items-center space-x-2 font-mono text-[10px]">
                   <span>ID:</span>
                   <span className="bg-slate-800 text-slate-300 px-1.5 py-0.5 rounded">{selectedId}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Attribute / Variant schema (Admin-only API; existing visual language) */}
+            {editorMode === 'edit' && selectedId && (
+              <div className="border border-slate-800 rounded p-3 space-y-3 bg-[#090a12]">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+                    Attribute & Variant Schema
+                  </label>
+                  {schemaLoading && (
+                    <span className="text-[9px] text-slate-500 font-mono">Loading…</span>
+                  )}
+                </div>
+                {schemaAttrs.length === 0 && !schemaLoading ? (
+                  <p className="text-[11px] text-slate-500">No attributes defined for this category yet.</p>
+                ) : (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto custom-scrollbar">
+                    {schemaAttrs.map((attr) => (
+                      <div
+                        key={attr.id}
+                        className="flex flex-wrap items-center justify-between gap-2 text-[11px] bg-[#121424] border border-slate-800 rounded px-2 py-1.5"
+                      >
+                        <div className="min-w-0">
+                          <span className="text-slate-200 font-bold">{attr.name}</span>
+                          <span className="text-slate-500 font-mono ml-2">{attr.key}</span>
+                          <span className="text-slate-500 ml-2">{attr.type}</span>
+                          {attr.required && (
+                            <span className="ml-2 text-[9px] uppercase text-red-400 font-bold">Required</span>
+                          )}
+                          {attr.variantEligible && (
+                            <span className="ml-2 text-[9px] uppercase text-[#FF9E2C] font-bold">Variant</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleToggleAttrFlag(attr, { required: !attr.required })}
+                            className="px-2 py-0.5 text-[9px] font-bold text-slate-300 bg-slate-800 hover:bg-[#FF6A00] hover:text-white rounded"
+                          >
+                            Required
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleToggleAttrFlag(attr, { variantEligible: !attr.variantEligible })
+                            }
+                            className="px-2 py-0.5 text-[9px] font-bold text-slate-300 bg-slate-800 hover:bg-[#FF6A00] hover:text-white rounded"
+                          >
+                            Variant
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveAttribute(attr)}
+                            className="px-2 py-0.5 text-[9px] font-bold text-red-400 bg-red-950/20 hover:bg-red-900/30 rounded"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-800">
+                  <input
+                    type="text"
+                    value={attrName}
+                    onChange={(e) => setAttrName(e.target.value)}
+                    placeholder="Attribute name"
+                    className="w-full px-2 py-1.5 text-xs bg-[#121424] border border-slate-800 rounded text-slate-100 placeholder-slate-600 focus:outline-none focus:border-[#FF6A00]"
+                  />
+                  <select
+                    value={attrType}
+                    onChange={(e) =>
+                      setAttrType(e.target.value as typeof attrType)
+                    }
+                    className="w-full px-2 py-1.5 text-xs bg-[#121424] border border-slate-800 rounded text-slate-300 focus:outline-none focus:border-[#FF6A00]"
+                  >
+                    <option value="text">text</option>
+                    <option value="number">number</option>
+                    <option value="boolean">boolean</option>
+                    <option value="select">select</option>
+                    <option value="multi_select">multi_select</option>
+                  </select>
+                  {(attrType === 'select' || attrType === 'multi_select') && (
+                    <input
+                      type="text"
+                      value={attrOptions}
+                      onChange={(e) => setAttrOptions(e.target.value)}
+                      placeholder="Options (comma-separated)"
+                      className="w-full sm:col-span-2 px-2 py-1.5 text-xs bg-[#121424] border border-slate-800 rounded text-slate-100 placeholder-slate-600 focus:outline-none focus:border-[#FF6A00]"
+                    />
+                  )}
+                  <div className="flex items-center gap-3 sm:col-span-2">
+                    <label className="flex items-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                      <input
+                        type="checkbox"
+                        checked={attrRequired}
+                        onChange={(e) => setAttrRequired(e.target.checked)}
+                        className="accent-[#FF6A00]"
+                      />
+                      Required
+                    </label>
+                    <label className="flex items-center gap-1.5 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                      <input
+                        type="checkbox"
+                        checked={attrVariant}
+                        onChange={(e) => setAttrVariant(e.target.checked)}
+                        className="accent-[#FF6A00]"
+                      />
+                      Variant
+                    </label>
+                    <button
+                      type="button"
+                      onClick={handleAddAttribute}
+                      className="ml-auto px-3 py-1.5 text-xs font-bold text-white bg-slate-800 hover:bg-[#FF6A00] rounded flex items-center gap-1"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Add Attribute</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

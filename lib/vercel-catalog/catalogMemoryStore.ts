@@ -2,6 +2,7 @@ import type {
   CatalogBrand,
   CatalogBrandPost,
   CatalogCategory,
+  CatalogCategoryAttribute,
   CatalogCreator,
   CatalogDeal,
   CatalogGuide,
@@ -47,10 +48,12 @@ const PRODUCT_DETAILS_COLLECTION = 'catalog_product_details';
 const BRAND_POSTS_COLLECTION = 'catalog_brand_posts';
 const INVENTORY_COLLECTION = 'catalog_inventory';
 const SERVICES_COLLECTION = 'catalog_services';
+const CATEGORY_ATTRIBUTES_COLLECTION = 'catalog_category_attributes';
 
 const memoryState: {
   products: CatalogProduct[];
   categories: CatalogCategory[];
+  categoryAttributes: CatalogCategoryAttribute[];
   brands: CatalogBrand[];
   deals: CatalogDeal[];
   creators: CatalogCreator[];
@@ -65,6 +68,7 @@ const memoryState: {
 } = {
   products: defaultProducts(),
   categories: defaultCategories(),
+  categoryAttributes: [],
   brands: defaultBrands(),
   deals: defaultDeals(),
   creators: defaultCreators(),
@@ -86,6 +90,7 @@ function buildSnapshot(): CatalogMemorySnapshot {
     savedAt: new Date().toISOString(),
     products: memoryState.products,
     categories: memoryState.categories,
+    categoryAttributes: memoryState.categoryAttributes,
     brands: memoryState.brands,
     deals: memoryState.deals,
     creators: memoryState.creators,
@@ -112,6 +117,8 @@ export function ensureMemoryCatalogHydrated(): boolean {
   if (!snapshot) return false;
   memoryState.products = (snapshot.products as CatalogProduct[]) || memoryState.products;
   memoryState.categories = (snapshot.categories as CatalogCategory[]) || memoryState.categories;
+  memoryState.categoryAttributes =
+    (snapshot.categoryAttributes as CatalogCategoryAttribute[]) || memoryState.categoryAttributes || [];
   memoryState.brands = (snapshot.brands as CatalogBrand[]) || memoryState.brands;
   memoryState.deals = (snapshot.deals as CatalogDeal[]) || memoryState.deals;
   memoryState.creators = (snapshot.creators as CatalogCreator[]) || memoryState.creators;
@@ -138,6 +145,8 @@ const collectionMemoryRef = (collectionName: string): unknown[] => {
       return memoryState.products;
     case CATEGORIES_COLLECTION:
       return memoryState.categories;
+    case CATEGORY_ATTRIBUTES_COLLECTION:
+      return memoryState.categoryAttributes;
     case BRANDS_COLLECTION:
       return memoryState.brands;
     case DEALS_COLLECTION:
@@ -228,6 +237,14 @@ export const catalogStore = {
   getCategory: (id: string) => getById<CatalogCategory>(CATEGORIES_COLLECTION, id),
   upsertCategory: (payload: CatalogCategory) => upsert(CATEGORIES_COLLECTION, payload),
   deleteCategory: (id: string) => remove(CATEGORIES_COLLECTION, id),
+
+  listCategoryAttributes: () =>
+    listCollection<CatalogCategoryAttribute>(CATEGORY_ATTRIBUTES_COLLECTION),
+  getCategoryAttribute: (id: string) =>
+    getById<CatalogCategoryAttribute>(CATEGORY_ATTRIBUTES_COLLECTION, id),
+  upsertCategoryAttribute: (payload: CatalogCategoryAttribute) =>
+    upsert(CATEGORY_ATTRIBUTES_COLLECTION, payload),
+  deleteCategoryAttribute: (id: string) => remove(CATEGORY_ATTRIBUTES_COLLECTION, id),
 
   listBrands: () => listCollection<CatalogBrand>(BRANDS_COLLECTION),
   getBrand: (id: string) => getById<CatalogBrand>(BRANDS_COLLECTION, id),

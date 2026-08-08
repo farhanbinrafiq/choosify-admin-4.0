@@ -1,15 +1,87 @@
-export type PermissionKey = 'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics';
+export type PermissionKey =
+  | 'content'
+  | 'users'
+  | 'finance'
+  | 'brand'
+  | 'system'
+  | 'analytics'
+  /** Category & Attribute Manager (Admin-only; IS-003 §57). */
+  | 'taxonomy';
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<PermissionKey, boolean>> = {
-  super_admin: { content: true, users: true, finance: true, brand: true, system: true, analytics: true },
-  admin: { content: true, users: true, finance: false, brand: true, system: true, analytics: true },
+  super_admin: {
+    content: true,
+    users: true,
+    finance: true,
+    brand: true,
+    system: true,
+    analytics: true,
+    taxonomy: true,
+  },
+  admin: {
+    content: true,
+    users: true,
+    finance: false,
+    brand: true,
+    system: true,
+    analytics: true,
+    taxonomy: true,
+  },
   // Seller/creator: permissions aligned to their CMS-mirror filtered menus
-  seller: { content: true, users: true, finance: true, brand: true, system: true, analytics: true },
-  creator: { content: true, users: true, finance: true, brand: false, system: true, analytics: true },
-  moderator: { content: true, users: false, finance: false, brand: true, system: false, analytics: true },
-  finance_manager: { content: false, users: false, finance: true, brand: false, system: false, analytics: true },
-  support_agent: { content: false, users: true, finance: false, brand: false, system: false, analytics: true },
-  marketing_manager: { content: true, users: false, finance: false, brand: false, system: false, analytics: true },
+  seller: {
+    content: true,
+    users: true,
+    finance: true,
+    brand: true,
+    system: true,
+    analytics: true,
+    taxonomy: false,
+  },
+  creator: {
+    content: true,
+    users: true,
+    finance: true,
+    brand: false,
+    system: true,
+    analytics: true,
+    taxonomy: false,
+  },
+  moderator: {
+    content: true,
+    users: false,
+    finance: false,
+    brand: true,
+    system: false,
+    analytics: true,
+    taxonomy: true,
+  },
+  finance_manager: {
+    content: false,
+    users: false,
+    finance: true,
+    brand: false,
+    system: false,
+    analytics: true,
+    taxonomy: false,
+  },
+  support_agent: {
+    content: false,
+    users: true,
+    finance: false,
+    brand: false,
+    system: false,
+    analytics: true,
+    taxonomy: false,
+  },
+  marketing_manager: {
+    content: true,
+    users: false,
+    finance: false,
+    brand: false,
+    system: false,
+    analytics: true,
+    taxonomy: false,
+  },
 };
 
 const ROUTE_PERMISSION: Array<{ prefix: string; permission: PermissionKey }> = [
@@ -18,7 +90,7 @@ const ROUTE_PERMISSION: Array<{ prefix: string; permission: PermissionKey }> = [
   { prefix: '/admin/cashbook', permission: 'finance' },
   { prefix: '/admin/coupons', permission: 'content' },
   { prefix: '/admin/products', permission: 'content' },
-  { prefix: '/admin/categories', permission: 'content' },
+  { prefix: '/admin/categories', permission: 'taxonomy' },
   { prefix: '/admin/brand-posts', permission: 'content' },
   { prefix: '/admin/website-cms', permission: 'content' },
   { prefix: '/admin/cms-studio', permission: 'content' },

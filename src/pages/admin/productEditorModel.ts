@@ -214,6 +214,16 @@ export function mapCatalogProductToEditor(
 }
 
 export function editorModelToProductPatch(model: ProductEditorModel): Partial<CatalogProduct> {
+  const attributes: Record<string, unknown> = {};
+  for (const row of model.specs || []) {
+    const key = String(row.key || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    if (!key) continue;
+    attributes[key] = row.value;
+  }
   return {
     title: model.title,
     description: model.description,
@@ -227,6 +237,7 @@ export function editorModelToProductPatch(model: ProductEditorModel): Partial<Ca
     originalPrice: model.originalPrice || undefined,
     stock: model.stock,
     status: model.status === 'LIVE' ? 'live' : model.status === 'ARCHIVED' ? 'archived' : 'draft',
+    attributes: Object.keys(attributes).length ? attributes : undefined,
   };
 }
 
@@ -307,10 +318,21 @@ export function editorModelToDetailPayload(model: ProductEditorModel): Partial<C
   };
 }
 
-/** Merge color/size/storage editor fields with any other preserved option groups. */
+/** Merge color/size/storage editor fields with any other preserved option groups.
+ * Hardcoded Color/Size/Storage are legacy editor helpers only — category schema
+ * (when defined) is the server SoT for which dimensions are allowed.
+ */
 function buildOptionGroupsFromModel(
   model: ProductEditorModel,
 ): CatalogProductDetail['optionGroups'] {
+  if (
+    !model.colors.length &&
+    !model.sizes.length &&
+    !model.storageOptions.length &&
+    model.optionGroups?.length
+  ) {
+    return model.optionGroups;
+  }
   const preserved = (model.optionGroups || []).filter(
     (g) => !/^(color|size|storage|ram)$/i.test(g.name) && !/color|size|storage|ram/i.test(g.name),
   );
@@ -339,7 +361,6 @@ function buildOptionGroupsFromModel(
       values: model.storageOptions,
     });
   }
-  // If editor fields empty but we had option groups, keep originals (no wipe).
   if (!built.length && model.optionGroups?.length) {
     return model.optionGroups;
   }

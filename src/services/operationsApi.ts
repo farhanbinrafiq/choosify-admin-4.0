@@ -205,7 +205,14 @@ export interface OpsJobApplication {
   updatedAt: string;
 }
 
-export type PermissionKey = 'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics';
+export type PermissionKey =
+  | 'content'
+  | 'users'
+  | 'finance'
+  | 'brand'
+  | 'system'
+  | 'analytics'
+  | 'taxonomy';
 
 export interface OpsShipment {
   id: string;

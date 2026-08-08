@@ -225,6 +225,7 @@ const productSchema = z.object({
   isBestseller: z.boolean(),
   /** Firebase uid of owning seller when listing is seller-managed; omitted for legacy/admin rows. */
   sellerId: z.string().optional(),
+  attributes: z.record(z.string(), z.unknown()).optional(),
   createdAt: isoDate,
   updatedAt: isoDate,
 });
@@ -562,6 +563,12 @@ export const normalizeProductInput = (
     isNewArrival: toBoolean(raw.isNewArrival, existing?.isNewArrival ?? false),
     isBestseller: toBoolean(raw.isBestseller, existing?.isBestseller ?? false),
     sellerId: toString(raw.sellerId, existing?.sellerId) || undefined,
+    attributes: (() => {
+      if (raw.attributes && typeof raw.attributes === 'object' && !Array.isArray(raw.attributes)) {
+        return raw.attributes as Record<string, unknown>;
+      }
+      return existing?.attributes;
+    })(),
     createdAt: existingOrNow(existing?.createdAt),
     updatedAt: nowIso(),
   };

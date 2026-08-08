@@ -18,7 +18,11 @@ type PermissionsMap = Record<string, Record<PermissionKey, boolean>>;
 function normalizePermissions(incoming: PermissionsMap | null | undefined): PermissionsMap {
   const base = structuredClone(DEFAULT_ROLE_PERMISSIONS) as PermissionsMap;
   if (!incoming) return base;
-  const merged: PermissionsMap = { ...base, ...incoming };
+  const merged: PermissionsMap = { ...base };
+  for (const role of Object.keys(base) as string[]) {
+    const defaults = base[role];
+    merged[role] = { ...defaults, ...(incoming[role] || {}) };
+  }
   for (const role of ['seller', 'creator'] as const) {
     const defaults = DEFAULT_ROLE_PERMISSIONS[role];
     merged[role] = { ...defaults, ...(incoming[role] || {}) };

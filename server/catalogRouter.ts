@@ -69,6 +69,22 @@ import {
   upsertService,
   deleteService as deleteServiceRecord,
 } from './catalog/serviceStore';
+import {
+  assertCategoryDeletable,
+  assertCategoryHierarchy,
+  CategorySchemaError,
+  deleteAttribute,
+  getAttribute,
+  getCategorySchema,
+  invalidateCategorySchemaCache,
+  listAttributesForCategory,
+  normalizeAttributeInput,
+  upsertAttribute,
+} from './catalog/categorySchemaStore';
+import {
+  attributesFromSpecs,
+  validateListingAgainstCategorySchema,
+} from './catalog/categorySchemaValidation';
 import { publishEvent } from './events/eventBus';
 import { operationsStore } from './operations/operationsStore';
 import { getCatalogPersistenceMode } from '../lib/vercel-catalog/catalogStore';
@@ -78,6 +94,15 @@ export const catalogRouter = Router();
 const requireAuth = [authenticateRequest];
 /** Platform admin (ADMIN inherits via ROLE_INHERITANCE; SUPER_ADMIN too). */
 const requireCmsWrite = [authenticateRequest, requireAnyPermission([PERMISSIONS.CMS_EDIT])];
+/** Admin-only category tree + attribute schema (IS-003 §52). */
+const requireCategoryManage = [
+  authenticateRequest,
+  requireAnyPermission([PERMISSIONS.CATEGORY_MANAGE]),
+];
+const requireAttributeManage = [
+  authenticateRequest,
+  requireAnyPermission([PERMISSIONS.ATTRIBUTE_MANAGE]),
+];
 /** Brand Studio profile writes: cms:edit OR owning seller. */
 const requireBrandStudioBrandWrite = [authenticateRequest, requireBrandStudioWrite];
 const requireProductCreate = [
@@ -560,6 +585,19 @@ catalogRouter.post('/catalog/products', ...requireProductCreate, async (req, res
     );
     if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;
     normalized = await enforceProductLifecycleAndPublish(req, undefined, normalized);
+    try {
+      await validateListingAgainstCategorySchema({
+        categoryId: normalized.categoryId,
+        status: normalized.status,
+        attributes: normalized.attributes,
+      });
+    } catch (error) {
+      if (error instanceof CategorySchemaError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
     // New products default to draft unless explicitly transitioning with eligibility.
     if (
       !userIsPlatformAdmin(req) &&
@@ -603,6 +641,19 @@ catalogRouter.put('/catalog/products/:id', ...requireProductEdit, async (req, re
       if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;
     }
     normalized = await enforceProductLifecycleAndPublish(req, existing, normalized);
+    try {
+      await validateListingAgainstCategorySchema({
+        categoryId: normalized.categoryId,
+        status: normalized.status,
+        attributes: normalized.attributes,
+      });
+    } catch (error) {
+      if (error instanceof CategorySchemaError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
     const saved = await catalogStore.upsertProduct(normalized);
     await ensureInventoryRecord({ productId: saved.id, quantity: Math.max(0, saved.stock) });
     await syncProductStockFromInventory(saved.id);
@@ -643,6 +694,19 @@ catalogRouter.patch('/catalog/products/:id', ...requireProductEdit, async (req, 
       if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;
     }
     normalized = await enforceProductLifecycleAndPublish(req, existing, normalized);
+    try {
+      await validateListingAgainstCategorySchema({
+        categoryId: normalized.categoryId,
+        status: normalized.status,
+        attributes: normalized.attributes,
+      });
+    } catch (error) {
+      if (error instanceof CategorySchemaError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
     const saved = await catalogStore.upsertProduct(normalized);
     if (typeof (req.body as { stock?: number })?.stock === 'number') {
       await ensureInventoryRecord({ productId: saved.id, quantity: Math.max(0, saved.stock) });
@@ -866,6 +930,170 @@ catalogRouter.get('/catalog/categories', async (_req, res) => {
   }
 });
 
+catalogRouter.get('/catalog/categories/:id', async (req, res) => {
+  try {
+    const category = await catalogStore.getCategory(req.params.id);
+    if (!category) {
+      res.status(404).json({ error: 'Category not found' });
+      return;
+    }
+    res.json({ data: category });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get category' });
+  }
+});
+
+/** Public/Seller read of category attribute + variant schema (IS-003 §54). */
+catalogRouter.get('/catalog/categories/:id/attributes', async (req, res) => {
+  try {
+    const category = await catalogStore.getCategory(req.params.id);
+    if (!category) {
+      res.status(404).json({ error: 'Category not found' });
+      return;
+    }
+    const attributes = await listAttributesForCategory(req.params.id, {
+      includeArchived: req.query.includeArchived === 'true',
+    });
+    res.json({
+      data: attributes,
+      meta: {
+        categoryId: category.id,
+        variantDimensions: attributes.filter((a) => a.variantEligible),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list attributes' });
+  }
+});
+
+catalogRouter.get('/catalog/categories/:id/schema', async (req, res) => {
+  try {
+    const schema = await getCategorySchema(req.params.id);
+    if (!schema) {
+      res.status(404).json({ error: 'Category not found' });
+      return;
+    }
+    res.json({ data: schema });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get category schema' });
+  }
+});
+
+catalogRouter.post('/catalog/categories/:id/attributes', ...requireAttributeManage, async (req, res) => {
+  try {
+    const normalized = normalizeAttributeInput(req.body, req.params.id);
+    const saved = await upsertAttribute(normalized);
+    publishEvent({
+      eventName: 'AttributeCreated',
+      domain: 'Catalog',
+      producer: 'catalogRouter',
+      aggregateId: saved.id,
+      actor: req.userId || 'anonymous',
+      payload: { attributeId: saved.id, categoryId: saved.categoryId, key: saved.key },
+    });
+    publishEvent({
+      eventName: 'CategorySchemaUpdated',
+      domain: 'Catalog',
+      producer: 'catalogRouter',
+      aggregateId: saved.categoryId,
+      actor: req.userId || 'anonymous',
+      payload: { categoryId: saved.categoryId, change: 'attribute_created', attributeId: saved.id },
+    });
+    res.status(201).json({ success: true, data: saved });
+  } catch (error) {
+    if (error instanceof CategorySchemaError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid attribute payload' });
+  }
+});
+
+catalogRouter.patch(
+  '/catalog/categories/:categoryId/attributes/:attributeId',
+  ...requireAttributeManage,
+  async (req, res) => {
+    try {
+      const existing = await getAttribute(req.params.attributeId);
+      if (!existing || existing.categoryId !== req.params.categoryId) {
+        res.status(404).json({ error: 'Attribute not found' });
+        return;
+      }
+      const normalized = normalizeAttributeInput(
+        { ...existing, ...req.body, id: existing.id },
+        req.params.categoryId,
+        existing,
+      );
+      const saved = await upsertAttribute(normalized);
+      publishEvent({
+        eventName: 'AttributeUpdated',
+        domain: 'Catalog',
+        producer: 'catalogRouter',
+        aggregateId: saved.id,
+        actor: req.userId || 'anonymous',
+        payload: { attributeId: saved.id, categoryId: saved.categoryId, key: saved.key },
+      });
+      publishEvent({
+        eventName: 'CategorySchemaUpdated',
+        domain: 'Catalog',
+        producer: 'catalogRouter',
+        aggregateId: saved.categoryId,
+        actor: req.userId || 'anonymous',
+        payload: { categoryId: saved.categoryId, change: 'attribute_updated', attributeId: saved.id },
+      });
+      res.json({ success: true, data: saved });
+    } catch (error) {
+      if (error instanceof CategorySchemaError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid attribute patch' });
+    }
+  },
+);
+
+catalogRouter.delete(
+  '/catalog/categories/:categoryId/attributes/:attributeId',
+  ...requireAttributeManage,
+  async (req, res) => {
+    try {
+      const existing = await getAttribute(req.params.attributeId);
+      if (!existing || existing.categoryId !== req.params.categoryId) {
+        res.status(404).json({ error: 'Attribute not found' });
+        return;
+      }
+      await deleteAttribute(existing.id);
+      publishEvent({
+        eventName: 'AttributeRemoved',
+        domain: 'Catalog',
+        producer: 'catalogRouter',
+        aggregateId: existing.id,
+        actor: req.userId || 'anonymous',
+        payload: { attributeId: existing.id, categoryId: existing.categoryId, key: existing.key },
+      });
+      publishEvent({
+        eventName: 'CategorySchemaUpdated',
+        domain: 'Catalog',
+        producer: 'catalogRouter',
+        aggregateId: existing.categoryId,
+        actor: req.userId || 'anonymous',
+        payload: {
+          categoryId: existing.categoryId,
+          change: 'attribute_removed',
+          attributeId: existing.id,
+        },
+      });
+      res.json({ success: true });
+    } catch (error) {
+      if (error instanceof CategorySchemaError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to delete attribute' });
+    }
+  },
+);
+
 /* ─── Service catalog foundation (Sprint 3; no booking engine) ─── */
 
 async function scopeServicesForRequest(
@@ -952,6 +1180,19 @@ catalogRouter.post('/catalog/services', ...requireProductCreate, async (req, res
     const brands = await catalogStore.listBrands();
     const brand = brands.find((b) => b.id === normalized.brandId);
     if (brand) normalized = { ...normalized, brandName: brand.name };
+    try {
+      await validateListingAgainstCategorySchema({
+        categoryId: normalized.categoryId,
+        status: normalized.status,
+        attributes: normalized.attributes,
+      });
+    } catch (error) {
+      if (error instanceof CategorySchemaError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
     const saved = await upsertService(normalized);
     publishEvent({
       eventName: 'ServiceCreated',
@@ -1019,6 +1260,19 @@ catalogRouter.patch('/catalog/services/:id', ...requireProductEdit, async (req, 
         normalizeProductLifecycle(normalized.status),
       ) as typeof normalized.status,
     };
+    try {
+      await validateListingAgainstCategorySchema({
+        categoryId: normalized.categoryId,
+        status: normalized.status,
+        attributes: normalized.attributes,
+      });
+    } catch (error) {
+      if (error instanceof CategorySchemaError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
     const saved = await upsertService(normalized);
     publishEvent({
       eventName: 'ServiceUpdated',
@@ -1058,17 +1312,31 @@ catalogRouter.delete('/catalog/services/:id', ...requireProductDelete, async (re
   }
 });
 
-catalogRouter.post('/catalog/categories', ...requireCmsWrite, async (req, res) => {
+catalogRouter.post('/catalog/categories', ...requireCategoryManage, async (req, res) => {
   try {
     const normalized = normalizeCategoryInput(req.body);
+    await assertCategoryHierarchy(normalized);
     const saved = await catalogStore.upsertCategory(normalized);
+    invalidateCategorySchemaCache(saved.id);
+    publishEvent({
+      eventName: 'CategoryCreated',
+      domain: 'Catalog',
+      producer: 'catalogRouter',
+      aggregateId: saved.id,
+      actor: req.userId || 'anonymous',
+      payload: { categoryId: saved.id, parentId: saved.parentId, slug: saved.slug },
+    });
     res.status(201).json({ success: true, data: saved });
   } catch (error) {
+    if (error instanceof CategorySchemaError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid category payload') });
   }
 });
 
-catalogRouter.put('/catalog/categories/:id', ...requireCmsWrite, async (req, res) => {
+catalogRouter.put('/catalog/categories/:id', ...requireCategoryManage, async (req, res) => {
   try {
     const existing = await catalogStore.getCategory(req.params.id);
     if (!existing) {
@@ -1076,14 +1344,28 @@ catalogRouter.put('/catalog/categories/:id', ...requireCmsWrite, async (req, res
       return;
     }
     const normalized = normalizeCategoryInput({ ...req.body, id: req.params.id }, existing);
+    await assertCategoryHierarchy(normalized);
     const saved = await catalogStore.upsertCategory(normalized);
+    invalidateCategorySchemaCache(saved.id);
+    publishEvent({
+      eventName: 'CategoryUpdated',
+      domain: 'Catalog',
+      producer: 'catalogRouter',
+      aggregateId: saved.id,
+      actor: req.userId || 'anonymous',
+      payload: { categoryId: saved.id, parentId: saved.parentId, enabled: saved.enabled },
+    });
     res.json({ success: true, data: saved });
   } catch (error) {
+    if (error instanceof CategorySchemaError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid category payload') });
   }
 });
 
-catalogRouter.patch('/catalog/categories/:id', ...requireCmsWrite, async (req, res) => {
+catalogRouter.patch('/catalog/categories/:id', ...requireCategoryManage, async (req, res) => {
   try {
     const existing = await catalogStore.getCategory(req.params.id);
     if (!existing) {
@@ -1091,18 +1373,57 @@ catalogRouter.patch('/catalog/categories/:id', ...requireCmsWrite, async (req, r
       return;
     }
     const normalized = normalizeCategoryInput({ ...existing, ...req.body, id: req.params.id }, existing);
+    await assertCategoryHierarchy(normalized);
     const saved = await catalogStore.upsertCategory(normalized);
+    invalidateCategorySchemaCache(saved.id);
+    const archived = existing.enabled && !saved.enabled;
+    publishEvent({
+      eventName: archived ? 'CategoryArchived' : 'CategoryUpdated',
+      domain: 'Catalog',
+      producer: 'catalogRouter',
+      aggregateId: saved.id,
+      actor: req.userId || 'anonymous',
+      payload: { categoryId: saved.id, parentId: saved.parentId, enabled: saved.enabled },
+    });
     res.json({ success: true, data: saved });
   } catch (error) {
+    if (error instanceof CategorySchemaError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid category patch payload') });
   }
 });
 
-catalogRouter.delete('/catalog/categories/:id', ...requireCmsWrite, async (req, res) => {
+catalogRouter.delete('/catalog/categories/:id', ...requireCategoryManage, async (req, res) => {
   try {
+    const existing = await catalogStore.getCategory(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Category not found' });
+      return;
+    }
+    await assertCategoryDeletable(req.params.id);
+    const attrs = await listAttributesForCategory(req.params.id, {
+      includeArchived: true,
+      bypassCache: true,
+    });
+    await Promise.all(attrs.map((a) => deleteAttribute(a.id)));
     await catalogStore.deleteCategory(req.params.id);
+    invalidateCategorySchemaCache(req.params.id);
+    publishEvent({
+      eventName: 'CategoryArchived',
+      domain: 'Catalog',
+      producer: 'catalogRouter',
+      aggregateId: req.params.id,
+      actor: req.userId || 'anonymous',
+      payload: { categoryId: req.params.id, deleted: true },
+    });
     res.json({ success: true });
   } catch (error) {
+    if (error instanceof CategorySchemaError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to delete category' });
   }
 });
@@ -1835,6 +2156,24 @@ catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, 
       req.params.productId,
       existing || undefined,
     );
+    try {
+      const attrs =
+        (product?.attributes as Record<string, unknown> | undefined) ||
+        attributesFromSpecs(normalized.specs, product?.attributes);
+      await validateListingAgainstCategorySchema({
+        categoryId: product!.categoryId,
+        status: product!.status,
+        attributes: attrs,
+        optionGroups: normalized.optionGroups,
+        productVariants: normalized.productVariants,
+      });
+    } catch (error) {
+      if (error instanceof CategorySchemaError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
     const saved = await catalogStore.upsertProductDetail(normalized);
     const prevIds = new Set((existing?.productVariants ?? []).map((v) => v.id));
     for (const variant of saved.productVariants ?? []) {
@@ -1887,6 +2226,24 @@ catalogRouter.patch('/catalog/product-details/:productId', ...requireProductEdit
       req.params.productId,
       existing,
     );
+    try {
+      const attrs =
+        (product?.attributes as Record<string, unknown> | undefined) ||
+        attributesFromSpecs(normalized.specs, product?.attributes);
+      await validateListingAgainstCategorySchema({
+        categoryId: product!.categoryId,
+        status: product!.status,
+        attributes: attrs,
+        optionGroups: normalized.optionGroups,
+        productVariants: normalized.productVariants,
+      });
+    } catch (error) {
+      if (error instanceof CategorySchemaError) {
+        res.status(error.statusCode).json({ error: error.message });
+        return;
+      }
+      throw error;
+    }
     const saved = await catalogStore.upsertProductDetail(normalized);
     const prevIds = new Set((existing.productVariants ?? []).map((v) => v.id));
     for (const variant of saved.productVariants ?? []) {

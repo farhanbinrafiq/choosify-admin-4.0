@@ -358,6 +358,17 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
   const [catalogBrands, setCatalogBrands] = useState<CatalogBrand[]>([]);
   const [catalogCategories, setCatalogCategories] = useState<CatalogCategory[]>([]);
   const [catalogOptionsLoaded, setCatalogOptionsLoaded] = useState(false);
+  /** Category attribute/variant schema for selected category (IS-010 Sprint 7). */
+  const [categorySchemaAttrs, setCategorySchemaAttrs] = useState<
+    Array<{
+      key: string;
+      name: string;
+      type: string;
+      required: boolean;
+      variantEligible: boolean;
+      options: string[];
+    }>
+  >([]);
   /** Explicit stock for products without variants. null = not set (do not default to 0). */
   const [productStock, setProductStock] = useState<number | null>(null);
   const [productType, setProductType] = useState<ProductListingType>('physical');
@@ -480,6 +491,36 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       cancelled = true;
     };
   }, []);
+
+  // Load Admin-defined category schema when category selection changes (logic only; UI frozen).
+  useEffect(() => {
+    let cancelled = false;
+    if (!selectedCategoryId) {
+      setCategorySchemaAttrs([]);
+      return;
+    }
+    (async () => {
+      try {
+        const schema = await catalogApi.getCategorySchema(selectedCategoryId);
+        if (cancelled) return;
+        setCategorySchemaAttrs(
+          (schema.attributes || []).map((a) => ({
+            key: a.key,
+            name: a.name,
+            type: a.type,
+            required: a.required,
+            variantEligible: a.variantEligible,
+            options: a.options || [],
+          })),
+        );
+      } catch {
+        if (!cancelled) setCategorySchemaAttrs([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCategoryId]);
 
   // Load the seller's account-wide booking-approval default
   useEffect(() => {
@@ -747,10 +788,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       { id: "bc3", icon: "Shield", title: "Original TPU Armor Case", description: "Reinforced corner protection bumpers", displayOrder: 3 }
     ]));
 
-    setOptionGroups(data.optionGroups || (isNewProduct ? [] : [
-      { id: "og-color", name: "Color", displayType: "color", values: ["Titanium Gray", "Cosmic Gold"] },
-      { id: "og-fit", name: "Fits Dimension", displayType: "button", values: ["Standard Fit", "Extra Protection Extended"] }
-    ]));
+    setOptionGroups(data.optionGroups || (isNewProduct ? [] : []));
 
     setProductVariants(data.productVariants || []);
 
@@ -1020,6 +1058,28 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
         ? String(id || activeId)
         : `prod-studio-${id || activeId}`;
 
+    const attributesFromSpecs: Record<string, unknown> = {};
+    for (const row of specs || []) {
+      const key = String(row.key || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+      if (!key) continue;
+      attributesFromSpecs[key] = row.value;
+    }
+    // Prefer schema keys when Admin defined attributes for this category.
+    if (categorySchemaAttrs.length) {
+      for (const def of categorySchemaAttrs) {
+        const match = (specs || []).find(
+          (s) =>
+            String(s.key || '').toLowerCase() === def.key ||
+            String(s.key || '').toLowerCase() === def.name.toLowerCase(),
+        );
+        if (match) attributesFromSpecs[def.key] = match.value;
+      }
+    }
+
     const productPayload = {
       id: catalogProductId,
       slug: slugifyCatalog(trimmedName),
@@ -1069,6 +1129,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       featuredFlag: false,
       isNewArrival: true,
       isBestseller: false,
+      attributes: Object.keys(attributesFromSpecs).length ? attributesFromSpecs : undefined,
     };
 
     try {

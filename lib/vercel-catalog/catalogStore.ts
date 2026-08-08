@@ -2,6 +2,7 @@ import type {
   CatalogBrand,
   CatalogBrandPost,
   CatalogCategory,
+  CatalogCategoryAttribute,
   CatalogCreator,
   CatalogDeal,
   CatalogGuide,
@@ -34,6 +35,7 @@ export { defaultHomepage } from './catalogDefaults';
 
 const PRODUCTS_COLLECTION = 'catalog_products';
 const CATEGORIES_COLLECTION = 'catalog_categories';
+const CATEGORY_ATTRIBUTES_COLLECTION = 'catalog_category_attributes';
 const BRANDS_COLLECTION = 'catalog_brands';
 const DEALS_COLLECTION = 'catalog_deals';
 const CREATORS_COLLECTION = 'catalog_creators';
@@ -65,6 +67,8 @@ async function listCollection<T>(collectionName: string): Promise<T[]> {
         return admin.listProducts() as Promise<T[]>;
       case CATEGORIES_COLLECTION:
         return admin.listCategories() as Promise<T[]>;
+      case CATEGORY_ATTRIBUTES_COLLECTION:
+        return admin.listCategoryAttributes() as Promise<T[]>;
       case BRANDS_COLLECTION:
         return admin.listBrands() as Promise<T[]>;
       case DEALS_COLLECTION:
@@ -96,6 +100,8 @@ function listFromMemory<T>(collectionName: string): Promise<T[]> {
       return memoryStore.listProducts() as Promise<T[]>;
     case CATEGORIES_COLLECTION:
       return memoryStore.listCategories() as Promise<T[]>;
+    case CATEGORY_ATTRIBUTES_COLLECTION:
+      return memoryStore.listCategoryAttributes() as Promise<T[]>;
     case BRANDS_COLLECTION:
       return memoryStore.listBrands() as Promise<T[]>;
     case DEALS_COLLECTION:
@@ -125,6 +131,8 @@ function getFromMemory<T>(collectionName: string, id: string): Promise<T | null>
       return memoryStore.getProduct(id) as Promise<T | null>;
     case CATEGORIES_COLLECTION:
       return memoryStore.getCategory(id) as Promise<T | null>;
+    case CATEGORY_ATTRIBUTES_COLLECTION:
+      return memoryStore.getCategoryAttribute(id) as Promise<T | null>;
     case BRANDS_COLLECTION:
       return memoryStore.getBrand(id) as Promise<T | null>;
     case DEALS_COLLECTION:
@@ -154,6 +162,10 @@ function upsertToMemory<T extends { id: string }>(collectionName: string, data: 
       return memoryStore.upsertProduct(data as unknown as CatalogProduct) as unknown as Promise<T>;
     case CATEGORIES_COLLECTION:
       return memoryStore.upsertCategory(data as unknown as CatalogCategory) as unknown as Promise<T>;
+    case CATEGORY_ATTRIBUTES_COLLECTION:
+      return memoryStore.upsertCategoryAttribute(
+        data as unknown as CatalogCategoryAttribute,
+      ) as unknown as Promise<T>;
     case BRANDS_COLLECTION:
       return memoryStore.upsertBrand(data as unknown as CatalogBrand) as unknown as Promise<T>;
     case DEALS_COLLECTION:
@@ -185,6 +197,8 @@ function removeFromMemory(collectionName: string, id: string): Promise<void> {
       return memoryStore.deleteProduct(id);
     case CATEGORIES_COLLECTION:
       return memoryStore.deleteCategory(id);
+    case CATEGORY_ATTRIBUTES_COLLECTION:
+      return memoryStore.deleteCategoryAttribute(id);
     case BRANDS_COLLECTION:
       return memoryStore.deleteBrand(id);
     case DEALS_COLLECTION:
@@ -216,6 +230,8 @@ async function getById<T>(collectionName: string, id: string): Promise<T | null>
         return admin.getProduct(id) as Promise<T | null>;
       case CATEGORIES_COLLECTION:
         return admin.getCategory(id) as Promise<T | null>;
+      case CATEGORY_ATTRIBUTES_COLLECTION:
+        return admin.getCategoryAttribute(id) as Promise<T | null>;
       case BRANDS_COLLECTION:
         return admin.getBrand(id) as Promise<T | null>;
       case DEALS_COLLECTION:
@@ -249,6 +265,10 @@ async function upsert<T extends { id: string }>(collectionName: string, data: T)
         return admin.upsertProduct(data as unknown as CatalogProduct) as unknown as Promise<T>;
       case CATEGORIES_COLLECTION:
         return admin.upsertCategory(data as unknown as CatalogCategory) as unknown as Promise<T>;
+      case CATEGORY_ATTRIBUTES_COLLECTION:
+        return admin.upsertCategoryAttribute(
+          data as unknown as CatalogCategoryAttribute,
+        ) as unknown as Promise<T>;
       case BRANDS_COLLECTION:
         return admin.upsertBrand(data as unknown as CatalogBrand) as unknown as Promise<T>;
       case DEALS_COLLECTION:
@@ -284,6 +304,8 @@ async function remove(collectionName: string, id: string): Promise<void> {
         return admin.deleteProduct(id);
       case CATEGORIES_COLLECTION:
         return admin.deleteCategory(id);
+      case CATEGORY_ATTRIBUTES_COLLECTION:
+        return admin.deleteCategoryAttribute(id);
       case BRANDS_COLLECTION:
         return admin.deleteBrand(id);
       case DEALS_COLLECTION:
@@ -319,6 +341,14 @@ export const catalogStore = {
   getCategory: (id: string) => getById<CatalogCategory>(CATEGORIES_COLLECTION, id),
   upsertCategory: (payload: CatalogCategory) => upsert(CATEGORIES_COLLECTION, payload),
   deleteCategory: (id: string) => remove(CATEGORIES_COLLECTION, id),
+
+  listCategoryAttributes: () =>
+    listCollection<CatalogCategoryAttribute>(CATEGORY_ATTRIBUTES_COLLECTION),
+  getCategoryAttribute: (id: string) =>
+    getById<CatalogCategoryAttribute>(CATEGORY_ATTRIBUTES_COLLECTION, id),
+  upsertCategoryAttribute: (payload: CatalogCategoryAttribute) =>
+    upsert(CATEGORY_ATTRIBUTES_COLLECTION, payload),
+  deleteCategoryAttribute: (id: string) => remove(CATEGORY_ATTRIBUTES_COLLECTION, id),
 
   listBrands: () => listCollection<CatalogBrand>(BRANDS_COLLECTION),
   getBrand: (id: string) => getById<CatalogBrand>(BRANDS_COLLECTION, id),

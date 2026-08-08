@@ -19,6 +19,39 @@ export interface CatalogCategory {
   updatedAt: string;
 }
 
+/** Supported Admin-defined attribute field types (IS-003 §9). */
+export type CatalogAttributeType =
+  | 'text'
+  | 'number'
+  | 'boolean'
+  | 'select'
+  | 'multi_select';
+
+/**
+ * Category-scoped attribute / variant-dimension definition (IS-003 §9–§10).
+ * Schema is Admin-owned; listings store values separately under `attributes`.
+ */
+export interface CatalogCategoryAttribute {
+  id: string;
+  categoryId: string;
+  key: string;
+  name: string;
+  type: CatalogAttributeType;
+  required: boolean;
+  searchable: boolean;
+  filterable: boolean;
+  comparable: boolean;
+  /** When true, this attribute may be used as a Product variant dimension. */
+  variantEligible: boolean;
+  unit?: string;
+  /** Allowed values for select / multi_select. */
+  options: string[];
+  displayOrder: number;
+  status: 'active' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CatalogSocialLinks {
   facebook?: string;
   instagram?: string;
@@ -150,6 +183,11 @@ export interface CatalogProduct {
   isBestseller: boolean;
   /** Firebase uid of owning seller when listing is seller-managed; omitted for legacy/admin rows. */
   sellerId?: string;
+  /**
+   * Per-listing attribute values keyed by category attribute `key` (IS-003 §11).
+   * Legacy listings may omit this; empty category schemas skip strict validation.
+   */
+  attributes?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
@@ -357,6 +395,8 @@ export interface CatalogService {
   image: string;
   status: CatalogPublishStatus;
   sellerId?: string;
+  /** Per-listing attribute values keyed by category attribute `key` (IS-003 §12). */
+  attributes?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }

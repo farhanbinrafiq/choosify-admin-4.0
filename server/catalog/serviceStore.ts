@@ -136,6 +136,12 @@ export function normalizeServiceInput(
       typeof raw.sellerId === 'string' && raw.sellerId.trim()
         ? raw.sellerId.trim()
         : existing?.sellerId,
+    attributes: (() => {
+      if (raw.attributes && typeof raw.attributes === 'object' && !Array.isArray(raw.attributes)) {
+        return raw.attributes as Record<string, unknown>;
+      }
+      return existing?.attributes;
+    })(),
     createdAt: existing?.createdAt ?? nowIso(),
     updatedAt: nowIso(),
   };

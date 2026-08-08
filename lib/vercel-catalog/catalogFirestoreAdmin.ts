@@ -2,6 +2,7 @@ import type {
   CatalogBrand,
   CatalogBrandPost,
   CatalogCategory,
+  CatalogCategoryAttribute,
   CatalogCreator,
   CatalogDeal,
   CatalogGuide,
@@ -24,6 +25,7 @@ import {
 
 const PRODUCTS_COLLECTION = 'catalog_products';
 const CATEGORIES_COLLECTION = 'catalog_categories';
+const CATEGORY_ATTRIBUTES_COLLECTION = 'catalog_category_attributes';
 const BRANDS_COLLECTION = 'catalog_brands';
 const DEALS_COLLECTION = 'catalog_deals';
 const CREATORS_COLLECTION = 'catalog_creators';
@@ -46,6 +48,14 @@ export const firestoreAdminStore = {
   getCategory: (id: string) => getDocumentById<CatalogCategory>(CATEGORIES_COLLECTION, id),
   upsertCategory: (payload: CatalogCategory) => upsertDocument(CATEGORIES_COLLECTION, payload),
   deleteCategory: (id: string) => deleteDocument(CATEGORIES_COLLECTION, id),
+
+  listCategoryAttributes: () =>
+    listCollection<CatalogCategoryAttribute>(CATEGORY_ATTRIBUTES_COLLECTION),
+  getCategoryAttribute: (id: string) =>
+    getDocumentById<CatalogCategoryAttribute>(CATEGORY_ATTRIBUTES_COLLECTION, id),
+  upsertCategoryAttribute: (payload: CatalogCategoryAttribute) =>
+    upsertDocument(CATEGORY_ATTRIBUTES_COLLECTION, payload),
+  deleteCategoryAttribute: (id: string) => deleteDocument(CATEGORY_ATTRIBUTES_COLLECTION, id),
 
   listBrands: () => listCollection<CatalogBrand>(BRANDS_COLLECTION),
   getBrand: (id: string) => getDocumentById<CatalogBrand>(BRANDS_COLLECTION, id),

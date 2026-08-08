@@ -14,6 +14,7 @@
     "test:brands": "tsx scripts/probe-brand-ownership.ts",
     "test:products": "tsx scripts/probe-product-inventory.ts",
     "test:catalog-persist": "tsx scripts/probe-catalog-persistence.ts",
+    "test:categories": "tsx scripts/probe-category-schema.ts",
     "verify:payments": "tsx scripts/verify-payment-flow.ts",
     "check:prod-env": "tsx scripts/check-production-env.ts",
     "seed:catalog": "tsx scripts/seedCatalog.ts",

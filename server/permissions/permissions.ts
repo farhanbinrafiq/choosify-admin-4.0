@@ -9,6 +9,10 @@ export const PERMISSIONS = {
   SELLER_SUSPEND: 'seller:suspend',
   USER_MANAGE: 'user:manage',
   CMS_EDIT: 'cms:edit',
+  /** Admin-only category tree mutation (IS-003 §52). */
+  CATEGORY_MANAGE: 'category.manage',
+  /** Admin-only attribute/variant schema mutation (IS-003 §52). */
+  ATTRIBUTE_MANAGE: 'attribute.manage',
   ANALYTICS_VIEW: 'analytics:view',
   ROLE_MANAGE: 'role:manage',
 } as const;
@@ -36,6 +40,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     PERMISSIONS.PRODUCT_READ,
     PERMISSIONS.SELLER_APPROVE,
     PERMISSIONS.CMS_EDIT,
+    PERMISSIONS.CATEGORY_MANAGE,
+    PERMISSIONS.ATTRIBUTE_MANAGE,
     PERMISSIONS.ANALYTICS_VIEW,
   ],
   [ROLES.ADMIN]: [
@@ -47,6 +53,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, readonly Permission[]> = {
     PERMISSIONS.SELLER_SUSPEND,
     PERMISSIONS.USER_MANAGE,
     PERMISSIONS.CMS_EDIT,
+    PERMISSIONS.CATEGORY_MANAGE,
+    PERMISSIONS.ATTRIBUTE_MANAGE,
     PERMISSIONS.ANALYTICS_VIEW,
   ],
   [ROLES.SUPER_ADMIN]: PERMISSION_VALUES,

@@ -2,6 +2,7 @@ import type {
   CatalogBrand,
   CatalogBrandPost,
   CatalogCategory,
+  CatalogCategoryAttribute,
   CatalogCreator,
   CatalogDeal,
   CatalogDealsBanner,
@@ -171,6 +172,61 @@ export const catalogApi = {
   listCategories: async (): Promise<CatalogCategory[]> => {
     const result = await request<{ data: CatalogCategory[] }>('/catalog/categories');
     return result.data;
+  },
+  getCategory: async (id: string): Promise<CatalogCategory> => {
+    const result = await request<{ data: CatalogCategory }>(`/catalog/categories/${id}`);
+    return result.data;
+  },
+  getCategorySchema: async (
+    id: string,
+  ): Promise<{
+    category: CatalogCategory;
+    attributes: CatalogCategoryAttribute[];
+    variantDimensions: CatalogCategoryAttribute[];
+  }> => {
+    const result = await request<{
+      data: {
+        category: CatalogCategory;
+        attributes: CatalogCategoryAttribute[];
+        variantDimensions: CatalogCategoryAttribute[];
+      };
+    }>(`/catalog/categories/${id}/schema`);
+    return result.data;
+  },
+  listCategoryAttributes: async (categoryId: string): Promise<CatalogCategoryAttribute[]> => {
+    const result = await request<{ data: CatalogCategoryAttribute[] }>(
+      `/catalog/categories/${categoryId}/attributes`,
+    );
+    return result.data;
+  },
+  createCategoryAttribute: async (
+    categoryId: string,
+    payload: Partial<CatalogCategoryAttribute>,
+  ): Promise<CatalogCategoryAttribute> => {
+    const result = await request<{ data: CatalogCategoryAttribute }>(
+      `/catalog/categories/${categoryId}/attributes`,
+      'POST',
+      payload,
+    );
+    return result.data;
+  },
+  updateCategoryAttribute: async (
+    categoryId: string,
+    attributeId: string,
+    payload: Partial<CatalogCategoryAttribute>,
+  ): Promise<CatalogCategoryAttribute> => {
+    const result = await request<{ data: CatalogCategoryAttribute }>(
+      `/catalog/categories/${categoryId}/attributes/${attributeId}`,
+      'PATCH',
+      payload,
+    );
+    return result.data;
+  },
+  deleteCategoryAttribute: async (categoryId: string, attributeId: string): Promise<void> => {
+    await request<{ success: boolean }>(
+      `/catalog/categories/${categoryId}/attributes/${attributeId}`,
+      'DELETE',
+    );
   },
   createCategory: async (payload: Partial<CatalogCategory>): Promise<CatalogCategory> => {
     const result = await request<{ data: CatalogCategory }>('/catalog/categories', 'POST', payload);

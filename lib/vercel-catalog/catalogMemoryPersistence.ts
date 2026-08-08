@@ -11,6 +11,7 @@ export type CatalogMemorySnapshot = {
   savedAt: string;
   products: unknown[];
   categories: unknown[];
+  categoryAttributes: unknown[];
   brands: unknown[];
   deals: unknown[];
   creators: unknown[];

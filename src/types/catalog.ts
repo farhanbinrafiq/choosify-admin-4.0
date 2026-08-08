@@ -24,6 +24,32 @@ export interface CatalogCategory {
   updatedAt: string;
 }
 
+export type CatalogAttributeType =
+  | 'text'
+  | 'number'
+  | 'boolean'
+  | 'select'
+  | 'multi_select';
+
+export interface CatalogCategoryAttribute {
+  id: string;
+  categoryId: string;
+  key: string;
+  name: string;
+  type: CatalogAttributeType;
+  required: boolean;
+  searchable: boolean;
+  filterable: boolean;
+  comparable: boolean;
+  variantEligible: boolean;
+  unit?: string;
+  options: string[];
+  displayOrder: number;
+  status: 'active' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface CatalogSocialLinks {
   facebook?: string;
   instagram?: string;
@@ -174,6 +200,8 @@ export interface CatalogProduct {
   isBestseller: boolean;
   /** Firebase uid of owning seller when listing is seller-managed; omitted for legacy/admin rows. */
   sellerId?: string;
+  /** Per-listing attribute values keyed by category attribute `key` (IS-003 §11). */
+  attributes?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
@@ -200,6 +228,8 @@ export interface CatalogService {
   image: string;
   status: CatalogPublishStatus;
   sellerId?: string;
+  /** Per-listing attribute values keyed by category attribute `key` (IS-003 §12). */
+  attributes?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
 }
