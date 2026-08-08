@@ -68,6 +68,8 @@ import ProfileLayout from '../../../components/profile/ProfileLayout';
 import ContentTable from '../../../components/profile/ContentTable';
 import BrandEditStudio from '../BrandEditStudio';
 import GuideStudioCMS, { GuideStudioItem } from '../../../components/profile/GuideStudioCMS';
+import { catalogApi } from '../../../services/catalogApi';
+import type { CatalogBrand } from '../../../types/catalog';
 
 type ProfileEntityKind = 'consumer' | 'seller' | 'brand' | 'order' | 'creator';
 
@@ -430,6 +432,9 @@ export default function UnifiedProfileShell() {
 
   // Active selected brand ID for visual portfolio CMS customization
   const [selectedCMSBrandId, setSelectedCMSBrandId] = useState<string>('');
+  /** Catalog brand hydration — Brand Management ledger uses catalog ids (e.g. brand-walton). */
+  const [catalogBrand, setCatalogBrand] = useState<CatalogBrand | null>(null);
+  const [catalogBrandLoading, setCatalogBrandLoading] = useState(false);
 
   useEffect(() => {
     if (typeKey === 'seller') {
@@ -438,10 +443,39 @@ export default function UnifiedProfileShell() {
         setSelectedCMSBrandId(match.brands[0].id);
       }
     } else if (typeKey === 'brand') {
-      setSelectedCMSBrandId(idKey || '1');
+      setSelectedCMSBrandId(idKey || '');
     }
   }, [typeKey, idKey]);
 
+  useEffect(() => {
+    if (typeKey !== 'brand' || !idKey) {
+      setCatalogBrand(null);
+      setCatalogBrandLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setCatalogBrandLoading(true);
+    catalogApi
+      .listBrands()
+      .then((rows) => {
+        if (cancelled) return;
+        const match =
+          rows.find((b) => b.id === idKey) ||
+          rows.find((b) => b.slug === idKey) ||
+          rows.find((b) => b.name.toLowerCase() === idKey.toLowerCase()) ||
+          null;
+        setCatalogBrand(match);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogBrand(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogBrandLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [typeKey, idKey]);
   // Toast Notifications
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
   const showToast = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
@@ -554,28 +588,55 @@ export default function UnifiedProfileShell() {
     }
 
     if (typeKey === 'brand') {
-      const b = brandProfiles.find(p => p.id === idKey) || brandProfiles[0];
-      if (!b) return null;
-      
-      const relatedOrders = orders.filter(o => o.product.brand.toLowerCase() === b.name.toLowerCase());
+      const fromProfiles = brandProfiles.find(
+        (p) =>
+          p.id === idKey ||
+          p.slug === idKey ||
+          (catalogBrand &&
+            (p.id === catalogBrand.id || p.name.toLowerCase() === catalogBrand.name.toLowerCase())),
+      );
+      const b = fromProfiles;
+      const name = b?.name || catalogBrand?.name;
+      if (!name) return null;
+
+      const relatedOrders = orders.filter(
+        (o) => o.product.brand.toLowerCase() === name.toLowerCase(),
+      );
+      const ownershipStatus =
+        b?.status ||
+        (catalogBrand?.claimStatus === 'verified' || catalogBrand?.verifiedStatus
+          ? 'VERIFIED_OWNER'
+          : catalogBrand?.claimStatus === 'pending'
+            ? 'OWNERSHIP_PENDING'
+            : 'UNCLAIMED');
+
       return {
         kind: 'brand' as const,
-        id: b.id,
-        name: b.name,
-        slug: b.slug,
-        description: b.description || 'Specialized premium boutique traditional fabric sync platform.',
-        logo: b.logo || '',
-        category: b.category || 'Traditional Saree',
-        industry: b.industry || 'Traditional Handlooms',
-        ownerStore: b.ownerStore || 'Aarong Digital Ltd',
-        websiteUrl: b.websiteUrl || 'https://aarong.com',
-        status: b.status || 'VERIFIED_OWNER',
-        completionScore: b.completionScore || 94,
-        referralTraffic: b.referralTraffic || 4220,
-        pageViews: b.pageViews || 18450,
-        searchVisibility: b.searchVisibility || 88,
-        badge: b.status === 'VERIFIED_OWNER' ? 'Diamond Partner' : 'Approve Partner',
-        orders: relatedOrders
+        id: catalogBrand?.id || b?.id || idKey,
+        name,
+        slug: catalogBrand?.slug || b?.slug || idKey,
+        description: catalogBrand?.description || b?.description || 'Brand profile on Choosify.',
+        logo: catalogBrand?.logo || b?.logo || '',
+        category: catalogBrand?.category || b?.category || 'Uncategorized',
+        industry: b?.industry || catalogBrand?.category || 'General',
+        ownerStore:
+          b?.ownerStore ||
+          (catalogBrand?.sellerId
+            ? `Seller · ${catalogBrand.sellerId.slice(0, 12)}`
+            : 'Unclaimed Pre-Merchant'),
+        websiteUrl: catalogBrand?.website || b?.websiteUrl || '',
+        status: ownershipStatus,
+        completionScore: b?.completionScore || 0,
+        referralTraffic: b?.referralTraffic || 0,
+        pageViews: b?.pageViews || 0,
+        searchVisibility: b?.searchVisibility || 0,
+        badge:
+          ownershipStatus === 'VERIFIED_OWNER'
+            ? 'Verified Partner'
+            : ownershipStatus === 'OWNERSHIP_PENDING'
+              ? 'Pending Review'
+              : 'Unclaimed Profile',
+        orders: relatedOrders,
       };
     }
 
@@ -659,7 +720,7 @@ export default function UnifiedProfileShell() {
     }
 
     return null;
-  }, [typeKey, idKey, orders, customers, brandProfiles]);
+  }, [typeKey, idKey, orders, customers, brandProfiles, catalogBrand]);
 
   // ----- Marketplace Access (suspend/reinstate) — shared across Brand/Seller/Creator/Consumer Account Info tabs -----
   const [marketplaceAccessByEntity, setMarketplaceAccessByEntity] = useState<Record<string, MarketplaceAccessState>>({});
@@ -788,12 +849,21 @@ export default function UnifiedProfileShell() {
 
   // Safe checks for un-compiled rendering states
   if (!entityData) {
+    if (typeKey === 'brand' && catalogBrandLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[500px] text-app-text-primary">
+          <p className="font-mono text-xs uppercase tracking-widest text-app-accent animate-pulse">
+            Loading Brand Profile…
+          </p>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col items-center justify-center min-h-[500px] text-app-text-primary">
         <AlertTriangle className="w-12 h-12 text-[#F4631E] animate-bounce" />
         <p className="mt-4 font-mono text-xs uppercase tracking-widest text-[#F4631E]">ERROR: ENTITY RESOLUTION FAILED</p>
-        <Link to="/admin/dashboard" className="mt-6 px-4 py-2 bg-app-sidebar border border-app-border rounded-lg text-xs font-bold text-app-text-primary hover:bg-white/5 transition-all flex items-center gap-2">
-          <ArrowLeft className="w-3.5 h-3.5" /> Return To Platform Central
+        <Link to={typeKey === 'brand' ? '/admin/brand-studio' : '/admin/dashboard'} className="mt-6 px-4 py-2 bg-app-sidebar border border-app-border rounded-lg text-xs font-bold text-app-text-primary hover:bg-white/5 transition-all flex items-center gap-2">
+          <ArrowLeft className="w-3.5 h-3.5" /> {typeKey === 'brand' ? 'Return To Brand Ledger' : 'Return To Platform Central'}
         </Link>
       </div>
     );
@@ -811,7 +881,7 @@ export default function UnifiedProfileShell() {
     { label: 'Dashboard', path: '/admin/dashboard' },
     typeKey === 'consumer' ? { label: 'Consumers', path: '/admin/consumers' } :
     typeKey === 'seller' ? { label: 'Sellers', path: '/admin/sellers' } :
-    typeKey === 'brand' ? { label: 'Brands', path: '/admin/sellers' } :
+    typeKey === 'brand' ? { label: 'Brands', path: '/admin/brand-studio' } :
     typeKey === 'order' ? { label: 'Orders', path: '/admin/orders' } :
     { label: 'Creators', path: '/admin/consumers?tab=creators' },
     { label: `${orderEnt ? `Order #${orderEnt.id}` : seller ? seller.storeName : entityData.name}` }
@@ -846,7 +916,7 @@ export default function UnifiedProfileShell() {
 
   const backLink = typeKey === 'consumer' ? '/admin/consumers' :
                    typeKey === 'seller' ? '/admin/sellers' :
-                   typeKey === 'brand' ? '/admin/sellers' :
+                   typeKey === 'brand' ? '/admin/brand-studio' :
                    typeKey === 'order' ? '/admin/orders' :
                    '/admin/consumers?tab=creators';
 
@@ -2406,6 +2476,14 @@ export default function UnifiedProfileShell() {
         {/* TAB 3: 🏬 Brand Portfolio */}
         {activeTab === 'portfolio' && (typeKey === 'seller' || typeKey === 'brand') && (
           <div className="space-y-6 text-left">
+            {typeKey === 'brand' && (
+              <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-xl">
+                <h3 className="text-sm font-bold text-app-text-primary m-0">Brand Portfolio · Storefront Visual Builder</h3>
+                <p className="text-[11px] text-app-text-secondary m-0 mt-1">
+                  Inspect and edit this Brand&apos;s public storefront profile. Save Draft / Publish / Snapshots remain available below.
+                </p>
+              </div>
+            )}
             {typeKey === 'seller' && (entityData as any)?.brands?.length > 1 && (
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
                 <div className="text-left space-y-1">
@@ -2430,7 +2508,7 @@ export default function UnifiedProfileShell() {
               </div>
             )}
 
-            <BrandEditStudio overrideId={selectedCMSBrandId || idKey || "1"} isNested={true} />
+            <BrandEditStudio overrideId={selectedCMSBrandId || idKey} isNested={true} />
           </div>
         )}
 

@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AdminLayout } from './components/AdminLayout';
+import { AdminWorkspaceLayout } from './components/Layout/AdminWorkspaceLayout';
 import { CmsMirrorHost } from './cms-mirror/CmsMirrorHost';
 import { TempRoleSwitcher } from './components/TempRoleSwitcher';
 import { OrdersProvider } from './contexts/OrdersContext';
@@ -81,6 +82,8 @@ const ModerationV2 = lazy(() => import('./pages/admin/ModerationV2'));
 
 const BrandsStudioList = lazy(() => import('./pages/admin/BrandsStudioList'));
 const BrandEditStudio = lazy(() => import('./pages/admin/BrandEditStudio'));
+const ProductEditStudio = lazy(() => import('./pages/admin/ProductEditStudio'));
+const CreatorEditStudio = lazy(() => import('./pages/admin/CreatorEditStudio'));
 
 const GuidesStudioList = lazy(() => import('./pages/admin/GuidesStudioList'));
 const GuideEditStudio = lazy(() => import('./pages/admin/GuideEditStudio'));
@@ -121,6 +124,54 @@ const BrandStudioRoleGate: React.FC<{ children: React.ReactNode }> = ({ children
     return <Navigate to="/admin/dashboard" replace />;
   }
   return <>{children}</>;
+};
+
+/** Same ownership roles as Brand Studio — Creators/Consumers denied (fail closed). */
+const PRODUCT_VISUAL_BUILDER_ALLOWED_ROLES = new Set(['seller', 'admin', 'super_admin']);
+const ProductVisualBuilderRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile } = useAuth();
+  if (!profile || !PRODUCT_VISUAL_BUILDER_ALLOWED_ROLES.has(profile.role)) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+  return <>{children}</>;
+};
+
+/** Creator Visual Builder — creator self-edit + admin/super_admin. Sellers denied. */
+const CREATOR_VISUAL_BUILDER_ALLOWED_ROLES = new Set(['creator', 'admin', 'super_admin']);
+const CreatorVisualBuilderRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile } = useAuth();
+  if (!profile || !CREATOR_VISUAL_BUILDER_ALLOWED_ROLES.has(profile.role)) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+  return <>{children}</>;
+};
+
+/** Guide Visual Builder — creator self-edit + admin/super_admin. Sellers denied. */
+const GUIDE_VISUAL_BUILDER_ALLOWED_ROLES = new Set(['creator', 'admin', 'super_admin']);
+const GuideVisualBuilderRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile } = useAuth();
+  if (!profile || !GUIDE_VISUAL_BUILDER_ALLOWED_ROLES.has(profile.role)) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+  return <>{children}</>;
+};
+
+/**
+ * Role-split home for /admin/brand-studio:
+ * - Seller → owned Brand Studio (cards / Visual Builder) inside React workspace shell
+ * - Admin / Super Admin → standalone CmsMirror Brand Management (list + Brand Profile)
+ * Studios stay on /admin/brand-studio/new and /admin/brand-studio/:id/edit
+ */
+const BrandStudioHomeEntry: React.FC = () => {
+  const { profile } = useAuth();
+  if (profile?.role === 'seller') {
+    return (
+      <AdminWorkspaceLayout>
+        <BrandsStudioList />
+      </AdminWorkspaceLayout>
+    );
+  }
+  return <CmsMirrorHost />;
 };
 
 /** Admin / seller / creator all use the CMS mirror (role filters the left nav). */
@@ -306,11 +357,9 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <BrandStudioRoleGate>
-                    <AdminLayout>
-                      <Suspense fallback={null}>
-                        <BrandsStudioList />
-                      </Suspense>
-                    </AdminLayout>
+                    <Suspense fallback={null}>
+                      <BrandStudioHomeEntry />
+                    </Suspense>
                   </BrandStudioRoleGate>
                 </ProtectedRoute>
               }
@@ -320,11 +369,11 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <BrandStudioRoleGate>
-                    <AdminLayout>
+                    <AdminWorkspaceLayout>
                       <Suspense fallback={null}>
                         <BrandEditStudio />
                       </Suspense>
-                    </AdminLayout>
+                    </AdminWorkspaceLayout>
                   </BrandStudioRoleGate>
                 </ProtectedRoute>
               }
@@ -334,12 +383,114 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <BrandStudioRoleGate>
-                    <AdminLayout>
+                    <AdminWorkspaceLayout>
                       <Suspense fallback={null}>
                         <BrandEditStudio />
                       </Suspense>
-                    </AdminLayout>
+                    </AdminWorkspaceLayout>
                   </BrandStudioRoleGate>
+                </ProtectedRoute>
+              }
+            />
+
+            {/*
+              Product Visual Builder — surgical cutover ONLY for single-product editor.
+              /admin/products (Products & Inventory Management) stays on CmsMirrorHost.
+              Rollback: remove these two routes; Edit falls back to in-iframe Product Studio.
+            */}
+            <Route
+              path="/admin/products/new"
+              element={
+                <ProtectedRoute>
+                  <ProductVisualBuilderRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={null}>
+                        <ProductEditStudio />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </ProductVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/products/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <ProductVisualBuilderRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={null}>
+                        <ProductEditStudio />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </ProductVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
+
+            {/*
+              Creator Visual Builder — surgical cutover ONLY for single-creator editor.
+              /admin/creator-studio (Creator Management list) and /admin/creator-profile
+              stay on CmsMirrorHost. Rollback: remove these two routes.
+            */}
+            <Route
+              path="/admin/creator-studio/new"
+              element={
+                <ProtectedRoute>
+                  <CreatorVisualBuilderRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={null}>
+                        <CreatorEditStudio />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </CreatorVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/creator-studio/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <CreatorVisualBuilderRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={null}>
+                        <CreatorEditStudio />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </CreatorVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
+
+            {/*
+              Guide Visual Builder — surgical cutover ONLY for single-guide editor.
+              /admin/guides (Guide Management list) stays on CmsMirrorHost.
+              Rollback: remove these two routes.
+            */}
+            <Route
+              path="/admin/guides/new"
+              element={
+                <ProtectedRoute>
+                  <GuideVisualBuilderRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={null}>
+                        <GuideEditStudio />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </GuideVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/guides/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <GuideVisualBuilderRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={null}>
+                        <GuideEditStudio />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </GuideVisualBuilderRoleGate>
                 </ProtectedRoute>
               }
             />
@@ -347,6 +498,36 @@ export default function App() {
             {/* Full CMS mirror for all other /admin/* routes (left nav filtered by role) */}
             <Route path="/admin/*" element={<ProtectedRoute><RoleGuard><AdminAreaEntry /></RoleGuard></ProtectedRoute>} />
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
+
+            {/* Dormant React list links → single-guide Visual Builder (management chrome untouched) */}
+            <Route
+              path="/dashboard/content-studio/guides/new"
+              element={
+                <ProtectedRoute>
+                  <GuideVisualBuilderRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={null}>
+                        <GuideEditStudio />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </GuideVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/dashboard/content-studio/guides/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <GuideVisualBuilderRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={null}>
+                        <GuideEditStudio />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </GuideVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
             
             <Route path="/dashboard/content-studio/*" element={<ProtectedRoute><ContentStudioEntry /></ProtectedRoute>} />
 

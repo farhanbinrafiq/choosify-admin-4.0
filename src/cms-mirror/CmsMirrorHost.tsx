@@ -8,7 +8,14 @@ import './tokens.css';
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 
 /** Bump when public/cms-mirror/app.html behavior changes so the iframe never serves a stale 304. */
-const CMS_MIRROR_ASSET_VERSION = '20260805-workspace-tenant-1';
+const CMS_MIRROR_ASSET_VERSION = '20260808-brand-list-merge-1';
+
+function parseBrandDetail(pathname: string, search: string): { id: string | null; name: string | null } {
+  const match = pathname.match(/^\/admin\/brand-detail\/([^/?#]+)/);
+  const id = match?.[1] ? decodeURIComponent(match[1]) : null;
+  const name = new URLSearchParams(search).get('name');
+  return { id, name: name || null };
+}
 
 /**
  * Full-viewport 1:1 host for the Choosify Admin CMS standalone prototype.
@@ -25,11 +32,29 @@ export const CmsMirrorHost: React.FC = () => {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const knownPageKey = useMemo(() => resolveAdminPageKey(location.pathname), [location.pathname]);
   const pageKey = useMemo(() => pathToPageKey(location.pathname), [location.pathname]);
-  // Never synthesize a privileged role. ProtectedRoute already guarantees `profile`
-  // is resolved before this component mounts — `role` stays undefined only in the
-  // brief window (if any) before that resolves, and every effect below treats an
-  // undefined role as "do nothing" rather than falling back to 'super_admin'.
+  const brandDetail = useMemo(
+    () => parseBrandDetail(location.pathname, location.search),
+    [location.pathname, location.search],
+  );
   const role = profile?.role;
+
+  const postSelectBrand = useCallback(() => {
+    if (!brandDetail.id && !brandDetail.name) return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    try {
+      win.postMessage(
+        {
+          type: 'cms-mirror-select-brand',
+          id: brandDetail.id,
+          name: brandDetail.name,
+        },
+        '*',
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [brandDetail.id, brandDetail.name]);
 
   const postMirrorState = useCallback(
     (page: string, nextRole: string | undefined) => {
@@ -53,11 +78,28 @@ export const CmsMirrorHost: React.FC = () => {
         if (token) {
           win.postMessage({ type: 'cms-mirror-auth-token', token }, '*');
         }
+        // Select Brand Profile after page state lands (Admin Brand Detail route).
+        if (brandDetail.id || brandDetail.name) {
+          window.setTimeout(() => {
+            try {
+              win.postMessage(
+                {
+                  type: 'cms-mirror-select-brand',
+                  id: brandDetail.id,
+                  name: brandDetail.name,
+                },
+                '*',
+              );
+            } catch {
+              /* ignore */
+            }
+          }, 120);
+        }
       } catch {
         /* ignore */
       }
     },
-    [profile?.id, profile?.displayName, profile?.email],
+    [profile?.id, profile?.displayName, profile?.email, brandDetail.id, brandDetail.name],
   );
 
   const postAuthTokenToMirror = useCallback(() => {
@@ -77,11 +119,20 @@ export const CmsMirrorHost: React.FC = () => {
     postMirrorState(pageKey, role);
   }, [knownPageKey, pageKey, role, postMirrorState]);
 
-  // Re-push JWT whenever the authenticated profile changes (login after iframe boot).
   useEffect(() => {
     if (!profile) return;
     postAuthTokenToMirror();
   }, [profile?.id, postAuthTokenToMirror]);
+
+  useEffect(() => {
+    if (!brandDetail.id && !brandDetail.name) return;
+    const t = window.setInterval(() => postSelectBrand(), 400);
+    const stop = window.setTimeout(() => window.clearInterval(t), 8000);
+    return () => {
+      window.clearInterval(t);
+      window.clearTimeout(stop);
+    };
+  }, [brandDetail.id, brandDetail.name, postSelectBrand]);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
@@ -90,7 +141,22 @@ export const CmsMirrorHost: React.FC = () => {
         postAuthTokenToMirror();
         return;
       }
+      if (data?.type === 'cms-mirror-navigate' && typeof data.path === 'string') {
+        if (data.path !== location.pathname) {
+          navigate(data.path, { replace: Boolean(data.replace) });
+        }
+        return;
+      }
       if (!data || data.type !== 'cms-mirror-page' || typeof data.page !== 'string') return;
+      // Admin Brand Profile lives at /admin/brand-detail/:id — leaving brands page
+      // (or clearing detail) should return to the React Brand Management ledger.
+      if (
+        data.page === 'brands' &&
+        location.pathname.startsWith('/admin/brand-detail')
+      ) {
+        navigate('/admin/brand-studio', { replace: true });
+        return;
+      }
       const target = PAGE_KEY_TO_PATH[data.page] || '/admin/dashboard';
       if (target !== location.pathname) {
         navigate(target, { replace: true });
@@ -103,6 +169,7 @@ export const CmsMirrorHost: React.FC = () => {
   const onIframeLoad = () => {
     postMirrorState(pageKey, role);
     postAuthTokenToMirror();
+    postSelectBrand();
   };
 
   const iframeSrc = useMemo(
@@ -121,10 +188,14 @@ export const CmsMirrorHost: React.FC = () => {
     }
   }, [knownPageKey, role, pageKey, navigate]);
 
-  // Never mount the iframe (or any of its privileged content) before the real
-  // profile/role has resolved. ProtectedRoute already redirects unauthenticated
-  // users to /login before this component renders at all — this is defense in
-  // depth against ever booting the standalone app with a synthesized role.
+  // Sellers must not open the admin Brand Profile detail route.
+  useEffect(() => {
+    if (!role) return;
+    if (!location.pathname.startsWith('/admin/brand-detail')) return;
+    if (role === 'admin' || role === 'super_admin') return;
+    navigate('/admin/brand-studio', { replace: true });
+  }, [location.pathname, role, navigate]);
+
   if (!profile || !role) {
     return null;
   }

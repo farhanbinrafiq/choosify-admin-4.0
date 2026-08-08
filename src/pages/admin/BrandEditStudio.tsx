@@ -1,4 +1,4 @@
-// BrandEditStudio.tsx
+﻿// BrandEditStudio.tsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -16,19 +16,19 @@ import {
   BrandServiceCenterEntry,
   BrandStoresModel,
   BrandFaqItem,
-  initialBrandSeeds,
 } from "./brandSeeds";
 import { useAuth } from "../../contexts/AuthContext";
 import { useBrandProfiles } from "../../contexts/BrandProfilesContext";
 import { catalogApi } from "../../services/catalogApi";
+import type { CatalogBrand, CatalogProduct } from "../../types/catalog";
 import { BrandImageUploadField } from "./BrandImageUploadField";
 import { useEntityDraft } from "../../hooks/useEntityDraft";
+import { BrandProfilePresentation } from "../../components/brand-profile";
 
 /**
- * Blank scaffold for a real (non-seeded) Brand with no draft/published cache
- * yet. Never falls back to a demo seed's content (e.g. Samsung Bangladesh's
- * products/team/reviews) — only name/category are known from the real
- * catalog record; everything else starts genuinely empty.
+ * Blank scaffold for a real Brand with no draft/published cache yet.
+ * Never falls back to demo Samsung/Aarong seed content — only known catalog
+ * fields are filled; everything else starts empty.
  */
 function createBlankBrandModel(id: string, name: string, category: string): BrandCMSModel {
   return {
@@ -100,6 +100,95 @@ function createBlankBrandModel(id: string, name: string, category: string): Bran
   };
 }
 
+function mapCatalogBrandToModel(brand: CatalogBrand): BrandCMSModel {
+  const blank = createBlankBrandModel(brand.id, brand.name || "", brand.category || "");
+  const ov = brand.overview || {};
+  const social = brand.socialLinks || {};
+  const stores = brand.stores || {};
+  const withId = <T extends { name: string }>(rows: T[] | undefined, prefix: string) =>
+    (rows || []).map((row, i) => ({
+      id: `${prefix}-${i}`,
+      name: row.name,
+      sub: ("sub" in row ? String((row as { sub?: string }).sub || "") : "") as string,
+      ...("hours" in row ? { hours: String((row as { hours?: string }).hours || "") } : {}),
+    }));
+
+  return {
+    ...blank,
+    brandName: brand.name || "",
+    slug: brand.slug || "",
+    logo: brand.logo || "",
+    logoUrl: brand.logo || "",
+    coverImage: brand.coverImage || "",
+    tagline: brand.tagline || "",
+    category: brand.category || "",
+    website: brand.website || "",
+    description: brand.description || "",
+    brandStory: brand.story || "",
+    socialFbUrl: social.facebook || "",
+    socialInstaUrl: social.instagram || "",
+    socialTiktokUrl: social.tiktok || "",
+    socialYtUrl: social.youtube || "",
+    verificationStatus: brand.verifiedStatus
+      ? "Verified"
+      : brand.claimStatus === "pending"
+        ? "Suspended"
+        : "Standard",
+    status: brand.marketplaceAccess ? "LIVE" : "DRAFT",
+    choosifyScore: typeof brand.ratings === "number" && brand.ratings > 0 ? brand.ratings : 0,
+    followersCount: typeof brand.followers === "number" ? brand.followers : 0,
+    address: ov.address || "",
+    contactEmail: ov.email || "",
+    phone: ov.phone || "",
+    priceRange: ov.priceRange || "",
+    ageRange: ov.ageFocus || "",
+    audienceType: ov.audience || "",
+    services: Array.isArray(ov.services) ? ov.services : [],
+    bestForTags: Array.isArray(ov.tags) ? ov.tags : [],
+    faq: (brand.faq || []).map((f, i) => ({
+      id: `faq-${i}`,
+      q: f.q || "",
+      a: f.a || "",
+    })),
+    stores: {
+      authorized: withId(stores.authorized, "auth") as BrandStoreEntry[],
+      distributors: withId(stores.distributors, "dist") as BrandStoreEntry[],
+      serviceCenters: withId(stores.serviceCenters, "svc") as BrandServiceCenterEntry[],
+    },
+    promoCodes: (brand.promoCodes || []).map((p) => ({
+      id: p.id,
+      code: p.code,
+      discountType: p.discountType,
+      discountValue: p.discountValue,
+      startDate: p.startDate,
+      endDate: p.endDate,
+      usageLimit: p.usageLimit,
+      enabled: p.enabled,
+    })),
+  };
+}
+
+function mapCatalogProductToItem(p: CatalogProduct): BrandCMSModel["products"][number] {
+  const statusRaw = String(p.status || "").toLowerCase();
+  const status =
+    statusRaw === "live" || statusRaw === "active"
+      ? "Live"
+      : statusRaw === "archived" || statusRaw === "hidden"
+        ? "Hidden"
+        : "Draft";
+  return {
+    id: p.id,
+    name: p.title || "Untitled",
+    sku: (p as { sku?: string }).sku || p.id,
+    category: p.categoryName || "",
+    price: typeof p.price === "number" ? p.price : Number(p.price) || 0,
+    stock: typeof p.stock === "number" ? p.stock : Number(p.stock) || 0,
+    featured: Boolean(p.featuredFlag),
+    status,
+    thumbnail: p.image || (Array.isArray(p.gallery) && p.gallery[0] ? p.gallery[0] : ""),
+  };
+}
+
 /** Soft URL check — empty is fine; only warn when non-empty looks invalid. */
 function softUrlError(value: string): string | null {
   const trimmed = value.trim();
@@ -123,7 +212,8 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   const { id } = useParams<{ id: string }>();
   const { activeBrandId, allBrands } = useAuth();
   const navigate = useNavigate();
-  const activeId = overrideId || id || activeBrandId || "1";
+  // Never default to demo id "1" (Samsung seed). Prefer route/override/active brand.
+  const activeId = overrideId || id || activeBrandId || "";
 
   const brandProfilesRef = useRef<any>(null);
   try {
@@ -150,7 +240,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   const [showExitModal, setShowExitModal] = useState(false);
   const [showPublishModal, setShowPublishModal] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [activeDrawer, setActiveDrawer] = useState<"header" | "creators" | "promos" | "overview" | "stores" | "faq" | null>(null);
+  const [activeDrawer, setActiveDrawer] = useState<"header" | "creators" | "promos" | "overview" | "stores" | "faq" | "story" | null>(null);
 
   // --- DRAWER WORKSPACE FORM STATES ---
   // Header editing temporal state
@@ -197,6 +287,11 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
   // Where to Buy stores temporal copy
   const [tempStores, setTempStores] = useState<BrandStoresModel>({ authorized: [], distributors: [], serviceCenters: [] });
+  const [storyForm, setStoryForm] = useState({
+    brandStory: "",
+    missionStatement: "",
+    values: "",
+  });
 
   // FAQ list temporal copy
   const [tempFaqs, setTempFaqs] = useState<BrandFaqItem[]>([]);
@@ -242,45 +337,133 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
       setSyncStatus("saving");
     } else if (draftError) {
       setSyncStatus("error");
-      triggerToast(`⚠ Save failed: ${draftError}`);
+      triggerToast(`âš  Save failed: ${draftError}`);
     } else if (syncStatus === "saving") {
       setSyncStatus("saved");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isDraftSaving, draftError]);
 
-  // Load state on mount
+  // Load real Brand data — never Samsung/Aarong demo seeds
   useEffect(() => {
-    let loaded: BrandCMSModel | null = null;
-    const cacheDraft = localStorage.getItem(draftKey);
-    if (cacheDraft) {
-      try { loaded = JSON.parse(cacheDraft); } catch (_) {}
+    if (!activeId) {
+      setModel(createBlankBrandModel("new", "", ""));
+      return;
     }
-    if (!loaded) {
-      const cachePub = localStorage.getItem(pubKey);
-      if (cachePub) {
-        try { loaded = JSON.parse(cachePub); } catch (_) {}
+
+    let cancelled = false;
+
+    async function loadBrand() {
+      let loaded: BrandCMSModel | null = null;
+      const cacheDraft = localStorage.getItem(draftKey);
+      if (cacheDraft) {
+        try {
+          loaded = JSON.parse(cacheDraft);
+        } catch (_) {}
+      }
+      if (!loaded) {
+        const cachePub = localStorage.getItem(pubKey);
+        if (cachePub) {
+          try {
+            loaded = JSON.parse(cachePub);
+          } catch (_) {}
+        }
+      }
+
+      // Prefer live catalog over any leftover local demo content
+      try {
+        const brands = await catalogApi.listBrands();
+        const catalogBrand = brands.find((b) => b.id === activeId);
+        if (catalogBrand) {
+          const fromCatalog = mapCatalogBrandToModel(catalogBrand);
+          loaded = loaded
+            ? {
+                ...fromCatalog,
+                ...loaded,
+                id: activeId,
+                brandName: loaded.brandName || fromCatalog.brandName,
+                category: loaded.category || fromCatalog.category,
+                // Prefer catalog media/story when local draft left them empty
+                logo: loaded.logo || fromCatalog.logo,
+                coverImage: loaded.coverImage || fromCatalog.coverImage,
+                tagline: loaded.tagline || fromCatalog.tagline,
+                description: loaded.description || fromCatalog.description,
+                brandStory: loaded.brandStory || fromCatalog.brandStory,
+                website: loaded.website || fromCatalog.website,
+                socialFbUrl: loaded.socialFbUrl || fromCatalog.socialFbUrl,
+                socialInstaUrl: loaded.socialInstaUrl || fromCatalog.socialInstaUrl,
+                socialTiktokUrl: loaded.socialTiktokUrl || fromCatalog.socialTiktokUrl,
+                socialYtUrl: loaded.socialYtUrl || fromCatalog.socialYtUrl,
+                faq: loaded.faq?.length ? loaded.faq : fromCatalog.faq,
+                stores: loaded.stores || fromCatalog.stores,
+                promoCodes: loaded.promoCodes?.length ? loaded.promoCodes : fromCatalog.promoCodes,
+                followersCount: fromCatalog.followersCount || loaded.followersCount || 0,
+                choosifyScore: fromCatalog.choosifyScore || loaded.choosifyScore || 0,
+                verificationStatus: fromCatalog.verificationStatus,
+              }
+            : fromCatalog;
+        }
+      } catch (_) {
+        // catalog fetch failed — keep local draft/blank
+      }
+
+      if (!loaded) {
+        const matchedBrand = allBrands.find((b) => b.id === activeId);
+        loaded = createBlankBrandModel(
+          activeId,
+          matchedBrand?.name || "",
+          matchedBrand?.category || "",
+        );
+      }
+
+      // Attach real catalog products for this brand (no fake product cards)
+      try {
+        const products = await catalogApi.listProducts();
+        const brandProducts = products
+          .filter(
+            (p) =>
+              p.brandId === activeId ||
+              (loaded?.brandName &&
+                p.brandName &&
+                p.brandName.toLowerCase() === loaded.brandName.toLowerCase()),
+          )
+          .map(mapCatalogProductToItem);
+        if (brandProducts.length > 0 && loaded) {
+          loaded = { ...loaded, products: brandProducts };
+        }
+      } catch (_) {}
+
+      // Attach real deals for this brand when brandId is present
+      try {
+        const deals = await catalogApi.listDeals();
+        const brandDeals = deals
+          .filter((d) => d.brandId === activeId)
+          .map((d) => ({
+            id: d.id,
+            title: d.name,
+            discountType: (d.discountType === "flat" ? "Flat" : "Percentage") as "Percentage" | "Flat",
+            discountValue: d.discountValue,
+            status: (d.status === "live" ? "Active" : d.status === "expired" ? "Expired" : "Scheduled") as
+              | "Active"
+              | "Scheduled"
+              | "Expired",
+            startDate: d.validFrom || "",
+            endDate: d.validUntil || "",
+          }));
+        if (brandDeals.length > 0 && loaded) {
+          loaded = { ...loaded, deals: brandDeals };
+        }
+      } catch (_) {}
+
+      if (!cancelled && loaded) {
+        setModel(loaded);
       }
     }
-    if (!loaded) {
-      // Exact-id match against the seeded demo catalog ("1".."5") is legitimate —
-      // those are intentional platform dev-data records an Admin may still edit.
-      // Any other id is a real Brand: never scaffold its content from a demo
-      // seed's products/team/reviews — start blank and let the real backend
-      // draft (fetched by useEntityDraft below) fill it in.
-      const seed = initialBrandSeeds[activeId];
-      if (seed) {
-        loaded = JSON.parse(JSON.stringify(seed));
-      } else {
-        const matchedBrand = allBrands.find(b => b.id === activeId);
-        loaded = createBlankBrandModel(activeId, matchedBrand?.name || "", matchedBrand?.category || "");
-      }
-    }
-    if (loaded) {
-      setModel(loaded);
-    }
-    // useEntityDraft fetches the backend draft in the background and, once it
-    // resolves, calls setModel again — the backend copy wins over this local seed.
+
+    void loadBrand();
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId]);
 
@@ -291,7 +474,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   };
 
   // --- DRAWER SEED TRIGGER ACTIONS ---
-  const openEditDrawer = (type: "header" | "creators" | "promos" | "overview" | "stores" | "faq") => {
+  const openEditDrawer = (type: "header" | "creators" | "promos" | "overview" | "stores" | "faq" | "story") => {
     if (!model) return;
     setActiveDrawer(type);
 
@@ -307,6 +490,12 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
         socialTiktokUrl: model.socialTiktokUrl || "",
         socialYtUrl: model.socialYtUrl || "",
         website: model.website || ""
+      });
+    } else if (type === "story") {
+      setStoryForm({
+        brandStory: model.brandStory || "",
+        missionStatement: model.missionStatement || "",
+        values: model.values || "",
       });
     } else if (type === "creators") {
       setTempCreators(JSON.parse(JSON.stringify(model.creators || [])));
@@ -352,11 +541,11 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
       title: "",
       sourceUrl: "",
       platform: "youtube",
-      thumbnailUrl: "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400",
-      duration: "10:00",
+      thumbnailUrl: "",
+      duration: "",
       creatorName: "",
-      views: 12000,
-      clicks: 800
+      views: 0,
+      clicks: 0
     });
   };
 
@@ -413,6 +602,19 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     setHasUnsavedChanges(true);
     setActiveDrawer(null);
     triggerToast("Creator Content Updated Successfully");
+  };
+
+  const saveStorySection = () => {
+    if (!model) return;
+    setModel({
+      ...model,
+      brandStory: storyForm.brandStory,
+      missionStatement: storyForm.missionStatement,
+      values: storyForm.values,
+    });
+    setHasUnsavedChanges(true);
+    setActiveDrawer(null);
+    triggerToast("Brand Story Updated Successfully");
   };
 
   const savePromosSection = () => {
@@ -532,7 +734,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     setHasUnsavedChanges(false);
     setSyncStatus("saving");
     saveVersion(`Draft Saved: ${model.brandName}`, model);
-    triggerToast("Saving draft…");
+    triggerToast("Saving draftâ€¦");
   };
 
   const handlePublishChanges = async () => {
@@ -584,8 +786,8 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     setIsPublishing(false);
     triggerToast(
       publishSucceeded
-        ? "🚀 Brand Profile Published Live in Bangladesh!"
-        : "⚠ Publish failed to sync to catalog — draft saved locally, please retry.",
+        ? "ðŸš€ Brand Profile Published Live in Bangladesh!"
+        : "âš  Publish failed to sync to catalog â€” draft saved locally, please retry.",
     );
   };
 
@@ -593,7 +795,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
     setModel(JSON.parse(JSON.stringify(snapshot)) as BrandCMSModel);
     setHasUnsavedChanges(true);
     setShowVersions(false);
-    triggerToast("✓ Snapshot restored successfully!");
+    triggerToast("âœ“ Snapshot restored successfully!");
   };
 
   // --- DYNAMIC CREATORS ENGINE: REORDER, DEFINE, OR FEATURE ---
@@ -644,7 +846,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
         title: creatorForm.title,
         sourceUrl: creatorForm.sourceUrl,
         platform: creatorForm.platform,
-        thumbnailUrl: creatorForm.thumbnailUrl || "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400",
+        thumbnailUrl: creatorForm.thumbnailUrl || "",
         duration: creatorForm.duration || "12:00",
         creatorName: creatorForm.creatorName,
         views: Number(creatorForm.views) || 24000,
@@ -727,7 +929,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
   if (!model || isDraftLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-[500px] gap-3 text-slate-500">
+      <div className="flex flex-col items-center justify-center h-[420px] gap-3 text-app-text-muted">
         <RotateCw className="w-10 h-10 animate-spin text-[#FF5B00]" />
         <span className="text-xs font-mono">Loading Choosify Enterprise Workspace...</span>
       </div>
@@ -735,17 +937,19 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   }
 
   return (
-    <div className="flex flex-col min-h-screen bg-[#F9FAFB] text-slate-900 select-none pb-12 relative overflow-x-hidden">
+    <div className="aws-page flex flex-col text-slate-900 select-none relative overflow-x-hidden">
       
-      {/* TOP HEADER STATUS TOOLBAR */}
-      <header className="h-16 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between z-30 shadow-sm">
+      {/* TOP HEADER STATUS TOOLBAR â€” editor chrome inside workspace content */}
+      <header className="h-14 shrink-0 bg-white border border-app-border rounded-[18px] px-5 flex items-center justify-between z-30 shadow-sm mb-5">
         <div className="flex items-center gap-4">
-          <button 
-            onClick={() => hasUnsavedChanges ? setShowExitModal(true) : navigate("/admin/brand-studio")}
-            className="p-2 bg-slate-100 text-slate-700 hover:bg-slate-200 rounded-xl transition-colors flex items-center gap-1 text-[#111827]"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
+          {!isNested && (
+            <button 
+              onClick={() => hasUnsavedChanges ? setShowExitModal(true) : navigate("/admin/brand-studio")}
+              className="p-2 bg-[#F1F3F5] text-slate-700 hover:bg-[#E8EDF2] rounded-[8px] transition-colors flex items-center gap-1 text-[#111827]"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+          )}
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-sm font-black text-[#111827]">{model.brandName}</h1>
@@ -753,30 +957,32 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                 ● LIVE PROFILE
               </span>
             </div>
-            <p className="text-[10px] text-slate-500 font-mono tracking-wider">Choosify V3 Dashboard Platform</p>
+            <p className="text-[10px] text-slate-500 font-mono tracking-wider">
+              {isNested ? 'Brand Portfolio · Visual Builder' : 'Choosify Brand Visual Builder'}
+            </p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
           {hasUnsavedChanges && (
             <span className="flex items-center gap-1 text-[#FF5B00] text-[10px] font-mono font-bold animate-pulse">
-              ● UNSAVED DRAFT CHANGES
+              â— UNSAVED DRAFT CHANGES
             </span>
           )}
 
           {syncStatus === "saving" && (
             <span className="flex items-center gap-1 text-blue-600 text-[10px] font-mono font-bold animate-pulse">
-              ● Saving…
+              â— Savingâ€¦
             </span>
           )}
           {syncStatus === "saved" && (
             <span className="flex items-center gap-1 text-emerald-600 text-[10px] font-mono font-bold">
-              ✓ Synced to server
+              âœ“ Synced to server
             </span>
           )}
           {syncStatus === "error" && (
             <span className="flex items-center gap-1 text-red-600 text-[10px] font-mono font-bold" title={draftError || undefined}>
-              ⚠ Save failed — retry
+              âš  Save failed â€” retry
             </span>
           )}
 
@@ -848,534 +1054,40 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
         </div>
       </header>
 
-      {/* --- CORE SECTON PROFILE MANAGEMENT WORKSPACE --- */}
-      <main className="max-w-6xl mx-auto w-full px-4 pt-8 space-y-8">
-        
-        {/* ========================================================== */}
-        {/* SECTION 1: BRAND HEADER HERO CARD */}
-        {/* ========================================================== */}
-        <div className="bg-white text-[#111827] rounded-3xl overflow-hidden relative border border-slate-200 group shadow-sm">
-          
-          {/* Edit icon overlay bottom/top */}
-          <div className="absolute top-4 right-4 z-10">
-            <button
-              onClick={() => openEditDrawer("header")}
-              className="p-2.5 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-xl transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold uppercase cursor-pointer"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              <span>EDIT</span>
-            </button>
-          </div>
-
-          {/* Banner cover background */}
-          <div className="h-44 md:h-56 relative bg-slate-100">
-            {model.coverImage ? (
-              <img src={model.coverImage} alt="" className="w-full h-full object-cover filter brightness-95" />
-            ) : (
-              <div className="w-full h-full bg-gradient-to-r from-slate-100 to-slate-200 flex items-center justify-center text-xs text-slate-400">
-                Choosify Banner Cover Photo Placeholder
-              </div>
-            )}
-            <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-white to-transparent" />
-          </div>
-
-          {/* Identity details with Split structure */}
-          <div className="px-6 pb-8 -mt-16 relative flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-            
-            {/* Left side details */}
-            <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4 text-center sm:text-left">
-              <img 
-                src={model.logo || "https://images.unsplash.com/photo-1622434641406-a158123450f9?w=120"} 
-                alt="" 
-                className="w-24 h-24 object-cover rounded-2xl border-4 border-white bg-white shadow-md shrink-0"
-              />
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2 justify-center sm:justify-start flex-wrap">
-                  <h2 className="text-xl md:text-2xl font-black text-[#111827] tracking-tight">{model.brandName}</h2>
-                  {model.verificationStatus === "Verified" ? (
-                    <span className="p-1 px-2 text-[9px] bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-full font-black uppercase flex items-center gap-1">
-                      <Check className="w-3 h-3 text-emerald-600" /> VERIFIED BRAND
-                    </span>
-                  ) : (
-                    <span className="p-1 bg-slate-100 text-slate-600 text-[9px] font-mono leading-none rounded">
-                      Standard Profile
-                    </span>
-                  )}
-                </div>
-                <p className="text-[#FF5B00] text-[11px] font-extrabold uppercase tracking-widest">{model.category}</p>
-                <div className="flex items-center gap-1.5 justify-center sm:justify-start text-xs text-slate-600">
-                  <Heart className="w-3.5 h-3.5 text-[#FF5B00] fill-[#FF5B00]" />
-                  <span className="font-extrabold text-[#111827]">50,050 SHOPPERS</span>
-                  <span className="text-slate-500 font-medium">LOVES THE BRANDS</span>
-                </div>
-              </div>
-            </div>
-
-            {/* CTA action buttons representation */}
-            <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto mt-4 md:mt-0">
-              <div className="flex flex-col items-center">
-                <button className="px-5 py-2.5 bg-[#FF5B00] hover:bg-[#E64A00] text-app-text-primary text-xs font-black uppercase tracking-wider rounded-xl shadow transition flex items-center gap-1 border-none cursor-pointer">
-                  <Heart className="w-3.5 h-3.5 fill-white" />
-                  <span>LOVE BRAND</span>
-                </button>
-                <span className="text-[10px] text-slate-500 font-mono font-bold mt-1">50,000 LOVES</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <button className="px-5 py-2.5 bg-white text-[#111827] border border-slate-200 hover:bg-slate-50 text-xs font-black uppercase tracking-wider rounded-xl shadow transition cursor-pointer">
-                  FOLLOW THE BRAND
-                </button>
-                <span className="text-[10px] text-slate-500 font-mono font-bold mt-1">50,000 FOLLOWERS</span>
-              </div>
-            </div>
-
-            {/* Right side Score Panel display representation from Image layout */}
-            <div className="flex flex-col items-end text-right w-full md:w-auto border-t md:border-t-0 border-slate-200 pt-4 md:pt-0">
-              <div className="bg-[#F9FAFB] border border-slate-200 rounded-2xl p-4 w-full md:w-56 text-center relative overflow-hidden shadow-sm">
-                <span className="absolute -top-1 -left-1 text-[8px] bg-emerald-500 text-white font-mono uppercase px-1.5 rounded">AUTO</span>
-                <p className="text-[10px] text-slate-500 font-mono font-black uppercase tracking-wider">TRUST SCORE</p>
-                <div className="text-2xl font-black text-emerald-600 tracking-tight font-mono my-1 flex items-center justify-center gap-1">
-                  <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
-                  <span>{model.choosifyScore * 20 || 92} / 100</span>
-                </div>
-                <button className="text-[10px] text-[#FF5B00] hover:text-red-700 font-black uppercase hover:underline flex items-center gap-1 mx-auto mt-1 cursor-pointer bg-transparent border-none">
-                  <span>VIEW SCORE BOARD</span>
-                  <ExternalLink className="w-3 h-3" />
-                </button>
-              </div>
-
-              {/* Read only stats visual indicators with lock icon */}
-              <div className="flex gap-4 mt-3 w-full justify-center md:justify-end text-[10px] text-slate-500">
-                <span className="flex items-center gap-1 border border-slate-200 bg-[#F9FAFB] px-2 py-1 rounded" title="Calculated Automatically. Read only.">
-                  <Lock className="w-2.5 h-2.5 text-app-text-secondary" /> Validation Status: <span className="font-bold text-slate-600">{model.verificationStatus}</span>
-                </span>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Social Icons footer area inside card banner */}
-          <div className="border-t border-slate-200 px-6 py-4 bg-[#F9FAFB] flex flex-wrap items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">FIND US ON</span>
-              <div className="flex items-center gap-2">
-                {model.socialFbUrl && (
-                  <a href={model.socialFbUrl} target="_blank" rel="noreferrer" className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 hover:text-[#FF5B00] transition" title="Facebook">
-                    <Facebook className="w-3.5 h-3.5" />
-                  </a>
-                )}
-                {model.socialInstaUrl && (
-                  <a href={model.socialInstaUrl} target="_blank" rel="noreferrer" className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 hover:text-[#FF5B00] transition" title="Instagram">
-                    <Instagram className="w-3.5 h-3.5" />
-                  </a>
-                )}
-                {model.website && (
-                  <a href={model.website} target="_blank" rel="noreferrer" className="p-1.5 bg-white border border-slate-200 rounded-lg text-slate-600 hover:text-[#FF5B00] transition" title="Official Storefront Website">
-                    <Globe className="w-3.5 h-3.5" />
-                  </a>
-                )}
-              </div>
-            </div>
-            {model.tagline && (
-              <p className="text-xs text-slate-500 italic">"{model.tagline}"</p>
-            )}
-          </div>
-
-        </div>
-
-        {/* ========================================================== */}
-        {/* SECTION 2: BRAND STATS BAR (Read-Only) */}
-        {/* ========================================================== */}
-        <div className="bg-white text-[#111827] border border-slate-200 rounded-3xl py-4 px-6 grid grid-cols-3 divide-x divide-slate-200 shadow-sm select-none">
-          <div className="text-center relative">
-            <span className="absolute top-0 left-2 text-[8px] bg-slate-100 text-slate-500 p-0.5 rounded font-mono leading-none flex items-center gap-0.5" title="Calculated Automatically">
-              <Lock className="w-2 h-2" /> AUTO
-            </span>
-            <p className="text-[10px] uppercase font-black tracking-widest text-[#111827]">TOTAL DEALS LISTED</p>
-            <p className="text-xl md:text-2xl font-black text-[#FF5B00] font-mono mt-0.5">{model.deals?.length || 20}</p>
-          </div>
-          
-          <div className="text-center relative">
-            <span className="absolute top-0 left-2 text-[8px] bg-slate-100 text-slate-500 p-0.5 rounded font-mono leading-none flex items-center gap-0.5" title="Calculated Automatically">
-              <Lock className="w-2 h-2" /> AUTO
-            </span>
-            <p className="text-[10px] uppercase font-black tracking-widest text-[#111827]">TOTAL PRODUCTS LISTED</p>
-            <p className="text-xl md:text-2xl font-black text-[#FF5B00] font-mono mt-0.5">{model.products?.length || 300}</p>
-          </div>
-
-          <div className="text-center relative">
-            <span className="absolute top-0 left-2 text-[8px] bg-slate-100 text-slate-500 p-0.5 rounded font-mono leading-none flex items-center gap-0.5" title="Calculated Automatically">
-              <Lock className="w-2 h-2" /> AUTO
-            </span>
-            <p className="text-[10px] uppercase font-black tracking-widest text-[#111827]">TOTAL PROMO CODES LISTED</p>
-            <p className="text-xl md:text-2xl font-black text-[#FF5B00] font-mono mt-0.5">{model.promoCodes?.length || 5}</p>
-          </div>
-        </div>
-
-        {/* ========================================================== */}
-        {/* SECTION 3: CREATOR EXPERIENCES (65%) + PROMO CODES (35%) */}
-        {/* ========================================================== */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-            {/* LEFT COLUMN: CREATOR EXPERIENCES (Light Card Layout) */}
-          <div className="lg:col-span-8 bg-white border border-slate-200 text-[#111827] rounded-3xl p-6 relative group shadow-sm">
-            
-            {/* Edit pencil icon */}
-            <button
-              onClick={() => openEditDrawer("creators")}
-              className="absolute top-5 right-5 p-2 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-xl transition duration-200 cursor-pointer"
-              title="Edit Creator Reviews"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
-
-            <span className="text-[9px] font-black tracking-widest text-[#FF5B00] uppercase">BRAND CAMPAIGNS & INFLUENCERS</span>
-            <h3 className="text-md font-black text-[#111827] mt-1 tracking-tight">
-              CREATOR EXPERIENCES WITH {model.brandName.toUpperCase()}
-            </h3>
-
-            {/* Filter platforms tabs */}
-            <div className="flex flex-wrap items-center gap-1.5 mt-5 border-b border-slate-100 pb-4">
-              {["ALL", "YOUTUBE", "INSTAGRAM", "TIKTOK", "FACEBOOK"].map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setCreatorFilter(tab)}
-                  className={`px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase transition cursor-pointer${
-                    creatorFilter === tab 
-                      ? "bg-[#FF5B00] text-white" 
-                      : "bg-[#F9FAFB] text-slate-600 hover:bg-slate-100 border border-slate-200"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-
-            {/* Feature Content card visualization */}
-            {activeCreator ? (
-              <div className="mt-6 bg-[#F9FAFB] border border-slate-200 rounded-2xl overflow-hidden p-4 relative group/video">
-                <span className="absolute top-4 left-4 z-10 bg-[#FF5B00] text-white px-2 py-0.5 text-[8px] font-black uppercase tracking-wider rounded-md flex items-center gap-1">
-                  <Play className="w-2 h-2 fill-white" /> {activeCreator.platform.toUpperCase()} PARTNERSHIP
-                </span>
-                
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
-                  <div className="md:col-span-5 aspect-video md:aspect-[4/3] relative rounded-xl overflow-hidden bg-app-card group-hover:shadow-md transition">
-                    <img src={activeCreator.thumbnailUrl} alt="" className="w-full h-full object-cover opacity-80" />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="w-12 h-12 bg-[#FF5B00] hover:scale-110 duration-250 cursor-pointer shadow-2xl text-app-text-primary rounded-full flex items-center justify-center">
-                        <Play className="w-5 h-5 fill-white ml-0.5" />
-                      </span>
-                    </div>
-                    <span className="absolute bottom-2 right-2 bg-app-card/20 text-[10px] text-app-text-primary px-2 py-0.5 rounded font-mono font-bold">
-                      {activeCreator.duration}
-                    </span>
-                  </div>
-
-                  <div className="md:col-span-7 space-y-3 text-left">
-                    <h4 className="text-sm font-bold text-[#111827] leading-snug">{activeCreator.title}</h4>
-                    <p className="text-xs text-slate-600 leading-relaxed font-light line-clamp-3">
-                      Empowered by standard Choosify distribution and partner endorsement campaigns inside Bangladesh.
-                    </p>
-                    <div className="flex items-center gap-4 text-[11px] text-slate-500 font-mono pt-1">
-                      <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5" /> {(activeCreator.views || 124000).toLocaleString()} Views</span>
-                      <span className="flex items-center gap-1"><Star className="w-3.5 h-3.5 fill-current text-orange-400" /> Authorized</span>
-                    </div>
-
-                    <div className="flex items-center gap-2 pt-2 border-t border-slate-200">
-                      <div className="w-8 h-8 rounded-full bg-[#FF5B00] flex items-center justify-center font-black text-app-text-primary text-[10px]">
-                        {activeCreator.creatorName.slice(0, 2).toUpperCase()}
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-[#111827]">@{activeCreator.creatorName}</p>
-                        <p className="text-[10px] text-slate-500">Collaborator Partner • Dhaka</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <p className="text-xs text-slate-500 italic py-8">No approved creator content found.</p>
-            )}
-
-            {/* Additional Creator Content Grid (3 Columns) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
-              {filteredCreatorsList.slice(0, 3).map((v) => (
-                <div key={v.id} className="bg-[#F9FAFB] border border-slate-200 p-3 rounded-2xl flex flex-col justify-between hover:border-slate-300 transition space-y-3 text-left">
-                  <div className="aspect-video relative rounded-lg overflow-hidden bg-slate-100">
-                    <img src={v.thumbnailUrl} alt="" className="w-full h-full object-cover filter brightness-90" />
-                    <span className="absolute bottom-1 right-1 bg-app-card/20 text-app-text-primary p-0.5 rounded text-[8px] font-mono leading-none">
-                      {v.duration}
-                    </span>
-                    <div className="absolute top-1 left-1 bg-app-card/20 text-app-text-primary px-1.5 py-0.5 rounded text-[8px] uppercase tracking-wider font-bold">
-                      {v.platform}
-                    </div>
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-bold text-[#111827] line-clamp-2 leading-tight">{v.title}</h5>
-                    <p className="text-[10px] text-slate-500 mt-1 font-mono">@{v.creatorName}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Action button at bottom */}
-            <div className="mt-8 border-t border-slate-200 pt-4 text-center">
-              <button
-                onClick={() => openEditDrawer("creators")}
-                className="w-full py-3 bg-white hover:bg-[#F9FAFB] border border-[#FF5B00] text-xs text-[#FF5B00] font-black uppercase tracking-widest rounded-xl flex items-center justify-center gap-1.5 transition cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Add / Manage Creator Review</span>
-              </button>
-            </div>
-
-          </div>
-
-          {/* RIGHT COLUMN: PROMO CODES (Light Card Layout) */}
-          <div className="lg:col-span-4 bg-white border border-slate-200 rounded-3xl p-6 relative group shadow-sm text-left">
-            
-            {/* Edit pencil icon */}
-            <button
-              onClick={() => openEditDrawer("promos")}
-              className="absolute top-5 right-5 p-2 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-xl transition duration-200 cursor-pointer"
-              title="Edit Promo Vouchers"
-            >
-              <Pencil className="w-4 h-4" />
-            </button>
-
-            <span className="text-[10px] font-black text-[#FF5B00] tracking-widest uppercase">PROMO VOUCHERS</span>
-            <div className="flex items-center gap-1.5 mt-1 border-b border-rose-50 pb-3">
-              <h3 className="text-md font-black text-[#111827]">PROMO CODES</h3>
-              <span className="p-0.5 px-2 bg-orange-50 text-[#FF5B00] rounded-full text-[9px] font-extrabold border border-orange-200">
-                {model.promoCodes?.filter(p => p.enabled).length || 3} verified
-              </span>
-            </div>
-
-            {/* Promo coupons details list */}
-            <div className="space-y-4 mt-6">
-              {(model.promoCodes || []).map((code) => (
-                <div 
-                  key={code.id}
-                  className={`border rounded-2xl p-4 text-center relative overflow-hidden transition${
-                    code.enabled ? "bg-[#F9FAFB] border-slate-200" : "bg-slate-50 border-slate-100 opacity-60"
-                  }`}
-                >
-                  <span className="text-[9px] bg-white text-[#FF5B00] font-extrabold uppercase px-2 py-0.5 rounded-full absolute top-2 left-2 border border-slate-200">
-                    {code.discountType === "Percentage" ? `${code.discountValue}% OFF` : `BDT ${code.discountValue} FLAT`}
-                  </span>
-
-                  <div className="mt-4">
-                    <p className="text-xs font-black uppercase text-[#111827]">
-                      {code.discountType === "Percentage" ? `${code.discountValue}% SAVINGS GIFT` : `BDT ${code.discountValue} FLAT DISCOUNT`}
-                    </p>
-                    <p className="text-[10px] text-slate-500 mt-1">Minimum purchase requirement apply</p>
-                  </div>
-
-                  {/* Promo Box highlighted inside code box */}
-                  <div className="mt-4 border-2 border-dashed border-[#FF5B00]/40 bg-orange-50/20 p-2.5 rounded-xl font-mono text-sm font-black text-[#FF5B00] flex items-center justify-between gap-1">
-                    <span>{code.code}</span>
-                    <button 
-                      onClick={() => {
-                        navigator.clipboard?.writeText(code.code);
-                        triggerToast("Coupon Code Copied to Clipboard!");
-                      }}
-                      className="p-1 text-slate-500 hover:text-[#FF5B00] rounded bg-transparent border-none cursor-pointer"
-                      title="Copy Coupon Code"
-                    >
-                      <Copy className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  <p className="text-[9px] text-[#111827] font-mono mt-3">Valid till {code.endDate || "Dec 31, 2026"}</p>
-                </div>
-              ))}
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* ========================================================== */}
-        {/* SECTION 4: BRAND OVERVIEW DETAILS */}
-        {/* ========================================================== */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 relative group shadow-sm text-left">
-          
-          {/* Edit icon pencil */}
-          <div className="absolute top-6 right-6 z-10">
-            <button
-              onClick={() => openEditDrawer("overview")}
-              className="p-2.5 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-xl transition duration-200 flex items-center gap-1.5 text-xs font-black uppercase shadow-sm cursor-pointer"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              <span>EDIT OVERVIEW</span>
-            </button>
-          </div>
-
-          <span className="text-[10px] font-black tracking-widest text-[#FF5B00] uppercase">OUR HERITAGE BRAND SPECIFICATIONS</span>
-          <h3 className="text-lg font-black text-[#111827] mt-1">BRAND OVERVIEW</h3>
-          <p className="text-xs text-app-text-secondary font-mono mt-0.5">{model.brandName}</p>
-
-          {/* Overview Grid sections */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
-            
-            {/* Card 1: Shop Address & Links */}
-            <div className="bg-[#F9FAFB] border border-slate-200 p-5 rounded-2xl min-h-[160px] flex flex-col justify-between relative">
-              <span className="absolute top-2 right-2 text-md">🏢</span>
-              <div className="space-y-2">
-                <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#FF5B00] block">SHOP ADDRESS & LINKS</span>
-                <p className="text-xs font-semibold text-slate-700 leading-relaxed font-mono">{model.address}</p>
-              </div>
-              <div className="mt-4 pt-3 border-t border-slate-200">
-                <a 
-                  href={model.mapLink || "#"} 
-                  target="_blank" 
-                  rel="noreferrer" 
-                  className="text-xs font-extrabold uppercase text-[#FF5B00] hover:underline flex items-center gap-1.5"
-                >
-                  <span>OPEN ON MAPS</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              </div>
-            </div>
-
-            {/* Card 2: Contact Info */}
-            <div className="bg-[#F9FAFB] border border-slate-200 p-5 rounded-2xl min-h-[160px] flex flex-col justify-between relative">
-              <span className="absolute top-2 right-2 text-md">📞</span>
-              <div className="space-y-2">
-                <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#FF5B00] block">CONTACT INFORMATIONS</span>
-                <div className="space-y-1">
-                  <p className="text-xs text-slate-500 font-bold font-mono">EMAIL DESK:</p>
-                  <p className="text-xs font-semibold font-mono text-slate-800">{model.contactEmail}</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-xs text-slate-500 font-bold font-mono">PHONE SERVICE:</p>
-                  <p className="text-xs font-semibold font-mono text-slate-800">{model.phone}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 3: Price & Audience */}
-            <div className="bg-[#F9FAFB] border border-[#E2E8F0] p-5 rounded-2xl min-h-[160px] flex flex-col justify-between relative col-span-1 md:col-span-1">
-              <span className="absolute top-2 right-2 text-md">🎯</span>
-              <div className="space-y-2">
-                <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#FF5B00] block">PRICE & AUDIENCE</span>
-                <div className="space-y-1 text-xs">
-                  <p className="text-app-text-secondary font-bold">BDT RANGE: <span className="font-black text-slate-800">{model.priceRange || "General / Medium"}</span></p>
-                  <p className="text-app-text-secondary font-bold">AGE FOCUS: <span className="text-[#111827] font-black">{model.ageRange}</span></p>
-                  <p className="text-slate-400 font-black text-[#FF5B00] tracking-wide mt-1 uppercase text-[10px]">{model.genderFocus || "Unisex focus"}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 4: Services Specialties */}
-            <div className="bg-[#F9FAFB] border border-slate-200 p-5 rounded-2xl min-h-[160px] col-span-1 md:col-span-2 relative">
-              <span className="absolute top-2 right-2 text-md">🏅</span>
-              <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#FF5B00] block">SERVICES & SPECIALTIES</span>
-              <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">
-                {(model.services || []).map((srv, idx) => (
-                  <li key={idx} className="text-xs font-bold text-slate-700 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 bg-[#FF5B00] rounded-full" />
-                    <span>{srv}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Card 5: Best For Tags */}
-            <div className="bg-[#F9FAFB] border border-[#E2E8F0] p-5 rounded-2xl min-h-[160px] col-span-1 md:col-span-1 flex flex-col justify-between">
-              <div>
-                <span className="text-[9px] font-extrabold uppercase tracking-wide text-[#FF5B00] block">BEST FOR TAGS</span>
-                <div className="flex flex-wrap gap-1.5 mt-4">
-                  {(model.bestForTags || []).map((tag, idx) => (
-                    <span key={idx} className="p-1 px-2.5 bg-transparent text-[#8A00C4] rounded-lg text-[10px] font-bold uppercase">
-                      #{tag}
-                    </span>
-                  ))}
-                  {(!model.bestForTags || model.bestForTags.length === 0) && (
-                    <p className="text-xs text-app-text-secondary italic">No brand tags added.</p>
-                  )}
-                </div>
-              </div>
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* ========================================================== */}
-        {/* SECTION 5: WHERE TO BUY (AUTHORIZED STORES / DISTRIBUTORS / SERVICE CENTERS) */}
-        {/* ========================================================== */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 relative group shadow-sm text-left">
-          <div className="absolute top-6 right-6 z-10">
-            <button
-              onClick={() => openEditDrawer("stores")}
-              className="p-2.5 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-xl transition duration-200 flex items-center gap-1.5 text-xs font-black uppercase shadow-sm cursor-pointer"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              <span>EDIT STORES</span>
-            </button>
-          </div>
-
-          <span className="text-[10px] font-black tracking-widest text-[#FF5B00] uppercase">STOREFRONT AVAILABILITY</span>
-          <h3 className="text-lg font-black text-[#111827] mt-1">WHERE TO BUY {model.brandName?.toUpperCase()}</h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 mt-6">
-            {([
-              { key: "authorized" as const, label: "AUTHORIZED STORES" },
-              { key: "distributors" as const, label: "DISTRIBUTORS & RESELLERS" },
-              { key: "serviceCenters" as const, label: "SERVICE CENTERS" },
-            ]).map(col => (
-              <div key={col.key} className="bg-[#F9FAFB] border border-[#E8EDF2] rounded-[10px] overflow-hidden">
-                <div className="text-[11px] font-extrabold text-white bg-[#1A1A2E] px-2.5 py-1.5">{col.label}</div>
-                <div className="p-[14px] space-y-2">
-                  {(model.stores?.[col.key] || []).length === 0 && (
-                    <p className="text-[10px] text-slate-400 italic">No entries added.</p>
-                  )}
-                  {(model.stores?.[col.key] || []).map((entry) => (
-                    <div key={entry.id} className="flex justify-between items-center py-1.5 border-b border-[#F1F1F3] last:border-0 gap-2">
-                      <div>
-                        <span className="text-[11.5px] font-bold text-[#111827] block">{entry.name}</span>
-                        <span className="text-[10px] text-[#9AA0AC] block">
-                          {entry.sub}
-                          {"hours" in entry && entry.hours ? ` · ${entry.hours}` : ""}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ========================================================== */}
-        {/* SECTION 6: FREQUENTLY ASKED QUESTIONS */}
-        {/* ========================================================== */}
-        <div className="bg-white border border-slate-200 rounded-3xl p-6 md:p-8 relative group shadow-sm text-left">
-          <div className="absolute top-6 right-6 z-10">
-            <button
-              onClick={() => openEditDrawer("faq")}
-              className="p-2.5 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-xl transition duration-200 flex items-center gap-1.5 text-xs font-black uppercase shadow-sm cursor-pointer"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-              <span>EDIT FAQ</span>
-            </button>
-          </div>
-
-          <span className="text-[10px] font-black tracking-widest text-[#FF5B00] uppercase">SHOPPER SUPPORT</span>
-          <h3 className="text-lg font-black text-[#111827] mt-1">FREQUENTLY ASKED QUESTIONS</h3>
-
-          <div className="mt-6 border border-[#E8EDF2] rounded-[10px] px-4">
-            {(model.faq || []).length === 0 && (
-              <p className="text-xs text-slate-400 italic py-4">No FAQ entries added.</p>
-            )}
-            {(model.faq || []).map((fq, idx) => (
-              <details key={fq.id} className="border-b border-[#F1F1F3] last:border-0 py-3" open={idx === 0}>
-                <summary className="text-[12.5px] font-semibold text-[#1A1A2E] cursor-pointer list-none">{fq.q}</summary>
-                <p className="text-[12px] text-[#4B5563] leading-relaxed pt-2 pr-6">{fq.a}</p>
-              </details>
-            ))}
-          </div>
-        </div>
-
+      {/* Storefront-parity Visual Builder canvas */}
+      <main className="w-full pt-5 pb-8">
+        <BrandProfilePresentation
+          model={model}
+          mode="editor"
+          compareBrands={allBrands
+            .filter((b) => b.id !== model.id)
+            .slice(0, 4)
+            .map((b) => ({
+              id: b.id,
+              name: b.name,
+              category: b.category,
+              score: typeof (b as { ratings?: number }).ratings === "number" ? (b as { ratings?: number }).ratings : undefined,
+            }))}
+          onEditSection={(section) => {
+            if (section === "products") {
+              triggerToast("Manage products in Products & Inventory");
+              return;
+            }
+            if (section === "reviews") {
+              triggerToast("Reviews come from verified purchases and stay read-only here");
+              return;
+            }
+            if (section === "story") {
+              openEditDrawer("story");
+              return;
+            }
+            if (section === "creators") {
+              openEditDrawer("creators");
+              return;
+            }
+            openEditDrawer(section);
+          }}
+        />
       </main>
 
       {/* --- FLOATING MODULAR SLIDING DRAWER SYSTEM (480px) --- */}
@@ -1411,6 +1123,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                       {activeDrawer === "overview" && "Edit Overview Specs"}
                       {activeDrawer === "stores" && "Manage Where to Buy"}
                       {activeDrawer === "faq" && "Manage FAQ"}
+                      {activeDrawer === "story" && "Edit Brand Story"}
                     </h3>
                     <p className="text-[10px] font-mono text-slate-500">Live Workspace Profile Control Panel</p>
                   </div>
@@ -1418,11 +1131,11 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     onClick={() => setActiveDrawer(null)}
                     className="p-1.5 hover:bg-slate-100 rounded-lg text-app-text-secondary"
                   >
-                    ✕
+                    âœ•
                   </button>
                 </div>
 
-                {/* DRAWERS SECTON: 1. BRAND HEADER — WYSIWYG mini hero */}
+                {/* DRAWERS SECTON: 1. BRAND HEADER â€” WYSIWYG mini hero */}
                 {activeDrawer === "header" && (
                   <div className="space-y-5">
                     {/* Live mini hero preview */}
@@ -1494,7 +1207,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     <details className="group rounded-xl border border-slate-100 bg-slate-50/80 px-3 py-2">
                       <summary className="text-[10px] font-bold text-slate-500 cursor-pointer list-none flex items-center justify-between">
                         <span>Paste image URLs instead</span>
-                        <span className="text-slate-400 group-open:rotate-180 transition-transform">▾</span>
+                        <span className="text-slate-400 group-open:rotate-180 transition-transform">â–¾</span>
                       </summary>
                       <div className="mt-3 space-y-2">
                         <div className="space-y-1">
@@ -1503,7 +1216,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                             type="url"
                             value={headerForm.logo}
                             onChange={(e) => setHeaderForm((prev) => ({ ...prev, logo: e.target.value }))}
-                            placeholder="https://…"
+                            placeholder="https://â€¦"
                             className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700"
                           />
                         </div>
@@ -1513,7 +1226,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                             type="url"
                             value={headerForm.coverImage}
                             onChange={(e) => setHeaderForm((prev) => ({ ...prev, coverImage: e.target.value }))}
-                            placeholder="https://…"
+                            placeholder="https://â€¦"
                             className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700"
                           />
                         </div>
@@ -1661,7 +1374,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     {/* Creator detail add form */}
                     <div className="border border-indigo-100 bg-orange-50/5 p-4 rounded-2xl space-y-3">
                       <p className="text-xs font-black text-[#FF5B00] uppercase border-b border-indigo-100/40 pb-1.5">
-                        {editingCreatorId ? "📝 Update Creator Review Details" : "➕ Add Brand Partner Creator content"}
+                        {editingCreatorId ? "ðŸ“ Update Creator Review Details" : "âž• Add Brand Partner Creator content"}
                       </p>
                       
                       <div className="grid grid-cols-2 gap-3">
@@ -1757,7 +1470,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                         onClick={addOrUpdateCreator}
                         className="w-full mt-2 py-2 bg-app-card text-app-text-primary rounded-lg text-xs font-black uppercase tracking-wider hover:bg-slate-800"
                       >
-                        {editingCreatorId ? "💾 Save Review Item" : "＋ Add Creator Review"}
+                        {editingCreatorId ? "ðŸ’¾ Save Review Item" : "ï¼‹ Add Creator Review"}
                       </button>
                     </div>
 
@@ -1809,7 +1522,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                             </div>
                           </div>
                           <div className="flex justify-between items-center text-[10px] text-slate-500 mt-1">
-                            <span>Status: {p.enabled ? "Active ✓" : "Inactive 🔒"}</span>
+                            <span>Status: {p.enabled ? "Active âœ“" : "Inactive ðŸ”’"}</span>
                             <span>Target: All Customers</span>
                           </div>
                         </div>
@@ -1819,7 +1532,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     {/* Vouchers add Form wrapper details */}
                     <div className="border border-indigo-100 bg-orange-50/5 p-4 rounded-2xl space-y-3 text-left">
                       <p className="text-xs font-black text-[#FF5B00] uppercase border-b pb-1.5">
-                        {editingPromoId ? "📝 Update Promo Voucher" : "➕ CREATE PROMO VOUCHER"}
+                        {editingPromoId ? "ðŸ“ Update Promo Voucher" : "âž• CREATE PROMO VOUCHER"}
                       </p>
 
                       <div className="space-y-1">
@@ -1913,7 +1626,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                         onClick={addOrUpdatePromo}
                         className="w-full mt-2 py-2.5 bg-app-card text-app-text-primary rounded-lg text-xs font-black uppercase tracking-wider hover:bg-slate-800"
                       >
-                        {editingPromoId ? "💾 Update Coupon Voucher" : "＋ Create Coupon Voucher"}
+                        {editingPromoId ? "ðŸ’¾ Update Coupon Voucher" : "ï¼‹ Create Coupon Voucher"}
                       </button>
                     </div>
 
@@ -2042,7 +1755,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                               onClick={() => setOverviewForm(prev => ({ ...prev, services: prev.services.filter((_, i) => i !== idx) }))}
                               className="p-1 hover:bg-red-50 hover:underline text-xs text-red-600"
                             >
-                              ✕
+                              âœ•
                             </button>
                           </div>
                         ))}
@@ -2050,7 +1763,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                           onClick={() => setOverviewForm(prev => ({ ...prev, services: [...prev.services, "New Official Warranty"] }))}
                           className="text-[10px] text-orange-600 font-bold hover:underline"
                         >
-                          ＋ Add custom bullet spec...
+                          ï¼‹ Add custom bullet spec...
                         </button>
                       </div>
                     </div>
@@ -2066,7 +1779,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                               onClick={() => setOverviewForm(prev => ({ ...prev, bestForTags: prev.bestForTags.filter(t => t !== tag) }))}
                               className="font-black hover:text-red-700 text-[#8A00C4]"
                             >
-                              ✕
+                              âœ•
                             </button>
                           </span>
                         ))}
@@ -2084,7 +1797,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                               onClick={() => setOverviewForm(prev => ({ ...prev, bestForTags: [...prev.bestForTags, suggested] }))}
                               className="p-1 px-2.5 bg-slate-50 border hover:bg-slate-100 rounded-lg text-[9px] text-slate-600 font-bold"
                             >
-                              ＋ #{suggested}
+                              ï¼‹ #{suggested}
                             </button>
                           );
                         })}
@@ -2116,8 +1829,8 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                                   className="flex-1 p-2 border rounded-lg text-xs"
                                 />
                                 <div className="flex flex-col gap-0.5">
-                                  <button onClick={() => moveStoreEntry(col.key, idx, "up")} className="text-[10px] text-slate-400 hover:text-slate-700 leading-none">▲</button>
-                                  <button onClick={() => moveStoreEntry(col.key, idx, "down")} className="text-[10px] text-slate-400 hover:text-slate-700 leading-none">▼</button>
+                                  <button onClick={() => moveStoreEntry(col.key, idx, "up")} className="text-[10px] text-slate-400 hover:text-slate-700 leading-none">â–²</button>
+                                  <button onClick={() => moveStoreEntry(col.key, idx, "down")} className="text-[10px] text-slate-400 hover:text-slate-700 leading-none">â–¼</button>
                                 </div>
                               </div>
                               <input
@@ -2148,7 +1861,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                             onClick={() => addStoreEntry(col.key)}
                             className="text-[10px] text-orange-600 font-bold hover:underline"
                           >
-                            ＋ Add entry to {col.label.toLowerCase()}...
+                            ï¼‹ Add entry to {col.label.toLowerCase()}...
                           </button>
                         </div>
                       </div>
@@ -2171,8 +1884,8 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                             className="flex-1 p-2 border rounded-lg text-xs font-semibold"
                           />
                           <div className="flex flex-col gap-0.5">
-                            <button onClick={() => moveFaqEntry(idx, "up")} className="text-[10px] text-slate-400 hover:text-slate-700 leading-none">▲</button>
-                            <button onClick={() => moveFaqEntry(idx, "down")} className="text-[10px] text-slate-400 hover:text-slate-700 leading-none">▼</button>
+                            <button onClick={() => moveFaqEntry(idx, "up")} className="text-[10px] text-slate-400 hover:text-slate-700 leading-none">â–²</button>
+                            <button onClick={() => moveFaqEntry(idx, "down")} className="text-[10px] text-slate-400 hover:text-slate-700 leading-none">â–¼</button>
                           </div>
                         </div>
                         <textarea
@@ -2194,8 +1907,43 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                       onClick={addFaqEntry}
                       className="text-[10px] text-orange-600 font-bold hover:underline"
                     >
-                      ＋ Add FAQ entry...
+                      ï¼‹ Add FAQ entry...
                     </button>
+                  </div>
+                )}
+
+                {activeDrawer === "story" && (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[9px] font-black text-app-text-secondary uppercase mb-1">Mission</label>
+                      <textarea
+                        rows={3}
+                        value={storyForm.missionStatement}
+                        onChange={(e) => setStoryForm({ ...storyForm, missionStatement: e.target.value })}
+                        placeholder="What is this Brand’s mission?"
+                        className="w-full p-2.5 border rounded-xl text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black text-app-text-secondary uppercase mb-1">Brand Story</label>
+                      <textarea
+                        rows={6}
+                        value={storyForm.brandStory}
+                        onChange={(e) => setStoryForm({ ...storyForm, brandStory: e.target.value })}
+                        placeholder="Tell the Brand Story shown on the public storefront"
+                        className="w-full p-2.5 border rounded-xl text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[9px] font-black text-app-text-secondary uppercase mb-1">Values</label>
+                      <textarea
+                        rows={3}
+                        value={storyForm.values}
+                        onChange={(e) => setStoryForm({ ...storyForm, values: e.target.value })}
+                        placeholder="Brand values"
+                        className="w-full p-2.5 border rounded-xl text-xs"
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -2217,6 +1965,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     if (activeDrawer === "overview") saveOverviewSection();
                     if (activeDrawer === "stores") saveStoresSection();
                     if (activeDrawer === "faq") saveFaqSection();
+                    if (activeDrawer === "story") saveStorySection();
                   }}
                   className="flex-1 py-2.5 bg-[#FF5B00] hover:bg-[#E64A00] text-app-text-primary text-xs font-black uppercase tracking-wider rounded-xl transition shadow-lg"
                 >
@@ -2247,7 +1996,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               onClick={() => setToastMessage(null)}
               className="text-app-text-secondary hover:text-white font-mono ml-4 text-xs font-bold"
             >
-              ✕
+              âœ•
             </button>
           </motion.div>
         )}
@@ -2257,7 +2006,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
       {showExitModal && (
         <div className="fixed inset-0 z-[1000] bg-app-card/20 backdrop-blur-sm flex flex-col items-center justify-center p-4">
           <div className="bg-white border rounded-2xl p-6 max-w-sm w-full space-y-4 text-center">
-            <span className="text-3xl">⚠️</span>
+            <span className="text-3xl">âš ï¸</span>
             <h3 className="text-sm font-black uppercase text-[#111827]">Unsaved Profile changes exist</h3>
             <p className="text-xs text-[#6B7280] leading-relaxed">
               Exiting without saving will destroy temporary changes made in this session. Protect your brand modifications.
@@ -2298,7 +2047,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
       {showPublishModal && (
         <div className="fixed inset-0 z-[1000] bg-app-card/20 backdrop-blur-sm flex flex-col items-center justify-center p-4">
           <div className="bg-white border rounded-2xl p-6 max-w-sm w-full space-y-4 text-center">
-            <span className="text-3xl">🚀</span>
+            <span className="text-3xl">ðŸš€</span>
             <h3 className="text-sm font-black uppercase">Publish Profile updates Live?</h3>
             <p className="text-xs text-[#6B7280] leading-relaxed">
               This compiles the live storefront profile for public visitor reviews. All active deals and verified vouchers go live immediately inside Bangladesh.

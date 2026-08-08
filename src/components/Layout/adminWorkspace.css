@@ -1,0 +1,369 @@
+/**
+ * Admin Workspace shell — presentation parity with the live Admin CMS chrome.
+ * Reuses tokens from src/cms-mirror/tokens.css and src/index.css :root.
+ */
+
+@import '../../cms-mirror/tokens.css';
+
+.admin-workspace {
+  display: flex;
+  min-height: 100vh;
+  background: var(--cms-page-bg, var(--color-page-bg, #f0f2f5));
+  color: var(--cms-text, var(--color-text-primary, #111827));
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+
+.admin-workspace__sidebar {
+  width: var(--cms-sidebar-width, 240px);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--cms-sidebar-bg, var(--cms-gradient-dark-surface));
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.05);
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.admin-workspace__logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 22px 20px;
+}
+
+.admin-workspace__logo img {
+  height: 40px;
+  width: auto;
+  max-width: 180px;
+  display: block;
+  object-fit: contain;
+}
+
+.admin-workspace__nav-search {
+  padding: 0 22px 14px;
+  position: relative;
+}
+
+.admin-workspace__nav-search input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 0 28px 0 12px;
+  font-size: 11.5px;
+  color: #fff;
+  font-family: inherit;
+  outline: none;
+}
+
+.admin-workspace__nav-search input::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.admin-workspace__nav-search-clear {
+  position: absolute;
+  right: 32px;
+  top: 0;
+  height: 34px;
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.admin-workspace__nav-search-clear:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.admin-workspace__nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 12px 12px;
+}
+
+.admin-workspace__nav-group {
+  margin-bottom: 18px;
+}
+
+.admin-workspace__nav-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.35);
+  padding: 0 10px;
+  margin-bottom: 6px;
+}
+
+.admin-workspace__nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-bottom: 2px;
+  background: transparent;
+  border: 0;
+  width: 100%;
+  text-align: left;
+  text-decoration: none;
+  font-family: inherit;
+  transition: background 0.12s ease;
+}
+
+.admin-workspace__nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.admin-workspace__nav-item--active {
+  background: rgba(255, 91, 0, 0.16);
+}
+
+.admin-workspace__nav-item--active:hover {
+  background: rgba(255, 91, 0, 0.2);
+}
+
+.admin-workspace__nav-bar {
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: transparent;
+  flex-shrink: 0;
+}
+
+.admin-workspace__nav-item--active .admin-workspace__nav-bar {
+  background: var(--cms-accent, #ff5b00);
+}
+
+.admin-workspace__nav-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-workspace__nav-item--active .admin-workspace__nav-label {
+  font-weight: 700;
+  color: var(--cms-accent, #ff5b00);
+}
+
+.admin-workspace__nav-tag {
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--cms-accent, #ff5b00);
+  background: rgba(255, 91, 0, 0.14);
+  padding: 2px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.admin-workspace__sidebar-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-workspace__sidebar-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff5b00, #2323ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.admin-workspace__sidebar-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.admin-workspace__sidebar-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-workspace__sidebar-role {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.admin-workspace__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-workspace__topbar {
+  height: 64px;
+  background: var(--cms-gradient-chrome-header);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.admin-workspace__topbar-title {
+  font-family: 'Outfit', system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.2;
+}
+
+.admin-workspace__topbar-subtitle {
+  font-size: 11.5px;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 600;
+  line-height: 1.3;
+  margin-top: 1px;
+}
+
+.admin-workspace__topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.admin-workspace__topbar-search {
+  width: 260px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  padding: 0 14px;
+  font-size: 12.5px;
+  color: #fff;
+  font-family: inherit;
+  outline: none;
+}
+
+.admin-workspace__topbar-search::placeholder {
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.admin-workspace__topbar-icon {
+  position: relative;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.admin-workspace__topbar-badge {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  background: var(--cms-gradient-orange-button);
+  color: #fff;
+  font-size: 8.5px;
+  font-weight: 700;
+  border-radius: 8px;
+  padding: 1px 4px;
+  line-height: 1.2;
+}
+
+.admin-workspace__topbar-divider {
+  width: 1px;
+  height: 22px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.admin-workspace__content {
+  flex: 1;
+  padding: 28px 32px 60px;
+  background: var(--cms-page-bg, #f0f2f5);
+  min-width: 0;
+}
+
+/* Brand Studio content fit helpers inside the shared shell */
+.admin-workspace__content .aws-page {
+  max-width: none;
+}
+
+.admin-workspace__content .aws-page-card {
+  background: var(--cms-surface, #fff);
+  border: 1px solid var(--cms-border, #e8edf2);
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(0, 4, 53, 0.04);
+}
+
+.admin-workspace__content .aws-cta {
+  background: var(--cms-gradient-orange-button);
+  color: #fff;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+  box-shadow: 0 8px 18px rgba(180, 65, 28, 0.22);
+}
+
+.admin-workspace__content .aws-cta:hover {
+  filter: brightness(1.05);
+}
+
+@media (max-width: 900px) {
+  .admin-workspace__topbar-search {
+    display: none;
+  }
+
+  .admin-workspace__topbar {
+    padding: 0 16px;
+  }
+
+  .admin-workspace__content {
+    padding: 20px 16px 48px;
+  }
+}

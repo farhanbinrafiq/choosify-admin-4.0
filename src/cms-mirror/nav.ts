@@ -63,6 +63,8 @@ export function resolveAdminPageKey(pathname: string): string | null {
   // Prefix matches for nested detail routes
   if (pathname.startsWith('/admin/consumers')) return 'customers';
   if (pathname.startsWith('/admin/brand-profile')) return 'brandProfile';
+  // Admin Brand Profile (standalone CMS Brand Detail) — not Brand Studio editor
+  if (pathname.startsWith('/admin/brand-detail')) return 'brands';
   if (pathname.startsWith('/admin/brand-studio')) return 'brands';
   if (pathname.startsWith('/admin/sellers') || pathname.startsWith('/admin/brand-profiles')) return 'brands';
   if (pathname.startsWith('/admin/products')) return 'products';

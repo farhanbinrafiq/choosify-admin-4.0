@@ -130,6 +130,17 @@ export const catalogApi = {
   deleteBrand: async (id: string): Promise<void> => {
     await request<{ success: boolean }>(`/catalog/brands/${id}`, 'DELETE');
   },
+  /** Admin-only ES-005 Marketplace Access lifecycle transition. */
+  setBrandMarketplaceAccess: async (
+    id: string,
+    status: NonNullable<CatalogBrand['marketplaceStatus']>,
+  ): Promise<{ data: CatalogBrand; warning?: string | null }> => {
+    return request<{ success: boolean; data: CatalogBrand; warning?: string | null }>(
+      `/catalog/brands/${id}/marketplace-access`,
+      'PATCH',
+      { status },
+    );
+  },
 
   listDeals: async (): Promise<CatalogDeal[]> => {
     const result = await request<{ data: CatalogDeal[] }>('/catalog/deals');

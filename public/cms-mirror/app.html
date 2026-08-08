@@ -1138,7 +1138,7 @@ window.addEventListener('message', function(ev) {
             </sc-for>
           </div>
 
-          <sc-if value="{{ selectedRequest.isPersonalTab }}" hint-placeholder-val="{{ true }}">
+          <sc-if value="{{ selectedRequest.isPersonalTab }}" hint-placeholder-val="{{ false }}">
             <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:20px;margin-bottom:16px">
               <div style="font-size:14px;font-weight:800;margin-bottom:16px">Applicant Personal Info</div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
@@ -1346,7 +1346,7 @@ window.addEventListener('message', function(ev) {
       </sc-if>
 
       <!-- ===== BRAND DETAIL (Brand Studio profile CMS) ===== -->
-      <sc-if value="{{ isBrandDetail }}" hint-placeholder-val="{{ true }}">
+      <sc-if value="{{ isBrandDetail }}" hint-placeholder-val="{{ false }}">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
           <div>
             <div style="font-size:15px;font-weight:800">{{ selectedBrand.profileHeaderTitle }}</div>
@@ -2472,7 +2472,7 @@ window.addEventListener('message', function(ev) {
       </sc-if>
 
       <!-- ===== CREATOR PROFILE STUDIO ===== -->
-      <sc-if value="{{ isCreatorDetail }}" hint-placeholder-val="{{ true }}">
+      <sc-if value="{{ isCreatorDetail }}" hint-placeholder-val="{{ false }}">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
           <div>
             <div style="font-size:15px;font-weight:800">{{ selectedCreator.profileHeaderTitle }}</div>
@@ -4909,7 +4909,7 @@ window.addEventListener('message', function(ev) {
 
           <div style="display:flex;gap:10px;background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:10px;margin-bottom:12px">
             <input value="{{ contentSearchValue }}" sc-camel-on-change="{{ setContentSearch }}" placeholder="Search by title, creator..." style="flex:1;height:38px;border-radius:8px;border:1px solid #E8EDF2;padding:0 14px;font-size:12.5px">
-            <button style="background:linear-gradient(90deg,#B4411C,#D15E32);color:#fff;border:none;border-radius:8px;padding:0 18px;font-size:12px;font-weight:800;cursor:pointer">+ Add Content</button>
+            <button sc-camel-on-click="{{ openNewGuide }}" style="background:linear-gradient(90deg,#B4411C,#D15E32);color:#fff;border:none;border-radius:8px;padding:0 18px;font-size:12px;font-weight:800;cursor:pointer">+ Add Content</button>
           </div>
 
           <sc-if value="{{ contentSelectedCount }}" hint-placeholder-val="{{ false }}">
@@ -4938,6 +4938,7 @@ window.addEventListener('message', function(ev) {
                 <div style="display:flex;gap:6px;flex-wrap:wrap">
                   <sc-if value="{{ ct.featureIsBadge }}" hint-placeholder-val="{{ false }}"><span style="{{ ct.featureStyle }}">{{ ct.featureLabel }}</span></sc-if>
                   <sc-if value="{{ !ct.featureIsBadge }}" hint-placeholder-val="{{ true }}"><button sc-camel-on-click="{{ ct.onRequestFeature }}" style="{{ ct.featureStyle }}">{{ ct.featureLabel }}</button></sc-if>
+                  <button sc-camel-on-click="{{ ct.onEdit }}" style="background:#fff;border:1px solid #E8EDF2;color:#FF5B00;border-radius:6px;padding:7px 12px;font-size:10px;font-weight:800;cursor:pointer">EDIT</button>
                   <sc-if value="{{ ct.canApprove }}" hint-placeholder-val="{{ false }}"><button sc-camel-on-click="{{ ct.onApprove }}" style="background:#16A34A;color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:10px;font-weight:800;cursor:pointer">APPROVE</button></sc-if>
                   <button sc-camel-on-click="{{ ct.onFlag }}" style="background:#fff;border:1px solid #E8EDF2;color:#B45309;border-radius:6px;padding:7px 12px;font-size:10px;font-weight:800;cursor:pointer">{{ ct.flagLabel }}</button>
                   <button sc-camel-on-click="{{ ct.onBlock }}" style="background:#fff;border:1px solid #E8EDF2;color:#DC2626;border-radius:6px;padding:7px 12px;font-size:10px;font-weight:800;cursor:pointer">BLOCK</button>
@@ -8640,7 +8641,39 @@ class Component extends DCLogic {
       this.showToast('Save failed: ' + (err && err.message ? err.message : err));
     }
   };
-  startCreatorStudioEdit = () => this.setState({creatorStudioEditing: true});
+  startCreatorStudioEdit = () => {
+    // Creator Visual Builder cutover — leave Creator Management / Profile chrome in-iframe;
+    // only the storefront profile editor navigates to React.
+    const name = this.state.selectedCreatorName;
+    const raw = (Component.CREATORS || []).find((c) => c.name === name) || (Component.CREATORS || [])[0] || null;
+    const drafts = (this.state.creatorProfileDrafts && name && this.state.creatorProfileDrafts[name]) || {};
+    let catalogId = (raw && raw.catalogId) || drafts.catalogId || null;
+    const navigateToBuilder = (id) => {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({
+          type: 'cms-mirror-navigate',
+          path: '/admin/creator-studio/' + encodeURIComponent(String(id)) + '/edit',
+        }, '*');
+        return true;
+      }
+      return false;
+    };
+    if (catalogId && navigateToBuilder(catalogId)) return;
+    // Resolve catalog UUID by name/handle when seed rows lack catalogId.
+    if (window.CmsStudioProfileApi && typeof window.CmsStudioProfileApi.listCreators === 'function') {
+      window.CmsStudioProfileApi.listCreators().then((creators) => {
+        const match = (creators || []).find((x) =>
+          (raw && raw.handle && x.handle === raw.handle) ||
+          (raw && raw.name && x.name === raw.name) ||
+          (name && x.name === name)
+        );
+        if (match && navigateToBuilder(match.id)) return;
+        this.setState({ creatorStudioEditing: true });
+      }).catch(() => this.setState({ creatorStudioEditing: true }));
+      return;
+    }
+    this.setState({ creatorStudioEditing: true });
+  };
   stopCreatorStudioEdit = () => this.setState({creatorStudioEditing: false});
   startProductStudioEdit = () => this.setState({productStudioEditing: true});
   stopProductStudioEdit = () => this.setState({productStudioEditing: false});
@@ -8650,6 +8683,11 @@ class Component extends DCLogic {
       this.setState({ selectedBrandName: first, viewingClaimId: null });
       return;
     }
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'cms-mirror-navigate', path: '/admin/brand-studio', replace: true }, '*');
+      }
+    } catch (e) {}
     this.setState({selectedBrandName: null, viewingClaimId: null});
   };
   resolveActiveClaim = (label) => () => { const id = this.state.viewingClaimId; const claim = Component.BRAND_CLAIMS.find(c => c.id === id); if (claim) this.showToast(`${claim.brand} ownership claim ${label}`); this.setState({selectedBrandName: null, viewingClaimId: null, brandTab: 'claims'}); };
@@ -9373,6 +9411,12 @@ class Component extends DCLogic {
   setProductsView = (v) => () => this.setState({productsView: v});
   setProductSort = (e) => this.setState({productSort: e.target.value});
   openNewProduct = () => {
+    // Product Visual Builder cutover — leave Products & Inventory list in-iframe;
+    // only the single-product editor navigates to React.
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'cms-mirror-navigate', path: '/admin/products/new' }, '*');
+      return;
+    }
     const sellerBrand = ((window.__CMS_MIRROR_ROLE__ || '') === 'seller' && Component.BRANDS[0] && Component.BRANDS[0].name) || '';
     this.setState({productStudioEditing: false, editingProduct:{
     id:null,name:'',brand:sellerBrand,category:'',price:'',salePrice:'',stock:'',rating:0,status:'Draft',description:'',
@@ -9396,7 +9440,29 @@ class Component extends DCLogic {
     reviewsEnabled:true, reviewsText:'Tanvir Hasan | 5 | 2 weeks ago | The material quality is top-notch, worth every taka.\nNusrat Jahan | 4.8 | 1 month ago | Beautiful design, delivered on time, sizing chart accurate.',
   }, isNew:true});
   };
-  openEditProduct = (p) => this.setState({productStudioEditing: false, editingProduct:{
+  openEditProduct = async (p) => {
+    // Resolve catalog UUID so React Product Visual Builder loads real API data.
+    // Seed rows use numeric mirror ids; seller hydrate rows expose catalogId.
+    let catalogId = p && (p.catalogId || (typeof p.id === 'string' ? p.id : null));
+    if (!catalogId && window.CmsStudioProfileApi && typeof window.CmsStudioProfileApi.listProducts === 'function') {
+      try {
+        const products = await window.CmsStudioProfileApi.listProducts();
+        const match = (products || []).find((x) =>
+          (p.sku && (x.sku === p.sku || x.id === p.sku)) ||
+          (p.name && x.title === p.name)
+        );
+        if (match) catalogId = match.id;
+      } catch (_) {}
+    }
+    if (window.parent && window.parent !== window) {
+      const pathId = catalogId || p.id;
+      window.parent.postMessage({
+        type: 'cms-mirror-navigate',
+        path: '/admin/products/' + encodeURIComponent(String(pathId)) + '/edit',
+      }, '*');
+      return;
+    }
+    this.setState({productStudioEditing: false, editingProduct:{
     ...p, salePrice:p.price,
     checkout:{findInStore:true,buyOnline:true,heartLove:true,wishlist:true,chatSeller:true,bulkQuote:false,preOrder:false},
     partialPaymentEnabled: p.partialPaymentEnabled||false, partialPaymentPct: p.partialPaymentPct||30,
@@ -9413,6 +9479,39 @@ class Component extends DCLogic {
     addonsEnabled:false, addonsText:'',
     reviewsEnabled:false, reviewsText:'',
   }, isNew:false});
+  };
+  openNewGuide = () => {
+    // Guide Visual Builder cutover — Guide Management list stays in-iframe;
+    // only the single-guide editor navigates to React.
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: 'cms-mirror-navigate', path: '/admin/guides/new' }, '*');
+      return;
+    }
+  };
+  openEditGuide = async (c) => {
+    let catalogId = c && (c.catalogId || (typeof c.id === 'string' && String(c.id).indexOf('guide-') === 0 ? c.id : null));
+    if (!catalogId && typeof fetch === 'function') {
+      try {
+        const res = await fetch('/api/v1/catalog/guides', { credentials: 'include' });
+        if (res.ok) {
+          const json = await res.json();
+          const guides = (json && (json.data || json)) || [];
+          const match = (Array.isArray(guides) ? guides : []).find((x) =>
+            (c.title && x.title === c.title) || (c.slug && x.slug === c.slug)
+          );
+          if (match) catalogId = match.id;
+        }
+      } catch (_) {}
+    }
+    if (window.parent && window.parent !== window) {
+      const pathId = catalogId || c.id;
+      window.parent.postMessage({
+        type: 'cms-mirror-navigate',
+        path: '/admin/guides/' + encodeURIComponent(String(pathId)) + '/edit',
+      }, '*');
+      return;
+    }
+  };
   closeEdit = () => this.setState({editingProduct:null, productStudioEditing: false});
   toggleSection = (key) => this.setState(s => ({editingProduct:{...s.editingProduct, [key]: !s.editingProduct[key]}}));
   toggleCheckout = (key) => this.setState(s => ({editingProduct:{...s.editingProduct, checkout:{...s.editingProduct.checkout, [key]: !s.editingProduct.checkout[key]}}}));
@@ -10232,7 +10331,7 @@ class Component extends DCLogic {
     };
     cmsFeaturedProducts.hasItems = cmsFeaturedProducts.items.length > 0;
     cmsFeaturedProducts.hasMatches = cmsFeaturedProducts.matches.length > 0;
-    cmsFeaturedProducts.requests = this.state.featuredRequests.products.map(r => ({reqId:r.reqId, name:Component.PRODUCTS[r.idx].name, meta:Component.PRODUCTS[r.idx].brand, requestedBy:r.requestedBy, onApprove:()=>this.approveFeaturedRequest('products',r.reqId), onReject:()=>this.rejectFeaturedRequest('products',r.reqId)}));
+    cmsFeaturedProducts.requests = this.state.featuredRequests.products.filter(r => Component.PRODUCTS[r.idx]).map(r => ({reqId:r.reqId, name:Component.PRODUCTS[r.idx].name, meta:Component.PRODUCTS[r.idx].brand, requestedBy:r.requestedBy, onApprove:()=>this.approveFeaturedRequest('products',r.reqId), onReject:()=>this.rejectFeaturedRequest('products',r.reqId)}));
     cmsFeaturedProducts.hasRequests = cmsFeaturedProducts.requests.length > 0;
 
     const cmsBrandQ = (this.state.cmsBrandSearch||'').toLowerCase().trim();
@@ -10245,7 +10344,7 @@ class Component extends DCLogic {
     };
     cmsFeaturedBrands.hasItems = cmsFeaturedBrands.items.length > 0;
     cmsFeaturedBrands.hasMatches = cmsFeaturedBrands.matches.length > 0;
-    cmsFeaturedBrands.requests = this.state.featuredRequests.brands.map(r => ({reqId:r.reqId, name:Component.BRANDS[r.idx].name, meta:Component.BRANDS[r.idx].category, requestedBy:r.requestedBy, onApprove:()=>this.approveFeaturedRequest('brands',r.reqId), onReject:()=>this.rejectFeaturedRequest('brands',r.reqId)}));
+    cmsFeaturedBrands.requests = this.state.featuredRequests.brands.filter(r => Component.BRANDS[r.idx]).map(r => ({reqId:r.reqId, name:Component.BRANDS[r.idx].name, meta:Component.BRANDS[r.idx].category, requestedBy:r.requestedBy, onApprove:()=>this.approveFeaturedRequest('brands',r.reqId), onReject:()=>this.rejectFeaturedRequest('brands',r.reqId)}));
     cmsFeaturedBrands.hasRequests = cmsFeaturedBrands.requests.length > 0;
 
     const cmsCreatorQ = (this.state.cmsCreatorSearch||'').toLowerCase().trim();
@@ -10258,7 +10357,7 @@ class Component extends DCLogic {
     };
     cmsFeaturedCreators.hasItems = cmsFeaturedCreators.items.length > 0;
     cmsFeaturedCreators.hasMatches = cmsFeaturedCreators.matches.length > 0;
-    cmsFeaturedCreators.requests = this.state.featuredRequests.creators.map(r => ({reqId:r.reqId, name:Component.CREATORS[r.idx].name, meta:Component.CREATORS[r.idx].platform, requestedBy:r.requestedBy, onApprove:()=>this.approveFeaturedRequest('creators',r.reqId), onReject:()=>this.rejectFeaturedRequest('creators',r.reqId)}));
+    cmsFeaturedCreators.requests = this.state.featuredRequests.creators.filter(r => Component.CREATORS[r.idx]).map(r => ({reqId:r.reqId, name:Component.CREATORS[r.idx].name, meta:Component.CREATORS[r.idx].platform, requestedBy:r.requestedBy, onApprove:()=>this.approveFeaturedRequest('creators',r.reqId), onReject:()=>this.rejectFeaturedRequest('creators',r.reqId)}));
     cmsFeaturedCreators.hasRequests = cmsFeaturedCreators.requests.length > 0;
 
     const cmsDealQ = (this.state.cmsDealSearch||'').toLowerCase().trim();
@@ -10271,7 +10370,7 @@ class Component extends DCLogic {
     };
     cmsFeaturedDeals.hasItems = cmsFeaturedDeals.items.length > 0;
     cmsFeaturedDeals.hasMatches = cmsFeaturedDeals.matches.length > 0;
-    cmsFeaturedDeals.requests = this.state.featuredRequests.deals.map(r => ({reqId:r.reqId, name:Component.DEALS[r.idx].title, meta:`${Component.DEALS[r.idx].discount} off · ${Component.DEALS[r.idx].brand}`, requestedBy:r.requestedBy, onApprove:()=>this.approveFeaturedRequest('deals',r.reqId), onReject:()=>this.rejectFeaturedRequest('deals',r.reqId)}));
+    cmsFeaturedDeals.requests = this.state.featuredRequests.deals.filter(r => Component.DEALS[r.idx]).map(r => ({reqId:r.reqId, name:Component.DEALS[r.idx].title, meta:`${Component.DEALS[r.idx].discount} off · ${Component.DEALS[r.idx].brand}`, requestedBy:r.requestedBy, onApprove:()=>this.approveFeaturedRequest('deals',r.reqId), onReject:()=>this.rejectFeaturedRequest('deals',r.reqId)}));
     cmsFeaturedDeals.hasRequests = cmsFeaturedDeals.requests.length > 0;
 
     const CMS_GUIDE_CATALOG = ['Best Budget Smartphones 2026','Winter Fashion Guide','Top Kitchen Appliances','Skincare Starter Kit','Home Office Essentials','Monsoon Ready Footwear'];
@@ -11283,6 +11382,7 @@ class Component extends DCLogic {
         featureStyle: this.featureBtnState('guides', c.title, this.state.cmsFeaturedGuideTitles.includes(c.title)).style,
         featureIsBadge: this.featureBtnState('guides', c.title, this.state.cmsFeaturedGuideTitles.includes(c.title)).isBadge,
         onRequestFeature: () => this.requestFeature('guides', c.title, {title: c.title}),
+        onEdit: () => this.openEditGuide(c),
       }));
     const contentSelectedCount = this.state.contentSelectedIds.size;
     const contentStats = [
@@ -12673,6 +12773,7 @@ class Component extends DCLogic {
       togglePartialPayment: this.togglePartialPayment, setPartialPaymentPct: this.setPartialPaymentPct,
       drawerTitle: this.state.isNew ? 'Add Product' : 'Edit Product',
       closeEdit: this.closeEdit, saveProduct: this.saveProduct, openNewProduct: this.openNewProduct,
+      openNewGuide: this.openNewGuide, openEditGuide: this.openEditGuide,
       toggleSection: this.toggleSection, toggleCheckout: this.toggleCheckout,
       studioVariantGroups, studioAdditionalSpecs, studioCreatorVideos, studioStorePrices, studioSpecs,
       studioBoxContents, studioOverviewQuality, studioOverviewFeatures,
@@ -12891,9 +12992,35 @@ class Component extends DCLogic {
         return;
       }
       if (role === 'super_admin' || role === 'admin') {
+        // Merge live catalog onto seed rows — do NOT wipe the standalone brand list /
+        // Brand Profile demo data (story, stores, FAQs keyed by name). Append brands
+        // that exist only in the catalog so Admin still sees platform inventory.
         var allBrands = await api.listBrands();
         if (allBrands && allBrands.length) {
-          Component.BRANDS = allBrands.map(mapCatalogBrandToMirror);
+          var mapped = allBrands.map(mapCatalogBrandToMirror);
+          var liveByName = {};
+          mapped.forEach(function(m) { liveByName[m.name] = m; });
+          var seedNames = {};
+          Component.BRANDS = Component.BRANDS.map(function(seed) {
+            seedNames[seed.name] = true;
+            var live = liveByName[seed.name];
+            if (!live) return seed;
+            return Object.assign({}, seed, {
+              catalogId: live.catalogId,
+              sellerId: live.sellerId,
+              marketplaceAccess: live.marketplaceAccess,
+              claimStatus: live.claimStatus,
+              verified: seed.verified || live.verified,
+              logo: seed.logo || live.logo,
+              coverImage: seed.coverImage || live.coverImage,
+              tagline: seed.tagline || live.tagline,
+              description: seed.description || live.description,
+            });
+          });
+          mapped.forEach(function(m) {
+            if (!seedNames[m.name]) Component.BRANDS.push(m);
+          });
+          try { self.setState({}); } catch (_) {}
         }
         window.__CMS_MIRROR_HYDRATED__ = hydrateKey;
       }
@@ -13004,6 +13131,40 @@ window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
   if (__boot.role) window.__CMS_MIRROR_ROLE__ = __boot.role;
   window.addEventListener('message', function(e){
     if (!e.data) return;
+    if (e.data.type === 'cms-mirror-select-brand') {
+      var pickName = e.data.name || null;
+      var pickId = e.data.id || null;
+      function applySelect() {
+        var inst = window.__CMS_MIRROR_INSTANCE__;
+        if (!inst || typeof inst.selectBrand !== 'function') return false;
+        var brands = (typeof Component !== 'undefined' && Component.BRANDS) ? Component.BRANDS : [];
+        if (!pickName && pickId && brands.length) {
+          var found = brands.find(function(b) {
+            return b.id === pickId || b.catalogId === pickId || String(b.id) === String(pickId);
+          });
+          if (found) pickName = found.name;
+        }
+        if (!pickName && pickId && brands.length) {
+          // Fallback: slugify match against catalog-hydrated rows
+          var found2 = brands.find(function(b) {
+            return (b.slug && b.slug === pickId) || (b.name && b.name.toLowerCase() === String(pickId).toLowerCase());
+          });
+          if (found2) pickName = found2.name;
+        }
+        if (!pickName) return false;
+        if (typeof inst.setPage === 'function') inst.setPage('brands');
+        inst.selectBrand(pickName);
+        return true;
+      }
+      if (!applySelect()) {
+        var tries = 0;
+        var timer = setInterval(function() {
+          tries++;
+          if (applySelect() || tries > 40) clearInterval(timer);
+        }, 200);
+      }
+      return;
+    }
     if (e.data.type === 'cms-mirror-set-state') {
       if (e.data.role) window.__CMS_MIRROR_ROLE__ = e.data.role;
       if (e.data.allowedKeys) window.__CMS_MIRROR_ALLOWED_KEYS__ = e.data.allowedKeys;

@@ -71,6 +71,7 @@ Living engineering specification derived from the Blueprint. Documents are added
 | ES-005 | Workflow State Machines & Business Lifecycles | [ES-005-State-Machines.md](engineering/ES-005-State-Machines.md) | Added |
 | ES-006 | Notification Matrix & Multi-Channel Delivery Architecture | [ES-006-Notification-Matrix.md](engineering/ES-006-Notification-Matrix.md) | Added |
 | ES-007 | User Interface Architecture, Design System & UX Specifications | [ES-007-UI-Specification.md](engineering/ES-007-UI-Specification.md) | Added |
+| — | Management Surface ≠ Visual Builder (UI Freeze) | [UI-Management-vs-Visual-Builder-Freeze.md](engineering/UI-Management-vs-Visual-Builder-Freeze.md) | Added |
 | ES-008 | Security Architecture, Privacy & Compliance Engineering | [ES-008-Security.md](engineering/ES-008-Security.md) | Added |
 | ES-009 | Performance, Scalability & Infrastructure Engineering | [ES-009-Performance.md](engineering/ES-009-Performance.md) | Added |
 | ES-010 | DevOps, Deployment, CI/CD & Operational Excellence | [ES-010-Deployment.md](engineering/ES-010-Deployment.md) | Added |

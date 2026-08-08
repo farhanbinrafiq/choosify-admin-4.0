@@ -330,7 +330,7 @@ export default function BrandsStudioList() {
   ];
 
   return (
-    <div className="space-y-6 pb-12 text-left text-app-text-primary">
+    <div className="aws-page space-y-5 text-left text-app-text-primary">
       
       {/* Toast Alert */}
       <AnimatePresence>
@@ -339,7 +339,7 @@ export default function BrandsStudioList() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed top-8 right-8 z-[300] bg-app-card border border-app-accent/30 px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3"
+            className="fixed top-20 right-8 z-[300] bg-white border border-app-border px-6 py-4 rounded-[18px] shadow-2xl flex items-center gap-3"
           >
             <span className="w-2.5 h-2.5 bg-app-accent rounded-full animate-ping" />
             <span className="text-xs font-semibold text-app-text-primary uppercase tracking-wider">{toastMessage}</span>
@@ -347,18 +347,18 @@ export default function BrandsStudioList() {
         )}
       </AnimatePresence>
 
-      {/* Header section */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-app-card border border-app-border p-6 rounded-[2rem] shadow-xl">
+      {/* Header section — spacing/radius tuned to Admin Workspace shell */}
+      <div className="aws-page-card flex flex-col lg:flex-row lg:items-center justify-between gap-5 p-5">
         <div className="text-left space-y-1">
           <div className="flex items-center gap-2">
             <span className="bg-app-accent/15 text-app-accent p-1.5 rounded-lg border border-app-accent/20">
               <Globe className="w-5 h-5 text-app-accent" />
             </span>
-            <h1 className="text-xl font-bold text-app-text-primary tracking-tight">
+            <h1 className="text-[20px] font-extrabold tracking-tight text-app-text-primary" style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}>
               My Brand Studio (Visual Brand Profile CMS)
             </h1>
           </div>
-          <p className="text-app-text-secondary text-[12px] opacity-80">
+          <p className="text-app-text-secondary text-[12.5px]">
             Design pristine brand storefront homepages, reputation meters, and verified ambassador streams.
           </p>
         </div>
@@ -368,12 +368,12 @@ export default function BrandsStudioList() {
             <div className="relative">
               <button
                 onClick={() => setShowCreateForm(prev => !prev)}
-                className="flex items-center gap-2 bg-[#F4631E] hover:bg-orange-500 text-white px-5 py-3 rounded-xl text-xs font-bold transition-all shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-95"
+                className="aws-cta"
               >
                 <Plus className="w-4 h-4" /> Create Brand Experience
               </button>
               {showCreateForm && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-app-card border border-app-border rounded-2xl p-4 shadow-2xl z-[100] space-y-3">
+                <div className="absolute right-0 top-full mt-2 w-80 bg-white border border-app-border rounded-[18px] p-4 shadow-2xl z-[100] space-y-3">
                   <span className="text-[10px] font-black text-app-accent uppercase tracking-widest block">New Brand Experience</span>
                   
                   <div className="space-y-1">
@@ -382,7 +382,7 @@ export default function BrandsStudioList() {
                       value={newBrandName}
                       onChange={e => setNewBrandName(e.target.value)}
                       placeholder="Enter brand name..."
-                      className="w-full px-3 py-2 bg-white/5 border border-app-border rounded-lg text-[11px] font-medium text-app-text-primary outline-none focus:border-app-accent"
+                      className="w-full px-3 py-2 bg-[#F0F2F5] border border-app-border rounded-lg text-[11px] font-medium text-app-text-primary outline-none focus:border-app-accent"
                     />
                   </div>
 
@@ -392,7 +392,7 @@ export default function BrandsStudioList() {
                       value={newBrandCategory}
                       onChange={e => setNewBrandCategory(e.target.value)}
                       placeholder="e.g. Fashion, Electronics"
-                      className="w-full px-3 py-2 bg-white/5 border border-app-border rounded-lg text-[11px] font-medium text-app-text-primary outline-none focus:border-app-accent"
+                      className="w-full px-3 py-2 bg-[#F0F2F5] border border-app-border rounded-lg text-[11px] font-medium text-app-text-primary outline-none focus:border-app-accent"
                     />
                   </div>
 
@@ -412,11 +412,12 @@ export default function BrandsStudioList() {
                         }
                       }}
                       disabled={!newBrandName.trim()}
-                      className="px-3 py-1.5 bg-app-accent text-app-text-primary text-[10px] font-black uppercase rounded-lg hover:bg-orange-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      className="px-3 py-1.5 text-white text-[10px] font-black uppercase rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      style={{ background: 'linear-gradient(90deg,#B4411C,#D15E32)' }}
                     >Create</button>
                     <button
                       onClick={() => { setShowCreateForm(false); setNewBrandName(''); }}
-                      className="px-3 py-1.5 bg-white/5 text-app-text-secondary text-[10px] font-black uppercase rounded-lg hover:bg-white/10 transition-colors"
+                      className="px-3 py-1.5 bg-[#F1F3F5] text-app-text-secondary text-[10px] font-black uppercase rounded-lg hover:bg-[#E8EDF2] transition-colors"
                     >Cancel</button>
                   </div>
                 </div>
@@ -425,7 +426,7 @@ export default function BrandsStudioList() {
           ) : (
             <Link
               to="/admin/brand-studio/new"
-              className="flex items-center gap-2 bg-[#F4631E] hover:bg-orange-500 text-white px-5 py-3 rounded-xl text-xs font-bold transition-all shadow-lg shadow-orange-500/20 hover:scale-[1.02] active:scale-95"
+              className="aws-cta"
             >
               <Plus className="w-4 h-4" /> Create Brand Experience
             </Link>
@@ -435,14 +436,15 @@ export default function BrandsStudioList() {
 
       {/* SECTION SELECTOR / BRAND INTELLIGENCE TAB ROW */}
       {profile?.role === 'seller' && (
-        <div className="bg-app-card border border-app-border rounded-[2rem] p-2 shadow-xl flex gap-1.5 overflow-x-auto scrollbar-hide">
+        <div className="aws-page-card p-2 flex gap-1.5 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => setActiveSubTab("storefronts")}
-            className={`flex items-center gap-2 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-widest transition-all shrink-0${
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-[10px] text-[11.5px] font-extrabold uppercase tracking-widest transition-all shrink-0 ${
               activeSubTab === "storefronts"
-                ? "bg-app-accent text-white shadow-lg shadow-app-accent/20"
-                : "text-slate-400 hover:text-white hover:bg-white/5"
+                ? "text-white shadow-lg"
+                : "text-app-text-secondary hover:text-app-text-primary hover:bg-[#F1F3F5]"
             }`}
+            style={activeSubTab === "storefronts" ? { background: 'linear-gradient(90deg,#B4411C,#D15E32)' } : undefined}
           >
             <Edit3 className="w-4 h-4" /> Visual Builder
           </button>
@@ -454,7 +456,7 @@ export default function BrandsStudioList() {
         profile?.role === 'seller' ? (
           <div className="space-y-4">
             {allBrands.filter(b => sellerBrands.filter(r => r.seller_user_id === profile?.id).map(r => r.brand_id).includes(b.id)).length > 1 && (
-              <div className="bg-app-card border border-app-border p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="aws-page-card p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="text-left space-y-1">
                   <h3 className="text-sm font-bold text-app-text-primary">Active Brand Content Editor</h3>
                   <p className="text-[11px] text-app-text-secondary">Select which brand store you are currently designing with the Visual Builder.</p>
@@ -467,7 +469,7 @@ export default function BrandsStudioList() {
                       setActiveBrandId(e.target.value || null);
                       triggerToast(`✓ Switched brand editor context.`);
                     }}
-                    className="bg-[#05055C] border border-orange-500/20 text-xs font-bold text-app-text-primary px-4 py-2 rounded-xl outline-none focus:border-orange-500/50"
+                    className="bg-white border border-app-border text-xs font-bold text-app-text-primary px-4 py-2 rounded-[8px] outline-none focus:border-app-accent"
                   >
                     {allBrands.filter(b => sellerBrands.filter(r => r.seller_user_id === profile?.id).map(r => r.brand_id).includes(b.id)).map(b => (
                       <option key={b.id} value={b.id}>{b.name}</option>
@@ -480,12 +482,12 @@ export default function BrandsStudioList() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="bg-app-card border border-app-border rounded-3xl p-16 text-center text-app-text-secondary flex flex-col items-center justify-center gap-4"
+                className="aws-page-card p-16 text-center text-app-text-secondary flex flex-col items-center justify-center gap-4"
               >
-                <Globe className="w-12 h-12 text-slate-600" />
+                <Globe className="w-12 h-12 text-app-text-muted" />
                 <div className="space-y-1">
                   <h4 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">No Brands Yet</h4>
-                  <p className="text-[11px] text-slate-500 max-w-sm">Create your first Brand using the "Create Brand Experience" button above to open the Visual Builder.</p>
+                  <p className="text-[11px] text-app-text-muted max-w-sm">Create your first Brand using the "Create Brand Experience" button above to open the Visual Builder.</p>
                 </div>
               </motion.div>
             ) : (
@@ -496,37 +498,44 @@ export default function BrandsStudioList() {
           <>
           {/* Analytics stats row */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-app-card border border-app-border p-4 rounded-2xl">
+        <div className="aws-page-card p-4">
           <div className="text-xs text-app-text-secondary uppercase tracking-widest font-semibold">Registered Experiences</div>
           <div className="text-2xl font-black text-app-text-primary mt-1.5">{brands.length} Brands</div>
-          <p className="text-[10px] text-emerald-400 mt-1 flex items-center gap-1 font-mono">
+          <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1 font-mono">
             ● {brands.filter(b => b.status === "Live").length} LIVE AT CHOOSIFY.BD
           </p>
         </div>
 
-        <div className="bg-app-card border border-app-border p-4 rounded-2xl">
+        <div className="aws-page-card p-4">
           <div className="text-xs text-app-text-secondary uppercase tracking-widest font-semibold">Total Followers Pool</div>
-          <div className="text-2xl font-black text-[#00D4B2] mt-1.5">39.6K</div>
+          <div className="text-2xl font-black text-app-text-primary mt-1.5">
+            {brands.reduce((sum, b) => sum + (Number(String(b.followersCount).replace(/,/g, '')) || 0), 0).toLocaleString()}
+          </div>
           <p className="text-[10px] text-app-text-secondary mt-1 font-mono">Organic brand fans linked</p>
         </div>
 
-        <div className="bg-app-card border border-app-border p-4 rounded-2xl">
+        <div className="aws-page-card p-4">
           <div className="text-xs text-app-text-secondary uppercase tracking-widest font-semibold">Reputation Rating Pool</div>
           <div className="text-2xl font-black text-app-text-primary mt-1.5 flex items-center gap-1.5">
-            4.82 <Star className="w-5 h-5 fill-amber-400 text-amber-400 shrink-0" />
+            {brands.length
+              ? (brands.reduce((sum, b) => sum + (b.trustScore || 0), 0) / brands.length).toFixed(2)
+              : "—"}{" "}
+            <Star className="w-5 h-5 fill-amber-400 text-amber-400 shrink-0" />
           </div>
-          <p className="text-[10px] text-[#00D4B2] mt-1 font-mono">Passed enterprise standard</p>
+          <p className="text-[10px] text-emerald-600 mt-1 font-mono">From live catalog brands</p>
         </div>
 
-        <div className="bg-app-card border border-app-border p-4 rounded-2xl">
-          <div className="text-xs text-app-text-secondary uppercase tracking-widest font-semibold">Sandbox Schema Version</div>
-          <div className="text-2xl font-black text-app-text-primary mt-1.5 font-mono text-app-accent">v2.10.4</div>
-          <p className="text-[10px] text-app-text-secondary mt-1 font-mono">Production Engine Synced</p>
+        <div className="aws-page-card p-4">
+          <div className="text-xs text-app-text-secondary uppercase tracking-widest font-semibold">Draft Experiences</div>
+          <div className="text-2xl font-black text-app-text-primary mt-1.5 font-mono text-app-accent">
+            {brands.filter((b) => b.status === "Draft").length}
+          </div>
+          <p className="text-[10px] text-app-text-secondary mt-1 font-mono">Awaiting marketplace access</p>
         </div>
       </div>
 
       {/* Filter and layout triggers */}
-      <div className="bg-app-card border border-app-border p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="aws-page-card p-4 flex flex-col md:flex-row items-center justify-between gap-4">
         
         {/* Search Input */}
         <div className="w-full md:w-96 bg-[#05050C] border border-[#202030] rounded-xl flex items-center px-3.5 gap-2.5">

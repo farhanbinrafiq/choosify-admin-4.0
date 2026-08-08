@@ -1,0 +1,1 @@
+export { GuideDetailPresentation } from './GuideDetailPresentation';
