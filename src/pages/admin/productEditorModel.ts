@@ -44,6 +44,9 @@ export interface ProductEditorModel {
   colors: string[];
   sizes: string[];
   storageOptions: string[];
+  /** Persisted option/variant data — round-tripped; must not be wiped on publish. */
+  optionGroups: CatalogProductDetail['optionGroups'];
+  productVariants: CatalogProductDetail['productVariants'];
   publicReviews: Array<{ id: string; author: string; rating: number; comment: string }>;
   creatorVideos: Array<{ id: string; title: string; platform: string; thumbnail: string }>;
 }
@@ -81,6 +84,8 @@ export function createBlankProductModel(id = 'new'): ProductEditorModel {
     colors: [],
     sizes: [],
     storageOptions: [],
+    optionGroups: [],
+    productVariants: [],
     publicReviews: [],
     creatorVideos: [],
   };
@@ -201,6 +206,8 @@ export function mapCatalogProductToEditor(
     colors: optionColors,
     sizes: optionSizes,
     storageOptions: optionStorage,
+    optionGroups: Array.isArray(detail?.optionGroups) ? detail!.optionGroups : [],
+    productVariants: Array.isArray(detail?.productVariants) ? detail!.productVariants : [],
     publicReviews,
     creatorVideos,
   };
@@ -269,8 +276,8 @@ export function editorModelToDetailPayload(model: ProductEditorModel): Partial<C
     storeComparisonList: [],
     physicalStores: [],
     overviewBlocks,
-    optionGroups: [],
-    productVariants: [],
+    optionGroups: buildOptionGroupsFromModel(model),
+    productVariants: model.productVariants ?? [],
     creatorContent: model.creatorVideos.map((c) => ({
       id: c.id,
       platform: c.platform,
@@ -298,4 +305,43 @@ export function editorModelToDetailPayload(model: ProductEditorModel): Partial<C
     })),
     updatedAt: new Date().toISOString(),
   };
+}
+
+/** Merge color/size/storage editor fields with any other preserved option groups. */
+function buildOptionGroupsFromModel(
+  model: ProductEditorModel,
+): CatalogProductDetail['optionGroups'] {
+  const preserved = (model.optionGroups || []).filter(
+    (g) => !/^(color|size|storage|ram)$/i.test(g.name) && !/color|size|storage|ram/i.test(g.name),
+  );
+  const built: CatalogProductDetail['optionGroups'] = [...preserved];
+  if (model.colors.length) {
+    built.push({
+      id: model.optionGroups?.find((g) => /color/i.test(g.name))?.id || 'og-color',
+      name: 'Color',
+      displayType: 'swatch',
+      values: model.colors,
+    });
+  }
+  if (model.sizes.length) {
+    built.push({
+      id: model.optionGroups?.find((g) => /size/i.test(g.name))?.id || 'og-size',
+      name: 'Size',
+      displayType: 'pills',
+      values: model.sizes,
+    });
+  }
+  if (model.storageOptions.length) {
+    built.push({
+      id: model.optionGroups?.find((g) => /storage|ram/i.test(g.name))?.id || 'og-storage',
+      name: 'Storage',
+      displayType: 'pills',
+      values: model.storageOptions,
+    });
+  }
+  // If editor fields empty but we had option groups, keep originals (no wipe).
+  if (!built.length && model.optionGroups?.length) {
+    return model.optionGroups;
+  }
+  return built;
 }

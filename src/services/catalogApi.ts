@@ -6,9 +6,11 @@ import type {
   CatalogDeal,
   CatalogDealsBanner,
   CatalogGuide,
+  CatalogInventory,
   CatalogPlacement,
   CatalogProduct,
   CatalogProductDetail,
+  CatalogService,
   HomepageConfig,
   SiteConfig,
 } from '../types/catalog';
@@ -80,8 +82,19 @@ async function request<T>(path: string, method: HttpMethod = 'GET', body?: unkno
 }
 
 export const catalogApi = {
-  listProducts: async (): Promise<CatalogProduct[]> => {
-    const result = await request<{ data: CatalogProduct[] }>('/catalog/products');
+  listProducts: async (params?: {
+    brandId?: string;
+    status?: string;
+    productType?: string;
+    q?: string;
+  }): Promise<CatalogProduct[]> => {
+    const query = new URLSearchParams();
+    if (params?.brandId) query.set('brandId', params.brandId);
+    if (params?.status) query.set('status', params.status);
+    if (params?.productType) query.set('productType', params.productType);
+    if (params?.q) query.set('q', params.q);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const result = await request<{ data: CatalogProduct[] }>(`/catalog/products${suffix}`);
     return result.data;
   },
   createProduct: async (payload: Partial<CatalogProduct> & Record<string, unknown>): Promise<CatalogProduct> => {
@@ -97,6 +110,62 @@ export const catalogApi = {
   },
   deleteProduct: async (id: string): Promise<void> => {
     await request<{ success: boolean }>(`/catalog/products/${id}`, 'DELETE');
+  },
+  archiveProduct: async (id: string): Promise<CatalogProduct> => {
+    const result = await request<{ data: CatalogProduct }>(`/catalog/products/${id}/archive`, 'POST');
+    return result.data;
+  },
+  restoreProduct: async (id: string): Promise<CatalogProduct> => {
+    const result = await request<{ data: CatalogProduct }>(`/catalog/products/${id}/restore`, 'POST');
+    return result.data;
+  },
+  getProductInventory: async (
+    productId: string,
+    variantId?: string,
+  ): Promise<{ data: CatalogInventory; records: CatalogInventory[] }> => {
+    const q = variantId ? `?variantId=${encodeURIComponent(variantId)}` : '';
+    return request<{ data: CatalogInventory; records: CatalogInventory[] }>(
+      `/catalog/products/${productId}/inventory${q}`,
+    );
+  },
+  adjustProductInventory: async (
+    productId: string,
+    payload: {
+      variantId?: string;
+      quantity?: number;
+      delta?: number;
+      reservedQuantity?: number;
+      sku?: string;
+      lowStockThreshold?: number;
+      warehouseId?: string | null;
+    },
+  ): Promise<{ data: CatalogInventory; product?: CatalogProduct }> => {
+    return request<{ data: CatalogInventory; product?: CatalogProduct }>(
+      `/catalog/products/${productId}/inventory`,
+      'PATCH',
+      payload,
+    );
+  },
+  listServices: async (params?: { brandId?: string }): Promise<CatalogService[]> => {
+    const query = new URLSearchParams();
+    if (params?.brandId) query.set('brandId', params.brandId);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const result = await request<{ data: CatalogService[] }>(`/catalog/services${suffix}`);
+    return result.data;
+  },
+  createService: async (payload: Partial<CatalogService> & Record<string, unknown>): Promise<CatalogService> => {
+    const result = await request<{ data: CatalogService }>('/catalog/services', 'POST', payload);
+    return result.data;
+  },
+  updateService: async (
+    id: string,
+    payload: Partial<CatalogService> & Record<string, unknown>,
+  ): Promise<CatalogService> => {
+    const result = await request<{ data: CatalogService }>(`/catalog/services/${id}`, 'PATCH', payload);
+    return result.data;
+  },
+  deleteService: async (id: string): Promise<void> => {
+    await request<{ success: boolean }>(`/catalog/services/${id}`, 'DELETE');
   },
 
   listCategories: async (): Promise<CatalogCategory[]> => {

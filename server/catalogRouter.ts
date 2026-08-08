@@ -16,7 +16,6 @@ import {
   normalizeProductDetailInput,
 } from '../lib/vercel-catalog/catalogEditorialContract';
 import { normalizeSiteInput } from '../lib/vercel-catalog/catalogContract';
-import type { CatalogProduct } from '../src/types/catalog';
 import { resolveDealsBannerHref } from '../lib/vercel-catalog/dealsBannerUtils';
 import { uploadImageToCloudinary } from '../lib/vercel-catalog/mediaUpload';
 import { recordProductView, recordSearch } from './analytics/eventHooks';
@@ -36,6 +35,7 @@ import { hasPermission, hasRole } from './permissions/authorization';
 import { PERMISSIONS } from './permissions/permissions';
 import { ROLES } from './permissions/roles';
 import { draftStore, type DraftEntityType } from '../lib/vercel-catalog/draftStore';
+import type { CatalogProduct } from '../src/types/catalog';
 import type { CatalogBrand } from '../src/types/catalog';
 import type { Request, Response } from 'express';
 import {
@@ -46,8 +46,32 @@ import {
   listSellerCustomersFromOrders,
 } from './catalog/sellerWorkspace';
 import { sellerOwnsBrand } from './catalog/brandOwnership';
+import {
+  assertProductLifecycleTransition,
+  brandAllowsProductPublish,
+  isProductPubliclyEligible,
+  normalizeProductLifecycle,
+  ProductLifecycleError,
+  toPersistedProductStatus,
+} from './catalog/productLifecycle';
+import {
+  adjustInventory,
+  ensureInventoryRecord,
+  getInventoryRecord,
+  InventoryValidationError,
+  listInventoryForProduct,
+  syncProductStockFromInventory,
+} from './catalog/inventoryStore';
+import {
+  getService,
+  listServices,
+  normalizeServiceInput,
+  upsertService,
+  deleteService as deleteServiceRecord,
+} from './catalog/serviceStore';
 import { publishEvent } from './events/eventBus';
 import { operationsStore } from './operations/operationsStore';
+import { getCatalogPersistenceMode } from '../lib/vercel-catalog/catalogStore';
 
 export const catalogRouter = Router();
 
@@ -163,8 +187,8 @@ async function scopeProductsForRequest(req: Request, products: CatalogProduct[])
     return products.filter((p) => p.sellerId === req.userId);
   }
   const brands = await catalogStore.listBrands();
-  const visibleIds = new Set(brands.filter(brandIsMarketplaceVisible).map((b) => b.id));
-  return products.filter((p) => visibleIds.has(p.brandId) && p.status === 'live');
+  const brandById = new Map(brands.map((b) => [b.id, b]));
+  return products.filter((p) => isProductPubliclyEligible(p, brandById.get(p.brandId)));
 }
 
 async function scopeCreatorsForRequest(req: Request, creators: Awaited<ReturnType<typeof catalogStore.listCreators>>) {
@@ -229,6 +253,76 @@ function forbidUnlessOwnsProduct(
   return true;
 }
 
+/** Sellers must own the TARGET brand when brandId changes (or on create). */
+async function assertSellerOwnsTargetBrand(
+  req: Request,
+  res: Response,
+  brandId: string,
+): Promise<boolean> {
+  if (userIsPlatformAdmin(req)) return true;
+  if (!userIsSellerRole(req) || !req.userId) return true;
+  if (!brandId || !(await sellerOwnsBrand(req.userId, brandId))) {
+    res.status(403).json({
+      error: 'Products must belong to a brand you own. Open Brand Studio or claim a brand first.',
+    });
+    return false;
+  }
+  return true;
+}
+
+async function enforceProductLifecycleAndPublish(
+  req: Request,
+  existing: CatalogProduct | undefined,
+  next: CatalogProduct,
+): Promise<CatalogProduct> {
+  if (existing) {
+    assertProductLifecycleTransition(
+      existing.status,
+      next.status,
+      userIsPlatformAdmin(req) ? 'admin' : 'seller',
+    );
+  }
+
+  const nextLifecycle = normalizeProductLifecycle(next.status);
+  const prevLifecycle = existing ? normalizeProductLifecycle(existing.status) : 'draft';
+  const becomingActive = nextLifecycle === 'active' && prevLifecycle !== 'active';
+
+  if (becomingActive) {
+    const brand = (await catalogStore.listBrands()).find((b) => b.id === next.brandId);
+    if (!brandAllowsProductPublish(brand)) {
+      throw new ProductLifecycleError(
+        'Cannot publish product while Brand Marketplace Access is not granted',
+      );
+    }
+  }
+
+  // Always persist Active as legacy `live`.
+  return { ...next, status: toPersistedProductStatus(nextLifecycle) as CatalogProduct['status'] };
+}
+
+function emitProductEvent(
+  eventName: string,
+  req: Request,
+  product: CatalogProduct,
+  extra: Record<string, unknown> = {},
+) {
+  publishEvent({
+    eventName,
+    domain: 'Catalog',
+    producer: 'catalogRouter',
+    aggregateId: product.id,
+    actor: req.userId || 'anonymous',
+    payload: {
+      productId: product.id,
+      brandId: product.brandId,
+      sellerId: product.sellerId,
+      status: product.status,
+      lifecycle: normalizeProductLifecycle(product.status),
+      ...extra,
+    },
+  });
+}
+
 /**
  * Draft/version writes: product drafts are seller-owned; brand/creator/guide need CMS_EDIT.
  */
@@ -284,6 +378,7 @@ const filterProducts = (products: CatalogProduct[], query: Record<string, unknow
   const brandId = typeof query.brandId === 'string' ? query.brandId : '';
   const status = typeof query.status === 'string' ? query.status : '';
   const modeType = typeof query.modeType === 'string' ? query.modeType : '';
+  const productType = typeof query.productType === 'string' ? query.productType : '';
 
   return products.filter((product) => {
     if (q) {
@@ -292,8 +387,14 @@ const filterProducts = (products: CatalogProduct[], query: Record<string, unknow
     }
     if (categoryId && product.categoryId !== categoryId) return false;
     if (brandId && product.brandId !== brandId) return false;
-    if (status && product.status !== status) return false;
+    if (status) {
+      const want = normalizeProductLifecycle(status);
+      const have = normalizeProductLifecycle(product.status);
+      // Accept live/active interchangeably for filters.
+      if (want !== have) return false;
+    }
     if (modeType && product.modeType !== modeType) return false;
+    if (productType && (product.productType || 'physical') !== productType) return false;
     return true;
   });
 };
@@ -453,22 +554,37 @@ catalogRouter.get(
 catalogRouter.post('/catalog/products', ...requireProductCreate, async (req, res) => {
   try {
     const context = await buildProductNormalizeContext();
-    const normalized = stampSellerOwnershipOnCreate(
+    let normalized = stampSellerOwnershipOnCreate(
       req,
       normalizeProductInput(req.body, undefined, context),
     );
-    // Sellers may only create products under a brand they own — never auto-claim seeded brands.
-    if (userIsSellerRole(req) && req.userId && !userIsPlatformAdmin(req)) {
-      if (!normalized.brandId || !(await sellerOwnsBrand(req.userId, normalized.brandId))) {
-        res.status(403).json({
-          error: 'Products must belong to a brand you own. Open Brand Studio or claim a brand first.',
-        });
-        return;
-      }
+    if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;
+    normalized = await enforceProductLifecycleAndPublish(req, undefined, normalized);
+    // New products default to draft unless explicitly transitioning with eligibility.
+    if (
+      !userIsPlatformAdmin(req) &&
+      normalizeProductLifecycle(normalized.status) === 'active' &&
+      normalizeProductLifecycle((req.body as { status?: string })?.status || 'draft') === 'active'
+    ) {
+      // already validated in enforceProductLifecycleAndPublish
     }
     const saved = await catalogStore.upsertProduct(normalized);
+    await ensureInventoryRecord({
+      productId: saved.id,
+      quantity: Math.max(0, saved.stock),
+      sku: typeof (req.body as { sku?: string })?.sku === 'string' ? (req.body as { sku: string }).sku : undefined,
+    });
+    await syncProductStockFromInventory(saved.id);
+    emitProductEvent('ProductCreated', req, saved);
+    if (normalizeProductLifecycle(saved.status) === 'active') {
+      emitProductEvent('ProductPublished', req, saved);
+    }
     res.status(201).json({ success: true, data: saved });
   } catch (error) {
+    if (error instanceof ProductLifecycleError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid product payload') });
   }
 });
@@ -478,14 +594,37 @@ catalogRouter.put('/catalog/products/:id', ...requireProductEdit, async (req, re
     const existing = await catalogStore.getProduct(req.params.id);
     if (!forbidUnlessOwnsProduct(req, res, existing)) return;
     const context = await buildProductNormalizeContext(req.params.id);
-    const normalized = preserveProductOwnershipOnUpdate(
+    let normalized = preserveProductOwnershipOnUpdate(
       req,
       existing,
       normalizeProductInput({ ...req.body, id: req.params.id }, existing, context),
     );
+    if (normalized.brandId !== existing.brandId) {
+      if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;
+    }
+    normalized = await enforceProductLifecycleAndPublish(req, existing, normalized);
     const saved = await catalogStore.upsertProduct(normalized);
+    await ensureInventoryRecord({ productId: saved.id, quantity: Math.max(0, saved.stock) });
+    await syncProductStockFromInventory(saved.id);
+    emitProductEvent('ProductUpdated', req, saved);
+    if (
+      normalizeProductLifecycle(existing.status) !== 'active' &&
+      normalizeProductLifecycle(saved.status) === 'active'
+    ) {
+      emitProductEvent('ProductPublished', req, saved);
+    }
+    if (normalizeProductLifecycle(saved.status) === 'archived') {
+      emitProductEvent('ProductArchived', req, saved);
+    }
+    if (normalizeProductLifecycle(saved.status) === 'suspended') {
+      emitProductEvent('ProductSuspended', req, saved);
+    }
     res.json({ success: true, data: saved });
   } catch (error) {
+    if (error instanceof ProductLifecycleError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid product payload') });
   }
 });
@@ -495,14 +634,45 @@ catalogRouter.patch('/catalog/products/:id', ...requireProductEdit, async (req, 
     const existing = await catalogStore.getProduct(req.params.id);
     if (!forbidUnlessOwnsProduct(req, res, existing)) return;
     const context = await buildProductNormalizeContext(req.params.id);
-    const normalized = preserveProductOwnershipOnUpdate(
+    let normalized = preserveProductOwnershipOnUpdate(
       req,
       existing,
       normalizeProductInput({ ...existing, ...req.body, id: req.params.id }, existing, context),
     );
+    if (normalized.brandId !== existing.brandId) {
+      if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;
+    }
+    normalized = await enforceProductLifecycleAndPublish(req, existing, normalized);
     const saved = await catalogStore.upsertProduct(normalized);
+    if (typeof (req.body as { stock?: number })?.stock === 'number') {
+      await ensureInventoryRecord({ productId: saved.id, quantity: Math.max(0, saved.stock) });
+      await syncProductStockFromInventory(saved.id);
+    }
+    emitProductEvent('ProductUpdated', req, saved);
+    if (
+      normalizeProductLifecycle(existing.status) !== 'active' &&
+      normalizeProductLifecycle(saved.status) === 'active'
+    ) {
+      emitProductEvent('ProductPublished', req, saved);
+    }
+    if (
+      normalizeProductLifecycle(existing.status) === 'archived' &&
+      normalizeProductLifecycle(saved.status) === 'active'
+    ) {
+      emitProductEvent('ProductRestored', req, saved);
+    }
+    if (normalizeProductLifecycle(saved.status) === 'archived') {
+      emitProductEvent('ProductArchived', req, saved);
+    }
+    if (normalizeProductLifecycle(saved.status) === 'suspended') {
+      emitProductEvent('ProductSuspended', req, saved);
+    }
     res.json({ success: true, data: saved });
   } catch (error) {
+    if (error instanceof ProductLifecycleError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid product patch payload') });
   }
 });
@@ -512,9 +682,178 @@ catalogRouter.delete('/catalog/products/:id', ...requireProductDelete, async (re
     const existing = await catalogStore.getProduct(req.params.id);
     if (!forbidUnlessOwnsProduct(req, res, existing)) return;
     await catalogStore.deleteProduct(req.params.id);
+    emitProductEvent('ProductDeleted', req, existing);
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to delete product' });
+  }
+});
+
+catalogRouter.post('/catalog/products/:id/archive', ...requireProductEdit, async (req, res) => {
+  try {
+    const existing = await catalogStore.getProduct(req.params.id);
+    if (!forbidUnlessOwnsProduct(req, res, existing)) return;
+    assertProductLifecycleTransition(existing.status, 'archived', userIsPlatformAdmin(req) ? 'admin' : 'seller');
+    const saved = await catalogStore.upsertProduct({
+      ...existing,
+      status: 'archived',
+      updatedAt: new Date().toISOString(),
+    });
+    emitProductEvent('ProductArchived', req, saved);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    if (error instanceof ProductLifecycleError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to archive product' });
+  }
+});
+
+catalogRouter.post('/catalog/products/:id/restore', ...requireProductEdit, async (req, res) => {
+  try {
+    const existing = await catalogStore.getProduct(req.params.id);
+    if (!forbidUnlessOwnsProduct(req, res, existing)) return;
+    assertProductLifecycleTransition(existing.status, 'active', userIsPlatformAdmin(req) ? 'admin' : 'seller');
+    const brand = (await catalogStore.listBrands()).find((b) => b.id === existing.brandId);
+    if (!brandAllowsProductPublish(brand)) {
+      res.status(400).json({
+        error: 'Cannot restore product to Active while Brand Marketplace Access is not granted',
+      });
+      return;
+    }
+    const saved = await catalogStore.upsertProduct({
+      ...existing,
+      status: toPersistedProductStatus('active') as CatalogProduct['status'],
+      updatedAt: new Date().toISOString(),
+    });
+    emitProductEvent('ProductRestored', req, saved);
+    emitProductEvent('ProductPublished', req, saved);
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    if (error instanceof ProductLifecycleError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to restore product' });
+  }
+});
+
+catalogRouter.get('/catalog/products/:id/inventory', ...requireProductEdit, async (req, res) => {
+  try {
+    const product = await catalogStore.getProduct(req.params.id);
+    if (!forbidUnlessOwnsProduct(req, res, product)) return;
+    const variantId = typeof req.query.variantId === 'string' ? req.query.variantId : undefined;
+    let record = await getInventoryRecord(product.id, variantId);
+    if (!record && !variantId) {
+      record = await ensureInventoryRecord({ productId: product.id, quantity: Math.max(0, product.stock) });
+    }
+    if (!record) {
+      res.status(404).json({ error: 'Inventory record not found' });
+      return;
+    }
+    res.json({ success: true, data: record, records: await listInventoryForProduct(product.id) });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load inventory' });
+  }
+});
+
+catalogRouter.patch('/catalog/products/:id/inventory', ...requireProductEdit, async (req, res) => {
+  try {
+    const product = await catalogStore.getProduct(req.params.id);
+    if (!forbidUnlessOwnsProduct(req, res, product)) return;
+
+    const body = (req.body ?? {}) as {
+      variantId?: string;
+      quantity?: number;
+      delta?: number;
+      reservedQuantity?: number;
+      sku?: string;
+      lowStockThreshold?: number;
+      warehouseId?: string | null;
+    };
+
+    if (body.variantId) {
+      const detail = await catalogStore.getProductDetail(product.id);
+      const variant = detail?.productVariants?.find((v) => v.id === body.variantId);
+      if (!variant) {
+        res.status(400).json({ error: 'Variant does not belong to this product' });
+        return;
+      }
+    }
+
+    const record = await adjustInventory({
+      productId: product.id,
+      variantId: body.variantId,
+      quantity: body.quantity,
+      delta: body.delta,
+      reservedQuantity: body.reservedQuantity,
+      sku: body.sku,
+      lowStockThreshold: body.lowStockThreshold,
+      warehouseId: body.warehouseId,
+      allowNegative: false,
+    });
+
+    if (body.variantId) {
+      const detail = await catalogStore.getProductDetail(product.id);
+      if (detail?.productVariants) {
+        const productVariants = detail.productVariants.map((v) =>
+          v.id === body.variantId
+            ? { ...v, stock: record.availableQuantity, sku: body.sku ?? v.sku }
+            : v,
+        );
+        await catalogStore.upsertProductDetail({
+          ...detail,
+          productVariants,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    }
+
+    const savedProduct = (await syncProductStockFromInventory(product.id)) || product;
+
+    publishEvent({
+      eventName: 'InventoryChanged',
+      domain: 'Inventory',
+      producer: 'catalogRouter',
+      aggregateId: product.id,
+      actor: req.userId || 'anonymous',
+      payload: {
+        productId: product.id,
+        variantId: body.variantId,
+        quantity: record.quantity,
+        availableQuantity: record.availableQuantity,
+        inventoryState: record.inventoryState,
+      },
+    });
+    if (record.inventoryState === 'low_stock') {
+      publishEvent({
+        eventName: 'InventoryLow',
+        domain: 'Inventory',
+        producer: 'catalogRouter',
+        aggregateId: product.id,
+        actor: req.userId || 'anonymous',
+        payload: { productId: product.id, availableQuantity: record.availableQuantity },
+      });
+    }
+    if (record.inventoryState === 'out_of_stock') {
+      publishEvent({
+        eventName: 'InventoryOutOfStock',
+        domain: 'Inventory',
+        producer: 'catalogRouter',
+        aggregateId: product.id,
+        actor: req.userId || 'anonymous',
+        payload: { productId: product.id },
+      });
+    }
+
+    res.json({ success: true, data: record, product: savedProduct });
+  } catch (error) {
+    if (error instanceof InventoryValidationError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to adjust inventory' });
   }
 });
 
@@ -524,6 +863,198 @@ catalogRouter.get('/catalog/categories', async (_req, res) => {
     res.json({ data: categories });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list categories' });
+  }
+});
+
+/* ─── Service catalog foundation (Sprint 3; no booking engine) ─── */
+
+async function scopeServicesForRequest(
+  req: Request,
+  rows: Awaited<ReturnType<typeof listServices>>,
+) {
+  if (userIsPlatformAdmin(req) || hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)) {
+    return rows;
+  }
+  if (userIsSellerRole(req) && req.userId) {
+    return rows.filter((s) => s.sellerId === req.userId);
+  }
+  const brands = await catalogStore.listBrands();
+  const brandById = new Map(brands.map((b) => [b.id, b]));
+  return rows.filter((s) => {
+    const brand = brandById.get(s.brandId);
+    if (!brand || !brandIsMarketplaceVisible(brand)) return false;
+    const lifecycle = normalizeProductLifecycle(s.status);
+    return lifecycle === 'active' || lifecycle === 'out_of_stock';
+  });
+}
+
+catalogRouter.get('/catalog/persistence-mode', (_req, res) => {
+  res.json({
+    mode: getCatalogPersistenceMode(),
+    note:
+      getCatalogPersistenceMode() === 'firestore-admin'
+        ? 'Production-safe Firestore catalog persistence'
+        : 'Dev memory adapter with disk snapshot under .data/catalog-memory-snapshot.json',
+  });
+});
+
+catalogRouter.get('/catalog/services', softAuthenticateRequest, async (req, res) => {
+  try {
+    const all = await scopeServicesForRequest(req, await listServices());
+    const brandId = typeof req.query.brandId === 'string' ? req.query.brandId : '';
+    const filtered = brandId ? all.filter((s) => s.brandId === brandId) : all;
+    const limit = parseLimit(req.query.limit, 100);
+    const offset = parseOffset(req.query.offset);
+    res.json({
+      data: filtered.slice(offset, offset + limit),
+      meta: { total: filtered.length, limit, offset },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list services' });
+  }
+});
+
+catalogRouter.get('/catalog/services/:id', softAuthenticateRequest, async (req, res) => {
+  try {
+    const service = await getService(req.params.id);
+    if (!service) {
+      res.status(404).json({ error: 'Service not found' });
+      return;
+    }
+    const scoped = await scopeServicesForRequest(req, [service]);
+    if (!scoped.length) {
+      res.status(404).json({ error: 'Service not found' });
+      return;
+    }
+    res.json(service);
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get service' });
+  }
+});
+
+catalogRouter.post('/catalog/services', ...requireProductCreate, async (req, res) => {
+  try {
+    const existingSlugs = (await listServices()).map((s) => s.slug);
+    let normalized = normalizeServiceInput(req.body, undefined, { existingSlugs });
+    if (userIsSellerRole(req) && req.userId && !userIsPlatformAdmin(req)) {
+      normalized = { ...normalized, sellerId: req.userId };
+      if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;
+    }
+    if (normalizeProductLifecycle(normalized.status) === 'active') {
+      const brand = (await catalogStore.listBrands()).find((b) => b.id === normalized.brandId);
+      if (!brandAllowsProductPublish(brand)) {
+        res.status(400).json({
+          error: 'Cannot publish service while Brand Marketplace Access is not granted',
+        });
+        return;
+      }
+    }
+    const brands = await catalogStore.listBrands();
+    const brand = brands.find((b) => b.id === normalized.brandId);
+    if (brand) normalized = { ...normalized, brandName: brand.name };
+    const saved = await upsertService(normalized);
+    publishEvent({
+      eventName: 'ServiceCreated',
+      domain: 'Catalog',
+      producer: 'catalogRouter',
+      aggregateId: saved.id,
+      actor: req.userId || 'anonymous',
+      payload: { serviceId: saved.id, brandId: saved.brandId, sellerId: saved.sellerId },
+    });
+    res.status(201).json({ success: true, data: saved });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid service payload' });
+  }
+});
+
+catalogRouter.patch('/catalog/services/:id', ...requireProductEdit, async (req, res) => {
+  try {
+    const existing = await getService(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Service not found' });
+      return;
+    }
+    if (!userIsPlatformAdmin(req)) {
+      if (!req.userId || !userIsSellerRole(req) || existing.sellerId !== req.userId) {
+        res.status(403).json({ error: 'Not authorized to modify this service' });
+        return;
+      }
+    }
+    const existingSlugs = (await listServices())
+      .filter((s) => s.id !== existing.id)
+      .map((s) => s.slug);
+    let normalized = normalizeServiceInput({ ...existing, ...req.body, id: existing.id }, existing, {
+      existingSlugs,
+    });
+    if (!userIsPlatformAdmin(req)) {
+      normalized = { ...normalized, sellerId: existing.sellerId };
+    }
+    if (normalized.brandId !== existing.brandId) {
+      if (!(await assertSellerOwnsTargetBrand(req, res, normalized.brandId))) return;
+    }
+    if (
+      normalizeProductLifecycle(existing.status) !== normalizeProductLifecycle(normalized.status)
+    ) {
+      assertProductLifecycleTransition(
+        existing.status,
+        normalized.status,
+        userIsPlatformAdmin(req) ? 'admin' : 'seller',
+      );
+    }
+    if (
+      normalizeProductLifecycle(normalized.status) === 'active' &&
+      normalizeProductLifecycle(existing.status) !== 'active'
+    ) {
+      const brand = (await catalogStore.listBrands()).find((b) => b.id === normalized.brandId);
+      if (!brandAllowsProductPublish(brand)) {
+        res.status(400).json({
+          error: 'Cannot publish service while Brand Marketplace Access is not granted',
+        });
+        return;
+      }
+    }
+    normalized = {
+      ...normalized,
+      status: toPersistedProductStatus(
+        normalizeProductLifecycle(normalized.status),
+      ) as typeof normalized.status,
+    };
+    const saved = await upsertService(normalized);
+    publishEvent({
+      eventName: 'ServiceUpdated',
+      domain: 'Catalog',
+      producer: 'catalogRouter',
+      aggregateId: saved.id,
+      actor: req.userId || 'anonymous',
+      payload: { serviceId: saved.id, brandId: saved.brandId, status: saved.status },
+    });
+    res.json({ success: true, data: saved });
+  } catch (error) {
+    if (error instanceof ProductLifecycleError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid service patch' });
+  }
+});
+
+catalogRouter.delete('/catalog/services/:id', ...requireProductDelete, async (req, res) => {
+  try {
+    const existing = await getService(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Service not found' });
+      return;
+    }
+    if (!userIsPlatformAdmin(req)) {
+      if (!req.userId || !userIsSellerRole(req) || existing.sellerId !== req.userId) {
+        res.status(403).json({ error: 'Not authorized to delete this service' });
+        return;
+      }
+    }
+    await deleteServiceRecord(existing.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to delete service' });
   }
 });
 
@@ -1305,6 +1836,37 @@ catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, 
       existing || undefined,
     );
     const saved = await catalogStore.upsertProductDetail(normalized);
+    const prevIds = new Set((existing?.productVariants ?? []).map((v) => v.id));
+    for (const variant of saved.productVariants ?? []) {
+      if (!prevIds.has(variant.id)) {
+        publishEvent({
+          eventName: 'VariantCreated',
+          domain: 'Catalog',
+          producer: 'catalogRouter',
+          aggregateId: product.id,
+          actor: req.userId || 'anonymous',
+          payload: { productId: product.id, variantId: variant.id, sku: variant.sku },
+        });
+        if (typeof variant.stock === 'number') {
+          await ensureInventoryRecord({
+            productId: product.id,
+            variantId: variant.id,
+            sku: variant.sku,
+            quantity: Math.max(0, variant.stock),
+          });
+        }
+      } else {
+        publishEvent({
+          eventName: 'VariantUpdated',
+          domain: 'Catalog',
+          producer: 'catalogRouter',
+          aggregateId: product.id,
+          actor: req.userId || 'anonymous',
+          payload: { productId: product.id, variantId: variant.id, sku: variant.sku },
+        });
+      }
+    }
+    await syncProductStockFromInventory(product.id);
     res.json({ success: true, data: saved });
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid product detail payload') });
@@ -1326,6 +1888,17 @@ catalogRouter.patch('/catalog/product-details/:productId', ...requireProductEdit
       existing,
     );
     const saved = await catalogStore.upsertProductDetail(normalized);
+    const prevIds = new Set((existing.productVariants ?? []).map((v) => v.id));
+    for (const variant of saved.productVariants ?? []) {
+      publishEvent({
+        eventName: prevIds.has(variant.id) ? 'VariantUpdated' : 'VariantCreated',
+        domain: 'Catalog',
+        producer: 'catalogRouter',
+        aggregateId: product.id,
+        actor: req.userId || 'anonymous',
+        payload: { productId: product.id, variantId: variant.id, sku: variant.sku },
+      });
+    }
     res.json({ success: true, data: saved });
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid product detail patch payload') });

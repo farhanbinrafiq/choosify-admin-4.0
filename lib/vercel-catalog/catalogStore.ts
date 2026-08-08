@@ -5,9 +5,11 @@ import type {
   CatalogCreator,
   CatalogDeal,
   CatalogGuide,
+  CatalogInventory,
   CatalogPlacement,
   CatalogProduct,
   CatalogProductDetail,
+  CatalogService,
   HomepageConfig,
   SiteConfig,
 } from './catalogTypes';
@@ -39,6 +41,8 @@ const GUIDES_COLLECTION = 'catalog_guides';
 const PLACEMENTS_COLLECTION = 'catalog_placements';
 const PRODUCT_DETAILS_COLLECTION = 'catalog_product_details';
 const BRAND_POSTS_COLLECTION = 'catalog_brand_posts';
+const INVENTORY_COLLECTION = 'catalog_inventory';
+const SERVICES_COLLECTION = 'catalog_services';
 
 const useAdminFirestore =
   process.env.CATALOG_USE_FIRESTORE === 'true' && hasFirebaseAdminCredentials();
@@ -75,6 +79,10 @@ async function listCollection<T>(collectionName: string): Promise<T[]> {
         return admin.listProductDetails() as Promise<T[]>;
       case BRAND_POSTS_COLLECTION:
         return admin.listBrandPosts() as Promise<T[]>;
+      case INVENTORY_COLLECTION:
+        return admin.listInventory() as Promise<T[]>;
+      case SERVICES_COLLECTION:
+        return admin.listServices() as Promise<T[]>;
       default:
         return [];
     }
@@ -102,6 +110,10 @@ function listFromMemory<T>(collectionName: string): Promise<T[]> {
       return memoryStore.listProductDetails() as Promise<T[]>;
     case BRAND_POSTS_COLLECTION:
       return memoryStore.listBrandPosts() as Promise<T[]>;
+    case INVENTORY_COLLECTION:
+      return memoryStore.listInventory() as Promise<T[]>;
+    case SERVICES_COLLECTION:
+      return memoryStore.listServices() as Promise<T[]>;
     default:
       return Promise.resolve([]);
   }
@@ -127,6 +139,10 @@ function getFromMemory<T>(collectionName: string, id: string): Promise<T | null>
       return memoryStore.getProductDetail(id) as Promise<T | null>;
     case BRAND_POSTS_COLLECTION:
       return memoryStore.getBrandPost(id) as Promise<T | null>;
+    case INVENTORY_COLLECTION:
+      return memoryStore.getInventory(id) as Promise<T | null>;
+    case SERVICES_COLLECTION:
+      return memoryStore.getService(id) as Promise<T | null>;
     default:
       return Promise.resolve(null);
   }
@@ -149,9 +165,15 @@ function upsertToMemory<T extends { id: string }>(collectionName: string, data: 
     case PLACEMENTS_COLLECTION:
       return memoryStore.upsertPlacement(data as unknown as CatalogPlacement) as unknown as Promise<T>;
     case PRODUCT_DETAILS_COLLECTION:
-      return memoryStore.upsertProductDetail(data as unknown as CatalogProductDetail) as unknown as Promise<T>;
+      return memoryStore.upsertProductDetail(
+        data as unknown as CatalogProductDetail,
+      ) as unknown as Promise<T>;
     case BRAND_POSTS_COLLECTION:
       return memoryStore.upsertBrandPost(data as unknown as CatalogBrandPost) as unknown as Promise<T>;
+    case INVENTORY_COLLECTION:
+      return memoryStore.upsertInventory(data as unknown as CatalogInventory) as unknown as Promise<T>;
+    case SERVICES_COLLECTION:
+      return memoryStore.upsertService(data as unknown as CatalogService) as unknown as Promise<T>;
     default:
       return Promise.resolve(data);
   }
@@ -177,6 +199,10 @@ function removeFromMemory(collectionName: string, id: string): Promise<void> {
       return memoryStore.deleteProductDetail(id);
     case BRAND_POSTS_COLLECTION:
       return memoryStore.deleteBrandPost(id);
+    case INVENTORY_COLLECTION:
+      return memoryStore.deleteInventory(id);
+    case SERVICES_COLLECTION:
+      return memoryStore.deleteService(id);
     default:
       return Promise.resolve();
   }
@@ -204,6 +230,10 @@ async function getById<T>(collectionName: string, id: string): Promise<T | null>
         return admin.getProductDetail(id) as Promise<T | null>;
       case BRAND_POSTS_COLLECTION:
         return admin.getBrandPost(id) as Promise<T | null>;
+      case INVENTORY_COLLECTION:
+        return admin.getInventory(id) as Promise<T | null>;
+      case SERVICES_COLLECTION:
+        return admin.getService(id) as Promise<T | null>;
       default:
         return null;
     }
@@ -230,9 +260,15 @@ async function upsert<T extends { id: string }>(collectionName: string, data: T)
       case PLACEMENTS_COLLECTION:
         return admin.upsertPlacement(data as unknown as CatalogPlacement) as unknown as Promise<T>;
       case PRODUCT_DETAILS_COLLECTION:
-        return admin.upsertProductDetail(data as unknown as CatalogProductDetail) as unknown as Promise<T>;
+        return admin.upsertProductDetail(
+          data as unknown as CatalogProductDetail,
+        ) as unknown as Promise<T>;
       case BRAND_POSTS_COLLECTION:
         return admin.upsertBrandPost(data as unknown as CatalogBrandPost) as unknown as Promise<T>;
+      case INVENTORY_COLLECTION:
+        return admin.upsertInventory(data as unknown as CatalogInventory) as unknown as Promise<T>;
+      case SERVICES_COLLECTION:
+        return admin.upsertService(data as unknown as CatalogService) as unknown as Promise<T>;
       default:
         return data;
     }
@@ -262,6 +298,10 @@ async function remove(collectionName: string, id: string): Promise<void> {
         return admin.deleteProductDetail(id);
       case BRAND_POSTS_COLLECTION:
         return admin.deleteBrandPost(id);
+      case INVENTORY_COLLECTION:
+        return admin.deleteInventory(id);
+      case SERVICES_COLLECTION:
+        return admin.deleteService(id);
       default:
         return;
     }
@@ -306,7 +346,8 @@ export const catalogStore = {
   deletePlacement: (id: string) => remove(PLACEMENTS_COLLECTION, id),
 
   listProductDetails: () => listCollection<CatalogProductDetail>(PRODUCT_DETAILS_COLLECTION),
-  getProductDetail: (productId: string) => getById<CatalogProductDetail>(PRODUCT_DETAILS_COLLECTION, productId),
+  getProductDetail: (productId: string) =>
+    getById<CatalogProductDetail>(PRODUCT_DETAILS_COLLECTION, productId),
   upsertProductDetail: (payload: CatalogProductDetail) =>
     upsert(PRODUCT_DETAILS_COLLECTION, { ...payload, id: payload.productId }),
   deleteProductDetail: (productId: string) => remove(PRODUCT_DETAILS_COLLECTION, productId),
@@ -315,6 +356,16 @@ export const catalogStore = {
   getBrandPost: (id: string) => getById<CatalogBrandPost>(BRAND_POSTS_COLLECTION, id),
   upsertBrandPost: (payload: CatalogBrandPost) => upsert(BRAND_POSTS_COLLECTION, payload),
   deleteBrandPost: (id: string) => remove(BRAND_POSTS_COLLECTION, id),
+
+  listInventory: () => listCollection<CatalogInventory>(INVENTORY_COLLECTION),
+  getInventory: (id: string) => getById<CatalogInventory>(INVENTORY_COLLECTION, id),
+  upsertInventory: (payload: CatalogInventory) => upsert(INVENTORY_COLLECTION, payload),
+  deleteInventory: (id: string) => remove(INVENTORY_COLLECTION, id),
+
+  listServices: () => listCollection<CatalogService>(SERVICES_COLLECTION),
+  getService: (id: string) => getById<CatalogService>(SERVICES_COLLECTION, id),
+  upsertService: (payload: CatalogService) => upsert(SERVICES_COLLECTION, payload),
+  deleteService: (id: string) => remove(SERVICES_COLLECTION, id),
 
   async getHomepage(): Promise<HomepageConfig> {
     if (useAdminFirestore) {
@@ -359,7 +410,10 @@ export async function ensureCatalogSeedData(): Promise<void> {
       if (hasProducts) return;
     } else {
       const existing = await memoryStore.listProducts();
-      if (existing.length > 0) return;
+      if (existing.length > 0) {
+        await memoryStore.upsertHomepage(await memoryStore.getHomepage());
+        return;
+      }
     }
   } catch (error) {
     console.warn('[Catalog Seed] Seed check failed, continuing with defaults.', error);
@@ -378,10 +432,13 @@ export async function ensureCatalogSeedData(): Promise<void> {
     catalogStore.upsertSiteConfig(defaultSiteConfig()),
   ]);
 
-  const mode = useAdminFirestore ? 'firestore-admin' : 'memory';
-  console.log(`[Catalog Seed] Seeded default catalog snapshot (${mode}).`);
+  console.log(`[Catalog Seed] Seeded default catalog snapshot (${getCatalogPersistenceMode()}).`);
 }
 
-export function getCatalogPersistenceMode(): 'firestore-admin' | 'memory' {
-  return useAdminFirestore ? 'firestore-admin' : 'memory';
+/**
+ * firestore-admin: production persistent catalog.
+ * memory-disk: local/dev adapter with JSON snapshot under `.data/` (survives restart).
+ */
+export function getCatalogPersistenceMode(): 'firestore-admin' | 'memory-disk' {
+  return useAdminFirestore ? 'firestore-admin' : 'memory-disk';
 }

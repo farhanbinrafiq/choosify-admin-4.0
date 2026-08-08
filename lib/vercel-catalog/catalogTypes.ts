@@ -1,4 +1,10 @@
-export type CatalogPublishStatus = 'draft' | 'live' | 'archived';
+export type CatalogPublishStatus =
+  | 'draft'
+  | 'live'
+  | 'active'
+  | 'out_of_stock'
+  | 'suspended'
+  | 'archived';
 
 export interface CatalogCategory {
   id: string;
@@ -297,7 +303,7 @@ export interface SiteWebsiteAssets {
   defaultProductImage: string;
 }
 
-export interface SiteConfig {
+export type SiteConfig = {
   id: 'default';
   navigation: SiteNavItem[];
   footer: {
@@ -313,6 +319,45 @@ export interface SiteConfig {
   announcementBarEnabled: boolean;
   productBadges?: SiteProductBadge[];
   websiteAssets?: SiteWebsiteAssets;
+  updatedAt: string;
+};
+
+/** Inventory record persisted via catalogStore (IS-003). */
+export interface CatalogInventory {
+  id: string;
+  productId: string;
+  variantId?: string;
+  sku?: string;
+  quantity: number;
+  reservedQuantity: number;
+  availableQuantity: number;
+  lowStockThreshold: number;
+  inventoryState: 'in_stock' | 'low_stock' | 'out_of_stock' | 'archived';
+  warehouseId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Service catalog foundation (Sprint 3). */
+export interface CatalogService {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  brandId: string;
+  brandName: string;
+  categoryId: string;
+  categoryName: string;
+  serviceCategory?: string;
+  price: number;
+  currency: string;
+  durationMinutes?: number;
+  serviceArea?: string;
+  media: string[];
+  image: string;
+  status: CatalogPublishStatus;
+  sellerId?: string;
+  createdAt: string;
   updatedAt: string;
 }
 

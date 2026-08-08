@@ -1,4 +1,15 @@
-export type CatalogPublishStatus = 'draft' | 'live' | 'archived';
+/**
+ * Product/Service publish status wire values.
+ * `live` is the legacy persisted form of Active (ES-005 / IS-003).
+ * Prefer server/catalog/productLifecycle helpers over comparing raw strings.
+ */
+export type CatalogPublishStatus =
+  | 'draft'
+  | 'live'
+  | 'active'
+  | 'out_of_stock'
+  | 'suspended'
+  | 'archived';
 
 export interface CatalogCategory {
   id: string;
@@ -163,6 +174,48 @@ export interface CatalogProduct {
   isBestseller: boolean;
   /** Firebase uid of owning seller when listing is seller-managed; omitted for legacy/admin rows. */
   sellerId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Service catalog foundation (Sprint 3). Dedicated resource — booking engine deferred.
+ * Lifecycle reuses CatalogPublishStatus (`live` ≡ Active).
+ */
+export interface CatalogService {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  brandId: string;
+  brandName: string;
+  categoryId: string;
+  categoryName: string;
+  serviceCategory?: CatalogProduct['serviceCategory'];
+  price: number;
+  currency: string;
+  durationMinutes?: number;
+  serviceArea?: string;
+  media: string[];
+  image: string;
+  status: CatalogPublishStatus;
+  sellerId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Server inventory record shape (IS-003). */
+export interface CatalogInventory {
+  id: string;
+  productId: string;
+  variantId?: string;
+  sku?: string;
+  quantity: number;
+  reservedQuantity: number;
+  availableQuantity: number;
+  lowStockThreshold: number;
+  inventoryState: 'in_stock' | 'low_stock' | 'out_of_stock' | 'archived';
+  warehouseId: string | null;
   createdAt: string;
   updatedAt: string;
 }

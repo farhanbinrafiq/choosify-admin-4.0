@@ -5,9 +5,11 @@ import type {
   CatalogCreator,
   CatalogDeal,
   CatalogGuide,
+  CatalogInventory,
   CatalogPlacement,
   CatalogProduct,
   CatalogProductDetail,
+  CatalogService,
   HomepageConfig,
   SiteConfig,
 } from './catalogTypes';
@@ -29,6 +31,8 @@ const GUIDES_COLLECTION = 'catalog_guides';
 const PLACEMENTS_COLLECTION = 'catalog_placements';
 const PRODUCT_DETAILS_COLLECTION = 'catalog_product_details';
 const BRAND_POSTS_COLLECTION = 'catalog_brand_posts';
+const INVENTORY_COLLECTION = 'catalog_inventory';
+const SERVICES_COLLECTION = 'catalog_services';
 const HOMEPAGE_DOC = { collection: 'settings', id: 'catalog_homepage' } as const;
 const SITE_DOC = { collection: 'settings', id: 'catalog_site' } as const;
 
@@ -79,6 +83,16 @@ export const firestoreAdminStore = {
   getBrandPost: (id: string) => getDocumentById<CatalogBrandPost>(BRAND_POSTS_COLLECTION, id),
   upsertBrandPost: (payload: CatalogBrandPost) => upsertDocument(BRAND_POSTS_COLLECTION, payload),
   deleteBrandPost: (id: string) => deleteDocument(BRAND_POSTS_COLLECTION, id),
+
+  listInventory: () => listCollection<CatalogInventory>(INVENTORY_COLLECTION),
+  getInventory: (id: string) => getDocumentById<CatalogInventory>(INVENTORY_COLLECTION, id),
+  upsertInventory: (payload: CatalogInventory) => upsertDocument(INVENTORY_COLLECTION, payload),
+  deleteInventory: (id: string) => deleteDocument(INVENTORY_COLLECTION, id),
+
+  listServices: () => listCollection<CatalogService>(SERVICES_COLLECTION),
+  getService: (id: string) => getDocumentById<CatalogService>(SERVICES_COLLECTION, id),
+  upsertService: (payload: CatalogService) => upsertDocument(SERVICES_COLLECTION, payload),
+  deleteService: (id: string) => deleteDocument(SERVICES_COLLECTION, id),
 
   getHomepage: () => getDocumentById<HomepageConfig>(HOMEPAGE_DOC.collection, HOMEPAGE_DOC.id),
   upsertHomepage: (homepage: HomepageConfig) =>

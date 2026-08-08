@@ -1,4 +1,9 @@
 import { z } from 'zod';
+/**
+ * Authoritative write-side catalog contract for runtime (used by server/catalogRouter).
+ * lib/vercel-catalog/catalogContract.ts remains for site-config helpers and must not
+ * silently diverge for Product/Brand ownership or lifecycle fields — prefer this module.
+ */
 import type {
   CatalogBrand,
   CatalogBrandPost,
@@ -10,6 +15,7 @@ import type {
   HomepageHeroBanner,
   HomepageSectionConfig,
 } from '../src/types/catalog';
+import { parseProductStatusInput } from './catalog/productLifecycle';
 
 const nonEmpty = z.string().trim().min(1);
 const isoDate = z.string().datetime();
@@ -178,7 +184,24 @@ const productSchema = z.object({
   modeType: z.literal('retail'),
   productType: z.enum(['physical', 'service']).optional(),
   serviceCategory: z
-    .enum(['hotels', 'restaurants', 'travel', 'doctors', 'education', 'beauty', 'real_estate', 'transport'])
+    .enum([
+      'hotels',
+      'restaurants',
+      'travel',
+      'doctors',
+      'education',
+      'beauty',
+      'real_estate',
+      'transport',
+      'events',
+      'tickets',
+      'home_services',
+      'gov_services',
+      'recruitment',
+      'b2b',
+      'rental',
+      'donation',
+    ])
     .optional(),
   relatedInfoType: z.enum(['price_across_stores', 'whats_nearby', 'before_your_visit']).optional(),
   priceAcrossStoresEnabled: z.boolean().optional(),
@@ -189,7 +212,8 @@ const productSchema = z.object({
   price: z.number().nonnegative(),
   originalPrice: z.number().nonnegative().optional(),
   stock: z.number().int(),
-  status: z.enum(['draft', 'live', 'archived']),
+  /** `live` = legacy Active; also accepts ES-005 states. */
+  status: z.enum(['draft', 'live', 'active', 'out_of_stock', 'suspended', 'archived']),
   tags: z.array(z.string()),
   isDeal: z.boolean(),
   dealType: z.enum(['flash', 'seasonal', 'brand', 'promo', 'clearance']).optional(),
@@ -396,7 +420,7 @@ export const normalizeProductInput = (
   const raw = (payload ?? {}) as Record<string, unknown>;
   const title = toString(raw.title, toString(raw.name, existing?.title ?? 'Untitled Product'));
   const id = toString(raw.id, existing?.id ?? `prod-${Date.now()}`);
-  const statusRaw = toString(raw.status, existing?.status ?? 'draft').toLowerCase();
+  const status = parseProductStatusInput(raw.status, existing?.status);
 
   const brandId = toString(raw.brandId, existing?.brandId ?? '');
   const categoryId = toString(raw.categoryId, existing?.categoryId ?? '');
@@ -466,9 +490,38 @@ export const normalizeProductInput = (
     image: toString(raw.image, existing?.image ?? ''),
     gallery: toStringArray(raw.gallery).length > 0 ? toStringArray(raw.gallery) : existing?.gallery ?? [],
     modeType: 'retail',
-    productType: toString(raw.productType, existing?.productType) as CatalogProduct['productType'],
-    serviceCategory: toString(raw.serviceCategory, existing?.serviceCategory) as CatalogProduct['serviceCategory'],
-    relatedInfoType: toString(raw.relatedInfoType, existing?.relatedInfoType) as CatalogProduct['relatedInfoType'],
+    productType: (() => {
+      const v = toString(raw.productType, existing?.productType);
+      return v === 'physical' || v === 'service' ? v : undefined;
+    })(),
+    serviceCategory: (() => {
+      const allowed = new Set([
+        'hotels',
+        'restaurants',
+        'travel',
+        'doctors',
+        'education',
+        'beauty',
+        'real_estate',
+        'transport',
+        'events',
+        'tickets',
+        'home_services',
+        'gov_services',
+        'recruitment',
+        'b2b',
+        'rental',
+        'donation',
+      ]);
+      const v = toString(raw.serviceCategory, existing?.serviceCategory);
+      return allowed.has(v) ? (v as CatalogProduct['serviceCategory']) : undefined;
+    })(),
+    relatedInfoType: (() => {
+      const v = toString(raw.relatedInfoType, existing?.relatedInfoType);
+      return v === 'price_across_stores' || v === 'whats_nearby' || v === 'before_your_visit'
+        ? v
+        : undefined;
+    })(),
     priceAcrossStoresEnabled:
       raw.priceAcrossStoresEnabled !== undefined
         ? toBoolean(raw.priceAcrossStoresEnabled)
@@ -490,10 +543,15 @@ export const normalizeProductInput = (
         ? toNumber(raw.originalPrice)
         : existing?.originalPrice,
     stock,
-    status: statusRaw === 'live' || statusRaw === 'archived' ? statusRaw : 'draft',
+    status,
     tags: toStringArray(raw.tags).length > 0 ? toStringArray(raw.tags) : existing?.tags ?? [],
     isDeal: toBoolean(raw.isDeal, existing?.isDeal ?? false),
-    dealType: toString(raw.dealType, existing?.dealType) as CatalogProduct['dealType'],
+    dealType: (() => {
+      const v = toString(raw.dealType, existing?.dealType);
+      return v === 'flash' || v === 'seasonal' || v === 'brand' || v === 'promo' || v === 'clearance'
+        ? v
+        : undefined;
+    })(),
     discountPercent:
       raw.discountPercent !== undefined
         ? toNumber(raw.discountPercent)

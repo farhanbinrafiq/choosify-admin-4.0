@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import { catalogApi } from '../services/catalogApi';
+import type { CatalogProduct } from '../types/catalog';
 
 export interface InventoryItem {
   productId: string;
@@ -74,56 +76,65 @@ interface InventoryContextType {
 
 const InventoryContext = createContext<InventoryContextType | undefined>(undefined);
 
-const INITIAL_INVENTORY: InventoryItem[] = [
-  { productId: '1', sku: 'SAMS-S25U-001', productName: 'Samsung S25 Ultra', currentStock: 45, allocatedStock: 5, availableStock: 40, minimumStock: 10, maximumStock: 100, status: 'in_stock', sellerId: 'sel_v1', categoryId: 'Mobile' },
-  { productId: '2', sku: 'VISN-55TV-002', productName: 'Vision Smart TV 55"', currentStock: 8, allocatedStock: 2, availableStock: 6, minimumStock: 15, maximumStock: 50, status: 'low_stock', sellerId: 'sel_v2', categoryId: 'Electronics' },
-  { productId: '3', sku: 'AARG-JAMD-003', productName: 'Aarong Jamdani Saree', currentStock: 0, allocatedStock: 0, availableStock: 0, minimumStock: 5, maximumStock: 30, status: 'out_of_stock', sellerId: 'sel_v3', categoryId: 'Fashion' },
-  { productId: '4', sku: 'WALT-REFR-004', productName: 'Walton 2-Door Fridge', currentStock: 12, allocatedStock: 1, availableStock: 11, minimumStock: 4, maximumStock: 25, status: 'in_stock', sellerId: 'sel_v1', categoryId: 'Home' },
-  { productId: 'apex-1', sku: 'APEX-LOAF-005', productName: 'Apex Men Royal Loafer', currentStock: 35, allocatedStock: 3, availableStock: 32, minimumStock: 8, maximumStock: 80, status: 'in_stock', sellerId: 'sel_v2', categoryId: 'Footwear & Apparel' },
-  { productId: 'apex-2', sku: 'APEX-FORM-006', productName: 'Apex Leather Formal Dress Shoes', currentStock: 3, allocatedStock: 1, availableStock: 2, minimumStock: 5, maximumStock: 50, status: 'low_stock', sellerId: 'sel_v2', categoryId: 'Footwear & Apparel' },
-  { productId: 'urbanfit-1', sku: 'URBN-TEE-007', productName: 'Urban Fit Elite Compression Tee', currentStock: 150, allocatedStock: 12, availableStock: 138, minimumStock: 20, maximumStock: 300, status: 'in_stock', sellerId: 'sel_v3', categoryId: 'Active Wear' },
-  { productId: 'urbanfit-2', sku: 'URBN-JOG-008', productName: 'Urban Fit Comfort Joggers', currentStock: 18, allocatedStock: 4, availableStock: 14, minimumStock: 10, maximumStock: 100, status: 'in_stock', sellerId: 'sel_v3', categoryId: 'Active Wear' },
-  { productId: 'techcore-1', sku: 'TECH-CHARG-009', productName: 'TechCore Wireless Charging Pad', currentStock: 2, allocatedStock: 2, availableStock: 0, minimumStock: 15, maximumStock: 120, status: 'out_of_stock', sellerId: 'sel_v1', categoryId: 'Consumer Tech' },
-  { productId: 'techcore-2', sku: 'TECH-WATCH-010', productName: 'TechCore Bluetooth Smart Watch V2', currentStock: 22, allocatedStock: 2, availableStock: 20, minimumStock: 12, maximumStock: 150, status: 'in_stock', sellerId: 'sel_v1', categoryId: 'Consumer Tech' }
-];
-
-const INITIAL_AUDITS: StockAuditLog[] = [
-  { id: 'aud_1', productId: '1', timestamp: new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString(), previousStock: 30, newStock: 45, change: 15, reason: 'restock', notes: 'Monthly regular shipment from Samsung Warehouse', actedBy: 'adm_1' },
-  { id: 'aud_2', productId: '2', timestamp: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), previousStock: 9, newStock: 8, change: -1, reason: 'order_placed', notes: 'Automated sale for Order #CHO-89021', actedBy: 'system', orderId: 'CHO-89021' },
-  { id: 'aud_3', productId: '3', timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(), previousStock: 1, newStock: 0, change: -1, reason: 'damage_loss', notes: 'Water damage detected during floor inspection', actedBy: 'sel_v3' }
-];
-
-const INITIAL_ALERTS: StockAlert[] = [
-  { id: 'alt_1', productId: '2', type: 'low_stock', severity: 'warning', message: 'Vision Smart TV 55" has fallen below minimum threshold of 15 units (Current: 8).', createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(), acknowledged: false },
-  { id: 'alt_2', productId: '3', type: 'out_of_stock', severity: 'critical', message: 'Aarong Jamdani Saree is completely out of stock!', createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(), acknowledged: false },
-  { id: 'alt_3', productId: 'techcore-1', type: 'out_of_stock', severity: 'critical', message: 'TechCore Wireless Charging Pad has 0 available stock.', createdAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(), acknowledged: false }
-];
-
 export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile } = useAuth();
   
-  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>(() => {
-    const saved = localStorage.getItem('choosify_inventory');
-    return saved ? JSON.parse(saved) : INITIAL_INVENTORY;
-  });
+  const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
+  const [catalogHydrated, setCatalogHydrated] = useState(false);
 
   const [auditLog, setAuditLog] = useState<StockAuditLog[]>(() => {
     const saved = localStorage.getItem('choosify_stock_audit');
-    return saved ? JSON.parse(saved) : INITIAL_AUDITS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [stockAlerts, setStockAlerts] = useState<StockAlert[]>(() => {
     const saved = localStorage.getItem('choosify_stock_alerts');
-    return saved ? JSON.parse(saved) : INITIAL_ALERTS;
+    return saved ? JSON.parse(saved) : [];
   });
 
   const [undoStack, setUndoStack] = useState<UndoAction[]>([]);
 
-  // Sync to localStorage
-  useEffect(() => {
-    localStorage.setItem('choosify_inventory', JSON.stringify(inventoryItems));
-  }, [inventoryItems]);
+  const mapProductToInventoryItem = useCallback((p: CatalogProduct): InventoryItem => {
+    const stock = Math.max(0, typeof p.stock === 'number' ? p.stock : 0);
+    const min = 5;
+    return {
+      productId: p.id,
+      sku: `SKU-${p.id.slice(0, 12)}`,
+      productName: p.title,
+      currentStock: stock,
+      allocatedStock: 0,
+      availableStock: stock,
+      minimumStock: min,
+      maximumStock: Math.max(stock * 2, 50),
+      status: stock <= 0 ? 'out_of_stock' : stock < min ? 'low_stock' : 'in_stock',
+      sellerId: p.sellerId || 'platform',
+      categoryId: p.categoryName || p.categoryId,
+    };
+  }, []);
 
+  /** Prefer server catalog stock over legacy mock/localStorage SKUs. */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const products = await catalogApi.listProducts();
+        if (cancelled) return;
+        setInventoryItems(products.map(mapProductToInventoryItem));
+        setCatalogHydrated(true);
+        localStorage.removeItem('choosify_inventory');
+      } catch {
+        if (cancelled) return;
+        // Unauthenticated or API unavailable: keep empty (no mock seed leakage).
+        setInventoryItems([]);
+        setCatalogHydrated(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mapProductToInventoryItem, profile?.id]);
+
+  // Sync audit/alerts to localStorage only (inventory SoT is catalog API)
   useEffect(() => {
     localStorage.setItem('choosify_stock_audit', JSON.stringify(auditLog));
   }, [auditLog]);
@@ -131,6 +142,8 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => {
     localStorage.setItem('choosify_stock_alerts', JSON.stringify(stockAlerts));
   }, [stockAlerts]);
+
+  void catalogHydrated;
 
   /**
    * Helper to determine item status based on stock levels
@@ -196,7 +209,7 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   /**
-   * updateStock - direct manual adjustment
+   * updateStock - manual adjustment; persists via catalog inventory API when possible.
    */
   const updateStock = (
     productId: string,
@@ -215,7 +228,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       const previousStock = item.currentStock;
       const change = newQuantity - previousStock;
 
-      // Log to undo stack before updating
       const undoAction: UndoAction = {
         productId,
         variantId,
@@ -232,7 +244,6 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         status: determineStatus(newQuantity, item.minimumStock)
       };
 
-      // Add to audit logs
       const audit: StockAuditLog = {
         id: `aud_${Math.random().toString(36).substr(2, 9)}`,
         productId,
@@ -253,6 +264,15 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       copy[idx] = updatedItem;
       return copy;
     });
+
+    void catalogApi
+      .adjustProductInventory(productId, {
+        variantId,
+        quantity: newQuantity,
+      })
+      .catch(() => {
+        /* UI already updated; next hydrate will reconcile */
+      });
   };
 
   /**
