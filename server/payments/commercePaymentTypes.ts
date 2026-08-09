@@ -50,6 +50,8 @@ export type CommercePayment = {
   paymentFailedEmitted?: boolean;
   /** Idempotency: PaymentCancelled already emitted. */
   paymentCancelledEmitted?: boolean;
+  /** Idempotency: Escrow Held created (or reconciled) for this Captured payment. */
+  escrowEffectsApplied?: boolean;
   /** Processed provider val_ids for this payment. */
   processedValIds?: string[];
   createdAt: string;

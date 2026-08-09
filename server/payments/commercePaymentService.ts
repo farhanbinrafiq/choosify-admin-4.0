@@ -1,7 +1,7 @@
 /**
  * Commerce Payment Engine — Sprint 7 / IS-010 Sprint 10.
  * Connects Commerce Checkout + split Orders to SSLCommerz / mock providers.
- * Payment records are server SoT. Escrow/Refund workflows are NOT implemented.
+ * Payment records are server SoT. Escrow creation is triggered after Capture (Sprint 8).
  */
 
 import { randomUUID } from 'node:crypto';
@@ -184,6 +184,20 @@ export async function reconcileCapturedPaymentEffects(
     emitPayment('PaymentCaptured', next, actor, { source: 'reconcile' });
     next = { ...next, paymentCapturedEmitted: true, updatedAt: nowIso() };
     await commercePaymentStore.upsertPayment(next);
+  }
+
+  // Escrow Held from authoritative Capture only (idempotent; crash-recoverable).
+  if (!next.escrowEffectsApplied) {
+    try {
+      const { reconcileEscrowEffectsForPayment } = await import('../escrow/escrowService');
+      const result = await reconcileEscrowEffectsForPayment(next, actor);
+      next = result.payment;
+    } catch (error) {
+      Logger.error('Escrow reconcile after capture failed (will retry on replay)', {
+        paymentId: next.paymentId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
   return next;
 }

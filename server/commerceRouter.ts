@@ -1,7 +1,7 @@
 /**
  * Commerce API — IS-004 §59.
  * Cart / Checkout / Orders / Manual Orders / Order lifecycle (Sprint 6).
- * Payments, returns, refunds: out of scope (later sprints).
+ * Payments, Escrow, Returns, Refunds: Sprint 7–8 surfaces under commerce/payments + commerce/escrow.
  */
 
 import { Router } from 'express';
@@ -308,7 +308,29 @@ commerceRouter.get('/orders/:id', ...requireAuth, async (req, res) => {
       userId: actorId(req),
       role: actorRole(req),
     });
-    res.json({ success: true, data: order });
+    let financial: {
+      escrows: unknown[];
+      settlementIds: string[];
+    } | null = null;
+    try {
+      const { escrowStore } = await import('./escrow/escrowStore');
+      const escrows = await escrowStore.listEscrowsByOrder(order.id);
+      financial = {
+        escrows: escrows.map((e) => ({
+          escrowId: e.escrowId,
+          status: e.status,
+          heldAmount: e.heldAmount,
+          refundedAmount: e.refundedAmount,
+          settledAmount: e.settledAmount,
+          sellerNetAmount: e.sellerNetAmount,
+          settlementId: e.settlementId,
+        })),
+        settlementIds: escrows.map((e) => e.settlementId).filter(Boolean) as string[],
+      };
+    } catch {
+      financial = null;
+    }
+    res.json({ success: true, data: order, financial });
   } catch (error) {
     handleCommerceError(res, error);
   }

@@ -440,6 +440,21 @@ export async function transitionOrder(
     });
   }
 
+  // Product Escrow release gate: OrderCompleted only (NOT OrderDelivered).
+  if (to === 'completed') {
+    try {
+      const { settleEscrowForOrder } = await import('../escrow/escrowService');
+      await settleEscrowForOrder(next.id, input.actor.userId);
+    } catch (error) {
+      // Settlement eligibility may fail (dispute hold, etc.) — surface on next reconcile/API.
+      const { Logger } = await import('../lib/logger');
+      Logger.error('Escrow settlement after OrderCompleted failed', {
+        orderId: next.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   return { order: next, shipment, reused: false };
 }
 
@@ -504,6 +519,45 @@ export async function cancelOrder(
   let shipmentUpdate: CommerceShipment | undefined;
   if (shipment && shipment.status !== 'delivered') {
     shipmentUpdate = { ...shipment, status: 'cancelled', updatedAt: nowIso() };
+  }
+
+  // Captured funds must enter Refund/Escrow reversal — do not forget money.
+  const hadCapturedFunds =
+    (order.paymentStatus === 'paid' || order.paymentStatus === 'partial') &&
+    (order.paidAmount || 0) > 0;
+  if (hadCapturedFunds) {
+    try {
+      if (order.paymentId) {
+        const { commercePaymentStore } = await import('../payments/commercePaymentStore');
+        const { reconcileEscrowEffectsForPayment, refundEscrowsForCancelledOrder } =
+          await import('../escrow/escrowService');
+        const payment = await commercePaymentStore.getPayment(order.paymentId);
+        if (payment?.status === 'captured') {
+          await reconcileEscrowEffectsForPayment(payment, input.actor.userId);
+        }
+        await refundEscrowsForCancelledOrder({
+          orderId: order.id,
+          reason: `Order cancelled: ${reason}`,
+          actor: input.actor,
+        });
+      } else {
+        const { refundEscrowsForCancelledOrder } = await import('../escrow/escrowService');
+        await refundEscrowsForCancelledOrder({
+          orderId: order.id,
+          reason: `Order cancelled: ${reason}`,
+          actor: input.actor,
+        });
+      }
+    } catch (error) {
+      const { Logger } = await import('../lib/logger');
+      Logger.error('Escrow refund on cancel failed', {
+        orderId: order.id,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error instanceof Error
+        ? error
+        : new CommerceError('Escrow refund on cancel failed', 500);
+    }
   }
 
   await commerceStore.commitOrderMutation({ order: next, shipment: shipmentUpdate });

@@ -19,6 +19,7 @@
     "test:orders": "tsx scripts/probe-orders.ts",
     "test:orders-wiring": "tsx scripts/probe-orders-wiring.ts",
     "test:payments": "tsx scripts/probe-payments.ts",
+    "test:escrow": "tsx scripts/probe-escrow.ts",
     "verify:payments": "tsx scripts/verify-payment-flow.ts",
     "check:prod-env": "tsx scripts/check-production-env.ts",
     "seed:catalog": "tsx scripts/seedCatalog.ts",

@@ -236,9 +236,10 @@ export function mapCommerceOrderToUi(
     platformSource: mapSource(row.source),
     earnings: {
       totalRevenue: row.grandTotal,
-      commissionPercent: 10,
-      futureAutomatedDeduction: Math.round(row.grandTotal * 0.1),
-      sellerNet: Math.round(row.grandTotal * 0.9),
+      // Commission % is Finance-owned; do not invent a platform rate in the UI adapter.
+      commissionPercent: 0,
+      futureAutomatedDeduction: 0,
+      sellerNet: row.grandTotal,
     },
     subOrders: [
       {

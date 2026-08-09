@@ -216,4 +216,22 @@ export const commerceApi = {
       { method: 'POST', token, body: JSON.stringify(input) },
     );
   },
+  getOrderEscrows(token: string, orderId: string) {
+    return commerceFetch<{ success: boolean; data: unknown; error?: string }>(
+      `/commerce/orders/${encodeURIComponent(orderId)}/escrows`,
+      { token },
+    );
+  },
+  getSellerBalance(token: string, sellerId: string, currency = 'BDT') {
+    return commerceFetch<{ success: boolean; data: unknown; error?: string }>(
+      `/commerce/sellers/${encodeURIComponent(sellerId)}/balance?currency=${encodeURIComponent(currency)}`,
+      { token },
+    );
+  },
+  requestReturn(token: string, orderId: string, reason: string) {
+    return commerceFetch<{ success: boolean; data: unknown; error?: string }>(
+      `/orders/${encodeURIComponent(orderId)}/returns`,
+      { method: 'POST', token, body: JSON.stringify({ reason }) },
+    );
+  },
 };
