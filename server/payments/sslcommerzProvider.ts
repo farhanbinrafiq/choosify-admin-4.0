@@ -1,5 +1,7 @@
 import type {
   PaymentGatewayProvider,
+  PaymentRefundInput,
+  PaymentRefundResult,
   PaymentSessionInput,
   PaymentSessionResult,
   PaymentValidationResult,
@@ -16,6 +18,10 @@ function baseUrl(mode: SslMode): string {
   return mode === 'live'
     ? 'https://securepay.sslcommerz.com'
     : 'https://sandbox.sslcommerz.com';
+}
+
+function sessionOrderId(input: PaymentSessionInput): string {
+  return input.order.orderId;
 }
 
 /**
@@ -49,6 +55,7 @@ export class SslcommerzProvider implements PaymentGatewayProvider {
 
     const mode = this.getMode();
     const url = `${baseUrl(mode)}/gwprocess/v4/api.php`;
+    const orderId = sessionOrderId(input);
     const body = new URLSearchParams();
     body.set('store_id', this.storeId());
     body.set('store_passwd', this.storePassword());
@@ -66,11 +73,10 @@ export class SslcommerzProvider implements PaymentGatewayProvider {
     body.set('cus_city', input.customer.city || 'Dhaka');
     body.set('cus_country', 'Bangladesh');
     body.set('shipping_method', 'NO');
-    body.set('product_name', `Order ${input.order.orderId}`);
+    body.set('product_name', `Order ${orderId}`);
     body.set('product_category', 'general');
     body.set('product_profile', 'general');
-    // Echo order id through value_a so IPN can recover the order if needed.
-    body.set('value_a', input.order.orderId);
+    body.set('value_a', orderId);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -132,7 +138,6 @@ export class SslcommerzProvider implements PaymentGatewayProvider {
     }
 
     const status = String(data.status || '').toUpperCase();
-    // VALID = first successful validation; VALIDATED = already validated previously (still success).
     const valid = status === 'VALID' || status === 'VALIDATED';
     return {
       valid,
@@ -141,6 +146,50 @@ export class SslcommerzProvider implements PaymentGatewayProvider {
       status,
       tranId: String(data.tran_id || ''),
       valId: String(data.val_id || valId),
+      raw: data,
+    };
+  }
+
+  /**
+   * Provider-level refund API readiness (Sprint 8 input).
+   * Does NOT implement Returns/Refund business workflow.
+   */
+  async refundTransaction(input: PaymentRefundInput): Promise<PaymentRefundResult> {
+    if (!this.isConfigured()) {
+      throw new Error('SSLCommerz is not configured');
+    }
+    const mode = this.getMode();
+    const url = `${baseUrl(mode)}/validator/api/merchantTransIDvalidationAPI.php`;
+    const body = new URLSearchParams();
+    body.set('store_id', this.storeId());
+    body.set('store_passwd', this.storePassword());
+    body.set('bank_tran_id', input.bankTranId);
+    body.set('refund_amount', input.refundAmount.toFixed(2));
+    body.set('refund_remarks', input.refundRemarks || 'Refund');
+    if (input.refeId) body.set('refe_id', input.refeId);
+    body.set('format', 'json');
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body.toString(),
+    });
+    const rawText = await response.text();
+    let data: Record<string, unknown> = {};
+    try {
+      data = JSON.parse(rawText) as Record<string, unknown>;
+    } catch {
+      return {
+        success: false,
+        message: `SSLCommerz refund response was not JSON: ${rawText.slice(0, 200)}`,
+      };
+    }
+    const status = String(data.status || '').toUpperCase();
+    const success = status === 'SUCCESS' || status === 'REFUNDED' || status === 'PROCESSING';
+    return {
+      success,
+      refundRefId: typeof data.refund_ref_id === 'string' ? data.refund_ref_id : undefined,
+      message: String(data.errorReason || data.failedreason || data.status || ''),
       raw: data,
     };
   }

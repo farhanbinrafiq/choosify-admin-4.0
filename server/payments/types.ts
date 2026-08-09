@@ -2,8 +2,14 @@ import type { OpsStorefrontOrder } from '../operations/types';
 
 export type PaymentProviderId = 'sslcommerz' | 'mock';
 
+/** Minimal order reference for gateway product_name / value_a echo. */
+export type PaymentSessionOrderRef = {
+  orderId: string;
+};
+
 export interface PaymentSessionInput {
-  order: OpsStorefrontOrder;
+  /** Ops storefront order OR commerce payment id reference. */
+  order: PaymentSessionOrderRef | OpsStorefrontOrder;
   /** Amount the customer will be charged in this session (BDT). */
   amount: number;
   currency?: string;
@@ -38,13 +44,29 @@ export interface PaymentValidationResult {
   raw?: Record<string, unknown>;
 }
 
+export interface PaymentRefundInput {
+  bankTranId: string;
+  refundAmount: number;
+  refundRemarks: string;
+  refeId?: string;
+}
+
+export interface PaymentRefundResult {
+  success: boolean;
+  refundRefId?: string;
+  message?: string;
+  raw?: Record<string, unknown>;
+}
+
 /**
  * Generic gateway contract — SSLCommerz is the first implementation;
  * a second provider can implement the same shape later.
+ * refundTransaction is provider-level readiness for Sprint 8 — not a Refund workflow.
  */
 export interface PaymentGatewayProvider {
   readonly id: PaymentProviderId;
   isConfigured(): boolean;
   initiateSession(input: PaymentSessionInput): Promise<PaymentSessionResult>;
   validateTransaction(valId: string): Promise<PaymentValidationResult>;
+  refundTransaction?(input: PaymentRefundInput): Promise<PaymentRefundResult>;
 }

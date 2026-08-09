@@ -31,3 +31,10 @@ IS-004 / BP-006 require inventory validation at checkout and discuss reservation
 - **Cancel after Packed:** restock `quantity` (seller may cancel until dispatch per ES-005 §33).
 - **Payment-failure reservation release:** still Sprint 10. Confirm is Seller/Admin status path until Payments hardens payment-gated Confirm.
 - **Do not emit** `PaymentCaptured` / escrow / refund events in Orders sprint.
+
+## Sprint 7 / IS-010 Sprint 10 addendum
+
+- **Payment-failure / cancel / timeout before consumption:** Payments releases `reservedQuantity` (idempotent via Payment.`reservationReleased` + Order.`inventoryReserved`).
+- **Successful PaymentCaptured:** reservation remains until Pack (no release).
+- **Prepaid Confirm:** Pending → Confirmed only after Payment Captured (server gate).
+- **COD:** Confirm allowed under COD policy without fabricating gateway Captured for the due-on-delivery balance.

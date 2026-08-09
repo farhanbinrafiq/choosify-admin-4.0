@@ -167,4 +167,53 @@ export const commerceApi = {
       { method: 'POST', token, body: JSON.stringify(input) },
     );
   },
+  listPaymentMethods() {
+    return commerceFetch<{ success: boolean; data: unknown }>('/commerce/payments/methods');
+  },
+  initiatePayment(
+    token: string,
+    input: {
+      checkoutId: string;
+      paymentMethod: string;
+      idempotencyKey?: string;
+      amount?: number;
+      customer?: Record<string, string>;
+    },
+  ) {
+    return commerceFetch<{
+      success: boolean;
+      data?: {
+        payment: unknown;
+        redirectUrl: string | null;
+        chargeNow: number;
+        reused: boolean;
+      };
+      error?: string;
+    }>('/commerce/payments/initiate', {
+      method: 'POST',
+      token,
+      body: JSON.stringify(input),
+    });
+  },
+  getPayment(token: string, paymentId: string) {
+    return commerceFetch<{ success: boolean; data: unknown; error?: string }>(
+      `/commerce/payments/${encodeURIComponent(paymentId)}`,
+      { token },
+    );
+  },
+  cancelPayment(token: string, paymentId: string) {
+    return commerceFetch<{ success: boolean; data: unknown; error?: string }>(
+      `/commerce/payments/${encodeURIComponent(paymentId)}/cancel`,
+      { method: 'POST', token },
+    );
+  },
+  harnessCompletePayment(
+    token: string,
+    input: { paymentId: string; outcome: 'captured' | 'failed' | 'cancelled'; valId?: string },
+  ) {
+    return commerceFetch<{ success: boolean; data: unknown; error?: string }>(
+      '/commerce/payments/harness/complete',
+      { method: 'POST', token, body: JSON.stringify(input) },
+    );
+  },
 };

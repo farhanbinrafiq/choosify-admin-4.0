@@ -44,6 +44,12 @@ export type CommerceOrderDto = {
     deliveryNotes?: string;
   };
   shipmentId?: string;
+  paymentId?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  paidAmount?: number;
+  outstandingAmount?: number;
+  invoicePaymentStatus?: string;
   cancelledBy?: string;
   cancelReason?: string;
   cancelledAt?: string;
@@ -141,6 +147,38 @@ function trackingFromShipment(
   }
 }
 
+function mapPaymentStatus(raw?: string): PaymentStatus {
+  switch (String(raw || '').toLowerCase()) {
+    case 'paid':
+      return 'Paid';
+    case 'partial':
+      return 'Partial';
+    case 'cod_due':
+      return 'COD Due';
+    case 'failed':
+      return 'Failed';
+    case 'cancelled':
+    case 'canceled':
+      return 'Pending';
+    case 'refunded':
+      return 'Refunded';
+    default:
+      return 'Pending';
+  }
+}
+
+function mapInvoiceStatus(
+  raw?: string,
+  paymentStatus?: PaymentStatus,
+): Order['invoice_status'] {
+  if (raw === 'Paid' || paymentStatus === 'Paid') return 'Paid';
+  if (raw === 'Partial' || paymentStatus === 'Partial' || paymentStatus === 'COD Due') {
+    return 'Partial';
+  }
+  if (raw === 'Refunded' || paymentStatus === 'Refunded') return 'Refunded';
+  return 'Unpaid';
+}
+
 /**
  * One Commerce Brand Order → one UI Order row (primary line for list cards).
  * Extra line items are not collapsed; totals use Order.grandTotal.
@@ -155,6 +193,7 @@ export function mapCommerceOrderToUi(
   const isManual = row.source === 'manual' || row.source.startsWith('external_');
   const uiStatus = commerceStatusToUi(row.status);
   const track = trackingFromShipment(shipment);
+  const paymentStatus = mapPaymentStatus(row.paymentStatus);
 
   return {
     id: row.id,
@@ -179,8 +218,7 @@ export function mapCommerceOrderToUi(
       history: [],
     },
     status: uiStatus,
-    /** Payments not implemented — never invent Paid (Sprint 10). */
-    paymentStatus: 'Pending' as PaymentStatus,
+    paymentStatus,
     timestamp: row.createdAt,
     cancelTime: row.cancelledAt,
     cancelReason: row.cancelReason,
@@ -193,7 +231,7 @@ export function mapCommerceOrderToUi(
     delivery_charge: row.deliveryTotal,
     total_payable: row.grandTotal,
     invoice_id: row.orderNumber,
-    invoice_status: 'Unpaid',
+    invoice_status: mapInvoiceStatus(row.invoicePaymentStatus, paymentStatus),
     isManual,
     platformSource: mapSource(row.source),
     earnings: {
@@ -210,14 +248,15 @@ export function mapCommerceOrderToUi(
       },
     ],
     adminNotes: [],
-    codCollected: false,
-    // Extended fields consumed by filters / grouping (ignored by older UI)
+    codCollected: paymentStatus === 'COD Due' ? false : paymentStatus === 'Paid',
     ...( {
       checkoutId: row.checkoutId,
       brandId: row.brandId,
       commerceStatus: row.status,
       commerceSource: row.source,
       shipmentId: row.shipmentId || shipment?.id,
+      paymentId: row.paymentId,
+      outstandingAmount: row.outstandingAmount,
     } as Partial<Order>),
   };
 }

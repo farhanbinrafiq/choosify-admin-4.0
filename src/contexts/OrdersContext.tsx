@@ -18,7 +18,7 @@ import {
  */
 
 export type OrderStatus = 'Pending' | 'Confirmed' | 'Dispatched' | 'In Transit' | 'Delivered' | 'Cancelled' | 'Rejected' | 'Returned' | 'Exchange' | 'Processing';
-export type PaymentStatus = 'Pending' | 'Paid' | 'Refunded';
+export type PaymentStatus = 'Pending' | 'Paid' | 'Refunded' | 'Failed' | 'Partial' | 'COD Due';
 export type CustomerBehavior = 'Good' | 'Neutral' | 'Risk';
 
 export interface Review {
@@ -95,7 +95,7 @@ export interface Order {
   delivery_charge?: number;
   total_payable?: number;
   invoice_id?: string;
-  invoice_status?: 'Paid' | 'Unpaid' | 'Refunded';
+  invoice_status?: 'Paid' | 'Unpaid' | 'Refunded' | 'Partial';
   confirmation_timestamp?: string;
   isManual?: boolean;
   platformSource?: 'WhatsApp' | 'Facebook' | 'Instagram' | 'Offline';
@@ -832,7 +832,7 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const updateObj: Partial<Order> = { status };
         if (status === 'Delivered') {
           updateObj.deliverTime = new Date().toISOString();
-          // Do not invent Paid — Payments are Sprint 10
+          // Payment status from Commerce Order payment fields (Sprint 7)
         }
         return {
           ...o,

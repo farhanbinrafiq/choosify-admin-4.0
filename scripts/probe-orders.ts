@@ -329,6 +329,25 @@ async function main() {
   const orderB = checkoutBody.data!.orders.find((o) => o.brandId === brandBId)!;
   assert(!!orderA && !!orderA2 && !!orderB, 'multi-Brand split present');
 
+  // Sprint 7 payment gate: COD policy allows Confirm without gateway capture (deliveryTotal=0)
+  {
+    const payRes = await fetch(`${base}/commerce/payments/initiate`, {
+      method: 'POST',
+      headers: authHeaders(consumer.token),
+      body: JSON.stringify({
+        checkoutId,
+        paymentMethod: 'cod',
+        idempotencyKey: `orders-cod-${RUN_ID}`,
+      }),
+    });
+    const payBody = (await json(payRes)) as { data?: { payment?: { status?: string; paymentMethod?: string } } };
+    assert(
+      payRes.status === 200 && payBody.data?.payment?.paymentMethod === 'cod',
+      'Sprint7 COD selected for lifecycle Confirm gate',
+      { status: payRes.status, body: payBody },
+    );
+  }
+
   // 1. Consumer lists own Orders
   {
     const res = await fetch(`${base}/orders?as=consumer`, { headers: authHeaders(consumer.token) });
@@ -512,8 +531,17 @@ async function main() {
       headers: { ...authHeaders(consumer.token), 'Idempotency-Key': `orders-seller-cancel-${RUN_ID}` },
       body: JSON.stringify({ shipping }),
     });
-    const cb = (await json(c)) as { data?: { orders: OrderRow[] } };
+    const cb = (await json(c)) as { data?: { checkout: { id: string }; orders: OrderRow[] } };
     const sellCancelOrder = cb.data!.orders[0];
+    await fetch(`${base}/commerce/payments/initiate`, {
+      method: 'POST',
+      headers: authHeaders(consumer.token),
+      body: JSON.stringify({
+        checkoutId: cb.data!.checkout.id,
+        paymentMethod: 'cod',
+        idempotencyKey: `orders-seller-cancel-cod-${RUN_ID}`,
+      }),
+    });
     await transition(sellerB.token, sellCancelOrder.id, 'confirmed');
     const sc = await cancel(sellerB.token, sellCancelOrder.id, 'out of stock');
     assert(
@@ -631,7 +659,7 @@ async function main() {
     );
     assert(
       !names.has('PaymentCaptured') && !names.has('EscrowReleased') && !names.has('RefundIssued'),
-      '35. no PaymentCaptured/Escrow/Refund events emitted',
+      '35. no PaymentCaptured/Escrow/Refund business events from Orders lifecycle',
       [...names],
     );
   }
@@ -656,23 +684,32 @@ async function main() {
       headers: { ...authHeaders(consumer.token), 'Idempotency-Key': `orders-ship-guard-${RUN_ID}` },
       body: JSON.stringify({ shipping }),
     });
-    const cb = (await json(c)) as { data?: { orders: OrderRow[] } };
+    const cb = (await json(c)) as { data?: { checkout: { id: string }; orders: OrderRow[] } };
     const o = cb.data!.orders[0];
+    await fetch(`${base}/commerce/payments/initiate`, {
+      method: 'POST',
+      headers: authHeaders(consumer.token),
+      body: JSON.stringify({
+        checkoutId: cb.data!.checkout.id,
+        paymentMethod: 'cod',
+        idempotencyKey: `orders-ship-guard-cod-${RUN_ID}`,
+      }),
+    });
     await transition(sellerB.token, o.id, 'confirmed');
     await transition(sellerB.token, o.id, 'packed');
     const bad = await transition(sellerB.token, o.id, 'delivered');
     assert(bad.status >= 400, '24b. Order Delivered blocked while Shipment unshipped', bad.body);
   }
 
-  // Payment boundary — no SSLCommerz / paid flags
+  // Payment boundary — Sprint 7: COD selected; not fake gateway Paid
   {
     const get = await fetch(`${base}/orders/${orderA.id}`, { headers: authHeaders(consumer.token) });
     const body = (await json(get)) as { data?: Record<string, unknown> };
     assert(
       body.data?.status === 'completed' &&
-        !('paymentStatus' in (body.data || {})) &&
-        !('paidAt' in (body.data || {})),
-      'Payment boundary: Order Completed without payment capture fields',
+        body.data?.paymentMethod === 'cod' &&
+        body.data?.paymentStatus === 'cod_due',
+      'Payment boundary: COD Order Completed without fake Paid capture',
       body.data,
     );
   }

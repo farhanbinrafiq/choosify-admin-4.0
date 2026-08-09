@@ -40,8 +40,13 @@ async function main() {
   const consumer = readFileSync(join(process.cwd(), 'src/pages/dashboards/ConsumerDashboard.tsx'), 'utf8');
   assert(consumer.includes('profile?.id') && consumer.includes('cancelOrder'), '6. Consumer history uses auth id + cancel');
   const adapter = readFileSync(join(process.cwd(), 'src/lib/commerceOrderAdapter.ts'), 'utf8');
-  assert(adapter.includes("paymentStatus: 'Pending'") && adapter.includes('never invent Paid'), '7. payment placeholder stays Pending');
-
+  assert(
+    adapter.includes('mapPaymentStatus') &&
+      adapter.includes("case 'paid'") &&
+      adapter.includes("return 'Paid'") &&
+      !adapter.includes('never invent Paid'),
+    '7. Order adapter wires authoritative payment status (no fake Paid default)',
+  );
   // Live API smoke (same SoT screens call)
   const login = await fetch(`${base}/auth/login`, {
     method: 'POST',

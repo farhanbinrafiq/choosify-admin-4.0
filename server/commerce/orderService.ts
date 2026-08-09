@@ -1,7 +1,7 @@
 /**
- * Order lifecycle service — Sprint 6 / IS-010 Sprint 9.
+ * Order lifecycle service — Sprint 6–7 / IS-010 Sprint 9–10.
  * Product: ES-005 §27. Cancel: ES-005 §33. Ship: ES-005 §39.
- * Payments NOT implemented — Confirm is Seller/Admin status path (Sprint 10 hardens payment gate).
+ * Prepaid Confirm requires PaymentCaptured; COD follows COD policy (Sprint 7).
  */
 
 import {
@@ -82,8 +82,8 @@ async function assertOrderAccess(
   throw new CommerceError('Not authorized to access this order', 403);
 }
 
-/** Release reserved qty on cancel (idempotent via inventoryReserved flag). */
-async function releaseOrderReservations(order: CommerceOrder): Promise<CommerceOrder> {
+/** Release reserved qty on cancel / payment failure (idempotent via inventoryReserved flag). */
+export async function releaseOrderReservations(order: CommerceOrder): Promise<CommerceOrder> {
   if (!order.inventoryReserved || order.inventoryConsumed) {
     return { ...order, inventoryReserved: false };
   }
@@ -98,6 +98,86 @@ async function releaseOrderReservations(order: CommerceOrder): Promise<CommerceO
     await syncProductStockFromInventory(item.listingId);
   }
   return { ...order, inventoryReserved: false };
+}
+
+/**
+ * ADR-003 Sprint 7: release reservations for orders under a failed/cancelled payment.
+ * Idempotent per-order via inventoryReserved.
+ */
+export async function applyPaymentFailureInventoryRelease(orderIds: string[]): Promise<void> {
+  for (const orderId of orderIds) {
+    const order = await commerceStore.getOrder(orderId);
+    if (!order) continue;
+    if (!order.inventoryReserved || order.inventoryConsumed) continue;
+    const next = await releaseOrderReservations(order);
+    await commerceStore.upsertOrder({ ...next, updatedAt: new Date().toISOString() });
+  }
+}
+
+/**
+ * After PaymentCaptured (prepaid) or COD policy acceptance — confirm pending orders.
+ * Emits OrderConfirmed. Does not release inventory.
+ */
+export async function confirmOrdersForCapturedPayment(params: {
+  orderIds: string[];
+  actorId: string;
+  paymentId: string;
+  reason: 'payment_captured' | 'cod_policy';
+}): Promise<CommerceOrder[]> {
+  const out: CommerceOrder[] = [];
+  for (const orderId of params.orderIds) {
+    const order = await commerceStore.getOrder(orderId);
+    if (!order) continue;
+    if (order.status !== 'pending') {
+      out.push(order);
+      continue;
+    }
+    const next: CommerceOrder = {
+      ...order,
+      status: 'confirmed',
+      updatedAt: new Date().toISOString(),
+    };
+    await commerceStore.upsertOrder(next);
+    mirrorOpsStatus(next);
+    emitOrder('OrderConfirmed', next.id, params.actorId, {
+      orderId: next.id,
+      paymentId: params.paymentId,
+      reason: params.reason,
+      from: 'pending',
+      to: 'confirmed',
+    });
+    out.push(next);
+  }
+  return out;
+}
+
+/** Prepaid checkout Orders cannot Confirm until Payment Captured. COD / manual paths differ. */
+function assertPaymentAllowsConfirm(order: CommerceOrder): void {
+  // Manual / external social: Confirm may precede payment (IS-004 §15–§16)
+  if (order.source === 'manual' || String(order.source).startsWith('external_')) {
+    return;
+  }
+
+  const method = String(order.paymentMethod || '').toLowerCase();
+  const payStatus = String(order.paymentStatus || '').toLowerCase();
+
+  if (method === 'cod') {
+    if (payStatus === 'failed' || payStatus === 'cancelled') {
+      throw new CommerceError('COD Order cannot be Confirmed after payment failure', 409);
+    }
+    return;
+  }
+
+  if (method === 'wallet' || method === 'installment') {
+    throw new CommerceError('Payment method not available for Confirm in this sprint', 409);
+  }
+
+  if (payStatus !== 'paid' && payStatus !== 'partial') {
+    throw new CommerceError(
+      'Prepaid Order cannot be Confirmed until Payment is Captured',
+      409,
+    );
+  }
 }
 
 /** Restock after cancel when inventory was already consumed at Packed. */
@@ -265,6 +345,11 @@ export async function transitionOrder(
   }
   if (!canActorForwardTransition(actorKind, to)) {
     throw new CommerceError('Not authorized for this transition', 403);
+  }
+
+  // Sprint 7: gate prepaid Confirm on payment capture (server-authoritative)
+  if (to === 'confirmed' && order.status === 'pending') {
+    assertPaymentAllowsConfirm(order);
   }
 
   let next: CommerceOrder = {

@@ -145,6 +145,22 @@ export type CommerceOrder = {
   inventoryReserved?: boolean;
   /** Product stock consumed at Packed (Sprint 6). */
   inventoryConsumed?: boolean;
+  /** Sprint 7 / IS-010 Sprint 10 — payment knowledge (server SoT via Payment record). */
+  paymentId?: string;
+  paymentMethod?: string;
+  paymentOption?: string;
+  paymentStatus?:
+    | 'unpaid'
+    | 'pending'
+    | 'paid'
+    | 'partial'
+    | 'failed'
+    | 'cancelled'
+    | 'cod_due';
+  paymentProvider?: string;
+  paidAmount?: number;
+  outstandingAmount?: number;
+  invoicePaymentStatus?: 'Paid' | 'Unpaid' | 'Partial';
   cancelledBy?: CommerceCancelActor;
   cancelReason?: string;
   cancelledAt?: string;

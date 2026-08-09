@@ -19,7 +19,7 @@ export class MockPaymentProvider implements PaymentGatewayProvider {
   /** val_id → expected validation outcome (harness can seed). */
   private validations = new Map<
     string,
-    { valid: boolean; amount: number; status: string; tranId: string }
+    { valid: boolean; amount: number; status: string; tranId: string; currency?: string }
   >();
 
   isConfigured(): boolean {
@@ -28,13 +28,20 @@ export class MockPaymentProvider implements PaymentGatewayProvider {
 
   seedValidation(
     valId: string,
-    outcome: { valid: boolean; amount: number; status?: string; tranId: string },
+    outcome: {
+      valid: boolean;
+      amount: number;
+      status?: string;
+      tranId: string;
+      currency?: string;
+    },
   ): void {
     this.validations.set(valId, {
       valid: outcome.valid,
       amount: outcome.amount,
       status: outcome.status || (outcome.valid ? 'VALID' : 'INVALID_TRANSACTION'),
       tranId: outcome.tranId,
+      currency: outcome.currency || 'BDT',
     });
   }
 
@@ -68,10 +75,26 @@ export class MockPaymentProvider implements PaymentGatewayProvider {
     return {
       valid: seeded.valid,
       amount: seeded.amount,
-      currency: 'BDT',
+      currency: seeded.currency || 'BDT',
       status: seeded.status,
       tranId: seeded.tranId,
       valId,
+    };
+  }
+
+  /** Interface readiness only — mock refund for harness; not a business Refund workflow. */
+  async refundTransaction(input: {
+    bankTranId: string;
+    refundAmount: number;
+    refundRemarks: string;
+  }): Promise<{ success: boolean; refundRefId?: string; message?: string }> {
+    if (!this.isConfigured()) {
+      throw new Error('Mock payment gateway is not enabled');
+    }
+    return {
+      success: true,
+      refundRefId: `mock_refund_${input.bankTranId}`,
+      message: 'mock refund accepted (no business workflow)',
     };
   }
 }

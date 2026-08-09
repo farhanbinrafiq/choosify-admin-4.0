@@ -1,7 +1,7 @@
 /**
  * Product Order lifecycle — ES-005 §27 / IS-004 §21.
  * Cancellation eligibility — ES-005 §33.
- * Payment-gated Confirm deferred to Sprint 10 (IS-010).
+ * Payment-gated Confirm — Sprint 7 / IS-010 Sprint 10.
  */
 
 import type { CommerceCancelActor, CommerceOrderStatus } from './types';

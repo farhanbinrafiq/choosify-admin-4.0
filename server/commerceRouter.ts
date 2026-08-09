@@ -382,15 +382,22 @@ commerceRouter.post('/commerce/_flush', ...requireAuth, async (_req, res) => {
   }
 });
 
-/** Probe helper — recent Commerce domain events (auth required). */
+/** Probe helper — recent Commerce + Payments domain events (auth required). */
 commerceRouter.get('/commerce/_recent-events', ...requireAuth, async (req, res) => {
   try {
-    const role = actorRole(req);
-    if (role !== 'admin' && role !== 'super_admin' && !String(role || '').includes('seller')) {
-      // consumers may also inspect for probe ownership tests via admin login preferred
-    }
-    const events = getRecentPublishedEvents({ domain: 'Commerce', limit: 200 });
-    res.json({ success: true, data: events.map((e) => ({ eventName: e.eventName, aggregateId: e.aggregateId, actor: e.actor })) });
+    const commerce = getRecentPublishedEvents({ domain: 'Commerce', limit: 200 });
+    const payments = getRecentPublishedEvents({ domain: 'Payments', limit: 200 });
+    const events = [...commerce, ...payments];
+    res.json({
+      success: true,
+      data: events.map((e) => ({
+        eventName: e.eventName,
+        aggregateId: e.aggregateId,
+        actor: e.actor,
+        domain: e.domain,
+        timestamp: e.timestamp,
+      })),
+    });
   } catch (error) {
     handleCommerceError(res, error);
   }
