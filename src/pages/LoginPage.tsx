@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRight, Lock, Mail } from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
 import { ChoosifyLogo } from '../components/common/ChoosifyLogo';
 import { authLoginErrorMessage } from '../lib/authLoginErrorMessage';
@@ -20,6 +20,7 @@ export default function LoginPage() {
 
   const [email, setEmail] = useState(prefillEmail || 'admin@choosify.bd');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const { loginWithEmail } = useAuth();
@@ -106,13 +107,24 @@ export default function LoginPage() {
             <div className="flex items-center gap-2 bg-[#F8F9FC] border border-[#E8EDF2] rounded-lg px-3.5 h-11 mb-2.5">
               <Lock className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
+                autoComplete="current-password"
                 className="flex-1 bg-transparent border-0 outline-none text-[13px] font-bold text-[#111827] tracking-[2px] placeholder:tracking-[2px] placeholder:text-[#9CA3AF]"
               />
+              <button
+                type="button"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-pressed={showPassword}
+                title={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() => setShowPassword((v) => !v)}
+                className="shrink-0 p-1 rounded-md text-[#9CA3AF] hover:text-[#374151] hover:bg-black/5 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[#EF3C23]/40"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
 
             <div className="text-right mb-[22px]">

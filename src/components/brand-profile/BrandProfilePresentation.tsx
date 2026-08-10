@@ -35,7 +35,7 @@ function EmptyEditorState({
         <button
           type="button"
           onClick={onAction}
-          className="mt-3 text-[11px] font-extrabold uppercase tracking-wider text-[#FF5B00] hover:underline bg-transparent border-0 cursor-pointer"
+          className="mt-3 text-[11px] font-extrabold uppercase tracking-wider text-[#EF3C23] hover:underline bg-transparent border-0 cursor-pointer"
         >
           {actionLabel}
         </button>
@@ -205,7 +205,7 @@ export function BrandProfilePresentation({
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {activeDeals.map((deal) => (
                 <div key={deal.id} className="bg-white border border-[#E8EDF2] rounded-[10px] p-4">
-                  <div className="text-[10px] font-extrabold text-[#FF5B00] uppercase tracking-wider mb-1">
+                  <div className="text-[10px] font-extrabold text-[#EF3C23] uppercase tracking-wider mb-1">
                     {deal.status}
                   </div>
                   <div className="text-[13px] font-extrabold text-[#1A1A2E]">{deal.title}</div>
@@ -270,7 +270,7 @@ export function BrandProfilePresentation({
                     <div className="text-[12px] font-bold text-[#1A1A2E] line-clamp-2 min-h-[2.5em]">
                       {p.name}
                     </div>
-                    <div className="text-[12.5px] font-extrabold text-[#FF5B00] mt-1">
+                    <div className="text-[12.5px] font-extrabold text-[#EF3C23] mt-1">
                       ৳{Number(p.price || 0).toLocaleString()}
                     </div>
                   </div>
@@ -395,7 +395,7 @@ export function BrandProfilePresentation({
                   {(model.bestForTags || []).map((t) => (
                     <span
                       key={t}
-                      className="px-2.5 py-1 rounded-full bg-[#FFF4ED] text-[10.5px] font-bold text-[#FF5B00]"
+                      className="px-2.5 py-1 rounded-full bg-[#FFF4ED] text-[10.5px] font-bold text-[#EF3C23]"
                     >
                       {t}
                     </span>

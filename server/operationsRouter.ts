@@ -2164,6 +2164,70 @@ operationsRouter.patch(
   },
 );
 
+/**
+ * Profile-owner document replace/re-upload.
+ * Resets document status to pending so Admin must re-review.
+ * Does not grant approve/reject authority.
+ */
+operationsRouter.put(
+  '/operations/verifications/:id/document/:docId/replace',
+  ...requireAuth,
+  (req, res) => {
+    const existing = operationsStore.getVerification(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Verification request not found' });
+      return;
+    }
+    const isOwner = Boolean(req.userId && existing.submitted_by === req.userId);
+    const isAdmin = userCanManageVerifications(req);
+    if (!isOwner && !isAdmin) {
+      res.status(403).json({ error: 'Not authorized to replace this verification document' });
+      return;
+    }
+    const docUrl = typeof req.body?.doc_url === 'string' ? req.body.doc_url.trim() : '';
+    if (!docUrl) {
+      res.status(400).json({ error: 'doc_url is required' });
+      return;
+    }
+    const name =
+      typeof req.body?.name === 'string' && req.body.name.trim()
+        ? req.body.name.trim()
+        : undefined;
+    const actor = req.user?.displayName || req.userId || 'Document Owner';
+    const saved = operationsStore.updateVerificationDocument(req.params.id, req.params.docId, {
+      doc_url: docUrl,
+      ...(name ? { name } : {}),
+      status: 'pending',
+      notes: undefined,
+    });
+    if (!saved) {
+      res.status(404).json({ error: 'Document not found on this verification request' });
+      return;
+    }
+    // Replacing a document invalidates prior approval — Admin must re-review.
+    let nextOverall = existing.status;
+    if (existing.status === 'Approved' || existing.status === 'Rejected') {
+      nextOverall = 'Under Review';
+    } else if (existing.status === 'Draft') {
+      nextOverall = 'Submitted';
+    }
+    const withAudit = operationsStore.updateVerification(req.params.id, {
+      status: nextOverall,
+      audit_trail: [
+        ...saved.audit_trail,
+        {
+          timestamp: new Date().toISOString(),
+          action: 'Document Replaced',
+          actor,
+          details: 'Owner replaced a verification document; status reset to pending for Admin review',
+        },
+      ],
+    });
+    scheduleOperationsPersist();
+    res.json({ success: true, data: withAudit || saved });
+  },
+);
+
 operationsRouter.patch('/operations/verifications/:id/review', ...requireModerator, async (req, res) => {
   if (!userCanManageVerifications(req)) {
     res.status(403).json({ error: 'Not authorized to review verification requests' });

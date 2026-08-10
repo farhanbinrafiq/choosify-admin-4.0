@@ -1,4 +1,4 @@
-﻿// BrandEditStudio.tsx
+// BrandEditStudio.tsx
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -210,10 +210,14 @@ interface BrandEditStudioProps {
 
 export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudioProps = {}) {
   const { id } = useParams<{ id: string }>();
-  const { activeBrandId, allBrands } = useAuth();
+  const { activeBrandId, allBrands, setActiveBrandId } = useAuth();
   const navigate = useNavigate();
   // Never default to demo id "1" (Samsung seed). Prefer route/override/active brand.
   const activeId = overrideId || id || activeBrandId || "";
+
+  useEffect(() => {
+    if (activeId) setActiveBrandId(activeId);
+  }, [activeId, setActiveBrandId]);
 
   const brandProfilesRef = useRef<any>(null);
   try {
@@ -930,7 +934,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
   if (!model || isDraftLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-[420px] gap-3 text-app-text-muted">
-        <RotateCw className="w-10 h-10 animate-spin text-[#FF5B00]" />
+        <RotateCw className="w-10 h-10 animate-spin text-[#EF3C23]" />
         <span className="text-xs font-mono">Loading Choosify Enterprise Workspace...</span>
       </div>
     );
@@ -965,7 +969,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
         <div className="flex items-center gap-3">
           {hasUnsavedChanges && (
-            <span className="flex items-center gap-1 text-[#FF5B00] text-[10px] font-mono font-bold animate-pulse">
+            <span className="flex items-center gap-1 text-[#EF3C23] text-[10px] font-mono font-bold animate-pulse">
               â— UNSAVED DRAFT CHANGES
             </span>
           )}
@@ -992,12 +996,12 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               onClick={() => setShowVersions(!showVersions)}
               className="p-2 bg-white border border-slate-200 rounded-xl text-[#111827] hover:bg-slate-50 transition flex items-center gap-1.5 text-xs font-semibold"
             >
-              <History className="w-4 h-4 text-[#FF5B00]" />
+              <History className="w-4 h-4 text-[#EF3C23]" />
               <span>Snapshots ({versions.length})</span>
             </button>
             {showVersions && (
               <div className="absolute right-0 mt-2 bg-white border border-slate-200 shadow-2xl rounded-2xl p-4 w-80 z-40 text-left text-slate-800">
-                <p className="text-xs font-black uppercase text-[#FF5B00] border-b border-slate-100 pb-2">History Logs & Revisions</p>
+                <p className="text-xs font-black uppercase text-[#EF3C23] border-b border-slate-100 pb-2">History Logs & Revisions</p>
                 {versions.length === 0 ? (
                   <p className="text-[11px] font-mono text-slate-400 py-4">No snapshots registered in this session.</p>
                 ) : (
@@ -1008,7 +1012,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                           <span>{new Date(ver.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                           <button
                             onClick={() => setConfirmingId(ver.id)}
-                            className="font-bold text-[#FF5B00] hover:underline text-[10px]"
+                            className="font-bold text-[#EF3C23] hover:underline text-[10px]"
                           >
                             RESTORE
                           </button>
@@ -1047,7 +1051,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
           <button
             onClick={() => setShowPublishModal(true)}
-            className="px-5 py-2 bg-[#FF5B00] hover:bg-[#E64A00] text-app-text-primary font-black rounded-xl text-xs shadow-md transition"
+            className="px-5 py-2 bg-[#EF3C23] hover:bg-[#E64A00] text-app-text-primary font-black rounded-xl text-xs shadow-md transition"
           >
             Publish Live Profile
           </button>
@@ -1191,7 +1195,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                             value={headerForm.category}
                             onChange={(e) => setHeaderForm((prev) => ({ ...prev, category: e.target.value }))}
                             placeholder="Category"
-                            className="w-full bg-transparent border-none p-0 text-[11px] font-extrabold uppercase tracking-widest text-[#FF5B00] focus:outline-none focus:ring-0 placeholder:text-orange-200"
+                            className="w-full bg-transparent border-none p-0 text-[11px] font-extrabold uppercase tracking-widest text-[#EF3C23] focus:outline-none focus:ring-0 placeholder:text-orange-200"
                           />
                           <input
                             type="text"
@@ -1373,7 +1377,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
                     {/* Creator detail add form */}
                     <div className="border border-indigo-100 bg-orange-50/5 p-4 rounded-2xl space-y-3">
-                      <p className="text-xs font-black text-[#FF5B00] uppercase border-b border-indigo-100/40 pb-1.5">
+                      <p className="text-xs font-black text-[#EF3C23] uppercase border-b border-indigo-100/40 pb-1.5">
                         {editingCreatorId ? "ðŸ“ Update Creator Review Details" : "âž• Add Brand Partner Creator content"}
                       </p>
                       
@@ -1531,7 +1535,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
 
                     {/* Vouchers add Form wrapper details */}
                     <div className="border border-indigo-100 bg-orange-50/5 p-4 rounded-2xl space-y-3 text-left">
-                      <p className="text-xs font-black text-[#FF5B00] uppercase border-b pb-1.5">
+                      <p className="text-xs font-black text-[#EF3C23] uppercase border-b pb-1.5">
                         {editingPromoId ? "ðŸ“ Update Promo Voucher" : "âž• CREATE PROMO VOUCHER"}
                       </p>
 
@@ -1967,7 +1971,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
                     if (activeDrawer === "faq") saveFaqSection();
                     if (activeDrawer === "story") saveStorySection();
                   }}
-                  className="flex-1 py-2.5 bg-[#FF5B00] hover:bg-[#E64A00] text-app-text-primary text-xs font-black uppercase tracking-wider rounded-xl transition shadow-lg"
+                  className="flex-1 py-2.5 bg-[#EF3C23] hover:bg-[#E64A00] text-app-text-primary text-xs font-black uppercase tracking-wider rounded-xl transition shadow-lg"
                 >
                   Save Section
                 </button>
@@ -2061,7 +2065,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               </button>
               <button 
                 onClick={handlePublishChanges}
-                className="flex-1 py-2 bg-[#FF5B00] hover:bg-[#E64A00] text-[#FFFFFF] rounded-xl font-black text-xs"
+                className="flex-1 py-2 bg-[#EF3C23] hover:bg-[#E64A00] text-[#FFFFFF] rounded-xl font-black text-xs"
               >
                 Publish Live Now
               </button>
@@ -2073,7 +2077,7 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
       {/* --- LIVE BROADCAST SPINNER BACKGROUND --- */}
       {isPublishing && (
         <div className="fixed inset-0 bg-app-card/20 backdrop-blur-sm z-[1500] flex flex-col items-center justify-center gap-3 text-app-text-primary">
-          <RotateCw className="w-12 h-12 animate-spin text-[#FF5B00]" />
+          <RotateCw className="w-12 h-12 animate-spin text-[#EF3C23]" />
           <span className="text-xs font-mono font-bold uppercase tracking-wider">Compiling live production content logs...</span>
         </div>
       )}

@@ -319,7 +319,7 @@ export default function ProductEditStudio() {
   if (loading || !model) {
     return (
       <div className="flex flex-col items-center justify-center h-[420px] gap-3 text-app-text-muted">
-        <RotateCw className="w-10 h-10 animate-spin text-[#FF5B00]" />
+        <RotateCw className="w-10 h-10 animate-spin text-[#EF3C23]" />
         <span className="text-xs font-mono">Loading Product Visual Builder…</span>
       </div>
     );
@@ -378,7 +378,7 @@ export default function ProductEditStudio() {
 
         <div className="flex items-center gap-3">
           {hasUnsavedChanges ? (
-            <span className="text-[#FF5B00] text-[10px] font-mono font-bold animate-pulse">
+            <span className="text-[#EF3C23] text-[10px] font-mono font-bold animate-pulse">
               ● UNSAVED
             </span>
           ) : null}
@@ -397,12 +397,12 @@ export default function ProductEditStudio() {
               onClick={() => setShowVersions((v) => !v)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E8EDF2] text-[11px] font-bold bg-white"
             >
-              <History className="w-4 h-4 text-[#FF5B00]" />
+              <History className="w-4 h-4 text-[#EF3C23]" />
               Snapshots ({versions?.length || 0})
             </button>
             {showVersions ? (
               <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-[#E8EDF2] rounded-xl shadow-xl p-3 z-40">
-                <p className="text-xs font-black uppercase text-[#FF5B00] border-b border-slate-100 pb-2 m-0 mb-2">
+                <p className="text-xs font-black uppercase text-[#EF3C23] border-b border-slate-100 pb-2 m-0 mb-2">
                   History
                 </p>
                 {(versions || []).length === 0 ? (
@@ -430,7 +430,7 @@ export default function ProductEditStudio() {
           <button
             type="button"
             onClick={() => setShowPublishModal(true)}
-            className="px-3.5 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#FF5B00]"
+            className="px-3.5 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#EF3C23]"
           >
             Publish
           </button>
@@ -672,7 +672,7 @@ export default function ProductEditStudio() {
                 <button
                   type="button"
                   onClick={saveDrawer}
-                  className="flex-1 py-2.5 bg-[#FF5B00] text-white text-xs font-black uppercase tracking-wider rounded-xl"
+                  className="flex-1 py-2.5 bg-[#EF3C23] text-white text-xs font-black uppercase tracking-wider rounded-xl"
                 >
                   Save Section
                 </button>
@@ -701,7 +701,7 @@ export default function ProductEditStudio() {
                 type="button"
                 disabled={isPublishing}
                 onClick={() => void handlePublish()}
-                className="flex-1 py-2.5 rounded-xl bg-[#FF5B00] text-white text-xs font-black disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-xl bg-[#EF3C23] text-white text-xs font-black disabled:opacity-50"
               >
                 {isPublishing ? 'Publishing…' : 'Publish'}
               </button>

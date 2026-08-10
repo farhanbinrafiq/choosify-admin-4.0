@@ -55,13 +55,24 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
     [close, navigate],
   );
 
+  const profileMenuLabel =
+    profile?.role === 'seller'
+      ? 'Seller Profile'
+      : profile?.role === 'creator'
+        ? 'Creator Profile'
+        : 'My Profile';
+
   const menuItems: MenuItem[] = profile
     ? [
         {
           id: 'profile',
-          label: 'My Profile',
+          label: profileMenuLabel,
           icon: <User className="w-4 h-4" aria-hidden />,
-          onSelect: () => go(getMyProfilePath(profile)),
+          onSelect: () => {
+            if (profile.role === 'seller') go('/admin/brand-profile');
+            else if (profile.role === 'creator') go('/admin/creator-profile');
+            else go(getMyProfilePath(profile));
+          },
         },
         {
           id: 'settings',
@@ -156,7 +167,7 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
           className={`relative flex items-center justify-center rounded-full font-bold text-white shrink-0 overflow-hidden transition-transform ${
             variant === 'overlay' ? 'w-9 h-9 text-[12px]' : 'w-8 h-8 text-[13px] group-hover:scale-105'
           }`}
-          style={{ backgroundImage: 'linear-gradient(135deg, #FF5B00, #2323FF)' }}
+          style={{ backgroundImage: 'linear-gradient(135deg, #EF3C23, #2323FF)' }}
         >
           <img
             src={avatarUrl}
@@ -189,7 +200,7 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
               <div className="mx-auto mb-3 relative w-14 h-14 rounded-full overflow-hidden ring-2 ring-white shadow-md">
                 <div
                   className="absolute inset-0 flex items-center justify-center text-[15px] font-extrabold text-white"
-                  style={{ backgroundImage: 'linear-gradient(135deg, #FF5B00, #2323FF)' }}
+                  style={{ backgroundImage: 'linear-gradient(135deg, #EF3C23, #2323FF)' }}
                 >
                   {initials}
                 </div>

@@ -685,7 +685,7 @@ export default function SellersPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <h1 className="text-2xl font-black text-app-text-primary tracking-tight">Brands Management Studio</h1>
+            <h1 className="text-2xl font-black text-app-text-primary tracking-tight">Seller Management Studio</h1>
             <span className="text-[9px] bg-[#F4631E]/15 border border-[#F4631E]/20 text-[#F4631E] px-2.5 py-0.5 rounded font-black tracking-widest uppercase font-mono">
               Workspace Consolidation
             </span>
@@ -2087,6 +2087,7 @@ export default function SellersPage() {
             }}
             onSuspend={(input) => handleSuspendWithAccess(accessPanelSeller.id, input)}
             onReinstate={() => handleReinstateFromAccess(accessPanelSeller.id)}
+            canManageMarketplaceAccess
           />
         )}
       </Modal>

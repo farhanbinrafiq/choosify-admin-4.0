@@ -29,6 +29,7 @@ import {
   Database
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { PasswordInput } from '../../../components/ui/PasswordInput';
 
 export default function CourierProviders() {
   const logisticsService = LogisticsService.getInstance();
@@ -1117,11 +1118,12 @@ export default function CourierProviders() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 uppercase tracking-wider mb-1">Webhook URL Secret</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={editingCourier.webhookSecret || ''}
-                    onChange={(e) => setEditingCourier({ ...editingCourier, webhookSecret: e.target.value })}
-                    className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white text-gray-900"
+                    onChange={(value) => setEditingCourier({ ...editingCourier, webhookSecret: value })}
+                    toggleLabel="Show secret"
+                    wrapperClassName="flex items-center gap-2 w-full text-sm px-3 py-0 border border-gray-300 rounded-lg focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 bg-white"
+                    inputClassName="flex-1 min-w-0 bg-transparent border-0 outline-none py-2 text-sm text-gray-900"
                   />
                 </div>
               </div>
@@ -1139,12 +1141,13 @@ export default function CourierProviders() {
 
               <div>
                 <label className="block text-xs font-medium text-gray-700 uppercase tracking-wider mb-1">API Secret Token</label>
-                <input
-                  type="password"
-                  required
+                <PasswordInput
                   value={editingCourier.apiSecret}
-                  onChange={(e) => setEditingCourier({ ...editingCourier, apiSecret: e.target.value })}
-                  className="w-full text-sm px-3 py-2 border border-gray-300 rounded-lg outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white text-gray-900"
+                  onChange={(value) => setEditingCourier({ ...editingCourier, apiSecret: value })}
+                  required
+                  toggleLabel="Show secret"
+                  wrapperClassName="flex items-center gap-2 w-full text-sm px-3 py-0 border border-gray-300 rounded-lg focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 bg-white"
+                  inputClassName="flex-1 min-w-0 bg-transparent border-0 outline-none py-2 text-sm text-gray-900"
                 />
               </div>
 

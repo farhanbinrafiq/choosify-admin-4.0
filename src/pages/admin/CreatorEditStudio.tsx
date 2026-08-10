@@ -4,6 +4,7 @@ import { ArrowLeft, Check, History, RotateCw } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { catalogApi } from '../../services/catalogApi';
 import { useEntityDraft } from '../../hooks/useEntityDraft';
+import { useAuth } from '../../contexts/AuthContext';
 import { CreatorProfilePresentation } from '../../components/creator-profile';
 import {
   createBlankCreatorModel,
@@ -23,6 +24,8 @@ function linesFromTextarea(value: string): string[] {
 export default function CreatorEditStudio() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { profile } = useAuth();
+  const isPlatformAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
   const isNew = !id || id === 'new';
   const activeId = isNew ? 'new' : id;
 
@@ -243,8 +246,9 @@ export default function CreatorEditStudio() {
         location: identityForm.location,
         bio: identityForm.bio,
         bestFor: identityForm.bestFor,
-        verified: identityForm.verified,
-        status: identityForm.status,
+        // Verification + LIVE status are platform-controlled; creators publish via Publish only.
+        verified: isPlatformAdmin ? identityForm.verified : model.verified,
+        status: isPlatformAdmin ? identityForm.status : model.status,
       };
     } else if (activeDrawer === 'social') {
       next = { ...next, socialLinks: { ...socialForm } };
@@ -328,7 +332,7 @@ export default function CreatorEditStudio() {
   if (loading || !model) {
     return (
       <div className="flex flex-col items-center justify-center h-[420px] gap-3 text-app-text-muted">
-        <RotateCw className="w-10 h-10 animate-spin text-[#FF5B00]" />
+        <RotateCw className="w-10 h-10 animate-spin text-[#EF3C23]" />
         <span className="text-xs font-mono">Loading Creator Visual Builder…</span>
       </div>
     );
@@ -357,7 +361,9 @@ export default function CreatorEditStudio() {
         <div className="flex items-center gap-4 min-w-0">
           <button
             type="button"
-            onClick={() => navigate('/admin/creator-studio')}
+            onClick={() =>
+              navigate(profile?.role === 'creator' ? '/admin/creator-profile' : '/admin/creator-studio')
+            }
             className="p-2 bg-[#F1F3F5] text-slate-700 hover:bg-[#E8EDF2] rounded-[8px] transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -385,7 +391,7 @@ export default function CreatorEditStudio() {
 
         <div className="flex items-center gap-3">
           {hasUnsavedChanges ? (
-            <span className="text-[#FF5B00] text-[10px] font-mono font-bold animate-pulse">
+            <span className="text-[#EF3C23] text-[10px] font-mono font-bold animate-pulse">
               ● UNSAVED
             </span>
           ) : null}
@@ -404,12 +410,12 @@ export default function CreatorEditStudio() {
               onClick={() => setShowVersions((v) => !v)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E8EDF2] text-[11px] font-bold bg-white"
             >
-              <History className="w-4 h-4 text-[#FF5B00]" />
+              <History className="w-4 h-4 text-[#EF3C23]" />
               Snapshots ({versions?.length || 0})
             </button>
             {showVersions ? (
               <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-[#E8EDF2] rounded-xl shadow-xl p-3 z-40">
-                <p className="text-xs font-black uppercase text-[#FF5B00] border-b border-slate-100 pb-2 m-0 mb-2">
+                <p className="text-xs font-black uppercase text-[#EF3C23] border-b border-slate-100 pb-2 m-0 mb-2">
                   History
                 </p>
                 {(versions || []).length === 0 ? (
@@ -434,10 +440,26 @@ export default function CreatorEditStudio() {
           >
             Save Draft
           </button>
+          {hasUnsavedChanges ? (
+            <button
+              type="button"
+              onClick={() => {
+                // Discard canvas edits by reloading catalog + clearing local draft cache.
+                try {
+                  localStorage.removeItem(draftKey);
+                } catch (_) {}
+                setHasUnsavedChanges(false);
+                window.location.reload();
+              }}
+              className="px-3.5 py-2 rounded-lg border border-[#E8EDF2] text-[11px] font-extrabold bg-white text-slate-600"
+            >
+              Cancel
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => setShowPublishModal(true)}
-            className="px-3.5 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#FF5B00]"
+            className="px-3.5 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#EF3C23]"
           >
             Publish
           </button>
@@ -534,29 +556,37 @@ export default function CreatorEditStudio() {
                     onChange={(e) => setIdentityForm({ ...identityForm, bio: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
                   />
-                  <label className="flex items-center gap-2 text-[11px] font-bold">
-                    <input
-                      type="checkbox"
-                      checked={identityForm.verified}
-                      onChange={(e) => setIdentityForm({ ...identityForm, verified: e.target.checked })}
-                    />
-                    Verified creator
-                  </label>
-                  <label className="block text-[9px] font-black uppercase text-slate-500">Status</label>
-                  <select
-                    value={identityForm.status}
-                    onChange={(e) =>
-                      setIdentityForm({
-                        ...identityForm,
-                        status: e.target.value as CreatorEditorModel['status'],
-                      })
-                    }
-                    className="w-full p-2.5 border rounded-xl text-xs"
-                  >
-                    <option value="DRAFT">DRAFT</option>
-                    <option value="LIVE">LIVE</option>
-                    <option value="ARCHIVED">ARCHIVED</option>
-                  </select>
+                  {isPlatformAdmin ? (
+                    <>
+                      <label className="flex items-center gap-2 text-[11px] font-bold">
+                        <input
+                          type="checkbox"
+                          checked={identityForm.verified}
+                          onChange={(e) => setIdentityForm({ ...identityForm, verified: e.target.checked })}
+                        />
+                        Verified creator
+                      </label>
+                      <label className="block text-[9px] font-black uppercase text-slate-500">Status</label>
+                      <select
+                        value={identityForm.status}
+                        onChange={(e) =>
+                          setIdentityForm({
+                            ...identityForm,
+                            status: e.target.value as CreatorEditorModel['status'],
+                          })
+                        }
+                        className="w-full p-2.5 border rounded-xl text-xs"
+                      >
+                        <option value="DRAFT">DRAFT</option>
+                        <option value="LIVE">LIVE</option>
+                        <option value="ARCHIVED">ARCHIVED</option>
+                      </select>
+                    </>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 m-0">
+                      Verification and Trust Score are system-managed. Use Publish to go live.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -688,7 +718,7 @@ export default function CreatorEditStudio() {
                 <button
                   type="button"
                   onClick={saveDrawer}
-                  className="flex-1 py-2.5 bg-[#FF5B00] text-white text-xs font-black uppercase tracking-wider rounded-xl"
+                  className="flex-1 py-2.5 bg-[#EF3C23] text-white text-xs font-black uppercase tracking-wider rounded-xl"
                 >
                   Save Section
                 </button>
@@ -717,7 +747,7 @@ export default function CreatorEditStudio() {
                 type="button"
                 disabled={isPublishing}
                 onClick={() => void handlePublish()}
-                className="flex-1 py-2.5 rounded-xl bg-[#FF5B00] text-white text-xs font-black disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-xl bg-[#EF3C23] text-white text-xs font-black disabled:opacity-50"
               >
                 {isPublishing ? 'Publishing…' : 'Publish'}
               </button>

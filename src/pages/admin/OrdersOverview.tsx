@@ -426,7 +426,7 @@ export default function OrdersOverview() {
         <div className="space-y-2 relative z-10">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-gradient-to-r from-orange-500/15 to-app-accent/15 rounded-full border border-app-accent/20">
             <Sparkles className="w-3.5 h-3.5 text-app-accent animate-pulse" />
-            <span className="text-[10px] font-black tracking-widest text-[#FF5B00] uppercase">Marketplace Order Intelligence</span>
+            <span className="text-[10px] font-black tracking-widest text-[#EF3C23] uppercase">Marketplace Order Intelligence</span>
           </div>
           <h1 className="text-2xl font-black text-app-text-primary tracking-tight flex items-center gap-3">
             📊 Marketplace Order Intelligence Center
@@ -463,7 +463,7 @@ export default function OrdersOverview() {
                   setTimeframe(t);
                   showInlineToast(`Timeline updated to ${t} based interval charts`);
                 }}
-                className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all${timeframe === t ? 'bg-[#FF5B00] text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                className={`px-3.5 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all${timeframe === t ? 'bg-[#EF3C23] text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
               >
                 {t}
               </button>
@@ -561,7 +561,7 @@ export default function OrdersOverview() {
             </div>
             <div className="space-y-1">
               <div className="text-xl font-black text-app-text-primary">{pendingOrdersCount}</div>
-              <span className="text-[9px] text-[#FF5B00] block font-bold">Needs Immediate Action</span>
+              <span className="text-[9px] text-[#EF3C23] block font-bold">Needs Immediate Action</span>
             </div>
           </div>
 
@@ -645,7 +645,7 @@ export default function OrdersOverview() {
               </div>
             </div>
             <div className="space-y-1">
-              <div className="text-xl font-black text-app-text-primary">32.4 <span className="text-xs uppercase font-black text-[#FF5B00]">Hrs</span></div>
+              <div className="text-xl font-black text-app-text-primary">32.4 <span className="text-xs uppercase font-black text-[#EF3C23]">Hrs</span></div>
               <span className="text-[9.5px] text-app-text-secondary block font-bold">Processing dispatch: 14.2 Hours</span>
             </div>
           </div>
@@ -655,12 +655,12 @@ export default function OrdersOverview() {
             <div className="flex items-center justify-between">
               <span className="text-[9px] font-bold text-app-text-secondary uppercase tracking-widest">Pending Merchant Settlements</span>
               <div className="p-2.5 bg-app-bg border border-app-border rounded-xl">
-                <Landmark className="w-4 h-4 text-[#FF5B00]" />
+                <Landmark className="w-4 h-4 text-[#EF3C23]" />
               </div>
             </div>
             <div className="space-y-1">
               <div className="text-xl font-black text-teal-400">৳ {sellerPayoutsLedgerVal.toLocaleString()}</div>
-              <span className="text-[9.5px] text-[#FF5B00] block font-bold">Bi-weekly settlement queue</span>
+              <span className="text-[9.5px] text-[#EF3C23] block font-bold">Bi-weekly settlement queue</span>
             </div>
           </div>
 
@@ -678,7 +678,7 @@ export default function OrdersOverview() {
           </div>
           <Link
             to="/admin/orders"
-            className="px-4 py-2 bg-[#FF5B00]/25 hover:bg-[#FF5B00]/40 border border-[#FF5B00]/30 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-colors duration-150"
+            className="px-4 py-2 bg-[#EF3C23]/25 hover:bg-[#EF3C23]/40 border border-[#EF3C23]/30 text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-colors duration-150"
           >
             Go to Operational Order Console <ArrowUpRight className="w-3.5 h-3.5" />
           </Link>
@@ -726,13 +726,13 @@ export default function OrdersOverview() {
               <AlertOctagon className="w-4 h-4 animate-bounce" />
             </div>
             <div>
-              <span className="text-[9px] text-[#FF5B00] font-black uppercase block">Operational Alert: Bottleneck Identified</span>
+              <span className="text-[9px] text-[#EF3C23] font-black uppercase block">Operational Alert: Bottleneck Identified</span>
               <p className="text-[11px] text-app-text-secondary mt-0.5">There are currently 2 orders stuck in "In Transit" status for more than 48 hours. SteatFast logistics has flagged delays at outer districts.</p>
             </div>
           </div>
           <Link 
             to="/admin/orders"
-            className="text-[10px] font-black uppercase tracking-wider text-[#FF5B00] hover:underline whitespace-nowrap"
+            className="text-[10px] font-black uppercase tracking-wider text-[#EF3C23] hover:underline whitespace-nowrap"
           >
             Inspect Logistics queue &rarr;
           </Link>
@@ -827,7 +827,7 @@ export default function OrdersOverview() {
                 <Legend wrapperStyle={{ fontSize: '10px' }} />
                 <Bar name="Gross Revenue Flow" dataKey="gross" fill="#E64A00" radius={[4, 4, 0, 0]}>
                   {getChartDataset().map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#FF5B00' : '#E64A00'} />
+                    <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#EF3C23' : '#E64A00'} />
                   ))}
                 </Bar>
                 <Bar name="Platform Fee Split" dataKey="commission" fill="#10B981" radius={[4, 4, 0, 0]} />
@@ -842,7 +842,7 @@ export default function OrdersOverview() {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-app-border">
           <div className="space-y-1">
             <h3 className="text-base font-black text-app-text-primary flex items-center gap-2">
-              <Landmark className="w-5 h-5 text-[#FF5B00]" /> SECTION 4 — Commission Split & Settlement Dispatch Center
+              <Landmark className="w-5 h-5 text-[#EF3C23]" /> SECTION 4 — Commission Split & Settlement Dispatch Center
             </h3>
             <p className="text-xs text-app-text-secondary">
               Manage default platform commission, view upcoming dispatch schedule, override frozen payouts, and authorize direct clearances.
@@ -923,7 +923,7 @@ export default function OrdersOverview() {
           
           <button 
             onClick={() => handleTriggerExport('Merchant Performance Rankings')}
-            className="px-3.5 py-1.5 bg-app-bg border border-app-border hover:bg-[#FF5B00] hover:text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all text-app-text-secondary cursor-pointer"
+            className="px-3.5 py-1.5 bg-app-bg border border-app-border hover:bg-[#EF3C23] hover:text-white rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all text-app-text-secondary cursor-pointer"
           >
             <Download className="w-3.5 h-3.5" /> Export Seller Rankings
           </button>
@@ -959,7 +959,7 @@ export default function OrdersOverview() {
                   <td className="p-4">
                     <Link
                       to={`/dashboard/content-studio/brands`}
-                      className="text-xs text-[#FF5B00] font-black hover:underline inline-flex items-center gap-1"
+                      className="text-xs text-[#EF3C23] font-black hover:underline inline-flex items-center gap-1"
                     >
                       🏷️ {s.brand} <ArrowUpRight className="w-3 h-3" />
                     </Link>
@@ -1058,7 +1058,7 @@ export default function OrdersOverview() {
                         {prod.category}
                       </span>
                     </td>
-                    <td className="p-3 text-right font-black text-[#FF5B00]">৳ {prod.revenue.toLocaleString()}</td>
+                    <td className="p-3 text-right font-black text-[#EF3C23]">৳ {prod.revenue.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1171,7 +1171,7 @@ export default function OrdersOverview() {
                     </div>
                     <div>
                       {isAdmin ? (
-                        <div className="font-bold text-[#FF5B00] hover:underline text-[11px]">
+                        <div className="font-bold text-[#EF3C23] hover:underline text-[11px]">
                           <Link to={`/upe/consumer/${c.id}`}>
                             {c.name} &rarr;
                           </Link>
@@ -1242,7 +1242,7 @@ export default function OrdersOverview() {
           {orderSourceAnalyticsList.map((src, sIdx) => {
             const countRate = (src.count / (totalOrdersCount || 1)) * 100;
             return (
-              <div key={sIdx} className="bg-app-bg border border-app-border rounded-2xl p-5 space-y-3 relative group hover:border-[#FF5B00]/40 transition-all">
+              <div key={sIdx} className="bg-app-bg border border-app-border rounded-2xl p-5 space-y-3 relative group hover:border-[#EF3C23]/40 transition-all">
                 <span className="text-[8.5px] font-black text-slate-500 uppercase tracking-widest block">{src.code} GATEWAY</span>
                 <h4 className="text-xs font-black text-app-text-primary truncate">{src.name}</h4>
                 <div className="space-y-1">
@@ -1272,13 +1272,13 @@ export default function OrdersOverview() {
           <div className="flex bg-app-bg p-1 rounded-xl border border-app-border gap-1 self-start">
             <button
               onClick={() => setLogisticsViewMode('Summary')}
-              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all${logisticsViewMode === 'Summary' ? 'bg-[#FF5B00] text-white' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all${logisticsViewMode === 'Summary' ? 'bg-[#EF3C23] text-white' : 'text-slate-400 hover:text-white'}`}
             >
               Logistics Overview
             </button>
             <button
               onClick={() => setLogisticsViewMode('CourierComparison')}
-              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all${logisticsViewMode === 'CourierComparison' ? 'bg-[#FF5B00] text-white' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all${logisticsViewMode === 'CourierComparison' ? 'bg-[#EF3C23] text-white' : 'text-slate-400 hover:text-white'}`}
             >
               Compare Couriers
             </button>
@@ -1299,7 +1299,7 @@ export default function OrdersOverview() {
             </div>
             <div className="bg-app-bg border border-app-border rounded-2xl p-5 space-y-3">
               <span className="text-[10px] font-black text-app-text-secondary uppercase tracking-widest block">Dispatched Outwards Queue</span>
-              <div className="text-2xl font-black text-[#FF5B00]">{dispatchOrdersCount} En-route</div>
+              <div className="text-2xl font-black text-[#EF3C23]">{dispatchOrdersCount} En-route</div>
               <p className="text-[10px] text-slate-500">Actively logged under API transit codes in Pathao or SteadFast panels.</p>
             </div>
           </div>
@@ -1416,7 +1416,7 @@ export default function OrdersOverview() {
       <section id="sec-risk-monitor" className="bg-app-card border border-app-border rounded-3xl p-8 shadow-2xl space-y-6">
         <div>
           <h3 className="text-md font-black text-app-text-primary flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-[#FF5B00]" /> SECTION 12 — Threat Vectors & Marketplace Risk Monitor
+            <ShieldCheck className="w-5 h-5 text-[#EF3C23]" /> SECTION 12 — Threat Vectors & Marketplace Risk Monitor
           </h3>
           <p className="text-xs text-app-text-secondary font-medium">Automatic system scans detecting chargeback risks, fake manual invoice generation, or abnormal purchase cancellation rates.</p>
         </div>
@@ -1482,7 +1482,7 @@ export default function OrdersOverview() {
               </div>
               <div className="text-right">
                 <span className="text-[10px] font-mono text-slate-500 font-bold block">{log.time}</span>
-                <span className="text-[8px] uppercase tracking-wider font-extrabold text-[#FF5B00]">SECURE LOG</span>
+                <span className="text-[8px] uppercase tracking-wider font-extrabold text-[#EF3C23]">SECURE LOG</span>
               </div>
             </div>
           ))}

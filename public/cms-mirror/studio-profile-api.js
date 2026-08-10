@@ -129,8 +129,38 @@
     });
   }
 
+  /** Commerce Orders — authoritative SoT for Order Hub (Sprint 6+). */
+  function listOrders() {
+    return ensureAuthToken().then(function (token) {
+      return request('/orders').then(function (r) { return (r && r.data) || []; });
+    });
+  }
+
+  function transitionOrder(orderId, toStatus, extra) {
+    var body = Object.assign({ toStatus: toStatus }, extra || {});
+    return request('/orders/' + encodeURIComponent(orderId) + '/transition', 'POST', body)
+      .then(function (r) { return (r && r.data) || r; });
+  }
+
+  function cancelOrder(orderId, reason) {
+    return request('/orders/' + encodeURIComponent(orderId) + '/cancel', 'POST', { reason: reason || 'Cancelled from Order Hub' })
+      .then(function (r) { return (r && r.data) || r; });
+  }
+
+  function getOrderShipment(orderId) {
+    return request('/orders/' + encodeURIComponent(orderId) + '/shipment').then(function (r) {
+      return (r && r.data) || null;
+    }).catch(function () { return null; });
+  }
+
   function patchBrand(id, payload) {
     return request('/catalog/brands/' + encodeURIComponent(id), 'PATCH', payload)
+      .then(function (r) { return (r && r.data) || r; });
+  }
+
+  /** Admin-only ES-005 Marketplace Access lifecycle transition. */
+  function setBrandMarketplaceAccess(id, status) {
+    return request('/catalog/brands/' + encodeURIComponent(id) + '/marketplace-access', 'PATCH', { status: status })
       .then(function (r) { return (r && r.data) || r; });
   }
 
@@ -175,6 +205,10 @@
   function putGuide(id, payload) {
     return request('/catalog/guides/' + encodeURIComponent(id), 'PUT', payload)
       .then(function (r) { return (r && r.data) || r; });
+  }
+
+  function listGuides() {
+    return request('/catalog/guides').then(function (r) { return (r && r.data) || []; });
   }
 
   function slugify(value) {
@@ -307,9 +341,7 @@
       verifiedStatus: !!b.verified,
       featuredFlag: false,
       sponsoredFlag: false,
-      marketplaceAccess: typeof b.marketplaceAccess === 'boolean'
-        ? b.marketplaceAccess
-        : (typeof draft.marketplaceAccess === 'boolean' ? draft.marketplaceAccess : undefined),
+      // Marketplace Access is Admin-only — never send from Seller Brand Studio saves.
     };
   }
 
@@ -464,13 +496,100 @@
     return pickImageFile().then(uploadImage);
   }
 
+  /** Communication Notification Center — mounted at `/api` (not `/api/v1`). */
+  var COMM_API_BASE = '/api';
+
+  function emptyNotificationFeed(temporaryEmpty) {
+    return {
+      items: [],
+      summary: { total: 0, unread: 0, read: 0, archived: 0, pinned: 0, dismissed: 0 },
+      temporaryEmpty: !!temporaryEmpty,
+    };
+  }
+
+  function requestCommunication(path, method, body) {
+    method = method || 'GET';
+    return ensureAuthToken().then(function (token) {
+      if (!token) {
+        var err = new Error('Missing bearer token');
+        err.code = 'NO_TOKEN';
+        throw err;
+      }
+      var headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token };
+      return fetch(COMM_API_BASE + path, {
+        method: method,
+        headers: headers,
+        credentials: 'include',
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      }).then(function (res) {
+        return res.text().then(function (text) {
+          var parsed = null;
+          try { parsed = text ? JSON.parse(text) : null; } catch (_) { parsed = { error: text }; }
+          if (!res.ok) {
+            var msg = (parsed && (parsed.error || parsed.message)) || ('Request failed (' + res.status + ')');
+            throw new Error(msg);
+          }
+          return parsed && parsed.data !== undefined ? parsed.data : parsed;
+        });
+      });
+    });
+  }
+
+  /**
+   * Identity-scoped inbox. Without a JWT (TempRoleSwitcher), returns empty —
+   * never invents seed/demo notifications as live SoT.
+   */
+  function listMyNotifications(opts) {
+    opts = opts || {};
+    return ensureAuthToken().then(function (token) {
+      if (!token) return emptyNotificationFeed(true);
+      var params = new URLSearchParams();
+      params.set('limit', String(opts.limit != null ? opts.limit : 20));
+      params.set('archived', String(opts.archived != null ? opts.archived : false));
+      params.set('dismissed', String(opts.dismissed != null ? opts.dismissed : false));
+      return requestCommunication('/notifications?' + params.toString(), 'GET').then(function (data) {
+        var items = (data && Array.isArray(data.items)) ? data.items : [];
+        var summary = (data && data.summary) || {
+          total: items.length,
+          unread: items.filter(function (n) { return !n.read && !n.archived; }).length,
+          read: items.filter(function (n) { return n.read && !n.archived; }).length,
+          archived: 0,
+          pinned: 0,
+          dismissed: 0,
+        };
+        return { items: items, summary: summary, temporaryEmpty: false };
+      }).catch(function () {
+        return emptyNotificationFeed(false);
+      });
+    });
+  }
+
+  function markNotificationRead(id) {
+    if (!id) return Promise.resolve(null);
+    return requestCommunication('/notifications/' + encodeURIComponent(id) + '/read', 'PATCH').catch(function () {
+      return null;
+    });
+  }
+
+  function markNotificationsRead(ids) {
+    if (!ids || !ids.length) return Promise.resolve();
+    return requestCommunication('/notifications/read', 'POST', { ids: ids }).catch(function () {
+      return null;
+    });
+  }
+
   global.CmsStudioProfileApi = {
     request: request,
     listBrands: listBrands,
     ensureSellerWorkspace: ensureSellerWorkspace,
     ensureCreatorWorkspace: ensureCreatorWorkspace,
     listSellerCustomers: listSellerCustomers,
+    listOrders: listOrders,
+    transitionOrder: transitionOrder,
+    cancelOrder: cancelOrder,
+    getOrderShipment: getOrderShipment,
     patchBrand: patchBrand,
+    setBrandMarketplaceAccess: setBrandMarketplaceAccess,
     listCreators: listCreators,
     patchCreator: patchCreator,
     putCreator: putCreator,
@@ -480,6 +599,7 @@
     getProductDetail: getProductDetail,
     upsertProductDetail: upsertProductDetail,
     putGuide: putGuide,
+    listGuides: listGuides,
     slugify: slugify,
     splitLines: splitLines,
     parseKeyValueLines: parseKeyValueLines,
@@ -493,5 +613,8 @@
     uploadImage: uploadImage,
     pickImageFile: pickImageFile,
     pickAndUploadImage: pickAndUploadImage,
+    listMyNotifications: listMyNotifications,
+    markNotificationRead: markNotificationRead,
+    markNotificationsRead: markNotificationsRead,
   };
 })(typeof window !== 'undefined' ? window : globalThis);

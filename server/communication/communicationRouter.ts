@@ -10,6 +10,7 @@ import {
   createNotification,
   deleteNotification,
   dismissNotification,
+  getNotification,
   getNotificationCenterSummary,
   listNotifications,
   markRead,
@@ -101,9 +102,15 @@ communicationRouter.put('/notifications/preferences', ...requireAuth, (req, res)
 });
 
 communicationRouter.post('/notifications/read', ...requireAuth, (req, res) => {
+  const userId = resolveUserId(req);
+  if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
   const ids = Array.isArray(req.body?.ids) ? (req.body.ids as string[]) : [];
   if (ids.length === 0) return res.status(400).json({ success: false, error: 'ids array is required' });
-  return success(res, bulkRead(ids, req));
+  const owned = ids.filter((id) => {
+    const row = getNotification(id);
+    return !!row && row.userId === userId;
+  });
+  return success(res, bulkRead(owned, req));
 });
 
 communicationRouter.post('/notifications/archive', ...requireAuth, (req, res) => {
@@ -113,12 +120,24 @@ communicationRouter.post('/notifications/archive', ...requireAuth, (req, res) =>
 });
 
 communicationRouter.patch('/notifications/:id/read', ...requireAuth, (req, res) => {
+  const userId = resolveUserId(req);
+  const existing = getNotification(req.params.id);
+  if (!existing) return res.status(404).json({ success: false, error: 'Notification not found' });
+  if (!userId || existing.userId !== userId) {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
   const updated = markRead(req.params.id, req);
   if (!updated) return res.status(404).json({ success: false, error: 'Notification not found' });
   return success(res, updated);
 });
 
 communicationRouter.patch('/notifications/:id/unread', ...requireAuth, (req, res) => {
+  const userId = resolveUserId(req);
+  const existing = getNotification(req.params.id);
+  if (!existing) return res.status(404).json({ success: false, error: 'Notification not found' });
+  if (!userId || existing.userId !== userId) {
+    return res.status(403).json({ success: false, error: 'Forbidden' });
+  }
   const updated = markUnread(req.params.id);
   if (!updated) return res.status(404).json({ success: false, error: 'Notification not found' });
   return success(res, updated);

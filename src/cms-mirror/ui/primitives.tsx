@@ -44,7 +44,7 @@ export function Tag({ children }: { children: React.ReactNode }) {
       style={{
         fontSize: 8,
         fontWeight: 800,
-        color: '#FF5B00',
+        color: '#EF3C23',
         background: 'rgba(255,91,0,0.14)',
         padding: '2px 6px',
         borderRadius: 4,

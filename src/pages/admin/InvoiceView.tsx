@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
-import { useOrders } from '../../contexts/OrdersContext';
+import { useOrders, type Order, type PaymentStatus } from '../../contexts/OrdersContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { ChoosifyLogo } from '../../components/common/ChoosifyLogo';
 import { 
@@ -16,12 +16,36 @@ import {
 } from 'lucide-react';
 import { listingSectionLabels } from '../../../shared/booking/bookingFieldConfig';
 import { Badge } from '../../components/ui/Badge';
+import { commerceApi } from '../../services/commerceApi';
+import {
+  getAuthToken,
+  mapCommerceOrderToUi,
+  type CommerceOrderDto,
+  type CommerceShipmentDto,
+} from '../../lib/commerceOrderAdapter';
 
 interface InvoiceViewProps {
   role?: 'admin' | 'seller';
 }
 
-// Supplier dictionary helper
+function paymentLockLabel(paymentStatus: PaymentStatus | string | undefined): string {
+  switch (paymentStatus) {
+    case 'Paid':
+      return 'PAID REVENUE';
+    case 'Partial':
+      return 'PARTIAL / OUTSTANDING';
+    case 'COD Due':
+      return 'COD BALANCE DUE';
+    case 'Failed':
+      return 'UNPAID / FAILED';
+    case 'Refunded':
+      return 'REFUNDED';
+    default:
+      return 'UNPAID';
+  }
+}
+
+// Supplier dictionary helper (legacy demo sellers only — do not invent IDs for live Commerce brands)
 const getSupplierInfo = (sellerId: string, sellerName: string) => {
   const mapping: Record<string, any> = {
     'seller_001': {
@@ -45,15 +69,16 @@ const getSupplierInfo = (sellerId: string, sellerName: string) => {
       email: 'info@techzone.com.bd'
     }
   };
-  return mapping[sellerId] || {
+  if (mapping[sellerId]) return mapping[sellerId];
+  return {
     storeName: sellerName || 'Choosify Authorized Merchant',
-    owner: 'Licensed Merchant Partner',
-    license: 'Standard Commercial Trade Contract',
-    tradeId: `NBR-VAT-CL-${Math.floor(100000 + Math.random() * 900000)}`,
+    owner: sellerName || 'Licensed Merchant Partner',
+    license: 'Platform merchant record',
+    tradeId: sellerId ? `SELLER-${sellerId.slice(0, 8)}` : 'N/A',
     certified: true,
-    address: 'Commercial Hub West A, Dhaka Union, Bangladesh',
-    phone: '+880 1800-CHOOSIFY',
-    email: 'merchant@choosify.com'
+    address: '—',
+    phone: '—',
+    email: '—',
   };
 };
 
@@ -63,6 +88,9 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
   const location = useLocation();
   const { orders } = useOrders();
   const { profile: loggedInProfile } = useAuth();
+  const [commerceOrder, setCommerceOrder] = useState<Order | null>(null);
+  const [commerceLoadState, setCommerceLoadState] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [commerceLoadError, setCommerceLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loggedInProfile) {
@@ -89,7 +117,59 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
       return stored ? JSON.parse(stored) : null;
     } catch { return null; }
   })();
-  const order = stateOrder || fallbackOrder || contextOrder;
+
+  useEffect(() => {
+    if (!id || !loggedInProfile) return;
+    if (stateOrder || fallbackOrder || contextOrder) {
+      setCommerceOrder(null);
+      setCommerceLoadState('idle');
+      setCommerceLoadError(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setCommerceLoadState('loading');
+      setCommerceLoadError(null);
+      const token = getAuthToken();
+      if (!token) {
+        if (!cancelled) {
+          setCommerceLoadState('error');
+          setCommerceLoadError('Authentication required to load invoice.');
+        }
+        return;
+      }
+      try {
+        const res = await commerceApi.getOrder(token, id);
+        if (!res.ok || !res.body?.data) {
+          throw new Error(res.body?.error || 'Invoice order not found');
+        }
+        let shipment: CommerceShipmentDto | null = null;
+        try {
+          const shipRes = await commerceApi.getOrderShipment(token, id);
+          if (shipRes.ok && shipRes.body?.data) {
+            shipment = shipRes.body.data as CommerceShipmentDto;
+          }
+        } catch {
+          /* shipment optional */
+        }
+        if (!cancelled) {
+          setCommerceOrder(mapCommerceOrderToUi(res.body.data as CommerceOrderDto, shipment));
+          setCommerceLoadState('idle');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setCommerceOrder(null);
+          setCommerceLoadState('error');
+          setCommerceLoadError(err instanceof Error ? err.message : 'Failed to load invoice');
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, loggedInProfile, stateOrder, fallbackOrder, contextOrder]);
+
+  const order = stateOrder || fallbackOrder || contextOrder || commerceOrder;
 
   const [notif, setNotif] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
 
@@ -125,9 +205,17 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
     );
   }
 
+  if (commerceLoadState === 'loading' && !order) {
+    return (
+      <div className="flex items-center justify-center h-64 text-app-text-secondary text-sm font-bold">
+        Loading invoice from Commerce…
+      </div>
+    );
+  }
+
   if (!order) return (
     <div className="flex items-center justify-center h-64 text-app-text-secondary text-sm font-bold">
-      Invoice data not found. Please navigate here from the Orders page.
+      {commerceLoadError || 'Invoice data not found. Please navigate here from the Orders page.'}
     </div>
   );
 
@@ -135,23 +223,38 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
   const isService = order.product.productType === 'service';
   const sectionLabels = listingSectionLabels(order.product.productType);
   
-  // Subtotal & calculated summaries
-  const subtotal = order.product.price;
-  const shipping = isService ? 0 : (order.delivery_charge || 120);
+  // Subtotal & calculated summaries — use authoritative order totals; do not invent shipping or commission.
+  const subtotal = typeof order.base_product_price === 'number' ? order.base_product_price : order.product.price;
+  const shipping = isService
+    ? 0
+    : (typeof order.delivery_charge === 'number' ? order.delivery_charge : 0);
   const advancePayment = 0;
-  const codPayable = subtotal + shipping - advancePayment;
-  const invoiceId = order.invoice_id || `INV-${order.id}`;
+  const codPayable =
+    typeof order.total_payable === 'number'
+      ? order.total_payable
+      : subtotal + shipping - advancePayment;
+  const invoiceId = order.invoice_id || order.id;
+  const commissionPercent =
+    typeof order.earnings?.commissionPercent === 'number' ? order.earnings.commissionPercent : 0;
+  const adminCut =
+    typeof order.earnings?.futureAutomatedDeduction === 'number'
+      ? order.earnings.futureAutomatedDeduction
+      : Math.round(subtotal * (commissionPercent / 100));
+  const sellerNet =
+    typeof order.earnings?.sellerNet === 'number'
+      ? order.earnings.sellerNet
+      : Math.round(codPayable - adminCut);
   const displayDate = order.timestamp ? new Date(order.timestamp).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
-  }) : 'June 16, 2026';
+  }) : '—';
 
   const dueDate = order.timestamp ? new Date(new Date(order.timestamp).getTime() + 9 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric'
-  }) : 'June 25, 2026';
+  }) : '—';
 
   const triggerPrint = () => {
     window.print();
@@ -1242,7 +1345,7 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
               <div className="flex justify-between">
                 <span className="text-slate-500">Payment Lock:</span>
                 <span className={`font-mono font-bold${order.paymentStatus === 'Paid' ? 'text-emerald-400' : 'text-amber-500'}`}>
-                  {order.paymentStatus === 'Paid' ? 'PAID REVENUE' : 'COD BALANCE DUE'}
+                  {paymentLockLabel(order.paymentStatus)}
                 </span>
               </div>
 
@@ -1250,17 +1353,17 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
                 <>
                   <div className="border-t border-app-border pt-3 flex justify-between">
                     <span className="text-slate-500">Commission Rate:</span>
-                    <span className="font-mono text-indigo-400">{order.earnings?.commissionPercent || 10}%</span>
+                    <span className="font-mono text-indigo-400">{commissionPercent}%</span>
                   </div>
                   
                   <div className="flex justify-between">
                     <span className="text-slate-500">Admin Cut:</span>
-                    <span className="font-mono text-indigo-400">৳ {(order.earnings?.futureAutomatedDeduction || Math.round(order.product.price * 0.1)).toLocaleString()}</span>
+                    <span className="font-mono text-indigo-400">৳ {adminCut.toLocaleString()}</span>
                   </div>
 
                   <div className="flex justify-between">
                     <span className="text-slate-500">Seller Net Earnings:</span>
-                    <span className="font-semibold font-mono text-emerald-400">৳ {(order.earnings?.sellerNet || Math.round(order.product.price * 0.9)).toLocaleString()}</span>
+                    <span className="font-semibold font-mono text-emerald-400">৳ {sellerNet.toLocaleString()}</span>
                   </div>
                 </>
               )}

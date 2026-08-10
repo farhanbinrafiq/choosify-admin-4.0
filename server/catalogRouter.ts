@@ -156,8 +156,10 @@ function userIsCreatorRole(req: {
 }
 
 /**
- * Sellers may edit Brand Studio profile fields and Marketplace Access.
- * Verification / claim / ownership / featured flags stay locked without cms:edit.
+ * Sellers may edit Brand Studio profile fields only.
+ * Marketplace Access / verification / claim / ownership / featured flags stay
+ * locked without cms:edit. Marketplace Access mutations require the admin-only
+ * PATCH .../marketplace-access endpoint.
  */
 function preserveBrandPrivilegedFieldsOnUpdate(
   req: Request,
@@ -167,13 +169,6 @@ function preserveBrandPrivilegedFieldsOnUpdate(
   if (hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)) {
     return normalized;
   }
-  // Admin-imposed restriction/suspension/revocation can only be lifted by an
-  // admin transition (PATCH .../marketplace-access), never by the seller's
-  // own boolean toggle here.
-  const adminLocked =
-    existing.marketplaceStatus === 'restricted' ||
-    existing.marketplaceStatus === 'suspended' ||
-    existing.marketplaceStatus === 'revoked';
   return {
     ...normalized,
     sellerId: existing.sellerId,
@@ -183,15 +178,30 @@ function preserveBrandPrivilegedFieldsOnUpdate(
     sponsoredFlag: existing.sponsoredFlag,
     followers: existing.followers,
     ratings: existing.ratings,
+    // Marketplace Access is platform-admin only — never accept seller/creator writes.
     marketplaceStatus: existing.marketplaceStatus,
-    // Sellers may toggle marketplaceAccess on their own brand (Granted <-> Not Granted),
-    // unless an admin-imposed status is currently in force.
-    marketplaceAccess: adminLocked
-      ? existing.marketplaceAccess
-      : typeof normalized.marketplaceAccess === 'boolean'
-        ? normalized.marketplaceAccess
-        : existing.marketplaceAccess,
+    marketplaceAccess: existing.marketplaceAccess,
   };
+}
+
+/** Reject Seller/Creator attempts to mutate Marketplace Access via brand PATCH/PUT. */
+function rejectUnauthorizedMarketplaceAccessMutation(
+  req: Request,
+  res: { status: (code: number) => { json: (body: unknown) => void } },
+  _existing: CatalogBrand,
+): boolean {
+  if (hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)) {
+    return false;
+  }
+  const body = (req.body || {}) as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(body, 'marketplaceAccess')
+    || Object.prototype.hasOwnProperty.call(body, 'marketplaceStatus')) {
+    res.status(403).json({
+      error: 'Marketplace Access can only be changed by platform administrators',
+    });
+    return true;
+  }
+  return false;
 }
 
 async function scopeBrandsForRequest(req: Request, brands: CatalogBrand[]): Promise<CatalogBrand[]> {
@@ -1521,8 +1531,9 @@ catalogRouter.post('/catalog/brands', ...requireBrandStudioBrandWrite, async (re
         ? {
             ...req.body,
             sellerId: req.userId,
-            marketplaceAccess:
-              typeof req.body?.marketplaceAccess === 'boolean' ? req.body.marketplaceAccess : false,
+            // New Seller brands start without Marketplace Access — Admin grants later.
+            marketplaceAccess: false,
+            marketplaceStatus: 'not_granted',
             claimStatus: req.body?.claimStatus || 'pending',
             verifiedStatus: false,
           }
@@ -1548,6 +1559,9 @@ catalogRouter.put('/catalog/brands/:id', ...requireBrandStudioBrandWrite, async 
     const existing = await catalogStore.getBrand(req.params.id);
     if (!existing) {
       res.status(404).json({ error: 'Brand not found' });
+      return;
+    }
+    if (rejectUnauthorizedMarketplaceAccessMutation(req, res, existing)) {
       return;
     }
     const context = await buildBrandNormalizeContext(req.params.id);
@@ -1578,6 +1592,9 @@ catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, asyn
       res.status(404).json({ error: 'Brand not found' });
       return;
     }
+    if (rejectUnauthorizedMarketplaceAccessMutation(req, res, existing)) {
+      return;
+    }
     const context = await buildBrandNormalizeContext(req.params.id);
     const normalized = preserveBrandPrivilegedFieldsOnUpdate(
       req,
@@ -1602,8 +1619,8 @@ catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, asyn
 /**
  * Admin-only Marketplace Access lifecycle transition (ES-005). Controls public
  * visibility only — never ownership/editing (Seller keeps full Brand Studio
- * access regardless of status). Restricted/Suspended/Revoked can only be
- * lifted here, not via the seller's own marketplaceAccess boolean toggle.
+ * access regardless of status). Sellers/Creators cannot change Marketplace
+ * Access via brand PATCH or this endpoint (requires cms:edit).
  */
 catalogRouter.patch(
   '/catalog/brands/:id/marketplace-access',

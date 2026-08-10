@@ -573,6 +573,19 @@ export const operationsApi = {
     );
     return result.data;
   },
+  /** Owner (or Admin) replace/re-upload — resets document to pending. */
+  replaceVerificationDocument: async (
+    id: string,
+    docId: string,
+    payload: { doc_url: string; name?: string },
+  ) => {
+    const result = await request<{ data: unknown }>(
+      `/operations/verifications/${encodeURIComponent(id)}/document/${encodeURIComponent(docId)}/replace`,
+      'PUT',
+      payload,
+    );
+    return result.data;
+  },
   reviewVerification: async (
     id: string,
     payload: { status: 'approved' | 'rejected'; feedback: string; reviewer_name?: string },

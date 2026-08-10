@@ -52,7 +52,7 @@ export function BrandProfileEditChip({
     <button
       type="button"
       onClick={onClick}
-      className="absolute top-3 right-3 z-20 p-2 bg-white border border-[#FF5B00] text-[#FF5B00] hover:bg-[#FF5B00] hover:text-white rounded-lg transition-all shadow-sm flex items-center gap-1.5 text-[10px] font-extrabold uppercase"
+      className="absolute top-3 right-3 z-20 p-2 bg-white border border-[#EF3C23] text-[#EF3C23] hover:bg-[#EF3C23] hover:text-white rounded-lg transition-all shadow-sm flex items-center gap-1.5 text-[10px] font-extrabold uppercase"
     >
       <Pencil className="w-3.5 h-3.5" />
       {label}
@@ -201,7 +201,7 @@ export function BrandProfileHero({
                     href={s.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-3 py-1.5 rounded-full border border-[#E5E7EB] bg-white text-[11px] font-semibold text-[#1A1A2E] hover:border-[#FF5B00]/40"
+                    className="px-3 py-1.5 rounded-full border border-[#E5E7EB] bg-white text-[11px] font-semibold text-[#1A1A2E] hover:border-[#EF3C23]/40"
                   >
                     {s.label}
                   </a>

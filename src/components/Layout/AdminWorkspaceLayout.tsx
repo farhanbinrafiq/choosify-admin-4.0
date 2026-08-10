@@ -1,10 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Bell } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { UserProfileDropdown } from '../account/UserProfileDropdown';
+import { NotificationBellDropdown } from '../account/NotificationBellDropdown';
 import {
   NAV_DEFS,
+  PAGE_KEY_TO_PATH,
   PAGE_META,
   allowedPageKeysForRole,
   pathToPageKey,
@@ -24,7 +25,103 @@ export type AdminWorkspaceLayoutProps = {
   pageSubtitle?: string;
 };
 
+/** Seller/Creator chrome must include identity profile keys missing from admin NAV_DEFS. */
 function filterNavForRole(role: string | undefined): CmsNavGroup[] {
+  if (role === 'seller') {
+    return [
+      {
+        title: 'OVERVIEW',
+        items: [{ key: 'dashboard', label: 'Dashboard', path: PAGE_KEY_TO_PATH.dashboard }],
+      },
+      {
+        title: 'BRAND & CATALOG',
+        items: [
+          { key: 'brands', label: 'Brand Management Studio', path: PAGE_KEY_TO_PATH.brands },
+          { key: 'brandProfile', label: 'Seller Profile', path: PAGE_KEY_TO_PATH.brandProfile },
+          { key: 'products', label: 'Products & Inventory', path: PAGE_KEY_TO_PATH.products },
+        ],
+      },
+      {
+        title: 'COMMERCE',
+        items: [
+          { key: 'orders', label: 'Orders Hub', path: PAGE_KEY_TO_PATH.orders },
+          { key: 'sellerCustomers', label: 'Seller Customers', path: PAGE_KEY_TO_PATH.sellerCustomers },
+          { key: 'returnsRefunds', label: 'Returns & Refunds', path: PAGE_KEY_TO_PATH.returnsRefunds },
+          { key: 'promoCodes', label: 'Promo Codes & Vouchers', path: PAGE_KEY_TO_PATH.promoCodes },
+        ],
+      },
+      {
+        title: 'LOGISTICS MANAGEMENT',
+        items: [
+          { key: 'courierProviders', label: 'Courier Providers', path: PAGE_KEY_TO_PATH.courierProviders },
+          { key: 'shipmentOperations', label: 'Shipment Operations', path: PAGE_KEY_TO_PATH.shipmentOperations },
+          { key: 'courierAnalytics', label: 'Courier Analytics', path: PAGE_KEY_TO_PATH.courierAnalytics },
+        ],
+      },
+      {
+        title: 'TRUST & SAFETY',
+        items: [{ key: 'reviews', label: 'Reviews', path: PAGE_KEY_TO_PATH.reviews }],
+      },
+      {
+        title: 'COMMUNICATION',
+        items: [{ key: 'messages', label: 'Messages', tag: '12', path: PAGE_KEY_TO_PATH.messages }],
+      },
+      {
+        title: 'FINANCE',
+        items: [
+          { key: 'finance', label: 'Analytics', path: PAGE_KEY_TO_PATH.finance },
+          { key: 'myCashbook', label: 'My Cashbook', tag: 'PRIVATE', path: PAGE_KEY_TO_PATH.myCashbook },
+        ],
+      },
+      {
+        title: 'SETTINGS',
+        items: [{ key: 'settings', label: 'Settings', path: PAGE_KEY_TO_PATH.settings }],
+      },
+    ];
+  }
+
+  if (role === 'creator') {
+    return [
+      {
+        title: 'OVERVIEW',
+        items: [{ key: 'dashboard', label: 'Dashboard', path: PAGE_KEY_TO_PATH.dashboard }],
+      },
+      {
+        title: 'PEOPLE',
+        items: [
+          { key: 'creators', label: 'Creator Studio', path: PAGE_KEY_TO_PATH.creators },
+          { key: 'creatorProfile', label: 'Creator Profile', path: PAGE_KEY_TO_PATH.creatorProfile },
+          { key: 'creatorEconomy', label: 'Creator Economy', path: PAGE_KEY_TO_PATH.creatorEconomy },
+        ],
+      },
+      {
+        title: 'MARKETING & CONTENT',
+        items: [
+          { key: 'contentStudio', label: 'Guide Management', tag: 'NEW', path: PAGE_KEY_TO_PATH.contentStudio },
+        ],
+      },
+      {
+        title: 'TRUST & SAFETY',
+        items: [{ key: 'reviews', label: 'Reviews', path: PAGE_KEY_TO_PATH.reviews }],
+      },
+      {
+        title: 'COMMUNICATION',
+        items: [{ key: 'messages', label: 'Messages', tag: '12', path: PAGE_KEY_TO_PATH.messages }],
+      },
+      {
+        title: 'FINANCE',
+        items: [
+          { key: 'finance', label: 'Finance', path: PAGE_KEY_TO_PATH.finance },
+          { key: 'myCashbook', label: 'My Cashbook', tag: 'PRIVATE', path: PAGE_KEY_TO_PATH.myCashbook },
+        ],
+      },
+      {
+        title: 'SETTINGS',
+        items: [{ key: 'settings', label: 'Settings', path: PAGE_KEY_TO_PATH.settings }],
+      },
+    ];
+  }
+
   const allowed = allowedPageKeysForRole(role);
   if (!allowed) return NAV_DEFS;
 
@@ -64,7 +161,13 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
       .filter((group) => group.items.length > 0);
   }, [role, navSearch]);
 
-  const meta = PAGE_META[activePageKey] || PAGE_META.dashboard;
+  const metaBase = PAGE_META[activePageKey] || PAGE_META.dashboard;
+  const meta: [string, string] =
+    role === 'seller' && activePageKey === 'brands'
+      ? ['Brand Management Studio', 'Manage your owned brands and open Brand Studio']
+      : role === 'creator' && activePageKey === 'creators'
+        ? ['Creator Studio', 'Edit and publish your live storefront creator profile']
+        : metaBase;
   const title = pageTitle ?? meta[0];
   const subtitle = pageSubtitle ?? meta[1];
 
@@ -76,6 +179,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
 
   const isNavActive = (path: string, key: string) => {
     if (key === 'brands') return location.pathname.startsWith('/admin/brand-studio');
+    if (key === 'creators') return location.pathname.startsWith('/admin/creator-studio');
     if (location.pathname === path) return true;
     if (path !== '/admin/dashboard' && location.pathname.startsWith(path)) return true;
     return activePageKey === key;
@@ -175,15 +279,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
               placeholder="Search catalog, brands, sellers..."
               aria-label="Search catalog"
             />
-            <button
-              type="button"
-              className="admin-workspace__topbar-icon"
-              onClick={() => navigate('/admin/notifications')}
-              aria-label="Notifications"
-            >
-              <Bell size={18} strokeWidth={1.6} />
-              <span className="admin-workspace__topbar-badge">5</span>
-            </button>
+            <NotificationBellDropdown />
             <div className="admin-workspace__topbar-divider" aria-hidden />
             <UserProfileDropdown variant="header" />
           </div>

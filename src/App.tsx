@@ -1,4 +1,4 @@
-import React, { Suspense, lazy } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { AdminLayout } from './components/AdminLayout';
@@ -15,6 +15,7 @@ import { CashBookProvider } from './contexts/CashBookContext';
 import { LogisticsProvider } from './contexts/LogisticsContext';
 import { InventoryProvider } from './contexts/InventoryContext';
 import { FeeChargesProvider } from './contexts/FeeChargesContext';
+import { catalogApi } from './services/catalogApi';
 
 // Lazy load pages
 const CashBookHub = lazy(() => import('./pages/admin/CashBookHub'));
@@ -59,7 +60,6 @@ const SellerOffersPage = lazy(() => import('./pages/admin/SellerOffers'));
 const PlatformOrdersPage = lazy(() => import('./pages/admin/PlatformOrders'));
 const AdsSponsorsPage = lazy(() => import('./pages/admin/AdsSponsors'));
 const SponsoredPromotionsPage = lazy(() => import('./pages/admin/SponsoredPromotions'));
-const Orders = lazy(() => import('./pages/admin/Orders'));
 import OrdersOverview from './pages/admin/OrdersOverview';
 const SellerCustomers = lazy(() => import('./pages/admin/SellerCustomers'));
 const InvoiceView = lazy(() => import('./pages/admin/InvoiceView').then(m => ({ default: m.InvoiceView })));
@@ -80,7 +80,6 @@ const CreatorEconomy = lazy(() => import('./pages/admin/CreatorEconomy'));
 const CreatorEarnings = lazy(() => import('./pages/admin/CreatorEarnings'));
 const ModerationV2 = lazy(() => import('./pages/admin/ModerationV2'));
 
-const BrandsStudioList = lazy(() => import('./pages/admin/BrandsStudioList'));
 const BrandEditStudio = lazy(() => import('./pages/admin/BrandEditStudio'));
 const ProductEditStudio = lazy(() => import('./pages/admin/ProductEditStudio'));
 const CreatorEditStudio = lazy(() => import('./pages/admin/CreatorEditStudio'));
@@ -157,19 +156,151 @@ const GuideVisualBuilderRoleGate: React.FC<{ children: React.ReactNode }> = ({ c
 };
 
 /**
- * Role-split home for /admin/brand-studio:
- * - Seller → owned Brand Studio (cards / Visual Builder) inside React workspace shell
- * - Admin / Super Admin → standalone CmsMirror Brand Management (list + Brand Profile)
- * Studios stay on /admin/brand-studio/new and /admin/brand-studio/:id/edit
+ * Seller Brand Management home — count-based contract (real owned Brands only):
+ *   0 → CmsMirror empty / Create First Brand
+ *   1 → direct storefront-parity Brand Studio (/admin/brand-studio/:id/edit)
+ *   2+ → CmsMirror management list (Admin list design language, seller-scoped)
+ * Admin / Super Admin stay on CmsMirror Brand Management (unchanged).
+ * Do NOT use BrandsStudioList or in-iframe CmsMirror Brand Portfolio as Seller Studio.
  */
+const SellerBrandStudioHome: React.FC = () => {
+  const { sellerBrands, brandsLoading, setActiveBrandId } = useAuth();
+  const ownedBrandIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (sellerBrands || [])
+            .map((r) => r.brand_id)
+            .filter((id): id is string => typeof id === 'string' && id.length > 0),
+        ),
+      ),
+    [sellerBrands],
+  );
+
+  useEffect(() => {
+    if (!brandsLoading && ownedBrandIds.length === 1) {
+      setActiveBrandId(ownedBrandIds[0]);
+    }
+  }, [brandsLoading, ownedBrandIds, setActiveBrandId]);
+
+  if (brandsLoading) {
+    return (
+      <div className="min-h-screen bg-app-bg flex items-center justify-center text-app-accent font-mono text-[10px] uppercase tracking-[4px] animate-pulse">
+        Loading Brand Management…
+      </div>
+    );
+  }
+
+  if (ownedBrandIds.length === 1) {
+    return <Navigate to={`/admin/brand-studio/${encodeURIComponent(ownedBrandIds[0])}/edit`} replace />;
+  }
+
+  // 0 brands → empty/create in CmsMirror; 2+ → seller-scoped management list in CmsMirror
+  return <CmsMirrorHost />;
+};
+
 const BrandStudioHomeEntry: React.FC = () => {
   const { profile } = useAuth();
   if (profile?.role === 'seller') {
+    return <SellerBrandStudioHome />;
+  }
+  return <CmsMirrorHost />;
+};
+
+/**
+ * Creator Studio home — storefront-parity Visual Builder (not CmsMirror portfolio chrome).
+ *   Creator → ensure owned catalog creator → /admin/creator-studio/:id/edit (CreatorEditStudio)
+ *   Admin / Super Admin → CmsMirror Creator Management list (unchanged)
+ * Creator Profile (/admin/creator-profile) stays on CmsMirror identity surface.
+ */
+const CreatorStudioHome: React.FC = () => {
+  const { profile } = useAuth();
+  const [creatorId, setCreatorId] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [loading, setLoading] = React.useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function boot() {
+      if (!profile || profile.role !== 'creator') {
+        if (!cancelled) {
+          setLoading(false);
+        }
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const token = localStorage.getItem('choosify_auth_token');
+        if (token) {
+          const { creators } = await catalogApi.ensureCreatorWorkspace({
+            displayName: profile.displayName || undefined,
+            email: profile.email || undefined,
+          });
+          const owned =
+            creators.find((c) => c.userId === profile.id) ||
+            creators.find((c) => c.id === profile.id) ||
+            creators[0];
+          if (!cancelled) {
+            if (owned?.id) setCreatorId(owned.id);
+            else setError('No Creator profile found for this account.');
+            setLoading(false);
+          }
+          return;
+        }
+
+        // Temp/mock sessions have no JWT — still open the storefront-parity builder.
+        // CreatorEditStudio loads catalog by id when available, blank canvas otherwise.
+        if (!cancelled) {
+          setCreatorId(profile.id);
+          setLoading(false);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          // Prefer opening the Visual Builder over blocking on ensure failures.
+          if (profile.id) {
+            setCreatorId(profile.id);
+            setError(null);
+          } else {
+            setError(err instanceof Error ? err.message : 'Failed to open Creator Studio');
+          }
+          setLoading(false);
+        }
+      }
+    }
+    void boot();
+    return () => {
+      cancelled = true;
+    };
+  }, [profile]);
+
+  if (!profile || profile.role !== 'creator') {
+    return <CmsMirrorHost />;
+  }
+
+  if (loading) {
     return (
-      <AdminWorkspaceLayout>
-        <BrandsStudioList />
-      </AdminWorkspaceLayout>
+      <div className="min-h-screen bg-app-bg flex items-center justify-center text-app-accent font-mono text-[10px] uppercase tracking-[4px] animate-pulse">
+        Loading Creator Studio…
+      </div>
     );
+  }
+
+  if (error || !creatorId) {
+    return (
+      <div className="min-h-screen bg-app-bg flex items-center justify-center text-app-text-primary text-sm px-6 text-center">
+        {error || 'Creator Studio is unavailable.'}
+      </div>
+    );
+  }
+
+  return <Navigate to={`/admin/creator-studio/${encodeURIComponent(creatorId)}/edit`} replace />;
+};
+
+const CreatorStudioHomeEntry: React.FC = () => {
+  const { profile } = useAuth();
+  if (profile?.role === 'creator') {
+    return <CreatorStudioHome />;
   }
   return <CmsMirrorHost />;
 };
@@ -428,9 +559,27 @@ export default function App() {
             />
 
             {/*
+              Creator Studio home:
+              - Creator → storefront-parity CreatorEditStudio (via ensure + redirect)
+              - Admin → CmsMirror Creator Management list
+              /admin/creator-profile stays on CmsMirror (identity surface, distinct).
+              Rollback: remove this home route; creator falls through to CmsMirrorHost.
+            */}
+            <Route
+              path="/admin/creator-studio"
+              element={
+                <ProtectedRoute>
+                  <CreatorVisualBuilderRoleGate>
+                    <Suspense fallback={null}>
+                      <CreatorStudioHomeEntry />
+                    </Suspense>
+                  </CreatorVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            {/*
               Creator Visual Builder — surgical cutover ONLY for single-creator editor.
-              /admin/creator-studio (Creator Management list) and /admin/creator-profile
-              stay on CmsMirrorHost. Rollback: remove these two routes.
+              Rollback: remove /new and /:id/edit routes.
             */}
             <Route
               path="/admin/creator-studio/new"
@@ -495,21 +644,12 @@ export default function App() {
               }
             />
 
-            {/* Orders Hub — React surfaces (Commerce API SoT). Remaining /admin/* → CmsMirror. */}
-            <Route
-              path="/admin/orders"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard>
-                    <AdminLayout>
-                      <Suspense fallback={null}>
-                        <Orders />
-                      </Suspense>
-                    </AdminLayout>
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
+            {/*
+              Order Hub (/admin/orders): approved CmsMirror management presentation.
+              Commerce Order API remains SoT via cms-mirror hydrate + studio-profile-api.
+              Do NOT host Order Hub in Orders.tsx/AdminLayout (Sprint 6 visual regression).
+              Invoice + overview/platform React routes kept for deep-links; not Order Hub chrome.
+            */}
             <Route
               path="/admin/orders-overview"
               element={

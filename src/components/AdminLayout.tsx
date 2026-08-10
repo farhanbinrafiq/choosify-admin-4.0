@@ -98,7 +98,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Creator Economy', icon: TrendingUp, path: '/admin/creator-hub' },
 
     { label: 'Brand & Catalog', type: 'label' },
-    { label: 'Brand Management Studio', icon: Building2, path: '/admin/brand-studio' },
+    { label: 'Seller Management Studio', icon: Building2, path: '/admin/brand-studio' },
     { label: 'Products & Inventory', icon: Package, path: '/admin/products' },
     { label: 'Category Management Studio', icon: FolderOpen, path: '/admin/categories' },
 
@@ -155,7 +155,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Creator Studio', icon: Award, path: '/admin/creator-studio' },
 
     { label: 'Brand & Catalog', type: 'label' },
-    { label: 'Brand Management Studio', icon: Building2, path: '/admin/brand-studio' },
+    { label: 'Seller Management Studio', icon: Building2, path: '/admin/brand-studio' },
     { label: 'Products & Inventory', icon: Package, path: '/admin/products' },
     { label: 'Category Management Studio', icon: FolderOpen, path: '/admin/categories' },
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },
@@ -201,7 +201,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Seller Operations', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Brand Management Studio', icon: Building2, path: '/admin/brand-studio' },
-    { label: 'Brand Profile', icon: Store, path: '/admin/brand-profile' },
+    { label: 'Seller Profile', icon: Store, path: '/admin/brand-profile' },
     { label: 'Orders Hub', icon: ListOrdered, path: '/admin/orders', badge: 4 },
     { label: 'Seller Customers', icon: Users, path: '/admin/customers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
@@ -226,7 +226,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Creator Hub', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Creator Studio', icon: Award, path: '/admin/creator-studio' },
-    { label: 'My Profile', icon: UserCircle, path: '/admin/creator-profile' },
+    { label: 'Creator Profile', icon: UserCircle, path: '/admin/creator-profile' },
     { label: 'Guides Studio', icon: FileText, path: '/dashboard/content-studio/guides' },
     { label: 'Recommendations', icon: Lightbulb, path: '/admin/recommendations' },
     { label: 'Collaborations', icon: Handshake, path: '/admin/creator-hub', badge: 1 },
@@ -735,12 +735,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                   onClick={() => !isCollapsed && toggleMenu(item.label)}
                   className={`w-full group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3'} py-2.5 text-[13px] font-bold rounded-lg transition-all duration-300 text-left cursor-pointer min-w-0 sidebar-nav-hover ${
                     isActive
-                      ? 'bg-[#FF5B00]/[0.16] text-[#FF5B00]'
+                      ? 'bg-[#EF3C23]/[0.16] text-[#EF3C23]'
                       : 'text-white/90'
                   }`}
                   title={item.label}
                 >
-                  <Icon className={`w-4 h-4 shrink-0 transition-all duration-300 ${isActive ? 'text-[#FF5B00]' : 'text-white/70'}`} />
+                  <Icon className={`w-4 h-4 shrink-0 transition-all duration-300 ${isActive ? 'text-[#EF3C23]' : 'text-white/70'}`} />
                   {!isCollapsed && (
                     <>
                       <span className="transition-colors duration-300 flex-1 font-semibold flex items-center gap-2 min-w-0">
@@ -748,18 +748,18 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                         {totalItemBadge > 0 && (
                           <span className={`text-[9.5px] px-1.5 py-0.2 rounded font-black shrink-0 ${
                             isActive
-                              ? 'bg-[#FF5B00] text-white'
+                              ? 'bg-[#EF3C23] text-white'
                               : 'bg-white/10 text-white'
                           }`}>
                             {totalItemBadge}
                           </span>
                         )}
                       </span>
-                      <ChevronRight className={`w-3.5 h-3.5 transition-transform shrink-0 ${isActive ? 'text-[#FF5B00]' : 'text-white/60'} ${isCurrentlyExpanded ? 'rotate-90' : ''}`} />
+                      <ChevronRight className={`w-3.5 h-3.5 transition-transform shrink-0 ${isActive ? 'text-[#EF3C23]' : 'text-white/60'} ${isCurrentlyExpanded ? 'rotate-90' : ''}`} />
                     </>
                   )}
                   {isCollapsed && totalItemBadge > 0 && (
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#FF5B00] rounded-full" />
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#EF3C23] rounded-full" />
                   )}
                 </button>
               ) : (
@@ -768,12 +768,12 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                   onClick={() => setIsSidebarOpen(false)}
                   className={`group flex items-center ${isCollapsed ? 'justify-center px-2' : 'gap-3 px-3'} py-2.5 text-[13px] font-bold rounded-lg transition-all duration-300 relative min-w-0 sidebar-nav-hover ${
                     isActive
-                      ? 'bg-[#FF5B00]/[0.16] text-[#FF5B00]'
+                      ? 'bg-[#EF3C23]/[0.16] text-[#EF3C23]'
                       : 'text-white/90'
                   }`}
                   title={item.label}
                 >
-                  <Icon className={`w-4 h-4 shrink-0 transition-all duration-300 ${isActive ? 'text-[#FF5B00]' : 'text-white/70'}`} />
+                  <Icon className={`w-4 h-4 shrink-0 transition-all duration-300 ${isActive ? 'text-[#EF3C23]' : 'text-white/70'}`} />
                   {!isCollapsed && (
                     <>
                       <span className="transition-colors duration-300 font-semibold truncate whitespace-nowrap flex-1 min-w-0">
@@ -781,7 +781,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                       </span>
                       {item.badge && (
                         <span className={`ml-auto text-[9px] px-1.5 py-0.5 rounded font-bold shrink-0 ${
-                          isActive ? 'bg-[#FF5B00] text-white' : 'bg-white/10 text-white'
+                          isActive ? 'bg-[#EF3C23] text-white' : 'bg-white/10 text-white'
                         }`}>
                           {item.badge}
                         </span>
@@ -789,7 +789,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                     </>
                   )}
                   {isCollapsed && item.badge && (
-                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#FF5B00] rounded-full animate-pulse" />
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#EF3C23] rounded-full animate-pulse" />
                   )}
                 </NavLink>
               )}
@@ -809,14 +809,14 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
                         onClick={() => setIsSidebarOpen(false)}
                         className={`flex items-center gap-2 py-2 px-3 text-[11px] font-medium rounded-lg transition-all sidebar-nav-hover ${
                           isSubActive
-                            ? 'text-[#FF5B00] font-bold bg-[#FF5B00]/[0.16]'
+                            ? 'text-[#EF3C23] font-bold bg-[#EF3C23]/[0.16]'
                             : 'text-white/80'
                         }`}
                       >
-                        <ChevronRight className={`w-2.5 h-2.5 ${isSubActive ? 'text-[#FF5B00] rotate-90 scale-110' : 'text-white/60 rotate-90'}`} />
+                        <ChevronRight className={`w-2.5 h-2.5 ${isSubActive ? 'text-[#EF3C23] rotate-90 scale-110' : 'text-white/60 rotate-90'}`} />
                         <span className="truncate whitespace-nowrap flex-1 min-w-0">{sub.label}</span>
                         {sub.badge && (
-                          <span className={`ml-auto text-[8px] px-1 py-0.2 rounded font-black ${isSubActive ? 'bg-[#FF5B00] text-white' : 'bg-white/10 text-white'}`}>
+                          <span className={`ml-auto text-[8px] px-1 py-0.2 rounded font-black ${isSubActive ? 'bg-[#EF3C23] text-white' : 'bg-white/10 text-white'}`}>
                             {sub.badge}
                           </span>
                         )}
@@ -1042,7 +1042,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
              >
                <MessageCircleMore className="w-4 h-4 text-white" />
                {unreadTotal > 0 && (
-                 <span id="NotificationBadge" className="absolute -top-1 -right-1 bg-[#F97316] text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-[#000435] NotificationBadge">
+                 <span id="NotificationBadge" className="absolute -top-1 -right-1 bg-[#EF3C23] text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-[#000435] NotificationBadge">
                    {unreadTotal}
                  </span>
                )}

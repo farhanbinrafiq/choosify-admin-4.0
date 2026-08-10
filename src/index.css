@@ -18,8 +18,8 @@
   --color-border:          #E8EDF2;   /* Elegant border lines (Theme Ticket card-border spec) */
   --color-border-dark:     #1E293B;   /* Borders inside navy surfaces */
 
-  --color-accent-primary:  #FF5B00;   /* Design reference global accent — buttons, links, badges, CTAs everywhere */
-  --color-accent-hover:    #E64A00;   /* Design reference a:hover */
+  --color-accent-primary:  #EF3C23;   /* Canonical Choosify logo orange (nav logo fill) */
+  --color-accent-hover:    #D4331B;   /* Controlled darker hover of logo orange */
   --color-accent-light:    #FFF4ED;   /* Soft Orange bg/light tint */
 
   --color-navy:            #000435;   /* Primary Navy (Theme Ticket brand swatch) — sidebar gradient base */
@@ -31,25 +31,25 @@
    * (Choosify-Web --gradient-dark-surface / .footer-brand-gradient)
    */
   --gradient-dark-surface:
-    radial-gradient(1200px 500px at 15% 0%, hsla(22, 100%, 50%, 0.18), transparent 65%),
-    radial-gradient(900px 500px at 90% 20%, hsla(12, 92%, 45%, 0.14), transparent 65%),
+    radial-gradient(1200px 500px at 15% 0%, hsla(6, 86%, 54%, 0.18), transparent 65%),
+    radial-gradient(900px 500px at 90% 20%, hsla(6, 86%, 45%, 0.14), transparent 65%),
     rgba(10, 10, 31, 0.96);
 
   /* Storefront chrome header (navbar / sticky dark bars) */
   --gradient-chrome-header:
-    radial-gradient(900px 200px at 15% 0%, hsla(22, 100%, 50%, 0.16), transparent 70%),
-    radial-gradient(700px 200px at 90% 100%, hsla(12, 92%, 45%, 0.12), transparent 70%),
+    radial-gradient(900px 200px at 15% 0%, hsla(6, 86%, 54%, 0.16), transparent 70%),
+    radial-gradient(700px 200px at 90% 100%, hsla(6, 86%, 45%, 0.12), transparent 70%),
     rgba(10, 10, 31, 0.94);
 
   /* Storefront hero / dark brand linear */
   --gradient-hero-chrome: linear-gradient(180deg, #3A1E22 0%, #000435 100%);
 
-  /* Storefront orange button gradient (not EMI) */
-  --gradient-orange-button: linear-gradient(90deg, #B4411C 0%, #D15E32 100%);
+  /* Brand primary button — logo orange with controlled darker start */
+  --gradient-orange-button: linear-gradient(90deg, #C8321A 0%, #EF3C23 100%);
 
   /* Sidebar + dark CMS chrome use footer dark-surface */
-  --color-sidebar-gradient-orange: #FF5B00;
-  --color-sidebar-gradient-orange-deep: #EB4501;
+  --color-sidebar-gradient-orange: #EF3C23;
+  --color-sidebar-gradient-orange-deep: #D4331B;
   --gradient-sidebar: var(--gradient-dark-surface);
 
   --color-text-primary:    #111827;   /* Headings, titles, data values */
@@ -57,7 +57,7 @@
   --color-text-muted:      #6B7280;   /* helper text, empty states */
   --color-text-disabled:   #9CA3AF;   /* Disabled elements */
   --color-text-inverse:    #FFFFFF;   /* Text on dark navy surfaces */
-  --color-text-orange:     #F97316;   /* Orange text */
+  --color-text-orange:     #EF3C23;   /* Brand orange text (= logo orange) */
 
   --color-success:         #22C55E;   /* Green */
   --color-success-light:   #F0FDF4;   /* Green tint bg */
@@ -110,6 +110,12 @@
   --color-cyan-50: var(--color-accent-light);
   --color-cyan-500: var(--color-accent-primary);
   --color-cyan-600: var(--color-accent-hover);
+
+  /* Normalize Tailwind orange scale to Choosify logo orange (not amber warning) */
+  --color-orange-500: var(--color-accent-primary);
+  --color-orange-600: var(--color-accent-hover);
+  --color-orange-400: var(--color-accent-primary);
+  --color-orange-700: var(--color-accent-hover);
 }
 
 @layer base {
@@ -217,7 +223,11 @@ aside.sidebar .text-app-accent,
 aside.sidebar [class*="text-[#F97316]"],
 .sidebar [class*="text-[#F97316]"],
 aside.sidebar [class*="text-[#EB4501]"],
-.sidebar [class*="text-[#EB4501]"] {
+.sidebar [class*="text-[#EB4501]"],
+aside.sidebar [class*="text-[#FF5B00]"],
+.sidebar [class*="text-[#FF5B00]"],
+aside.sidebar [class*="text-[#EF3C23]"],
+.sidebar [class*="text-[#EF3C23]"] {
   color: var(--color-accent-primary) !important;
 }
 
@@ -980,25 +990,27 @@ html:not(.dark) main .text-app-text-muted {
 html:not(.dark) main .text-orange-300,
 html:not(.dark) main .text-orange-400,
 html:not(.dark) main .text-orange-200,
-html:not(.dark) main .text-amber-300,
-html:not(.dark) main .text-amber-400,
+html:not(.dark) main .text-orange-500,
 html:not(.dark) main [class*="text-orange-300"],
 html:not(.dark) main [class*="text-orange-400"],
 html:not(.dark) main [class*="text-orange-200"],
-html:not(.dark) main [class*="text-[#ffedd5]"] {
-  color: #F97316 !important; /* Primary Orange: #F97316 */
+html:not(.dark) main [class*="text-orange-500"],
+html:not(.dark) main [class*="text-[#ffedd5]"],
+html:not(.dark) main [class*="text-[#F97316]"],
+html:not(.dark) main [class*="text-[#FF5B00]"],
+html:not(.dark) main [class*="text-[#EF3C23]"] {
+  color: var(--color-accent-primary) !important; /* Canonical logo orange */
 }
 
-/* Enforce stronger emphasis orange for key metrics, KPIs, links, and highlights in the main feed */
+/* Stronger emphasis orange for key metrics / links — still brand orange, not Tailwind amber */
 html:not(.dark) main .text-orange-600,
 html:not(.dark) main .text-orange-700,
 html:not(.dark) main .text-orange-850,
-html:not(.dark) main .text-amber-600,
-html:not(.dark) main .text-amber-700,
 html:not(.dark) main [class*="text-[#EA580C]"],
 html:not(.dark) main [class*="text-orange-600"],
-html:not(.dark) main [class*="text-orange-700"] {
-  color: #EA580C !important; /* Strong Orange: #EA580C */
+html:not(.dark) main [class*="text-orange-700"],
+html:not(.dark) main [class*="text-[#E64A00]"] {
+  color: var(--color-accent-hover) !important; /* Controlled darker brand orange */
 }
 
 /* Retain pale backgrounds ONLY for block layouts/badges but NEVER for text readable contents */
@@ -1447,9 +1459,15 @@ html.dark .sidebar .sidebar-nav-search input::placeholder {
   border: none;
 }
 
-/* Solid primary CTAs → storefront orange button gradient (EMI excluded) */
+/* Solid primary CTAs → logo-orange brand button gradient (EMI excluded) */
 html:not(.dark) button[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
 html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
+html:not(.dark) button[class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]),
+html:not(.dark) a[class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]),
+html:not(.dark) button[class*="bg-[#F97316]"]:not([class*="bg-[#F97316]/"]),
+html:not(.dark) a[class*="bg-[#F97316]"]:not([class*="bg-[#F97316]/"]),
+html:not(.dark) button[class*="bg-orange-500"]:not([class*="bg-orange-500/"]),
+html:not(.dark) a[class*="bg-orange-500"]:not([class*="bg-orange-500/"]),
 html:not(.dark) button[class*="bg-app-accent"]:not([class*="bg-app-accent/"]),
 html:not(.dark) a[class*="bg-app-accent"]:not([class*="bg-app-accent/"]) {
   background: var(--gradient-orange-button) !important;
@@ -1457,9 +1475,88 @@ html:not(.dark) a[class*="bg-app-accent"]:not([class*="bg-app-accent/"]) {
   color: #fff !important;
 }
 html:not(.dark) button[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover,
-html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover {
-  background: linear-gradient(90deg, #9a3818 0%, #c4542a 100%) !important;
-  background-image: linear-gradient(90deg, #9a3818 0%, #c4542a 100%) !important;
+html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover,
+html:not(.dark) button[class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]):hover,
+html:not(.dark) a[class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]):hover,
+html:not(.dark) button[class*="bg-[#F97316]"]:not([class*="bg-[#F97316]/"]):hover,
+html:not(.dark) a[class*="bg-[#F97316]"]:not([class*="bg-[#F97316]/"]):hover,
+html:not(.dark) button[class*="bg-orange-500"]:not([class*="bg-orange-500/"]):hover,
+html:not(.dark) a[class*="bg-orange-500"]:not([class*="bg-orange-500/"]):hover {
+  background: linear-gradient(90deg, #b02b16 0%, #d4331b 100%) !important;
+  background-image: linear-gradient(90deg, #b02b16 0%, #d4331b 100%) !important;
+}
+
+/* ============================================================
+   CHOOSIFY BRAND ORANGE NORMALIZATION
+   Canonical source: left-nav logo fill #EF3C23
+   Token: --color-accent-primary / --cms-accent
+   Remaps legacy brand-orange aliases only.
+   Semantic amber/red/green/blue are intentionally NOT remapped.
+   ============================================================ */
+html:not(.dark) [class*="text-[#FF5B00]"],
+html:not(.dark) [class*="text-[#ff5b00]"],
+html:not(.dark) [class*="text-[#F97316]"],
+html:not(.dark) [class*="text-[#f97316]"],
+html:not(.dark) [class*="text-[#EB4501]"],
+html:not(.dark) [class*="text-[#F4631E]"],
+html:not(.dark) [class*="text-[#EF3C23]"],
+html:not(.dark) .text-app-accent {
+  color: var(--color-accent-primary) !important;
+}
+
+html:not(.dark) [class*="border-[#FF5B00]"]:not([class*="border-[#FF5B00]/"]),
+html:not(.dark) [class*="border-[#F97316]"]:not([class*="border-[#F97316]/"]),
+html:not(.dark) [class*="border-[#EF3C23]"]:not([class*="border-[#EF3C23]/"]),
+html:not(.dark) [class*="border-orange-500"]:not([class*="border-orange-500/"]),
+html:not(.dark) .border-app-accent {
+  border-color: var(--color-accent-primary) !important;
+}
+
+html:not(.dark) [class*="from-[#FF5B00]"],
+html:not(.dark) [class*="from-[#F97316]"],
+html:not(.dark) [class*="from-orange-500"],
+html:not(.dark) [class*="to-orange-500"],
+html:not(.dark) [class*="to-orange-600"] {
+  --tw-gradient-from: var(--color-accent-primary) !important;
+  --tw-gradient-to: var(--color-accent-hover) !important;
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to) !important;
+}
+
+/* Legacy #FF5B00 opacity utilities → logo orange channel */
+html:not(.dark) [class*="bg-[#FF5B00]/[0.05]"],
+html:not(.dark) [class*="bg-[#FF5B00]/5"] { background-color: rgba(239, 60, 35, 0.05) !important; }
+html:not(.dark) [class*="bg-[#FF5B00]/[0.1]"],
+html:not(.dark) [class*="bg-[#FF5B00]/10"] { background-color: rgba(239, 60, 35, 0.10) !important; }
+html:not(.dark) [class*="bg-[#FF5B00]/[0.16]"],
+html:not(.dark) [class*="bg-[#FF5B00]/[0.15]"],
+html:not(.dark) [class*="bg-[#FF5B00]/15"],
+html:not(.dark) [class*="bg-[#FF5B00]/20"],
+html:not(.dark) [class*="bg-[#FF5B00]/[0.2]"] { background-color: rgba(239, 60, 35, 0.16) !important; }
+html:not(.dark) [class*="bg-[#FF5B00]/[0.22]"],
+html:not(.dark) [class*="bg-[#FF5B00]/25"],
+html:not(.dark) [class*="bg-[#FF5B00]/[0.25]"] { background-color: rgba(239, 60, 35, 0.22) !important; }
+html:not(.dark) [class*="bg-[#FF5B00]/30"],
+html:not(.dark) [class*="bg-[#FF5B00]/[0.3]"] { background-color: rgba(239, 60, 35, 0.30) !important; }
+html:not(.dark) [class*="bg-[#FF5B00]/40"],
+html:not(.dark) [class*="bg-[#FF5B00]/[0.4]"] { background-color: rgba(239, 60, 35, 0.40) !important; }
+html:not(.dark) [class*="border-[#FF5B00]/"],
+html:not(.dark) [class*="border-[#FF5B00]/10"],
+html:not(.dark) [class*="border-[#FF5B00]/20"],
+html:not(.dark) [class*="border-[#FF5B00]/25"],
+html:not(.dark) [class*="border-[#FF5B00]/30"],
+html:not(.dark) [class*="border-[#FF5B00]/40"],
+html:not(.dark) [class*="border-[#FF5B00]/45"] {
+  border-color: rgba(239, 60, 35, 0.35) !important;
+}
+html:not(.dark) [class*="shadow-[#FF5B00]"] {
+  --tw-shadow-color: rgba(239, 60, 35, 0.25) !important;
+}
+html:not(.dark) [class*="ring-[#FF5B00]"],
+html:not(.dark) [class*="focus:ring-[#FF5B00]"],
+html:not(.dark) [class*="focus:border-[#FF5B00]"],
+html:not(.dark) [class*="accent-[#FF5B00]"] {
+  --tw-ring-color: var(--color-accent-primary) !important;
+  accent-color: var(--color-accent-primary);
 }
 
 /** Best For #tag chips — purple text, no fill (storefront parity) */

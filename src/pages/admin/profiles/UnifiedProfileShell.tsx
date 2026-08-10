@@ -390,6 +390,17 @@ export default function UnifiedProfileShell() {
   const { profile: loggedInProfile } = useAuth();
   const { triggerMessage, triggerPhone } = useContact();
 
+  // Marketplace Access mutations require platform CMS edit privilege (viewer role — not profile type).
+  const canManageMarketplaceAccess = useMemo(() => {
+    const role = loggedInProfile?.role;
+    return (
+      role === 'admin' ||
+      role === 'super_admin' ||
+      role === 'moderator' ||
+      role === 'marketing_manager'
+    );
+  }, [loggedInProfile?.role]);
+
   // Derive active type and id, supporting legacy upe paths and direct /consumer/:id routes
   const typeKey = useMemo((): ProfileEntityKind => {
     const raw = entityType?.toLowerCase();
@@ -729,7 +740,32 @@ export default function UnifiedProfileShell() {
   const marketplaceEntityName =
     (entityData as any)?.name || (entityData as any)?.storeName || (entityData as any)?.displayName || 'Account';
 
+  /** Prefer catalog brand Marketplace Access lifecycle when viewing a Brand profile. */
+  const marketplaceStatusLabel = useMemo(() => {
+    if (marketplaceAccessState.suspended) return 'Suspended';
+    if (typeKey === 'brand' && catalogBrand) {
+      const status = catalogBrand.marketplaceStatus
+        || (catalogBrand.marketplaceAccess ? 'granted' : 'not_granted');
+      switch (status) {
+        case 'granted':
+        case 'restored':
+          return 'Active';
+        case 'suspended':
+          return 'Suspended';
+        case 'restricted':
+          return 'Restricted';
+        case 'revoked':
+          return 'Revoked';
+        case 'not_granted':
+        default:
+          return 'Inactive';
+      }
+    }
+    return marketplaceAccessState.suspended ? 'Suspended' : 'Active';
+  }, [marketplaceAccessState.suspended, typeKey, catalogBrand]);
+
   const handleMarketplaceSuspend = (input: SuspendInput) => {
+    if (!canManageMarketplaceAccess) return;
     const suspendedAt = new Date().toISOString();
     const autoReinstateAt = input.durationDays && input.durationDays > 0
       ? new Date(Date.now() + input.durationDays * 24 * 60 * 60 * 1000).toISOString()
@@ -756,6 +792,7 @@ export default function UnifiedProfileShell() {
   };
 
   const handleMarketplaceReinstate = () => {
+    if (!canManageMarketplaceAccess) return;
     setMarketplaceAccessByEntity(prev => ({ ...prev, [marketplaceAccessKey]: { suspended: false } }));
     addLog(marketplaceAccessKey, marketplaceEntityName, loggedInProfile?.displayName || 'Admin', 'Marketplace Access Reinstated', 'Suspension lifted; marketplace access restored.');
     showToast(`✓ Reinstated marketplace access for ${marketplaceEntityName}.`, 'success');
@@ -1050,7 +1087,23 @@ export default function UnifiedProfileShell() {
   ];
 
   // 8. Tabs Configuration Items
-  const tabs = (UPE_CONFIG[typeKey] || []).map(tab => {
+  // Recommendation listing tabs: Admin Creator Profile oversight only.
+  // Hidden for Creator self-view and Seller viewers / seller-brand profiles.
+  const viewerRole = loggedInProfile?.role;
+  const tabKeysForProfile = (UPE_CONFIG[typeKey] || []).filter((tab) => {
+    const isCreatorRecTab = tab === 'recommended_products' || tab === 'content_listings';
+    if (!isCreatorRecTab) return true;
+    if (typeKey === 'seller' || typeKey === 'brand') return false;
+    if (viewerRole === 'seller' || viewerRole === 'creator') return false;
+    if (typeKey !== 'creator') return false;
+    return (
+      viewerRole === 'admin' ||
+      viewerRole === 'super_admin' ||
+      viewerRole === 'moderator' ||
+      viewerRole === 'marketing_manager'
+    );
+  });
+  const tabs = tabKeysForProfile.map(tab => {
     let label = '';
     if (typeKey === 'seller' || typeKey === 'brand') {
       if (tab === 'account') label = '⚙️ Account Information';
@@ -1383,6 +1436,8 @@ export default function UnifiedProfileShell() {
               state={marketplaceAccessState}
               onSuspend={handleMarketplaceSuspend}
               onReinstate={handleMarketplaceReinstate}
+              canManageMarketplaceAccess={canManageMarketplaceAccess}
+              statusLabel={marketplaceStatusLabel}
             />
             {/* Billing & Shipping Addresses (Editable Mocks) */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
@@ -2305,6 +2360,8 @@ export default function UnifiedProfileShell() {
               state={marketplaceAccessState}
               onSuspend={handleMarketplaceSuspend}
               onReinstate={handleMarketplaceReinstate}
+              canManageMarketplaceAccess={canManageMarketplaceAccess}
+              statusLabel={marketplaceStatusLabel}
             />
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
               <div className="border-b border-app-border pb-3">
@@ -2466,8 +2523,12 @@ export default function UnifiedProfileShell() {
               </div>
 
               <div className="pt-4 border-t border-app-border flex flex-wrap gap-3">
-                <button onClick={() => showToast('✓ Request dispatched: Missing SLA TIN Document alert.')} className="px-4 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 text-xs font-bold border border-yellow-500/30 rounded cursor-pointer transition-all">Request Update / Alert Missing Doc</button>
-                <button onClick={() => showToast('✓ Certification claim locked with NBR Registry.')} className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30 rounded cursor-pointer transition-all">Lock Verification Claim</button>
+                {canManageMarketplaceAccess ? (
+                  <>
+                    <button onClick={() => showToast('✓ Request dispatched: Missing SLA TIN Document alert.')} className="px-4 py-2 bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 text-xs font-bold border border-yellow-500/30 rounded cursor-pointer transition-all">Request Update / Alert Missing Doc</button>
+                    <button onClick={() => showToast('✓ Certification claim locked with NBR Registry.')} className="px-4 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30 rounded cursor-pointer transition-all">Lock Verification Claim</button>
+                  </>
+                ) : null}
               </div>
             </div>
           </div>
@@ -3030,6 +3091,8 @@ export default function UnifiedProfileShell() {
               state={marketplaceAccessState}
               onSuspend={handleMarketplaceSuspend}
               onReinstate={handleMarketplaceReinstate}
+              canManageMarketplaceAccess={canManageMarketplaceAccess}
+              statusLabel={marketplaceStatusLabel}
             />
             {/* Notification Preferences & Password Security Section */}
             <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">

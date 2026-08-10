@@ -56,7 +56,7 @@ export function TempRoleSwitcher() {
           }}
         >
           <div className="flex items-center justify-between mb-2 px-1">
-            <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#FF5B00]">
+            <span className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-[#EF3C23]">
               Temp roles
             </span>
             <button
@@ -80,9 +80,9 @@ export function TempRoleSwitcher() {
                   style={
                     active
                       ? {
-                          background: 'rgba(255,91,0,0.22)',
-                          color: '#FF5B00',
-                          border: '1px solid rgba(255,91,0,0.45)',
+                          background: 'rgba(239,60,35,0.22)',
+                          color: '#EF3C23',
+                          border: '1px solid rgba(239,60,35,0.45)',
                         }
                       : {
                           background: 'rgba(255,255,255,0.06)',
@@ -105,7 +105,7 @@ export function TempRoleSwitcher() {
           type="button"
           onClick={() => setOpen(true)}
           className="h-11 px-3.5 rounded-full text-white text-[11px] font-extrabold shadow-2xl flex items-center gap-2 border border-white/15"
-          style={{ background: 'linear-gradient(90deg, #FF5B00, #E64A00)' }}
+          style={{ background: 'linear-gradient(90deg, #C8321A, #EF3C23)' }}
           title="Temp role switcher"
         >
           <RefreshCw className="w-3.5 h-3.5" />

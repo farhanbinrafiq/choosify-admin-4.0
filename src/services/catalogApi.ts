@@ -333,6 +333,21 @@ export const catalogApi = {
     const result = await request<{ data: CatalogCreator[] }>('/catalog/creators');
     return result.data;
   },
+  /** Creator Studio boot — own catalog creator row (auto-creates draft if missing). */
+  ensureCreatorWorkspace: async (hints?: {
+    displayName?: string;
+    email?: string;
+  }): Promise<{ creators: CatalogCreator[]; created: boolean }> => {
+    const result = await request<{ creators: CatalogCreator[]; created?: boolean }>(
+      '/catalog/workspace/creator/ensure',
+      'POST',
+      hints || {},
+    );
+    return {
+      creators: Array.isArray(result.creators) ? result.creators : [],
+      created: Boolean(result.created),
+    };
+  },
   upsertCreator: async (id: string, payload: Partial<CatalogCreator>): Promise<CatalogCreator> => {
     const result = await request<{ data: CatalogCreator }>(`/catalog/creators/${id}`, 'PUT', payload);
     return result.data;

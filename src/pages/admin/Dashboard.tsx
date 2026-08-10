@@ -60,7 +60,7 @@ const StatCard = ({
       <div className="dash-kpi-value text-[28px] font-extrabold tracking-tight mb-2 leading-none">{value}</div>
       <div className="dash-kpi-sub text-[11px] font-medium flex items-center gap-1">
         {sub}
-        {href && <ArrowUpRight className="w-3.5 h-3.5 text-[#FF5B00] opacity-0 group-hover:opacity-100 transition-opacity" />}
+        {href && <ArrowUpRight className="w-3.5 h-3.5 text-[#EF3C23] opacity-0 group-hover:opacity-100 transition-opacity" />}
       </div>
     </div>
   );

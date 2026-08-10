@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { catalogApi } from '../../services/catalogApi';
 import { useEntityDraft } from '../../hooks/useEntityDraft';
 import { GuideDetailPresentation } from '../../components/guide-detail';
-import {
+import { 
   createBlankGuideModel,
   editorModelToGuidePayload,
   mapCatalogGuideToEditor,
@@ -163,7 +163,7 @@ export default function GuideEditStudio() {
               creatorId: loaded.creatorId || fromCatalog.creatorId,
               status: loaded.status || fromCatalog.status,
             };
-          } else {
+      } else {
             loaded = fromCatalog;
           }
         }
@@ -383,14 +383,14 @@ export default function GuideEditStudio() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-[420px] gap-3 text-app-text-muted">
-        <RotateCw className="w-10 h-10 animate-spin text-[#FF5B00]" />
+        <RotateCw className="w-10 h-10 animate-spin text-[#EF3C23]" />
         <span className="text-xs font-mono">Loading Guide Visual Builder…</span>
       </div>
     );
   }
 
   if (!model || (loadError && !model.title)) {
-    return (
+  return (
       <div className="flex flex-col items-center justify-center h-[420px] gap-4 text-center px-6">
         <p className="text-sm font-bold text-[#111827] m-0">Could not load Guide</p>
         <p className="text-[12px] text-slate-500 m-0 max-w-md">
@@ -401,21 +401,21 @@ export default function GuideEditStudio() {
           server.
         </p>
         <div className="flex gap-2">
-          <button
+          <button 
             type="button"
             onClick={() => navigate('/admin/guides')}
             className="px-3.5 py-2 rounded-lg border border-[#E8EDF2] text-[11px] font-extrabold bg-white"
           >
             Back
           </button>
-          <button
+            <button
             type="button"
             onClick={() => window.location.reload()}
-            className="px-3.5 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#FF5B00]"
+            className="px-3.5 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#EF3C23]"
           >
             Retry
-          </button>
-        </div>
+            </button>
+          </div>
       </div>
     );
   }
@@ -462,19 +462,19 @@ export default function GuideEditStudio() {
                 }`}
               >
                 {model.status === 'LIVE' ? '● LIVE' : '○ DRAFT'}
-              </span>
-            </div>
+            </span>
+          </div>
             <p className="text-[10px] text-slate-500 font-mono tracking-wider">
               Choosify Guide Visual Builder
             </p>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3">
           {hasUnsavedChanges ? (
-            <span className="text-[#FF5B00] text-[10px] font-mono font-bold animate-pulse">
+            <span className="text-[#EF3C23] text-[10px] font-mono font-bold animate-pulse">
               ● UNSAVED
-            </span>
+                </span>
           ) : null}
           {syncStatus === 'saving' ? (
             <span className="text-blue-600 text-[10px] font-mono font-bold">● Saving…</span>
@@ -488,8 +488,8 @@ export default function GuideEditStudio() {
           {publicPreviewPath ? (
             <a
               href={`http://localhost:5173${publicPreviewPath}`}
-              target="_blank"
-              rel="noreferrer"
+                    target="_blank"
+                    rel="noreferrer"
               className="px-3 py-2 rounded-lg border border-[#E8EDF2] text-[11px] font-bold bg-white no-underline text-slate-800"
             >
               Preview
@@ -497,17 +497,17 @@ export default function GuideEditStudio() {
           ) : null}
 
           <div className="relative">
-            <button
+            <button 
               type="button"
               onClick={() => setShowVersions((v) => !v)}
               className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E8EDF2] text-[11px] font-bold bg-white"
             >
-              <History className="w-4 h-4 text-[#FF5B00]" />
+              <History className="w-4 h-4 text-[#EF3C23]" />
               Snapshots ({versions?.length || 0})
             </button>
             {showVersions ? (
               <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-[#E8EDF2] rounded-xl shadow-xl p-3 z-40">
-                <p className="text-xs font-black uppercase text-[#FF5B00] border-b border-slate-100 pb-2 m-0 mb-2">
+                <p className="text-xs font-black uppercase text-[#EF3C23] border-b border-slate-100 pb-2 m-0 mb-2">
                   History
                 </p>
                 {(versions || []).length === 0 ? (
@@ -518,28 +518,28 @@ export default function GuideEditStudio() {
                       <li key={v.id} className="text-[11px] text-slate-700 py-1 border-b border-slate-50">
                         {v.label || v.createdAt}
                       </li>
-                    ))}
-                  </ul>
+                ))}
+              </ul>
                 )}
-              </div>
+            </div>
             ) : null}
-          </div>
+            </div>
 
-          <button
-            type="button"
+                      <button
+                        type="button"
             onClick={() => void handleSaveDraft()}
             className="px-3.5 py-2 rounded-lg border border-[#E8EDF2] text-[11px] font-extrabold bg-white"
-          >
+                      >
             Save Draft
-          </button>
-          <button
-            type="button"
+                      </button>
+                    <button
+                      type="button"
             onClick={() => setShowPublishModal(true)}
-            className="px-3.5 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#FF5B00]"
+            className="px-3.5 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#EF3C23]"
           >
             Publish
-          </button>
-        </div>
+                    </button>
+                  </div>
       </header>
 
       <GuideDetailPresentation
@@ -552,19 +552,19 @@ export default function GuideEditStudio() {
 
       {/* SEO edit entry — not a public section; toolbar-adjacent control */}
       <div className="max-w-[1280px] mx-auto px-5 sm:px-8 lg:px-10 w-full -mt-6 mb-8">
-        <button
+          <button 
           type="button"
           onClick={() => openDrawer('seo')}
-          className="text-[11px] font-bold text-[#FF5B00] bg-transparent border-0 cursor-pointer underline"
+          className="text-[11px] font-bold text-[#EF3C23] bg-transparent border-0 cursor-pointer underline"
         >
           Edit SEO metadata
-        </button>
-      </div>
+          </button>
+        </div>
 
       <AnimatePresence>
         {activeDrawer ? (
           <>
-            <motion.div
+            <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.5 }}
               exit={{ opacity: 0 }}
@@ -592,13 +592,13 @@ export default function GuideEditStudio() {
               {activeDrawer === 'media' ? (
                 <div className="space-y-3">
                   <label className="block text-[9px] font-black uppercase text-slate-500">Cover image URL</label>
-                  <input
+                          <input
                     value={mediaForm.image}
                     onChange={(e) => setMediaForm({ ...mediaForm, image: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
                   />
                   <label className="block text-[9px] font-black uppercase text-slate-500">Video URL</label>
-                  <input
+                          <input
                     value={mediaForm.videoUrl}
                     onChange={(e) => setMediaForm({ ...mediaForm, videoUrl: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
@@ -606,55 +606,55 @@ export default function GuideEditStudio() {
                   <label className="block text-[9px] font-black uppercase text-slate-500">
                     Watch / YouTube URL
                   </label>
-                  <input
+                      <input 
                     value={mediaForm.watchUrl}
                     onChange={(e) => setMediaForm({ ...mediaForm, watchUrl: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
-                  />
-                </div>
+                      />
+                    </div>
               ) : null}
 
               {activeDrawer === 'header' ? (
                 <div className="space-y-3">
                   <label className="block text-[9px] font-black uppercase text-slate-500">Title</label>
-                  <input
+                      <input 
                     value={headerForm.title}
                     onChange={(e) => setHeaderForm({ ...headerForm, title: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
                   />
                   <label className="block text-[9px] font-black uppercase text-slate-500">Slug</label>
-                  <input
+                      <input 
                     value={headerForm.slug}
                     onChange={(e) => setHeaderForm({ ...headerForm, slug: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs font-mono"
                   />
                   <label className="block text-[9px] font-black uppercase text-slate-500">Category</label>
-                  <input
+                        <input
                     value={headerForm.category}
                     onChange={(e) => setHeaderForm({ ...headerForm, category: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
                   />
                   <label className="block text-[9px] font-black uppercase text-slate-500">Summary</label>
-                  <textarea
+                      <textarea 
                     rows={3}
                     value={headerForm.excerpt}
                     onChange={(e) => setHeaderForm({ ...headerForm, excerpt: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
                   />
                   <label className="block text-[9px] font-black uppercase text-slate-500">Author</label>
-                  <input
+                          <input 
                     value={headerForm.author}
                     onChange={(e) => setHeaderForm({ ...headerForm, author: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
                   />
                   <label className="block text-[9px] font-black uppercase text-slate-500">Author avatar URL</label>
-                  <input
+                        <input 
                     value={headerForm.authorAvatar}
                     onChange={(e) => setHeaderForm({ ...headerForm, authorAvatar: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
                   />
                   <label className="block text-[9px] font-black uppercase text-slate-500">Creator ID</label>
-                  <input
+                        <input 
                     value={headerForm.creatorId}
                     onChange={(e) => setHeaderForm({ ...headerForm, creatorId: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs font-mono"
@@ -677,7 +677,7 @@ export default function GuideEditStudio() {
                         <option value="reels">reels</option>
                         <option value="shorts">shorts</option>
                       </select>
-                    </div>
+                      </div>
                     <div>
                       <label className="block text-[9px] font-black uppercase text-slate-500">Format</label>
                       <select
@@ -700,13 +700,13 @@ export default function GuideEditStudio() {
                     </div>
                   </div>
                   <label className="block text-[9px] font-black uppercase text-slate-500">Read time</label>
-                  <input
+                        <input 
                     value={headerForm.readTime}
                     onChange={(e) => setHeaderForm({ ...headerForm, readTime: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
                   />
                   <label className="block text-[9px] font-black uppercase text-slate-500">Tags (comma)</label>
-                  <input
+                        <input 
                     value={headerForm.tags}
                     onChange={(e) => setHeaderForm({ ...headerForm, tags: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
@@ -726,7 +726,7 @@ export default function GuideEditStudio() {
                     <option value="LIVE">LIVE</option>
                     <option value="ARCHIVED">ARCHIVED</option>
                   </select>
-                </div>
+                      </div>
               ) : null}
 
               {activeDrawer === 'content' ? (
@@ -738,8 +738,8 @@ export default function GuideEditStudio() {
                     onChange={(e) => setBodyText(e.target.value)}
                     className="w-full p-2.5 border rounded-xl text-xs"
                     placeholder="Guide article content…"
-                  />
-                </div>
+                      />
+                    </div>
               ) : null}
 
               {activeDrawer === 'verdict' ? (
@@ -747,7 +747,7 @@ export default function GuideEditStudio() {
                   <label className="block text-[9px] font-black uppercase text-slate-500">
                     What we like (one per line)
                   </label>
-                  <textarea
+                      <textarea 
                     rows={4}
                     value={verdictForm.whatWeLike}
                     onChange={(e) => setVerdictForm({ ...verdictForm, whatWeLike: e.target.value })}
@@ -770,8 +770,8 @@ export default function GuideEditStudio() {
                     value={verdictForm.verdict}
                     onChange={(e) => setVerdictForm({ ...verdictForm, verdict: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
-                  />
-                </div>
+                      />
+                    </div>
               ) : null}
 
               {activeDrawer === 'associations' ? (
@@ -779,7 +779,7 @@ export default function GuideEditStudio() {
                   <label className="block text-[9px] font-black uppercase text-slate-500">
                     Product IDs (one per line)
                   </label>
-                  <textarea
+                      <textarea 
                     rows={4}
                     value={assocForm.productIds}
                     onChange={(e) => setAssocForm({ ...assocForm, productIds: e.target.value })}
@@ -793,14 +793,14 @@ export default function GuideEditStudio() {
                     value={assocForm.brandIds}
                     onChange={(e) => setAssocForm({ ...assocForm, brandIds: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs font-mono"
-                  />
-                </div>
+                      />
+                    </div>
               ) : null}
 
               {activeDrawer === 'seo' ? (
                 <div className="space-y-3">
                   <label className="block text-[9px] font-black uppercase text-slate-500">SEO title</label>
-                  <input
+                          <input 
                     value={seoForm.seoTitle}
                     onChange={(e) => setSeoForm({ ...seoForm, seoTitle: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
@@ -808,31 +808,31 @@ export default function GuideEditStudio() {
                   <label className="block text-[9px] font-black uppercase text-slate-500">
                     SEO description
                   </label>
-                  <textarea
+                      <textarea 
                     rows={4}
                     value={seoForm.seoDescription}
                     onChange={(e) => setSeoForm({ ...seoForm, seoDescription: e.target.value })}
                     className="w-full p-2.5 border rounded-xl text-xs"
-                  />
-                </div>
+                      />
+                    </div>
               ) : null}
 
               <div className="flex gap-2 mt-6 pt-4 border-t border-[#F1F1F3]">
-                <button
+                        <button 
                   type="button"
                   onClick={() => setActiveDrawer(null)}
                   className="flex-1 py-2.5 rounded-lg border border-[#E8EDF2] text-[11px] font-extrabold bg-white"
-                >
+                        >
                   Cancel
-                </button>
-                <button
+                        </button>
+                          <button
                   type="button"
                   onClick={saveDrawer}
-                  className="flex-1 py-2.5 rounded-lg text-[11px] font-extrabold text-white bg-[#FF5B00]"
+                  className="flex-1 py-2.5 rounded-lg text-[11px] font-extrabold text-white bg-[#EF3C23]"
                 >
                   Save
-                </button>
-              </div>
+                          </button>
+                        </div>
             </motion.div>
           </>
         ) : null}
@@ -853,23 +853,23 @@ export default function GuideEditStudio() {
                 payload once catalog sync completes.
               </p>
               <div className="flex gap-2 justify-end">
-                <button
+                        <button 
                   type="button"
                   onClick={() => setShowPublishModal(false)}
                   className="px-4 py-2 rounded-lg border text-[11px] font-bold bg-white"
-                >
+                        >
                   Cancel
-                </button>
-                <button
+                        </button>
+                          <button
                   type="button"
                   disabled={isPublishing}
                   onClick={() => void handlePublish()}
-                  className="px-4 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#FF5B00] disabled:opacity-60"
+                  className="px-4 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#EF3C23] disabled:opacity-60"
                 >
                   {isPublishing ? 'Publishing…' : 'Publish'}
-                </button>
-              </div>
-            </div>
+                          </button>
+                        </div>
+                    </div>
           </motion.div>
         ) : null}
       </AnimatePresence>
@@ -883,7 +883,7 @@ export default function GuideEditStudio() {
             className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] bg-[#111827] text-white text-[11px] font-bold px-4 py-2.5 rounded-full shadow-lg"
           >
             {toastMessage}
-          </motion.div>
+            </motion.div>
         ) : null}
       </AnimatePresence>
     </div>

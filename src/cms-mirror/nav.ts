@@ -130,6 +130,7 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
     'returnsRefunds',
     'promoCodes',
     'messages',
+    'notifications',
     'reviews',
     'finance',
     'courierProviders',
@@ -141,10 +142,11 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
   creator: [
     'dashboard',
     'creators', // Creator Studio → live storefront profile editor (not guides)
-    'creatorProfile', // My Profile (account / verification / listings / earnings)
+    'creatorProfile', // Creator Profile (account / verification / listings / earnings)
     'contentStudio',
     'creatorEconomy',
     'messages',
+    'notifications',
     'reviews',
     'finance',
     'myCashbook',
@@ -177,7 +179,7 @@ export const NAV_DEFS: CmsNavGroup[] = [
   {
     title: 'BRAND & CATALOG',
     items: [
-      { key: 'brands', label: 'Brand Management Studio', path: PAGE_KEY_TO_PATH.brands },
+      { key: 'brands', label: 'Seller Management Studio', path: PAGE_KEY_TO_PATH.brands },
       { key: 'products', label: 'Products & Inventory', path: PAGE_KEY_TO_PATH.products },
       { key: 'categories', label: 'Category Management Studio', path: PAGE_KEY_TO_PATH.categories },
     ],
@@ -255,11 +257,11 @@ export const NAV_DEFS: CmsNavGroup[] = [
 export const PAGE_META: Record<string, [string, string]> = {
   dashboard: ['Dashboard', 'Overview of store performance'],
   products: ['Products & Inventory', 'Manage your product catalog and stock'],
-  brands: ['Brand Management Studio', 'Manage partner brands'],
-  brandProfile: ['Brand Profile', 'Your brand account, verification, products, and earnings'],
+  brands: ['Seller Management Studio', 'Platform seller and brand governance'],
+  brandProfile: ['Seller Profile', 'Your seller account, verification, products, and earnings'],
   categories: ['Category Management Studio', 'Organize your catalog'],
   creators: ['Creators', 'Manage creator partnerships'],
-  creatorProfile: ['My Profile', 'Your creator account, verification, listings, and earnings'],
+  creatorProfile: ['Creator Profile', 'Your creator account, verification, listings, and earnings'],
   deals: ['Deals', 'Promotions and discounts'],
   orders: ['Orders Hub', 'Track and fulfill customer orders'],
   customers: ['Consumers', 'View and manage customer accounts'],

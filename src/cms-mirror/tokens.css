@@ -5,8 +5,8 @@
   --cms-surface: #ffffff;
   --cms-border: #e8edf2;
   --cms-navy: #000435;
-  --cms-accent: #ff5b00;
-  --cms-accent-hover: #e64a00;
+  --cms-accent: #ef3c23;
+  --cms-accent-hover: #d4331b;
   --cms-text: #111827;
   --cms-text-secondary: #374151;
   --cms-text-muted: #6b7280;
@@ -16,21 +16,21 @@
 
   /* Storefront --gradient-dark-surface / .footer-brand-gradient */
   --cms-gradient-dark-surface:
-    radial-gradient(1200px 500px at 15% 0%, hsla(22, 100%, 50%, 0.18), transparent 65%),
-    radial-gradient(900px 500px at 90% 20%, hsla(12, 92%, 45%, 0.14), transparent 65%),
+    radial-gradient(1200px 500px at 15% 0%, hsla(6, 86%, 54%, 0.18), transparent 65%),
+    radial-gradient(900px 500px at 90% 20%, hsla(6, 86%, 45%, 0.14), transparent 65%),
     rgba(10, 10, 31, 0.96);
 
   /* Storefront .choosify-chrome-header */
   --cms-gradient-chrome-header:
-    radial-gradient(900px 200px at 15% 0%, hsla(22, 100%, 50%, 0.16), transparent 70%),
-    radial-gradient(700px 200px at 90% 100%, hsla(12, 92%, 45%, 0.12), transparent 70%),
+    radial-gradient(900px 200px at 15% 0%, hsla(6, 86%, 54%, 0.16), transparent 70%),
+    radial-gradient(700px 200px at 90% 100%, hsla(6, 86%, 45%, 0.12), transparent 70%),
     rgba(10, 10, 31, 0.94);
 
   /* Storefront hero / dark-brand linear */
   --cms-gradient-hero: linear-gradient(180deg, #3a1e22 0%, #000435 100%);
 
-  /* Storefront orange button (not EMI) */
-  --cms-gradient-orange-button: linear-gradient(90deg, #b4411c 0%, #d15e32 100%);
+  /* Brand primary button — logo orange */
+  --cms-gradient-orange-button: linear-gradient(90deg, #c8321a 0%, #ef3c23 100%);
 
   --cms-sidebar-bg: var(--cms-gradient-dark-surface);
 }
@@ -72,7 +72,7 @@
 
 .cms-mirror-profile-trigger:hover,
 .cms-mirror-profile-trigger:focus-visible {
-  border-color: rgba(255, 91, 0, 0.55);
+  border-color: rgba(239, 60, 35, 0.55);
 }
 
 .cms-mirror-logout {
@@ -96,6 +96,6 @@
 }
 
 .cms-mirror-logout:hover {
-  border-color: rgba(255, 91, 0, 0.55);
-  color: #ff5b00;
+  border-color: rgba(239, 60, 35, 0.55);
+  color: #ef3c23;
 }

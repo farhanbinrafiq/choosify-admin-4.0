@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Sliders, Mail, Phone, Lock, CheckCircle2 } from 'lucide-react';
+import { PasswordInput } from '../ui/PasswordInput';
 
 interface BrandAccountTabProps {
   merchantContact: any;
@@ -249,32 +250,35 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-1">
                 <label className="text-slate-500 font-bold">Current Password</label>
-                <input 
-                  type="password" 
+                <PasswordInput
                   value={authControls.currentPass || ''}
-                  onChange={(e) => setAuthControls((prev: any) => ({ ...prev, currentPass: e.target.value }))}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:outline-none focus:border-[#F4631E]" 
+                  onChange={(value) => setAuthControls((prev: any) => ({ ...prev, currentPass: value }))}
+                  wrapperClassName="flex items-center gap-2 w-full bg-white border border-slate-300 rounded-xl px-4 focus-within:border-[#F4631E]"
+                  inputClassName="flex-1 min-w-0 bg-transparent border-0 outline-none py-2 text-sm"
                   placeholder="••••••••"
+                  autoComplete="current-password"
                 />
               </div>
               <div className="space-y-1">
                 <label className="text-slate-500 font-bold">New Password</label>
-                <input 
-                  type="password" 
+                <PasswordInput
                   value={authControls.newPass || ''}
-                  onChange={(e) => setAuthControls((prev: any) => ({ ...prev, newPass: e.target.value }))}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:outline-none focus:border-[#F4631E]" 
+                  onChange={(value) => setAuthControls((prev: any) => ({ ...prev, newPass: value }))}
+                  wrapperClassName="flex items-center gap-2 w-full bg-white border border-slate-300 rounded-xl px-4 focus-within:border-[#F4631E]"
+                  inputClassName="flex-1 min-w-0 bg-transparent border-0 outline-none py-2 text-sm"
                   placeholder="••••••••"
+                  autoComplete="new-password"
                 />
               </div>
               <div className="space-y-1">
                 <label className="text-slate-500 font-bold">Confirm New Password</label>
-                <input 
-                  type="password" 
+                <PasswordInput
                   value={authControls.confirmPass || ''}
-                  onChange={(e) => setAuthControls((prev: any) => ({ ...prev, confirmPass: e.target.value }))}
-                  className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:outline-none focus:border-[#F4631E]" 
+                  onChange={(value) => setAuthControls((prev: any) => ({ ...prev, confirmPass: value }))}
+                  wrapperClassName="flex items-center gap-2 w-full bg-white border border-slate-300 rounded-xl px-4 focus-within:border-[#F4631E]"
+                  inputClassName="flex-1 min-w-0 bg-transparent border-0 outline-none py-2 text-sm"
                   placeholder="••••••••"
+                  autoComplete="new-password"
                 />
               </div>
             </div>

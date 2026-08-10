@@ -35,7 +35,18 @@ async function main() {
   assert(ctx.includes('commerceAuthoritative') && ctx.includes('commerceApi.listOrders'), '2. OrdersContext loads Commerce API');
   assert(!ctx.includes('mergePlatformOrders'), '3. operations merge no longer authoritative path');
   const app = readFileSync(join(process.cwd(), 'src/App.tsx'), 'utf8');
-  assert(app.includes('path="/admin/orders"') && app.includes('<Orders'), '4. /admin/orders cut over to React Orders');
+  assert(
+    app.includes('path="/admin/*"') &&
+      app.includes('AdminAreaEntry') &&
+      !app.includes('path="/admin/orders"'),
+    '4. /admin/orders uses approved CmsMirror host (not Orders.tsx cutover)',
+  );
+  assert(
+    app.includes('BrandStudioHomeEntry') &&
+      app.includes('return <CmsMirrorHost />') &&
+      !app.includes('<BrandsStudioList'),
+    '4b. Brand Management home uses CmsMirror (not BrandsStudioList)',
+  );
   assert(app.includes('path="/admin/invoice/:id"'), '5. invoice route wired');
   const consumer = readFileSync(join(process.cwd(), 'src/pages/dashboards/ConsumerDashboard.tsx'), 'utf8');
   assert(consumer.includes('profile?.id') && consumer.includes('cancelOrder'), '6. Consumer history uses auth id + cancel');

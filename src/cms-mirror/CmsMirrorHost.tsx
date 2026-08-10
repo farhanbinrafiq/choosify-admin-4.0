@@ -8,7 +8,7 @@ import './tokens.css';
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 
 /** Bump when public/cms-mirror/app.html behavior changes so the iframe never serves a stale 304. */
-const CMS_MIRROR_ASSET_VERSION = '20260808-brand-list-merge-1';
+const CMS_MIRROR_ASSET_VERSION = '20260809-ui-hotfix-notif-bell-1';
 
 function parseBrandDetail(pathname: string, search: string): { id: string | null; name: string | null } {
   const match = pathname.match(/^\/admin\/brand-detail\/([^/?#]+)/);

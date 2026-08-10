@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getCanonicalAdminCategories } from '../lib/storefrontCategories';
+import { PasswordInput } from '../components/ui/PasswordInput';
 
 const PAGE_BG = '#000435';
 const PRIMARY = '#EB4501';
@@ -303,14 +304,15 @@ export default function SellerSignupPage() {
 
                 <div>
                   <FieldLabel>Password</FieldLabel>
-                  <TextInput
+                  <PasswordInput
                     id="password"
-                    type="password"
                     value={password}
                     onChange={setPassword}
                     placeholder="At least 8 characters"
                     required
                     autoComplete="new-password"
+                    wrapperClassName="flex items-center gap-2 w-full rounded-lg border border-[#E5E7EB] bg-white px-3.5 focus-within:border-[#EB4501]"
+                    inputClassName="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13px] text-[#1A1A2E] placeholder:text-[#9AA0AC] py-2.5"
                   />
                 </div>
 
