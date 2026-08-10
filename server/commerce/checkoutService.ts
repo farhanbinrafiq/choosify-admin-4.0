@@ -424,6 +424,8 @@ export async function executeCheckout(input: CheckoutInput): Promise<CheckoutRes
         checkoutId,
         sellerId: order.sellerId,
         brandId: order.brandId,
+        consumerId,
+        source: order.source,
         grandTotal: order.grandTotal,
       });
     }
@@ -433,6 +435,8 @@ export async function executeCheckout(input: CheckoutInput): Promise<CheckoutRes
         orderId: br.orderId,
         serviceId: br.serviceId,
         sellerId: br.sellerId,
+        brandId: br.brandId,
+        consumerId,
       });
     }
 
@@ -601,6 +605,11 @@ export async function createManualOrder(input: {
   emitCommerce('OrderCreated', order.id, input.actorId, {
     orderId: order.id,
     orderNumber: order.orderNumber,
+    checkoutId: order.checkoutId,
+    sellerId: order.sellerId,
+    brandId: order.brandId,
+    consumerId: order.consumerId || input.actorId,
+    source: order.source,
     manual: true,
   });
 
@@ -626,7 +635,34 @@ export async function associateManualOrder(input: {
   order.consumerId = input.consumerId;
   order.claimToken = undefined;
   order.updatedAt = nowIso();
-  return commerceStore.upsertOrder(order);
+  const saved = await commerceStore.upsertOrder(order);
+  try {
+    const { ensureOrderConversation } = await import(
+      '../messaging/conversations/conversationService'
+    );
+    await ensureOrderConversation({
+      orderId: saved.id,
+      consumerId: saved.consumerId,
+      sellerId: saved.sellerId,
+      brandId: saved.brandId,
+      checkoutId: saved.checkoutId,
+      sourceChannel:
+        saved.source === 'external_whatsapp'
+          ? 'external_whatsapp'
+          : saved.source === 'external_facebook'
+            ? 'facebook'
+            : saved.source === 'external_instagram'
+              ? 'instagram'
+              : saved.source === 'checkout'
+                ? 'platform'
+                : 'manual',
+      contextType: saved.source === 'checkout' ? 'order' : 'manual_order',
+      actor: input.consumerId,
+    });
+  } catch (error) {
+    console.error('[Commerce] Failed to ensure conversation after manual order associate:', error);
+  }
+  return saved;
 }
 
 export async function getOrderForActor(

@@ -12,7 +12,39 @@ This document lists Firestore queries that require composite indexes. **Indexes 
 
 ## Required composite indexes
 
+### `messaging_conversations` (commerce Messaging SoT)
+
+| Query | Fields | Order | Used by |
+|-------|--------|-------|---------|
+| Order reconcile key | `reconcileKey` ASC | Single-field (auto) | `getConversationByReconcileKey()` |
+
+### `messaging_messages`
+
+| Query | Fields | Order | Used by |
+|-------|--------|-------|---------|
+| Messages by conversation | `conversationId` ASC | Single-field / composite with `createdAt` | `listMessages()` |
+| External / Meta dedup | `externalMessageId` ASC | Single-field (auto) | `getMessageByExternalId()` |
+
+### `messaging_attachments`
+
+| Query | Fields | Order | Used by |
+|-------|--------|-------|---------|
+| Attachments by message | `messageId` ASC | Single-field (auto) | `listAttachmentsForMessage()` |
+
+### `messaging_social_inbox`
+
+| Query | Fields | Order | Used by |
+|-------|--------|-------|---------|
+| By brand | `brandId` ASC | Single-field (auto) | `listSocialInbox(brandId)` |
+
+### `messaging_admin_entries`
+
+| Query | Fields | Order | Used by |
+|-------|--------|-------|---------|
+| By conversation | `conversationId` ASC | Single-field (auto) | `listAdminEntries(conversationId)` |
+
 ### `omni_messages`
+
 
 | Query | Fields | Order | Used by |
 |-------|--------|-------|---------|

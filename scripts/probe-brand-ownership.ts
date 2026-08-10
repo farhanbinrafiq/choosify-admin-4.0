@@ -327,11 +327,17 @@ async function main() {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sellerAToken}` },
     body: JSON.stringify({ marketplaceAccess: true }),
   });
-  const sellerCannotSelfLiftBody = (await json(sellerCannotSelfLiftSuspensionRes)) as { data?: { marketplaceAccess?: boolean } };
+  const sellerCannotSelfLiftBody = (await json(sellerCannotSelfLiftSuspensionRes)) as {
+    error?: string;
+    data?: { marketplaceAccess?: boolean };
+  };
   assert(
-    sellerCannotSelfLiftBody.data?.marketplaceAccess === false,
-    'Seller cannot self-lift an admin-imposed suspension via the plain marketplaceAccess toggle',
-    sellerCannotSelfLiftBody,
+    sellerCannotSelfLiftSuspensionRes.status === 403 &&
+      /Marketplace Access can only be changed by platform administrators/i.test(
+        String(sellerCannotSelfLiftBody.error || ''),
+      ),
+    'Seller cannot self-lift an admin-imposed suspension via the plain marketplaceAccess toggle (403 Admin-only)',
+    { status: sellerCannotSelfLiftSuspensionRes.status, body: sellerCannotSelfLiftBody },
   );
 
   console.log('');

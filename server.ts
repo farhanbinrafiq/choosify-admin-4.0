@@ -2,6 +2,8 @@ import path from "path";
 import express from "express";
 import { createServer } from "http";
 import { bootstrapMessagingJobs, seedOmnichannelData } from "./server/messagingHub";
+import { bootstrapConversationEventSubscribers } from "./server/messaging/conversations/conversationEvents";
+import { ensureConversationMemoryHydrated } from "./server/messaging/conversations/conversationMemoryBackend";
 import { attachOperationsPersistence, ensureOperationsHydrated } from "./server/operations/operationsPersistence";
 import { ensureCatalogSeedData } from "./lib/vercel-catalog/catalogStore";
 import { Logger } from "./server/lib/logger";
@@ -61,6 +63,8 @@ async function startServer() {
   await ensureOperationsHydrated();
   await seedOmnichannelData();
   await bootstrapMessagingJobs();
+  ensureConversationMemoryHydrated();
+  bootstrapConversationEventSubscribers();
   await ensureCatalogSeedData();
   markApplicationReady();
 

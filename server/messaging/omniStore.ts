@@ -10,6 +10,12 @@ import {
   listWhereOrdered,
 } from '../lib/firestore/queryHelpers';
 import { snapToData } from '../lib/firestore/documentHelpers';
+import {
+  flushOmniMemoryPersist,
+  loadOmniMemorySnapshot,
+  scheduleOmniMemoryPersist,
+  type OmniMemorySnapshot,
+} from './omniPersistence';
 
 type StoreBackend = 'admin' | 'memory';
 
@@ -21,12 +27,43 @@ const memory = {
 };
 
 let backend: StoreBackend | null = null;
+let memoryHydrated = false;
+
+function buildOmniSnapshot(): OmniMemorySnapshot {
+  return {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    conversations: Array.from(memory.conversations.values()),
+    messages: Array.from(memory.messages.values()),
+    agents: Array.from(memory.agents.values()),
+    customers: Array.from(memory.customers.values()),
+  };
+}
+
+function scheduleMemoryPersist(): void {
+  scheduleOmniMemoryPersist(buildOmniSnapshot);
+}
+
+function ensureOmniMemoryHydrated(): void {
+  if (memoryHydrated) return;
+  memoryHydrated = true;
+  const snap = loadOmniMemorySnapshot();
+  if (!snap) return;
+  for (const c of snap.conversations || []) memory.conversations.set(c.conversationId, c);
+  for (const m of snap.messages || []) memory.messages.set(m.id, m);
+  for (const a of snap.agents || []) memory.agents.set(a.id, a);
+  for (const cu of snap.customers || []) memory.customers.set(cu.id, cu);
+  console.log(
+    `[OmniMemoryPersist] Hydrated (${memory.conversations.size} conversations, ${memory.messages.size} messages).`,
+  );
+}
 
 async function resolveBackend(): Promise<StoreBackend> {
   if (backend) return backend;
   const adminDb = await getAdminFirestore();
   backend = adminDb ? 'admin' : 'memory';
-  console.log(`[OmniStore] Using ${backend} backend`);
+  if (backend === 'memory') ensureOmniMemoryHydrated();
+  console.log(`[OmniStore] Using ${backend === 'admin' ? 'admin' : 'memory-disk'} backend`);
   return backend;
 }
 
@@ -37,6 +74,7 @@ export async function getStoreBackend(): Promise<StoreBackend> {
 export async function hasConversationData(): Promise<boolean> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
+    ensureOmniMemoryHydrated();
     return memory.conversations.size > 0;
   }
   return collectionHasDocuments('omni_conversations', 1);
@@ -45,7 +83,9 @@ export async function hasConversationData(): Promise<boolean> {
 export async function saveCustomer(customer: Customer): Promise<void> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
+    ensureOmniMemoryHydrated();
     memory.customers.set(customer.id, customer);
+    scheduleMemoryPersist();
     return;
   }
   const db = await getAdminFirestore();
@@ -55,7 +95,9 @@ export async function saveCustomer(customer: Customer): Promise<void> {
 export async function saveAgent(agent: Agent): Promise<void> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
+    ensureOmniMemoryHydrated();
     memory.agents.set(agent.id, agent);
+    scheduleMemoryPersist();
     return;
   }
   const db = await getAdminFirestore();
@@ -65,7 +107,9 @@ export async function saveAgent(agent: Agent): Promise<void> {
 export async function saveConversation(conversation: Conversation): Promise<void> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
+    ensureOmniMemoryHydrated();
     memory.conversations.set(conversation.conversationId, conversation);
+    scheduleMemoryPersist();
     return;
   }
   const db = await getAdminFirestore();
@@ -75,6 +119,7 @@ export async function saveConversation(conversation: Conversation): Promise<void
 export async function getConversation(conversationId: string): Promise<Conversation | null> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
+    ensureOmniMemoryHydrated();
     return memory.conversations.get(conversationId) ?? null;
   }
   return getDocumentById<Conversation>('omni_conversations', conversationId);
@@ -85,6 +130,7 @@ export async function listConversations(
 ): Promise<Conversation[]> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
+    ensureOmniMemoryHydrated();
     const rows = Array.from(memory.conversations.values()).sort(
       (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
     );
@@ -101,7 +147,9 @@ export async function listConversations(
 export async function saveMessage(message: UnifiedMessage): Promise<void> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
+    ensureOmniMemoryHydrated();
     memory.messages.set(message.id, message);
+    scheduleMemoryPersist();
     return;
   }
   const db = await getAdminFirestore();
@@ -111,6 +159,7 @@ export async function saveMessage(message: UnifiedMessage): Promise<void> {
 export async function messageExistsByPlatformId(platformMessageId: string): Promise<boolean> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
+    ensureOmniMemoryHydrated();
     return Array.from(memory.messages.values()).some((m) => m.platformMessageId === platformMessageId);
   }
   return existsWhere('omni_messages', 'platformMessageId', '==', platformMessageId);
@@ -122,6 +171,7 @@ export async function listMessages(
 ): Promise<UnifiedMessage[]> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
+    ensureOmniMemoryHydrated();
     const rows = Array.from(memory.messages.values())
       .filter((m) => m.conversationId === conversationId)
       .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
@@ -140,6 +190,7 @@ export async function listMessages(
 export async function getLatestInboundMessage(conversationId: string): Promise<UnifiedMessage | null> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
+    ensureOmniMemoryHydrated();
     const inbound = Array.from(memory.messages.values())
       .filter((m) => m.conversationId === conversationId && m.direction === 'inbound')
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
@@ -159,6 +210,7 @@ export async function getLatestInboundMessage(conversationId: string): Promise<U
 export async function listAgents(): Promise<Agent[]> {
   const mode = await resolveBackend();
   if (mode === 'memory') {
+    ensureOmniMemoryHydrated();
     return Array.from(memory.agents.values());
   }
   const db = await getAdminFirestore();
@@ -177,6 +229,11 @@ export async function patchConversation(
   return updated;
 }
 
+export function omniMemoryFlushNow(): void {
+  scheduleOmniMemoryPersist(buildOmniSnapshot);
+  flushOmniMemoryPersist();
+}
+
 /** Dev-only: expose memory store for tests */
 export function __resetMemoryStoreForTests() {
   memory.conversations.clear();
@@ -184,4 +241,6 @@ export function __resetMemoryStoreForTests() {
   memory.agents.clear();
   memory.customers.clear();
   backend = null;
+  memoryHydrated = true;
+  scheduleMemoryPersist();
 }

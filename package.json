@@ -23,7 +23,9 @@
     "verify:payments": "tsx scripts/verify-payment-flow.ts",
     "check:prod-env": "tsx scripts/check-production-env.ts",
     "seed:catalog": "tsx scripts/seedCatalog.ts",
-    "build:cms-mirror": "node scripts/build-cms-mirror.mjs"
+    "build:cms-mirror": "node scripts/build-cms-mirror.mjs",
+    "test:messaging": "tsx scripts/probe-messaging.ts",
+    "test:messaging-persist": "tsx scripts/probe-messaging-persist.ts"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

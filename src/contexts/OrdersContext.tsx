@@ -8,6 +8,7 @@ import {
   type CommerceOrderDto,
   type CommerceShipmentDto,
 } from '../lib/commerceOrderAdapter';
+import { messagingApi, type ApiConversation, type ApiMessage } from '../services/messagingApi';
 
 /**
  * OrdersContext — presentation/cache layer for Order Hub UI.
@@ -15,6 +16,9 @@ import {
  * Sprint 6: When the user is authenticated, Commerce Order API is the
  * authoritative source. localStorage `choosify_orders` is legacy/demo only and
  * is not written while commerceAuthoritative is true.
+ *
+ * Sprint 9: Platform message threads hydrate from /api/v1/conversations when
+ * authenticated. Demo choosify_threads must not masquerade as real Conversations.
  */
 
 export type OrderStatus = 'Pending' | 'Confirmed' | 'Dispatched' | 'In Transit' | 'Delivered' | 'Cancelled' | 'Rejected' | 'Returned' | 'Exchange' | 'Processing';
@@ -149,6 +153,9 @@ interface OrdersContextType {
   messageThreads: MessageThread[];
   /** True when list is loaded from Commerce API (not localStorage demo). */
   commerceAuthoritative: boolean;
+  /** True when platform threads are loaded from Messaging API. */
+  messagingAuthoritative: boolean;
+  refreshMessageThreads: () => Promise<void>;
   ordersLoading: boolean;
   ordersError: string | null;
   refreshOrders: () => Promise<void>;
@@ -269,6 +276,7 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const { allocateStock, deallocateStock, logStockChange } = useInventory();
   const { applyCoupon } = useCoupons();
   const [commerceAuthoritative, setCommerceAuthoritative] = useState(false);
+  const [messagingAuthoritative, setMessagingAuthoritative] = useState(false);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState<string | null>(null);
   const [orders, setOrders] = useState<Order[]>(() => {
@@ -398,10 +406,18 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   });
 
   const [messageThreads, setMessageThreads] = useState<MessageThread[]>(() => {
+    // Demo fixtures are isolated: only hydrate from localStorage when unauthenticated.
+    if (getAuthToken()) return [];
     const saved = localStorage.getItem('choosify_threads');
-    if (saved) return JSON.parse(saved);
+    if (saved) {
+      try {
+        return JSON.parse(saved) as MessageThread[];
+      } catch {
+        /* fall through */
+      }
+    }
 
-    // Bootstrap threads from orders
+    // Bootstrap demo threads from orders (preview only — not Messaging SoT)
     return [
       {
         id: 'thread_CSS-9921',
@@ -433,6 +449,75 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     ];
   });
 
+  const mapApiMessages = (rows: ApiMessage[]): ThreadMessage[] =>
+    rows.map((m) => ({
+      id: m.id,
+      senderName: m.senderRole,
+      senderRole:
+        m.senderRole === 'consumer'
+          ? 'customer'
+          : m.senderRole === 'admin'
+            ? 'admin'
+            : 'seller',
+      text: m.body,
+      timestamp: m.createdAt,
+    }));
+
+  const mapApiConversation = async (c: ApiConversation): Promise<MessageThread> => {
+    let messages: ThreadMessage[] = [];
+    try {
+      messages = mapApiMessages(await messagingApi.listMessages(c.id));
+    } catch {
+      messages = [];
+    }
+    const subject =
+      c.orderId
+        ? `Order ${c.orderId}`
+        : c.bookingRequestId
+          ? `Booking ${c.bookingRequestId}`
+          : `${c.contextType} conversation`;
+    return {
+      id: c.id,
+      orderId: c.orderId,
+      customer: {
+        id: c.consumerId,
+        name: `Consumer ${c.consumerId.slice(0, 8)}`,
+        email: '',
+        avatar: 'C',
+        behavior: 'Neutral',
+        flagged: false,
+        history: [],
+      },
+      subject,
+      preview: c.lastMessagePreview || subject,
+      status: c.status === 'active' ? 'UNREAD' : 'READ',
+      time: c.lastMessageAt || c.updatedAt,
+      messages,
+    };
+  };
+
+  const refreshMessageThreads = useCallback(async () => {
+    const token = getAuthToken();
+    if (!token) {
+      setMessagingAuthoritative(false);
+      return;
+    }
+    try {
+      const rows = await messagingApi.listConversations();
+      const mapped = await Promise.all(rows.map((c) => mapApiConversation(c)));
+      setMessageThreads(mapped);
+      setMessagingAuthoritative(true);
+    } catch (error) {
+      console.warn('[Messaging] Failed to hydrate conversations', error);
+      // Keep whatever is on screen; do not silently restore demo as SoT.
+      setMessagingAuthoritative(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshMessageThreads();
+  }, [refreshMessageThreads, commerceAuthoritative]);
+
   // Persist demo orders only when Commerce is not authoritative
   useEffect(() => {
     if (commerceAuthoritative) return;
@@ -444,8 +529,9 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [customers]);
 
   useEffect(() => {
+    if (messagingAuthoritative || getAuthToken()) return;
     localStorage.setItem('choosify_threads', JSON.stringify(messageThreads));
-  }, [messageThreads]);
+  }, [messageThreads, messagingAuthoritative]);
 
   // Actions
   const approveOrder = (orderId: string, deliveryChargeNum?: number, note?: string) => {
@@ -900,27 +986,43 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const sendChatMessage = (threadId: string, text: string, senderRole: 'customer' | 'seller' | 'admin', senderName: string) => {
-    setMessageThreads(prev => prev.map(t => {
-      if (t.id === threadId) {
-        return {
-          ...t,
-          status: senderRole === 'customer' ? 'UNREAD' : 'RESPONDED',
-          preview: text,
-          time: 'Just now',
-          messages: [
-            ...t.messages,
-            {
-              id: Math.random().toString(),
-              senderName,
-              senderRole,
-              text,
-              timestamp: new Date().toISOString(),
-            }
-          ]
-        };
-      }
-      return t;
-    }));
+    const optimistic = () => {
+      setMessageThreads(prev => prev.map(t => {
+        if (t.id === threadId) {
+          return {
+            ...t,
+            status: senderRole === 'customer' ? 'UNREAD' : 'RESPONDED',
+            preview: text,
+            time: 'Just now',
+            messages: [
+              ...t.messages,
+              {
+                id: Math.random().toString(),
+                senderName,
+                senderRole,
+                text,
+                timestamp: new Date().toISOString(),
+              }
+            ]
+          };
+        }
+        return t;
+      }));
+    };
+
+    // Authoritative Messaging API for real conversation ids (conv_*)
+    if ((messagingAuthoritative || getAuthToken()) && threadId.startsWith('conv_')) {
+      optimistic();
+      void messagingApi
+        .sendMessage(threadId, text)
+        .then(() => refreshMessageThreads())
+        .catch((error) => {
+          console.error('[Messaging] send failed', error);
+        });
+      return;
+    }
+
+    optimistic();
   };
 
   const createOrderNow = (product: OrderProduct, customerMsg: string, promoCode?: string, promoDiscount?: number) => {
@@ -1281,6 +1383,8 @@ export const OrdersProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       customers,
       messageThreads,
       commerceAuthoritative,
+      messagingAuthoritative,
+      refreshMessageThreads,
       ordersLoading,
       ordersError,
       refreshOrders,

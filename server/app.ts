@@ -11,6 +11,9 @@ import { paymentsRouter } from "./payments/paymentsRouter";
 import { commercePaymentsRouter } from "./payments/commercePaymentsRouter";
 import { escrowRouter } from "./escrow/escrowRouter";
 import { commerceRouter } from "./commerceRouter";
+import { conversationRouter } from "./messaging/conversations/conversationRouter";
+import { bootstrapConversationEventSubscribers } from "./messaging/conversations/conversationEvents";
+import { ensureConversationMemoryHydrated } from "./messaging/conversations/conversationMemoryBackend";
 import { getAnalyticsSummary } from "./operations/analyticsService";
 import { Logger } from "./lib/logger";
 import { validateEnvironment } from "./lib/env";
@@ -45,6 +48,8 @@ import { diagnosticsRouter } from "./routes/diagnostics";
 
 dotenv.config();
 validateEnvironment();
+ensureConversationMemoryHydrated();
+bootstrapConversationEventSubscribers();
 
 /**
  * Fully configured Express app with all middleware and API routers.
@@ -84,6 +89,9 @@ export function createApp(): Express {
   app.use("/api/emi", aiRateLimit);
   app.use("/api/v1/catalog/products", searchRateLimitMiddleware);
   app.use("/api/v1/catalog", catalogReadRateLimitMiddleware);
+  app.use("/api/v1/conversations", messagingRateLimit);
+  app.use("/api/v1/support", messagingRateLimit);
+  app.use("/api/v1/seller/social-inbox", messagingRateLimit);
   app.use("/api", publicApiRateLimit);
 
   app.use("/api", analyticsRouter);
@@ -102,6 +110,7 @@ export function createApp(): Express {
   app.use("/api/v1", bookingRouter);
   app.use("/api/v1", paymentsRouter);
   app.use("/api/v1", authRouter);
+  app.use("/api/v1", conversationRouter);
 
   app.get("/api/admin/stats", async (_req, res) => {
     const summary = getAnalyticsSummary("30d");
