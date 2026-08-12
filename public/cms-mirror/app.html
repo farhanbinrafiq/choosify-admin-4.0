@@ -12737,22 +12737,26 @@ class Component extends DCLogic {
     let quickLinks;
     if (isSellerMirrorRole) {
       quickLinks = [
-        {label:'Products & Inventory', sub:'Manage SKUs, stock & listings', onClick: () => this.setPage('products')},
-        {label:'Brand Management Studio', sub:'Your brands & storefront', onClick: () => this.setPage('brands')},
-        {label:'Orders Hub', sub:'Fulfillment & dispatch queues', onClick: () => this.setPage('orders')},
-        {label:'Ads & Deals Studio', sub:'Promotions & campaigns', onClick: () => this.setPage('adsDealsStudio')},
-        {label:'Guide Management', sub:'Linked creator guides', onClick: () => this.setPage('contentStudio')},
-        {label:'My Cashbook', sub:'Track earnings & expenses', onClick: () => this.setPage('myCashbook')},
-      ];
+        {label:'Products & Inventory', sub:'Manage SKUs, stock & listings', onClick: () => this.setPage('products'), key:'products'},
+        {label:'Brand Management Studio', sub:'Your brands & storefront', onClick: () => this.setPage('brands'), key:'brands'},
+        {label:'Orders Hub', sub:'Fulfillment & dispatch queues', onClick: () => this.setPage('orders'), key:'orders'},
+        {label:'Ads & Deals Studio', sub:'Promotions & campaigns', onClick: () => this.setPage('adsDealsStudio'), key:'adsDealsStudio'},
+        {label:'Guide Management', sub:'Linked creator guides', onClick: () => this.setPage('contentStudio'), key:'contentStudio'},
+        {label:'My Cashbook', sub:'Track earnings & expenses', onClick: () => this.setPage('myCashbook'), key:'myCashbook'},
+      ].filter(function(ql) {
+        return typeof window.__CMS_MIRROR_PAGE_ALLOWED__ !== 'function' || window.__CMS_MIRROR_PAGE_ALLOWED__(ql.key);
+      });
     } else if (isCreatorMirrorRole) {
       quickLinks = [
-        {label:'Creator Studio', sub:'Guides & content library', onClick: () => this.setPage('contentStudio')},
-        {label:'Ads & Deals Studio', sub:'Promotions & campaigns', onClick: () => this.setPage('adsDealsStudio')},
-        {label:'My Customers', sub:'Buyer relationships', onClick: () => this.setPage('sellerCustomers')},
-        {label:'My Earnings', sub:'Payouts & commissions', onClick: () => this.setPage('myEarnings')},
-        {label:'My Cashbook', sub:'Financial records', onClick: () => this.setPage('myCashbook')},
-        {label:'Messages', sub:'Conversations & support', onClick: () => this.setPage('messages')},
-      ];
+        {label:'Creator Studio', sub:'Guides & content library', onClick: () => this.setPage('contentStudio'), key:'contentStudio'},
+        {label:'Ads & Deals Studio', sub:'Promotions & campaigns', onClick: () => this.setPage('adsDealsStudio'), key:'adsDealsStudio'},
+        {label:'My Customers', sub:'Buyer relationships', onClick: () => this.setPage('sellerCustomers'), key:'sellerCustomers'},
+        {label:'My Earnings', sub:'Payouts & commissions', onClick: () => this.setPage('myEarnings'), key:'myEarnings'},
+        {label:'My Cashbook', sub:'Financial records', onClick: () => this.setPage('myCashbook'), key:'myCashbook'},
+        {label:'Messages', sub:'Conversations & support', onClick: () => this.setPage('messages'), key:'messages'},
+      ].filter(function(ql) {
+        return typeof window.__CMS_MIRROR_PAGE_ALLOWED__ !== 'function' || window.__CMS_MIRROR_PAGE_ALLOWED__(ql.key);
+      });
     } else {
       quickLinks = [
         {label:'Seller Management Studio', sub:'Verified merchants & listings', onClick: () => this.setPage('brands')},
@@ -17008,15 +17012,24 @@ window.__CMS_MIRROR_ROLE_NAV__ = {
   support_agent: ['dashboard','messages','reviews'],
   marketing_manager: ['dashboard','adsDealsStudio','promoCodes','websiteCmsStudio']
 };
+window.__CMS_MIRROR_PAGE_ALLOWED__ = function(key) {
+  var role = window.__CMS_MIRROR_ROLE__ || 'super_admin';
+  var allowed = window.__CMS_MIRROR_ALLOWED_KEYS__;
+  if (!allowed) allowed = window.__CMS_MIRROR_ROLE_NAV__[role];
+  if (!allowed) return true;
+  return allowed.indexOf(key) >= 0;
+};
 window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
   var role = window.__CMS_MIRROR_ROLE__ || 'super_admin';
   var allowed = window.__CMS_MIRROR_ROLE_NAV__[role];
   if (arguments.length > 1 && arguments[1]) allowed = arguments[1];
   if (!allowed) return defs;
+  var keep = function(it) { return allowed.indexOf(it.key) >= 0; };
   var mapped = defs.map(function(g) {
-    return { title: g.title, items: (g.items || []).filter(function(it) { return allowed.indexOf(it.key) >= 0; }) };
+    return { title: g.title, items: (g.items || []).filter(keep) };
   }).filter(function(g) { return g.items && g.items.length > 0; });
   // Seller: Brand Management Studio = portfolio; Seller Profile = seller identity
+  // Entitlement-disabled keys (e.g. myCashbook) must be filtered via `allowed`.
   if (role === 'seller') {
     return [
       {title:'OVERVIEW', items:[{key:'dashboard',label:'Dashboard'}]},
@@ -17048,7 +17061,9 @@ window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
         {key:'payouts',label:'Payouts / Withdrawals'}
       ]},
       {title:'SETTINGS', items:[{key:'settings',label:'Settings'}]}
-    ];
+    ].map(function(g) {
+      return { title: g.title, items: (g.items || []).filter(keep) };
+    }).filter(function(g) { return g.items && g.items.length > 0; });
   }
   if (role === 'creator') {
     mapped = mapped.map(function(g) {
@@ -17063,20 +17078,20 @@ window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
           items.push(it);
         }
       });
-      return { title: g.title, items: items };
-    });
+      return { title: g.title, items: items.filter(keep) };
+    }).filter(function(g) { return g.items && g.items.length > 0; });
     // Ensure My Customers appears under Commerce-equivalent for creators even if NAV_DEFS omits it for admin.
     var hasCust = mapped.some(function(g) {
       return (g.items || []).some(function(it) { return it.key === 'sellerCustomers'; });
     });
-    if (!hasCust) {
+    if (!hasCust && keep({ key: 'sellerCustomers' })) {
       mapped.splice(2, 0, {
         title: 'COMMERCE',
         items: [{ key: 'sellerCustomers', label: 'My Customers' }],
       });
     }
     mapped = mapped.map(function(g) {
-      if (g.title !== 'FINANCE') return g;
+      if (g.title !== 'FINANCE' && g.title !== 'FINANCE & PAYOUTS') return g;
       return {
         title: 'FINANCE & PAYOUTS',
         items: [
@@ -17085,9 +17100,9 @@ window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
           {key:'myCashbook',label:'Cashbooks',tag:'PRIVATE'},
           {key:'feesAdjustments',label:'Fees & Adjustments'},
           {key:'payouts',label:'Payouts / Withdrawals'}
-        ]
+        ].filter(keep)
       };
-    });
+    }).filter(function(g) { return g.items && g.items.length > 0; });
   }
   return mapped;
 };

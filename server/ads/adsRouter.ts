@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import { authenticateRequest } from '../middleware/auth';
 import { requireRole } from '../middleware/authorization';
+import { requirePartnerEntitlement } from '../entitlements/entitlementMiddleware';
 import { Logger } from '../lib/logger';
 import { ROLES } from '../permissions/roles';
 import {
@@ -39,7 +40,7 @@ import type { AdsOwnerRole } from './types';
 
 export const adsRouter = Router();
 
-const requireAuth = [authenticateRequest];
+const requireAuth = [authenticateRequest, requirePartnerEntitlement];
 const requireAdmin = [authenticateRequest, requireRole(ROLES.ADMIN)];
 
 function actorOf(req: {

@@ -53,6 +53,7 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   websiteCmsStudio: '/admin/website-cms',
   settings: '/admin/settings',
   adminProfile: '/admin/profile',
+  featureAccess: '/admin/feature-access',
 };
 
 export const PATH_TO_PAGE_KEY: Record<string, string> = Object.fromEntries(
@@ -111,6 +112,7 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/promotions')) return 'subscriptionPlans';
   if (pathname.startsWith('/admin/monetization')) return 'monetizationCenter';
   if (pathname.startsWith('/admin/audit-logs')) return 'auditLogs';
+  if (pathname.startsWith('/admin/feature-access')) return 'featureAccess';
   if (pathname.startsWith('/dashboard/content-studio')) return 'contentStudio';
   if (pathname.startsWith('/seller')) return 'products';
 
@@ -257,6 +259,7 @@ export const NAV_DEFS: CmsNavGroup[] = [
     title: 'SUPER ADMIN CORE',
     items: [
       { key: 'adminManagement', label: 'Admin Management', path: PAGE_KEY_TO_PATH.adminManagement },
+      { key: 'featureAccess', label: 'Feature Access & Entitlements', path: PAGE_KEY_TO_PATH.featureAccess },
       { key: 'verificationCenter', label: 'Verification Center', path: PAGE_KEY_TO_PATH.verificationCenter },
       { key: 'subscriptionPlans', label: 'Subscription Plans', path: PAGE_KEY_TO_PATH.subscriptionPlans },
       { key: 'monetizationCenter', label: 'Monetization Center', path: PAGE_KEY_TO_PATH.monetizationCenter },
@@ -332,6 +335,10 @@ export const PAGE_META: Record<string, [string, string]> = {
   myEarnings: ['My Earnings', 'Earnings overview and payout Payment Info'],
   feesAdjustments: ['Fees & Adjustments', 'Authoritative current deductions and credits'],
   adminManagement: ['Admin Management', 'Manage admin accounts and access'],
+  featureAccess: [
+    'Feature Access & Entitlements',
+    'Control Seller and Creator feature availability without deleting data',
+  ],
   verificationCenter: ['Verification Center', 'Seller & brand identity verification queue'],
   subscriptionPlans: ['Subscription Plans', 'Seller & brand subscription tiers'],
   monetizationCenter: ['Monetization Center', 'Ad placements and promoted listings'],

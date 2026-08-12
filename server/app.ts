@@ -49,11 +49,15 @@ import { emiRouter } from "./emi/emiRouter";
 import { healthRouter } from "./routes/health";
 import { diagnosticsRouter } from "./routes/diagnostics";
 import { dashboardSearchRouter } from "./dashboardSearch/dashboardSearchRouter";
+import { entitlementsRouter } from "./entitlements/entitlementsRouter";
+import { partnerApplicationRouter } from "./partnerApplications/partnerApplicationRouter";
+import { hydratePartnerEntitlementsPersistence } from "./entitlements/entitlementPersistence";
 
 dotenv.config();
 validateEnvironment();
 ensureConversationMemoryHydrated();
 bootstrapConversationEventSubscribers();
+hydratePartnerEntitlementsPersistence();
 
 // Ensure Choosify User ID schema + idempotent backfill on boot (non-blocking failure).
 void import('./auth/choosifyUserId')
@@ -103,7 +107,7 @@ export function createApp(): Express {
   // Authenticated reads (/auth/me, impersonation status/history, directory) use
   // the admin policy so a valid session is not flushed by login-tier limits.
   const AUTH_STRICT_PATH =
-    /^\/api\/v1\/auth\/(login|register|seller-register|upgrade-to-seller|refresh|logout|dev-login|password-reset-request|change-password)(\/|$)/i;
+    /^\/api\/v1\/auth\/(login|register|seller-register|partner-apply|upgrade-to-seller|refresh|logout|dev-login|password-reset-request|change-password)(\/|$)/i;
   app.use("/api/v1/auth", (req, res, next) => {
     if (AUTH_STRICT_PATH.test(req.originalUrl.split("?")[0] || "")) {
       return authRateLimit(req, res, next);
@@ -149,6 +153,8 @@ export function createApp(): Express {
   app.use("/api/v1", bookingRouter);
   app.use("/api/v1", paymentsRouter);
   app.use("/api/v1", authRouter);
+  app.use("/api/v1", partnerApplicationRouter);
+  app.use("/api/v1", entitlementsRouter);
   app.use("/api/v1", conversationRouter);
 
   app.get("/api/admin/stats", async (_req, res) => {

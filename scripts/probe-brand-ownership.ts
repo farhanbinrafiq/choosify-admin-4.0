@@ -76,6 +76,49 @@ async function upgradeToSeller(token: string) {
   return { status: res.status, body };
 }
 
+async function partnerApplySeller(opts: {
+  email: string;
+  password: string;
+  displayName: string;
+  storeName: string;
+  phone: string;
+}) {
+  const res = await fetch(`${base}/auth/partner-apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      applicantType: 'seller',
+      email: opts.email,
+      password: opts.password,
+      displayName: opts.displayName,
+      businessOrChannelName: opts.storeName,
+      phone: opts.phone,
+      category: 'General',
+      city: 'Dhaka',
+    }),
+  });
+  const body = await json(res);
+  return { status: res.status, body };
+}
+
+async function approvePendingByEmail(adminToken: string, email: string) {
+  const listRes = await fetch(`${base}/operations/partner-applications?status=pending`, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+  const listBody = (await json(listRes)) as {
+    applications?: Array<{ id: string; email?: string }>;
+  };
+  const app = (listBody.applications || []).find((a) => a.email === email);
+  if (!app) throw new Error(`pending partner application missing for ${email}`);
+  const approveRes = await fetch(`${base}/operations/partner-applications/${app.id}/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({ note: 'brand ownership probe' }),
+  });
+  const approveBody = await json(approveRes);
+  return { status: approveRes.status, body: approveBody, applicationId: app.id };
+}
+
 async function createBrand(token: string, name: string) {
   const res = await fetch(`${base}/catalog/brands`, {
     method: 'POST',
@@ -97,33 +140,89 @@ async function listBrands(token?: string) {
 }
 
 async function main() {
-  // --- Setup: two fresh sellers (via Consumer->Seller upgrade), one via
-  // standalone seller-register, plus seeded admin/moderator.
+  // --- Setup: Partner Application is the only Seller provision path.
+  // Legacy upgrade-to-seller / seller-register remain closed.
+  const admin = await login(ADMIN_EMAIL, DEV_PASSWORD);
+  const moderator = await login(MODERATOR_EMAIL, DEV_PASSWORD);
+
   const consumerAEmail = `probe.consumer.a.${RUN_ID}@choosify.test`;
+  const consumerAPass = 'Probe!2026xx';
   const consumerA = await registerConsumer(consumerAEmail);
+  const consumerAMe = await fetch(`${base}/auth/me`, {
+    headers: { Authorization: `Bearer ${consumerA.token}` },
+  });
+  const consumerAProfile = (await json(consumerAMe)) as { choosifyUserId?: string; uid?: string };
+  const consumerACf = String(consumerAProfile.choosifyUserId || '');
 
-  // 1/2: Consumer -> Seller upgrade keeps the same uid, no duplicate identity.
-  const upgradeA = await upgradeToSeller(consumerA.token);
-  assert(upgradeA.status === 200, 'Consumer upgrades to Seller using same account', upgradeA);
+  // Legacy Consumer→Seller self-upgrade is closed.
+  const closedUpgrade = await upgradeToSeller(consumerA.token);
   assert(
-    upgradeA.body?.uid === consumerA.uid,
-    'Consumer identity/uid is not duplicated across the upgrade',
-    { before: consumerA.uid, after: upgradeA.body?.uid },
+    closedUpgrade.status === 403 && closedUpgrade.body?.code === 'PARTNER_APPLICATION_REQUIRED',
+    'upgrade-to-seller closed: 403 PARTNER_APPLICATION_REQUIRED',
+    closedUpgrade,
   );
-  const sellerAToken = upgradeA.body?.accessToken as string;
-  const sellerAUid = upgradeA.body?.uid as string;
 
-  // Re-upgrading an already-Seller account must be rejected, not silently duplicated.
+  // Consumer applies via Partner Application; Admin approval preserves UID + CF ID.
+  const applyA = await partnerApplySeller({
+    email: consumerAEmail,
+    password: consumerAPass,
+    displayName: 'Probe Consumer A',
+    storeName: `Probe Store ${RUN_ID}`,
+    phone: '+8801711000000',
+  });
+  assert(applyA.status === 201, 'Consumer submits Seller Partner Application', applyA);
+  assert(
+    applyA.body?.accessGranted === false && !applyA.body?.accessToken && !applyA.body?.customToken,
+    'Partner Application does not self-grant Seller JWT',
+    applyA.body,
+  );
+  const approveA = await approvePendingByEmail(admin.token, consumerAEmail);
+  assert(approveA.status === 200, 'Admin approves Consumer→Seller Partner Application', approveA);
+
+  const sellerA = await login(consumerAEmail, consumerAPass);
+  const sellerAMeRes = await fetch(`${base}/auth/me`, {
+    headers: { Authorization: `Bearer ${sellerA.token}` },
+  });
+  const sellerAMe = (await json(sellerAMeRes)) as {
+    uid?: string;
+    role?: string;
+    choosifyUserId?: string;
+  };
+  assert(
+    sellerAMe.role === 'seller' || sellerAMe.role === 'verified_seller',
+    'Approved Consumer becomes Seller',
+    sellerAMe,
+  );
+  assert(
+    sellerA.uid === consumerA.uid,
+    'Consumer identity/uid is preserved across Partner Application approval',
+    { before: consumerA.uid, after: sellerA.uid },
+  );
+  assert(
+    Boolean(consumerACf) && sellerAMe.choosifyUserId === consumerACf,
+    'Choosify User ID is preserved across Partner Application approval',
+    { before: consumerACf, after: sellerAMe.choosifyUserId },
+  );
+  const sellerAToken = sellerA.token;
+  const sellerAUid = sellerA.uid;
+
+  // Already-Seller path still cannot use legacy upgrade endpoint.
   const reUpgrade = await upgradeToSeller(sellerAToken);
-  assert(reUpgrade.status === 409, 'Re-upgrading an already-Seller account is rejected (409)', reUpgrade);
+  assert(
+    reUpgrade.status === 403 && reUpgrade.body?.code === 'PARTNER_APPLICATION_REQUIRED',
+    'Already-Seller upgrade-to-seller remains closed (403)',
+    reUpgrade,
+  );
 
-  // 3: standalone new-Seller signup still works independently of the upgrade path.
+  // Legacy standalone seller-register is closed (no JWT / no Seller provisioned).
+  const sellerBEmail = `probe.seller.b.${RUN_ID}@choosify.test`;
+  const sellerBPass = 'Probe!2026xx';
   const sellerRegisterRes = await fetch(`${base}/auth/seller-register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      email: `probe.seller.b.${RUN_ID}@choosify.test`,
-      password: 'Probe!2026xx',
+      email: sellerBEmail,
+      password: sellerBPass,
       displayName: 'Probe Seller B',
       storeName: `Probe Store B ${RUN_ID}`,
       phone: '+8801711000001',
@@ -131,17 +230,36 @@ async function main() {
       city: 'Dhaka',
     }),
   });
-  const sellerRegisterBody = (await json(sellerRegisterRes)) as { customToken?: string; uid?: string };
+  const sellerRegisterBody = (await json(sellerRegisterRes)) as {
+    customToken?: string;
+    accessToken?: string;
+    uid?: string;
+    role?: string;
+    code?: string;
+  };
   assert(
-    sellerRegisterRes.status === 201 && Boolean(sellerRegisterBody.customToken),
-    'Standalone new-Seller signup still works',
-    { status: sellerRegisterRes.status },
+    sellerRegisterRes.status === 403 &&
+      sellerRegisterBody.code === 'PARTNER_APPLICATION_REQUIRED' &&
+      !sellerRegisterBody.customToken &&
+      !sellerRegisterBody.accessToken,
+    'seller-register closed: 403 PARTNER_APPLICATION_REQUIRED (no JWT)',
+    { status: sellerRegisterRes.status, code: sellerRegisterBody.code },
   );
-  const sellerBToken = sellerRegisterBody.customToken as string;
-  const sellerBUid = sellerRegisterBody.uid as string;
 
-  const admin = await login(ADMIN_EMAIL, DEV_PASSWORD);
-  const moderator = await login(MODERATOR_EMAIL, DEV_PASSWORD);
+  // Second Seller is provisioned only via Partner Application + Admin approval.
+  const applyB = await partnerApplySeller({
+    email: sellerBEmail,
+    password: sellerBPass,
+    displayName: 'Probe Seller B',
+    storeName: `Probe Store B ${RUN_ID}`,
+    phone: '+8801711000001',
+  });
+  assert(applyB.status === 201, 'New Seller Partner Application submits', applyB);
+  const approveB = await approvePendingByEmail(admin.token, sellerBEmail);
+  assert(approveB.status === 200, 'Admin approves new Seller Partner Application', approveB);
+  const sellerB = await login(sellerBEmail, sellerBPass);
+  const sellerBToken = sellerB.token;
+  const sellerBUid = sellerB.uid;
 
   // 4/23: brand-new Seller has zero Brands — no auto-created draft, no mock/seeded names.
   const freshList = await listBrands(sellerAToken);

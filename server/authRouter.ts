@@ -49,7 +49,6 @@ import {
 import { DevLoginBodySchema } from './validation/auth/devLoginSchema';
 import { LoginBodySchema } from './validation/auth/loginSchema';
 import { RegisterBodySchema } from './validation/auth/registerSchema';
-import { SellerRegisterBodySchema } from './validation/auth/sellerRegisterSchema';
 import { UpgradeToSellerBodySchema } from './validation/auth/upgradeToSellerSchema';
 import { loadAdminUserByEmail } from './operations/operationsDb';
 import { db } from './db/client';
@@ -186,111 +185,15 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
  */
 authRouter.post(
   '/auth/seller-register',
-  (req, res, next) => {
-    const body = (req.body || {}) as Record<string, unknown>;
-    if (body.choosifyUserId || body.userCode || body.publicId || body.cfId || body.choosifyId) {
-      res.status(400).json({
-        error: 'choosifyUserId is server-assigned and cannot be supplied by the client',
-        code: 'CHOOSIFY_USER_ID_IMMUTABLE',
-      });
-      return;
-    }
-    next();
+  (_req, res) => {
+    res.status(403).json({
+      error:
+        'Direct seller self-registration is disabled. Submit a Partner Application for Admin review.',
+      code: 'PARTNER_APPLICATION_REQUIRED',
+      applyPath: '/signup',
+    });
   },
-  validate({ body: SellerRegisterBodySchema }),
-  async (req, res) => {
-  const { email, password, displayName, storeName, phone, category, city, website } = req.body as {
-    email: string;
-    password: string;
-    displayName: string;
-    storeName: string;
-    phone: string;
-    category: string;
-    city: string;
-    website?: string;
-  };
-  const normalizedEmail = email.trim().toLowerCase();
-
-  try {
-    const existingProfile = await loadAdminUserByEmail(normalizedEmail);
-    if (existingProfile) {
-      const role = toUserRole(existingProfile.role);
-      if (role === ROLES.SELLER || role === ROLES.VERIFIED_SELLER) {
-        res.status(409).json({
-          error: 'A seller account already exists for this email. Sign in instead.',
-          code: 'SELLER_EXISTS',
-          loginPath: `/login?email=${encodeURIComponent(normalizedEmail)}&role=seller`,
-        });
-        return;
-      }
-      res.status(409).json({
-        error: 'This email is already registered with another dashboard role.',
-        code: 'EMAIL_IN_USE',
-      });
-      return;
-    }
-
-    const passwordHash = await hashPassword(password);
-    const uid = randomUUID();
-    const now = new Date();
-    let choosifyUserId = '';
-
-    await db.transaction(async (tx) => {
-      choosifyUserId = await allocateNextChoosifyUserId(tx);
-      await tx.insert(users).values({
-        id: uid,
-        email: normalizedEmail,
-        passwordHash,
-        displayName: displayName.trim(),
-        role: ROLES.SELLER,
-        emailVerified: false,
-        choosifyUserId,
-        createdAt: now,
-        updatedAt: now,
-      });
-      await tx.insert(sellerProfiles).values({
-        userId: uid,
-        storeName: storeName.trim(),
-        phone: phone.trim(),
-        category: category.trim(),
-        city: city.trim(),
-        website: website?.trim() || null,
-        createdAt: now,
-      });
-    });
-
-    const accessToken = signAccessToken({
-      id: uid,
-      email: normalizedEmail,
-      emailVerified: false,
-    });
-    const refreshToken = await issueRefreshToken(uid);
-    setRefreshTokenCookie(res, refreshToken);
-
-    Logger.info('seller account registered', {
-      requestId: req.requestId,
-      uid,
-      email: normalizedEmail,
-      choosifyUserId,
-    });
-
-    res.status(201).json({
-      uid,
-      email: normalizedEmail,
-      displayName: displayName.trim(),
-      role: ROLES.SELLER,
-      choosifyUserId,
-      customToken: accessToken,
-      dashboardPath: '/seller/products',
-    });
-  } catch (error) {
-    Logger.warn('seller-register failed', {
-      requestId: req.requestId,
-      error: error instanceof Error ? error.message : String(error),
-    });
-    res.status(500).json({ error: 'Unable to create seller account' });
-  }
-});
+);
 
 /**
  * Create a standard customer account. Creates a users row only (role=user) —
@@ -382,133 +285,29 @@ authRouter.post(
 });
 
 /**
- * Consumer -> Seller upgrade. Same user id/email, same session identity —
- * this only changes the users.role and attaches a seller_profiles row.
- * Consumer order history/wishlist/reviews/trust score stay intact because
- * they are keyed by this same userId and nothing here touches them.
- * Creators remain a separate account type per Blueprint — this endpoint
- * only accepts upgrades from plain "user" (Consumer) accounts.
+ * Consumer -> Seller upgrade — CLOSED.
+ * Self-grant of Seller role is no longer allowed. Consumers must submit a
+ * Partner Application (`POST /auth/partner-apply`); Admin approval upgrades
+ * the same uid/CF ID without creating a duplicate identity.
  */
+authRouter.post('/auth/upgrade-to-seller', (_req, res) => {
+  res.status(403).json({
+    error:
+      'Direct Consumer→Seller self-upgrade is disabled. Submit a Partner Application for Admin review.',
+    code: 'PARTNER_APPLICATION_REQUIRED',
+    applyPath: '/signup',
+  });
+});
+
+/* Legacy upgrade-to-seller body retained only as comment reference — route above is authoritative.
 authRouter.post(
   '/auth/upgrade-to-seller',
   validate({ body: UpgradeToSellerBodySchema }),
   async (req, res) => {
-    const token = getBearerToken(req.headers.authorization);
-    if (!token) {
-      recordFailedAuthAttempt(req.ip, req.originalUrl);
-      sendAuthError(res, 401, AUTH_ERROR_CODES.MISSING_TOKEN, 'Missing bearer token');
-      return;
-    }
-
-    const authed = await resolveAuthenticatedUserFromToken(token);
-    if (!authed) {
-      recordFailedAuthAttempt(req.ip, req.originalUrl);
-      sendAuthError(res, 401, AUTH_ERROR_CODES.INVALID_TOKEN, 'Invalid token');
-      return;
-    }
-
-    const { storeName, phone, category, city, website } = req.body as {
-      storeName: string;
-      phone: string;
-      category: string;
-      city: string;
-      website?: string;
-    };
-
-    try {
-      const rows = await db.select().from(users).where(eq(users.id, authed.uid)).limit(1);
-      const user = rows[0];
-      if (!user) {
-        sendAuthError(res, 401, AUTH_ERROR_CODES.INVALID_TOKEN, 'Invalid token');
-        return;
-      }
-
-      const currentRole = toUserRole(user.role);
-      if (currentRole === ROLES.SELLER || currentRole === ROLES.VERIFIED_SELLER) {
-        res.status(409).json({
-          error: 'This account already has a Seller Workspace.',
-          code: 'ALREADY_SELLER',
-          dashboardPath: '/seller/products',
-        });
-        return;
-      }
-      if (currentRole !== ROLES.USER) {
-        res.status(409).json({
-          error: 'Only Consumer accounts can upgrade to a Seller Workspace.',
-          code: 'UPGRADE_NOT_ALLOWED',
-        });
-        return;
-      }
-
-      const now = new Date();
-      await db.transaction(async (tx) => {
-        await tx
-          .update(users)
-          .set({ role: ROLES.SELLER, updatedAt: now })
-          .where(eq(users.id, user.id));
-        await tx
-          .insert(sellerProfiles)
-          .values({
-            userId: user.id,
-            storeName: storeName.trim(),
-            phone: phone.trim(),
-            category: category.trim(),
-            city: city.trim(),
-            website: website?.trim() || null,
-            createdAt: now,
-          })
-          .onConflictDoUpdate({
-            target: sellerProfiles.userId,
-            set: {
-              storeName: storeName.trim(),
-              phone: phone.trim(),
-              category: category.trim(),
-              city: city.trim(),
-              website: website?.trim() || null,
-            },
-          });
-      });
-
-      const accessToken = signAccessToken({
-        id: user.id,
-        email: user.email,
-        emailVerified: user.emailVerified,
-      });
-      const refreshToken = await issueRefreshToken(user.id);
-      setRefreshTokenCookie(res, refreshToken);
-
-      publishEvent({
-        eventName: 'SellerUpgraded',
-        domain: 'Marketplace',
-        producer: 'authRouter',
-        aggregateId: user.id,
-        actor: user.id,
-        payload: { userId: user.id, email: user.email, storeName: storeName.trim() },
-      });
-
-      Logger.info('consumer upgraded to seller', {
-        requestId: req.requestId,
-        uid: user.id,
-        email: user.email,
-      });
-
-      res.json({
-        uid: user.id,
-        email: user.email,
-        displayName: user.displayName,
-        role: ROLES.SELLER,
-        accessToken,
-        dashboardPath: '/seller/products',
-      });
-    } catch (error) {
-      Logger.warn('upgrade-to-seller failed', {
-        requestId: req.requestId,
-        error: error instanceof Error ? error.message : String(error),
-      });
-      res.status(500).json({ error: 'Unable to upgrade to a Seller Workspace' });
-    }
+    // removed: self-grant
   },
 );
+*/
 
 authRouter.post('/auth/refresh', async (req, res) => {
   try {

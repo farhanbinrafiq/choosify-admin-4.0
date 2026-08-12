@@ -1,116 +1,71 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import {
-  ArrowRight,
-  BadgeCheck,
-  LayoutDashboard,
-  Users,
-  Wallet,
-} from 'lucide-react';
+import { ArrowRight, Eye, EyeOff, Lock, Mail } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { ChoosifyLogo } from '../components/common/ChoosifyLogo';
 import { getCanonicalAdminCategories } from '../lib/storefrontCategories';
-import { PasswordInput } from '../components/ui/PasswordInput';
 
-const PAGE_BG = '#000435';
-const PRIMARY = '#EB4501';
 const STOREFRONT_TERMS_URL = 'https://choosify.bd/terms';
 
-const BENEFITS = [
-  {
-    icon: Users,
-    title: 'Reach 2M+ shoppers',
-    description: "Tap into Bangladesh's fastest-growing discovery platform.",
-  },
-  {
-    icon: BadgeCheck,
-    title: 'Verified badge',
-    description: 'Build trust instantly with a verified-seller mark on your storefront.',
-  },
-  {
-    icon: Wallet,
-    title: 'Fast payouts',
-    description: 'Get paid weekly with transparent, low commission rates.',
-  },
-  {
-    icon: LayoutDashboard,
-    title: 'Seller dashboard',
-    description: 'Track orders, reviews and performance in one place.',
-  },
-] as const;
+type ApplicantType = 'seller' | 'creator';
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <label className="block text-[11px] font-bold text-[#6B7280] uppercase tracking-wider mb-1.5">
-      {children}
-    </label>
-  );
-}
-
-function TextInput({
-  id,
-  value,
-  onChange,
-  type = 'text',
-  placeholder,
-  required,
-  autoComplete,
-}: {
-  id: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: string;
-  placeholder?: string;
-  required?: boolean;
-  autoComplete?: string;
-}) {
-  return (
-    <input
-      id={id}
-      type={type}
-      required={required}
-      value={value}
-      autoComplete={autoComplete}
-      placeholder={placeholder}
-      onChange={(e) => onChange(e.target.value)}
-      className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3.5 py-2.5 text-[13px] text-[#1A1A2E] outline-none transition-colors placeholder:text-[#9AA0AC] focus:border-[#EB4501]"
-    />
-  );
-}
-
+/**
+ * Unified Partner Application page — Seller/Brand + Creator.
+ * Visual system: exact dashboard login tokens (choosify-dark-surface, btn-brand-gradient, login inputs).
+ * Submitting requests a role only — Admin approval provisions access (no self-grant).
+ */
 export default function SellerSignupPage() {
   const [searchParams] = useSearchParams();
   const prefillEmail = searchParams.get('email')?.trim() || '';
+  const typeParam = searchParams.get('type')?.trim().toLowerCase();
 
-  const { registerSeller, categories } = useAuth();
+  const { applyAsPartner, categories } = useAuth();
   const navigate = useNavigate();
 
-  const [storeName, setStoreName] = useState('');
+  const [applicantType, setApplicantType] = useState<ApplicantType>(
+    typeParam === 'creator' ? 'creator' : 'seller',
+  );
+  const [businessOrChannelName, setBusinessOrChannelName] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [phoneLocal, setPhoneLocal] = useState('');
   const [email, setEmail] = useState(prefillEmail);
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [category, setCategory] = useState('');
   const [city, setCity] = useState('');
   const [website, setWebsite] = useState('');
+  const [niche, setNiche] = useState('');
+  const [contentFocus, setContentFocus] = useState('');
+  const [socialPrimary, setSocialPrimary] = useState('');
+  const [audienceSize, setAudienceSize] = useState('');
+  const [notes, setNotes] = useState('');
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const categoryOptions = useMemo(() => {
     const source = (categories?.length ? categories : getCanonicalAdminCategories()).filter(
       (row) => row.enabled !== false && (row.parentId == null || row.parentId === ''),
     );
-    return [...source].sort((a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0) || a.name.localeCompare(b.name));
+    return [...source].sort(
+      (a, b) => (a.displayOrder ?? 0) - (b.displayOrder ?? 0) || a.name.localeCompare(b.name),
+    );
   }, [categories]);
 
-  const loginHref = `/login?email=${encodeURIComponent(email.trim())}&role=seller`;
+  const loginHref = `/login${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''}`;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setInfo('');
 
-    if (!storeName.trim()) {
-      setError('Please enter your business or brand name.');
+    if (!businessOrChannelName.trim()) {
+      setError(
+        applicantType === 'creator'
+          ? 'Please enter your channel or creator name.'
+          : 'Please enter your business or brand name.',
+      );
       return;
     }
     if (!displayName.trim()) {
@@ -123,7 +78,7 @@ export default function SellerSignupPage() {
       return;
     }
     if (!email.includes('@')) {
-      setError('Please enter a valid business email.');
+      setError('Please enter a valid email.');
       return;
     }
     if (password.length < 8) {
@@ -131,282 +86,342 @@ export default function SellerSignupPage() {
       return;
     }
     if (!category.trim()) {
-      setError('Please select a category.');
+      setError(
+        applicantType === 'creator'
+          ? 'Please select your primary content category.'
+          : 'Please select a business category.',
+      );
       return;
     }
     if (!city.trim()) {
       setError('Please enter your city.');
       return;
     }
+    if (applicantType === 'creator' && !niche.trim()) {
+      setError('Please describe your niche or content focus.');
+      return;
+    }
     if (!agreed) {
-      setError('Please agree to the Seller Terms to continue.');
+      setError('Please agree to the Terms of Service to continue.');
       return;
     }
 
-    const phone = `+880${digits.replace(/^880/, '').replace(/^0+/, '')}`;
-
     setSubmitting(true);
     try {
-      const result = await registerSeller({
-        email,
+      const result = await applyAsPartner({
+        applicantType,
+        email: email.trim().toLowerCase(),
         password,
-        displayName,
-        storeName,
-        phone,
-        category,
-        city,
+        displayName: displayName.trim(),
+        phone: `+880${digits.replace(/^0+/, '')}`,
+        businessOrChannelName: businessOrChannelName.trim(),
+        category: category.trim(),
+        city: city.trim(),
         website: website.trim() || undefined,
+        niche: applicantType === 'creator' ? niche.trim() : undefined,
+        contentFocus: applicantType === 'creator' ? contentFocus.trim() || undefined : undefined,
+        socialPrimary: applicantType === 'creator' ? socialPrimary.trim() || undefined : undefined,
+        audienceSize: applicantType === 'creator' ? audienceSize.trim() || undefined : undefined,
+        notes: notes.trim() || undefined,
       });
-      navigate(result.dashboardPath || '/seller/products', { replace: true });
+      setInfo(
+        result.message ||
+          'Application received. Choosify Admin will review your request. You cannot access partner tools until approved.',
+      );
+      window.setTimeout(() => {
+        navigate(`/login?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+      }, 2200);
     } catch (err) {
-      const typed = err as Error & { code?: string; loginPath?: string };
-      if (typed.code === 'SELLER_EXISTS' || typed.code === 'EMAIL_EXISTS') {
-        setError(typed.message || 'An account already exists for this email.');
+      const e = err as Error & { code?: string; loginPath?: string };
+      if (e.code === 'PARTNER_EXISTS' || e.code === 'SELLER_EXISTS') {
+        setError(e.message || 'An account already exists for this email. Sign in instead.');
+      } else if (e.code === 'APPLICATION_PENDING') {
+        setError(e.message || 'A pending application already exists for this email.');
       } else {
-        setError(typed.message || 'Unable to submit your application. Please try again.');
+        setError(e.message || 'Unable to submit partner application.');
       }
     } finally {
       setSubmitting(false);
     }
   };
 
+  const fieldLabel = 'block text-[10px] font-extrabold text-[#6B7280] tracking-wide mb-1.5';
+  const fieldWrap =
+    'flex items-center gap-2 bg-[#F8F9FC] border border-[#E8EDF2] rounded-lg px-3.5 h-11 mb-[14px]';
+  const fieldInput =
+    'flex-1 bg-transparent border-0 outline-none text-[13px] font-semibold text-[#111827] placeholder:text-[#9CA3AF]';
+  const selectClass =
+    'w-full bg-[#F8F9FC] border border-[#E8EDF2] rounded-lg px-3.5 h-11 mb-[14px] text-[13px] font-semibold text-[#111827] outline-none';
+
   return (
-    <div className="min-h-screen font-sans relative overflow-hidden" style={{ background: PAGE_BG }}>
+    <div
+      className="choosify-dark-surface min-h-screen flex items-center justify-center p-6 relative overflow-hidden"
+      style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
+    >
       <div
-        className="absolute inset-0 pointer-events-none bg-gradient-to-b from-black/20 via-transparent to-black/35"
-        aria-hidden
-      />
-
-      <div className="relative z-[2] flex flex-col min-h-screen">
-        <div className="flex-1 flex items-center justify-center px-6 sm:px-10 py-8 sm:py-10">
-          <div className="w-full max-w-[920px]">
-            <div className="flex justify-between items-center gap-3 mb-3">
-              <a
-                href="https://choosify.bd"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center min-h-[36px] px-3.5 py-1.5 rounded-full text-[12.5px] font-bold bg-white text-[#EB4501] hover:brightness-105 transition-all no-underline border-0 shadow-sm"
-              >
-                ← Visit choosify.bd
-              </a>
-              <Link
-                to={loginHref}
-                className="inline-flex items-center min-h-[36px] px-3.5 py-1.5 rounded-full text-[12.5px] font-bold bg-[#EB4501] text-white hover:brightness-110 transition-all no-underline border-0 shadow-sm"
-              >
-                Already a seller? Sign in
-              </Link>
+        className="relative w-full max-w-[920px] flex flex-col md:flex-row rounded-2xl overflow-hidden border border-white/12"
+        style={{ boxShadow: '0 30px 80px rgba(0,0,0,0.45)' }}
+      >
+        <div className="choosify-dark-surface flex-1 flex flex-col justify-between min-h-[280px] md:min-h-[560px] p-10 md:p-12 border-r border-white/10">
+          <div>
+            <div className="flex items-center gap-2 mb-12">
+              <ChoosifyLogo variant="full" theme="dark" className="h-10 w-auto max-w-[200px] select-none" />
             </div>
-
-            <div className="flex flex-col lg:flex-row rounded-2xl overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
-            {/* Left marketing panel — flush dark surface */}
-            <div
-              className="flex-1 min-w-0 p-7 sm:p-9"
-              style={{
-                background: `linear-gradient(160deg, ${PAGE_BG} 0%, #0A0A2A 55%, #1A1030 100%)`,
-              }}
+            <h1
+              className="text-[28px] font-extrabold text-white leading-tight mb-4"
+              style={{ fontFamily: 'Georgia, serif' }}
             >
-              <div
-                className="inline-block text-[11px] font-bold px-3.5 py-1.5 rounded-full mb-5"
-                style={{ background: 'rgba(255,90,44,0.15)', color: PRIMARY }}
+              Partner with
+              <br />
+              Choosify Bangladesh.
+            </h1>
+            <p className="text-[13px] font-semibold leading-relaxed max-w-[320px] text-white/55">
+              Apply as a Seller/Brand or Creator. Access is granted only after Admin review —
+              submitting this form does not activate partner tools.
+            </p>
+          </div>
+          <div className="text-[10.5px] font-semibold text-white/30 mt-10 md:mt-0">
+            © 2026 CHOOSIFY BANGLADESH LTD.
+          </div>
+        </div>
+
+        <div className="flex-1 bg-white flex flex-col justify-start min-h-[420px] md:min-h-[560px] max-h-[90vh] overflow-y-auto p-8 md:p-10">
+          <p className="text-[12.5px] font-bold text-[#6B7280] mb-5 shrink-0">Partner application</p>
+
+          <form onSubmit={(e) => void handleSubmit(e)}>
+            <label className={fieldLabel}>APPLY AS</label>
+            <select
+              value={applicantType}
+              onChange={(e) => setApplicantType(e.target.value as ApplicantType)}
+              className={selectClass}
+              required
+            >
+              <option value="seller">Seller / Brand</option>
+              <option value="creator">Creator</option>
+            </select>
+
+            <label className={fieldLabel}>
+              {applicantType === 'creator' ? 'CHANNEL / CREATOR NAME' : 'BUSINESS / BRAND NAME'}
+            </label>
+            <div className={fieldWrap}>
+              <input
+                className={fieldInput}
+                required
+                value={businessOrChannelName}
+                onChange={(e) => setBusinessOrChannelName(e.target.value)}
+                placeholder={applicantType === 'creator' ? 'Your channel name' : 'Your store or brand'}
+              />
+            </div>
+
+            <label className={fieldLabel}>YOUR FULL NAME</label>
+            <div className={fieldWrap}>
+              <input
+                className={fieldInput}
+                required
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Full name"
+                autoComplete="name"
+              />
+            </div>
+
+            <label className={fieldLabel}>EMAIL ADDRESS</label>
+            <div className={fieldWrap}>
+              <Mail className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@business.bd"
+                className={fieldInput}
+                autoComplete="email"
+              />
+            </div>
+
+            <label className={fieldLabel}>PASSWORD</label>
+            <div className={fieldWrap}>
+              <Lock className="w-3.5 h-3.5 text-[#9CA3AF] shrink-0" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                autoComplete="new-password"
+                className={`${fieldInput} font-bold tracking-[2px] placeholder:tracking-[2px]`}
+              />
+              <button
+                type="button"
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                onClick={() => setShowPassword((v) => !v)}
+                className="shrink-0 p-1 rounded-md text-[#9CA3AF] hover:text-[#374151] hover:bg-black/5"
               >
-                BECOME A SELLER
-              </div>
-              <h1 className="text-[28px] sm:text-[34px] font-extrabold text-white leading-[1.2] mb-[18px]">
-                Sell your brand to{' '}
-                <span style={{ color: PRIMARY }}>millions</span> of shoppers
-              </h1>
-              <p className="text-[13.5px] text-white/55 leading-[1.7] m-0 mb-7">
-                Join Choosify&apos;s verified seller network and get your products in front of
-                Bangladesh&apos;s most engaged shoppers.
-              </p>
-              <ul className="space-y-4 list-none p-0 m-0">
-                {BENEFITS.map((item) => (
-                  <li key={item.title} className="flex items-start gap-3">
-                    <span
-                      className="mt-0.5 w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                      style={{ background: 'rgba(235, 69, 1, 0.16)' }}
-                    >
-                      <item.icon size={16} color={PRIMARY} strokeWidth={2.4} />
-                    </span>
-                    <div>
-                      <div className="text-[13.5px] font-bold text-white leading-tight">{item.title}</div>
-                      <div className="text-[12.5px] text-white/55 leading-snug mt-0.5">{item.description}</div>
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
 
-            {/* Right apply form — white, no gap between panels */}
-            <div className="bg-white p-7 sm:p-9 w-full lg:w-[440px] lg:shrink-0">
-              <h2 className="text-[22px] font-extrabold text-[#1A1A2E] mb-1">Apply to sell</h2>
-              <p className="text-[12.5px] text-[#9AA0AC] mb-5">
-                Tell us about your business to get started
-              </p>
+            <label className={fieldLabel}>PHONE (BD)</label>
+            <div className={fieldWrap}>
+              <span className="text-[12px] font-bold text-[#6B7280] shrink-0">+880</span>
+              <input
+                className={fieldInput}
+                required
+                value={phoneLocal}
+                onChange={(e) => setPhoneLocal(e.target.value)}
+                placeholder="1XXXXXXXXX"
+                inputMode="tel"
+              />
+            </div>
 
-              <form onSubmit={handleSubmit} className="space-y-3.5">
-                <div>
-                  <FieldLabel>Business / brand name</FieldLabel>
-                  <TextInput
-                    id="store-name"
-                    value={storeName}
-                    onChange={setStoreName}
-                    placeholder="e.g. Walton Digi-Tech"
-                    required
-                    autoComplete="organization"
-                  />
-                </div>
+            <label className={fieldLabel}>
+              {applicantType === 'creator' ? 'PRIMARY CATEGORY' : 'BUSINESS CATEGORY'}
+            </label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className={selectClass}
+              required
+            >
+              <option value="">Select category</option>
+              {categoryOptions.map((c) => (
+                <option key={c.id || c.name} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <FieldLabel>Your name</FieldLabel>
-                    <TextInput
-                      id="display-name"
-                      value={displayName}
-                      onChange={setDisplayName}
-                      placeholder="Your full name"
-                      required
-                      autoComplete="name"
-                    />
-                  </div>
-                  <div>
-                    <FieldLabel>Phone</FieldLabel>
-                    <div className="flex rounded-lg border border-[#E5E7EB] overflow-hidden focus-within:border-[#EB4501]">
-                      <span className="px-3 py-2.5 text-[13px] font-semibold text-[#6B7280] bg-[#F8FAFC] border-r border-[#E5E7EB] select-none">
-                        +880
-                      </span>
-                      <input
-                        id="phone"
-                        type="tel"
-                        required
-                        value={phoneLocal}
-                        onChange={(e) => setPhoneLocal(e.target.value.replace(/[^\d\s-]/g, ''))}
-                        placeholder="1XXXXXXXXX"
-                        autoComplete="tel-national"
-                        className="w-full px-3 py-2.5 text-[13px] text-[#1A1A2E] outline-none placeholder:text-[#9AA0AC]"
-                      />
-                    </div>
-                  </div>
-                </div>
+            <label className={fieldLabel}>CITY</label>
+            <div className={fieldWrap}>
+              <input
+                className={fieldInput}
+                required
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder="Dhaka"
+              />
+            </div>
 
-                <div>
-                  <FieldLabel>Business email</FieldLabel>
-                  <TextInput
-                    id="email"
-                    type="email"
-                    value={email}
-                    onChange={setEmail}
-                    placeholder="you@brand.com"
-                    required
-                    autoComplete="email"
-                  />
-                </div>
-
-                <div>
-                  <FieldLabel>Password</FieldLabel>
-                  <PasswordInput
-                    id="password"
-                    value={password}
-                    onChange={setPassword}
-                    placeholder="At least 8 characters"
-                    required
-                    autoComplete="new-password"
-                    wrapperClassName="flex items-center gap-2 w-full rounded-lg border border-[#E5E7EB] bg-white px-3.5 focus-within:border-[#EB4501]"
-                    inputClassName="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13px] text-[#1A1A2E] placeholder:text-[#9AA0AC] py-2.5"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <FieldLabel>Category</FieldLabel>
-                    <select
-                      id="category"
-                      required
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      className="w-full rounded-lg border border-[#E5E7EB] bg-white px-3.5 py-2.5 text-[13px] text-[#1A1A2E] outline-none transition-colors focus:border-[#EB4501]"
-                    >
-                      <option value="">Select category</option>
-                      {categoryOptions.map((row) => (
-                        <option key={row.id} value={row.name}>
-                          {row.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <FieldLabel>City</FieldLabel>
-                    <TextInput
-                      id="city"
-                      value={city}
-                      onChange={setCity}
-                      placeholder="Dhaka"
-                      required
-                      autoComplete="address-level2"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <FieldLabel>
-                    Website / social link <span className="normal-case font-medium text-[#9AA0AC]">(optional)</span>
-                  </FieldLabel>
-                  <TextInput
-                    id="website"
-                    value={website}
-                    onChange={setWebsite}
-                    placeholder="https://"
-                    autoComplete="url"
-                  />
-                </div>
-
-                <label className="flex items-start gap-2.5 cursor-pointer pt-1">
+            {applicantType === 'seller' ? (
+              <>
+                <label className={fieldLabel}>WEBSITE (OPTIONAL)</label>
+                <div className={fieldWrap}>
                   <input
-                    type="checkbox"
-                    checked={agreed}
-                    onChange={(e) => setAgreed(e.target.checked)}
-                    className="mt-0.5 h-3.5 w-3.5 rounded accent-[#EB4501] shrink-0"
+                    className={fieldInput}
+                    value={website}
+                    onChange={(e) => setWebsite(e.target.value)}
+                    placeholder="https://"
                   />
-                  <span className="text-[12px] text-[#4B5563] leading-snug">
-                    I agree to Choosify&apos;s Seller{' '}
-                    <a
-                      href={STOREFRONT_TERMS_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-bold text-[#EB4501] hover:underline"
-                    >
-                      Terms
-                    </a>{' '}
-                    and confirm the information above is accurate.
-                  </span>
-                </label>
+                </div>
+              </>
+            ) : (
+              <>
+                <label className={fieldLabel}>NICHE / CONTENT FOCUS</label>
+                <div className={fieldWrap}>
+                  <input
+                    className={fieldInput}
+                    required
+                    value={niche}
+                    onChange={(e) => setNiche(e.target.value)}
+                    placeholder="e.g. Beauty reviews, travel vlogs"
+                  />
+                </div>
+                <label className={fieldLabel}>CONTENT STYLE (OPTIONAL)</label>
+                <div className={fieldWrap}>
+                  <input
+                    className={fieldInput}
+                    value={contentFocus}
+                    onChange={(e) => setContentFocus(e.target.value)}
+                    placeholder="Short-form, long-form, live shopping…"
+                  />
+                </div>
+                <label className={fieldLabel}>PRIMARY SOCIAL LINK (OPTIONAL)</label>
+                <div className={fieldWrap}>
+                  <input
+                    className={fieldInput}
+                    value={socialPrimary}
+                    onChange={(e) => setSocialPrimary(e.target.value)}
+                    placeholder="Instagram / YouTube / TikTok URL"
+                  />
+                </div>
+                <label className={fieldLabel}>AUDIENCE SIZE (OPTIONAL)</label>
+                <div className={fieldWrap}>
+                  <input
+                    className={fieldInput}
+                    value={audienceSize}
+                    onChange={(e) => setAudienceSize(e.target.value)}
+                    placeholder="e.g. 10K–50K"
+                  />
+                </div>
+                <label className={fieldLabel}>WEBSITE / PORTFOLIO (OPTIONAL)</label>
+                <div className={fieldWrap}>
+                  <input
+                    className={fieldInput}
+                    value={website}
+                    onChange={(e) => setWebsite(e.target.value)}
+                    placeholder="https://"
+                  />
+                </div>
+              </>
+            )}
 
-                {error && (
-                  <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-[12.5px] text-red-700">
-                    {error}
-                    {(error.toLowerCase().includes('already') || error.toLowerCase().includes('sign in')) && (
-                      <div className="mt-1.5">
-                        <Link to={loginHref} className="font-bold text-[#EB4501] hover:underline">
-                          Go to seller login →
-                        </Link>
-                      </div>
-                    )}
-                  </div>
-                )}
+            <label className={fieldLabel}>NOTES FOR REVIEW (OPTIONAL)</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              placeholder="Anything Admin should know"
+              className="w-full bg-[#F8F9FC] border border-[#E8EDF2] rounded-lg px-3.5 py-2.5 mb-[14px] text-[13px] font-semibold text-[#111827] outline-none resize-none"
+            />
 
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="w-full py-3.5 rounded-lg text-[13px] font-bold text-white border-none cursor-pointer active:scale-[0.99] transition-all flex items-center justify-center gap-2 disabled:opacity-60"
-                  style={{ background: PRIMARY }}
+            <label className="flex items-start gap-2 mb-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={agreed}
+                onChange={(e) => setAgreed(e.target.checked)}
+                className="mt-0.5 accent-[#FF5B00]"
+              />
+              <span className="text-[11px] font-semibold text-[#6B7280] leading-relaxed">
+                I agree to the{' '}
+                <a
+                  href={STOREFRONT_TERMS_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[#FF5B00] font-bold hover:text-[#E64A00]"
                 >
-                  {submitting ? 'Submitting…' : 'Submit application'}
-                  {!submitting && <ArrowRight size={16} strokeWidth={2.4} />}
-                </button>
-              </form>
-            </div>
-          </div>
-          </div>
+                  Terms of Service
+                </a>{' '}
+                and understand my application requires Admin approval.
+              </span>
+            </label>
+
+            {error && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-[12.5px] text-red-700 mb-[14px]">
+                {error}
+              </div>
+            )}
+            {info && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12.5px] text-emerald-800 mb-[14px]">
+                {info}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn-brand-gradient w-full h-[46px] rounded-[9px] text-[13.5px] font-extrabold text-white flex items-center justify-center gap-1.5 disabled:opacity-70"
+            >
+              {submitting ? 'Submitting…' : 'Submit Partner Application'}
+              {!submitting && <ArrowRight className="w-4 h-4" />}
+            </button>
+          </form>
+
+          <p className="text-center text-[11px] font-semibold text-[#6B7280] mt-5">
+            Already have an account?{' '}
+            <Link to={loginHref} className="text-[#FF5B00] font-bold hover:text-[#E64A00]">
+              Sign in
+            </Link>
+          </p>
         </div>
       </div>
     </div>

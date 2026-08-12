@@ -62,6 +62,23 @@ interface AuthContextType {
   loginWithEmail: (email: string, password: string, fallbackRole?: UserRole) => Promise<UserRole>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   clearMustChangePassword: () => void;
+  applyAsPartner: (input: {
+    applicantType: 'seller' | 'creator';
+    email: string;
+    displayName: string;
+    businessOrChannelName: string;
+    phone: string;
+    category: string;
+    city: string;
+    website?: string;
+    password: string;
+    niche?: string;
+    contentFocus?: string;
+    socialPrimary?: string;
+    audienceSize?: string;
+    notes?: string;
+  }) => Promise<{ applicationId: string; status: 'pending'; message: string }>;
+  /** @deprecated Direct seller self-registration is closed — use applyAsPartner. */
   registerSeller: (input: {
     email: string;
     displayName: string;
@@ -254,6 +271,11 @@ const AuthContext = createContext<AuthContextType>({
   loginWithEmail: async () => 'admin',
   changePassword: async () => {},
   clearMustChangePassword: () => {},
+  applyAsPartner: async () => ({
+    applicationId: '',
+    status: 'pending' as const,
+    message: '',
+  }),
   registerSeller: async () => ({ role: 'seller', dashboardPath: '/seller/products' }),
   logout: () => {},
   switchRole: () => {},
@@ -531,6 +553,83 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     clearMustChangePassword();
   };
 
+  const applyAsPartner = async (input: {
+    applicantType: 'seller' | 'creator';
+    email: string;
+    displayName: string;
+    businessOrChannelName: string;
+    phone: string;
+    category: string;
+    city: string;
+    website?: string;
+    password: string;
+    niche?: string;
+    contentFocus?: string;
+    socialPrimary?: string;
+    audienceSize?: string;
+    notes?: string;
+  }) => {
+    console.info('[Auth] Partner application submit', {
+      email: input.email.trim().toLowerCase(),
+      applicantType: input.applicantType,
+    });
+    const response = await fetch(`${API_BASE}/auth/partner-apply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        applicantType: input.applicantType,
+        email: input.email.trim().toLowerCase(),
+        password: input.password,
+        displayName: input.displayName.trim(),
+        businessOrChannelName: input.businessOrChannelName.trim(),
+        storeName: input.businessOrChannelName.trim(),
+        phone: input.phone.trim(),
+        category: input.category.trim(),
+        city: input.city.trim(),
+        website: input.website?.trim() || undefined,
+        niche: input.niche?.trim() || undefined,
+        contentFocus: input.contentFocus?.trim() || undefined,
+        socialPrimary: input.socialPrimary?.trim() || undefined,
+        audienceSize: input.audienceSize?.trim() || undefined,
+        notes: input.notes?.trim() || undefined,
+      }),
+    });
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      code?: string;
+      loginPath?: string;
+      applicationId?: string;
+      status?: 'pending';
+      message?: string;
+      accessGranted?: boolean;
+    };
+
+    if (!response.ok) {
+      console.warn('[Auth] Partner application failed', {
+        status: response.status,
+        code: payload.code,
+      });
+      const err = new Error(payload.error || 'Unable to submit partner application') as Error & {
+        code?: string;
+        loginPath?: string;
+      };
+      err.code = payload.code;
+      err.loginPath = payload.loginPath;
+      throw err;
+    }
+
+    // Explicit: no JWT / no role grant on submit
+    return {
+      applicationId: payload.applicationId || '',
+      status: 'pending' as const,
+      message:
+        payload.message ||
+        'Application received. Choosify Admin will review your partner request.',
+    };
+  };
+
+  /** Closed path — redirects callers to partner application semantics without self-grant. */
   const registerSeller = async (input: {
     email: string;
     displayName: string;
@@ -541,82 +640,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     website?: string;
     password: string;
   }) => {
-    console.info('[Auth] Seller registration attempt', { email: input.email.trim().toLowerCase() });
-    const response = await fetch(`${API_BASE}/auth/seller-register`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: input.email.trim().toLowerCase(),
-        password: input.password,
-        displayName: input.displayName.trim(),
-        storeName: input.storeName.trim(),
-        phone: input.phone.trim(),
-        category: input.category.trim(),
-        city: input.city.trim(),
-        website: input.website?.trim() || undefined,
-      }),
+    await applyAsPartner({
+      applicantType: 'seller',
+      email: input.email,
+      displayName: input.displayName,
+      businessOrChannelName: input.storeName,
+      phone: input.phone,
+      category: input.category,
+      city: input.city,
+      website: input.website,
+      password: input.password,
     });
-
-    const payload = (await response.json().catch(() => ({}))) as {
-      error?: string;
-      code?: string;
-      loginPath?: string;
-      customToken?: string;
-      uid?: string;
-      email?: string;
-      displayName?: string;
-      role?: string;
-      dashboardPath?: string;
-    };
-
-    if (!response.ok) {
-      console.warn('[Auth] Seller registration failed', { status: response.status, code: payload.code });
-      const err = new Error(payload.error || 'Unable to create seller account') as Error & {
-        code?: string;
-        loginPath?: string;
-      };
-      err.code = payload.code;
-      err.loginPath = payload.loginPath;
-      throw err;
-    }
-
-    if (!payload.customToken) {
-      throw new Error('Seller account created but sign-in token was missing.');
-    }
-
-    // customToken carries the backend access JWT directly (see server/authRouter.ts) —
-    // it is not a Firebase custom auth token.
-    localStorage.setItem(AUTH_TOKEN_KEY, payload.customToken);
-
-    let role: UserRole = 'seller';
-    let nextProfile: UserProfile = {
-      id: payload.uid || '',
-      displayName: payload.displayName || input.displayName.trim(),
-      email: payload.email || input.email.trim().toLowerCase(),
-      role,
-    };
-
-    try {
-      const remote = await resolveAuthProfile(payload.customToken);
-      role = toUserRole(remote.role, 'seller');
-      nextProfile = {
-        id: remote.uid,
-        displayName: remote.displayName,
-        email: remote.email,
-        role,
-      };
-    } catch (error) {
-      console.warn('[Auth] Post-registration profile fetch failed, using registration payload', error);
-    }
-
-    setProfile(nextProfile);
-    // choosify_mock_role is TempRoleSwitcher-only — never share it with real auth.
-    localStorage.removeItem('choosify_mock_role');
-    console.info('[Auth] Seller registration succeeded', { uid: nextProfile.id, role });
-    return {
-      role,
-      dashboardPath: payload.dashboardPath || '/seller/products',
-    };
+    const err = new Error(
+      'Partner application submitted. You cannot access Seller tools until Admin approval.',
+    ) as Error & { code?: string };
+    err.code = 'PARTNER_APPLICATION_PENDING';
+    throw err;
   };
 
   const logout = () => {
@@ -892,6 +931,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loginWithEmail,
       changePassword,
       clearMustChangePassword,
+      applyAsPartner,
       registerSeller,
       logout,
       switchRole,

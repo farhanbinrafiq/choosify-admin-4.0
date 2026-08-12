@@ -99,9 +99,51 @@ async function upgradeToSeller(token: string, storeName: string) {
       city: 'Dhaka',
     }),
   });
-  const body = (await json(res)) as { accessToken?: string; uid?: string };
+  const body = (await json(res)) as { accessToken?: string; uid?: string; code?: string };
   if (!res.ok || !body.accessToken) throw new Error(`upgrade failed: ${res.status}`);
   return { token: body.accessToken as string, uid: body.uid as string };
+}
+
+/** Provision Seller via Partner Application + Admin approval (self-upgrade is closed). */
+async function provisionSellerViaPartnerApp(
+  adminToken: string,
+  email: string,
+  storeName: string,
+) {
+  const password = 'Probe!2026xx';
+  // Prefer fresh partner-apply for a brand-new email; if the caller already registered
+  // a Consumer with this email, partner-apply verifies the same password.
+  const applyRes = await fetch(`${base}/auth/partner-apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      applicantType: 'seller',
+      email,
+      password,
+      displayName: storeName,
+      businessOrChannelName: storeName,
+      phone: '+8801711000099',
+      category: 'General',
+      city: 'Dhaka',
+    }),
+  });
+  const applyBody = await json(applyRes);
+  if (applyRes.status !== 201) {
+    throw new Error(`partner-apply failed: ${applyRes.status} ${JSON.stringify(applyBody)}`);
+  }
+  const listRes = await fetch(`${base}/operations/partner-applications?status=pending`, {
+    headers: authHeaders(adminToken),
+  });
+  const listBody = (await json(listRes)) as { applications?: Array<{ id: string; email?: string }> };
+  const app = (listBody.applications || []).find((a) => a.email === email);
+  if (!app) throw new Error(`pending application missing for ${email}`);
+  const approveRes = await fetch(`${base}/operations/partner-applications/${app.id}/approve`, {
+    method: 'POST',
+    headers: authHeaders(adminToken),
+    body: JSON.stringify({ note: 'messaging probe' }),
+  });
+  if (!approveRes.ok) throw new Error(`approve failed: ${approveRes.status}`);
+  return login(email, password);
 }
 
 async function createBrand(token: string, name: string) {
@@ -544,8 +586,11 @@ async function main() {
   if (!admin) throw new Error('Admin login failed after retries');
   const catId = await firstCategoryId(admin.token);
 
-  const sellerAReg = await registerConsumer(`msg-seller-a-${RUN_ID}@probe.local`);
-  const sellerA = await upgradeToSeller(sellerAReg.token, `Msg Seller A ${RUN_ID}`);
+  const sellerA = await provisionSellerViaPartnerApp(
+    admin.token,
+    `msg-seller-a-${RUN_ID}@probe.local`,
+    `Msg Seller A ${RUN_ID}`,
+  );
   const brandA = await createBrand(sellerA.token, `Msg Brand A ${RUN_ID}`);
   await grantMarketplace(admin.token, brandA);
   const productA = await createProduct(sellerA.token, {
@@ -556,8 +601,11 @@ async function main() {
   });
   await publishProduct(sellerA.token, productA.id);
 
-  const sellerBReg = await registerConsumer(`msg-seller-b-${RUN_ID}@probe.local`);
-  const sellerB = await upgradeToSeller(sellerBReg.token, `Msg Seller B ${RUN_ID}`);
+  const sellerB = await provisionSellerViaPartnerApp(
+    admin.token,
+    `msg-seller-b-${RUN_ID}@probe.local`,
+    `Msg Seller B ${RUN_ID}`,
+  );
   const brandB = await createBrand(sellerB.token, `Msg Brand B ${RUN_ID}`);
   await grantMarketplace(admin.token, brandB);
   const productB = await createProduct(sellerB.token, {

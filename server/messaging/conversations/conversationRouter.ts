@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import { CommerceError } from '../../commerce/cartService';
 import { authenticateRequest } from '../../middleware/auth';
+import { requirePartnerEntitlement } from '../../entitlements/entitlementMiddleware';
 import { Logger } from '../../lib/logger';
 import { conversationMemoryFlushNow } from './conversationMemoryBackend';
 import {
@@ -38,7 +39,7 @@ function flushIfMemoryDisk(): void {
   }
 }
 
-const requireAuth = [authenticateRequest];
+const requireAuth = [authenticateRequest, requirePartnerEntitlement];
 
 function actorOf(req: {
   userId?: string;

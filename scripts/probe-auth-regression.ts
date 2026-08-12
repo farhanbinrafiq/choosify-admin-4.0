@@ -90,7 +90,7 @@ async function main() {
   });
   assert(unknownRes.status === 401, 'unknown account returns 401', { status: unknownRes.status });
 
-  // --- 4. Seller registration --------------------------------------------------
+  // --- 4. Legacy seller self-register is closed (Partner Application required) ---
   const freshEmail = `probe-seller-${Date.now()}@choosify-test.bd`;
   const registerRes = await fetch(`${base}/auth/seller-register`, {
     method: 'POST',
@@ -105,11 +105,31 @@ async function main() {
       city: 'Dhaka',
     }),
   });
-  const registerBody = (await registerRes.json()) as { customToken?: string; role?: string };
+  const registerBody = (await registerRes.json()) as {
+    customToken?: string;
+    accessToken?: string;
+    role?: string;
+    code?: string;
+  };
   assert(
-    registerRes.status === 201 && Boolean(registerBody.customToken) && registerBody.role === 'seller',
-    'seller registration returns 201 + customToken + role=seller',
-    { status: registerRes.status },
+    registerRes.status === 403 &&
+      registerBody.code === 'PARTNER_APPLICATION_REQUIRED' &&
+      !registerBody.customToken &&
+      !registerBody.accessToken &&
+      registerBody.role !== 'seller',
+    'seller-register closed: 403 PARTNER_APPLICATION_REQUIRED (no JWT / no Seller role)',
+    { status: registerRes.status, code: registerBody.code, role: registerBody.role },
+  );
+  // Confirm the closed path did not provision a Seller account for that email.
+  const sneakLogin = await fetch(`${base}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: freshEmail, password: 'ProbeSellerPass!123' }),
+  });
+  assert(
+    sneakLogin.status === 401,
+    'seller-register did not provision a loginable Seller account',
+    { status: sneakLogin.status },
   );
 
   // --- 5. Session restore (GET /auth/me with a just-issued token) --------------

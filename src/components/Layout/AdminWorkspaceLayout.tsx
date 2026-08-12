@@ -2,6 +2,7 @@ import React, { Suspense, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useImpersonation } from '../../contexts/ImpersonationContext';
+import { useEntitlements } from '../../contexts/EntitlementsContext';
 import { UserProfileDropdown } from '../account/UserProfileDropdown';
 import { NotificationBellDropdown } from '../account/NotificationBellDropdown';
 import { GlobalDashboardSearch } from '../common/GlobalDashboardSearch';
@@ -169,6 +170,21 @@ function filterNavForRole(role: string | undefined): CmsNavGroup[] {
   })).filter((group) => group.items.length > 0);
 }
 
+function applyEntitlementNavFilter(
+  groups: CmsNavGroup[],
+  filterAllowedPageKeys: (keys: string[] | null) => string[] | null,
+  role: string | undefined,
+): CmsNavGroup[] {
+  const allowed = filterAllowedPageKeys(allowedPageKeysForRole(role));
+  if (!allowed) return groups;
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => allowed.includes(item.key)),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
 /**
  * Shared React Admin workspace chrome — visual parity with the live Admin CMS shell.
  * Presentation only; does not change RBAC, auth, or backend behavior.
@@ -179,6 +195,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
   pageSubtitle,
 }) => {
   const { profile } = useAuth();
+  const { filterAllowedPageKeys } = useEntitlements();
   const { state: impersonation, exitImpersonation } = useImpersonation();
   const location = useLocation();
   const navigate = useNavigate();
@@ -188,7 +205,11 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
   const role = profile?.role;
 
   const navGroups = useMemo(() => {
-    const roleFiltered = filterNavForRole(role);
+    const roleFiltered = applyEntitlementNavFilter(
+      filterNavForRole(role),
+      filterAllowedPageKeys,
+      role,
+    );
     const q = navSearch.trim().toLowerCase();
     if (!q) return roleFiltered;
     return roleFiltered
@@ -197,7 +218,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
         items: group.items.filter((item) => item.label.toLowerCase().includes(q)),
       }))
       .filter((group) => group.items.length > 0);
-  }, [role, navSearch]);
+  }, [role, navSearch, filterAllowedPageKeys]);
 
   const metaBase = PAGE_META[activePageKey] || PAGE_META.dashboard;
   const meta: [string, string] =

@@ -28,6 +28,7 @@ import {
   EntityVersionBodySchema,
 } from './validation/catalog/draftSchemas';
 import { authenticateRequest, softAuthenticateRequest } from './middleware/auth';
+import { requirePartnerEntitlement } from './entitlements/entitlementMiddleware';
 import { requireAnyPermission } from './middleware/authorization';
 import { requireBrandStudioWrite } from './middleware/brandStudioAuth';
 import { requireCreatorStudioWrite } from './middleware/creatorStudioAuth';
@@ -96,9 +97,9 @@ import { normalizeReferenceIdQuery } from '../shared/referenceIds/registry';
 
 export const catalogRouter = Router();
 
-const requireAuth = [authenticateRequest];
+const requireAuth = [authenticateRequest, requirePartnerEntitlement];
 /** Platform admin (ADMIN inherits via ROLE_INHERITANCE; SUPER_ADMIN too). */
-const requireCmsWrite = [authenticateRequest, requireAnyPermission([PERMISSIONS.CMS_EDIT])];
+const requireCmsWrite = [authenticateRequest, requirePartnerEntitlement, requireAnyPermission([PERMISSIONS.CMS_EDIT])];
 /** Admin-only category tree + attribute schema (IS-003 §52). */
 const requireCategoryManage = [
   authenticateRequest,
@@ -109,21 +110,25 @@ const requireAttributeManage = [
   requireAnyPermission([PERMISSIONS.ATTRIBUTE_MANAGE]),
 ];
 /** Brand Studio profile writes: cms:edit OR owning seller. */
-const requireBrandStudioBrandWrite = [authenticateRequest, requireBrandStudioWrite];
+const requireBrandStudioBrandWrite = [authenticateRequest, requirePartnerEntitlement, requireBrandStudioWrite];
 const requireProductCreate = [
   authenticateRequest,
+  requirePartnerEntitlement,
   requireAnyPermission([PERMISSIONS.PRODUCT_CREATE]),
 ];
 const requireProductEdit = [
   authenticateRequest,
+  requirePartnerEntitlement,
   requireAnyPermission([PERMISSIONS.PRODUCT_EDIT]),
 ];
 const requireProductDelete = [
   authenticateRequest,
+  requirePartnerEntitlement,
   requireAnyPermission([PERMISSIONS.PRODUCT_DELETE]),
 ];
 const requireCatalogMedia = [
   authenticateRequest,
+  requirePartnerEntitlement,
   requireAnyPermission([
     PERMISSIONS.PRODUCT_CREATE,
     PERMISSIONS.PRODUCT_EDIT,
@@ -133,6 +138,7 @@ const requireCatalogMedia = [
 /** Drafts/versions: sellers editing own listings or CMS editors. */
 const requireCatalogDraftWrite = [
   authenticateRequest,
+  requirePartnerEntitlement,
   requireAnyPermission([PERMISSIONS.PRODUCT_EDIT, PERMISSIONS.CMS_EDIT]),
 ];
 

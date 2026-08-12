@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useImpersonation } from '../contexts/ImpersonationContext';
 import { useRbac } from '../contexts/RbacContext';
+import { useEntitlements } from '../contexts/EntitlementsContext';
 import { PAGE_KEY_TO_PATH, allowedPageKeysForRole, pathToPageKey, resolveAdminPageKey } from './nav';
 import { UserProfileDropdown } from '../components/account/UserProfileDropdown';
 import { GlobalDashboardSearch } from '../components/common/GlobalDashboardSearch';
@@ -13,7 +14,7 @@ import './tokens.css';
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 
 /** Bump when public/cms-mirror/app.html behavior changes so the iframe never serves a stale 304. */
-const CMS_MIRROR_ASSET_VERSION = '20260811-seller-cover-label-12';
+const CMS_MIRROR_ASSET_VERSION = '20260812-entitlement-nav-filter-1';
 
 function pageSkeletonVariant(pageKey: string): 'dashboard' | 'profile' | 'orders' | 'products' | 'generic' {
   if (pageKey === 'dashboard') return 'dashboard';
@@ -105,6 +106,8 @@ export const CmsMirrorHost: React.FC = () => {
     }
   }, [brandDetail.id, brandDetail.name]);
 
+  const { filterAllowedPageKeys } = useEntitlements();
+
   const postMirrorState = useCallback(
     (page: string, nextRole: string | undefined) => {
       if (!nextRole) return;
@@ -121,7 +124,7 @@ export const CmsMirrorHost: React.FC = () => {
               page === 'myEarnings' && (tabParam === 'payment' || tabParam === 'overview')
                 ? tabParam
                 : undefined,
-            allowedKeys: allowedPageKeysForRole(nextRole),
+            allowedKeys: filterAllowedPageKeys(allowedPageKeysForRole(nextRole)),
             userId: profile?.id || null,
             displayName: profile?.displayName || null,
             email: profile?.email || null,
@@ -171,6 +174,7 @@ export const CmsMirrorHost: React.FC = () => {
       brandDetail.name,
       location.search,
       canImpersonate,
+      filterAllowedPageKeys,
     ],
   );
 
@@ -314,11 +318,11 @@ export const CmsMirrorHost: React.FC = () => {
 
   useEffect(() => {
     if (!knownPageKey || !role) return;
-    const allowed = allowedPageKeysForRole(role);
+    const allowed = filterAllowedPageKeys(allowedPageKeysForRole(role));
     if (allowed && !allowed.includes(pageKey)) {
       navigate('/admin/dashboard', { replace: true });
     }
-  }, [knownPageKey, role, pageKey, navigate]);
+  }, [knownPageKey, role, pageKey, navigate, filterAllowedPageKeys]);
 
   useEffect(() => {
     if (!role) return;

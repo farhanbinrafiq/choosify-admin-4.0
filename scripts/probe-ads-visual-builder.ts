@@ -78,25 +78,40 @@ async function main() {
 
     const sellerEmail = `ads.seller.${suffix}@example.com`;
     const sellerPass = `AdsPass1_${suffix}`;
-    const reg = await req('POST', '/auth/seller-register', {
+    const apply = await req('POST', '/auth/partner-apply', {
       body: {
+        applicantType: 'seller',
         email: sellerEmail,
         password: sellerPass,
         displayName: `Ads Seller ${suffix}`,
-        storeName: `Ads Store ${suffix}`,
+        businessOrChannelName: `Ads Store ${suffix}`,
         phone: '01700000000',
         category: 'Fashion',
         city: 'Dhaka',
       },
-      expect: [200, 201],
+      expect: [201],
     });
-    let sellerToken = String(reg.body.customToken || reg.body.accessToken || '');
-    const sellerId = String(reg.body.uid || '');
-    if (!sellerToken) {
-      const logged = await login(sellerEmail, sellerPass);
-      sellerToken = logged.token;
-    }
-    mark('seller-register', Boolean(sellerToken && sellerId));
+    mark(
+      'seller-partner-apply',
+      apply.status === 201 && apply.body.accessGranted === false && !apply.body.accessToken,
+      `status=${apply.status}`,
+    );
+    const pending = await req('GET', '/operations/partner-applications?status=pending', {
+      token: admin.token,
+      expect: [200],
+    });
+    const sellerApp = ((pending.body.applications as Json[]) || []).find((a) => a.email === sellerEmail);
+    if (!sellerApp?.id) throw new Error('ads seller application missing');
+    await req('POST', `/operations/partner-applications/${String(sellerApp.id)}/approve`, {
+      token: admin.token,
+      body: { note: 'ads probe' },
+      expect: [200],
+    });
+    const logged = await login(sellerEmail, sellerPass);
+    const sellerToken = logged.token;
+    const me = await req('GET', '/auth/me', { token: sellerToken, expect: [200] });
+    const sellerId = String(me.body.uid || me.body.id || '');
+    mark('seller-provisioned', Boolean(sellerToken && sellerId));
 
     let creatorToken = '';
     try {
@@ -140,7 +155,7 @@ async function main() {
     });
     mark('seller-cannot-publish-now', force.status === 403, `status=${force.status}`);
 
-    const pending = await req('POST', '/ads/banners', {
+    const pendingBanner = await req('POST', '/ads/banners', {
       token: sellerToken,
       body: {
         title: `Seller banner ${suffix}`,
@@ -151,8 +166,8 @@ async function main() {
       },
       expect: [201],
     });
-    const pendingStatus = String(((pending.body.data as Json) || {}).status || '');
-    const pendingId = String(((pending.body.data as Json) || {}).id || '');
+    const pendingStatus = String(((pendingBanner.body.data as Json) || {}).status || '');
+    const pendingId = String(((pendingBanner.body.data as Json) || {}).id || '');
     mark('seller-banner-pending', pendingStatus === 'pending', `status=${pendingStatus}`);
 
     const selfApprove = await req('POST', `/ads/banners/${encodeURIComponent(pendingId)}/approve`, {

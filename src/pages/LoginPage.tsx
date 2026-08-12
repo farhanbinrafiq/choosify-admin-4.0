@@ -195,12 +195,12 @@ export default function LoginPage() {
           </p>
 
           <p className="text-center text-[11px] font-semibold text-[#6B7280] mt-4">
-            New seller?{' '}
+            New to Choosify?{' '}
             <Link
               to={`/signup${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''}`}
               className="text-[#FF5B00] font-bold hover:text-[#E64A00]"
             >
-              Create a seller account
+              Apply as a Partner
             </Link>
           </p>
         </div>

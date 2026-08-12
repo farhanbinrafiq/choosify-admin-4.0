@@ -2,6 +2,7 @@ import { Router, type Request } from 'express';
 import { created, success } from '../lib/apiResponse';
 import { authenticateRequest } from '../middleware/auth';
 import { requireRole } from '../middleware/authorization';
+import { requirePartnerEntitlement } from '../entitlements/entitlementMiddleware';
 import { ROLES } from '../permissions/roles';
 import {
   archiveNotification,
@@ -30,7 +31,7 @@ import type { NotificationCenterFilter } from './communicationTypes';
 
 export const communicationRouter = Router();
 
-const requireAuth = [authenticateRequest];
+const requireAuth = [authenticateRequest, requirePartnerEntitlement];
 const requireAdmin = [authenticateRequest, requireRole(ROLES.ADMIN)];
 
 function parseBool(value: unknown): boolean | undefined {

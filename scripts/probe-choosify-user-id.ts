@@ -103,21 +103,55 @@ async function main() {
 
     const sellerEmail = `cf.seller.${suffix}@example.com`;
     const sellerPass = `CfPass1_${suffix}`;
-    const sellerOk = await req('POST', '/auth/seller-register', {
+    const sellerApply = await req('POST', '/auth/partner-apply', {
       body: {
+        applicantType: 'seller',
         email: sellerEmail,
         password: sellerPass,
         displayName: `CF Seller ${suffix}`,
-        storeName: `CF Store ${suffix}`,
+        businessOrChannelName: `CF Store ${suffix}`,
         phone: '01711111111',
         category: 'Fashion',
         city: 'Dhaka',
       },
       expect: [201],
     });
-    const sellerCf = String(sellerOk.body.choosifyUserId || '');
-    const sellerUid = String(sellerOk.body.uid || '');
-    const sellerToken = String(sellerOk.body.customToken || '');
+    mark(
+      'seller-self-register-closed',
+      (await req('POST', '/auth/seller-register', {
+        body: {
+          email: `legacy.${suffix}@example.com`,
+          password: sellerPass,
+          displayName: 'X',
+          storeName: 'X',
+          phone: '01711111111',
+          category: 'Fashion',
+          city: 'Dhaka',
+        },
+      })).status === 403,
+      'seller-register → 403',
+    );
+    const pendingList = await req('GET', '/operations/partner-applications?status=pending', {
+      token: adminToken,
+      expect: [200],
+    });
+    const sellerApp = ((pendingList.body.applications as Json[]) || []).find(
+      (a) => a.email === sellerEmail,
+    );
+    assert(sellerApp, 'seller application missing');
+    await req('POST', `/operations/partner-applications/${sellerApp!.id}/approve`, {
+      token: adminToken,
+      body: { note: 'cf probe' },
+      expect: [200],
+    });
+    const sellerLogin = await req('POST', '/auth/login', {
+      body: { email: sellerEmail, password: sellerPass },
+      expect: [200],
+    });
+    const sellerToken = String(sellerLogin.body.accessToken || sellerLogin.body.customToken || '');
+    const meSeller0 = await req('GET', '/auth/me', { token: sellerToken, expect: [200] });
+    const sellerCf = String(meSeller0.body.choosifyUserId || '');
+    const sellerUid = String(meSeller0.body.uid || meSeller0.body.id || '');
     mark('seller-receives-cf-id', /^CF-\d{5,}$/.test(sellerCf), sellerCf);
     mark('ids-globally-unique', consumerCf !== sellerCf && sellerCf !== adminCf, `${consumerCf} vs ${sellerCf}`);
 
@@ -137,7 +171,7 @@ async function main() {
     });
     mark('seller-cannot-modify-cf-id', mutate.status === 403, `status=${mutate.status}`);
 
-    // Upgrade consumer → seller preserves CF ID
+    // Consumer → Seller via Partner Application preserves CF ID (upgrade-to-seller closed)
     const upgradeEmail = `cf.upgrade.${suffix}@example.com`;
     const upgradePass = `CfPass1_${suffix}`;
     const upReg = await req('POST', '/auth/register', {
@@ -145,24 +179,54 @@ async function main() {
       expect: [201],
     });
     const upCf = String(upReg.body.choosifyUserId || '');
-    const upToken = String(upReg.body.customToken || '');
-    const upgraded = await req('POST', '/auth/upgrade-to-seller', {
-      token: upToken,
+    const closedUpgrade = await req('POST', '/auth/upgrade-to-seller', {
       body: {
         storeName: `Upgrade Store ${suffix}`,
         phone: '01822222222',
         category: 'Fashion',
         city: 'Dhaka',
       },
-      expect: [200, 201],
+    });
+    mark(
+      'upgrade-to-seller-closed',
+      closedUpgrade.status === 403 && closedUpgrade.body.code === 'PARTNER_APPLICATION_REQUIRED',
+      `status=${closedUpgrade.status}`,
+    );
+    await req('POST', '/auth/partner-apply', {
+      body: {
+        applicantType: 'seller',
+        email: upgradeEmail,
+        password: upgradePass,
+        displayName: `CF Upgrade ${suffix}`,
+        businessOrChannelName: `Upgrade Store ${suffix}`,
+        phone: '01822222222',
+        category: 'Fashion',
+        city: 'Dhaka',
+      },
+      expect: [201],
+    });
+    const pending2 = await req('GET', '/operations/partner-applications?status=pending', {
+      token: adminToken,
+      expect: [200],
+    });
+    const upApp = ((pending2.body.applications as Json[]) || []).find((a) => a.email === upgradeEmail);
+    assert(upApp, 'upgrade application missing');
+    await req('POST', `/operations/partner-applications/${upApp!.id}/approve`, {
+      token: adminToken,
+      body: { note: 'cf upgrade' },
+      expect: [200],
+    });
+    const upLogin = await req('POST', '/auth/login', {
+      body: { email: upgradeEmail, password: upgradePass },
+      expect: [200],
     });
     const upMe = await req('GET', '/auth/me', {
-      token: String(upgraded.body.customToken || upgraded.body.accessToken || upToken),
+      token: String(upLogin.body.accessToken || upLogin.body.customToken || ''),
       expect: [200],
     });
     mark(
       'role-change-preserves-cf-id',
-      String(upMe.body.choosifyUserId || upCf) === upCf,
+      String(upMe.body.choosifyUserId || '') === upCf,
       `${upCf} → ${upMe.body.choosifyUserId}`,
     );
 

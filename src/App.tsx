@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ImpersonationProvider } from './contexts/ImpersonationContext';
+import { EntitlementsProvider, useEntitlements } from './contexts/EntitlementsContext';
 import { AdminLayout } from './components/AdminLayout';
 import { AdminWorkspaceLayout } from './components/Layout/AdminWorkspaceLayout';
 import { CmsMirrorHost } from './cms-mirror/CmsMirrorHost';
@@ -41,6 +42,7 @@ const FeeChargesEngine = lazy(() => import('./pages/admin/FeeChargesEngine'));
 const AdsDealsStudio = lazy(() => import('./pages/admin/AdsDealsStudio'));
 const AdsVisualBuilder = lazy(() => import('./pages/admin/AdsVisualBuilder'));
 const BannerDirectAdsStudio = lazy(() => import('./pages/admin/BannerDirectAdsStudio'));
+const FeatureAccessEntitlements = lazy(() => import('./pages/admin/FeatureAccessEntitlements'));
 const CreatorsHub = lazy(() => import('./pages/admin/CreatorsHub'));
 const Categories = lazy(() => import('./pages/admin/Categories'));
 const Returns = lazy(() => import('./pages/admin/Returns'));
@@ -176,7 +178,14 @@ const CreatorVisualBuilderRoleGate: React.FC<{ children: React.ReactNode }> = ({
 const ADS_STUDIO_ALLOWED_ROLES = new Set(['admin', 'super_admin', 'seller', 'creator']);
 const AdsStudioRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile } = useAuth();
+  const { isFeatureEnabled } = useEntitlements();
   if (!profile || !ADS_STUDIO_ALLOWED_ROLES.has(profile.role)) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+  if (
+    (profile.role === 'seller' || profile.role === 'creator') &&
+    !isFeatureEnabled('adsDeals')
+  ) {
     return <Navigate to="/admin/dashboard" replace />;
   }
   return <>{children}</>;
@@ -412,11 +421,9 @@ const SignupRoute: React.FC = () => {
   const { profile, loading } = useAuth();
 
   if (loading) return null;
-  if (profile?.role === 'seller') {
-    return <Navigate to="/admin/dashboard" replace />;
-  }
+  // Applications do not create sessions; only redirect if already authenticated.
   if (profile) {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/admin/dashboard" replace />;
   }
   return (
     <Suspense fallback={routeSuspenseFallback}>
@@ -448,6 +455,7 @@ export default function App() {
         <AdsProvider>
         <Router>
         <AuthProvider>
+          <EntitlementsProvider>
           <RbacProvider>
           <ImpersonationProvider>
           <LogisticsProvider>
@@ -748,6 +756,19 @@ export default function App() {
               }
             />
 
+            <Route
+              path="/admin/feature-access"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <Suspense fallback={routeSuspenseFallback}>
+                      <FeatureAccessEntitlements />
+                    </Suspense>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+
             {/*
               Order Hub (/admin/orders): approved CmsMirror management presentation.
               Commerce Order API remains SoT via cms-mirror hydrate + studio-profile-api.
@@ -861,6 +882,7 @@ export default function App() {
           </LogisticsProvider>
           </ImpersonationProvider>
           </RbacProvider>
+          </EntitlementsProvider>
         </AuthProvider>
     </Router>
     </AdsProvider>
