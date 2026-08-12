@@ -42,10 +42,13 @@ import {
   brandIsMarketplaceVisible,
   ensureCreatorWorkspace,
   ensureSellerBrandWorkspace,
+  getMyCustomerForOwner,
+  listMyCustomersForOwner,
   listOwnedProducts,
-  listSellerCustomersFromOrders,
 } from './catalog/sellerWorkspace';
 import { sellerOwnsBrand } from './catalog/brandOwnership';
+import { createReport } from './moderation/moderationService';
+import { REPORT_CATEGORIES } from './moderation/moderationTypes';
 import {
   assertProductLifecycleTransition,
   brandAllowsProductPublish,
@@ -88,6 +91,8 @@ import {
 import { publishEvent } from './events/eventBus';
 import { operationsStore } from './operations/operationsStore';
 import { getCatalogPersistenceMode } from '../lib/vercel-catalog/catalogStore';
+import { stampReferenceId } from './referenceIds/stampReferenceId';
+import { normalizeReferenceIdQuery } from '../shared/referenceIds/registry';
 
 export const catalogRouter = Router();
 
@@ -408,7 +413,9 @@ const parseOffset = (value: unknown): number => {
 };
 
 const filterProducts = (products: CatalogProduct[], query: Record<string, unknown>) => {
-  const q = typeof query.q === 'string' ? query.q.trim().toLowerCase() : '';
+  const qRaw = typeof query.q === 'string' ? query.q.trim() : '';
+  const q = qRaw.toLowerCase();
+  const refQ = normalizeReferenceIdQuery(qRaw, 'product');
   const categoryId = typeof query.categoryId === 'string' ? query.categoryId : '';
   const brandId = typeof query.brandId === 'string' ? query.brandId : '';
   const status = typeof query.status === 'string' ? query.status : '';
@@ -417,8 +424,15 @@ const filterProducts = (products: CatalogProduct[], query: Record<string, unknow
 
   return products.filter((product) => {
     if (q) {
-      const haystack = `${product.title} ${product.description} ${product.brandName} ${product.categoryName}`.toLowerCase();
-      if (!haystack.includes(q)) return false;
+      if (refQ && product.productReferenceId) {
+        const canonical = normalizeReferenceIdQuery(product.productReferenceId, 'product');
+        if (canonical === refQ) return true;
+      }
+      const haystack =
+        `${product.title} ${product.description} ${product.brandName} ${product.categoryName} ${product.productReferenceId || ''} ${product.sku || ''}`.toLowerCase();
+      if (!haystack.includes(q) && !(refQ && (product.productReferenceId || '').toUpperCase() === refQ)) {
+        return false;
+      }
     }
     if (categoryId && product.categoryId !== categoryId) return false;
     if (brandId && product.brandId !== brandId) return false;
@@ -616,7 +630,13 @@ catalogRouter.post('/catalog/products', ...requireProductCreate, async (req, res
     ) {
       // already validated in enforceProductLifecycleAndPublish
     }
-    const saved = await catalogStore.upsertProduct(normalized);
+    const withRef = {
+      ...normalized,
+      productReferenceId:
+        (await stampReferenceId('product', normalized, normalized.productReferenceId)) ||
+        normalized.productReferenceId,
+    };
+    const saved = await catalogStore.upsertProduct(withRef);
     await ensureInventoryRecord({
       productId: saved.id,
       quantity: Math.max(0, saved.stock),
@@ -664,7 +684,13 @@ catalogRouter.put('/catalog/products/:id', ...requireProductEdit, async (req, re
       }
       throw error;
     }
-    const saved = await catalogStore.upsertProduct(normalized);
+    const saved = await catalogStore.upsertProduct({
+      ...normalized,
+      productReferenceId:
+        existing.productReferenceId ||
+        (await stampReferenceId('product', normalized, normalized.productReferenceId)) ||
+        normalized.productReferenceId,
+    });
     await ensureInventoryRecord({ productId: saved.id, quantity: Math.max(0, saved.stock) });
     await syncProductStockFromInventory(saved.id);
     emitProductEvent('ProductUpdated', req, saved);
@@ -1440,7 +1466,20 @@ catalogRouter.delete('/catalog/categories/:id', ...requireCategoryManage, async 
 
 catalogRouter.get('/catalog/brands', softAuthenticateRequest, async (req, res) => {
   try {
-    const brands = await scopeBrandsForRequest(req, await catalogStore.listBrands());
+    let brands = await scopeBrandsForRequest(req, await catalogStore.listBrands());
+    const qRaw = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (qRaw) {
+      const q = qRaw.toLowerCase();
+      const refQ = normalizeReferenceIdQuery(qRaw, 'brand');
+      brands = brands.filter((b) => {
+        if (refQ) {
+          const canonical = normalizeReferenceIdQuery(b.brandReferenceId || '', 'brand');
+          if (canonical === refQ) return true;
+        }
+        const hay = `${b.name} ${b.category} ${b.brandReferenceId || ''} ${b.slug || ''}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
     res.json({ data: brands });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list brands' });
@@ -1462,7 +1501,7 @@ catalogRouter.post('/catalog/workspace/seller/ensure', ...requireAuth, async (re
     }
     const { brands, created } = await ensureSellerBrandWorkspace(req.userId!);
     const products = await listOwnedProducts(req.userId!);
-    const customers = listSellerCustomersFromOrders(req.userId!);
+    const customers = await listMyCustomersForOwner(req.userId!);
     res.json({ brands, products, customers, created });
   } catch (error) {
     res.status(500).json({
@@ -1493,7 +1532,8 @@ catalogRouter.post('/catalog/workspace/creator/ensure', ...requireAuth, async (r
       displayName,
       email,
     });
-    res.json({ creators, created });
+    const customers = await listMyCustomersForOwner(req.userId!);
+    res.json({ creators, customers, created });
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Failed to ensure creator workspace',
@@ -1501,23 +1541,185 @@ catalogRouter.post('/catalog/workspace/creator/ensure', ...requireAuth, async (r
   }
 });
 
+async function resolveOwnedBrandScope(
+  req: { userId?: string },
+  brandIdRaw: unknown,
+): Promise<{ brandId: string | null; error?: string; status?: number }> {
+  if (typeof brandIdRaw !== 'string' || !brandIdRaw.trim()) {
+    return { brandId: null };
+  }
+  const brandId = brandIdRaw.trim();
+  if (!req.userId) {
+    return { brandId: null, error: 'Authentication required', status: 401 };
+  }
+  const owns = await sellerOwnsBrand(req.userId, brandId);
+  if (!owns) {
+    return { brandId: null, error: 'Brand not found or not owned', status: 403 };
+  }
+  return { brandId };
+}
+
 catalogRouter.get('/catalog/workspace/seller/customers', ...requireAuth, async (req, res) => {
   try {
     if (!req.userId) {
       res.status(401).json({ error: 'Authentication required' });
       return;
     }
-    if (userIsPlatformAdmin(req)) {
-      res.json({ data: listSellerCustomersFromOrders(typeof req.query.sellerId === 'string' ? req.query.sellerId : req.userId) });
+    const scope = await resolveOwnedBrandScope(req, req.query.brandId);
+    if (scope.error) {
+      res.status(scope.status || 403).json({ error: scope.error });
+      return;
+    }
+    if (userIsPlatformAdmin(req) && !userIsSellerRole(req)) {
+      // Admin may inspect a seller scope only via authenticated identity — never arbitrary sellerId from clients.
+      res.json({ data: await listMyCustomersForOwner(req.userId, { brandId: scope.brandId }) });
       return;
     }
     if (!userIsSellerRole(req)) {
       res.status(403).json({ error: 'Seller authentication required' });
       return;
     }
-    res.json({ data: listSellerCustomersFromOrders(req.userId) });
+    res.json({ data: await listMyCustomersForOwner(req.userId, { brandId: scope.brandId }) });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list customers' });
+  }
+});
+
+catalogRouter.get('/catalog/workspace/seller/customers/:customerId', ...requireAuth, async (req, res) => {
+  try {
+    if (!req.userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    if (!userIsSellerRole(req) && !userIsPlatformAdmin(req)) {
+      res.status(403).json({ error: 'Seller authentication required' });
+      return;
+    }
+    const scope = await resolveOwnedBrandScope(req, req.query.brandId);
+    if (scope.error) {
+      res.status(scope.status || 403).json({ error: scope.error });
+      return;
+    }
+    const customer = await getMyCustomerForOwner(req.userId, req.params.customerId, {
+      brandId: scope.brandId,
+    });
+    if (!customer) {
+      res.status(403).json({ error: 'Customer not accessible' });
+      return;
+    }
+    res.json({ data: customer });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load customer' });
+  }
+});
+
+catalogRouter.post('/catalog/workspace/seller/customers/:customerId/report', ...requireAuth, async (req, res) => {
+  try {
+    if (!req.userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    if (!userIsSellerRole(req)) {
+      res.status(403).json({ error: 'Seller authentication required' });
+      return;
+    }
+    const customer = await getMyCustomerForOwner(req.userId, req.params.customerId);
+    if (!customer) {
+      res.status(403).json({ error: 'Customer not accessible' });
+      return;
+    }
+    const description =
+      typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+    const report = createReport(
+      {
+        category: REPORT_CATEGORIES.ABUSE,
+        resourceType: 'user',
+        resourceId: customer.id,
+        resourceLabel: customer.name,
+        reporterId: req.userId,
+        reporterRole: String(req.userRole || 'seller'),
+        description: description || 'Seller reported a customer violation from My Customers',
+        metadata: { source: 'my_customers', choosifyUserId: customer.choosifyUserId },
+      },
+      req,
+    );
+    res.status(201).json({ data: { id: report.id, status: report.status } });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to submit report' });
+  }
+});
+
+catalogRouter.get('/catalog/workspace/creator/customers', ...requireAuth, async (req, res) => {
+  try {
+    if (!req.userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    if (!userIsCreatorRole(req) && !userIsPlatformAdmin(req)) {
+      res.status(403).json({ error: 'Creator authentication required' });
+      return;
+    }
+    // Creator scope is always authenticated identity — never trust creatorId query.
+    res.json({ data: await listMyCustomersForOwner(req.userId) });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list customers' });
+  }
+});
+
+catalogRouter.get('/catalog/workspace/creator/customers/:customerId', ...requireAuth, async (req, res) => {
+  try {
+    if (!req.userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    if (!userIsCreatorRole(req) && !userIsPlatformAdmin(req)) {
+      res.status(403).json({ error: 'Creator authentication required' });
+      return;
+    }
+    const customer = await getMyCustomerForOwner(req.userId, req.params.customerId);
+    if (!customer) {
+      res.status(403).json({ error: 'Customer not accessible' });
+      return;
+    }
+    res.json({ data: customer });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load customer' });
+  }
+});
+
+catalogRouter.post('/catalog/workspace/creator/customers/:customerId/report', ...requireAuth, async (req, res) => {
+  try {
+    if (!req.userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    if (!userIsCreatorRole(req)) {
+      res.status(403).json({ error: 'Creator authentication required' });
+      return;
+    }
+    const customer = await getMyCustomerForOwner(req.userId, req.params.customerId);
+    if (!customer) {
+      res.status(403).json({ error: 'Customer not accessible' });
+      return;
+    }
+    const description =
+      typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+    const report = createReport(
+      {
+        category: REPORT_CATEGORIES.ABUSE,
+        resourceType: 'user',
+        resourceId: customer.id,
+        resourceLabel: customer.name,
+        reporterId: req.userId,
+        reporterRole: String(req.userRole || 'creator'),
+        description: description || 'Creator reported a customer violation from My Customers',
+        metadata: { source: 'my_customers', choosifyUserId: customer.choosifyUserId },
+      },
+      req,
+    );
+    res.status(201).json({ data: { id: report.id, status: report.status } });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to submit report' });
   }
 });
 
@@ -1539,7 +1741,13 @@ catalogRouter.post('/catalog/brands', ...requireBrandStudioBrandWrite, async (re
           }
         : req.body;
     const normalized = normalizeBrandInput(payload, undefined, context);
-    const saved = await catalogStore.upsertBrand(normalized);
+    const withRef = {
+      ...normalized,
+      brandReferenceId:
+        (await stampReferenceId('brand', normalized, normalized.brandReferenceId)) ||
+        normalized.brandReferenceId,
+    };
+    const saved = await catalogStore.upsertBrand(withRef);
     publishEvent({
       eventName: 'BrandCreated',
       domain: 'Marketplace',
@@ -1570,7 +1778,14 @@ catalogRouter.put('/catalog/brands/:id', ...requireBrandStudioBrandWrite, async 
       existing,
       normalizeBrandInput({ ...req.body, id: req.params.id }, existing, context),
     );
-    const saved = await catalogStore.upsertBrand(normalized);
+    const withRef = {
+      ...normalized,
+      brandReferenceId:
+        existing.brandReferenceId ||
+        (await stampReferenceId('brand', normalized, normalized.brandReferenceId)) ||
+        normalized.brandReferenceId,
+    };
+    const saved = await catalogStore.upsertBrand(withRef);
     publishEvent({
       eventName: 'BrandUpdated',
       domain: 'Marketplace',
@@ -1601,7 +1816,14 @@ catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, asyn
       existing,
       normalizeBrandInput({ ...existing, ...req.body, id: req.params.id }, existing, context),
     );
-    const saved = await catalogStore.upsertBrand(normalized);
+    const withRef = {
+      ...normalized,
+      brandReferenceId:
+        existing.brandReferenceId ||
+        (await stampReferenceId('brand', normalized, normalized.brandReferenceId)) ||
+        normalized.brandReferenceId,
+    };
+    const saved = await catalogStore.upsertBrand(withRef);
     publishEvent({
       eventName: 'BrandUpdated',
       domain: 'Marketplace',
@@ -1991,7 +2213,14 @@ catalogRouter.put('/catalog/guides/:id', ...requireCmsWrite, async (req, res) =>
   try {
     const existing = await catalogStore.getGuide(req.params.id);
     const normalized = normalizeGuideInput({ ...req.body, id: req.params.id }, existing || undefined);
-    const saved = await catalogStore.upsertGuide(normalized);
+    const withRef = {
+      ...normalized,
+      contentReferenceId:
+        existing?.contentReferenceId ||
+        (await stampReferenceId('content', normalized, normalized.contentReferenceId)) ||
+        normalized.contentReferenceId,
+    };
+    const saved = await catalogStore.upsertGuide(withRef);
     res.json({ success: true, data: saved });
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid guide payload') });
@@ -2006,7 +2235,14 @@ catalogRouter.patch('/catalog/guides/:id', ...requireCmsWrite, async (req, res) 
       return;
     }
     const normalized = normalizeGuideInput({ ...existing, ...req.body, id: req.params.id }, existing);
-    const saved = await catalogStore.upsertGuide(normalized);
+    const withRef = {
+      ...normalized,
+      contentReferenceId:
+        existing.contentReferenceId ||
+        (await stampReferenceId('content', normalized, normalized.contentReferenceId)) ||
+        normalized.contentReferenceId,
+    };
+    const saved = await catalogStore.upsertGuide(withRef);
     res.json({ success: true, data: saved });
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid guide patch payload') });

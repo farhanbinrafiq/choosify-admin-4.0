@@ -638,7 +638,8 @@ export async function getSellerDashboardIntelligence(query: SellerDashboardQuery
   );
 
   if (sellerProducts.length === 0) {
-    sellerProducts = allProducts.slice(0, Math.min(8, allProducts.length));
+    // Zero-product sellers must see empty intelligence — never platform fallback.
+    sellerProducts = [];
   }
 
   const reviews = operationsStore.listReviews();

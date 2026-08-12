@@ -92,7 +92,43 @@ export function getAnalyticsSummary(rangeInput?: string) {
   };
 }
 
-export function getRoleAnalytics(role: string, rangeInput?: string) {
+export type RoleAnalyticsOptions = {
+  ownerId?: string;
+  activeBrandId?: string | null;
+  /** Precomputed owned brand IDs for seller scoping */
+  ownedBrandIds?: string[];
+};
+
+function normalizeId(value: unknown): string {
+  return String(value || '')
+    .trim()
+    .toLowerCase();
+}
+
+function orderBelongsToOwner(
+  order: { subOrders?: { sellerId?: string; brandId?: string; productId?: string }[] },
+  ownerId: string,
+  brandIds: Set<string>,
+  activeBrandId?: string | null,
+): boolean {
+  const subs = order.subOrders || [];
+  if (!subs.length) return false;
+  return subs.some((sub) => {
+    const sellerMatch = normalizeId(sub.sellerId) === normalizeId(ownerId);
+    const brandMatch = sub.brandId ? brandIds.has(normalizeId(sub.brandId)) : false;
+    if (!sellerMatch && !brandMatch) return false;
+    if (activeBrandId) {
+      return normalizeId(sub.brandId) === normalizeId(activeBrandId);
+    }
+    return true;
+  });
+}
+
+export function getRoleAnalytics(
+  role: string,
+  rangeInput?: string,
+  options?: RoleAnalyticsOptions,
+) {
   const summary = getAnalyticsSummary(rangeInput);
   const permissions: Record<PermissionKey, boolean> =
     operationsStore.getPermissions()[role] ||
@@ -123,62 +159,122 @@ export function getRoleAnalytics(role: string, rangeInput?: string) {
   quickLinks.push({ label: 'Messages', path: '/admin/messages' });
 
   const cards: { label: string; value: string; sub?: string }[] = [];
+  const ownerId = options?.ownerId?.trim() || '';
+  const activeBrandId = options?.activeBrandId || null;
+  const ownedBrandIds = new Set(
+    (options?.ownedBrandIds || []).map((id) => normalizeId(id)).filter(Boolean),
+  );
+  if (activeBrandId) ownedBrandIds.add(normalizeId(activeBrandId));
 
-  switch (role) {
-    case 'finance_manager':
-      cards.push(
-        { label: 'Platform Revenue', value: `৳ ${summary.orders.revenue.toLocaleString()}`, sub: `${summary.orders.total} orders` },
-        { label: 'Promo Discounts', value: `৳ ${summary.orders.promoDiscount.toLocaleString()}`, sub: 'Redeemed at checkout' },
-        { label: 'Coupon Savings', value: `৳ ${summary.coupons.totalDiscountGiven.toLocaleString()}`, sub: `${summary.coupons.totalRedemptions} redemptions` },
-        { label: 'COD Orders', value: String(summary.orders.cod), sub: 'Cash on delivery' },
-      );
-      break;
-    case 'support_agent':
-      cards.push(
-        { label: 'Platform Orders', value: String(summary.orders.total), sub: 'Storefront checkout' },
-        { label: 'Open Shipments', value: String(summary.shipments.pending), sub: `${summary.shipments.delivered} delivered` },
-        { label: 'Pending Reviews', value: String(summary.reviews.pending), sub: 'Needs moderation' },
-        { label: 'New Leads', value: String(summary.leads.new), sub: `${summary.leads.total} total leads` },
-      );
-      break;
-    case 'marketing_manager':
-      cards.push(
-        { label: 'Advertise Leads', value: String(summary.leads.total), sub: `${summary.leads.new} new` },
-        { label: 'Active Coupons', value: String(summary.coupons.active), sub: `${summary.coupons.totalRedemptions} uses` },
-        { label: 'Orders (Campaign)', value: String(summary.orders.total), sub: `৳ ${summary.orders.revenue.toLocaleString()} revenue` },
-        { label: 'Promo Savings', value: `৳ ${summary.orders.promoDiscount.toLocaleString()}`, sub: 'Attributed discounts' },
-      );
-      break;
-    case 'moderator':
-      cards.push(
-        { label: 'Pending Reviews', value: String(summary.reviews.pending), sub: 'Awaiting action' },
-        { label: 'Published Reviews', value: String(summary.reviews.published), sub: 'Live on site' },
-        { label: 'Total Reviews', value: String(summary.reviews.total), sub: 'In pipeline' },
-        { label: 'Platform Orders', value: String(summary.orders.total), sub: 'For dispute context' },
-      );
-      break;
-    case 'admin':
-      cards.push(
-        { label: 'Storefront Orders', value: String(summary.orders.total), sub: `৳ ${summary.orders.revenue.toLocaleString()}` },
-        { label: 'Shipments', value: String(summary.shipments.total), sub: `${summary.shipments.pending} in transit` },
-        { label: 'Leads Inbox', value: String(summary.leads.new), sub: `${summary.leads.total} total` },
-        { label: 'Review Queue', value: String(summary.reviews.pending), sub: 'Needs moderation' },
-      );
-      break;
-    default:
-      cards.push(
-        { label: 'Orders', value: String(summary.orders.total), sub: `৳ ${summary.orders.revenue.toLocaleString()}` },
-        { label: 'Leads', value: String(summary.leads.total), sub: `${summary.leads.new} new` },
-        { label: 'Reviews', value: String(summary.reviews.total), sub: `${summary.reviews.pending} pending` },
-        { label: 'Shipments', value: String(summary.shipments.total), sub: `${summary.shipments.pending} active` },
-      );
+  if (role === 'seller' && ownerId) {
+    const range = parseRange(rangeInput);
+    const orders = operationsStore
+      .listOrders()
+      .filter((o) => inRange(o.createdAt, range))
+      .filter((o) => orderBelongsToOwner(o, ownerId, ownedBrandIds, activeBrandId));
+    const revenue = orders.reduce((sum, o) => sum + Number(o.overallTotal || 0), 0);
+    cards.push(
+      {
+        label: 'Your Orders',
+        value: String(orders.length),
+        sub: activeBrandId ? 'Active Brand scoped' : 'All owned Brands',
+      },
+      {
+        label: 'Your Revenue',
+        value: `৳ ${revenue.toLocaleString()}`,
+        sub: orders.length ? `${orders.length} orders` : 'No data yet',
+      },
+      {
+        label: 'Owned Brands',
+        value: String(ownedBrandIds.size || (activeBrandId ? 1 : 0)),
+        sub: activeBrandId ? 'Filtered to Active Brand' : 'Aggregated',
+      },
+      {
+        label: 'Insights',
+        value: orders.length ? 'Available' : 'No data',
+        sub: 'Ownership-scoped only',
+      },
+    );
+  } else if (role === 'creator' && ownerId) {
+    cards.push(
+      { label: 'Your Guides', value: '0', sub: 'Use Guide Management for live counts' },
+      { label: 'Engagement', value: 'No data', sub: 'Unavailable until metrics exist' },
+      { label: 'Ads & Deals', value: 'Owned only', sub: 'See Ads & Deals Studio' },
+      { label: 'Earnings', value: 'Unavailable', sub: 'No invented figures' },
+    );
+  } else {
+    switch (role) {
+      case 'finance_manager':
+        cards.push(
+          { label: 'Platform Revenue', value: `৳ ${summary.orders.revenue.toLocaleString()}`, sub: `${summary.orders.total} orders` },
+          { label: 'Promo Discounts', value: `৳ ${summary.orders.promoDiscount.toLocaleString()}`, sub: 'Redeemed at checkout' },
+          { label: 'Coupon Savings', value: `৳ ${summary.coupons.totalDiscountGiven.toLocaleString()}`, sub: `${summary.coupons.totalRedemptions} redemptions` },
+          { label: 'COD Orders', value: String(summary.orders.cod), sub: 'Cash on delivery' },
+        );
+        break;
+      case 'support_agent':
+        cards.push(
+          { label: 'Platform Orders', value: String(summary.orders.total), sub: 'Storefront checkout' },
+          { label: 'Open Shipments', value: String(summary.shipments.pending), sub: `${summary.shipments.delivered} delivered` },
+          { label: 'Pending Reviews', value: String(summary.reviews.pending), sub: 'Needs moderation' },
+          { label: 'New Leads', value: String(summary.leads.new), sub: `${summary.leads.total} total leads` },
+        );
+        break;
+      case 'marketing_manager':
+        cards.push(
+          { label: 'Advertise Leads', value: String(summary.leads.total), sub: `${summary.leads.new} new` },
+          { label: 'Active Coupons', value: String(summary.coupons.active), sub: `${summary.coupons.totalRedemptions} uses` },
+          { label: 'Orders (Campaign)', value: String(summary.orders.total), sub: `৳ ${summary.orders.revenue.toLocaleString()} revenue` },
+          { label: 'Promo Savings', value: `৳ ${summary.orders.promoDiscount.toLocaleString()}`, sub: 'Attributed discounts' },
+        );
+        break;
+      case 'moderator':
+        cards.push(
+          { label: 'Pending Reviews', value: String(summary.reviews.pending), sub: 'Awaiting action' },
+          { label: 'Published Reviews', value: String(summary.reviews.published), sub: 'Live on site' },
+          { label: 'Total Reviews', value: String(summary.reviews.total), sub: 'In pipeline' },
+          { label: 'Platform Orders', value: String(summary.orders.total), sub: 'For dispute context' },
+        );
+        break;
+      case 'admin':
+        cards.push(
+          { label: 'Storefront Orders', value: String(summary.orders.total), sub: `৳ ${summary.orders.revenue.toLocaleString()}` },
+          { label: 'Shipments', value: String(summary.shipments.total), sub: `${summary.shipments.pending} in transit` },
+          { label: 'Leads Inbox', value: String(summary.leads.new), sub: `${summary.leads.total} total` },
+          { label: 'Review Queue', value: String(summary.reviews.pending), sub: 'Needs moderation' },
+        );
+        break;
+      default:
+        cards.push(
+          { label: 'Orders', value: String(summary.orders.total), sub: `৳ ${summary.orders.revenue.toLocaleString()}` },
+          { label: 'Leads', value: String(summary.leads.total), sub: `${summary.leads.new} new` },
+          { label: 'Reviews', value: String(summary.reviews.total), sub: `${summary.reviews.pending} pending` },
+          { label: 'Shipments', value: String(summary.shipments.total), sub: `${summary.shipments.pending} active` },
+        );
+    }
   }
+
+  const scopedSummary =
+    (role === 'seller' || role === 'creator') && ownerId
+      ? {
+          ...summary,
+          orders: {
+            total: cards[0]?.value === String(Number(cards[0]?.value)) ? Number(cards[0].value) : 0,
+            revenue: 0,
+            promoDiscount: 0,
+            cod: 0,
+          },
+          scoped: true,
+          ownerId,
+          activeBrandId: activeBrandId || null,
+        }
+      : summary;
 
   return {
     role,
     permissions: permissions as Record<PermissionKey, boolean>,
     cards,
     quickLinks,
-    summary,
+    summary: scopedSummary,
   };
 }

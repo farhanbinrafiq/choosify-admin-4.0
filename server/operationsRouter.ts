@@ -36,6 +36,7 @@ import { catalogStore } from '../lib/vercel-catalog/catalogStore';
 import { normalizeBrandInput } from './catalogContract';
 import { normalizeCreatorInput } from '../lib/vercel-catalog/catalogEditorialContract';
 import { recordSuspiciousRequest, recordClaimConfirmAttempt } from './lib/abuseProtection';
+import { Logger } from './lib/logger';
 import { createNotification } from './communication/notificationService';
 import { COMMUNICATION_TYPES, DELIVERY_CHANNELS } from './communication/communicationTypes';
 import { publishEvent } from './events/eventBus';
@@ -1611,19 +1612,146 @@ operationsRouter.get('/operations/permissions/check', (req, res) => {
   res.json({ allowed, role, permission });
 });
 
-operationsRouter.get('/operations/analytics', (req, res) => {
+operationsRouter.get('/operations/analytics', ...requireAuth, async (req, res) => {
   const range = typeof req.query.range === 'string' ? req.query.range : '30d';
-  res.json({ data: getAnalyticsSummary(range) });
+  const role = req.userRole;
+  const userId = req.userId || '';
+  const activeBrandId =
+    typeof req.query.brandId === 'string' && req.query.brandId.trim()
+      ? req.query.brandId.trim()
+      : null;
+
+  if (
+    role &&
+    (hasRole(role, ROLES.ADMIN) ||
+      hasRole(role, ROLES.SUPER_ADMIN) ||
+      hasRole(role, ROLES.MODERATOR))
+  ) {
+    res.json({ data: getAnalyticsSummary(range) });
+    return;
+  }
+
+  if (role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER))) {
+    let ownedBrandIds: string[] = [];
+    try {
+      const brands = await catalogStore.listBrands();
+      ownedBrandIds = brands
+        .filter((b) => String(b.sellerId || '') === String(userId))
+        .map((b) => b.id)
+        .filter(Boolean);
+    } catch {
+      ownedBrandIds = [];
+    }
+    if (activeBrandId && !ownedBrandIds.includes(activeBrandId)) {
+      res.status(403).json({ error: 'Not authorized for this Brand analytics scope' });
+      return;
+    }
+    res.json({
+      data: getRoleAnalytics('seller', range, {
+        ownerId: userId,
+        activeBrandId,
+        ownedBrandIds,
+      }),
+    });
+    return;
+  }
+
+  if (role && hasRole(role, ROLES.CREATOR)) {
+    res.json({
+      data: getRoleAnalytics('creator', range, { ownerId: userId }),
+    });
+    return;
+  }
+
+  res.status(403).json({ error: 'Not authorized to view platform analytics' });
 });
 
-operationsRouter.get('/operations/analytics/role/:role', (req, res) => {
+operationsRouter.get('/operations/analytics/role/:role', ...requireAuth, async (req, res) => {
   const range = typeof req.query.range === 'string' ? req.query.range : '30d';
-  res.json({ data: getRoleAnalytics(req.params.role, range) });
+  const requestedRole = req.params.role;
+  const userRole = req.userRole;
+  const userId = req.userId || '';
+  const activeBrandId =
+    typeof req.query.brandId === 'string' && req.query.brandId.trim()
+      ? req.query.brandId.trim()
+      : null;
+
+  if (
+    userRole &&
+    (hasRole(userRole, ROLES.ADMIN) ||
+      hasRole(userRole, ROLES.SUPER_ADMIN) ||
+      hasRole(userRole, ROLES.MODERATOR))
+  ) {
+    res.json({ data: getRoleAnalytics(requestedRole, range) });
+    return;
+  }
+
+  if (userRole && (hasRole(userRole, ROLES.SELLER) || hasRole(userRole, ROLES.VERIFIED_SELLER))) {
+    if (requestedRole === 'seller') {
+      let ownedBrandIds: string[] = [];
+      try {
+        const brands = await catalogStore.listBrands();
+        ownedBrandIds = brands
+          .filter((b) => String(b.sellerId || '') === String(userId))
+          .map((b) => b.id)
+          .filter(Boolean);
+      } catch {
+        ownedBrandIds = [];
+      }
+      if (activeBrandId && !ownedBrandIds.includes(activeBrandId)) {
+        res.status(403).json({ error: 'Not authorized for this Brand analytics scope' });
+        return;
+      }
+      res.json({
+        data: getRoleAnalytics('seller', range, {
+          ownerId: userId,
+          activeBrandId,
+          ownedBrandIds,
+        }),
+      });
+      return;
+    }
+    res.status(403).json({ error: 'Sellers may only request their own role analytics' });
+    return;
+  }
+
+  if (userRole && hasRole(userRole, ROLES.CREATOR)) {
+    if (requestedRole === 'creator') {
+      res.json({
+        data: getRoleAnalytics('creator', range, { ownerId: userId }),
+      });
+      return;
+    }
+    res.status(403).json({ error: 'Creators may only request their own role analytics' });
+    return;
+  }
+
+  res.status(403).json({ error: 'Not authorized to view role analytics' });
 });
 
-operationsRouter.get('/operations/seller-dashboard', async (req, res) => {
+operationsRouter.get('/operations/seller-dashboard', ...requireAuth, async (req, res) => {
   try {
-    const sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId.trim() : '';
+    let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId.trim() : '';
+    const role = req.userRole;
+    const userId = req.userId;
+    const isStaff =
+      role &&
+      (hasRole(role, ROLES.ADMIN) ||
+        hasRole(role, ROLES.SUPER_ADMIN) ||
+        hasRole(role, ROLES.MODERATOR) ||
+        hasRole(role, ROLES.SUPPORT_AGENT));
+
+    if (role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER))) {
+      if (sellerId && sellerId !== userId) {
+        res.status(403).json({ error: 'Sellers may only view their own dashboard' });
+        return;
+      }
+      sellerId = userId || '';
+    } else if (!isStaff) {
+      res.status(403).json({ error: 'Not authorized to view seller dashboard' });
+      return;
+    }
+
     if (!sellerId) {
       res.status(400).json({ error: 'sellerId query parameter is required' });
       return;
@@ -1864,7 +1992,62 @@ operationsRouter.put('/operations/feature-flags', ...requireAdmin, (req, res) =>
   res.json({ success: true, flags: saved });
 });
 
-operationsRouter.get('/operations/users', (_req, res) => {
+operationsRouter.get('/operations/users', async (_req, res) => {
+  try {
+    const { db } = await import('./db/client');
+    const { users } = await import('./db/schema');
+    const rows = await db
+      .select({
+        id: users.id,
+        email: users.email,
+        displayName: users.displayName,
+        role: users.role,
+        choosifyUserId: users.choosifyUserId,
+        createdAt: users.createdAt,
+      })
+      .from(users);
+
+    const mapRole = (role: string): 'Consumer' | 'Creator' | 'Seller' | 'Admin' => {
+      const r = String(role || '').toLowerCase();
+      if (r === 'creator') return 'Creator';
+      if (r === 'seller' || r === 'verified_seller') return 'Seller';
+      if (r === 'admin' || r === 'super_admin') return 'Admin';
+      return 'Consumer';
+    };
+
+    const initials = (name: string) =>
+      name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0]?.toUpperCase() || '')
+        .join('') || 'U';
+
+    const authUsers = rows.map((u) => {
+      const name = u.displayName || u.email || 'User';
+      const joined = u.createdAt ? String(u.createdAt).slice(0, 10) : '—';
+      return {
+        id: u.id,
+        name,
+        email: u.email,
+        role: mapRole(u.role),
+        status: 'Active' as const,
+        joined,
+        active: joined,
+        initials: initials(name),
+        trustScore: 85,
+        behaviorSegment: 'Retail Shopper',
+        choosifyUserId: u.choosifyUserId || undefined,
+      };
+    });
+
+    if (authUsers.length) {
+      res.json({ data: authUsers });
+      return;
+    }
+  } catch {
+    /* fall through to ops memory list */
+  }
   res.json({ data: operationsStore.listUsers() });
 });
 
@@ -2005,8 +2188,9 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
       type: doc.type,
       name: doc.name,
       doc_url: doc.doc_url,
-      status: doc.status === 'approved' || doc.status === 'rejected' ? doc.status : 'pending',
-      notes: doc.notes,
+      // Never trust client-supplied approval/rejection on create.
+      status: 'pending' as const,
+      notes: undefined,
     })),
     audit_trail: [
       {
@@ -2051,6 +2235,23 @@ operationsRouter.get('/operations/verifications', ...requireAuth, (req, res) => 
   const entityType = typeof req.query.entityType === 'string' ? req.query.entityType : undefined;
   const entityId = typeof req.query.entityId === 'string' ? req.query.entityId : undefined;
 
+  const redactForOwner = (rows: ReturnType<typeof operationsStore.listVerifications>) =>
+    rows.map((row) => ({
+      ...row,
+      documents: (row.documents || []).map((doc) => ({
+        ...doc,
+        // Internal admin notes must not leak to owners.
+        notes: doc.status === 'rejected' ? doc.notes : undefined,
+      })),
+      reviews: (row.reviews || []).map((rv) => ({
+        id: rv.id,
+        status: rv.status,
+        reviewed_at: rv.reviewed_at,
+        // Keep rejection-facing feedback only; strip reviewer identity internals for owners.
+        feedback: rv.status === 'rejected' ? rv.feedback : undefined,
+      })),
+    }));
+
   if (userCanManageVerifications(req)) {
     res.json({
       data: operationsStore.listVerifications({ status, entityType, entityId }),
@@ -2058,14 +2259,16 @@ operationsRouter.get('/operations/verifications', ...requireAuth, (req, res) => 
     return;
   }
 
-  // Regular users: only their own submissions.
+  // Regular users: only their own submissions; redact internal admin comments.
   res.json({
-    data: operationsStore.listVerifications({
-      submittedBy: req.userId,
-      status,
-      entityType,
-      entityId,
-    }),
+    data: redactForOwner(
+      operationsStore.listVerifications({
+        submittedBy: req.userId,
+        status,
+        entityType,
+        entityId,
+      }),
+    ),
   });
 });
 
@@ -2079,7 +2282,25 @@ operationsRouter.get('/operations/verifications/:id', ...requireAuth, (req, res)
     res.status(403).json({ error: 'Not authorized to view this verification request' });
     return;
   }
-  res.json({ data: row });
+  if (userCanManageVerifications(req)) {
+    res.json({ data: row });
+    return;
+  }
+  res.json({
+    data: {
+      ...row,
+      documents: (row.documents || []).map((doc) => ({
+        ...doc,
+        notes: doc.status === 'rejected' ? doc.notes : undefined,
+      })),
+      reviews: (row.reviews || []).map((rv) => ({
+        id: rv.id,
+        status: rv.status,
+        reviewed_at: rv.reviewed_at,
+        feedback: rv.status === 'rejected' ? rv.feedback : undefined,
+      })),
+    },
+  });
 });
 
 /** Submitter or admin may move Draft → Submitted (and into Under Review queue). */
@@ -2137,8 +2358,18 @@ operationsRouter.patch(
       res.status(400).json({ error: 'status must be approved or rejected' });
       return;
     }
-    const notes = typeof req.body?.notes === 'string' ? req.body.notes.trim() : undefined;
+    const notes =
+      typeof req.body?.notes === 'string'
+        ? req.body.notes.trim()
+        : typeof req.body?.adminComment === 'string'
+          ? req.body.adminComment.trim()
+          : undefined;
     const actor = req.user?.displayName || req.userId || 'Administrative Auditor';
+    // Self-approve / self-reject of own dossier documents is forbidden.
+    if (req.userId && existing.submitted_by === req.userId) {
+      res.status(403).json({ error: 'Cannot approve or reject your own verification documents' });
+      return;
+    }
     const saved = operationsStore.updateVerificationDocument(req.params.id, req.params.docId, {
       status,
       notes,
@@ -2158,6 +2389,12 @@ operationsRouter.patch(
           details: `Document item state updated to ${status}. Notes: ${notes || 'none'}`,
         },
       ],
+    });
+    Logger.audit('verification.document_reviewed', {
+      actorId: req.userId,
+      verificationId: req.params.id,
+      docId: req.params.docId,
+      status,
     });
     scheduleOperationsPersist();
     res.json({ success: true, data: withAudit || saved });
@@ -2224,6 +2461,12 @@ operationsRouter.put(
       ],
     });
     scheduleOperationsPersist();
+    Logger.audit('verification.document_replaced', {
+      actorId: req.userId,
+      verificationId: req.params.id,
+      docId: req.params.docId,
+      overallStatus: nextOverall,
+    });
     res.json({ success: true, data: withAudit || saved });
   },
 );
@@ -2238,12 +2481,16 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
     res.status(404).json({ error: 'Verification request not found' });
     return;
   }
+  if (req.userId && existing.submitted_by === req.userId) {
+    res.status(403).json({ error: 'Cannot approve or reject your own verification request' });
+    return;
+  }
   const decision = req.body?.status === 'rejected' ? 'rejected' : req.body?.status === 'approved' ? 'approved' : '';
   if (!decision) {
     res.status(400).json({ error: 'status must be approved or rejected' });
     return;
   }
-  const feedback = String(req.body?.feedback || '').trim();
+  const feedback = String(req.body?.feedback || req.body?.adminComment || '').trim();
   if (!feedback) {
     res.status(400).json({ error: 'feedback is required' });
     return;
@@ -2305,6 +2552,12 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
   });
 
   scheduleOperationsPersist();
+  Logger.audit('verification.reviewed', {
+    actorId: reviewerId,
+    verificationId: existing.id,
+    decision: finalStatus,
+    submittedBy: existing.submitted_by,
+  });
   res.json({
     success: true,
     data: saved,

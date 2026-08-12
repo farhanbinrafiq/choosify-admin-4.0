@@ -39,6 +39,8 @@ const Sellers = lazy(() => import('./pages/admin/Sellers'));
 const Products = lazy(() => import('./pages/admin/Products'));
 const FeeChargesEngine = lazy(() => import('./pages/admin/FeeChargesEngine'));
 const AdsDealsStudio = lazy(() => import('./pages/admin/AdsDealsStudio'));
+const AdsVisualBuilder = lazy(() => import('./pages/admin/AdsVisualBuilder'));
+const BannerDirectAdsStudio = lazy(() => import('./pages/admin/BannerDirectAdsStudio'));
 const CreatorsHub = lazy(() => import('./pages/admin/CreatorsHub'));
 const Categories = lazy(() => import('./pages/admin/Categories'));
 const Returns = lazy(() => import('./pages/admin/Returns'));
@@ -165,6 +167,16 @@ const CREATOR_VISUAL_BUILDER_ALLOWED_ROLES = new Set(['creator', 'admin', 'super
 const CreatorVisualBuilderRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile } = useAuth();
   if (!profile || !CREATOR_VISUAL_BUILDER_ALLOWED_ROLES.has(profile.role)) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+  return <>{children}</>;
+};
+
+/** Ads Visual Builder — admin, seller, creator (consumers denied). */
+const ADS_STUDIO_ALLOWED_ROLES = new Set(['admin', 'super_admin', 'seller', 'creator']);
+const AdsStudioRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile } = useAuth();
+  if (!profile || !ADS_STUDIO_ALLOWED_ROLES.has(profile.role)) {
     return <Navigate to="/admin/dashboard" replace />;
   }
   return <>{children}</>;
@@ -684,6 +696,54 @@ export default function App() {
                       </Suspense>
                     </AdminWorkspaceLayout>
                   </GuideVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
+
+            {/*
+              Banner / Direct Ads Visual Builder — surgical cutover.
+              /admin/ads-deals-studio (Ads & Deals Studio chrome) stays on CmsMirrorHost.
+              Rollback: remove these routes; Create Ad falls back to cms-mirror button.
+            */}
+            <Route
+              path="/admin/ads-studio"
+              element={
+                <ProtectedRoute>
+                  <AdsStudioRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <BannerDirectAdsStudio />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </AdsStudioRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/ads-studio/new"
+              element={
+                <ProtectedRoute>
+                  <AdsStudioRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <AdsVisualBuilder />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </AdsStudioRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/ads-studio/:id/edit"
+              element={
+                <ProtectedRoute>
+                  <AdsStudioRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <AdsVisualBuilder />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </AdsStudioRoleGate>
                 </ProtectedRoute>
               }
             />

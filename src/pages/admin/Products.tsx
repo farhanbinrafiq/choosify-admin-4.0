@@ -49,6 +49,8 @@ type ProductRow = {
   price: string;
   status: string;
   views: number;
+  productReferenceId?: string;
+  sku?: string;
   icon: typeof Smartphone;
   color: string;
 };
@@ -80,6 +82,8 @@ const mapCatalogProduct = (product: CatalogProduct): ProductRow => {
     price: `৳ ${Number(product.price || 0).toLocaleString()}`,
     status: product.status === 'live' ? 'Live' : product.status === 'draft' ? 'Pending' : 'Flagged',
     views: 0,
+    productReferenceId: product.productReferenceId,
+    sku: product.sku,
     icon,
     color,
   };
@@ -411,7 +415,21 @@ export default function ProductsPage() {
                   {p.name}
                 </Link>
               </div>
-              <div className="flex items-center gap-2 mt-1">
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                {p.productReferenceId ? (
+                  <span className="text-[10px] font-mono font-bold text-app-text-primary tracking-wide">
+                    {p.productReferenceId}
+                  </span>
+                ) : null}
+                {p.sku ? (
+                  <>
+                    <span className="w-1 h-1 rounded-full bg-app-border" />
+                    <span className="text-[10px] text-app-text-secondary opacity-70 font-bold">
+                      SKU {p.sku}
+                    </span>
+                  </>
+                ) : null}
+                <span className="w-1 h-1 rounded-full bg-app-border" />
                 <span className="text-[10px] text-app-text-secondary opacity-60 font-bold uppercase tracking-widest">{p.brand}</span>
                 <span className="w-1 h-1 rounded-full bg-app-border" />
                 <span className="text-[10px] text-app-accent font-bold">{p.views.toLocaleString()} views</span>

@@ -88,8 +88,10 @@ async function uploadViaCatalogApi(file: File): Promise<string> {
 }
 
 async function uploadImage(file: File, folder = 'choosify/products'): Promise<string> {
-  if (!file.type.startsWith('image/')) {
-    throw new Error('Only image files are supported.');
+  const allowed = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif']);
+  const mime = (file.type || '').toLowerCase();
+  if (!allowed.has(mime)) {
+    throw new Error('Unsupported image type. Use JPG, PNG, WEBP, or GIF.');
   }
 
   if (UPLOAD_PRESET?.trim()) {

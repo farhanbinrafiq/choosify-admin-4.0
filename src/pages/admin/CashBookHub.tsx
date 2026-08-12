@@ -390,6 +390,7 @@ export default function CashBookHub() {
   const [deletingBookId, setDeletingBookId] = useState<string | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
   const [deleteConfirmError, setDeleteConfirmError] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   // Custom Categories state
   const [customCategories, setCustomCategories] = useState<string[]>(() => {
@@ -607,9 +608,14 @@ export default function CashBookHub() {
     triggerToast('Google Drive integration disconnected. Cache sync restricted.', 'info');
   };
 
-  // Book Creation Handler
+  // Book Creation Handler (Seller / Creator only — Admin tracks existing ledgers)
   const handleCreateBook = (e: React.FormEvent) => {
     e.preventDefault();
+    if (isAdmin) {
+      triggerToast('Admins track Seller & Creator cashbooks — book creation is not available here', 'info');
+      setIsNewBookModalOpen(false);
+      return;
+    }
     if (!newBookName.trim()) {
       triggerToast('Please type a descriptive book name', 'danger');
       return;
@@ -617,7 +623,7 @@ export default function CashBookHub() {
 
     const newBook: Book = {
       id: 'book_' + Date.now(),
-      name: newBookName,
+      name: newBookName.trim(),
       emoji: newBookEmoji,
       color: newBookColor,
       createdAt: new Date().toISOString(),
@@ -749,19 +755,50 @@ export default function CashBookHub() {
     triggerToast('Transaction entry has been permanently deleted.', 'info');
   };
 
-  // Delete dynamic CashBook
+  // Delete dynamic CashBook (Cashbook reporting only — does not mutate Commerce/Payment/Escrow)
   const handleDeleteBook = (targetBookId: string) => {
-    // Remove the book from books list
     const updatedBooks = books.filter(b => b.id !== targetBookId);
-    // Remove its entries
     const updatedEntries = { ...entries };
     delete updatedEntries[targetBookId];
 
     handleSaveBooks(updatedBooks);
     handleSaveAllEntries(updatedEntries);
 
-    triggerToast('Ledger CashBook has been permanently deleted.', 'info');
+    triggerToast('Cashbook deleted successfully.', 'info');
     navigate('/admin/cashbook');
+  };
+
+  const closeDeleteModal = () => {
+    if (deleteBusy) return;
+    setDeletingBookId(null);
+    setDeleteConfirmName('');
+    setDeleteConfirmError('');
+    setDeleteBusy(false);
+  };
+
+  const confirmDeletePendingBook = () => {
+    if (deleteBusy || !deletingBookId) return;
+    const pending = books.find((b) => b.id === deletingBookId);
+    if (!pending) {
+      setDeleteConfirmError('Unable to delete Cashbook. Please try again.');
+      return;
+    }
+    if (deleteConfirmName !== pending.name) {
+      setDeleteConfirmError('Confirmation name does not match.');
+      return;
+    }
+    setDeleteBusy(true);
+    try {
+      handleDeleteBook(pending.id);
+      setDeletingBookId(null);
+      setDeleteConfirmName('');
+      setDeleteConfirmError('');
+      setDeleteBusy(false);
+    } catch {
+      setDeleteBusy(false);
+      setDeleteConfirmError('Unable to delete Cashbook. Please try again.');
+      triggerToast('Unable to delete Cashbook. Please try again.', 'danger');
+    }
   };
 
   // Synchronize orders into CashBook
@@ -1033,7 +1070,7 @@ export default function CashBookHub() {
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 border-b border-app-border pb-6">
             <div>
               <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl font-black text-app-text-primary tracking-tight">My Cashbook</h1>
+                <h1 className="text-2xl font-black text-app-text-primary tracking-tight">{isAdmin ? 'Cashbook Hub' : 'My Cashbook'}</h1>
                 <span className={`text-[10px] uppercase font-black tracking-widest px-2.5 py-1 rounded-full${
                   roleToShow === 'admin' 
                     ? 'bg-purple-100 text-purple-700' 
@@ -1082,6 +1119,7 @@ export default function CashBookHub() {
                 Sync Orders
               </button>
 
+              {!isAdmin && (
               <button 
                 onClick={() => setIsNewBookModalOpen(true)}
                 className="px-4 py-2 bg-app-accent text-app-text-primary hover:bg-[#EA580C] text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer shadow-md"
@@ -1089,6 +1127,7 @@ export default function CashBookHub() {
                 <Plus className="w-3.5 h-3.5" />
                 New Book
               </button>
+              )}
             </div>
           </div>
 
@@ -1288,66 +1327,105 @@ export default function CashBookHub() {
                           </button>
                         </div>
                       </div>
-
-                      {deletingBookId === book.id && (
-                        <div className="col-span-full bg-red-50 border border-red-200 rounded-[5px] p-5 text-xs space-y-3.5 shadow-md">
-                          <div className="flex items-center justify-between">
-                            <span className="font-extrabold text-red-700 flex items-center gap-1.5 uppercase tracking-wide">
-                              ⚠️ Danger: Confirm Deletion of "{book.name}"
-                            </span>
-                            <button 
-                              type="button" 
-                              onClick={() => { setDeletingBookId(null); setDeleteConfirmName(''); }}
-                              className="text-app-text-secondary hover:text-slate-600 font-bold border-0 bg-transparent text-sm cursor-pointer"
-                            >
-                              ✕ Cancel
-                            </button>
-                          </div>
-                          <p className="text-slate-600 font-medium leading-relaxed">
-                            Deleting this book will permanently purge its associated <strong className="font-black text-red-600">{bookEntriesList.length} transaction records</strong> and all meta history logs from local storage.
-                          </p>
-                          <div className="space-y-2">
-                            <label className="text-[10px] font-black uppercase tracking-wider text-slate-500 block">
-                              Type the book's name "<span className="font-black text-red-600">{book.name}</span>" below to authorize:
-                            </label>
-                            <div className="flex gap-3">
-                              <input 
-                                type="text"
-                                value={deleteConfirmName}
-                                onChange={(e) => {
-                                  setDeleteConfirmName(e.target.value);
-                                  setDeleteConfirmError('');
-                                }}
-                                placeholder={book.name}
-                                className="flex-1 px-3 py-2 bg-white border border-[#E5E7EB] rounded-lg text-xs outline-none focus:border-red-500 font-bold text-slate-800"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (deleteConfirmName !== book.name) {
-                                    setDeleteConfirmError('Confirmation name does not match.');
-                                    return;
-                                  }
-                                  handleDeleteBook(book.id);
-                                  setDeletingBookId(null);
-                                  setDeleteConfirmName('');
-                                }}
-                                className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-black text-[10px] uppercase rounded-lg cursor-pointer border-0 transition-all tracking-wider"
-                              >
-                                Delete Permanently
-                              </button>
-                            </div>
-                            {deleteConfirmError && (
-                              <p className="text-[10px] text-red-500 font-bold mt-1">{deleteConfirmError}</p>
-                            )}
-                          </div>
-                        </div>
-                      )}
                     </React.Fragment>
                   );
                 })}
               </div>
             )}
+
+            {deletingBookId && (() => {
+              const pendingBook = books.find((b) => b.id === deletingBookId) || null;
+              if (!pendingBook) return null;
+              const pendingEntries = entries[pendingBook.id] || [];
+              const canSubmit = deleteConfirmName === pendingBook.name && !deleteBusy;
+              return (
+                <div
+                  className="fixed inset-0 z-[220] flex items-center justify-center p-4"
+                  style={{ background: 'rgba(17,24,39,0.45)' }}
+                  onClick={closeDeleteModal}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') closeDeleteModal();
+                  }}
+                  role="presentation"
+                >
+                  <div
+                    className="bg-white rounded-2xl border border-red-200 shadow-xl w-full max-w-[480px] max-h-[calc(100vh-32px)] overflow-auto p-6"
+                    onClick={(e) => e.stopPropagation()}
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="cashbook-delete-title"
+                  >
+                    <div className="flex items-start justify-between gap-3 mb-3">
+                      <div>
+                        <h2 id="cashbook-delete-title" className="text-[15px] font-extrabold text-red-800">
+                          Delete Cashbook?
+                        </h2>
+                        <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+                          You are about to permanently delete:
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={closeDeleteModal}
+                        disabled={deleteBusy}
+                        className="text-slate-400 hover:text-slate-600 border-0 bg-transparent text-base cursor-pointer disabled:opacity-50"
+                        aria-label="Close"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-lg px-3.5 py-3 mb-3">
+                      <div className="text-sm font-extrabold text-slate-900">"{pendingBook.name}"</div>
+                      <p className="text-[11px] text-red-800 mt-1.5 leading-relaxed">
+                        This will permanently remove this Cashbook and its associated {pendingEntries.length} Cashbook
+                        records/history. This action cannot be undone. Source Orders, Payments, Escrow, and Settlements
+                        are not affected.
+                      </p>
+                    </div>
+                    <label className="text-[10.5px] font-extrabold text-red-800 block mb-1.5">
+                      To confirm, type the Cashbook name:
+                    </label>
+                    <input
+                      type="text"
+                      value={deleteConfirmName}
+                      disabled={deleteBusy}
+                      onChange={(e) => {
+                        setDeleteConfirmName(e.target.value);
+                        setDeleteConfirmError('');
+                      }}
+                      placeholder={pendingBook.name}
+                      className="w-full px-3.5 py-2.5 bg-white border border-red-300 rounded-lg text-xs outline-none focus:border-red-500 font-bold text-slate-800 mb-4 disabled:opacity-70"
+                    />
+                    {deleteConfirmError && (
+                      <p className="text-[10px] text-red-500 font-bold mb-3">{deleteConfirmError}</p>
+                    )}
+                    <div className="flex flex-wrap justify-end items-center gap-2.5 border-t border-slate-100 pt-4">
+                      <button
+                        type="button"
+                        onClick={closeDeleteModal}
+                        disabled={deleteBusy}
+                        className="shrink-0 px-[18px] h-10 min-w-[88px] bg-slate-100 text-slate-700 border-0 rounded-lg text-xs font-extrabold cursor-pointer disabled:cursor-not-allowed disabled:opacity-70"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmDeletePendingBook}
+                        disabled={!canSubmit}
+                        aria-disabled={!canSubmit}
+                        className={`shrink-0 box-border whitespace-nowrap px-[18px] h-10 min-w-[158px] border-0 rounded-lg text-[11.5px] font-extrabold tracking-wide opacity-100 disabled:opacity-100 ${
+                          deleteConfirmName === pendingBook.name || deleteBusy
+                            ? 'bg-red-600 text-white cursor-pointer hover:bg-red-700 disabled:hover:bg-red-600 disabled:cursor-wait'
+                            : 'bg-slate-200 text-slate-600 cursor-not-allowed'
+                        }`}
+                      >
+                        {deleteBusy ? 'Deleting...' : 'Delete Permanently'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
           </div>
 
@@ -1997,7 +2075,7 @@ export default function CashBookHub() {
           ========================================= */}
 
       {/* MODAL 1: NEW BOOK MODAL */}
-      {isNewBookModalOpen && (
+      {!isAdmin && isNewBookModalOpen && (
         <div className="fixed inset-0 bg-[#000435]/40 backdrop-blur-sm z-[90] flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white border border-[#CBD5E1] rounded-[5px] shadow-2xl p-6 w-full max-w-md animate-scale-up">
             

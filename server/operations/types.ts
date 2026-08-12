@@ -253,7 +253,8 @@ export type PermissionKey =
   | 'brand'
   | 'system'
   | 'analytics'
-  | 'taxonomy';
+  | 'taxonomy'
+  | 'impersonate';
 
 export type RolePermissionsMap = Record<string, Record<PermissionKey, boolean>>;
 

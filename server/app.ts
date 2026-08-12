@@ -10,6 +10,8 @@ import { authRouter } from "./authRouter";
 import { paymentsRouter } from "./payments/paymentsRouter";
 import { commercePaymentsRouter } from "./payments/commercePaymentsRouter";
 import { escrowRouter } from "./escrow/escrowRouter";
+import { adsRouter } from "./ads/adsRouter";
+import { cashbookRouter } from "./cashbook/cashbookRouter";
 import { referenceIdRouter } from "./referenceIds/referenceIdRouter";
 import { commerceRouter } from "./commerceRouter";
 import { conversationRouter } from "./messaging/conversations/conversationRouter";
@@ -140,6 +142,8 @@ export function createApp(): Express {
   app.use("/api/v1", commerceRouter);
   app.use("/api/v1", commercePaymentsRouter);
   app.use("/api/v1", escrowRouter);
+  app.use("/api/v1", adsRouter);
+  app.use("/api/v1", cashbookRouter);
   app.use("/api/v1", referenceIdRouter);
   app.use("/api/v1", operationsRouter);
   app.use("/api/v1", bookingRouter);

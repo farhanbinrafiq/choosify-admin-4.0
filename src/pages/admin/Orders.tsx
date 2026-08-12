@@ -181,6 +181,21 @@ export default function OrdersPage() {
   };
 
   const isAdmin = ['super_admin', 'admin', 'moderator', 'support_agent', 'finance_manager', 'marketing_manager'].includes(profile?.role || '');
+  // Seller Orders Hub stays operational. Admin Orders Hub defaults to oversight/read-only.
+  const isSellerHub = profile?.role === 'seller';
+
+  const [interventionMode, setInterventionMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('choosify_order_intervention_mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [interventionConfirmOpen, setInterventionConfirmOpen] = useState(false);
+
+  const showAdminInterventionControls = interventionMode && isAdmin;
+  // Mutation controls allowed when Seller hub OR admin has explicitly entered intervention mode.
+  const canMutate = isSellerHub || showAdminInterventionControls;
 
   const activeBrand = allBrands.find(b => b.id === activeBrandId);
   const sellerId = profile?.role === 'seller' ? profile.id : 'seller_001'; 
@@ -793,6 +808,7 @@ Thank you for using Choosify Commerce Network.
                         orderId={order.id} 
                         updateOrderTrackingStatus={updateOrderTrackingStatus}
                         showInlineToast={showInlineToast}
+                        readOnly={!interventionMode}
                       />
                     ))}
                   </div>
@@ -802,6 +818,22 @@ Thank you for using Choosify Commerce Network.
                     const isCOD = order.isManual || order.paymentStatus !== 'Paid';
                     const isDelivered = order.status === 'Delivered';
                     if (isCOD && isDelivered) {
+                      if (!interventionMode) {
+                        return (
+                          <div className="bg-app-bg border border-app-border rounded-xl p-5 flex items-center justify-between">
+                            <div>
+                              <h4 className="text-xs font-bold text-app-text-primary uppercase tracking-wider">COD Collected Status</h4>
+                              <p className="text-[10px] text-app-text-secondary mt-1 font-medium">
+                                Read-only until you enter Intervention Mode.
+                              </p>
+                            </div>
+                            <div className="text-[12px] font-black text-white bg-white/5 border border-app-border rounded-xl px-3 py-2">
+                              {order.codCollected ? 'Confirmed' : 'Pending'}
+                            </div>
+                          </div>
+                        );
+                      }
+
                       return (
                         <div className="bg-app-bg border border-app-border rounded-xl p-5 flex items-center justify-between">
                           <div>
@@ -832,33 +864,46 @@ Thank you for using Choosify Commerce Network.
 
                   {/* Admin Notes Section */}
                   <div className="space-y-3 pt-4 border-t border-app-border/40">
-                    <label className="text-[10px] font-bold text-app-text-secondary uppercase tracking-wider block">Add Internal Admin Note</label>
-                    <form onSubmit={(e) => {
-                      e.preventDefault();
-                      const form = e.currentTarget;
-                      const formData = new FormData(form);
-                      const note = formData.get('adminNoteText')?.toString().trim();
-                      if (note) {
-                        addAdminNote(order.id, note);
-                        form.reset();
-                        showInlineToast(`✓ Private admin ledger note appended successfully.`);
-                      }
-                    }} className="space-y-2">
-                      <textarea 
-                        name="adminNoteText"
-                        rows={3}
-                        placeholder="Type private admin notes..."
-                        className="w-full p-4 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary placeholder-slate-500 outline-none focus:border-[#EF3C23] min-h-[80px]"
-                      />
-                      <div className="flex justify-end">
-                        <button 
-                          type="submit"
-                          className="px-4 py-2 bg-[#EF3C23]/20 hover:bg-[#EF3C23]/30 text-[#EF3C23] border border-[#EF3C23]/30 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer active:scale-95 transition-all"
+                    {interventionMode ? (
+                      <>
+                        <label className="text-[10px] font-bold text-app-text-secondary uppercase tracking-wider block">
+                          Add Internal Admin Note
+                        </label>
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const form = e.currentTarget;
+                            const formData = new FormData(form);
+                            const note = formData.get('adminNoteText')?.toString().trim();
+                            if (note) {
+                              addAdminNote(order.id, note);
+                              form.reset();
+                              showInlineToast(`✓ Private admin ledger note appended successfully.`);
+                            }
+                          }}
+                          className="space-y-2"
                         >
-                          Save Note
-                        </button>
+                          <textarea 
+                            name="adminNoteText"
+                            rows={3}
+                            placeholder="Type private admin notes..."
+                            className="w-full p-4 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary placeholder-slate-500 outline-none focus:border-[#EF3C23] min-h-[80px]"
+                          />
+                          <div className="flex justify-end">
+                            <button 
+                              type="submit"
+                              className="px-4 py-2 bg-[#EF3C23]/20 hover:bg-[#EF3C23]/30 text-[#EF3C23] border border-[#EF3C23]/30 rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer active:scale-95 transition-all"
+                            >
+                              Save Note
+                            </button>
+                          </div>
+                        </form>
+                      </>
+                    ) : (
+                      <div className="text-[10px] text-app-text-secondary font-semibold">
+                        Read-only until you enter Intervention Mode.
                       </div>
-                    </form>
+                    )}
 
                     {/* Render existing adminNotes */}
                     {order.adminNotes && order.adminNotes.length > 0 && (
@@ -878,7 +923,7 @@ Thank you for using Choosify Commerce Network.
               )}
 
               {/* Secure Admin Overrides panel */}
-              {isAdmin && (
+              {isAdmin && interventionMode && (
                 <div className="bg-[#1e1512] border border-[#EF3C23]/20 rounded-2xl p-8 shadow-2xl space-y-6">
                   <div className="flex items-center gap-2 border-b border-[#EF3C23]/10 pb-4">
                     <ShieldCheck className="w-5 h-5 text-[#EF3C23]" />
@@ -1240,8 +1285,109 @@ Thank you for using Choosify Commerce Network.
         </div>
       )}
 
+      {/* Intervention Mode Banner (Admin oversight safety) */}
+      {isAdmin && interventionMode && (
+        <div className="bg-rose-950/40 border border-rose-500/30 rounded-2xl px-8 py-6 shadow-2xl flex items-center justify-between gap-6">
+          <div className="space-y-1 min-w-0">
+            <div className="text-[10px] font-extrabold uppercase tracking-widest text-rose-300">
+              ADMIN INTERVENTION MODE
+            </div>
+            <div className="text-xs text-rose-200 font-semibold">
+              You are modifying Order state manually.
+              All changes are recorded in the intervention/audit trail.
+            </div>
+            {selectedOrderId && (
+              <div className="text-[11px] font-mono font-bold text-white/90">
+                Target: {selectedOrderId}
+              </div>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              try {
+                localStorage.setItem('choosify_order_intervention_mode', 'false');
+              } catch {}
+              setInterventionMode(false);
+            }}
+            className="shrink-0 px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-extrabold uppercase tracking-widest cursor-pointer"
+          >
+            Exit Intervention Mode
+          </button>
+        </div>
+      )}
+
+      {/* Enter Intervention Mode CTA */}
+      {isAdmin && !interventionMode && (
+        <div className="bg-app-card border border-app-border rounded-2xl p-6 shadow-2xl flex items-center justify-between gap-6">
+          <div className="min-w-0">
+            <div className="text-xs font-black uppercase tracking-widest text-[#EF3C23]">
+              Admin Intervention (Override)
+            </div>
+            <div className="text-[12px] text-app-text-secondary font-semibold mt-1">
+              Normal view is read-only. Enter intervention mode to make audited overrides.
+            </div>
+          </div>
+          <button
+            onClick={() => setInterventionConfirmOpen(true)}
+            className="px-6 py-3 bg-[#EF3C23]/15 hover:bg-[#EF3C23]/25 border border-[#EF3C23]/30 rounded-xl text-[#EF3C23] text-[10px] font-black uppercase tracking-widest cursor-pointer"
+          >
+            Enter Intervention Mode
+          </button>
+        </div>
+      )}
+
+      {/* Intervention confirmation modal */}
+      {isAdmin && interventionConfirmOpen && !interventionMode && (
+        <div className="fixed inset-0 z-[700] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-app-card border border-app-border rounded-2xl shadow-[0_20px_70px_rgba(0,0,0,0.5)] max-w-xl w-full p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <h2 className="text-[15px] font-extrabold text-app-text-primary">
+                  Enter Order Intervention Mode?
+                </h2>
+                <p className="text-[12px] text-app-text-secondary font-semibold mt-2 leading-relaxed">
+                  Changes made in this mode may affect the Seller, Customer, fulfillment, payments and order lifecycle.
+                  All administrative changes will be recorded.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="p-2 rounded-lg border border-app-border hover:bg-white/5 cursor-pointer"
+                aria-label="Close modal"
+                onClick={() => setInterventionConfirmOpen(false)}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setInterventionConfirmOpen(false)}
+                className="px-4 py-2 rounded-xl border border-app-border bg-app-bg text-app-text-primary text-[12px] font-extrabold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    localStorage.setItem('choosify_order_intervention_mode', 'true');
+                  } catch {}
+                  setInterventionMode(true);
+                  setInterventionConfirmOpen(false);
+                }}
+                className="px-4 py-2 rounded-xl bg-[#EF3C23] hover:bg-orange-500 text-white text-[12px] font-extrabold cursor-pointer"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Dynamic Floating Sticky Bulk Actions Control Tray */}
-      {isAdmin && selectedOrders.length > 0 && (
+      {canMutate && selectedOrders.length > 0 && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-[#1e1e2e]/95 border border-[#EF3C23]/40 px-6 py-4 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.7)] flex items-center gap-6 animate-in slide-in-from-bottom duration-300">
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#EF3C23] animate-ping" />
@@ -1896,7 +2042,7 @@ Thank you for using Choosify Commerce Network.
 
                     {/* Operational Action Buttons */}
                     <div className="flex flex-wrap gap-2">
-                      {currentMainTab === 'console' && (
+                      {currentMainTab === 'console' && canMutate && (
                         <>
                           {order.status === 'Pending' && (
                             <>
@@ -2010,7 +2156,13 @@ Thank you for using Choosify Commerce Network.
                           onClick={() => setSelectedOrderId(order.id)}
                           className="flex items-center gap-1.5 px-3.5 py-2.5 bg-gradient-to-r from-[#EF3C23]/20 to-orange-500/20 text-[#EF3C23] border border-[#EF3C23]/25 hover:border-[#EF3C23]/45 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer"
                         >
-                          Fulfillment
+                          {order.status === 'Delivered'
+                            ? order.deliveryPartner
+                              ? 'Courier Fulfilled'
+                              : 'Seller Fulfilled'
+                            : order.deliveryPartner
+                              ? 'Fulfillment In Progress'
+                              : 'Not Configured'}
                         </button>
                       )}
 
@@ -2678,7 +2830,7 @@ Thank you for using Choosify Commerce Network.
   );
 }
 
-function SubOrderTrackerRow({ subOrder, orderId, updateOrderTrackingStatus, showInlineToast }: {
+function SubOrderTrackerRow({ subOrder, orderId, updateOrderTrackingStatus, showInlineToast, readOnly }: {
   subOrder: {
     sellerId: string;
     sellerName: string;
@@ -2687,6 +2839,7 @@ function SubOrderTrackerRow({ subOrder, orderId, updateOrderTrackingStatus, show
   orderId: string;
   updateOrderTrackingStatus: any;
   showInlineToast: any;
+  readOnly?: boolean;
   key?: any;
 }) {
   const [selectedStatus, setSelectedStatus] = useState(subOrder.trackingStatus);
@@ -2718,6 +2871,7 @@ function SubOrderTrackerRow({ subOrder, orderId, updateOrderTrackingStatus, show
       <div className="flex items-center gap-2">
         <select 
           value={selectedStatus}
+          disabled={readOnly}
           onChange={(e) => setSelectedStatus(e.target.value as any)}
           className="px-3 py-1.5 bg-app-card border border-app-border rounded-xl text-xs text-app-text-primary outline-none focus:border-[#EF3C23]"
         >
@@ -2725,15 +2879,17 @@ function SubOrderTrackerRow({ subOrder, orderId, updateOrderTrackingStatus, show
             <option key={val} value={val}>{val}</option>
           ))}
         </select>
-        <button 
-          onClick={() => {
-            updateOrderTrackingStatus(orderId, subOrder.sellerId, selectedStatus);
-            showInlineToast(`✓ Updated ${subOrder.sellerName} tracking to: ${selectedStatus}`);
-          }}
-          className="px-3.5 py-1.5 bg-[#EF3C23] text-white rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-orange-600 transition-all active:scale-95"
-        >
-          Update
-        </button>
+        {!readOnly && (
+          <button 
+            onClick={() => {
+              updateOrderTrackingStatus(orderId, subOrder.sellerId, selectedStatus);
+              showInlineToast(`✓ Updated ${subOrder.sellerName} tracking to: ${selectedStatus}`);
+            }}
+            className="px-3.5 py-1.5 bg-[#EF3C23] text-white rounded-xl text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-orange-600 transition-all active:scale-95"
+          >
+            Update
+          </button>
+        )}
       </div>
     </div>
   );

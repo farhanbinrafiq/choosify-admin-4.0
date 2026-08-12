@@ -256,6 +256,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
     system: true,
     analytics: true,
     taxonomy: true,
+    impersonate: true,
   },
   admin: {
     content: true,
@@ -265,6 +266,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
     system: true,
     analytics: true,
     taxonomy: true,
+    impersonate: true,
   },
   // Aligned with src/lib/rbac.ts — seller/creator CMS mirror menus need these gates open
   seller: {
@@ -275,6 +277,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
     system: true,
     analytics: true,
     taxonomy: false,
+    impersonate: false,
   },
   creator: {
     content: true,
@@ -284,6 +287,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
     system: true,
     analytics: true,
     taxonomy: false,
+    impersonate: false,
   },
   moderator: {
     content: true,
@@ -293,6 +297,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
     system: false,
     analytics: true,
     taxonomy: true,
+    impersonate: false,
   },
   finance_manager: {
     content: false,
@@ -302,6 +307,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
     system: false,
     analytics: true,
     taxonomy: false,
+    impersonate: false,
   },
   support_agent: {
     content: false,
@@ -311,6 +317,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
     system: false,
     analytics: true,
     taxonomy: false,
+    impersonate: false,
   },
   marketing_manager: {
     content: true,
@@ -320,6 +327,7 @@ export const DEFAULT_ROLE_PERMISSIONS: RolePermissionsMap = {
     system: false,
     analytics: true,
     taxonomy: false,
+    impersonate: false,
   },
 };
 

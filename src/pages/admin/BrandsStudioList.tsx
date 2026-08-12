@@ -30,6 +30,7 @@ interface BrandStudioItem {
   initials: string;
   color: string;
   lastUpdated: string;
+  brandReferenceId?: string;
 }
 
 const BRAND_COLORS = [
@@ -49,6 +50,7 @@ type ApiCatalogBrand = {
   verifiedStatus?: boolean;
   marketplaceAccess?: boolean;
   updatedAt?: string;
+  brandReferenceId?: string;
 };
 
 function mapCatalogBrandToItem(b: ApiCatalogBrand): BrandStudioItem {
@@ -65,6 +67,7 @@ function mapCatalogBrandToItem(b: ApiCatalogBrand): BrandStudioItem {
     initials,
     color,
     lastUpdated: b.updatedAt ? new Date(b.updatedAt).toLocaleDateString() : "—",
+    brandReferenceId: b.brandReferenceId,
   };
 }
 
@@ -218,8 +221,13 @@ export default function BrandsStudioList() {
   const ownedBrandIds = sellerBrands.filter(r => r.seller_user_id === profile?.id).map(r => r.brand_id);
 
   const filteredBrands = brands.filter((brand) => {
-    const matchesSearch = brand.brandName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          brand.category.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase().trim();
+    const matchesSearch =
+      !q ||
+      brand.brandName.toLowerCase().includes(q) ||
+      brand.category.toLowerCase().includes(q) ||
+      (brand.brandReferenceId || '').toLowerCase().includes(q) ||
+      (brand.brandReferenceId || '').replace(/^br-/i, '').replace(/^0+/, '').includes(q.replace(/^br-/i, '').replace(/^0+/, ''));
     const matchesStatus = statusFilter === "All" || brand.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -241,7 +249,13 @@ export default function BrandsStudioList() {
               </Link>
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
             </div>
-            <div className="text-[10px] text-app-text-secondary">{brand.category}</div>
+            <div className="text-[10px] text-app-text-secondary flex items-center gap-1.5">
+              {brand.brandReferenceId ? (
+                <span className="font-mono font-bold text-app-text-primary">{brand.brandReferenceId}</span>
+              ) : null}
+              {brand.brandReferenceId ? <span>·</span> : null}
+              <span>{brand.category}</span>
+            </div>
           </div>
         </div>
       ),

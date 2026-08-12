@@ -37,6 +37,10 @@ export default function ConsumerDashboard() {
           <h1 className="text-2xl font-bold text-app-text-primary tracking-tight">
             Assalamu Alaikum{profile?.displayName ? `, ${profile.displayName}` : ''}!
           </h1>
+          <p className="text-sm font-semibold text-app-text-primary">
+            Choosify User ID{' '}
+            <span className="font-mono tracking-wide">{profile?.choosifyUserId || '—'}</span>
+          </p>
           <p className="text-sm text-app-text-secondary">
             Explore your handpicked deals and order status today.
           </p>
