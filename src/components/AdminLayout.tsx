@@ -67,6 +67,8 @@ import { ResizableSidebar } from './Layout/ResizableSidebar';
 import { useLayoutPreferences } from '../hooks/useLayoutPreferences';
 import { ChoosifyLogo } from './common/ChoosifyLogo';
 import { UserProfileDropdown } from './account/UserProfileDropdown';
+import { GlobalDashboardSearch } from './common/GlobalDashboardSearch';
+import { useImpersonation } from '../contexts/ImpersonationContext';
 
 interface SidebarItem {
   label: string;
@@ -129,7 +131,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Finance', icon: BarChart3, path: '/admin/analytics' },
     { label: 'Fee & Charges Engine', icon: Percent, path: '/admin/fee-charges', badge: 'NEW' },
     { label: 'Payouts', icon: CircleDollarSign, path: '/admin/payouts' },
-    { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'PRIVATE' },
+    { label: 'Cashbook Hub', icon: Wallet, path: '/admin/cashbook', badge: 'PRIVATE' },
 
     { label: 'Super Admin Core', type: 'label' },
     { label: 'Admin Management', icon: UserCheck, path: '/admin/admins' },
@@ -188,7 +190,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages' },
 
     { label: 'Finance', type: 'label' },
-    { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
+    { label: 'Cashbook Hub', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
 
     { label: 'Website', type: 'label' },
     { label: 'Website Manager', icon: LayoutTemplate, path: '/admin/website-cms', badge: 'NEW' },
@@ -203,7 +205,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Brand Management Studio', icon: Building2, path: '/admin/brand-studio' },
     { label: 'Seller Profile', icon: Store, path: '/admin/brand-profile' },
     { label: 'Orders Hub', icon: ListOrdered, path: '/admin/orders', badge: 4 },
-    { label: 'Seller Customers', icon: Users, path: '/admin/customers' },
+    { label: 'My Customers', icon: Users, path: '/admin/customers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
     { label: 'Promo Codes & Vouchers', icon: Ticket, path: '/admin/coupons' },
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },
@@ -240,6 +242,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
   consumer: [
     { label: 'My Shopping', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+    { label: 'My Profile', icon: UserCircle, path: '/admin/consumer-profile' },
     { label: 'My Orders', icon: ListOrdered, path: '/admin/orders' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
   ],
@@ -287,6 +290,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile, logout, switchRole, activeBrandId, setActiveBrandId, sellerBrands, allBrands, requestNewBrand } = useAuth();
   const { canAccessPath } = useRbac();
+  const { state: impersonation, exitImpersonation } = useImpersonation();
   const { cmsData } = useCMS();
   const location = useLocation();
   const navigate = useNavigate();
@@ -310,147 +314,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isSidebarOpen]);
 
-  // Global Search State & Logic
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearchFocused, setIsSearchFocused] = useState(false);
-  const searchContainerRef = React.useRef<HTMLDivElement>(null);
-
-  const { orders, customers } = useOrders();
-  let profiles: any[] = [];
-  try {
-    const brandCtx = useBrandProfiles();
-    if (brandCtx && brandCtx.profiles) {
-      profiles = brandCtx.profiles;
-    }
-  } catch (e) {
-    // fallback context safety
-  }
-
-  const searchResults = React.useMemo(() => {
-    if (searchQuery.trim().length < 3) return [];
-    
-    const query = searchQuery.toLowerCase().trim();
-    const results: SearchResultItem[] = [];
-
-    // 1. Orders
-    const matchedOrders = (orders || []).filter(o => 
-      o.id.toLowerCase().includes(query) || 
-      (o.invoice_id && o.invoice_id.toLowerCase().includes(query)) ||
-      (o.product?.name && o.product.name.toLowerCase().includes(query))
-    );
-    matchedOrders.forEach(o => {
-      results.push({
-        id: o.id,
-        title: `Order ${o.id}`,
-        subtitle: `${o.product?.name || 'Items'} - BDT ${o.earnings?.totalRevenue || 0}`,
-        type: 'Order',
-        path: `/upe/order/${o.id}`
-      });
-    });
-
-    // 2. Brands
-    const staticBrands = [
-      { id: 'b1', name: 'Samsung Mobile Bangladesh', category: 'Electronics' },
-      { id: 'b2', name: 'Aarong Saree & crafts', category: 'Fashion' },
-      { id: 'b3', name: 'Yellow clothing', category: 'Fashion' },
-      { id: 'b4', name: 'Apex Footwear', category: 'Accessories' },
-      { id: 'b5', name: 'Bata Bangladesh', category: 'Accessories' }
-    ];
-    const sourceBrands = profiles && profiles.length > 0 ? profiles : staticBrands;
-    const matchedBrands = sourceBrands.filter((b: any) => 
-      b.name.toLowerCase().includes(query) || 
-      (b.category && b.category.toLowerCase().includes(query))
-    );
-    matchedBrands.forEach((b: any) => {
-      results.push({
-        id: b.id,
-        title: b.name,
-        subtitle: `Brand / ${b.category || 'Retail'}`,
-        type: 'Brand',
-        path: `/upe/brand/${b.id}`
-      });
-    });
-
-    // 3. Sellers
-    const derivedSellers = new Map<string, { id: string; name: string; info?: string }>();
-    (orders || []).forEach(o => {
-      if (o.product?.sellerId && o.product?.sellerName) {
-        derivedSellers.set(o.product.sellerId, { id: o.product.sellerId, name: o.product.sellerName, info: o.product.brand });
-      }
-    });
-    const staticSellers = [
-      { id: 's1', name: 'Nadia Akter', info: 'Daraz Seller' },
-      { id: 's2', name: 'Rifat Hasan', info: 'Verified Influencer' },
-      { id: 's3', name: 'StyleCouture BD', info: 'Premium Boutique' }
-    ];
-    staticSellers.forEach(s => {
-      derivedSellers.set(s.id, s);
-    });
-    const matchedSellers = Array.from(derivedSellers.values()).filter(s => 
-      s.name.toLowerCase().includes(query)
-    );
-    matchedSellers.forEach(s => {
-      results.push({
-        id: s.id,
-        title: s.name,
-        subtitle: `Seller / ${s.info || 'Merchant'}`,
-        type: 'Seller',
-        path: `/upe/seller/${s.id}`
-      });
-    });
-
-    // 4. Consumers
-    const derivedConsumers = new Map<string, { id: string; name: string; email: string }>();
-    (customers || []).forEach(c => {
-      derivedConsumers.set(c.id, { id: c.id, name: c.name, email: c.email });
-    });
-    const staticConsumers = [
-      { id: 'c1', name: 'Mehedi Rahman', email: 'mehedi@gmail.com' },
-      { id: 'c2', name: 'Nusrat Jahan', email: 'nusrat@outlook.com' },
-      { id: 'c3', name: 'Farhana Islam', email: 'farhana@yahoo.com' }
-    ];
-    staticConsumers.forEach(c => {
-      derivedConsumers.set(c.id, c);
-    });
-    const matchedConsumers = Array.from(derivedConsumers.values()).filter(c => 
-      c.name.toLowerCase().includes(query) || c.email.toLowerCase().includes(query)
-    );
-    matchedConsumers.forEach(c => {
-      results.push({
-        id: c.id,
-        title: c.name,
-        subtitle: c.email,
-        type: 'Consumer',
-        path: `/upe/consumer/${c.id}`
-      });
-    });
-
-    return results;
-  }, [searchQuery, orders, customers, profiles]);
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (searchContainerRef.current && !searchContainerRef.current.contains(event.target as Node)) {
-        setIsSearchFocused(false);
-      }
-    };
-
-    const handleEscapeKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsSearchFocused(false);
-        if (searchContainerRef.current) {
-          (searchContainerRef.current.querySelector('input') as HTMLInputElement)?.blur();
-        }
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscapeKey);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscapeKey);
-    };
-  }, []);
+  // Global search is now handled by <GlobalDashboardSearch /> (role-aware server-side).
 
   const toggleMenu = (label: string) => {
     setExpandedMenus(prev => ({
@@ -570,6 +434,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         '/admin/products',
         '/products',
         '/seller/products',
+        '/seller/', // UniversalProfileShell self / inspect routes (/seller/:id)
+        '/upe/seller/',
         '/dashboard/content-studio/products',
         '/dashboard/content-studio/brands',
         '/admin/brand-profiles',
@@ -593,7 +459,11 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         '/admin/logistics/labels'
       ];
       
-      const isAllowed = allowedSellers.some(p => path === p || path.startsWith(p + '/')) || (path.startsWith('/admin/sellers/') && path !== '/admin/sellers');
+      const isAllowed =
+        allowedSellers.some((p) =>
+          p.endsWith('/') ? path.startsWith(p) : path === p || path.startsWith(`${p}/`),
+        ) ||
+        (path.startsWith('/admin/sellers/') && path !== '/admin/sellers');
       if (!isAllowed) {
         navigate('/admin/dashboard', { replace: true });
       }
@@ -606,7 +476,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         '/admin/creator-studio',
         '/admin/creator-profile',
         '/admin/creators-hub',
-        '/creator/1',
+        '/creator/', // UniversalProfileShell self / inspect routes (/creator/:id)
+        '/upe/creator/',
         '/admin/products',
         '/products',
         '/seller/products',
@@ -620,7 +491,9 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
         '/admin/settings',
         '/admin/cashbook'
       ];
-      const isAllowed = allowedCreators.some(p => path === p || path.startsWith(p + '/'));
+      const isAllowed = allowedCreators.some((p) =>
+        p.endsWith('/') ? path.startsWith(p) : path === p || path.startsWith(`${p}/`),
+      );
       if (!isAllowed) {
         navigate('/admin/dashboard', { replace: true });
       }
@@ -957,84 +830,26 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden h-full">
-        <header className="glass-header h-[64px] px-8 flex items-center justify-between shrink-0 mb-2 sticky top-0 z-40">
+        <header className="glass-header h-[64px] px-8 flex items-center gap-3 sm:gap-4 shrink-0 mb-2 sticky top-0 z-40">
           <button
-            className="sm:hidden flex items-center justify-center w-9 h-9 rounded-lg glass-on-navy text-white hover:text-app-accent transition-colors mr-3 flex-shrink-0"
+            className="sm:hidden flex items-center justify-center w-9 h-9 rounded-lg glass-on-navy text-white hover:text-app-accent transition-colors flex-shrink-0"
             onClick={() => setIsSidebarOpen(true)}
             aria-label="Open navigation menu"
           >
             <Menu className="w-4 h-4" />
           </button>
 
-          <div className="flex flex-col min-w-0">
+          <div className="flex flex-col min-w-0 shrink-0 max-w-[min(280px,28vw)]">
             <h1 className="text-[15px] font-extrabold text-white leading-tight truncate">{currentPageTitle}</h1>
             <p className="text-[11px] text-white/50 truncate">{currentPageSubtitle}</p>
           </div>
 
-          {/* MIDDLE GLOBAL SEARCH ENGINE */}
-          <div className="relative mx-4 flex-1 max-w-sm" ref={searchContainerRef}>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Search className="h-4 w-4 text-white/50" />
-              </div>
-              <input
-                type="text"
-                placeholder="Search catalog, brands, sellers..."
-                value={searchQuery}
-                onFocus={() => setIsSearchFocused(true)}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setIsSearchFocused(true);
-                }}
-                className="glass-on-navy pl-9 rounded-lg px-3 py-2 text-[12px] w-full max-w-xs placeholder-white/45 outline-none focus:border-white/30 text-white transition-colors"
-              />
-            </div>
-
-            {/* SEARCH DROPDOWN */}
-            {isSearchFocused && searchQuery.trim().length >= 3 && (
-              <div className="absolute left-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-gray-100 z-50 max-h-80 overflow-y-auto py-2 divide-y divide-gray-50 text-slate-700 animate-in fade-in slide-in-from-top-1 duration-150">
-                {searchResults.length > 0 ? (
-                  searchResults.map((item) => (
-                    <div
-                      key={item.type + '-' + item.id}
-                      onClick={() => {
-                        navigate(item.path);
-                        setSearchQuery('');
-                        setIsSearchFocused(false);
-                      }}
-                      className="px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors flex items-center justify-between group"
-                    >
-                      <div className="min-w-0 pr-2">
-                        <div className="text-[12px] font-bold text-slate-950 truncate group-hover:text-orange-500 transition-colors">
-                          {item.title}
-                        </div>
-                        {item.subtitle && (
-                          <div className="text-[10px] text-slate-400 truncate mt-0.5">
-                            {item.subtitle}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Badge tags */}
-                      <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded shrink-0 ${
-                        item.type === 'Order' ? 'bg-orange-100 text-orange-600 border border-orange-200/50' :
-                        item.type === 'Brand' ? 'bg-indigo-100 text-indigo-600 border border-indigo-200/50' :
-                        item.type === 'Seller' ? 'bg-emerald-100 text-emerald-600 border border-emerald-200/50' :
-                        'bg-blue-100 text-blue-600 border border-blue-200/50'
-                      }`}>
-                        {item.type}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <div className="px-4 py-5 text-center text-[11px] text-gray-400 font-medium">
-                    No matching results found
-                  </div>
-                )}
-              </div>
-            )}
+          {/* Flexible center search — consumes all space until bell/avatar (storefront navbar-fluid pattern) */}
+          <div className="relative flex-1 min-w-0 px-1 sm:px-2">
+            <GlobalDashboardSearch variant="header" className="w-full" ready={Boolean(profile?.role)} />
           </div>
-          <div className="flex items-center gap-4">
+
+          <div className="flex items-center gap-3 sm:gap-4 shrink-0">
              <button
                onClick={() => triggerOpenInbox()}
                className="w-8 h-8 rounded-full glass-on-navy flex items-center justify-center hover:bg-white/20 active:scale-95 cursor-pointer relative shrink-0 transition-all"
@@ -1058,6 +873,27 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
              <UserProfileDropdown variant="header" />
           </div>
         </header>
+
+        {impersonation.active && (
+          <div className="mb-4 px-6 py-3 rounded-[4px] border border-rose-300/40 bg-rose-600/10 text-rose-200 flex items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="text-[10px] font-extrabold uppercase tracking-widest text-rose-200">IMPERSONATION MODE</div>
+              <div className="text-[12px] font-bold text-white/90 truncate mt-1">
+                Viewing as: {profile?.displayName || 'User'} · {profile?.role || '—'} · {profile?.choosifyUserId || '—'}
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                const ok = window.confirm('Exit impersonation and return to the original admin session?');
+                if (!ok) return;
+                await exitImpersonation();
+              }}
+              className="shrink-0 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold"
+            >
+              Exit Impersonation
+            </button>
+          </div>
+        )}
 
         <div className="flex-1 overflow-y-auto px-8 py-6 custom-scrollbar scroll-smooth">
           <motion.div

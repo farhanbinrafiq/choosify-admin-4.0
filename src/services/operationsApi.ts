@@ -212,7 +212,8 @@ export type PermissionKey =
   | 'brand'
   | 'system'
   | 'analytics'
-  | 'taxonomy';
+  | 'taxonomy'
+  | 'impersonate';
 
 export interface OpsShipment {
   id: string;

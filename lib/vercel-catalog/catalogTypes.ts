@@ -97,6 +97,8 @@ export interface CatalogBrand {
   id: string;
   slug: string;
   name: string;
+  /** Permanent Choosify Brand Reference ID (BR-#####). Display/search only. */
+  brandReferenceId?: string;
   category: string;
   description: string;
   logo: string;
@@ -132,6 +134,10 @@ export interface CatalogProduct {
   id: string;
   slug: string;
   title: string;
+  /** Permanent Choosify Product Reference ID (PR-#####). Not SKU. */
+  productReferenceId?: string;
+  /** Optional seller/catalog SKU — coexists with productReferenceId. */
+  sku?: string;
   description: string;
   brandId: string;
   brandName: string;

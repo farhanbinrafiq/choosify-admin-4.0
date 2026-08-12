@@ -69,6 +69,9 @@ export interface ProfileLayoutProps {
 
   // Tab Content Children
   children?: React.ReactNode;
+
+  /** Light = cms-mirror / Seller Profile workspace chrome; dark = legacy UPE shell */
+  variant?: import('./profileTheme').ProfileShellVariant;
 }
 
 export default function ProfileLayout({
@@ -107,9 +110,10 @@ export default function ProfileLayout({
   fab,
   toast,
   children,
+  variant = 'dark',
 }: ProfileLayoutProps) {
   return (
-    <div className="space-y-6 pb-12 text-app-text-primary font-sans transition-all animate-in fade-in duration-300">
+    <div className={`space-y-6 pb-12 font-sans transition-all animate-in fade-in duration-300 ${variant === 'light' ? 'text-[#111827]' : 'text-app-text-primary'}`}>
       {/* Toast Notification */}
       {toast && (
         <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-app-card text-app-text-primary shadow-2xl px-4 py-2.5 rounded-[4px] border border-app-border animate-slide-in">
@@ -126,6 +130,7 @@ export default function ProfileLayout({
         actions={headerActions}
         backLink={backLink}
         backLinkLabel={backLinkLabel}
+        variant={variant}
       />
 
       {/* Main Layout Grid */}
@@ -145,6 +150,7 @@ export default function ProfileLayout({
             fields={identityFields}
             onPhoneClick={onPhoneClick}
             onMessageClick={onMessageClick}
+            variant={variant}
           />
 
           {tagsTitle && tags && (
@@ -171,7 +177,13 @@ export default function ProfileLayout({
           
           {/* SEARCH & FILTERS BAR */}
           {onSearchChange && (
-            <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div
+              className={
+                variant === 'light'
+                  ? 'bg-white border border-[#E8EDF2] rounded-lg p-3 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4'
+                  : 'bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4'
+              }
+            >
               <div className="relative w-full sm:w-80 group">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-app-text-secondary group-focus-within:text-app-accent-light" />
                 <input 
@@ -201,17 +213,10 @@ export default function ProfileLayout({
           )}
 
           {/* Metric Cards Row */}
-          {kpis && kpis.length > 0 && (
-            <KPISection kpis={kpis} />
-          )}
+          {kpis && kpis.length > 0 && <KPISection kpis={kpis} variant={variant} columns={kpis.length >= 4 ? 4 : 3} />}
 
-          {/* Tab switches */}
           {tabs && tabs.length > 0 && (
-            <ProfileTabs
-              tabs={tabs}
-              activeTab={activeTab}
-              onChange={onTabChange}
-            />
+            <ProfileTabs tabs={tabs} activeTab={activeTab} onChange={onTabChange} variant={variant} />
           )}
 
           {/* Render Active Tab Children */}

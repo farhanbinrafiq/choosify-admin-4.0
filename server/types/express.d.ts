@@ -10,6 +10,12 @@ declare global {
       userId?: string;
       userRole?: UserRole;
       permissions?: readonly Permission[];
+      // Impersonation (server-authoritative) metadata.
+      // When present, `userId/userRole` represent the effective actor (target account).
+      // `realActor*` represent the admin/super_admin that initiated impersonation.
+      impersonationSessionId?: string;
+      realActorUserId?: string;
+      realActorRole?: string;
     }
 
     interface Locals {

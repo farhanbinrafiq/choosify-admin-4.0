@@ -34,15 +34,33 @@ export function getAvatarUrl(profile: Pick<UserProfile, 'displayName' | 'email' 
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(label)}&background=FF5B00&color=ffffff&bold=true&size=128`;
 }
 
-/** Best-effort profile destination from the current session (no new API). */
-export function getMyProfilePath(profile: UserProfile): string {
-  if (!profile.id) return '/admin/account/profile';
+/**
+ * Canonical own-profile destination for the authenticated effective session user.
+ *
+ * Live self-profiles use the approved cms-mirror profile chrome (Image 1):
+ * Seller → /admin/brand-profile, Creator → /admin/creator-profile,
+ * Admin → /admin/profile, Consumer → /admin/consumer-profile.
+ *
+ * React UnifiedProfileShell (/seller|:id, /upe/…) remains Admin inspection / legacy only —
+ * not Avatar → My Profile or sidebar self-profile entry points.
+ */
+export function getMyProfilePath(profile: Pick<UserProfile, 'id' | 'role'>): string {
   switch (profile.role) {
     case 'seller':
-      return `/seller/${profile.id}`;
+      return '/admin/brand-profile';
     case 'creator':
-      return `/creator/${profile.id}`;
+      return '/admin/creator-profile';
+    case 'consumer':
+      return '/admin/consumer-profile';
     default:
-      return '/admin/account/profile';
+      return '/admin/profile';
   }
+}
+
+/** @deprecated Prefer getMyProfilePath — kept as an explicit alias for call sites. */
+export function resolveOwnProfileRoute(
+  profile: Pick<UserProfile, 'id' | 'role'> | null | undefined,
+): string {
+  if (!profile) return '/admin/profile';
+  return getMyProfilePath(profile);
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRight, ArrowLeft } from 'lucide-react';
+import { profileShellClasses, type ProfileShellVariant } from './profileTheme';
 
 export interface Breadcrumb {
   label: string;
@@ -21,6 +22,7 @@ interface ProfileHeaderProps {
   actions?: HeaderAction[];
   backLink?: string;
   backLinkLabel?: string;
+  variant?: ProfileShellVariant;
 }
 
 export default function ProfileHeader({
@@ -30,27 +32,31 @@ export default function ProfileHeader({
   actions,
   backLink,
   backLinkLabel = 'All Records',
+  variant = 'dark',
 }: ProfileHeaderProps) {
+  const t = profileShellClasses(variant);
   return (
     <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 font-sans">
       <div className="space-y-1">
-        <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-app-text-secondary">
-          <Link to="/admin/dashboard" className="hover:text-app-accent transition-colors">Dashboard</Link>
+        <div className={`flex items-center gap-1.5 ${t.breadcrumb}`}>
+          <Link to="/admin/dashboard" className="hover:text-[#EF3C23] transition-colors">
+            Dashboard
+          </Link>
           {breadcrumbs.map((bc, idx) => (
             <React.Fragment key={idx}>
-              <ChevronRight className="w-3.5 h-3.5 text-app-text-secondary/30" />
+              <ChevronRight className="w-3.5 h-3.5 opacity-30" />
               {bc.path ? (
-                <Link to={bc.path} className="hover:text-app-accent transition-colors">
+                <Link to={bc.path} className="hover:text-[#EF3C23] transition-colors">
                   {bc.label}
                 </Link>
               ) : (
-                <span className="text-app-accent-light">{bc.label}</span>
+                <span className={t.breadcrumbActive}>{bc.label}</span>
               )}
             </React.Fragment>
           ))}
         </div>
-        <h1 className="text-xl font-bold text-white tracking-tight">{title}</h1>
-        <p className="text-app-text-secondary text-[12px]">{subtitle}</p>
+        <h1 className={t.headerTitle}>{title}</h1>
+        <p className={t.headerSubtitle}>{subtitle}</p>
       </div>
 
       {/* Action Controls */}

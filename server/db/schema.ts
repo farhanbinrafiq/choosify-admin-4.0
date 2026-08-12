@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, pgEnum } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, pgEnum, integer, bigint } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('user_role', [
   'user',
@@ -20,8 +20,24 @@ export const users = pgTable('users', {
   displayName: varchar('display_name', { length: 120 }).notNull(),
   role: roleEnum('role').notNull().default('user'),
   emailVerified: boolean('email_verified').notNull().default(false),
+  /** Permanent human-readable Choosify User ID (CF-00001…). Never reuse. */
+  choosifyUserId: varchar('choosify_user_id', { length: 32 }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+/** Singleton atomic counter for Choosify User ID allocation (id must remain 1). */
+export const choosifyUserIdCounters = pgTable('choosify_user_id_counters', {
+  id: integer('id').primaryKey(),
+  nextValue: bigint('next_value', { mode: 'number' }).notNull().default(1),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Per-entity-type counters for Platform Reference IDs (BR/PR/CT/OR/…). CF uses choosifyUserIdCounters. */
+export const choosifyReferenceIdCounters = pgTable('choosify_reference_id_counters', {
+  entityType: varchar('entity_type', { length: 32 }).primaryKey(),
+  nextValue: bigint('next_value', { mode: 'number' }).notNull().default(1),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const sellerProfiles = pgTable('seller_profiles', {

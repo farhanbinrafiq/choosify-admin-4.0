@@ -18,6 +18,7 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   customers: '/admin/consumers',
   creators: '/admin/creator-studio',
   creatorProfile: '/admin/creator-profile',
+  consumerProfile: '/admin/consumer-profile',
   creatorEconomy: '/admin/creator-hub',
   brands: '/admin/brand-studio',
   brandProfile: '/admin/brand-profile',
@@ -38,6 +39,8 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   messages: '/admin/messages',
   notifications: '/admin/notifications',
   finance: '/admin/analytics',
+  myEarnings: '/admin/my-earnings',
+  feesAdjustments: '/admin/fees-adjustments',
   feeCharges: '/admin/fee-charges',
   payouts: '/admin/payouts',
   myCashbook: '/admin/cashbook',
@@ -49,6 +52,7 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   auditLogs: '/admin/audit-logs',
   websiteCmsStudio: '/admin/website-cms',
   settings: '/admin/settings',
+  adminProfile: '/admin/profile',
 };
 
 export const PATH_TO_PAGE_KEY: Record<string, string> = Object.fromEntries(
@@ -70,6 +74,7 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/products')) return 'products';
   if (pathname.startsWith('/admin/orders')) return 'orders';
   if (pathname.startsWith('/admin/creator-profile')) return 'creatorProfile';
+  if (pathname.startsWith('/admin/consumer-profile')) return 'consumerProfile';
   if (pathname.startsWith('/admin/creator-studio')) return 'creators';
   if (pathname.startsWith('/admin/creators-hub') || pathname.startsWith('/admin/creators')) return 'creators';
   if (pathname.startsWith('/admin/creator-hub') || pathname.startsWith('/admin/creator-earnings')) return 'creatorEconomy';
@@ -79,11 +84,15 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/reviews')) return 'reviews';
   if (pathname.startsWith('/admin/messages')) return 'messages';
   if (pathname.startsWith('/admin/analytics')) return 'finance';
+  if (pathname.startsWith('/admin/my-earnings')) return 'myEarnings';
+  if (pathname.startsWith('/admin/fees-adjustments')) return 'feesAdjustments';
   if (pathname.startsWith('/admin/cashbook')) return 'myCashbook';
   if (pathname.startsWith('/admin/settings')) return 'settings';
+  if (pathname.startsWith('/admin/profile') || pathname.startsWith('/admin/account/profile')) return 'adminProfile';
   if (pathname.startsWith('/admin/recommendations')) return 'contentStudio';
   if (pathname.startsWith('/admin/guides')) return 'contentStudio';
   if (pathname.startsWith('/admin/categories')) return 'categories';
+  if (pathname.startsWith('/admin/ads-studio')) return 'adsDealsStudio';
   if (pathname.startsWith('/admin/ads-deals-studio')) return 'adsDealsStudio';
   if (pathname.startsWith('/admin/logistics/couriers')) return 'courierProviders';
   if (pathname.startsWith('/admin/logistics/shipments') || pathname.startsWith('/admin/logistics/tracking') || pathname.startsWith('/admin/logistics/labels')) {
@@ -125,6 +134,8 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
     'brands',
     'brandProfile',
     'products',
+    'contentStudio',
+    'adsDealsStudio',
     'orders',
     'sellerCustomers',
     'returnsRefunds',
@@ -133,6 +144,9 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
     'notifications',
     'reviews',
     'finance',
+    'myEarnings',
+    'feesAdjustments',
+    'payouts',
     'courierProviders',
     'shipmentOperations',
     'courierAnalytics',
@@ -142,20 +156,26 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
   creator: [
     'dashboard',
     'creators', // Creator Studio → live storefront profile editor (not guides)
-    'creatorProfile', // Creator Profile (account / verification / listings / earnings)
+    'creatorProfile', // Creator Profile (account / verification / listings)
     'contentStudio',
+    'adsDealsStudio',
     'creatorEconomy',
+    'sellerCustomers',
     'messages',
     'notifications',
     'reviews',
     'finance',
+    'myEarnings',
+    'feesAdjustments',
+    'payouts',
     'myCashbook',
     'settings',
   ],
-  moderator: ['dashboard', 'moderationCenter', 'reviews', 'messages'],
-  finance_manager: ['dashboard', 'payouts', 'feeCharges', 'finance'],
-  support_agent: ['dashboard', 'messages', 'reviews'],
-  marketing_manager: ['dashboard', 'adsDealsStudio', 'promoCodes', 'websiteCmsStudio'],
+  consumer: ['dashboard', 'orders', 'consumerProfile', 'settings'],
+  moderator: ['dashboard', 'moderationCenter', 'reviews', 'messages', 'adminProfile'],
+  finance_manager: ['dashboard', 'payouts', 'feeCharges', 'finance', 'adminProfile'],
+  support_agent: ['dashboard', 'messages', 'reviews', 'adminProfile'],
+  marketing_manager: ['dashboard', 'adsDealsStudio', 'promoCodes', 'websiteCmsStudio', 'adminProfile'],
 };
 
 export function allowedPageKeysForRole(role: string | undefined | null): string[] | null {
@@ -174,6 +194,7 @@ export const NAV_DEFS: CmsNavGroup[] = [
       { key: 'customers', label: 'Consumers', path: PAGE_KEY_TO_PATH.customers },
       { key: 'creators', label: 'Creators', path: PAGE_KEY_TO_PATH.creators },
       { key: 'creatorEconomy', label: 'Creator Economy', path: PAGE_KEY_TO_PATH.creatorEconomy },
+      { key: 'consumerProfile', label: 'My Profile', path: PAGE_KEY_TO_PATH.consumerProfile },
     ],
   },
   {
@@ -218,7 +239,7 @@ export const NAV_DEFS: CmsNavGroup[] = [
   {
     title: 'COMMUNICATION',
     items: [
-      { key: 'messages', label: 'Messages', tag: '12', path: PAGE_KEY_TO_PATH.messages },
+      { key: 'messages', label: 'Messages', path: PAGE_KEY_TO_PATH.messages },
       { key: 'notifications', label: 'Notifications', path: PAGE_KEY_TO_PATH.notifications },
     ],
   },
@@ -226,9 +247,10 @@ export const NAV_DEFS: CmsNavGroup[] = [
     title: 'FINANCE',
     items: [
       { key: 'finance', label: 'Finance', path: PAGE_KEY_TO_PATH.finance },
+      { key: 'feesAdjustments', label: 'Fees & Adjustments', path: PAGE_KEY_TO_PATH.feesAdjustments },
       { key: 'feeCharges', label: 'Fee & Charges Engine', tag: 'NEW', path: PAGE_KEY_TO_PATH.feeCharges },
       { key: 'payouts', label: 'Payouts', path: PAGE_KEY_TO_PATH.payouts },
-      { key: 'myCashbook', label: 'My Cashbook', tag: 'PRIVATE', path: PAGE_KEY_TO_PATH.myCashbook },
+      { key: 'myCashbook', label: 'Cashbook Hub', tag: 'PRIVATE', path: PAGE_KEY_TO_PATH.myCashbook },
     ],
   },
   {
@@ -250,7 +272,10 @@ export const NAV_DEFS: CmsNavGroup[] = [
   },
   {
     title: 'SETTINGS',
-    items: [{ key: 'settings', label: 'Settings', path: PAGE_KEY_TO_PATH.settings }],
+    items: [
+      { key: 'adminProfile', label: 'Admin Profile', path: PAGE_KEY_TO_PATH.adminProfile },
+      { key: 'settings', label: 'Settings', path: PAGE_KEY_TO_PATH.settings },
+    ],
   },
 ];
 
@@ -258,14 +283,16 @@ export const PAGE_META: Record<string, [string, string]> = {
   dashboard: ['Dashboard', 'Overview of store performance'],
   products: ['Products & Inventory', 'Manage your product catalog and stock'],
   brands: ['Seller Management Studio', 'Platform seller and brand governance'],
-  brandProfile: ['Seller Profile', 'Your seller account, verification, products, and earnings'],
+  brandProfile: ['Seller Profile', 'Your seller account, verification, and profile settings'],
   categories: ['Category Management Studio', 'Organize your catalog'],
   creators: ['Creators', 'Manage creator partnerships'],
-  creatorProfile: ['Creator Profile', 'Your creator account, verification, listings, and earnings'],
+  creatorProfile: ['Creator Profile', 'Your creator account, verification, and profile settings'],
+  consumerProfile: ['My Profile', 'Your consumer account, orders preference, and security settings'],
   deals: ['Deals', 'Promotions and discounts'],
   orders: ['Orders Hub', 'Track and fulfill customer orders'],
   customers: ['Consumers', 'View and manage customer accounts'],
   settings: ['Settings', 'Store configuration'],
+  adminProfile: ['Admin Profile', 'Account, security, RBAC scope, and preferences'],
   websiteCmsStudio: ['Website Manager', 'Manage homepage banners, pages, and site content'],
   adsDealsStudio: ['Ads & Deals Studio', 'Manage promoted ads, deals, coupons, and paid placements'],
   contentStudio: ['Guide Management', 'Manage videos, reels, blogs, and live sessions'],
@@ -295,13 +322,15 @@ export const PAGE_META: Record<string, [string, string]> = {
     'Affiliate commission attribution, campaign, and partnership management',
   ],
   sellerCustomers: [
-    'Seller-Scoped Customer Directory',
-    'Buyer analytics, segments, and secure messaging per storefront',
+    'My Customers',
+    'Buyers you have served through orders and bookings',
   ],
   moderationCenter: ['Moderation Center', 'Flagged content awaiting review'],
   disputes: ['Disputes', 'Buyer/seller disputes requiring resolution'],
   trustCenter: ['Trust & Analytics', 'Platform trust metrics and safety alerts'],
-  finance: ['Finance', 'Platform financial overview'],
+  finance: ['Finance & Payouts', 'Current eligible earnings, commission, and net withdrawable'],
+  myEarnings: ['My Earnings', 'Earnings overview and payout Payment Info'],
+  feesAdjustments: ['Fees & Adjustments', 'Authoritative current deductions and credits'],
   adminManagement: ['Admin Management', 'Manage admin accounts and access'],
   verificationCenter: ['Verification Center', 'Seller & brand identity verification queue'],
   subscriptionPlans: ['Subscription Plans', 'Seller & brand subscription tiers'],
@@ -309,5 +338,9 @@ export const PAGE_META: Record<string, [string, string]> = {
   courierProviders: ['Courier Providers', 'Manage integrated delivery partners'],
   shipmentOperations: ['Shipment Operations', 'Active shipments across all couriers'],
   courierAnalytics: ['Courier Analytics', 'Delivery performance by courier partner'],
-  myCashbook: ['My Cashbook', 'Private cashbook ledger'],
+  myCashbook: ['Cashbook Hub', 'Inspect Seller and Creator cashbook ledgers'],
+  shipmentConsole: ['Shipment Console', 'Active shipments across all couriers'],
+  trackingCenter: ['Tracking Center', 'Real-time tracking status across all in-flight orders'],
+  shippingLabels: ['Shipping Labels', 'Generate and manage printable courier labels'],
+  analytics: ['Analytics', 'Platform-wide traffic and engagement'],
 };

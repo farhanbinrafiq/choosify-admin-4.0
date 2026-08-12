@@ -12,6 +12,19 @@ import {
   verifyFirebaseToken,
 } from '../auth/authProfile';
 import { isExpiredJwtError } from '../auth/jwtTokens';
+import { getUserProfileExtras } from '../auth/userProfileExtras';
+import { getImpersonationSession, cleanupExpiredImpersonations } from '../impersonation/impersonationStore';
+
+/** Paths allowed while changeNextLogin is true (relative to /api/v1 mount or full originalUrl). */
+function isPasswordChangeAllowlisted(req: Request): boolean {
+  const raw = `${req.originalUrl || ''} ${req.path || ''}`.toLowerCase();
+  return (
+    raw.includes('/auth/me') ||
+    raw.includes('/auth/change-password') ||
+    raw.includes('/auth/logout') ||
+    raw.includes('/auth/refresh')
+  );
+}
 
 export async function authenticateRequest(
   req: Request,
@@ -44,6 +57,40 @@ export async function authenticateRequest(
     req.userId = user.uid;
     req.userRole = user.role;
     req.permissions = user.permissions;
+
+    // Preserve admin identity for audit/troubleshooting while using
+    // effective actor (target account) for all RBAC checks.
+    if (decoded.impersonation?.sessionId) {
+      cleanupExpiredImpersonations();
+      const sess = getImpersonationSession(decoded.impersonation.sessionId);
+      if (!sess || sess.endedAt) {
+        sendAuthError(res, 401, AUTH_ERROR_CODES.INVALID_TOKEN, 'Impersonation session ended');
+        return;
+      }
+      if (new Date(sess.expiresAt).getTime() <= Date.now()) {
+        sendAuthError(res, 401, AUTH_ERROR_CODES.INVALID_TOKEN, 'Impersonation session expired');
+        return;
+      }
+
+      // For all RBAC checks, req.userId/req.userRole remain the effective actor
+      // (target account). The real admin is preserved separately.
+      req.impersonationSessionId = decoded.impersonation.sessionId;
+      req.realActorUserId = decoded.impersonation.realActorUid;
+      req.realActorRole = decoded.impersonation.realActorRole;
+    }
+
+    const extras = getUserProfileExtras(user.uid);
+    const mustChange = extras?.changeNextLogin === true;
+    (req as Request & { changeNextLogin?: boolean }).changeNextLogin = mustChange;
+
+    if (mustChange && !isPasswordChangeAllowlisted(req)) {
+      res.status(403).json({
+        success: false,
+        error: 'Password change required before continuing',
+        code: 'PASSWORD_CHANGE_REQUIRED',
+      });
+      return;
+    }
 
     next();
   } catch (error) {

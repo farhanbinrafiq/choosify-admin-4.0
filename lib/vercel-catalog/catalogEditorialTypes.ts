@@ -61,6 +61,8 @@ export interface CatalogGuide {
   id: string;
   slug: string;
   title: string;
+  /** Permanent Choosify Content Reference ID (CT-#####). Covers Video/Reel/Blog/Live/Guide. */
+  contentReferenceId?: string;
   author: string;
   authorAvatar?: string;
   category: string;

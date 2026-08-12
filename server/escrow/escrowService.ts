@@ -27,6 +27,7 @@ import type {
   SellerBalanceAccount,
   SellerBalanceLedgerEntry,
 } from './types';
+import { ensureEntityReferenceId } from '../referenceIds/referenceIdService';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -188,6 +189,15 @@ export async function createEscrowsForCapturedPayment(
       createdAt: now,
       updatedAt: now,
     };
+    try {
+      escrow.escrowReferenceId = await ensureEntityReferenceId({
+        entityType: 'escrow',
+        internalId: escrow.escrowId,
+        current: escrow.escrowReferenceId,
+      });
+    } catch {
+      /* backfill can repair */
+    }
     await escrowStore.upsertEscrow(escrow);
     await bumpEscrowBalanceAggregate(escrow.sellerId, escrow.currency, escrow.heldAmount);
     emitFinance('EscrowCreated', escrow.escrowId, actor, {
@@ -482,6 +492,15 @@ export async function processEscrowRefund(
       createdAt: now,
       updatedAt: now,
     };
+    try {
+      blocked.refundReferenceId = await ensureEntityReferenceId({
+        entityType: 'refund',
+        internalId: blocked.refundId,
+        current: blocked.refundReferenceId,
+      });
+    } catch {
+      /* backfill can repair */
+    }
     await escrowStore.upsertRefund(blocked);
     return blocked;
   }
@@ -538,6 +557,15 @@ export async function processEscrowRefund(
     createdAt: now,
     updatedAt: now,
   };
+  try {
+    refund.refundReferenceId = await ensureEntityReferenceId({
+      entityType: 'refund',
+      internalId: refund.refundId,
+      current: refund.refundReferenceId,
+    });
+  } catch {
+    /* backfill can repair */
+  }
   await escrowStore.upsertRefund(refund);
 
   // Provider boundary — persist provider success before local reverse (crash D)
@@ -811,6 +839,15 @@ export async function requestReturn(params: {
     createdAt: nowIso(),
     updatedAt: nowIso(),
   };
+  try {
+    row.returnReferenceId = await ensureEntityReferenceId({
+      entityType: 'return',
+      internalId: row.returnId,
+      current: row.returnReferenceId,
+    });
+  } catch {
+    /* backfill can repair */
+  }
   await escrowStore.upsertReturn(row);
   return row;
 }

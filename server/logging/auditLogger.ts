@@ -39,6 +39,9 @@ function resolveRequestContext(req?: Request) {
     requestId: req.requestId,
     userId: req.userId || req.user?.uid,
     userRole: req.userRole || req.user?.role,
+    realActorUserId: req.realActorUserId,
+    realActorRole: req.realActorRole,
+    impersonationSessionId: req.impersonationSessionId,
     ip: req.ip,
     userAgent: req.get('user-agent') || undefined,
   };

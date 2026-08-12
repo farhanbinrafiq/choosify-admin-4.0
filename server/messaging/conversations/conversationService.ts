@@ -174,6 +174,16 @@ export async function ensureOrderConversation(
   const raced = await getConversationByReconcileKey(key);
   if (raced) return { conversation: raced, created: false };
 
+  try {
+    const { ensureEntityReferenceId } = await import('../../referenceIds/referenceIdService');
+    conversation.conversationReferenceId = await ensureEntityReferenceId({
+      entityType: 'conversation',
+      internalId: conversation.id,
+    });
+  } catch {
+    /* backfill can repair */
+  }
+
   const saved = await saveConversation(conversation);
   await mirrorConversationToOmni(saved);
 

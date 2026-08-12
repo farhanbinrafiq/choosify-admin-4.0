@@ -352,6 +352,19 @@ export async function executeCheckout(input: CheckoutInput): Promise<CheckoutRes
         createdAt: nowIso(),
         updatedAt: nowIso(),
       };
+      try {
+        const { ensureEntityReferenceId } = await import('../referenceIds/referenceIdService');
+        order.orderReferenceId = await ensureEntityReferenceId({
+          entityType: 'order',
+          internalId: order.id,
+        });
+        order.invoiceReferenceId = await ensureEntityReferenceId({
+          entityType: 'invoice',
+          internalId: order.id,
+        });
+      } catch {
+        /* backfill can repair */
+      }
 
       if (hasService) {
         for (const item of items.filter((i) => i.listingType === 'service')) {

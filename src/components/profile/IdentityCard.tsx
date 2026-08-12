@@ -1,5 +1,6 @@
 import React from 'react';
 import { Phone, MessageSquare } from 'lucide-react';
+import { profileShellClasses, type ProfileShellVariant } from './profileTheme';
 
 export interface IdentityBadge {
   label: string;
@@ -23,6 +24,7 @@ interface IdentityCardProps {
   fields?: IdentityField[];
   onPhoneClick?: () => void;
   onMessageClick?: () => void;
+  variant?: ProfileShellVariant;
 }
 
 export default function IdentityCard({
@@ -37,29 +39,38 @@ export default function IdentityCard({
   fields = [],
   onPhoneClick,
   onMessageClick,
+  variant = 'dark',
 }: IdentityCardProps) {
+  const t = profileShellClasses(variant);
+  const fieldDivider = variant === 'light' ? 'border-[#F1F3F5]' : 'border-white/5';
   return (
-    <div className="bg-app-card border border-app-border rounded-[4px] overflow-hidden shadow-xl font-sans">
-      {/* Top Banner */}
-      <div className={`h-24 bg-gradient-to-r ${bannerGradientClass} opacity-90 relative overflow-hidden flex items-center justify-center`}>
+    <div className={`${t.identityCard} font-sans`}>
+      <div className={`${t.identityBanner} relative overflow-hidden flex items-center justify-center`}>
         <div className="absolute inset-0 flex items-center justify-center px-4">
-          <span className="text-xl sm:text-2xl md:text-xl lg:text-xl xl:text-2xl font-black text-white uppercase tracking-[0.22em] select-none text-center max-w-full truncate">
+          <span className="text-sm font-black text-white uppercase tracking-[0.22em] select-none text-center max-w-full truncate">
             {bannerText}
           </span>
         </div>
       </div>
 
-      {/* Details Box */}
       <div className="px-5 pb-5 relative">
         <div className="-mt-10 mb-4 flex items-end justify-between">
           {avatarUrl ? (
-            <img 
-              src={avatarUrl} 
+            <img
+              src={avatarUrl}
               alt={name}
-              className="w-20 h-20 rounded-full border-2 border-app-border object-cover bg-app-card shrink-0" 
+              className={`w-20 h-20 rounded-full border-2 object-cover shrink-0 ${
+                variant === 'light' ? 'border-white shadow-md bg-white' : 'border-app-border bg-app-card'
+              }`}
             />
           ) : (
-            <div className="w-20 h-20 rounded-full border-2 border-app-border bg-slate-900 flex items-center justify-center text-xl font-black text-white shrink-0">
+            <div
+              className={`w-20 h-20 rounded-full border-2 flex items-center justify-center text-xl font-black shrink-0 ${
+                variant === 'light'
+                  ? 'border-white bg-[#111827] text-white shadow-md'
+                  : 'border-app-border bg-slate-900 text-white'
+              }`}
+            >
               {initials}
             </div>
           )}
@@ -87,10 +98,9 @@ export default function IdentityCard({
           </div>
         </div>
 
-        {/* Identity Details */}
         <div className="space-y-1.5">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-base font-bold tracking-tight text-white">{name}</h2>
+            <h2 className={`${t.identityName} tracking-tight`}>{name}</h2>
             {badges.map((badge, idx) => (
               <span
                 key={idx}
@@ -102,29 +112,16 @@ export default function IdentityCard({
               </span>
             ))}
           </div>
-          {handle && (
-            <p className="text-[9.5px] font-semibold text-app-accent-light font-mono block">
-              {handle}
-            </p>
-          )}
-          {persona && (
-            <p className="text-[11px] text-app-text-secondary leading-relaxed">
-              {persona}
-            </p>
-          )}
+          {handle && <p className={`${t.identityHandle} font-mono block`}>{handle}</p>}
+          {persona && <p className={t.identityPersona}>{persona}</p>}
         </div>
 
-        {/* Key-Value Attributes List */}
         {fields.length > 0 && (
-          <div className="mt-5 space-y-3.5 pt-4 border-t border-white/5">
+          <div className={`mt-5 space-y-3.5 pt-4 border-t ${fieldDivider}`}>
             {fields.map((field, idx) => (
-              <div key={idx} className={idx > 0 ? "pt-2 border-t border-white/5" : ""}>
-                <label className="text-[9px] text-app-text-secondary font-bold uppercase tracking-wider block opacity-70">
-                  {field.label}
-                </label>
-                <div className="text-xs text-white font-semibold mt-0.5 block truncate leading-relaxed">
-                  {field.value}
-                </div>
+              <div key={idx} className={idx > 0 ? `pt-2 border-t ${fieldDivider}` : ''}>
+                <label className={`${t.identityFieldLabel} block`}>{field.label}</label>
+                <div className={`${t.identityFieldValue} block truncate leading-relaxed`}>{field.value}</div>
               </div>
             ))}
           </div>

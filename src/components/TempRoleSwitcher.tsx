@@ -11,6 +11,7 @@ const TEMP_ROLES: { role: UserRole; label: string; path: string }[] = [
   { role: 'super_admin', label: 'Admin', path: '/admin/dashboard' },
   { role: 'seller', label: 'Seller', path: '/admin/dashboard' },
   { role: 'creator', label: 'Creator', path: '/admin/dashboard' },
+  { role: 'consumer', label: 'Consumer', path: '/admin/dashboard' },
 ];
 
 export function TempRoleSwitcher() {

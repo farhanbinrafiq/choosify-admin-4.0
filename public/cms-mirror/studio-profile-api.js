@@ -123,9 +123,55 @@
     });
   }
 
-  function listSellerCustomers() {
-    return request('/catalog/workspace/seller/customers').then(function (r) {
+  function listSellerCustomers(opts) {
+    var qs = '';
+    if (opts && opts.brandId) {
+      qs = '?brandId=' + encodeURIComponent(opts.brandId);
+    }
+    return request('/catalog/workspace/seller/customers' + qs).then(function (r) {
       return (r && r.data) || [];
+    });
+  }
+
+  function getSellerCustomer(customerId, opts) {
+    var qs = '';
+    if (opts && opts.brandId) {
+      qs = '?brandId=' + encodeURIComponent(opts.brandId);
+    }
+    return request('/catalog/workspace/seller/customers/' + encodeURIComponent(customerId) + qs).then(function (r) {
+      return (r && r.data) || null;
+    });
+  }
+
+  function reportSellerCustomer(customerId, description) {
+    return request(
+      '/catalog/workspace/seller/customers/' + encodeURIComponent(customerId) + '/report',
+      'POST',
+      { description: description || '' },
+    ).then(function (r) {
+      return (r && r.data) || r;
+    });
+  }
+
+  function listCreatorCustomers() {
+    return request('/catalog/workspace/creator/customers').then(function (r) {
+      return (r && r.data) || [];
+    });
+  }
+
+  function getCreatorCustomer(customerId) {
+    return request('/catalog/workspace/creator/customers/' + encodeURIComponent(customerId)).then(function (r) {
+      return (r && r.data) || null;
+    });
+  }
+
+  function reportCreatorCustomer(customerId, description) {
+    return request(
+      '/catalog/workspace/creator/customers/' + encodeURIComponent(customerId) + '/report',
+      'POST',
+      { description: description || '' },
+    ).then(function (r) {
+      return (r && r.data) || r;
     });
   }
 
@@ -166,6 +212,46 @@
 
   function listCreators() {
     return request('/catalog/creators').then(function (r) { return (r && r.data) || []; });
+  }
+
+  /** Admin-protected GET — always wait for bearer (directory / CF lookup). */
+  function requestAdmin(path) {
+    return ensureAuthToken().then(function (token) {
+      if (!token) throw new Error('Missing bearer token');
+      var headers = {
+        'Content-Type': 'application/json',
+        Authorization: 'Bearer ' + token,
+      };
+      return fetch(API_BASE + path, {
+        method: 'GET',
+        headers: headers,
+        credentials: 'include',
+      }).then(function (res) {
+        return res.text().then(function (text) {
+          var parsed = null;
+          try { parsed = text ? JSON.parse(text) : null; } catch (_) { parsed = { error: text }; }
+          if (!res.ok) {
+            var msg = (parsed && (parsed.error || parsed.message)) || ('Request failed (' + res.status + ')');
+            throw new Error(msg);
+          }
+          return parsed;
+        });
+      });
+    });
+  }
+
+  /** Admin/support — resolve account CF ID by Auth UID. */
+  function lookupUserAccount(userId) {
+    return requestAdmin('/auth/users/' + encodeURIComponent(userId)).then(function (r) {
+      return (r && r.data) || r;
+    });
+  }
+
+  /** Admin — lightweight uid/email/choosifyUserId directory for profile propagation. */
+  function listUserDirectory() {
+    return requestAdmin('/auth/users/directory').then(function (r) {
+      return (r && r.data) || [];
+    });
   }
 
   function patchCreator(id, payload) {
@@ -580,10 +666,16 @@
 
   global.CmsStudioProfileApi = {
     request: request,
+    ensureAuthToken: ensureAuthToken,
     listBrands: listBrands,
     ensureSellerWorkspace: ensureSellerWorkspace,
     ensureCreatorWorkspace: ensureCreatorWorkspace,
     listSellerCustomers: listSellerCustomers,
+    getSellerCustomer: getSellerCustomer,
+    reportSellerCustomer: reportSellerCustomer,
+    listCreatorCustomers: listCreatorCustomers,
+    getCreatorCustomer: getCreatorCustomer,
+    reportCreatorCustomer: reportCreatorCustomer,
     listOrders: listOrders,
     transitionOrder: transitionOrder,
     cancelOrder: cancelOrder,
@@ -591,6 +683,8 @@
     patchBrand: patchBrand,
     setBrandMarketplaceAccess: setBrandMarketplaceAccess,
     listCreators: listCreators,
+    lookupUserAccount: lookupUserAccount,
+    listUserDirectory: listUserDirectory,
     patchCreator: patchCreator,
     putCreator: putCreator,
     listProducts: listProducts,
@@ -616,5 +710,37 @@
     listMyNotifications: listMyNotifications,
     markNotificationRead: markNotificationRead,
     markNotificationsRead: markNotificationsRead,
+    getFinanceSummary: function (sellerId) {
+      var q = sellerId ? ('?sellerId=' + encodeURIComponent(sellerId)) : '';
+      return ensureAuthToken().then(function () {
+        return request('/finance/summary' + q, 'GET');
+      });
+    },
+    listFinanceAdjustments: function (sellerId) {
+      var q = sellerId ? ('?sellerId=' + encodeURIComponent(sellerId)) : '';
+      return ensureAuthToken().then(function () {
+        return request('/finance/adjustments' + q, 'GET');
+      });
+    },
+    listCashbooks: function () {
+      return ensureAuthToken().then(function () {
+        return request('/cashbooks', 'GET');
+      });
+    },
+    createCashbook: function (payload) {
+      return request('/cashbooks', 'POST', payload || {});
+    },
+    getCashbook: function (bookId, ownerUserId) {
+      var q = ownerUserId ? ('?ownerUserId=' + encodeURIComponent(ownerUserId)) : '';
+      return ensureAuthToken().then(function () {
+        return request('/cashbooks/' + encodeURIComponent(bookId) + q, 'GET');
+      });
+    },
+    importOrdersToCashbook: function (payload) {
+      return request('/cashbooks/import-orders', 'POST', payload || {});
+    },
+    deleteCashbookEntry: function (entryId) {
+      return request('/cashbooks/entries/' + encodeURIComponent(entryId), 'DELETE');
+    },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

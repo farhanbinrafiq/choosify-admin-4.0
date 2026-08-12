@@ -1,14 +1,44 @@
-import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useImpersonation } from '../contexts/ImpersonationContext';
+import { useRbac } from '../contexts/RbacContext';
 import { PAGE_KEY_TO_PATH, allowedPageKeysForRole, pathToPageKey, resolveAdminPageKey } from './nav';
 import { UserProfileDropdown } from '../components/account/UserProfileDropdown';
+import { GlobalDashboardSearch } from '../components/common/GlobalDashboardSearch';
+import { AdminPageSkeleton, DashboardSearchSkeleton, SkeletonAvatar } from '../components/common/skeletons';
+import { formatRoleLabel, getAvatarUrl } from '../lib/userDisplay';
 import './tokens.css';
 
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 
 /** Bump when public/cms-mirror/app.html behavior changes so the iframe never serves a stale 304. */
-const CMS_MIRROR_ASSET_VERSION = '20260809-ui-hotfix-notif-bell-1';
+const CMS_MIRROR_ASSET_VERSION = '20260811-seller-cover-label-12';
+
+function pageSkeletonVariant(pageKey: string): 'dashboard' | 'profile' | 'orders' | 'products' | 'generic' {
+  if (pageKey === 'dashboard') return 'dashboard';
+  if (
+    pageKey === 'brandProfile' ||
+    pageKey === 'creatorProfile' ||
+    pageKey === 'consumerProfile' ||
+    pageKey === 'adminProfile' ||
+    pageKey === 'profile'
+  ) {
+    return 'profile';
+  }
+  if (pageKey === 'orders' || pageKey === 'returnsRefunds') return 'orders';
+  if (pageKey === 'products' || pageKey === 'inventoryStock') return 'products';
+  return 'generic';
+}
+
+type LoginAsTarget = {
+  targetUserId: string;
+  displayName: string;
+  roleLabel: string;
+  choosifyUserId?: string;
+  email?: string;
+  avatarUrl?: string;
+};
 
 function parseBrandDetail(pathname: string, search: string): { id: string | null; name: string | null } {
   const match = pathname.match(/^\/admin\/brand-detail\/([^/?#]+)/);
@@ -24,12 +54,20 @@ function parseBrandDetail(pathname: string, search: string): { id: string | null
  * Remount only on role change (nav filter + data scope). Page changes sync via
  * postMessage / hash so Brand & Creator Studio keep selection state instead of
  * blanking the main pane on every remount race.
+ *
+ * Host overlays (outside iframe):
+ * - GlobalDashboardSearch (storefront-style operational search)
+ * - UserProfileDropdown
+ * - Impersonation banner + Login As User confirmation
  */
 export const CmsMirrorHost: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, activeBrandId } = useAuth();
+  const { can } = useRbac();
+  const { state: impersonation, startImpersonation, exitImpersonation } = useImpersonation();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const searchAnchorRef = useRef<HTMLDivElement>(null);
   const knownPageKey = useMemo(() => resolveAdminPageKey(location.pathname), [location.pathname]);
   const pageKey = useMemo(() => pathToPageKey(location.pathname), [location.pathname]);
   const brandDetail = useMemo(
@@ -37,6 +75,17 @@ export const CmsMirrorHost: React.FC = () => {
     [location.pathname, location.search],
   );
   const role = profile?.role;
+  const canImpersonate = can('impersonate') && !impersonation.active;
+
+  const [loginAsTarget, setLoginAsTarget] = useState<LoginAsTarget | null>(null);
+  const [loginAsReason, setLoginAsReason] = useState('Customer support / diagnostics');
+  const [loginAsError, setLoginAsError] = useState<string | null>(null);
+  const [loginAsBusy, setLoginAsBusy] = useState(false);
+  /** First-load / role-change gate: search stays non-interactive until iframe chrome is ready. */
+  const [iframeReady, setIframeReady] = useState(false);
+  const [slotReady, setSlotReady] = useState(false);
+  const [bootFailed, setBootFailed] = useState(false);
+  const shellInteractive = (iframeReady && slotReady) || bootFailed;
 
   const postSelectBrand = useCallback(() => {
     if (!brandDetail.id && !brandDetail.name) return;
@@ -62,15 +111,26 @@ export const CmsMirrorHost: React.FC = () => {
       const win = iframeRef.current?.contentWindow;
       if (!win) return;
       try {
+        const tabParam = new URLSearchParams(location.search).get('tab');
         win.postMessage(
           {
             type: 'cms-mirror-set-state',
             page,
             role: nextRole,
+            tab:
+              page === 'myEarnings' && (tabParam === 'payment' || tabParam === 'overview')
+                ? tabParam
+                : undefined,
             allowedKeys: allowedPageKeysForRole(nextRole),
             userId: profile?.id || null,
             displayName: profile?.displayName || null,
             email: profile?.email || null,
+            activeBrandId: activeBrandId || null,
+            username: profile?.username || null,
+            website: profile?.website || null,
+            bio: profile?.bio || null,
+            choosifyUserId: profile?.choosifyUserId || null,
+            canImpersonate,
           },
           '*',
         );
@@ -78,7 +138,6 @@ export const CmsMirrorHost: React.FC = () => {
         if (token) {
           win.postMessage({ type: 'cms-mirror-auth-token', token }, '*');
         }
-        // Select Brand Profile after page state lands (Admin Brand Detail route).
         if (brandDetail.id || brandDetail.name) {
           window.setTimeout(() => {
             try {
@@ -99,7 +158,20 @@ export const CmsMirrorHost: React.FC = () => {
         /* ignore */
       }
     },
-    [profile?.id, profile?.displayName, profile?.email, brandDetail.id, brandDetail.name],
+    [
+      profile?.id,
+      profile?.displayName,
+      profile?.email,
+      profile?.username,
+      profile?.website,
+      profile?.bio,
+      profile?.choosifyUserId,
+      activeBrandId,
+      brandDetail.id,
+      brandDetail.name,
+      location.search,
+      canImpersonate,
+    ],
   );
 
   const postAuthTokenToMirror = useCallback(() => {
@@ -134,11 +206,76 @@ export const CmsMirrorHost: React.FC = () => {
     };
   }, [brandDetail.id, brandDetail.name, postSelectBrand]);
 
+  /** Pin React search overlay to the iframe flex search slot (storefront-width parity). */
+  useEffect(() => {
+    const syncSearchSlot = () => {
+      const anchor = searchAnchorRef.current;
+      const iframe = iframeRef.current;
+      if (!anchor || !iframe) return;
+      try {
+        const doc = iframe.contentDocument;
+        const slot = doc?.querySelector('[data-cms-search-slot]') as HTMLElement | null;
+        if (!slot) return;
+        const rect = slot.getBoundingClientRect();
+        if (rect.width < 40 || rect.height < 8) return;
+        anchor.style.top = `${Math.round(rect.top)}px`;
+        anchor.style.left = `${Math.round(rect.left)}px`;
+        anchor.style.width = `${Math.round(rect.width)}px`;
+        anchor.style.height = `${Math.round(Math.max(rect.height, 40))}px`;
+        setSlotReady(true);
+      } catch {
+        /* cross-origin / unloaded */
+      }
+    };
+
+    syncSearchSlot();
+    const interval = window.setInterval(syncSearchSlot, 300);
+    window.addEventListener('resize', syncSearchSlot);
+    const iframe = iframeRef.current;
+    iframe?.addEventListener('load', syncSearchSlot);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('resize', syncSearchSlot);
+      iframe?.removeEventListener('load', syncSearchSlot);
+    };
+  }, [knownPageKey, pageKey, role, impersonation.active]);
+
+  /** Role / impersonation identity change: re-gate chrome until iframe remount settles. */
+  useEffect(() => {
+    setIframeReady(false);
+    setSlotReady(false);
+    setBootFailed(false);
+  }, [role, impersonation.active, impersonation.targetUserId]);
+
+  /** Fail-safe: never leave an infinite skeleton if iframe boot stalls. */
+  useEffect(() => {
+    if (shellInteractive) return;
+    const t = window.setTimeout(() => setBootFailed(true), 10000);
+    return () => window.clearTimeout(t);
+  }, [shellInteractive, role]);
+
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
       const data = event.data;
       if (data?.type === 'cms-mirror-auth-token-request') {
         postAuthTokenToMirror();
+        return;
+      }
+      if (data?.type === 'cms-mirror-login-as-user') {
+        if (!canImpersonate) return;
+        const targetUserId = typeof data.targetUserId === 'string' ? data.targetUserId.trim() : '';
+        if (!targetUserId) return;
+        if (profile?.id && targetUserId === profile.id) return;
+        setLoginAsError(null);
+        setLoginAsReason('Customer support / diagnostics');
+        setLoginAsTarget({
+          targetUserId,
+          displayName: typeof data.displayName === 'string' ? data.displayName : 'User',
+          roleLabel: typeof data.roleLabel === 'string' ? data.roleLabel : 'User',
+          choosifyUserId: typeof data.choosifyUserId === 'string' ? data.choosifyUserId : undefined,
+          email: typeof data.email === 'string' ? data.email : undefined,
+          avatarUrl: typeof data.avatarUrl === 'string' ? data.avatarUrl : undefined,
+        });
         return;
       }
       if (data?.type === 'cms-mirror-navigate' && typeof data.path === 'string') {
@@ -148,12 +285,7 @@ export const CmsMirrorHost: React.FC = () => {
         return;
       }
       if (!data || data.type !== 'cms-mirror-page' || typeof data.page !== 'string') return;
-      // Admin Brand Profile lives at /admin/brand-detail/:id — leaving brands page
-      // (or clearing detail) should return to the React Brand Management ledger.
-      if (
-        data.page === 'brands' &&
-        location.pathname.startsWith('/admin/brand-detail')
-      ) {
+      if (data.page === 'brands' && location.pathname.startsWith('/admin/brand-detail')) {
         navigate('/admin/brand-studio', { replace: true });
         return;
       }
@@ -164,9 +296,10 @@ export const CmsMirrorHost: React.FC = () => {
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [location.pathname, navigate, postAuthTokenToMirror]);
+  }, [canImpersonate, location.pathname, navigate, postAuthTokenToMirror, profile?.id]);
 
   const onIframeLoad = () => {
+    setIframeReady(true);
     postMirrorState(pageKey, role);
     postAuthTokenToMirror();
     postSelectBrand();
@@ -175,7 +308,6 @@ export const CmsMirrorHost: React.FC = () => {
   const iframeSrc = useMemo(
     () =>
       `/cms-mirror/app.html?v=${CMS_MIRROR_ASSET_VERSION}#page=${encodeURIComponent(pageKey)}&role=${encodeURIComponent(role || '')}`,
-    // role in src + key forces a clean boot when switching Admin/Seller/Creator
     // eslint-disable-next-line react-hooks/exhaustive-deps -- pageKey applied via postMessage after load
     [role],
   );
@@ -188,7 +320,6 @@ export const CmsMirrorHost: React.FC = () => {
     }
   }, [knownPageKey, role, pageKey, navigate]);
 
-  // Sellers must not open the admin Brand Profile detail route.
   useEffect(() => {
     if (!role) return;
     if (!location.pathname.startsWith('/admin/brand-detail')) return;
@@ -196,21 +327,107 @@ export const CmsMirrorHost: React.FC = () => {
     navigate('/admin/brand-studio', { replace: true });
   }, [location.pathname, role, navigate]);
 
+  const confirmLoginAs = async () => {
+    if (!loginAsTarget) return;
+    setLoginAsBusy(true);
+    setLoginAsError(null);
+    try {
+      await startImpersonation({
+        targetUserId: loginAsTarget.targetUserId,
+        reason: loginAsReason.trim() || 'Customer support / diagnostics',
+      });
+    } catch (e) {
+      setLoginAsError(e instanceof Error ? e.message : String(e));
+      setLoginAsBusy(false);
+    }
+  };
+
   if (!profile || !role) {
-    return null;
+    return (
+      <div className="cms-mirror-host cms-mirror-host--booting" role="status" aria-busy="true" aria-label="Loading dashboard">
+        <div className="cms-mirror-boot-chrome" aria-hidden>
+          <div className="cms-mirror-boot-sidebar" />
+          <div className="cms-mirror-boot-main">
+            <div className="cms-mirror-boot-topbar">
+              <div className="cms-mirror-boot-title-skel" />
+              <div className="cms-mirror-boot-search-skel">
+                <DashboardSearchSkeleton />
+              </div>
+              <SkeletonAvatar className="w-8 h-8 bg-white/20" />
+            </div>
+            <AdminPageSkeleton variant="dashboard" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!knownPageKey) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={<AdminPageSkeleton variant="generic" />}>
         <NotFoundPage />
       </Suspense>
     );
   }
 
   return (
-    <div className="cms-mirror-host">
-      <UserProfileDropdown variant="overlay" />
+    <div
+      className={`cms-mirror-host${impersonation.active ? ' cms-mirror-host--impersonating' : ''}${
+        !shellInteractive ? ' cms-mirror-host--booting' : ''
+      }`}
+      aria-busy={!shellInteractive}
+    >
+      {impersonation.active && (
+        <div className="cms-mirror-impersonation-banner" role="status">
+          <div className="cms-mirror-impersonation-banner__copy">
+            <div className="cms-mirror-impersonation-banner__eyebrow">You are viewing Choosify as</div>
+            <div className="cms-mirror-impersonation-banner__title">
+              {profile.displayName || 'User'} · {formatRoleLabel(profile.role)} ·{' '}
+              {profile.choosifyUserId || '—'}
+            </div>
+          </div>
+          <button
+            type="button"
+            className="cms-mirror-impersonation-banner__exit"
+            onClick={() => void exitImpersonation()}
+          >
+            Exit Impersonation
+          </button>
+        </div>
+      )}
+
+      <div
+        ref={searchAnchorRef}
+        className={`cms-mirror-search-anchor${!shellInteractive ? ' cms-mirror-search-anchor--booting' : ''}`}
+      >
+        <GlobalDashboardSearch variant="topbar" className="w-full" ready={shellInteractive} />
+      </div>
+
+      {shellInteractive ? (
+        <UserProfileDropdown variant="overlay" />
+      ) : (
+        <div className="cms-mirror-profile-anchor" aria-hidden>
+          <SkeletonAvatar className="w-9 h-9 bg-white/25" />
+        </div>
+      )}
+
+      {!shellInteractive ? (
+        <div className="cms-mirror-boot-overlay" role="status" aria-busy="true" aria-label="Loading page">
+          <div className="cms-mirror-boot-chrome">
+            <div className="cms-mirror-boot-sidebar" />
+            <div className="cms-mirror-boot-main">
+              <div className="cms-mirror-boot-topbar cms-mirror-boot-topbar--spacer" aria-hidden />
+              <AdminPageSkeleton variant={pageSkeletonVariant(pageKey)} />
+              {bootFailed ? (
+                <div className="cms-mirror-boot-error" role="alert">
+                  Dashboard is taking longer than expected. Content will appear when ready.
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       <iframe
         key={`${role}::${CMS_MIRROR_ASSET_VERSION}`}
         ref={iframeRef}
@@ -218,7 +435,79 @@ export const CmsMirrorHost: React.FC = () => {
         src={iframeSrc}
         onLoad={onIframeLoad}
         allow="clipboard-read; clipboard-write"
+        className={!shellInteractive ? 'cms-mirror-iframe--booting' : undefined}
       />
+
+      {loginAsTarget && (
+        <div className="cms-mirror-login-as-modal" role="dialog" aria-modal="true" aria-labelledby="login-as-title">
+          <div className="cms-mirror-login-as-modal__card">
+            <div className="cms-mirror-login-as-modal__warn">Privileged support action</div>
+            <h2 id="login-as-title" className="cms-mirror-login-as-modal__title">
+              Login As User?
+            </h2>
+            <p className="cms-mirror-login-as-modal__body">
+              You are about to enter this account as:
+            </p>
+            <div className="cms-mirror-login-as-modal__target">
+              <img
+                src={
+                  loginAsTarget.avatarUrl ||
+                  getAvatarUrl({
+                    displayName: loginAsTarget.displayName,
+                    email: loginAsTarget.email || '',
+                    avatar: undefined,
+                  })
+                }
+                alt=""
+                className="cms-mirror-login-as-modal__avatar"
+              />
+              <div className="min-w-0">
+                <div className="cms-mirror-login-as-modal__name">{loginAsTarget.displayName}</div>
+                <div className="cms-mirror-login-as-modal__meta">
+                  {loginAsTarget.roleLabel}
+                  {loginAsTarget.choosifyUserId ? ` · ${loginAsTarget.choosifyUserId}` : ''}
+                </div>
+                {loginAsTarget.email ? (
+                  <div className="cms-mirror-login-as-modal__email">{loginAsTarget.email}</div>
+                ) : null}
+              </div>
+            </div>
+            <p className="cms-mirror-login-as-modal__body">
+              You will temporarily experience Choosify using this user&apos;s permissions and account
+              scope. Your admin session is retained and can be restored via Exit Impersonation.
+            </p>
+            <label className="cms-mirror-login-as-modal__label" htmlFor="login-as-reason">
+              Support reason (required)
+            </label>
+            <textarea
+              id="login-as-reason"
+              value={loginAsReason}
+              onChange={(e) => setLoginAsReason(e.target.value)}
+              className="cms-mirror-login-as-modal__reason"
+              rows={3}
+            />
+            {loginAsError ? <div className="cms-mirror-login-as-modal__error">{loginAsError}</div> : null}
+            <div className="cms-mirror-login-as-modal__actions">
+              <button
+                type="button"
+                className="cms-mirror-login-as-modal__cancel"
+                disabled={loginAsBusy}
+                onClick={() => setLoginAsTarget(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="cms-mirror-login-as-modal__confirm"
+                disabled={loginAsBusy || loginAsReason.trim().length < 2}
+                onClick={() => void confirmLoginAs()}
+              >
+                {loginAsBusy ? 'Starting…' : 'Login As User'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -162,6 +162,28 @@ aside.sidebar,
   color: #FFFFFF !important;
 }
 
+/*
+ * Profile identity-card cover — same hsla/rgba recipe as --gradient-sidebar,
+ * with % radials so the orange falloff is visible on an ~80px strip
+ * (full-viewport 1200×500px sidebar ellipses look solid at this height).
+ */
+.profile-identity-banner {
+  /* Warm→navy strip: lifted midtones, no near-black terminus */
+  background:
+    radial-gradient(95% 170% at 8% 50%, hsla(6, 86%, 54%, 0.62), transparent 72%),
+    radial-gradient(80% 150% at 92% 50%, hsla(230, 58%, 48%, 0.42), transparent 70%),
+    linear-gradient(100deg, #8B3A3E 0%, #5A2A2E 28%, #3A1E22 52%, #2a2858 82%, #1e2260 100%) !important;
+  background-color: #5A2A2E !important;
+}
+
+/* Keep role label readable on the dark sidebar gradient (typography otherwise unchanged). */
+html:not(.dark) main .profile-identity-banner .text-white,
+html:not(.dark) main .profile-identity-banner span,
+.profile-identity-banner .text-white,
+.profile-identity-banner span {
+  color: #ffffff !important;
+}
+
 /* Enforce bright, high-contrast text and link colors inside the sidebar regardless of parent theme */
 aside.sidebar .text-white,
 .sidebar .text-white,
@@ -882,7 +904,8 @@ html:not(.dark) main .text-white:not(
   [class*="bg-app-accent"], [class*="bg-app-accent"] *,
   [class*="bg-emerald"], [class*="bg-emerald"] *,
   [class*="bg-red"], [class*="bg-red"] *,
-  [class*="bg-green"], [class*="bg-green"] *
+  [class*="bg-green"], [class*="bg-green"] *,
+  .profile-identity-banner, .profile-identity-banner *
 ) {
   color: #111827 !important;
 }
@@ -1443,6 +1466,83 @@ html.dark .sidebar .sidebar-nav-search input::placeholder {
 .dark-brand-gradient,
 .hero-gradient {
   background: var(--gradient-hero-chrome) !important;
+}
+
+/* ============================================================
+   Global Search Shell — ported from Choosify-Web GlobalSearchBar
+   (.choosify-navbar-hero-search + omni dropdown tokens).
+   Shared by Dashboard GlobalDashboardSearch via GlobalSearchShell.
+   ============================================================ */
+.choosify-navbar-hero-search {
+  width: 100%;
+  max-width: none;
+}
+
+.choosify-navbar-hero-search form,
+.global-search-shell form,
+form.choosify-navbar-hero-search {
+  padding: 2px;
+}
+
+.choosify-navbar-hero-search .global-search-shell__pill,
+.choosify-navbar-hero-search form .bg-white,
+.global-search-shell__pill {
+  min-height: 2.25rem;
+}
+
+@media (min-width: 768px) {
+  .choosify-navbar-hero-search .global-search-shell__pill,
+  .choosify-navbar-hero-search form .bg-white,
+  .global-search-shell__pill {
+    min-height: 2.5rem;
+  }
+}
+
+.choosify-navbar-hero-search .global-search-shell__input,
+.choosify-navbar-hero-search form input,
+.global-search-shell__input {
+  height: 2.25rem !important;
+}
+
+@media (min-width: 768px) {
+  .choosify-navbar-hero-search .global-search-shell__input,
+  .choosify-navbar-hero-search form input,
+  .global-search-shell__input {
+    height: 2.5rem !important;
+  }
+}
+
+/* Omni search suggestions — reset inherited nav/hero text colors */
+.choosify-omni-search-dropdown {
+  color: #1a1a2e !important;
+  background: #ffffff !important;
+}
+
+.choosify-omni-search-dropdown h4,
+.choosify-omni-search-dropdown span,
+.choosify-omni-search-dropdown p {
+  color: inherit;
+}
+
+.choosify-omni-search-dropdown .text-gray-400,
+.choosify-omni-search-dropdown .text-gray-500 {
+  color: #6b7280 !important;
+}
+
+.global-search-shell__cta {
+  color: #ffffff !important;
+  background: #eb4501 !important;
+  background-image: none !important;
+  font-weight: 800 !important;
+}
+
+.global-search-shell__cta span {
+  font-weight: 800 !important;
+}
+
+.global-search-shell__cta:hover {
+  background: #cf4400 !important;
+  color: #ffffff !important;
 }
 
 .choosify-chrome-header {

@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect, useMemo } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ImpersonationProvider } from './contexts/ImpersonationContext';
 import { AdminLayout } from './components/AdminLayout';
 import { AdminWorkspaceLayout } from './components/Layout/AdminWorkspaceLayout';
 import { CmsMirrorHost } from './cms-mirror/CmsMirrorHost';
@@ -16,17 +17,21 @@ import { LogisticsProvider } from './contexts/LogisticsContext';
 import { InventoryProvider } from './contexts/InventoryContext';
 import { FeeChargesProvider } from './contexts/FeeChargesContext';
 import { catalogApi } from './services/catalogApi';
+import { getMyProfilePath } from './lib/userDisplay';
+import { AdminPageSkeleton } from './components/common/skeletons';
+
+const routeSuspenseFallback = <AdminPageSkeleton variant="generic" />;
 
 // Lazy load pages
 const CashBookHub = lazy(() => import('./pages/admin/CashBookHub'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
+const ForcePasswordChangePage = lazy(() => import('./pages/ForcePasswordChangePage'));
 const SellerSignupPage = lazy(() => import('./pages/SellerSignupPage'));
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
 const DashboardRouter = lazy(() => import('./pages/dashboards/DashboardRouter'));
 const Consumers = lazy(() => import('./pages/admin/Consumers'));
 
 // Profile & Detail Pages
-const AdminProfile = lazy(() => import('./pages/admin/profiles/AdminProfile'));
 const UnifiedProfileShell = lazy(() => import('./pages/admin/profiles/UnifiedProfileShell'));
 const SellerDashboardPreview = lazy(() => import('./pages/admin/previews/SellerDashboardPreview'));
 const RecommendationPreview = lazy(() => import('./pages/admin/previews/RecommendationPreview'));
@@ -102,10 +107,30 @@ const ViewModeWrapper: React.FC<{ mode: 'consumers' | 'creators' | 'admins' }> =
 };
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { profile, loading } = useAuth();
+  const { profile, loading, mustChangePassword } = useAuth();
   if (loading) return <div className="min-h-screen bg-app-bg flex items-center justify-center text-app-accent font-mono text-[10px] uppercase tracking-[4px] animate-pulse">Authenticating Choosify Session...</div>;
   if (!profile) return <Navigate to="/login" />;
+  if (mustChangePassword) return <Navigate to="/force-password-change" replace />;
   return <>{children}</>;
+};
+
+/**
+ * If the URL is the signed-in user's own profile, send them to the canonical
+ * cms-mirror self-profile path. Otherwise keep UnifiedProfileShell for Admin inspection.
+ */
+const OwnProfileRedirect: React.FC<{ role: 'seller' | 'creator' | 'consumer' }> = ({ role }) => {
+  const { id } = useParams();
+  const { profile } = useAuth();
+  if (profile?.id && id && decodeURIComponent(id) === profile.id) {
+    return <Navigate to={getMyProfilePath(profile)} replace />;
+  }
+  return (
+    <AdminLayout>
+      <Suspense fallback={routeSuspenseFallback}>
+        <UnifiedProfileShell />
+      </Suspense>
+    </AdminLayout>
+  );
 };
 
 /**
@@ -310,8 +335,16 @@ const AdminAreaEntry: React.FC = () => <CmsMirrorHost />;
 
 const ContentStudioEntry: React.FC = () => <CmsMirrorHost />;
 
+const ForcePasswordChangeGate: React.FC = () => {
+  const { profile, loading, mustChangePassword } = useAuth();
+  if (loading) return null;
+  if (!profile) return <Navigate to="/login" replace />;
+  if (!mustChangePassword) return <Navigate to="/admin/dashboard" replace />;
+  return <ForcePasswordChangePage />;
+};
+
 const RootRoute: React.FC = () => {
-  const { profile, loading } = useAuth();
+  const { profile, loading, mustChangePassword } = useAuth();
 
   if (loading) {
     return (
@@ -323,17 +356,21 @@ const RootRoute: React.FC = () => {
 
   if (!profile) {
     return (
-      <Suspense fallback={null}>
+      <Suspense fallback={routeSuspenseFallback}>
         <LoginPage />
       </Suspense>
     );
+  }
+
+  if (mustChangePassword) {
+    return <Navigate to="/force-password-change" replace />;
   }
 
   return <Navigate to="/admin/dashboard" replace />;
 };
 
 const LoginRoute: React.FC = () => {
-  const { profile, loading } = useAuth();
+  const { profile, loading, mustChangePassword } = useAuth();
   const [searchParams] = useSearchParams();
 
   if (loading) return null;
@@ -347,10 +384,13 @@ const LoginRoute: React.FC = () => {
   }
 
   if (profile) {
+    if (mustChangePassword) {
+      return <Navigate to="/force-password-change" replace />;
+    }
     return <Navigate to="/admin/dashboard" replace />;
   }
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={routeSuspenseFallback}>
       <LoginPage />
     </Suspense>
   );
@@ -367,7 +407,7 @@ const SignupRoute: React.FC = () => {
     return <Navigate to="/" replace />;
   }
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={routeSuspenseFallback}>
       <SellerSignupPage />
     </Suspense>
   );
@@ -397,6 +437,7 @@ export default function App() {
         <Router>
         <AuthProvider>
           <RbacProvider>
+          <ImpersonationProvider>
           <LogisticsProvider>
           <CashBookProvider>
             <BrandProfilesProvider>
@@ -414,38 +455,41 @@ export default function App() {
               <ErrorBoundary>
               <Routes>
             <Route path="/login" element={<LoginRoute />} />
-            <Route path="/signup" element={<SignupRoute />} />
-            <Route path="/products/:id" element={<Suspense fallback={null}><ProductDetailPage /></Suspense>} />
-            <Route path="/upe/:entityType/:entityId" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Unified Profile...</div>}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
-            
-            {/* Unified root-level profile routes */}
-            <Route path="/consumer/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
-            <Route path="/seller/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
-            <Route path="/brand/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
-            <Route path="/order/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
-            <Route path="/creator/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={null}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
-
             <Route
-              path="/admin/account/profile"
+              path="/force-password-change"
               element={
-                <ProtectedRoute>
-                  <AdminLayout>
-                    <Suspense fallback={null}>
-                      <AccountComingSoon
-                        title="My Profile"
-                        description="View and edit your personal profile, public display name, and workspace identity."
-                      />
-                    </Suspense>
-                  </AdminLayout>
-                </ProtectedRoute>
+                <Suspense fallback={routeSuspenseFallback}>
+                  <ForcePasswordChangeGate />
+                </Suspense>
               }
             />
+            <Route path="/signup" element={<SignupRoute />} />
+            <Route path="/products/:id" element={<Suspense fallback={routeSuspenseFallback}><ProductDetailPage /></Suspense>} />
+            <Route path="/upe/:entityType/:entityId" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Unified Profile...</div>}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
+            
+            {/*
+              Entity profile routes — Admin inspection / deep links only.
+              Own-profile navigations must use getMyProfilePath → cms-mirror
+              (/admin/brand-profile | /admin/creator-profile | /admin/profile | /admin/consumer-profile).
+              Self hits on /seller|/creator|/consumer/:id redirect to the canonical cms-mirror path.
+            */}
+            <Route path="/consumer/:id" element={<ProtectedRoute><OwnProfileRedirect role="consumer" /></ProtectedRoute>} />
+            <Route path="/seller/:id" element={<ProtectedRoute><OwnProfileRedirect role="seller" /></ProtectedRoute>} />
+            <Route path="/brand/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={routeSuspenseFallback}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
+            <Route path="/order/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={routeSuspenseFallback}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
+            <Route path="/creator/:id" element={<ProtectedRoute><OwnProfileRedirect role="creator" /></ProtectedRoute>} />
+
+            {/*
+              Admin / account self-profile: CmsMirrorHost (adminProfile page) — NOT UnifiedProfileShell.
+              Fall through /admin/* catch-all below; do not mount the legacy React UPE shell here.
+            */}
+            <Route path="/admin/account/profile" element={<Navigate to="/admin/profile" replace />} />
             <Route
               path="/admin/account/settings"
               element={
                 <ProtectedRoute>
                   <AdminLayout>
-                    <Suspense fallback={null}>
+                    <Suspense fallback={routeSuspenseFallback}>
                       <AccountComingSoon
                         title="Account Settings"
                         description="Manage your personal account preferences, contact details, and notification defaults."
@@ -460,7 +504,7 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <AdminLayout>
-                    <Suspense fallback={null}>
+                    <Suspense fallback={routeSuspenseFallback}>
                       <AccountComingSoon
                         title="Security"
                         description="Update your password, review active sessions, and manage account security controls."
@@ -488,7 +532,7 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <BrandStudioRoleGate>
-                    <Suspense fallback={null}>
+                    <Suspense fallback={routeSuspenseFallback}>
                       <BrandStudioHomeEntry />
                     </Suspense>
                   </BrandStudioRoleGate>
@@ -501,7 +545,7 @@ export default function App() {
                 <ProtectedRoute>
                   <BrandStudioRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <BrandEditStudio />
                       </Suspense>
                     </AdminWorkspaceLayout>
@@ -515,7 +559,7 @@ export default function App() {
                 <ProtectedRoute>
                   <BrandStudioRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <BrandEditStudio />
                       </Suspense>
                     </AdminWorkspaceLayout>
@@ -535,7 +579,7 @@ export default function App() {
                 <ProtectedRoute>
                   <ProductVisualBuilderRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <ProductEditStudio />
                       </Suspense>
                     </AdminWorkspaceLayout>
@@ -549,7 +593,7 @@ export default function App() {
                 <ProtectedRoute>
                   <ProductVisualBuilderRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <ProductEditStudio />
                       </Suspense>
                     </AdminWorkspaceLayout>
@@ -570,7 +614,7 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <CreatorVisualBuilderRoleGate>
-                    <Suspense fallback={null}>
+                    <Suspense fallback={routeSuspenseFallback}>
                       <CreatorStudioHomeEntry />
                     </Suspense>
                   </CreatorVisualBuilderRoleGate>
@@ -587,7 +631,7 @@ export default function App() {
                 <ProtectedRoute>
                   <CreatorVisualBuilderRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <CreatorEditStudio />
                       </Suspense>
                     </AdminWorkspaceLayout>
@@ -601,7 +645,7 @@ export default function App() {
                 <ProtectedRoute>
                   <CreatorVisualBuilderRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <CreatorEditStudio />
                       </Suspense>
                     </AdminWorkspaceLayout>
@@ -621,7 +665,7 @@ export default function App() {
                 <ProtectedRoute>
                   <GuideVisualBuilderRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <GuideEditStudio />
                       </Suspense>
                     </AdminWorkspaceLayout>
@@ -635,7 +679,7 @@ export default function App() {
                 <ProtectedRoute>
                   <GuideVisualBuilderRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <GuideEditStudio />
                       </Suspense>
                     </AdminWorkspaceLayout>
@@ -656,7 +700,7 @@ export default function App() {
                 <ProtectedRoute>
                   <RoleGuard>
                     <AdminLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <OrdersOverview />
                       </Suspense>
                     </AdminLayout>
@@ -670,7 +714,7 @@ export default function App() {
                 <ProtectedRoute>
                   <RoleGuard>
                     <AdminLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <PlatformOrdersPage />
                       </Suspense>
                     </AdminLayout>
@@ -684,7 +728,7 @@ export default function App() {
                 <ProtectedRoute>
                   <RoleGuard>
                     <AdminLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <InvoiceView />
                       </Suspense>
                     </AdminLayout>
@@ -702,7 +746,7 @@ export default function App() {
                 <ProtectedRoute>
                   <GuideVisualBuilderRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <GuideEditStudio />
                       </Suspense>
                     </AdminWorkspaceLayout>
@@ -716,7 +760,7 @@ export default function App() {
                 <ProtectedRoute>
                   <GuideVisualBuilderRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={null}>
+                      <Suspense fallback={routeSuspenseFallback}>
                         <GuideEditStudio />
                       </Suspense>
                     </AdminWorkspaceLayout>
@@ -735,7 +779,7 @@ export default function App() {
             <Route
               path="*"
               element={
-                <Suspense fallback={null}>
+                <Suspense fallback={routeSuspenseFallback}>
                   <NotFoundPage />
                 </Suspense>
               }
@@ -755,6 +799,7 @@ export default function App() {
             </BrandProfilesProvider>
           </CashBookProvider>
           </LogisticsProvider>
+          </ImpersonationProvider>
           </RbacProvider>
         </AuthProvider>
     </Router>

@@ -139,7 +139,15 @@ export default function SettingsPage() {
     setRolePermissions(updated);
     localStorage.setItem('choosify_role_permissions', JSON.stringify(updated));
     operationsApi
-      .updatePermissions(updated as Record<string, Record<'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics' | 'taxonomy', boolean>>)
+      .updatePermissions(
+        updated as Record<
+          string,
+          Record<
+            'content' | 'users' | 'finance' | 'brand' | 'system' | 'analytics' | 'taxonomy' | 'impersonate',
+            boolean
+          >
+        >,
+      )
       .then(
         () => showToast(`✓ Updated [${role.replace('_', ' ')}] permission for [${permKey}]`),
         (err: unknown) => {

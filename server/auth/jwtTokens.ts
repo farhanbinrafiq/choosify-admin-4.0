@@ -14,6 +14,14 @@ export type AccessTokenClaims = {
   uid: string;
   email?: string;
   emailVerified?: boolean;
+  impersonation?: {
+    sessionId: string;
+    realActorUid: string;
+    realActorRole?: string;
+    startedAt: string;
+    expiresAt: string;
+    reason?: string;
+  };
 };
 
 function requireAccessSecret(): string {
@@ -33,11 +41,13 @@ export function signAccessToken(user: {
   id: string;
   email: string;
   emailVerified: boolean;
+  impersonation?: AccessTokenClaims['impersonation'];
 }): string {
   const claims: AccessTokenClaims = {
     uid: user.id,
     email: user.email,
     emailVerified: user.emailVerified,
+    impersonation: user.impersonation,
   };
   return jwt.sign(claims, requireAccessSecret(), {
     expiresIn: ACCESS_TTL,
@@ -54,6 +64,7 @@ export function verifyAccessToken(token: string): AccessTokenClaims | null {
       uid,
       email: typeof decoded.email === 'string' ? decoded.email : undefined,
       emailVerified: Boolean(decoded.emailVerified),
+      impersonation: decoded.impersonation,
     };
   } catch (error) {
     if (isExpiredJwtError(error)) throw error;

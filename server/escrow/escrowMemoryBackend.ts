@@ -145,6 +145,12 @@ export const escrowMemoryBackend = {
     schedulePersist();
     return row;
   },
+  listBalanceEntriesBySeller(sellerId: string): SellerBalanceLedgerEntry[] {
+    ensureEscrowMemoryHydrated();
+    return state.balanceEntries
+      .filter((e) => e.sellerId === sellerId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
   getRefund(refundId: string): CommerceRefund | null {
     ensureEscrowMemoryHydrated();
     return state.refunds.find((r) => r.refundId === refundId) ?? null;

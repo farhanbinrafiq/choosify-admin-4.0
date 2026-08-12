@@ -31,6 +31,12 @@ export interface UserProfile {
   email: string;
   role: UserRole;
   avatar?: string;
+  changeNextLogin?: boolean;
+  username?: string;
+  website?: string;
+  bio?: string;
+  /** Permanent human-readable Choosify User ID (CF-00001…). Immutable. */
+  choosifyUserId?: string;
 }
 
 export interface SellerBrandRelation {
@@ -51,8 +57,11 @@ interface AuthContextType {
   user: any | null; // Keep for compatibility
   profile: UserProfile | null;
   loading: boolean;
+  mustChangePassword: boolean;
   login: (role: UserRole) => void;
   loginWithEmail: (email: string, password: string, fallbackRole?: UserRole) => Promise<UserRole>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  clearMustChangePassword: () => void;
   registerSeller: (input: {
     email: string;
     displayName: string;
@@ -154,7 +163,8 @@ function toUserRole(role: string, fallback: UserRole = 'admin'): UserRole {
     'support_agent',
     'marketing_manager',
   ];
-  return allowed.includes(role as UserRole) ? (role as UserRole) : fallback;
+  const normalized = role === 'user' ? 'consumer' : role;
+  return allowed.includes(normalized as UserRole) ? (normalized as UserRole) : fallback;
 }
 
 const AUTH_TOKEN_KEY = 'choosify_auth_token';
@@ -191,8 +201,18 @@ async function refreshAccessToken(): Promise<string | null> {
   }
 }
 
+class AuthResolveError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'AuthResolveError';
+    this.status = status;
+  }
+}
+
 // Fetches /auth/me; on a 401 it refreshes the access token exactly once and
 // retries the same request exactly once before giving up.
+// 429 is retried with backoff and never treated as a hard logout signal.
 async function resolveAuthProfile(token: string) {
   let response = await fetchAuthProfile(token);
 
@@ -203,8 +223,13 @@ async function resolveAuthProfile(token: string) {
     }
   }
 
+  for (let attempt = 0; attempt < 4 && response.status === 429; attempt++) {
+    await new Promise((r) => setTimeout(r, 800 * (attempt + 1)));
+    response = await fetchAuthProfile(token);
+  }
+
   if (!response.ok) {
-    throw new Error('Unable to resolve admin profile');
+    throw new AuthResolveError(response.status, 'Unable to resolve admin profile');
   }
 
   return response.json() as Promise<{
@@ -212,6 +237,11 @@ async function resolveAuthProfile(token: string) {
     email: string;
     displayName: string;
     role: string;
+    changeNextLogin?: boolean;
+    username?: string;
+    website?: string;
+    bio?: string;
+    choosifyUserId?: string | null;
   }>;
 }
 
@@ -219,8 +249,11 @@ const AuthContext = createContext<AuthContextType>({
   user: null, 
   profile: null, 
   loading: true,
+  mustChangePassword: false,
   login: () => {},
   loginWithEmail: async () => 'admin',
+  changePassword: async () => {},
+  clearMustChangePassword: () => {},
   registerSeller: async () => ({ role: 'seller', dashboardPath: '/seller/products' }),
   logout: () => {},
   switchRole: () => {},
@@ -271,27 +304,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (token) {
         console.info('[Auth] Restoring session from stored token');
-        try {
-          const remote = await resolveAuthProfile(token);
-          if (!cancelled) {
-            // Real JWT session — never keep a TempRole mock key alongside it.
-            localStorage.removeItem('choosify_mock_role');
-            setProfile({
-              id: remote.uid,
-              displayName: remote.displayName,
-              email: remote.email,
-              role: toUserRole(remote.role),
-            });
-            console.info('[Auth] Session restored', { uid: remote.uid, role: remote.role });
-          }
-        } catch (error) {
-          console.warn('[Auth] Session restore failed — clearing JWT, remaining unauthenticated', error);
-          // StrictMode: a cancelled mount must not erase a token still needed by the remount.
-          if (!cancelled) {
-            localStorage.removeItem(AUTH_TOKEN_KEY);
-            // Never resurrect mockProfiles after a failed real session.
-            localStorage.removeItem('choosify_mock_role');
-            setProfile(null);
+        let restored = false;
+        for (let attempt = 0; attempt < 5 && !restored && !cancelled; attempt++) {
+          try {
+            const remote = await resolveAuthProfile(token);
+            if (!cancelled) {
+              // Real JWT session — never keep a TempRole mock key alongside it.
+              localStorage.removeItem('choosify_mock_role');
+              setProfile({
+                id: remote.uid,
+                displayName: remote.displayName,
+                email: remote.email,
+                role: toUserRole(remote.role),
+                changeNextLogin: remote.changeNextLogin === true,
+                username: remote.username,
+                website: remote.website,
+                bio: remote.bio,
+                choosifyUserId: remote.choosifyUserId || undefined,
+              });
+              console.info('[Auth] Session restored', { uid: remote.uid, role: remote.role });
+            }
+            restored = true;
+          } catch (error) {
+            const status = error instanceof AuthResolveError ? error.status : 0;
+            // Rate-limit / transient failures must not wipe a still-valid JWT.
+            if (status === 429 || status >= 500) {
+              console.warn('[Auth] Session restore retry — keeping JWT', { status, attempt });
+              await new Promise((r) => setTimeout(r, 700 * (attempt + 1)));
+              continue;
+            }
+            console.warn('[Auth] Session restore failed — clearing JWT, remaining unauthenticated', error);
+            // StrictMode: a cancelled mount must not erase a token still needed by the remount.
+            if (!cancelled) {
+              localStorage.removeItem(AUTH_TOKEN_KEY);
+              // Never resurrect mockProfiles after a failed real session.
+              localStorage.removeItem('choosify_mock_role');
+              setProfile(null);
+            }
+            break;
           }
         }
       } else {
@@ -404,6 +454,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       displayName?: string;
       role?: string;
       accessToken?: string;
+      changeNextLogin?: boolean;
+      username?: string;
+      website?: string;
+      bio?: string;
+      choosifyUserId?: string | null;
     };
 
     if (!response.ok || !payload.accessToken) {
@@ -415,15 +470,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // choosify_mock_role is TempRoleSwitcher-only — never share it with real auth.
     localStorage.removeItem('choosify_mock_role');
     const role = toUserRole(payload.role || '', fallbackRole);
-    const nextProfile: UserProfile = {
+    let nextProfile: UserProfile = {
       id: payload.uid || '',
       displayName: payload.displayName || email.trim(),
       email: payload.email || email.trim(),
       role,
+      changeNextLogin: payload.changeNextLogin === true,
+      username: payload.username,
+      website: payload.website,
+      bio: payload.bio,
+      choosifyUserId: payload.choosifyUserId || undefined,
     };
+    // Prefer /auth/me so changeNextLogin and identity extras are authoritative after login.
+    try {
+      const remote = await resolveAuthProfile(payload.accessToken);
+      nextProfile = {
+        id: remote.uid,
+        displayName: remote.displayName,
+        email: remote.email,
+        role: toUserRole(remote.role, role),
+        changeNextLogin: remote.changeNextLogin === true,
+        username: remote.username,
+        website: remote.website,
+        bio: remote.bio,
+        choosifyUserId: remote.choosifyUserId || undefined,
+      };
+    } catch (error) {
+      console.warn('[Auth] Post-login /auth/me failed; using login payload', error);
+    }
     setProfile(nextProfile);
-    console.info('[Auth] Login succeeded', { uid: payload.uid, role });
-    return role;
+    console.info('[Auth] Login succeeded', { uid: nextProfile.id, role: nextProfile.role });
+    return nextProfile.role;
+  };
+
+  const clearMustChangePassword = () => {
+    setProfile((prev) => (prev ? { ...prev, changeNextLogin: false } : prev));
+  };
+
+  const changePassword = async (currentPassword: string, newPassword: string) => {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!token) throw new Error('Sign in required');
+    if (localStorage.getItem('choosify_impersonation_original_token')) {
+      throw new Error('Unavailable during Admin impersonation');
+    }
+    const response = await fetch(`${API_BASE}/auth/change-password`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as {
+      error?: string;
+      message?: string;
+    };
+    if (!response.ok) {
+      throw new Error(payload.error || 'Unable to change password');
+    }
+    clearMustChangePassword();
   };
 
   const registerSeller = async (input: {
@@ -782,8 +887,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       user: profile ? { uid: profile.id, email: profile.email } : null, 
       profile, 
       loading,
+      mustChangePassword: profile?.changeNextLogin === true,
       login,
       loginWithEmail,
+      changePassword,
+      clearMustChangePassword,
       registerSeller,
       logout,
       switchRole,

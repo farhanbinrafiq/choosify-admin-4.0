@@ -114,6 +114,9 @@ export const escrowStore = {
   ): Promise<SellerBalanceLedgerEntry> {
     return (await requireMemory()).appendBalanceEntry(row);
   },
+  async listBalanceEntriesBySeller(sellerId: string): Promise<SellerBalanceLedgerEntry[]> {
+    return (await requireMemory()).listBalanceEntriesBySeller(sellerId);
+  },
   async getRefund(refundId: string): Promise<CommerceRefund | null> {
     return (await requireMemory()).getRefund(refundId);
   },

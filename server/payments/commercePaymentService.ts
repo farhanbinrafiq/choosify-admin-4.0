@@ -422,6 +422,15 @@ export async function initiateCommercePayment(
     updatedAt: now,
     processedValIds: [],
   };
+  try {
+    const { ensureEntityReferenceId } = await import('../referenceIds/referenceIdService');
+    payment.paymentReferenceId = await ensureEntityReferenceId({
+      entityType: 'payment',
+      internalId: payment.paymentId,
+    });
+  } catch {
+    /* backfill can repair */
+  }
 
   emitPayment('PaymentInitiated', payment, input.actor.userId);
   payment = {

@@ -22,9 +22,42 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [resetRequesting, setResetRequesting] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const { loginWithEmail } = useAuth();
   const navigate = useNavigate();
+
+  const handleForgotPassword = async () => {
+    setError('');
+    setInfo('');
+    const target = email.trim();
+    if (!target || !target.includes('@')) {
+      setError('Enter your account email above, then request a password reset.');
+      return;
+    }
+    setResetRequesting(true);
+    try {
+      const res = await fetch('/api/v1/auth/password-reset-request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: target }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+      if (!res.ok) {
+        setError(body.error || 'Unable to submit password reset request');
+        return;
+      }
+      setInfo(
+        body.message ||
+          'If an account exists with this email, password reset assistance has been requested. Choosify Support/Admin will assist.',
+      );
+    } catch {
+      setError('Unable to submit password reset request');
+    } finally {
+      setResetRequesting(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,12 +67,9 @@ export default function LoginPage() {
       const role = await loginWithEmail(email, password, roleFromQuery || 'super_admin');
       void role;
 
-      let redirectPath = '/admin/dashboard';
-      if (nextPath.startsWith('/') && !nextPath.startsWith('//')) {
-        redirectPath = nextPath;
-      }
-
-      navigate(redirectPath);
+      // Forced password change is gated by AuthContext.mustChangePassword + routes.
+      // Always land on root so RootRoute / ForcePasswordChangeGate can enforce.
+      navigate('/');
     } catch (err) {
       setError(authLoginErrorMessage(err));
     } finally {
@@ -130,15 +160,23 @@ export default function LoginPage() {
             <div className="text-right mb-[22px]">
               <button
                 type="button"
-                className="text-[11px] font-bold text-[#FF5B00] hover:text-[#E64A00] transition-colors"
+                disabled={resetRequesting}
+                onClick={() => void handleForgotPassword()}
+                className="text-[11px] font-bold text-[#FF5B00] hover:text-[#E64A00] transition-colors disabled:opacity-60"
               >
-                Forgot your password?
+                {resetRequesting ? 'Requesting…' : 'Forgot your password?'}
               </button>
             </div>
 
             {error && (
               <div className="rounded-lg border border-red-200 bg-red-50 px-3.5 py-2.5 text-[12.5px] text-red-700 mb-[18px]">
                 {error}
+              </div>
+            )}
+
+            {info && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3.5 py-2.5 text-[12.5px] text-emerald-800 mb-[18px]">
+                {info}
               </div>
             )}
 

@@ -10,6 +10,7 @@ import { authRouter } from "./authRouter";
 import { paymentsRouter } from "./payments/paymentsRouter";
 import { commercePaymentsRouter } from "./payments/commercePaymentsRouter";
 import { escrowRouter } from "./escrow/escrowRouter";
+import { referenceIdRouter } from "./referenceIds/referenceIdRouter";
 import { commerceRouter } from "./commerceRouter";
 import { conversationRouter } from "./messaging/conversations/conversationRouter";
 import { bootstrapConversationEventSubscribers } from "./messaging/conversations/conversationEvents";
@@ -45,11 +46,28 @@ import { aiRouter } from "./ai/aiRouter";
 import { emiRouter } from "./emi/emiRouter";
 import { healthRouter } from "./routes/health";
 import { diagnosticsRouter } from "./routes/diagnostics";
+import { dashboardSearchRouter } from "./dashboardSearch/dashboardSearchRouter";
 
 dotenv.config();
 validateEnvironment();
 ensureConversationMemoryHydrated();
 bootstrapConversationEventSubscribers();
+
+// Ensure Choosify User ID schema + idempotent backfill on boot (non-blocking failure).
+void import('./auth/choosifyUserId')
+  .then(async ({ ensureChoosifyUserIdSchema, backfillChoosifyUserIds }) => {
+    await ensureChoosifyUserIdSchema();
+    const result = await backfillChoosifyUserIds();
+    console.log(
+      `[ChoosifyUserId] Backfill complete — total=${result.totalUsers} assigned=${result.assigned} preserved=${result.alreadyHadId} duplicates=${result.duplicatesDetected.length}`,
+    );
+  })
+  .catch((error) => {
+    console.warn(
+      '[ChoosifyUserId] Boot backfill skipped:',
+      error instanceof Error ? error.message : String(error),
+    );
+  });
 
 /**
  * Fully configured Express app with all middleware and API routers.
@@ -78,8 +96,18 @@ export function createApp(): Express {
   app.use(payloadTooLargeHandler);
   app.use(createCorsMiddleware());
 
-  // Rate limiting — specific policies before public fallback
-  app.use("/api/v1/auth", authRateLimit);
+  // Rate limiting — specific policies before public fallback.
+  // Strict auth bucket applies only to credential/session-mutation endpoints.
+  // Authenticated reads (/auth/me, impersonation status/history, directory) use
+  // the admin policy so a valid session is not flushed by login-tier limits.
+  const AUTH_STRICT_PATH =
+    /^\/api\/v1\/auth\/(login|register|seller-register|upgrade-to-seller|refresh|logout|dev-login|password-reset-request|change-password)(\/|$)/i;
+  app.use("/api/v1/auth", (req, res, next) => {
+    if (AUTH_STRICT_PATH.test(req.originalUrl.split("?")[0] || "")) {
+      return authRateLimit(req, res, next);
+    }
+    return adminRateLimit(req, res, next);
+  });
   app.use("/api/messaging", messagingRateLimit);
   app.use("/api/conversations", messagingRateLimit);
   app.use("/api/messages", messagingRateLimit);
@@ -92,7 +120,12 @@ export function createApp(): Express {
   app.use("/api/v1/conversations", messagingRateLimit);
   app.use("/api/v1/support", messagingRateLimit);
   app.use("/api/v1/seller/social-inbox", messagingRateLimit);
-  app.use("/api", publicApiRateLimit);
+  // Auth already has its own policy — do not double-count under the public bucket.
+  app.use("/api", (req, res, next) => {
+    const path = (req.originalUrl || req.url || "").split("?")[0] || "";
+    if (path.startsWith("/api/v1/auth")) return next();
+    return publicApiRateLimit(req, res, next);
+  });
 
   app.use("/api", analyticsRouter);
   app.use("/api", moderationRouter);
@@ -103,9 +136,11 @@ export function createApp(): Express {
   app.use("/api", messagingRouter);
   app.use("/api", logisticsRouter);
   app.use("/api/v1", catalogRouter);
+  app.use("/api/v1", dashboardSearchRouter);
   app.use("/api/v1", commerceRouter);
   app.use("/api/v1", commercePaymentsRouter);
   app.use("/api/v1", escrowRouter);
+  app.use("/api/v1", referenceIdRouter);
   app.use("/api/v1", operationsRouter);
   app.use("/api/v1", bookingRouter);
   app.use("/api/v1", paymentsRouter);

@@ -95,6 +95,8 @@ export interface CatalogBrand {
   id: string;
   slug: string;
   name: string;
+  /** Permanent Choosify Brand Reference ID (BR-#####). Display/search only. */
+  brandReferenceId?: string;
   category: string;
   description: string;
   logo: string;
@@ -141,6 +143,8 @@ export interface CatalogProduct {
   id: string;
   slug: string;
   title: string;
+  /** Permanent Choosify Product Reference ID (PR-#####). Not SKU. */
+  productReferenceId?: string;
   description: string;
   brandId: string;
   brandName: string;
@@ -188,6 +192,8 @@ export interface CatalogProduct {
   price: number;
   originalPrice?: number;
   stock: number;
+  /** Optional seller/catalog SKU — coexists with productReferenceId; not a substitute for it. */
+  sku?: string;
   status: CatalogPublishStatus;
   tags: string[];
   isDeal: boolean;
@@ -489,6 +495,8 @@ export interface CatalogGuide {
   id: string;
   slug: string;
   title: string;
+  /** Permanent Choosify Content Reference ID (CT-#####). Covers Video/Reel/Blog/Live/Guide. */
+  contentReferenceId?: string;
   author: string;
   authorAvatar?: string;
   category: string;

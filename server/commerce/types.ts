@@ -116,6 +116,10 @@ export type CommerceShipment = {
 export type CommerceOrder = {
   id: string;
   orderNumber: string;
+  /** Permanent Choosify Order Reference ID (OR-#####). Coexists with orderNumber. */
+  orderReferenceId?: string;
+  /** Permanent Choosify Invoice Reference ID (INV-#####). Coexists with any legal invoice number. */
+  invoiceReferenceId?: string;
   checkoutId: string;
   consumerId: string;
   sellerId: string;

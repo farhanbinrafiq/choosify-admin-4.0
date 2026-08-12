@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
+import { useParams, useNavigate, Link, useLocation, useSearchParams } from 'react-router-dom';
 import { useOrders, Order, OrderStatus, PaymentStatus } from '../../../contexts/OrdersContext';
 import { useBrandProfiles, BrandProfile, BrandStatus } from '../../../contexts/BrandProfilesContext';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useContact } from '../../../contexts/ContactInteractionContext';
+import { useRbac } from '../../../contexts/RbacContext';
+import { useImpersonation } from '../../../contexts/ImpersonationContext';
 import { MarketplaceAccessPanel } from '../../../components/admin/MarketplaceAccessPanel';
 import type { MarketplaceAccessState, MarketplaceEntityType, SuspendInput } from '../../../hooks/useMarketplaceAccess';
 import { 
@@ -28,6 +30,7 @@ import {
   Clock,
   CheckCircle,
   XCircle,
+  X,
   FileText,
   AlertTriangle,
   Upload,
@@ -71,7 +74,7 @@ import GuideStudioCMS, { GuideStudioItem } from '../../../components/profile/Gui
 import { catalogApi } from '../../../services/catalogApi';
 import type { CatalogBrand } from '../../../types/catalog';
 
-type ProfileEntityKind = 'consumer' | 'seller' | 'brand' | 'order' | 'creator';
+type ProfileEntityKind = 'consumer' | 'seller' | 'brand' | 'order' | 'creator' | 'admin';
 
 const getMockProductId = (title: string): string => {
   const t = title.toLowerCase();
@@ -369,7 +372,8 @@ const UPE_CONFIG: Record<string, string[]> = {
   seller: ['account', 'verification', 'portfolio', 'products', 'orders', 'reviews', 'ads'],
   brand: ['account', 'verification', 'portfolio', 'products', 'orders', 'reviews', 'ads'],
   order: ['overview', 'customer', 'logistics', 'finance', 'timeline'],
-  creator: ['account', 'verification', 'portfolio', 'recommended_products', 'content_listings', 'reviews']
+  creator: ['account', 'verification', 'portfolio', 'recommended_products', 'content_listings', 'reviews'],
+  admin: ['account', 'security', 'activity', 'permissions', 'notifications']
 };
 
 const defaultSubTabMap: Record<string, string> = {
@@ -377,7 +381,8 @@ const defaultSubTabMap: Record<string, string> = {
   seller: 'account',
   brand: 'account',
   order: 'overview',
-  creator: 'account'
+  creator: 'account',
+  admin: 'account'
 };
 
 export default function UnifiedProfileShell() {
@@ -388,6 +393,9 @@ export default function UnifiedProfileShell() {
   const { orders, customers, approveOrder, dispatchOrder, cancelOrder, addCustomerNotes, sendChatMessage } = useOrders();
   const { profiles: brandProfiles, addLog } = useBrandProfiles();
   const { profile: loggedInProfile } = useAuth();
+  const { can } = useRbac();
+  const { state: impersonationState, startImpersonation } = useImpersonation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { triggerMessage, triggerPhone } = useContact();
 
   // Marketplace Access mutations require platform CMS edit privilege (viewer role — not profile type).
@@ -404,10 +412,11 @@ export default function UnifiedProfileShell() {
   // Derive active type and id, supporting legacy upe paths and direct /consumer/:id routes
   const typeKey = useMemo((): ProfileEntityKind => {
     const raw = entityType?.toLowerCase();
-    if (raw === 'consumer' || raw === 'seller' || raw === 'brand' || raw === 'order' || raw === 'creator') {
+    if (raw === 'consumer' || raw === 'seller' || raw === 'brand' || raw === 'order' || raw === 'creator' || raw === 'admin') {
       return raw;
     }
     const path = location.pathname.toLowerCase();
+    if (path === '/admin/profile' || path === '/admin/account/profile' || path.startsWith('/admin/profile/')) return 'admin';
     if (path.includes('/consumer/')) return 'consumer';
     if (path.includes('/seller/')) return 'seller';
     if (path.includes('/brand/')) return 'brand';
@@ -426,7 +435,15 @@ export default function UnifiedProfileShell() {
     return 'consumer';
   }, [entityType, location.pathname]);
 
-  const idKey = entityId || id || (typeKey === 'seller' ? '1' : '');
+  const idKey =
+    typeKey === 'admin'
+      ? loggedInProfile?.id || 'self'
+      : entityId || id || (typeKey === 'seller' ? '1' : '');
+
+  const isSelfProfile = Boolean(
+    typeKey === 'admin' ||
+      (loggedInProfile?.id && idKey && loggedInProfile.id === idKey),
+  );
 
   // Tab routing control
   const [activeTab, setActiveTab] = useState('');
@@ -446,6 +463,49 @@ export default function UnifiedProfileShell() {
   /** Catalog brand hydration — Brand Management ledger uses catalog ids (e.g. brand-walton). */
   const [catalogBrand, setCatalogBrand] = useState<CatalogBrand | null>(null);
   const [catalogBrandLoading, setCatalogBrandLoading] = useState(false);
+  const [targetChoosifyUserId, setTargetChoosifyUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const token = localStorage.getItem('choosify_auth_token');
+    const selfMatch = Boolean(
+      typeKey === 'admin' || (loggedInProfile?.id && idKey && loggedInProfile.id === idKey),
+    );
+    if (selfMatch) {
+      setTargetChoosifyUserId(loggedInProfile?.choosifyUserId || null);
+      return;
+    }
+    if (!token) {
+      setTargetChoosifyUserId(null);
+      return;
+    }
+    let lookupUid: string | null = null;
+    if (typeKey === 'brand' && catalogBrand?.sellerId) {
+      lookupUid = catalogBrand.sellerId;
+    } else if (typeKey === 'consumer' || typeKey === 'seller' || typeKey === 'creator') {
+      lookupUid = idKey || null;
+    }
+    if (!lookupUid) {
+      setTargetChoosifyUserId(null);
+      return;
+    }
+    void (async () => {
+      try {
+        const res = await fetch(`/api/v1/auth/users/${encodeURIComponent(lookupUid)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const body = (await res.json().catch(() => ({}))) as { data?: { choosifyUserId?: string } };
+        if (!cancelled) {
+          setTargetChoosifyUserId(body.data?.choosifyUserId || null);
+        }
+      } catch {
+        if (!cancelled) setTargetChoosifyUserId(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [typeKey, idKey, catalogBrand?.sellerId, loggedInProfile?.id, loggedInProfile?.choosifyUserId]);
 
   useEffect(() => {
     if (typeKey === 'seller') {
@@ -493,6 +553,9 @@ export default function UnifiedProfileShell() {
     setToast({ text, type });
     setTimeout(() => setToast(null), 3500);
   };
+
+  const [impersonationConfirmOpen, setImpersonationConfirmOpen] = useState(false);
+  const [impersonationReason, setImpersonationReason] = useState('');
 
   // State for dispatch parameters log on orders logistics
   const [transitUpdateText, setTransitUpdateText] = useState('');
@@ -554,6 +617,22 @@ export default function UnifiedProfileShell() {
 
   // Load and assemble dynamic entity data based on state configurations
   const entityData = useMemo(() => {
+    if (typeKey === 'admin') {
+      const p = loggedInProfile;
+      if (!p) return null;
+      return {
+        kind: 'admin' as const,
+        id: p.id,
+        name: p.displayName || p.email || 'Admin',
+        email: p.email || '',
+        username: p.username || '',
+        avatarUrl: p.avatar || '',
+        choosifyUserId: p.choosifyUserId || '',
+        role: p.role,
+        status: 'Active',
+        recentActivities: [],
+      };
+    }
     if (!idKey) return null;
 
     if (typeKey === 'consumer') {
@@ -731,7 +810,7 @@ export default function UnifiedProfileShell() {
     }
 
     return null;
-  }, [typeKey, idKey, orders, customers, brandProfiles, catalogBrand]);
+  }, [typeKey, idKey, orders, customers, brandProfiles, catalogBrand, loggedInProfile]);
 
   // ----- Marketplace Access (suspend/reinstate) — shared across Brand/Seller/Creator/Consumer Account Info tabs -----
   const [marketplaceAccessByEntity, setMarketplaceAccessByEntity] = useState<Record<string, MarketplaceAccessState>>({});
@@ -914,7 +993,10 @@ export default function UnifiedProfileShell() {
   const orderEnt = entityData.kind === 'order' ? entityData : null;
 
   // 1. Map Breadcrumbs
-  const breadcrumbs = [
+  const breadcrumbs = typeKey === 'admin' ? [
+    { label: 'Dashboard', path: '/admin/dashboard' },
+    { label: 'Admin Profile' },
+  ] : [
     { label: 'Dashboard', path: '/admin/dashboard' },
     typeKey === 'consumer' ? { label: 'Consumers', path: '/admin/consumers' } :
     typeKey === 'seller' ? { label: 'Sellers', path: '/admin/sellers' } :
@@ -928,36 +1010,76 @@ export default function UnifiedProfileShell() {
   const title = typeKey === 'consumer' ? 'Consumer Profile' :
                 typeKey === 'seller' ? 'Seller Profile' :
                 typeKey === 'brand' ? 'Brand Profile' :
-                typeKey === 'order' ? 'Order Profile' : 'Creator Profile';
+                typeKey === 'order' ? 'Order Profile' :
+                typeKey === 'admin' ? 'Admin Profile' : 'Creator Profile';
 
   const subtitle = typeKey === 'consumer' ? 'Client account registry standard logs' :
                    typeKey === 'seller' ? 'NBR registered merchant legal profile & statistics' :
                    typeKey === 'brand' ? 'Ecosystem verified brand partner details' :
                    typeKey === 'order' ? 'System logistics and payment ledger status' :
+                   typeKey === 'admin' ? 'Account, security, RBAC scope, and preferences' :
                    'Expert influencer ecosystem alignment & campaign performance metrics';
 
   // 3. Header Action Buttons
-  const headerActions = typeKey === 'creator' ? [
-    {
-      label: 'Feature Creator',
-      onClick: () => showToast(`Featured Creator: ${entityData.name} pushed to spotlight`, 'success'),
-      icon: <Award className="w-3.5 h-3.5" />
-    }
-  ] : typeKey === 'order' ? [
-    {
-      label: 'Approve Order SLA',
-      onClick: handleOrderApproveSLA,
-      icon: <CheckCircle className="w-3.5 h-3.5" />
-    }
-  ] : undefined;
+  const canImpersonate = can('impersonate');
+  const showLoginAsUser =
+    ['consumer', 'seller', 'creator'].includes(typeKey) &&
+    canImpersonate &&
+    !impersonationState.active &&
+    !isSelfProfile &&
+    Boolean(idKey);
 
-  const backLink = typeKey === 'consumer' ? '/admin/consumers' :
+
+  useEffect(() => {
+    if (!showLoginAsUser) return;
+    if (searchParams.get('impersonate') !== '1') return;
+    setImpersonationConfirmOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('impersonate');
+    setSearchParams(next, { replace: true });
+  }, [showLoginAsUser, searchParams, setSearchParams]);
+
+  const baseHeaderActions =
+    typeKey === 'creator'
+      ? [
+          {
+            label: 'Feature Creator',
+            onClick: () => showToast(`Featured Creator: ${entityData.name} pushed to spotlight`, 'success'),
+            icon: <Award className="w-3.5 h-3.5" />,
+          },
+        ]
+      : typeKey === 'order'
+        ? [
+            {
+              label: 'Approve Order SLA',
+              onClick: handleOrderApproveSLA,
+              icon: <CheckCircle className="w-3.5 h-3.5" />,
+            },
+          ]
+        : [];
+
+  const headerActions = showLoginAsUser
+    ? [
+        ...baseHeaderActions,
+        {
+          label: 'Login As User',
+          onClick: () => setImpersonationConfirmOpen(true),
+          icon: <ShieldAlert className="w-3.5 h-3.5" />,
+        },
+      ]
+    : baseHeaderActions.length
+      ? baseHeaderActions
+      : undefined;
+
+  const backLink = typeKey === 'admin' ? undefined :
+                   typeKey === 'consumer' ? '/admin/consumers' :
                    typeKey === 'seller' ? '/admin/sellers' :
                    typeKey === 'brand' ? '/admin/brand-studio' :
                    typeKey === 'order' ? '/admin/orders' :
                    '/admin/consumers?tab=creators';
 
-  const backLinkLabel = typeKey === 'consumer' ? 'All Consumers' :
+  const backLinkLabel = typeKey === 'admin' ? undefined :
+                        typeKey === 'consumer' ? 'All Consumers' :
                         typeKey === 'seller' ? 'All Sellers' :
                         typeKey === 'brand' ? 'All Brands' :
                         typeKey === 'order' ? 'All Orders' :
@@ -965,20 +1087,27 @@ export default function UnifiedProfileShell() {
 
   // 4. Identity Column Mapping
   const bannerText = typeKey.toUpperCase();
-  const bannerGradientClass = typeKey === 'consumer' ? 'from-rose-600/30 via-app-card to-app-gradient-end' :
+  const bannerGradientClass = typeKey === 'admin' ? 'from-slate-600/30 via-app-card to-app-gradient-end' :
+                              typeKey === 'consumer' ? 'from-rose-600/30 via-app-card to-app-gradient-end' :
                               typeKey === 'seller' ? 'from-orange-600/30 via-app-card to-app-gradient-end' :
                               typeKey === 'brand' ? 'from-indigo-600/30 via-app-card to-app-gradient-end' :
                               typeKey === 'order' ? 'from-yellow-600/30 via-app-card to-app-gradient-end' :
                               'from-emerald-600/30 via-app-card to-app-gradient-end';
 
   const avatarUrl = brand ? brand.logo : (creator?.avatarUrl || consumer?.avatarUrl || (entityData as { avatarUrl?: string }).avatarUrl);
-  const initials = consumer?.initials || seller?.name?.slice(0, 2).toUpperCase() || (orderEnt ? 'ORD' : brand ? 'BRD' : 'CR');
+  const initials = typeKey === 'admin'
+    ? (entityData.name || 'AD').slice(0, 2).toUpperCase()
+    : consumer?.initials || seller?.name?.slice(0, 2).toUpperCase() || (orderEnt ? 'ORD' : brand ? 'BRD' : 'CR');
   const name = orderEnt
     ? `ORDER #${orderEnt.id}`
     : seller
       ? seller.storeName
       : entityData.name;
-  const handle = creator
+  const handle = typeKey === 'admin'
+    ? ((entityData as { username?: string }).username
+        ? `@${String((entityData as { username?: string }).username).replace(/^@/, '')}`
+        : (entityData as { email?: string }).email || '')
+    : creator
     ? creator.handle
     : seller
       ? seller.name
@@ -992,7 +1121,10 @@ export default function UnifiedProfileShell() {
 
   const persona = brand ? brand.description : creator?.persona || consumer?.persona;
 
-  const identityBadges = creator ? [
+  const identityBadges = typeKey === 'admin' ? [
+    { label: String((entityData as { role?: string }).role || 'admin').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()), colorClass: 'bg-blue-500/10 text-blue-400 border border-blue-500/20' },
+    { label: 'Active', colorClass: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' },
+  ] : creator ? [
     { label: creator.verificationStatus },
     { label: creator.status, colorClass: creator.status === 'Banned' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20' }
   ] : consumer ? [
@@ -1007,22 +1139,37 @@ export default function UnifiedProfileShell() {
     { label: orderEnt.paymentStatus, colorClass: orderEnt.paymentStatus === 'Paid' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20' }
   ] : [];
 
-  const identityFields = creator ? [
+  const resolvedCfId =
+    (isSelfProfile && loggedInProfile?.choosifyUserId) ||
+    targetChoosifyUserId ||
+    (entityData as { choosifyUserId?: string } | null)?.choosifyUserId ||
+    '—';
+
+  const identityFields = typeKey === 'admin' ? [
+    { label: 'Choosify User ID', value: resolvedCfId },
+    { label: 'Role', value: (entityData as any)?.role ? String((entityData as any).role).replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : 'Admin' },
+    { label: 'Email', value: (entityData as any)?.email || '—' },
+    { label: 'Status', value: 'Active' },
+  ] : creator ? [
+    { label: 'Choosify User ID', value: resolvedCfId },
     { label: 'Email address', value: creator.email },
     { label: 'Geography Base', value: creator.address },
     { label: 'Primary Phone', value: creator.phone },
     { label: 'Last active timestamp', value: creator.lastActive, icon: <Clock className="w-3.5 h-3.5 text-app-accent-light" /> }
   ] : consumer ? [
+    { label: 'Choosify User ID', value: resolvedCfId },
     { label: 'Email account', value: consumer.email },
     { label: 'Geography Base', value: consumer.address },
     { label: 'Primary Phone', value: consumer.phone },
     { label: 'Connection Standing', value: consumer.lastActive, icon: <Clock className="w-3.5 h-3.5 text-app-accent-light" /> }
   ] : seller ? [
+    { label: 'Choosify User ID', value: resolvedCfId },
     { label: 'Corporate Email', value: seller.email },
     { label: 'Contact Phone', value: seller.phone },
     { label: 'Settlement Plan', value: seller.settlementPlan },
     { label: 'Corporate Address', value: seller.address, icon: <MapPin className="w-3.5 h-3.5 text-app-accent-light" /> }
   ] : brand ? [
+    { label: 'Choosify User ID', value: resolvedCfId },
     { label: 'Owner Store Name', value: brand.ownerStore },
     { label: 'Creative Industry', value: brand.industry },
     { label: 'Creative Segment', value: brand.category },
@@ -1064,7 +1211,11 @@ export default function UnifiedProfileShell() {
   ] : undefined;
 
   // 7. KPIs Metrics Sections
-  const kpis = typeKey === 'consumer' ? [
+  const kpis = typeKey === 'admin' ? [
+    { title: 'Last Login', value: '—', subtext: 'Not exposed by backend yet', sparklinePath: 'M5 25 Q 25 10, 45 35 T 85 15 T 95 20' },
+    { title: 'Active Sessions', value: '1', subtext: 'Current browser session only', colorTheme: 'indigo' as const },
+    { title: 'Admin Actions — 30D', value: '—', subtext: 'Audit retrieval API not available', colorTheme: 'emerald' as const },
+  ] : typeKey === 'consumer' ? [
     { title: 'Total Revenue LTV', value: (entityData as any).totalSpent, subtext: `Last active: ${(entityData as any).lastActive}`, sparklinePath: 'M5 25 Q 25 10, 45 35 T 85 15 T 95 20' },
     { title: 'Secure Wallet Standing', value: `${(entityData as any).totalOrders} Invoices`, subtext: `Score: ${(entityData as any).retentionScore}% retention`, colorTheme: 'indigo' as const },
     { title: 'Support & Tickets Log', value: `${(entityData as any).supportTicketsCount} Tickets`, subtext: `Wishlist: ${(entityData as any).wishlistCount} items saved`, colorTheme: entityData.status === 'Banned' ? 'rose' as const : 'emerald' as const }
@@ -1121,6 +1272,12 @@ export default function UnifiedProfileShell() {
       else if (tab === 'saved_items') label = '📌 Saved Items';
       else if (tab === 'followed_creators') label = '🎞 Followed Creators';
       else if (tab === 'search_history') label = '🔍 Search History';
+    } else if (typeKey === 'admin') {
+      if (tab === 'account') label = 'Account Information';
+      else if (tab === 'security') label = 'Security & Sessions';
+      else if (tab === 'activity') label = 'Activity Log';
+      else if (tab === 'permissions') label = 'Permissions & Role';
+      else if (tab === 'notifications') label = 'Notification Preferences';
     } else if (typeKey === 'creator') {
       if (tab === 'account') label = '⚙️ Account Information';
       else if (tab === 'verification') label = '🧾 Verification Center';
@@ -1421,8 +1578,108 @@ export default function UnifiedProfileShell() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         toast={toast ? { message: toast.text, type: toast.type } : null}
+        variant="light"
       >
-        
+        {/* ========== ADMIN SELF PROFILE (same ProfileLayout shell) ========== */}
+        {typeKey === 'admin' && activeTab === 'account' && entityData && (
+          <div className="space-y-4 text-left font-sans">
+            <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl space-y-3">
+              <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Account Information</h3>
+              <div>
+                <div className="text-[9px] font-bold text-app-text-secondary uppercase tracking-wider">Choosify User ID</div>
+                <div className="mt-1 text-sm font-mono font-bold text-app-text-primary">{resolvedCfId}</div>
+                <div className="text-[10px] text-app-text-secondary font-semibold mt-1">Permanent account reference — not editable</div>
+              </div>
+              <div>
+                <div className="text-[9px] font-bold text-app-text-secondary uppercase tracking-wider">Display Name</div>
+                <div className="mt-1 text-[13px] font-bold text-app-text-primary">{entityData.name}</div>
+              </div>
+              <div>
+                <div className="text-[9px] font-bold text-app-text-secondary uppercase tracking-wider">Email</div>
+                <div className="mt-1 text-[13px] font-bold text-app-text-primary">{(entityData as { email?: string }).email || '—'}</div>
+              </div>
+              <div>
+                <div className="text-[9px] font-bold text-app-text-secondary uppercase tracking-wider">Username</div>
+                <div className="mt-1 text-[13px] font-bold text-app-text-primary">
+                  {(entityData as { username?: string }).username
+                    ? `@${String((entityData as { username?: string }).username).replace(/^@/, '')}`
+                    : '—'}
+                </div>
+              </div>
+              <p className="text-[11px] text-app-text-secondary font-semibold">
+                Profile photo is managed from the avatar menu in the top bar. Role and CF ID are not self-editable.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {typeKey === 'admin' && activeTab === 'security' && (
+          <div className="space-y-4 text-left font-sans">
+            <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl space-y-3">
+              <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Security &amp; Sessions</h3>
+              <div className="text-[12px] text-app-text-secondary font-semibold">
+                Password change is available from Account Settings / Security routes. Two-Factor Authentication —{' '}
+                <span className="text-app-text-primary font-bold">Not Implemented</span>.
+              </div>
+              <div className="border border-app-border rounded-[4px] p-4 bg-app-bg/40">
+                <div className="text-[9px] font-bold text-app-text-secondary uppercase tracking-wider">Current Session</div>
+                <div className="text-[12px] font-bold text-app-text-primary mt-1">This browser</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {typeKey === 'admin' && activeTab === 'activity' && (
+          <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl text-left font-sans space-y-3">
+            <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Activity Log</h3>
+            <div className="text-[12px] text-app-text-secondary font-semibold">
+              No admin-safe per-user audit retrieval API is available in this build.
+            </div>
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-app-bg/40">
+                  <th className="p-3 text-[10px] font-extrabold uppercase tracking-widest text-app-text-secondary">Action</th>
+                  <th className="p-3 text-[10px] font-extrabold uppercase tracking-widest text-app-text-secondary">Target</th>
+                  <th className="p-3 text-[10px] font-extrabold uppercase tracking-widest text-app-text-secondary">Reference ID</th>
+                  <th className="p-3 text-[10px] font-extrabold uppercase tracking-widest text-app-text-secondary">Date/Time</th>
+                  <th className="p-3 text-[10px] font-extrabold uppercase tracking-widest text-app-text-secondary">Result</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan={5} className="p-5 text-[12px] text-app-text-secondary font-semibold">
+                    No audit rows available from backend API.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {typeKey === 'admin' && activeTab === 'permissions' && (
+          <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl text-left font-sans space-y-3">
+            <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Permissions &amp; Role</h3>
+            <div className="text-[12px] text-app-text-secondary font-semibold">
+              Role and permissions are <span className="text-app-text-primary font-bold">read-only</span> here.
+            </div>
+            <div>
+              <div className="text-[9px] font-bold text-app-text-secondary uppercase tracking-wider">Role</div>
+              <div className="text-[12.5px] font-bold mt-1 text-app-text-primary">
+                {String((entityData as { role?: string } | null)?.role || 'admin')}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {typeKey === 'admin' && activeTab === 'notifications' && (
+          <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl text-left font-sans space-y-3">
+            <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Notification Preferences</h3>
+            <div className="text-[12px] text-app-text-secondary font-semibold">
+              Delivery-channel preferences are managed via the notifications API when available. Unsupported toggles are omitted.
+            </div>
+          </div>
+        )}
+
         {/* ========================================== */}
         {/* REVISED WORKSPACE TABS FOR CONSUMERS       */}
         {/* ========================================== */}
@@ -1430,6 +1687,12 @@ export default function UnifiedProfileShell() {
         {/* TAB 1: ⚙️ Account Information */}
         {activeTab === 'account' && typeKey === 'consumer' && entityData && (
           <div className="space-y-6 text-left font-sans">
+            <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl">
+              <div className="text-[9px] font-bold text-app-text-secondary uppercase tracking-wider">Choosify User ID</div>
+              <div className="mt-1 text-sm font-mono font-bold text-app-text-primary">
+                {resolvedCfId}
+              </div>
+            </div>
             <MarketplaceAccessPanel
               entityType="consumer"
               entityName={marketplaceEntityName}
@@ -2198,7 +2461,7 @@ export default function UnifiedProfileShell() {
         )}
 
         {/* Module E: Brands Partnership Registry for Sellers */}
-        {activeTab === 'brands' && typeKey !== 'seller' && typeKey !== 'brand' && (
+        {activeTab === 'brands' && typeKey !== 'seller' && typeKey !== 'brand' && typeKey !== 'admin' && (
           <ContentTable 
             title="Brands Partnership Registry & Commissions" 
             headers={['ID', 'Brand Name', 'Commission Split', 'Connection status']}
@@ -2219,7 +2482,7 @@ export default function UnifiedProfileShell() {
         )}
 
         {/* Module F: Product catalog items pipeline */}
-        {activeTab === 'products' && typeKey !== 'seller' && typeKey !== 'brand' && (
+        {activeTab === 'products' && typeKey !== 'seller' && typeKey !== 'brand' && typeKey !== 'admin' && (
           <ContentTable 
             title="Active Products Catalog List Pipeline" 
             headers={['ID', 'Product Title', 'Active Retail Price', 'SLA Stocks Status', 'Status']}
@@ -2248,7 +2511,7 @@ export default function UnifiedProfileShell() {
         )}
 
         {/* Module G: Brand Properties Account */}
-        {activeTab === 'account' && typeKey !== 'seller' && typeKey !== 'brand' && (
+        {activeTab === 'account' && typeKey !== 'seller' && typeKey !== 'brand' && typeKey !== 'admin' && typeKey !== 'consumer' && typeKey !== 'creator' && (
           <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
             <div className="border-b border-app-border pb-3">
               <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Creative Brand Asset Description</h3>
@@ -2264,7 +2527,7 @@ export default function UnifiedProfileShell() {
         )}
 
         {/* Module H: Brand verification checkpoint */}
-        {activeTab === 'verification' && typeKey !== 'seller' && typeKey !== 'brand' && (
+        {activeTab === 'verification' && typeKey !== 'seller' && typeKey !== 'brand' && typeKey !== 'admin' && typeKey !== 'creator' && (
           <div className="bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
             <div className="border-b border-app-border pb-3">
               <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Brand Partnership Verification Checklist</h3>
@@ -2283,7 +2546,7 @@ export default function UnifiedProfileShell() {
         )}
 
         {/* Module I: Campaign Promotional Ads Insights */}
-        {activeTab === 'ads' && typeKey !== 'seller' && typeKey !== 'brand' && (
+        {activeTab === 'ads' && typeKey !== 'seller' && typeKey !== 'brand' && typeKey !== 'admin' && (
           <div className="space-y-6">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 bg-app-card border border-app-border rounded-[4px] p-6 shadow-xl space-y-6">
@@ -2354,6 +2617,12 @@ export default function UnifiedProfileShell() {
         {/* TAB 1: ⚙️ Account Information */}
         {activeTab === 'account' && (typeKey === 'seller' || typeKey === 'brand') && (
           <div className="space-y-6 text-left">
+            <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl">
+              <div className="text-[9px] font-bold text-app-text-secondary uppercase tracking-wider">Choosify User ID</div>
+              <div className="mt-1 text-sm font-mono font-bold text-app-text-primary">
+                {resolvedCfId}
+              </div>
+            </div>
             <MarketplaceAccessPanel
               entityType={typeKey as MarketplaceEntityType}
               entityName={marketplaceEntityName}
@@ -3085,6 +3354,12 @@ export default function UnifiedProfileShell() {
         {/* TAB 1: ⚙️ Account Information */}
         {activeTab === 'account' && typeKey === 'creator' && entityData && (
           <div className="space-y-6 text-left">
+            <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl">
+              <div className="text-[9px] font-bold text-app-text-secondary uppercase tracking-wider">Choosify User ID</div>
+              <div className="mt-1 text-sm font-mono font-bold text-app-text-primary">
+                {resolvedCfId}
+              </div>
+            </div>
             <MarketplaceAccessPanel
               entityType="creator"
               entityName={marketplaceEntityName}
@@ -3696,6 +3971,78 @@ export default function UnifiedProfileShell() {
       </ProfileLayout>
 
       {renderInspectModal()}
+
+      {impersonationConfirmOpen && (
+        <div className="fixed inset-0 z-[600] bg-black/60 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl border border-app-border shadow-2xl max-w-xl w-full p-6">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 className="text-[15px] font-extrabold text-[#111827]">Login As User Confirmation</h2>
+                <p className="text-[12px] text-gray-600 font-semibold mt-2">
+                  You are about to temporarily access this account as:
+                </p>
+              </div>
+              <button
+                onClick={() => setImpersonationConfirmOpen(false)}
+                className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
+                aria-label="Close confirmation"
+                type="button"
+              >
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-1">
+              <div className="text-[13px] font-extrabold text-[#111827] truncate">
+                {entityData?.name || '—'}{" "}
+                <span className="text-gray-500 font-mono font-bold">· {typeKey.toUpperCase()}</span>
+              </div>
+              <div className="text-[12px] text-gray-700 font-semibold font-mono">{resolvedCfId}</div>
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-[11px] font-extrabold text-[#6B7280] tracking-wide mb-1.5">
+                Support ticket / reason
+              </label>
+              <textarea
+                value={impersonationReason}
+                onChange={(e) => setImpersonationReason(e.target.value)}
+                placeholder="Customer support investigation, order issue, profile troubleshooting…"
+                className="w-full bg-[#F8F9FC] border border-[#E8EDF2] rounded-lg px-3.5 py-2 text-[13px] font-semibold text-[#111827] outline-none min-h-[80px] resize-none"
+              />
+              <p className="text-[11px] text-gray-500 font-semibold mt-1">
+                Reason is required and will be recorded in the audit log.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setImpersonationConfirmOpen(false)}
+                className="px-4 py-2 rounded-lg border border-gray-200 text-[12px] font-extrabold text-gray-700 hover:bg-gray-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={impersonationReason.trim().length < 2}
+                onClick={async () => {
+                  try {
+                    const reason = impersonationReason.trim();
+                    await startImpersonation({ targetUserId: idKey || '', reason });
+                    setImpersonationConfirmOpen(false);
+                  } catch (e) {
+                    showToast(e instanceof Error ? e.message : 'Unable to start impersonation', 'error');
+                  }
+                }}
+                className="px-4 py-2 rounded-lg bg-[#EF3C23] hover:bg-[#EF3C23]/90 disabled:opacity-60 text-white text-[12px] font-extrabold cursor-pointer"
+              >
+                Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,8 +1,11 @@
-import React, { useMemo, useState } from 'react';
+import React, { Suspense, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { useImpersonation } from '../../contexts/ImpersonationContext';
 import { UserProfileDropdown } from '../account/UserProfileDropdown';
 import { NotificationBellDropdown } from '../account/NotificationBellDropdown';
+import { GlobalDashboardSearch } from '../common/GlobalDashboardSearch';
+import { AdminPageSkeleton } from '../common/skeletons';
 import {
   NAV_DEFS,
   PAGE_KEY_TO_PATH,
@@ -27,6 +30,22 @@ export type AdminWorkspaceLayoutProps = {
 
 /** Seller/Creator chrome must include identity profile keys missing from admin NAV_DEFS. */
 function filterNavForRole(role: string | undefined): CmsNavGroup[] {
+  if (role === 'consumer') {
+    return [
+      {
+        title: 'OVERVIEW',
+        items: [{ key: 'dashboard', label: 'Dashboard', path: PAGE_KEY_TO_PATH.dashboard }],
+      },
+      {
+        title: 'MY ACCOUNT',
+        items: [
+          { key: 'consumerProfile', label: 'My Profile', path: PAGE_KEY_TO_PATH.consumerProfile },
+          { key: 'orders', label: 'My Orders', path: PAGE_KEY_TO_PATH.orders },
+          { key: 'settings', label: 'Settings', path: PAGE_KEY_TO_PATH.settings },
+        ],
+      },
+    ];
+  }
   if (role === 'seller') {
     return [
       {
@@ -42,10 +61,16 @@ function filterNavForRole(role: string | undefined): CmsNavGroup[] {
         ],
       },
       {
+        title: 'MARKETING & CONTENT',
+        items: [
+          { key: 'adsDealsStudio', label: 'Ads & Deals Studio', tag: 'NEW', path: PAGE_KEY_TO_PATH.adsDealsStudio },
+        ],
+      },
+      {
         title: 'COMMERCE',
         items: [
           { key: 'orders', label: 'Orders Hub', path: PAGE_KEY_TO_PATH.orders },
-          { key: 'sellerCustomers', label: 'Seller Customers', path: PAGE_KEY_TO_PATH.sellerCustomers },
+          { key: 'sellerCustomers', label: 'My Customers', path: PAGE_KEY_TO_PATH.sellerCustomers },
           { key: 'returnsRefunds', label: 'Returns & Refunds', path: PAGE_KEY_TO_PATH.returnsRefunds },
           { key: 'promoCodes', label: 'Promo Codes & Vouchers', path: PAGE_KEY_TO_PATH.promoCodes },
         ],
@@ -67,10 +92,13 @@ function filterNavForRole(role: string | undefined): CmsNavGroup[] {
         items: [{ key: 'messages', label: 'Messages', tag: '12', path: PAGE_KEY_TO_PATH.messages }],
       },
       {
-        title: 'FINANCE',
+        title: 'FINANCE & PAYOUTS',
         items: [
-          { key: 'finance', label: 'Analytics', path: PAGE_KEY_TO_PATH.finance },
-          { key: 'myCashbook', label: 'My Cashbook', tag: 'PRIVATE', path: PAGE_KEY_TO_PATH.myCashbook },
+          { key: 'finance', label: 'Finance & Payouts', path: PAGE_KEY_TO_PATH.finance },
+          { key: 'myEarnings', label: 'My Earnings', path: PAGE_KEY_TO_PATH.myEarnings },
+          { key: 'myCashbook', label: 'Cashbooks', tag: 'PRIVATE', path: PAGE_KEY_TO_PATH.myCashbook },
+          { key: 'feesAdjustments', label: 'Fees & Adjustments', path: PAGE_KEY_TO_PATH.feesAdjustments },
+          { key: 'payouts', label: 'Payouts / Withdrawals', path: PAGE_KEY_TO_PATH.payouts },
         ],
       },
       {
@@ -95,8 +123,15 @@ function filterNavForRole(role: string | undefined): CmsNavGroup[] {
         ],
       },
       {
+        title: 'COMMERCE',
+        items: [
+          { key: 'sellerCustomers', label: 'My Customers', path: PAGE_KEY_TO_PATH.sellerCustomers },
+        ],
+      },
+      {
         title: 'MARKETING & CONTENT',
         items: [
+          { key: 'adsDealsStudio', label: 'Ads & Deals Studio', tag: 'NEW', path: PAGE_KEY_TO_PATH.adsDealsStudio },
           { key: 'contentStudio', label: 'Guide Management', tag: 'NEW', path: PAGE_KEY_TO_PATH.contentStudio },
         ],
       },
@@ -109,10 +144,13 @@ function filterNavForRole(role: string | undefined): CmsNavGroup[] {
         items: [{ key: 'messages', label: 'Messages', tag: '12', path: PAGE_KEY_TO_PATH.messages }],
       },
       {
-        title: 'FINANCE',
+        title: 'FINANCE & PAYOUTS',
         items: [
-          { key: 'finance', label: 'Finance', path: PAGE_KEY_TO_PATH.finance },
-          { key: 'myCashbook', label: 'My Cashbook', tag: 'PRIVATE', path: PAGE_KEY_TO_PATH.myCashbook },
+          { key: 'finance', label: 'Finance & Payouts', path: PAGE_KEY_TO_PATH.finance },
+          { key: 'myEarnings', label: 'My Earnings', path: PAGE_KEY_TO_PATH.myEarnings },
+          { key: 'myCashbook', label: 'Cashbooks', tag: 'PRIVATE', path: PAGE_KEY_TO_PATH.myCashbook },
+          { key: 'feesAdjustments', label: 'Fees & Adjustments', path: PAGE_KEY_TO_PATH.feesAdjustments },
+          { key: 'payouts', label: 'Payouts / Withdrawals', path: PAGE_KEY_TO_PATH.payouts },
         ],
       },
       {
@@ -141,10 +179,10 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
   pageSubtitle,
 }) => {
   const { profile } = useAuth();
+  const { state: impersonation, exitImpersonation } = useImpersonation();
   const location = useLocation();
   const navigate = useNavigate();
   const [navSearch, setNavSearch] = useState('');
-  const [catalogSearch, setCatalogSearch] = useState('');
 
   const activePageKey = pathToPageKey(location.pathname);
   const role = profile?.role;
@@ -262,30 +300,47 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
 
       <div className="admin-workspace__main">
         <header className="admin-workspace__topbar">
-          <div>
+          <div className="admin-workspace__topbar-title-block">
             <div className="admin-workspace__topbar-title">{title}</div>
             <div className="admin-workspace__topbar-subtitle">{subtitle}</div>
           </div>
+          <div className="admin-workspace__topbar-search-wrap">
+            <GlobalDashboardSearch variant="topbar" className="w-full" ready={Boolean(profile?.role)} />
+          </div>
           <div className="admin-workspace__topbar-actions">
-            <input
-              className="admin-workspace__topbar-search"
-              value={catalogSearch}
-              onChange={(e) => setCatalogSearch(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && catalogSearch.trim()) {
-                  navigate(`/admin/products?q=${encodeURIComponent(catalogSearch.trim())}`);
-                }
-              }}
-              placeholder="Search catalog, brands, sellers..."
-              aria-label="Search catalog"
-            />
             <NotificationBellDropdown />
             <div className="admin-workspace__topbar-divider" aria-hidden />
             <UserProfileDropdown variant="header" />
           </div>
         </header>
 
-        <main className="admin-workspace__content">{children}</main>
+        {impersonation.active ? (
+          <div
+            className="mx-6 mt-4 mb-0 px-4 py-3 rounded-lg border border-rose-300/40 bg-rose-600/10 text-rose-100 flex items-center justify-between gap-4"
+            role="status"
+          >
+            <div className="min-w-0">
+              <div className="text-[10px] font-extrabold uppercase tracking-widest text-rose-200">
+                You are viewing Choosify as
+              </div>
+              <div className="text-[12px] font-bold text-white truncate mt-1">
+                {profile?.displayName || 'User'} · {formatRoleLabel(profile?.role)} ·{' '}
+                {profile?.choosifyUserId || '—'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void exitImpersonation()}
+              className="shrink-0 px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold"
+            >
+              Exit Impersonation
+            </button>
+          </div>
+        ) : null}
+
+        <main className="admin-workspace__content">
+          <Suspense fallback={<AdminPageSkeleton variant="generic" />}>{children}</Suspense>
+        </main>
       </div>
     </div>
   );

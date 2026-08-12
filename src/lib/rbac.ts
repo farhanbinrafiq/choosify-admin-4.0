@@ -6,7 +6,9 @@ export type PermissionKey =
   | 'system'
   | 'analytics'
   /** Category & Attribute Manager (Admin-only; IS-003 §57). */
-  | 'taxonomy';
+  | 'taxonomy'
+  /** High-risk admin-only: server-authorized “Login As User” impersonation. */
+  | 'impersonate';
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<PermissionKey, boolean>> = {
   super_admin: {
@@ -17,6 +19,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<PermissionKey, bool
     system: true,
     analytics: true,
     taxonomy: true,
+    impersonate: true,
   },
   admin: {
     content: true,
@@ -26,6 +29,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<PermissionKey, bool
     system: true,
     analytics: true,
     taxonomy: true,
+    /** Platform Admin may Login As User (server still enforces role + audit). */
+    impersonate: true,
   },
   // Seller/creator: permissions aligned to their CMS-mirror filtered menus
   seller: {
@@ -36,6 +41,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<PermissionKey, bool
     system: true,
     analytics: true,
     taxonomy: false,
+    impersonate: false,
   },
   creator: {
     content: true,
@@ -45,6 +51,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<PermissionKey, bool
     system: true,
     analytics: true,
     taxonomy: false,
+    impersonate: false,
   },
   moderator: {
     content: true,
@@ -54,6 +61,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<PermissionKey, bool
     system: false,
     analytics: true,
     taxonomy: true,
+    impersonate: false,
   },
   finance_manager: {
     content: false,
@@ -63,6 +71,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<PermissionKey, bool
     system: false,
     analytics: true,
     taxonomy: false,
+    impersonate: false,
   },
   support_agent: {
     content: false,
@@ -72,6 +81,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<PermissionKey, bool
     system: false,
     analytics: true,
     taxonomy: false,
+    impersonate: false,
   },
   marketing_manager: {
     content: true,
@@ -81,6 +91,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<PermissionKey, bool
     system: false,
     analytics: true,
     taxonomy: false,
+    impersonate: false,
   },
 };
 
@@ -121,6 +132,11 @@ const ROUTE_PERMISSION: Array<{ prefix: string; permission: PermissionKey }> = [
   { prefix: '/admin/trust-center', permission: 'brand' },
   { prefix: '/admin/settings', permission: 'system' },
   { prefix: '/admin/admins', permission: 'system' },
+  { prefix: '/admin/profile', permission: 'system' },
+  { prefix: '/admin/account/profile', permission: 'system' },
+  { prefix: '/admin/account/profile', permission: 'system' },
+  { prefix: '/admin/account/settings', permission: 'system' },
+  { prefix: '/admin/account/security', permission: 'system' },
   { prefix: '/admin/analytics', permission: 'analytics' },
   { prefix: '/admin/dashboard', permission: 'analytics' },
 ];

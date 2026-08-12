@@ -237,12 +237,18 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 16px;
   padding: 0 32px;
   position: sticky;
   top: 0;
   z-index: 10;
   flex-shrink: 0;
+}
+
+.admin-workspace__topbar-title-block {
+  flex-shrink: 0;
+  min-width: 0;
+  max-width: min(280px, 28vw);
 }
 
 .admin-workspace__topbar-title {
@@ -251,6 +257,9 @@
   font-weight: 800;
   color: #fff;
   line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .admin-workspace__topbar-subtitle {
@@ -259,29 +268,29 @@
   font-weight: 600;
   line-height: 1.3;
   margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Search consumes ALL remaining center space until bell/avatar */
+.admin-workspace__topbar-search-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
 }
 
 .admin-workspace__topbar-actions {
   display: flex;
   align-items: center;
   gap: 18px;
+  flex: 0 0 auto;
+  min-width: 0;
+  justify-content: flex-end;
 }
 
 .admin-workspace__topbar-search {
-  width: 260px;
-  height: 36px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.08);
-  padding: 0 14px;
-  font-size: 12.5px;
-  color: #fff;
-  font-family: inherit;
-  outline: none;
-}
-
-.admin-workspace__topbar-search::placeholder {
-  color: rgba(255, 255, 255, 0.45);
+  width: 100%;
 }
 
 .admin-workspace__topbar-icon {
@@ -355,8 +364,8 @@
 }
 
 @media (max-width: 900px) {
-  .admin-workspace__topbar-search {
-    display: none;
+  .admin-workspace__topbar-search-wrap {
+    max-width: none;
   }
 
   .admin-workspace__topbar {

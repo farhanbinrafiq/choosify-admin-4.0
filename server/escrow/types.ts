@@ -14,6 +14,8 @@ export type EscrowStatus =
 
 export type CommerceEscrow = {
   escrowId: string;
+  /** Permanent Choosify Escrow Reference ID (ESC-#####). */
+  escrowReferenceId?: string;
   paymentId: string;
   checkoutId: string;
   orderId: string;
@@ -95,6 +97,8 @@ export type RefundStatus =
 
 export type CommerceRefund = {
   refundId: string;
+  /** Permanent Choosify Refund Reference ID (RF-#####). */
+  refundReferenceId?: string;
   paymentId: string;
   escrowId: string;
   checkoutId: string;
@@ -124,6 +128,8 @@ export type ReturnStatus =
 
 export type CommerceReturn = {
   returnId: string;
+  /** Permanent Choosify Return Reference ID (RT-#####). */
+  returnReferenceId?: string;
   orderId: string;
   consumerId: string;
   sellerId: string;

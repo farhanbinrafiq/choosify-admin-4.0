@@ -139,7 +139,7 @@ export function NotificationBellDropdown({ className = '' }: NotificationBellDro
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-            className="absolute right-0 mt-2 w-[360px] max-w-[min(360px,calc(100vw-24px))] rounded-xl border border-[#E8EDF2] bg-white shadow-[0_18px_50px_rgba(0,4,53,0.18)] overflow-hidden z-[120]"
+            className="absolute right-0 top-full mt-[14px] w-[360px] max-w-[min(360px,calc(100vw-24px))] rounded-xl border border-[#E8EDF2] bg-white shadow-[0_18px_50px_rgba(0,4,53,0.18)] overflow-hidden z-[120]"
           >
             <div className="px-4 pt-3.5 pb-2.5 border-b border-[#F1F5F9] flex items-center justify-between gap-3">
               <div>

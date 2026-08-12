@@ -50,6 +50,8 @@ export type SourceChannel =
 
 export type CommerceConversation = {
   id: string;
+  /** Permanent Choosify Conversation Reference ID (CV-#####). Support/audit display. */
+  conversationReferenceId?: string;
   contextType: ConversationContextType;
   status: ConversationStatus;
   consumerId: string;

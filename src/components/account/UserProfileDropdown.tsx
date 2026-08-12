@@ -1,14 +1,16 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { LogOut, Settings, Shield, User } from 'lucide-react';
+import { Lock, Pencil, RefreshCw, Settings, Undo2, User } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useRbac } from '../../contexts/RbacContext';
 import {
   formatRoleLabel,
   getAvatarUrl,
   getMyProfilePath,
   getUserInitials,
 } from '../../lib/userDisplay';
+import { AvatarCropModal } from './AvatarCropModal';
 
 type UserProfileDropdownProps = {
   /** `header` = AdminLayout chrome; `overlay` = fixed on CMS mirror iframe host */
@@ -21,25 +23,75 @@ type MenuItem = {
   label: string;
   icon: React.ReactNode;
   onSelect: () => void;
-  danger?: boolean;
 };
+
+const AVATAR_STORAGE_PREFIX = 'choosify_user_avatar:';
+
+function avatarStorageKey(userId: string): string {
+  return `${AVATAR_STORAGE_PREFIX}${userId}`;
+}
+
+function readStoredAvatar(userId: string): string | null {
+  try {
+    const value = localStorage.getItem(avatarStorageKey(userId));
+    return value?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredAvatar(userId: string, dataUrl: string): void {
+  try {
+    localStorage.setItem(avatarStorageKey(userId), dataUrl);
+  } catch {
+    // Quota / private mode — ignore persistence failure; session still updates.
+  }
+}
 
 export function UserProfileDropdown({ variant = 'header', className = '' }: UserProfileDropdownProps) {
   const { profile, logout } = useAuth();
+  const { canAccessPath } = useRbac();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const [localAvatar, setLocalAvatar] = useState<string | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropSrc, setCropSrc] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const avatarMenuRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const menuId = useId();
+
+  const isClickOutside = useCallback((target: EventTarget | null) => {
+    if (!(target instanceof Node)) return true;
+    if (triggerRef.current?.contains(target)) return false;
+    if (menuRef.current?.contains(target)) return false;
+    if (avatarMenuRef.current?.contains(target)) return false;
+    return true;
+  }, []);
 
   const displayName = profile?.displayName?.trim() || 'User';
   const email = profile?.email?.trim() || '';
   const roleLabel = formatRoleLabel(profile?.role);
+  const roleBadge = roleLabel.toUpperCase();
   const initials = getUserInitials(displayName, email);
-  const avatarUrl = profile ? getAvatarUrl(profile) : '';
+  const baseAvatarUrl = profile ? getAvatarUrl(profile) : '';
+  const avatarUrl = localAvatar || baseAvatarUrl;
 
-  const close = useCallback(() => setOpen(false), []);
+  useEffect(() => {
+    if (!profile?.id) {
+      setLocalAvatar(null);
+      return;
+    }
+    setLocalAvatar(readStoredAvatar(profile.id));
+  }, [profile?.id]);
+
+  const close = useCallback(() => {
+    setOpen(false);
+    setAvatarMenuOpen(false);
+  }, []);
 
   const handleLogout = useCallback(() => {
     close();
@@ -55,52 +107,118 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
     [close, navigate],
   );
 
-  const profileMenuLabel =
-    profile?.role === 'seller'
-      ? 'Seller Profile'
-      : profile?.role === 'creator'
-        ? 'Creator Profile'
-        : 'My Profile';
+  const persistAvatar = useCallback(
+    (dataUrl: string) => {
+      if (!profile?.id) return;
+      writeStoredAvatar(profile.id, dataUrl);
+      setLocalAvatar(dataUrl);
+    },
+    [profile?.id],
+  );
+
+  /** Edit = crop / reposition the current photo. */
+  const openCropEditor = useCallback(() => {
+    setAvatarMenuOpen(false);
+    if (!avatarUrl) {
+      window.alert('No photo to edit. Use Replace to upload one first.');
+      return;
+    }
+    setCropSrc(avatarUrl);
+    setCropOpen(true);
+  }, [avatarUrl]);
+
+  /** Replace = pick a new image file (reupload / change). */
+  const openReplacePicker = useCallback(() => {
+    setAvatarMenuOpen(false);
+    fileInputRef.current?.click();
+  }, []);
+
+  const onAvatarFileChange = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      event.target.value = '';
+      if (!file || !profile?.id) return;
+      if (!file.type.startsWith('image/')) return;
+      if (file.size > 2_500_000) {
+        window.alert('Please choose an image under 2.5 MB.');
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = typeof reader.result === 'string' ? reader.result : '';
+        if (!result) return;
+        // Replace applies the new upload immediately; user can Edit to crop/reposition.
+        persistAvatar(result);
+      };
+      reader.readAsDataURL(file);
+    },
+    [persistAvatar, profile?.id],
+  );
+
+  const onCropSave = useCallback(
+    (dataUrl: string) => {
+      persistAvatar(dataUrl);
+      setCropOpen(false);
+      setCropSrc('');
+    },
+    [persistAvatar],
+  );
+
+  const onCropCancel = useCallback(() => {
+    setCropOpen(false);
+    setCropSrc('');
+  }, []);
 
   const menuItems: MenuItem[] = profile
-    ? [
-        {
-          id: 'profile',
-          label: profileMenuLabel,
-          icon: <User className="w-4 h-4" aria-hidden />,
-          onSelect: () => {
-            if (profile.role === 'seller') go('/admin/brand-profile');
-            else if (profile.role === 'creator') go('/admin/creator-profile');
-            else go(getMyProfilePath(profile));
+    ? (() => {
+        const items: MenuItem[] = [
+          {
+            id: 'profile',
+            label: 'My Profile',
+            icon: <User className="w-[18px] h-[18px] text-[#7C3AED]" aria-hidden strokeWidth={2.25} />,
+            onSelect: () => {
+              go(getMyProfilePath(profile));
+            },
           },
-        },
-        {
-          id: 'settings',
-          label: 'Account Settings',
-          icon: <Settings className="w-4 h-4" aria-hidden />,
-          onSelect: () => go('/admin/account/settings'),
-        },
-        {
-          id: 'security',
-          label: 'Security',
-          icon: <Shield className="w-4 h-4" aria-hidden />,
-          onSelect: () => go('/admin/account/security'),
-        },
-      ]
+        ];
+
+        if (canAccessPath('/admin/account/settings')) {
+          items.push({
+            id: 'settings',
+            label: 'Account Settings',
+            icon: <Settings className="w-[18px] h-[18px] text-[#6B7280]" aria-hidden strokeWidth={2.25} />,
+            onSelect: () => go('/admin/account/settings'),
+          });
+        }
+
+        if (canAccessPath('/admin/account/security')) {
+          items.push({
+            id: 'security',
+            label: 'Security',
+            icon: <Lock className="w-[18px] h-[18px] text-[#D97706]" aria-hidden strokeWidth={2.25} />,
+            onSelect: () => go('/admin/account/security'),
+          });
+        }
+
+        return items;
+      })()
     : [];
 
   useEffect(() => {
-    if (!open) return;
+    if (!open || cropOpen) return;
 
-    const onPointerDown = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        close();
-      }
+    const onPointerDown = (event: PointerEvent) => {
+      if (!isClickOutside(event.target)) return;
+      close();
     };
 
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
+        if (avatarMenuOpen) {
+          setAvatarMenuOpen(false);
+          return;
+        }
         close();
         triggerRef.current?.focus();
         return;
@@ -121,19 +239,23 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
       next?.focus();
     };
 
-    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown);
     return () => {
-      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('pointerdown', onPointerDown, true);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [close, open]);
+  }, [avatarMenuOpen, close, cropOpen, isClickOutside, open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setAvatarMenuOpen(false);
+      return;
+    }
+    if (cropOpen) return;
     const first = menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]');
     first?.focus();
-  }, [open]);
+  }, [cropOpen, open]);
 
   if (!profile) return null;
 
@@ -142,15 +264,58 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
       ? 'cms-mirror-profile-trigger'
       : 'flex items-center gap-2.5 pl-1 shrink-0 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-white/30';
 
+  const AvatarFace = ({ sizeClass, textClass }: { sizeClass: string; textClass: string }) => (
+    <span
+      className={`relative flex items-center justify-center rounded-full font-bold text-white shrink-0 overflow-hidden ${sizeClass} ${textClass}`}
+      style={{ backgroundImage: 'linear-gradient(135deg, #EF3C23, #2323FF)' }}
+    >
+      <img
+        src={avatarUrl}
+        alt=""
+        className="absolute inset-0 w-full h-full object-cover"
+        onError={(event) => {
+          event.currentTarget.style.display = 'none';
+        }}
+      />
+      <span aria-hidden>{initials}</span>
+    </span>
+  );
+
   return (
     <div
       ref={rootRef}
       className={`relative ${variant === 'overlay' ? 'cms-mirror-profile-anchor' : ''} ${className}`}
     >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp,image/gif"
+        className="hidden"
+        onChange={onAvatarFileChange}
+      />
+
+      <AvatarCropModal
+        open={cropOpen}
+        imageSrc={cropSrc}
+        onCancel={onCropCancel}
+        onSave={onCropSave}
+      />
+
+      {open && variant === 'overlay' && (
+        <div
+          className="fixed inset-0"
+          style={{ zIndex: 118 }}
+          aria-hidden="true"
+          onPointerDown={() => {
+            close();
+          }}
+        />
+      )}
+
       <button
         ref={triggerRef}
         type="button"
-        className={triggerClasses}
+        className={`${triggerClasses}${variant === 'overlay' ? ' relative z-[119]' : ''}`}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
@@ -163,22 +328,10 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
             <div className="text-[10px] text-white/50 leading-tight">{roleLabel}</div>
           </div>
         )}
-        <span
-          className={`relative flex items-center justify-center rounded-full font-bold text-white shrink-0 overflow-hidden transition-transform ${
-            variant === 'overlay' ? 'w-9 h-9 text-[12px]' : 'w-8 h-8 text-[13px] group-hover:scale-105'
-          }`}
-          style={{ backgroundImage: 'linear-gradient(135deg, #EF3C23, #2323FF)' }}
-        >
-          <img
-            src={avatarUrl}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-            onError={(event) => {
-              event.currentTarget.style.display = 'none';
-            }}
-          />
-          <span aria-hidden>{initials}</span>
-        </span>
+        <AvatarFace
+          sizeClass={variant === 'overlay' ? 'w-9 h-9' : 'w-8 h-8'}
+          textClass={variant === 'overlay' ? 'text-[12px]' : 'text-[13px]'}
+        />
       </button>
 
       <AnimatePresence>
@@ -192,63 +345,125 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -6, scale: 0.98 }}
             transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-            className={`absolute right-0 mt-2 w-[280px] rounded-xl border border-[#E8EDF2] bg-white shadow-[0_18px_50px_rgba(0,4,53,0.18)] overflow-hidden z-[120] ${
-              variant === 'overlay' ? 'top-full' : 'top-full'
-            }`}
+            className="absolute right-0 top-full mt-2.5 w-[268px] rounded-2xl border border-[#EEF2F6] bg-white shadow-[0_16px_40px_rgba(15,23,42,0.14)] overflow-visible z-[120]"
           >
-            <div className="px-4 pt-4 pb-3 text-center border-b border-[#F1F5F9] bg-gradient-to-b from-[#FAFBFC] to-white">
-              <div className="mx-auto mb-3 relative w-14 h-14 rounded-full overflow-hidden ring-2 ring-white shadow-md">
-                <div
-                  className="absolute inset-0 flex items-center justify-center text-[15px] font-extrabold text-white"
-                  style={{ backgroundImage: 'linear-gradient(135deg, #EF3C23, #2323FF)' }}
-                >
-                  {initials}
-                </div>
-                <img
-                  src={avatarUrl}
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover"
-                  onError={(event) => {
-                    event.currentTarget.style.display = 'none';
+            <div className="px-5 pt-5 pb-4 text-center">
+              <div className="relative mx-auto mb-3 w-[72px] h-[72px]">
+                <button
+                  type="button"
+                  className="relative w-full h-full rounded-full overflow-hidden ring-[3px] ring-white shadow-[0_6px_16px_rgba(15,23,42,0.12)] outline-none focus-visible:ring-2 focus-visible:ring-[#EF3C23]/40"
+                  aria-label="Profile photo options"
+                  aria-expanded={avatarMenuOpen}
+                  title="Photo options"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setAvatarMenuOpen((prev) => !prev);
                   }}
-                />
+                >
+                  <span
+                    className="absolute inset-0 flex items-center justify-center text-[18px] font-extrabold text-white"
+                    style={{ backgroundImage: 'linear-gradient(135deg, #EF3C23, #2323FF)' }}
+                  >
+                    {initials}
+                  </span>
+                  <img
+                    src={avatarUrl}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover"
+                    onError={(event) => {
+                      event.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </button>
+
+                <AnimatePresence>
+                  {avatarMenuOpen && (
+                    <motion.div
+                      ref={avatarMenuRef}
+                      initial={{ opacity: 0, y: 4, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 4, scale: 0.96 }}
+                      transition={{ duration: 0.12 }}
+                      className="absolute left-1/2 top-[58%] z-10 w-[118px] -translate-x-1/2 rounded-xl border border-[#E8EDF2] bg-white py-1.5 shadow-[0_10px_28px_rgba(15,23,42,0.16)]"
+                      role="menu"
+                      aria-label="Photo actions"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        title="Crop and reposition the current photo"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] font-semibold text-[#111827] hover:bg-[#F8FAFC]"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openCropEditor();
+                        }}
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-[#C2410C]" aria-hidden strokeWidth={2.4} />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        title="Upload a different photo"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] font-semibold text-[#111827] hover:bg-[#F8FAFC]"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          openReplacePicker();
+                        }}
+                      >
+                        <RefreshCw className="w-3.5 h-3.5 text-[#2563EB]" aria-hidden strokeWidth={2.4} />
+                        Replace
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-              <p className="text-[14px] font-extrabold text-[#111827] leading-tight truncate">{displayName}</p>
-              <p className="text-[12px] text-[#6B7280] mt-0.5 truncate">{email}</p>
-              <div className="mt-3 flex items-center justify-center gap-3 text-[11px]">
-                <span className="inline-flex items-center rounded-full bg-[#FFF4ED] px-2.5 py-1 font-bold text-[#C2410C]">
-                  Role: {roleLabel}
+
+              <p className="text-[15px] font-extrabold text-[#111827] leading-tight truncate">{displayName}</p>
+              <div className="mt-3 flex items-center justify-center gap-2 flex-wrap">
+                <span className="inline-flex items-center rounded-full bg-[#F3E8FF] px-2.5 py-1 text-[10px] font-extrabold tracking-wide text-[#7C3AED]">
+                  {roleBadge}
                 </span>
-                <span className="inline-flex items-center gap-1.5 text-[#059669] font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-[#10B981] shadow-[0_0_0_3px_rgba(16,185,129,0.18)]" aria-hidden />
-                  Online
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ECFDF5] px-2.5 py-1 text-[10px] font-bold text-[#059669]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" aria-hidden />
+                  Active
                 </span>
               </div>
+              <p className="text-[11.5px] font-bold text-[#374151] mt-2 truncate" title="Choosify User ID">
+                User ID: {profile?.choosifyUserId || '—'}
+              </p>
+              <p className="text-[12.5px] text-[#6B7280] mt-1 truncate">{email}</p>
             </div>
 
-            <div className="py-1.5">
+            <div className="mx-4 border-t border-[#EEF2F6]" />
+
+            <div className="py-2 px-1.5">
               {menuItems.map((item) => (
                 <button
                   key={item.id}
                   type="button"
                   role="menuitem"
-                  className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[13px] font-semibold text-[#111827] hover:bg-[#F8FAFC] transition-colors focus:bg-[#F8FAFC] focus:outline-none"
+                  className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] font-semibold text-[#1F2937] hover:bg-[#F8FAFC] rounded-xl transition-colors focus:bg-[#F8FAFC] focus:outline-none"
                   onClick={item.onSelect}
                 >
-                  <span className="text-[#6B7280]">{item.icon}</span>
+                  <span className="shrink-0 w-5 flex justify-center">{item.icon}</span>
                   {item.label}
                 </button>
               ))}
             </div>
 
-            <div className="border-t border-[#F1F5F9] py-1.5">
+            <div className="mx-4 border-t border-[#EEF2F6]" />
+
+            <div className="py-2 px-1.5 pb-2.5">
               <button
                 type="button"
                 role="menuitem"
-                className="w-full flex items-center gap-3 px-4 py-2.5 text-left text-[13px] font-semibold text-[#DC2626] hover:bg-[#FEF2F2] transition-colors focus:bg-[#FEF2F2] focus:outline-none"
+                className="w-full flex items-center gap-3 px-3.5 py-2.5 text-left text-[13.5px] font-bold text-[#DC2626] hover:bg-[#FEF2F2] rounded-xl transition-colors focus:bg-[#FEF2F2] focus:outline-none"
                 onClick={handleLogout}
               >
-                <LogOut className="w-4 h-4" aria-hidden />
+                <span className="shrink-0 w-5 flex justify-center">
+                  <Undo2 className="w-[18px] h-[18px]" aria-hidden strokeWidth={2.25} />
+                </span>
                 Logout
               </button>
             </div>

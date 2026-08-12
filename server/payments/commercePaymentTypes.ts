@@ -19,6 +19,8 @@ export type CommerceOrderPaymentStatus =
 
 export type CommercePayment = {
   paymentId: string;
+  /** Permanent Choosify Payment Reference ID (PAY-#####). Does not replace paymentId or provider refs. */
+  paymentReferenceId?: string;
   checkoutId: string;
   orderIds: string[];
   consumerId: string;

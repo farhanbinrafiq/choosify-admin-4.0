@@ -40,6 +40,7 @@ interface MockUser {
   initials: string;
   trustScore: number;
   behaviorSegment: string;
+  choosifyUserId?: string;
 }
 
 const mockUsers: MockUser[] = [];
@@ -79,6 +80,66 @@ export default function ConsumersPage() {
   const [usersLoading, setUsersLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  const [cfLookup, setCfLookup] = useState<{
+    uid: string;
+    email: string;
+    displayName: string;
+    role: string;
+    choosifyUserId: string;
+  } | null>(null);
+  const [cfLookupError, setCfLookupError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    const looksLikeCf =
+      /^CF-\d+$/i.test(q) || (/^\d{1,9}$/.test(q) && Number(q) >= 1);
+    if (!looksLikeCf) {
+      setCfLookup(null);
+      setCfLookupError(null);
+      return;
+    }
+    let cancelled = false;
+    const token = localStorage.getItem('choosify_auth_token');
+    if (!token) return;
+    const t = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const res = await fetch(
+            `/api/v1/auth/users/search?q=${encodeURIComponent(q)}`,
+            { headers: { Authorization: `Bearer ${token}` } },
+          );
+          const body = (await res.json().catch(() => ({}))) as {
+            data?: {
+              uid: string;
+              email: string;
+              displayName: string;
+              role: string;
+              choosifyUserId: string;
+            };
+            error?: string;
+          };
+          if (cancelled) return;
+          if (!res.ok || !body.data) {
+            setCfLookup(null);
+            setCfLookupError(body.error || 'No account found for this User ID');
+            return;
+          }
+          setCfLookupError(null);
+          setCfLookup(body.data);
+        } catch {
+          if (!cancelled) {
+            setCfLookup(null);
+            setCfLookupError('User ID lookup failed');
+          }
+        }
+      })();
+    }, 250);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [searchQuery]);
+
   useEffect(() => {
     operationsApi
       .listUsers()
@@ -117,11 +178,24 @@ export default function ConsumersPage() {
   const baseFiltered = usersList.filter(u => u.role === currentViewRole);
 
   const finalFiltered = baseFiltered.filter(u => {
-    const s = searchQuery.toLowerCase();
-    return !searchQuery || 
-      u.name.toLowerCase().includes(s) || 
-      u.email.toLowerCase().includes(s) || 
-      u.behaviorSegment.toLowerCase().includes(s);
+    const s = searchQuery.toLowerCase().trim();
+    if (!s) return true;
+    if (
+      u.name.toLowerCase().includes(s) ||
+      u.email.toLowerCase().includes(s) ||
+      u.behaviorSegment.toLowerCase().includes(s) ||
+      (u.choosifyUserId || '').toLowerCase().includes(s)
+    ) {
+      return true;
+    }
+    // Numeric / CF-padded forms: 127 / 00127 → CF-00127
+    const digits = s.replace(/^cf-/, '').replace(/\D/g, '');
+    if (digits && u.choosifyUserId) {
+      const cfDigits = u.choosifyUserId.replace(/^CF-/i, '').replace(/^0+/, '') || '0';
+      const qDigits = digits.replace(/^0+/, '') || '0';
+      if (cfDigits === qDigits) return true;
+    }
+    return false;
   });
 
   const getProfilePath = (role: string, id: string) => {
@@ -198,6 +272,16 @@ export default function ConsumersPage() {
 
     if (!isCreatorView) {
       columns.push(
+        {
+          key: 'cfId',
+          header: 'CF ID',
+          sortValue: (u) => u.choosifyUserId || '',
+          render: (u) => (
+            <span className="font-mono text-[11px] font-bold text-app-text-muted whitespace-nowrap">
+              {u.choosifyUserId || '—'}
+            </span>
+          ),
+        },
         { key: 'role', header: 'Role Type', render: (u) => <RoleBadge role={u.role} /> },
         {
           key: 'segment',
@@ -233,6 +317,16 @@ export default function ConsumersPage() {
       );
     } else {
       columns.push(
+        {
+          key: 'cfId',
+          header: 'CF ID',
+          sortValue: (u) => u.choosifyUserId || '',
+          render: (u) => (
+            <span className="font-mono text-[11px] font-bold text-app-text-muted whitespace-nowrap">
+              {u.choosifyUserId || '—'}
+            </span>
+          ),
+        },
         {
           key: 'followers',
           header: 'Follower Range',
@@ -408,7 +502,7 @@ export default function ConsumersPage() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-app-text-muted group-focus-within:text-app-accent transition-colors" />
             <input
               type="text"
-              placeholder={`Search ${currentViewRole.toLowerCase()}s...`}
+              placeholder={`Search ${currentViewRole.toLowerCase()}s or User ID (CF-00127)`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 pr-4 py-1.5 bg-white border border-app-border rounded-lg text-xs w-full md:w-64 focus:outline-none focus:border-app-accent/50 transition-all text-app-text-primary placeholder-app-text-muted font-semibold"
@@ -429,6 +523,30 @@ export default function ConsumersPage() {
           </button>
         </div>
       </div>
+
+      {cfLookup ? (
+        <div className="rounded-lg border border-app-border bg-white px-4 py-3 text-xs">
+          <div className="font-extrabold text-app-text-primary">Choosify User ID match</div>
+          <div className="mt-1 font-mono font-bold text-app-accent">{cfLookup.choosifyUserId}</div>
+          <div className="mt-1 text-app-text-secondary font-semibold">
+            {cfLookup.displayName} · {cfLookup.email} · {cfLookup.role}
+          </div>
+          <Link
+            to={getProfilePath(
+              cfLookup.role === 'seller' ? 'Seller' : cfLookup.role === 'creator' ? 'Creator' : 'Consumer',
+              cfLookup.uid,
+            )}
+            className="mt-2 inline-flex items-center gap-1 text-app-accent font-extrabold hover:underline"
+          >
+            Open profile <ChevronRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+      ) : null}
+      {cfLookupError ? (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700">
+          {cfLookupError}
+        </div>
+      ) : null}
 
       {/* CONTEXTUAL STATS BLOCK */}
       {isCreatorView && (
