@@ -54,13 +54,11 @@ const CommunitySubmissions = lazy(() => import('./pages/admin/CommunitySubmissio
 const Payouts = lazy(() => import('./pages/admin/Payouts'));
 const Analytics = lazy(() => import('./pages/admin/Analytics'));
 const NotificationsPage = lazy(() => import('./pages/admin/Notifications'));
-const SettingsPage = lazy(() => import('./pages/admin/Settings'));
 const Moderation = lazy(() => import('./pages/admin/Moderation'));
 const Messages = lazy(() => import('./pages/admin/Messages'));
 const ProductStudio = lazy(() => import('./pages/admin/ProductStudio'));
 const BrandDetails = lazy(() => import('./pages/admin/BrandDetails'));
 const SellerReview = lazy(() => import('./pages/admin/SellerReview'));
-const WebsiteCMSStudio = lazy(() => import('./pages/admin/WebsiteCMSStudio'));
 const DealsBannersStudio = lazy(() => import('./pages/admin/DealsBannersStudio'));
 const BrandPostsPage = lazy(() => import('./pages/admin/BrandPosts'));
 const LeadsInboxPage = lazy(() => import('./pages/admin/LeadsInbox'));
@@ -95,7 +93,6 @@ const CreatorEditStudio = lazy(() => import('./pages/admin/CreatorEditStudio'));
 
 const GuidesStudioList = lazy(() => import('./pages/admin/GuidesStudioList'));
 const GuideEditStudio = lazy(() => import('./pages/admin/GuideEditStudio'));
-const AccountComingSoon = lazy(() => import('./pages/account/AccountComingSoon'));
 
 const ViewModeWrapper: React.FC<{ mode: 'consumers' | 'creators' | 'admins' }> = ({ mode }) => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -178,14 +175,13 @@ const CreatorVisualBuilderRoleGate: React.FC<{ children: React.ReactNode }> = ({
 const ADS_STUDIO_ALLOWED_ROLES = new Set(['admin', 'super_admin', 'seller', 'creator']);
 const AdsStudioRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile } = useAuth();
-  const { isFeatureEnabled } = useEntitlements();
+  const { isFeatureEnabled, status } = useEntitlements();
   if (!profile || !ADS_STUDIO_ALLOWED_ROLES.has(profile.role)) {
     return <Navigate to="/admin/dashboard" replace />;
   }
-  if (
-    (profile.role === 'seller' || profile.role === 'creator') &&
-    !isFeatureEnabled('adsDeals')
-  ) {
+  const partner = profile.role === 'seller' || profile.role === 'creator';
+  if (partner && (status === 'loading' || status === 'idle')) return null;
+  if (partner && !isFeatureEnabled('adsDeals')) {
     return <Navigate to="/admin/dashboard" replace />;
   }
   return <>{children}</>;
@@ -504,36 +500,8 @@ export default function App() {
               Fall through /admin/* catch-all below; do not mount the legacy React UPE shell here.
             */}
             <Route path="/admin/account/profile" element={<Navigate to="/admin/profile" replace />} />
-            <Route
-              path="/admin/account/settings"
-              element={
-                <ProtectedRoute>
-                  <AdminLayout>
-                    <Suspense fallback={routeSuspenseFallback}>
-                      <AccountComingSoon
-                        title="Account Settings"
-                        description="Manage your personal account preferences, contact details, and notification defaults."
-                      />
-                    </Suspense>
-                  </AdminLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/account/security"
-              element={
-                <ProtectedRoute>
-                  <AdminLayout>
-                    <Suspense fallback={routeSuspenseFallback}>
-                      <AccountComingSoon
-                        title="Security"
-                        description="Update your password, review active sessions, and manage account security controls."
-                      />
-                    </Suspense>
-                  </AdminLayout>
-                </ProtectedRoute>
-              }
-            />
+            <Route path="/admin/account/settings" element={<Navigate to="/admin/settings" replace />} />
+            <Route path="/admin/account/security" element={<Navigate to="/admin/settings" replace />} />
             
             <Route path="/" element={<RootRoute />} />
             <Route path="/marketplace" element={<Navigate to="/login" replace />} />

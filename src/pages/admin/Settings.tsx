@@ -1,3 +1,8 @@
+/**
+ * LEGACY / DEAD — not mounted.
+ * Live Settings SoT is cms-mirror `/admin/settings` (app.html SETTINGS_TABS_BY_ROLE).
+ * Kept for shared toggle/operations patterns; do not re-route avatar or left-nav here.
+ */
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { DEFAULT_ROLE_PERMISSIONS } from '../../lib/rbac';

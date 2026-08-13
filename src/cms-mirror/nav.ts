@@ -1,3 +1,5 @@
+import { PARTNER_FEATURES, type PartnerRole } from '../../shared/entitlements/registry';
+
 /** Exact navDefs + pageMeta from Choosify Admin CMS (standalone).html */
 
 export type CmsNavItem = {
@@ -337,7 +339,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   adminManagement: ['Admin Management', 'Manage admin accounts and access'],
   featureAccess: [
     'Feature Access & Entitlements',
-    'Control Seller and Creator feature availability without deleting data',
+    'Manage which platform features are enabled per role and plan',
   ],
   verificationCenter: ['Verification Center', 'Seller & brand identity verification queue'],
   subscriptionPlans: ['Subscription Plans', 'Seller & brand subscription tiers'],
@@ -351,3 +353,186 @@ export const PAGE_META: Record<string, [string, string]> = {
   shippingLabels: ['Shipping Labels', 'Generate and manage printable courier labels'],
   analytics: ['Analytics', 'Platform-wide traffic and engagement'],
 };
+
+function navItem(key: string, label: string, tag?: string): CmsNavItem {
+  return { key, label, ...(tag ? { tag } : {}), path: PAGE_KEY_TO_PATH[key] || `/admin/${key}` };
+}
+
+/**
+ * Seller chrome tree (cms-mirror + AdminWorkspaceLayout).
+ * Labels/categories match the live partner sidebar — not the Admin catalog.
+ */
+export const SELLER_NAV_GROUPS: CmsNavGroup[] = [
+  { title: 'OVERVIEW', items: [navItem('dashboard', 'Dashboard')] },
+  {
+    title: 'BRAND & CATALOG',
+    items: [
+      navItem('brands', 'Brand Management Studio'),
+      navItem('brandProfile', 'Seller Profile'),
+      navItem('products', 'Products & Inventory'),
+      navItem('contentStudio', 'Guide Management'),
+      navItem('adsDealsStudio', 'Ads & Deals Studio'),
+    ],
+  },
+  {
+    title: 'COMMERCE',
+    items: [
+      navItem('orders', 'Orders Hub'),
+      navItem('sellerCustomers', 'My Customers'),
+      navItem('returnsRefunds', 'Returns & Refunds'),
+      navItem('promoCodes', 'Promo Codes & Vouchers'),
+    ],
+  },
+  {
+    title: 'LOGISTICS MANAGEMENT',
+    items: [
+      navItem('courierProviders', 'Courier Providers'),
+      navItem('shipmentOperations', 'Shipment Operations'),
+      navItem('courierAnalytics', 'Courier Analytics'),
+    ],
+  },
+  { title: 'TRUST & SAFETY', items: [navItem('reviews', 'Reviews')] },
+  {
+    title: 'COMMUNICATION',
+    items: [navItem('messages', 'Messages'), navItem('notifications', 'Notifications')],
+  },
+  {
+    title: 'FINANCE & PAYOUTS',
+    items: [
+      navItem('finance', 'Finance & Payouts'),
+      navItem('myEarnings', 'My Earnings'),
+      navItem('myCashbook', 'Cashbooks', 'PRIVATE'),
+      navItem('feesAdjustments', 'Fees & Adjustments'),
+      navItem('payouts', 'Payouts / Withdrawals'),
+    ],
+  },
+  { title: 'SETTINGS', items: [navItem('settings', 'Settings')] },
+];
+
+/** Creator chrome tree (cms-mirror + AdminWorkspaceLayout). */
+export const CREATOR_NAV_GROUPS: CmsNavGroup[] = [
+  { title: 'OVERVIEW', items: [navItem('dashboard', 'Dashboard')] },
+  {
+    title: 'PEOPLE',
+    items: [
+      navItem('creators', 'Creator Studio'),
+      navItem('creatorProfile', 'Creator Profile'),
+      navItem('creatorEconomy', 'Creator Economy'),
+    ],
+  },
+  { title: 'COMMERCE', items: [navItem('sellerCustomers', 'My Customers')] },
+  {
+    title: 'MARKETING & CONTENT',
+    items: [
+      navItem('adsDealsStudio', 'Ads & Deals Studio'),
+      navItem('contentStudio', 'Guide Management'),
+    ],
+  },
+  { title: 'TRUST & SAFETY', items: [navItem('reviews', 'Reviews')] },
+  {
+    title: 'COMMUNICATION',
+    items: [navItem('messages', 'Messages'), navItem('notifications', 'Notifications')],
+  },
+  {
+    title: 'FINANCE & PAYOUTS',
+    items: [
+      navItem('finance', 'Finance & Payouts'),
+      navItem('myEarnings', 'My Earnings'),
+      navItem('myCashbook', 'Cashbooks', 'PRIVATE'),
+      navItem('feesAdjustments', 'Fees & Adjustments'),
+      navItem('payouts', 'Payouts / Withdrawals'),
+    ],
+  },
+  { title: 'SETTINGS', items: [navItem('settings', 'Settings')] },
+];
+
+export const CONSUMER_NAV_GROUPS: CmsNavGroup[] = [
+  { title: 'OVERVIEW', items: [navItem('dashboard', 'Dashboard')] },
+  {
+    title: 'MY ACCOUNT',
+    items: [
+      navItem('consumerProfile', 'My Profile'),
+      navItem('orders', 'My Orders'),
+      navItem('settings', 'Settings'),
+    ],
+  },
+];
+
+/** Super-admin / staff modules that must never appear on Seller or Creator nav. */
+export const ADMIN_ONLY_PAGE_KEYS = [
+  'adminManagement',
+  'featureAccess',
+  'verificationCenter',
+  'subscriptionPlans',
+  'monetizationCenter',
+  'auditLogs',
+  'websiteCmsStudio',
+  'feeCharges',
+  'customers',
+  'categories',
+  'moderationCenter',
+  'disputes',
+  'trustCenter',
+  'adminProfile',
+] as const;
+
+export function pageKeysFromNavGroups(groups: CmsNavGroup[]): string[] {
+  return groups.flatMap((g) => g.items.map((item) => item.key));
+}
+
+/** Page keys with no PARTNER_FEATURES mapping — role access only. */
+export function corePageKeysForRole(role: PartnerRole): string[] {
+  const gated = new Set(
+    PARTNER_FEATURES.filter((f) => f.roles.includes(role)).flatMap((f) => f.pageKeys),
+  );
+  return (ROLE_ALLOWED_PAGE_KEYS[role] || []).filter((k) => !gated.has(k));
+}
+
+/**
+ * Role chrome source of truth. Admin catalog (NAV_DEFS) is never used as the
+ * Seller/Creator tree — filtering the admin list silently dropped partner-only keys.
+ */
+export function navGroupsForRole(role: string | undefined): CmsNavGroup[] {
+  if (role === 'consumer') return CONSUMER_NAV_GROUPS;
+  if (role === 'seller') return SELLER_NAV_GROUPS;
+  if (role === 'creator') return CREATOR_NAV_GROUPS;
+
+  const allowed = allowedPageKeysForRole(role);
+  if (!allowed) return NAV_DEFS;
+  const allow = new Set(allowed);
+  return NAV_DEFS.map((group) => ({
+    ...group,
+    items: group.items.filter((item) => allow.has(item.key)),
+  })).filter((group) => group.items.length > 0);
+}
+
+/** Hide entitlement-disabled items; drop empty category headings. */
+export function applyEntitlementNavFilter(
+  groups: CmsNavGroup[],
+  filterAllowedPageKeys: (keys: string[] | null) => string[] | null,
+  role: string | undefined,
+): CmsNavGroup[] {
+  const allowed = filterAllowedPageKeys(allowedPageKeysForRole(role));
+  if (!allowed) return groups;
+  const allow = new Set(allowed);
+  return groups
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => allow.has(item.key)),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
+/** Iframe navDefs shape (no React paths). */
+export function navGroupsForMirror(
+  groups: CmsNavGroup[],
+): Array<{ title: string; items: Array<{ key: string; label: string; tag?: string }> }> {
+  return groups.map((group) => ({
+    title: group.title,
+    items: group.items.map(({ key, label, tag }) => ({
+      key,
+      label,
+      ...(tag ? { tag } : {}),
+    })),
+  }));
+}

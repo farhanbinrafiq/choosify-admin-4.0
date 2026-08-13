@@ -215,6 +215,11 @@ export function featureKeysForRole(role: PartnerRole): PartnerFeatureKey[] {
   return PARTNER_FEATURES.filter((f) => f.roles.includes(role)).map((f) => f.key);
 }
 
+/** True when this page key is gated by a catalog feature for the role. */
+export function isEntitlementControlledPageKey(role: PartnerRole, pageKey: string): boolean {
+  return PARTNER_FEATURES.some((f) => f.roles.includes(role) && f.pageKeys.includes(pageKey));
+}
+
 export function pageKeysDisabledByFeatures(
   role: PartnerRole,
   enabled: Record<string, boolean>,

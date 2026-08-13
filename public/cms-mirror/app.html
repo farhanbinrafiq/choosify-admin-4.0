@@ -208,6 +208,17 @@ window.addEventListener('message', function(ev) {
     ::placeholder{color:#6B7280}
     ::-webkit-scrollbar{width:8px;height:8px}
     ::-webkit-scrollbar-thumb{background:rgba(0,0,0,0.15);border-radius:4px}
+    /* Sidebar nav: overlay-thin, no reserved classic Windows track */
+    .cms-sidebar-nav {
+      overflow-y: auto;
+      overflow-x: hidden;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255,255,255,0.22) transparent;
+      scrollbar-gutter: auto;
+    }
+    .cms-sidebar-nav::-webkit-scrollbar { width: 8px; }
+    .cms-sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+    .cms-sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.22); border-radius: 4px; }
     /*
      * Profile identity-card cover — same color recipe as live sidebarStyle
      * (hsla orange glows + rgba(10,10,31,0.96)), but radial sizes are % of the
@@ -245,6 +256,30 @@ window.addEventListener('message', function(ev) {
       box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 24px rgba(0, 4, 53, 0.12);
       border-radius: 18px;
     }
+    /* Storefront Navbar search pad band: px-1 / sm:px-3 / md:px-4 / lg:px-5 */
+    [data-cms-search-slot] {
+      padding-left: 4px !important;
+      padding-right: 4px !important;
+      box-sizing: border-box !important;
+    }
+    @media (min-width: 640px) {
+      [data-cms-search-slot] {
+        padding-left: 12px !important;
+        padding-right: 12px !important;
+      }
+    }
+    @media (min-width: 768px) {
+      [data-cms-search-slot] {
+        padding-left: 16px !important;
+        padding-right: 16px !important;
+      }
+    }
+    @media (min-width: 1024px) {
+      [data-cms-search-slot] {
+        padding-left: 20px !important;
+        padding-right: 20px !important;
+      }
+    }
   </style>
 </helmet>
 
@@ -261,7 +296,7 @@ window.addEventListener('message', function(ev) {
         <span sc-camel-on-click="{{ clearNavSearch }}" style="position:absolute;right:32px;top:0;height:34px;width:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:rgba(255,255,255,0.45);font-size:12px" style-hover="color:rgba(255,255,255,0.8)">✕</span>
       </sc-if>
     </div>
-    <div style="flex:1;overflow-y:auto;padding:4px 12px 12px">
+    <div class="cms-sidebar-nav" style="flex:1;overflow-y:auto;overflow-x:hidden;padding:4px 12px 12px">
       <sc-for list="{{ navGroups }}" as="grp" hint-placeholder-count="5">
         <div style="margin-bottom:18px">
           <div style="{{ groupTitleStyle }}">{{ grp.title }}</div>
@@ -286,13 +321,13 @@ window.addEventListener('message', function(ev) {
 
   <!-- MAIN -->
   <div style="flex:1;min-width:0;display:flex;flex-direction:column">
-    <div style="height:64px;background:radial-gradient(900px 200px at 15% 0%,hsla(6,86%,54%,0.16),transparent 70%),radial-gradient(700px 200px at 90% 100%,hsla(6,86%,45%,0.12),transparent 70%),rgba(10,10,31,0.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,0.12);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);display:flex;align-items:center;gap:16px;padding:0 32px;position:sticky;top:0;z-index:10;flex-shrink:0">
-      <div style="flex-shrink:0;min-width:0;max-width:min(280px,28vw)">
+    <div style="height:64px;background:radial-gradient(900px 200px at 15% 0%,hsla(6,86%,54%,0.16),transparent 70%),radial-gradient(700px 200px at 90% 100%,hsla(6,86%,45%,0.12),transparent 70%),rgba(10,10,31,0.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,0.12);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);display:flex;align-items:center;gap:12px;padding:0 24px;position:sticky;top:0;z-index:10;flex-shrink:0">
+      <div style="flex:0 1 auto;min-width:0;max-width:min(220px,20vw)">
         <div style="font-family:'Outfit',sans-serif;font-size:18px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pageTitle }}</div>
         <div style="font-size:11.5px;color:rgba(255,255,255,0.6);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pageSubtitle }}</div>
       </div>
-      <!-- Flex search slot: live GlobalDashboardSearch overlays this via CmsMirrorHost -->
-      <div data-cms-search-slot="1" aria-hidden="true" style="flex:1 1 auto;min-width:0;height:44px;visibility:hidden;pointer-events:none"></div>
+      <!-- Flex search slot — storefront navbar-fluid: flex:1 1 0% middle band -->
+      <div data-cms-search-slot="1" aria-hidden="true" style="flex:1 1 0%;min-width:0;height:44px;visibility:hidden;pointer-events:none;padding-left:4px;padding-right:4px;box-sizing:border-box"></div>
       <div style="display:flex;align-items:center;gap:18px;flex-shrink:0">
         <div data-notif-root="1" style="position:relative">
           <div sc-camel-on-click="{{ toggleNotifMenu }}" style="position:relative;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center" title="Notifications" role="button" aria-label="Notifications">
@@ -4474,7 +4509,7 @@ window.addEventListener('message', function(ev) {
           </sc-for>
         </div>
 
-        <sc-if value="{{ isSettingsPlatform }}" hint-placeholder-val="{{ true }}">
+        <sc-if value="{{ isSettingsPlatform }}" hint-placeholder-val="{{ false }}">
           <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:24px;margin-bottom:16px">
             <div style="font-size:16px;font-weight:800;margin-bottom:4px">Platform Settings</div>
             <div style="font-size:12px;color:#6B7280;font-weight:600">Manage global configurations for the Choosify platform security, modules, and gateways.</div>
@@ -4580,6 +4615,91 @@ window.addEventListener('message', function(ev) {
             </div>
           </div>
         </sc-if>
+
+        <sc-if value="{{ isSettingsAccount }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:24px;margin-bottom:16px">
+            <div style="font-size:16px;font-weight:800;margin-bottom:4px">Account &amp; Security</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600;margin-bottom:16px">Password, sessions, and identity live on your own profile. Settings here stay role-scoped.</div>
+            <button sc-camel-on-click="{{ openProfileFromSettings }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:800;cursor:pointer">Open My Profile</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isSettingsNotifications }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:24px">
+            <div style="font-size:16px;font-weight:800;margin-bottom:4px">Notifications</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600">Order, message, and payout alerts for this account. Platform-wide blasts remain Admin-only.</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isSettingsStore }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:24px">
+            <div style="font-size:16px;font-weight:800;margin-bottom:4px">Store / Brand Preferences</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600;margin-bottom:16px">Manage owned brands and storefront identity from Brand Management Studio.</div>
+            <button sc-camel-on-click="{{ openBrandStudioFromSettings }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:800;cursor:pointer">Open Brand Management Studio</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isSettingsFulfillment }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:24px">
+            <div style="font-size:16px;font-weight:800;margin-bottom:4px">Order / Fulfillment Preferences</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600;margin-bottom:16px">Courier partners and shipment operations for your orders.</div>
+            <button sc-camel-on-click="{{ openCourierFromSettings }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:800;cursor:pointer">Open Courier Providers</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isSettingsCreatorPrefs }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:24px">
+            <div style="font-size:16px;font-weight:800;margin-bottom:4px">Creator / Content Preferences</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600;margin-bottom:16px">Studio identity and guide publishing stay in Creator Studio.</div>
+            <button sc-camel-on-click="{{ openCreatorStudioFromSettings }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:800;cursor:pointer;margin-right:8px">Open Creator Studio</button>
+            <button sc-camel-on-click="{{ openGuidesFromSettings }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:800;cursor:pointer">Open Guide Management</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isSettingsPublishing }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:24px">
+            <div style="font-size:16px;font-weight:800;margin-bottom:4px">Publishing Preferences</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600">Draft, review, and publish creator guides from Guide Management.</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isSettingsFinancePrefs }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:24px">
+            <div style="font-size:16px;font-weight:800;margin-bottom:4px">Finance / Payout Preferences</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600;margin-bottom:16px">Payment info and withdrawals for this account — not platform finance.</div>
+            <button sc-camel-on-click="{{ openEarningsFromSettings }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:800;cursor:pointer;margin-right:8px">My Earnings</button>
+            <button sc-camel-on-click="{{ openPayoutsFromSettings }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:800;cursor:pointer">Payouts</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isSettingsIntegrations }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:24px">
+            <div style="font-size:16px;font-weight:800;margin-bottom:4px">Integrations</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600;margin-bottom:16px">Messaging channels connected to this account.</div>
+            <button sc-camel-on-click="{{ openMessagesFromSettings }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:10px 16px;font-size:12px;font-weight:800;cursor:pointer">Open Messages</button>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isSettingsPrivacy }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:24px">
+            <div style="font-size:16px;font-weight:800;margin-bottom:4px">Privacy / Data</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600">Account privacy and communication preferences are stored on your profile. Platform data tools remain Admin-only.</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isSettingsCommunication }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:24px">
+            <div style="font-size:16px;font-weight:800;margin-bottom:4px">Communication Preferences</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600">Email and in-app alerts for orders and account activity.</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ isSettingsFeatureAccessStatus }}" hint-placeholder-val="{{ false }}">
+          <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:24px">
+            <div style="font-size:16px;font-weight:800;margin-bottom:4px">Feature Access Status</div>
+            <div style="font-size:12px;color:#6B7280;font-weight:600;margin-bottom:16px">Read-only. Admin controls these toggles from Feature Access &amp; Entitlements.</div>
+            <sc-if value="{{ hasPartnerEntitlementRows }}" hint-placeholder-val="{{ false }}">
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{ partnerEntitlementRows }}" as="fe" hint-placeholder-count="4">
+                  <div style="display:flex;justify-content:space-between;align-items:center;border:1px solid #E8EDF2;border-radius:8px;padding:10px 14px">
+                    <span style="font-size:12.5px;font-weight:700">{{ fe.label }}</span>
+                    <span style="font-size:10px;font-weight:800;color:{{ fe.on ? '#15803D' : '#991B1B' }}">{{ fe.on ? 'ON' : 'OFF' }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
       </sc-if>
 
       <!-- ===== LOGIN PAGE REDESIGN (PREVIEW) ===== -->
@@ -4628,23 +4748,20 @@ window.addEventListener('message', function(ev) {
             <div style="font-size:12.5px;color:#6B7280;font-weight:600;margin-top:2px">Manage homepage banners, navigation, and site-wide content blocks</div>
           </div>
           <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:0 16px;height:38px;font-size:11.5px;font-weight:800;color:#374151;cursor:pointer">👁 PREVIEW WEBSITE</button>
+            <button sc-camel-on-click="{{ openPreviewWebsite }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:0 16px;height:38px;font-size:11.5px;font-weight:800;color:#374151;cursor:pointer">👁 PREVIEW WEBSITE</button>
             <button sc-camel-on-click="{{ toggleCmsLivePreview }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:0 16px;height:38px;font-size:11.5px;font-weight:800;color:#374151;cursor:pointer">▤ LIVE PREVIEW</button>
             <button sc-camel-on-click="{{ publishCmsChanges }}" style="background:linear-gradient(90deg,#C8321A,#EF3C23);color:#fff;border:none;border-radius:8px;padding:0 18px;height:38px;font-size:11.5px;font-weight:800;cursor:pointer">💾 PUBLISH ALL CHANGES</button>
           </div>
         </div>
-        <div style="display:flex;background:#fff;border:1px solid #E8EDF2;border-radius:10px;overflow:hidden;align-items:stretch">
-          <div style="width:184px;flex-shrink:0;border-right:1px solid #E8EDF2;padding:18px 10px;background:#FAFBFC">
-            <sc-for list="{{ cmsSubNavGroups }}" as="grp" hint-placeholder-count="4">
-              <div style="margin-bottom:16px">
-                <div style="font-size:10px;font-weight:800;color:#9CA3AF;letter-spacing:0.06em;padding:0 10px;margin-bottom:6px">{{ grp.title }}</div>
-                <sc-for list="{{ grp.items }}" as="item" hint-placeholder-count="3">
-                  <div style="{{ item.rowStyle }}" sc-camel-on-click="{{ item.onClick }}">{{ item.label }}</div>
-                </sc-for>
-              </div>
-            </sc-for>
+        <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;overflow:hidden">
+          <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;border-bottom:1px solid #E8EDF2">
+            <div style="display:flex;align-items:stretch;gap:0;min-width:max-content">
+              <sc-for list="{{ cmsTopTabs }}" as="tab" hint-placeholder-count="8">
+                <div style="{{ tab.tabStyle }}" sc-camel-on-click="{{ tab.onClick }}">{{ tab.label }}</div>
+              </sc-for>
+            </div>
           </div>
-          <div style="flex:1;min-width:0;padding:26px 22px">
+          <div style="padding:26px 22px">
             <sc-if value="{{ isContentManagementStudio }}" hint-placeholder-val="{{ true }}">
               <div style="font-size:17px;font-weight:800;margin-bottom:2px">Content Management Studio</div>
               <div style="font-size:12.5px;color:#6B7280;font-weight:600;margin-bottom:20px">Manage homepage widgets, hero banners, site navigation, and footer content — all in one place.</div>
@@ -5006,6 +5123,21 @@ window.addEventListener('message', function(ev) {
                 </sc-if>
               </div>
             </sc-if>
+            <sc-if value="{{ isSitePagesCms }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:16px;font-weight:800;margin-bottom:2px">Pages</div>
+              <div style="font-size:12.5px;color:#6B7280;font-weight:600;margin-bottom:18px">Informational, legal, and business pages published on the Choosify storefront.</div>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <sc-for list="{{ cmsSitePagesView }}" as="pg" hint-placeholder-count="7">
+                  <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:14px 16px">
+                    <div>
+                      <div style="font-size:13px;font-weight:800">{{ pg.title }}</div>
+                      <div style="font-size:10.5px;color:#9CA3AF;font-weight:600;margin-top:2px">{{ pg.path }}</div>
+                    </div>
+                    <button sc-camel-on-click="{{ pg.onOpen }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:9px 14px;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0">OPEN LIVE</button>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
             <sc-if value="{{ isSearchExperience }}" hint-placeholder-val="{{ false }}">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
                 <div>
@@ -5164,21 +5296,15 @@ window.addEventListener('message', function(ev) {
 
         <sc-if value="{{ cmsLivePreviewOpen }}" hint-placeholder-val="{{ false }}">
           <div sc-camel-on-click="{{ toggleCmsLivePreview }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:200;display:flex;justify-content:flex-end">
-            <div sc-camel-on-click="{{ stopClickPropagation }}" style="width:380px;max-width:90vw;height:100%;background:#fff;padding:20px;overflow-y:auto;box-shadow:-8px 0 24px rgba(0,0,0,0.15)">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-                <div style="font-size:14px;font-weight:800">▤ Live Preview — Homepage</div>
+            <div sc-camel-on-click="{{ stopClickPropagation }}" style="width:min(920px,96vw);height:100%;background:#fff;display:flex;flex-direction:column;box-shadow:-8px 0 24px rgba(0,0,0,0.15)">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #E8EDF2;flex-shrink:0">
+                <div>
+                  <div style="font-size:14px;font-weight:800">▤ Live Preview</div>
+                  <div style="font-size:11px;color:#6B7280;font-weight:600;margin-top:2px">{{ cmsLivePreviewUrl }}</div>
+                </div>
                 <span sc-camel-on-click="{{ toggleCmsLivePreview }}" style="cursor:pointer;color:#9CA3AF;font-size:16px">✕</span>
               </div>
-              <div style="display:flex;flex-direction:column;gap:8px">
-                <sc-for list="{{ cmsSectionRows }}" as="sec" hint-placeholder-count="9">
-                  <sc-if value="{{ sec.visible }}" hint-placeholder-val="{{ true }}">
-                    <div style="background:#F9FAFB;border:1px solid #E8EDF2;border-radius:8px;padding:12px;display:flex;align-items:center;gap:10px">
-                      <span style="font-size:16px">{{ sec.icon }}</span>
-                      <span style="font-size:12px;font-weight:700">{{ sec.name }}</span>
-                    </div>
-                  </sc-if>
-                </sc-for>
-              </div>
+              <iframe title="Choosify-Web live preview" src="{{ cmsLivePreviewUrl }}" style="flex:1;width:100%;border:0;background:#fff"></iframe>
             </div>
           </div>
         </sc-if>
@@ -9178,19 +9304,23 @@ class Component extends DCLogic {
   };
 
   static CMS_SUBNAV = [
-    {title:'CONTENT', items:[
-      {key:'contentManagementStudio', label:'Content Management Studio'},
-    ]},
-    {title:'MERCHANDISING', items:[
-      {key:'searchExperience', label:'Search Experience'},
-      {key:'productBadges', label:'Product Badges'},
-    ]},
-    {title:'PLATFORM', items:[
-      {key:'promotionalSections', label:'Promotional Sections'},
-      {key:'websiteAssets', label:'Website Assets'},
-      {key:'seoManager', label:'SEO Manager'},
-      {key:'globalSettings', label:'Global Settings'},
-    ]},
+    {key:'contentManagementStudio', label:'Content Management Studio'},
+    {key:'sitePages', label:'Pages'},
+    {key:'searchExperience', label:'Search Experience'},
+    {key:'productBadges', label:'Product Badges'},
+    {key:'promotionalSections', label:'Promotional Sections'},
+    {key:'websiteAssets', label:'Website Assets'},
+    {key:'seoManager', label:'SEO Manager'},
+    {key:'globalSettings', label:'Global Settings'},
+  ];
+  static CMS_SITE_PAGES = [
+    {id:'about', title:'About Us', path:'/about'},
+    {id:'suggestBrand', title:'Suggest a Brand', path:'/suggest-brand'},
+    {id:'partnership', title:'Partnership', path:'/partnership'},
+    {id:'advertise', title:'Advertise', path:'/advertise'},
+    {id:'terms', title:'Terms of Service', path:'/terms'},
+    {id:'privacy', title:'Privacy Policy', path:'/privacy'},
+    {id:'contact', title:'Contact', path:'/contact'},
   ];
 
   static CMS_SECTIONS_SEED = [
@@ -11191,14 +11321,63 @@ class Component extends DCLogic {
       rejectingRecId: null, rejectReasonText: '',
     };
   });
-  toggle2FA = () => this.setState(s => ({settings2FA: s.settings2FA === false ? true : false}));
-  inviteAdminUser = () => this.showToast('Admin invite link generated');
-  toggleMaintenanceMode = () => this.setState(s => ({settingsMaintenanceMode: s.settingsMaintenanceMode === false ? true : false}));
-  runDbOptimization = () => this.showToast('Database optimization started');
-  configureSmtp = () => this.showToast('Opening SMTP configuration');
-  flushAnalyticsLogs = () => this.showToast('All analytics logs flushed');
-  resetFeatureFlags = () => this.showToast('Feature flags reset to default');
-  clearAdminSessions = () => this.showToast('All admin sessions cleared');
+  cmsMirrorIsPlatformAdmin = () => {
+    var role = String(window.__CMS_MIRROR_ROLE__ || '').toLowerCase();
+    return role !== 'seller' && role !== 'creator' && role !== 'consumer';
+  };
+  rejectPartnerAdminSettings = () => {
+    this.showToast('This control is available to Admin only');
+  };
+  toggle2FA = () => {
+    if (!this.cmsMirrorIsPlatformAdmin()) return this.rejectPartnerAdminSettings();
+    this.setState(s => ({settings2FA: s.settings2FA === false ? true : false}));
+  };
+  inviteAdminUser = () => {
+    if (!this.cmsMirrorIsPlatformAdmin()) return this.rejectPartnerAdminSettings();
+    this.showToast('Admin invite link generated');
+  };
+  toggleMaintenanceMode = () => {
+    if (!this.cmsMirrorIsPlatformAdmin()) return this.rejectPartnerAdminSettings();
+    this.setState(s => ({settingsMaintenanceMode: s.settingsMaintenanceMode === false ? true : false}));
+  };
+  runDbOptimization = () => {
+    if (!this.cmsMirrorIsPlatformAdmin()) return this.rejectPartnerAdminSettings();
+    this.showToast('Database optimization started');
+  };
+  configureSmtp = () => {
+    if (!this.cmsMirrorIsPlatformAdmin()) return this.rejectPartnerAdminSettings();
+    this.showToast('Opening SMTP configuration');
+  };
+  flushAnalyticsLogs = () => {
+    if (!this.cmsMirrorIsPlatformAdmin()) return this.rejectPartnerAdminSettings();
+    this.showToast('All analytics logs flushed');
+  };
+  resetFeatureFlags = () => {
+    if (!this.cmsMirrorIsPlatformAdmin()) return this.rejectPartnerAdminSettings();
+    this.showToast('Feature flags reset to default');
+  };
+  clearAdminSessions = () => {
+    if (!this.cmsMirrorIsPlatformAdmin()) return this.rejectPartnerAdminSettings();
+    this.showToast('All admin sessions cleared');
+  };
+  openPreviewWebsite = () => {
+    var url = window.__CMS_MIRROR_STOREFRONT_URL__ || 'https://choosify.bd';
+    window.open(url, '_blank', 'noopener,noreferrer');
+  };
+  openBrandStudioFromSettings = () => this.setPage('brands');
+  openCreatorStudioFromSettings = () => this.setPage('creators');
+  openCourierFromSettings = () => this.setPage('courierProviders');
+  openGuidesFromSettings = () => this.setPage('contentStudio');
+  openEarningsFromSettings = () => this.setPage('myEarnings', { tab: 'payment' });
+  openPayoutsFromSettings = () => this.setPage('payouts');
+  openMessagesFromSettings = () => this.setPage('messages');
+  openProfileFromSettings = () => {
+    var role = String(window.__CMS_MIRROR_ROLE__ || '');
+    if (role === 'seller') return this.setPage('brandProfile');
+    if (role === 'creator') return this.setPage('creatorProfile');
+    if (role === 'consumer') return this.setPage('consumerProfile');
+    return this.setPage('adminProfile');
+  };
   setOrderStatus = (id, status) => {
     // Optimistic UI update; Commerce API is authoritative when hydrated.
     this.setState(s => ({orderStatuses: {...s.orderStatuses, [id]: status}}));
@@ -12082,7 +12261,7 @@ class Component extends DCLogic {
       {title:'TRUST & SAFETY', items:[{key:'reviews',label:'Reviews'},{key:'moderationCenter',label:'Moderation Center'},{key:'disputes',label:'Disputes'},{key:'trustCenter',label:'Trust & Analytics'}]},
       {title:'COMMUNICATION', items:[{key:'messages',label:'Messages'},{key:'notifications',label:'Notifications'}]},
       {title:'FINANCE', items:[{key:'finance',label:'Finance'},{key:'feeCharges',label:'Fee & Charges Engine',tag:'NEW'},{key:'payouts',label:'Payouts'},{key:'myCashbook',label:'Cashbook Hub',tag:'PRIVATE'}]},
-      {title:'SUPER ADMIN CORE', items:[{key:'adminManagement',label:'Admin Management'},{key:'verificationCenter',label:'Verification Center'},{key:'subscriptionPlans',label:'Subscription Plans'},{key:'monetizationCenter',label:'Monetization Center'},{key:'promoCodes',label:'Promo Codes & Vouchers'},{key:'auditLogs',label:'Audit Logs'}]},
+      {title:'SUPER ADMIN CORE', items:[{key:'adminManagement',label:'Admin Management'},{key:'featureAccess',label:'Feature Access & Entitlements'},{key:'verificationCenter',label:'Verification Center'},{key:'subscriptionPlans',label:'Subscription Plans'},{key:'monetizationCenter',label:'Monetization Center'},{key:'promoCodes',label:'Promo Codes & Vouchers'},{key:'auditLogs',label:'Audit Logs'}]},
       {title:'WEBSITE', items:[{key:'websiteCmsStudio',label:'Website Manager',tag:'NEW'}]},
       {title:'SETTINGS', items:[{key:'settings',label:'Settings'}]},
     ];
@@ -12769,19 +12948,20 @@ class Component extends DCLogic {
     }
 
     const cmsSubPage = this.state.cmsSubPage;
-    const cmsSubNavGroups = Component.CMS_SUBNAV.map(g => ({
-      title: g.title,
-      items: g.items.map(it => {
-        const active = it.key === cmsSubPage;
-        return {
-          key: it.key, label: it.label,
-          onClick: () => this.setCmsSubPage(it.key),
-          rowStyle: `padding:8px 12px;border-radius:8px;cursor:pointer;font-size:12.5px;font-weight:${active?800:600};color:${active?'#EF3C23':'#374151'};background:${active?'rgba(239,60,35,0.1)':'transparent'}`,
-        };
-      }),
-    }));
+    const cmsTopTabs = Component.CMS_SUBNAV.map(it => {
+      const active = it.key === cmsSubPage;
+      return {
+        key: it.key,
+        label: it.label,
+        onClick: () => this.setCmsSubPage(it.key),
+        tabStyle: active
+          ? 'flex-shrink:0;padding:12px 16px;font-size:12px;font-weight:800;color:#EF3C23;border-bottom:2px solid #EF3C23;cursor:pointer;white-space:nowrap'
+          : 'flex-shrink:0;padding:12px 16px;font-size:12px;font-weight:600;color:#6B7280;border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap',
+      };
+    });
     const isWebsiteCms = page === 'websiteCmsStudio';
     const isContentManagementStudio = isWebsiteCms && cmsSubPage === 'contentManagementStudio';
+    const isSitePagesCms = isWebsiteCms && cmsSubPage === 'sitePages';
     const isHomepageManager = isContentManagementStudio;
     const cmsExpandedSection = this.state.cmsExpandedSection || null;
     const toggleCmsExpand = (id) => () => this.setState(s => ({cmsExpandedSection: s.cmsExpandedSection === id ? null : id}));
@@ -12803,7 +12983,15 @@ class Component extends DCLogic {
       ? 'background:rgba(21,128,61,0.12);color:#15803D;font-size:10px;font-weight:800;padding:5px 12px;border-radius:6px'
       : 'background:#F3F4F6;color:#6B7280;font-size:10px;font-weight:800;padding:5px 12px;border-radius:6px';
     const guideBadgeLabel = (on) => on ? 'ENABLED' : 'DISABLED';
-    const cmsSubPageLabel = (Component.CMS_SUBNAV.flatMap(g=>g.items).find(i=>i.key===cmsSubPage) || {}).label || '';
+    const cmsSubPageLabel = (Component.CMS_SUBNAV.find(i=>i.key===cmsSubPage) || {}).label || '';
+    const cmsLivePreviewUrl = window.__CMS_MIRROR_PREVIEW_URL__ || window.__CMS_MIRROR_STOREFRONT_URL__ || 'https://choosify.bd';
+    const cmsSitePagesView = Component.CMS_SITE_PAGES.map(pg => ({
+      ...pg,
+      onOpen: () => {
+        var base = (window.__CMS_MIRROR_STOREFRONT_URL__ || 'https://choosify.bd').replace(/\/$/, '');
+        window.open(base + pg.path, '_blank', 'noopener,noreferrer');
+      },
+    }));
     const visibleCount = this.state.cmsSections.filter(s=>s.visible).length;
     const cmsStats = [
       {label:'TOTAL SECTIONS', value: String(this.state.cmsSections.length), style:'background:#F9FAFB;border:1px solid #E8EDF2;color:#111827'},
@@ -13940,15 +14128,78 @@ class Component extends DCLogic {
     const isFeeScopePlatform = feeRuleDraft.scope==='platform';
     const feeValueUnitLabel = feeRuleDraft.rateType==='percentage' ? '%' : '৳ flat';
 
-    const settingsTab = this.state.settingsTab || 'platform';
-    const settingsTabDefs = [
-      {key:'platform', label:'PLATFORM CONFIG'}, {key:'roles', label:'ROLES & PERMISSIONS'}, {key:'flags', label:'FEATURE FLAGS'}, {key:'security', label:'SECURITY'}, {key:'danger', label:'DANGER ZONE'},
-    ].map(t => ({...t, onClick: () => this.setState({settingsTab: t.key}), tabStyle: t.key===settingsTab ? 'background:linear-gradient(90deg,#C8321A,#EF3C23);color:#fff' : 'color:#374151'}));
-    const isSettingsPlatform = settingsTab === 'platform';
-    const isSettingsRoles = settingsTab === 'roles';
-    const isSettingsFeatureFlags = settingsTab === 'flags';
-    const isSettingsSecurity = settingsTab === 'security';
-    const isSettingsDanger = settingsTab === 'danger';
+    const settingsRoleKey = isSellerMirrorRole
+      ? 'seller'
+      : isCreatorMirrorRole
+        ? 'creator'
+        : (mirrorRole === 'consumer' ? 'consumer' : 'admin');
+    const SETTINGS_TABS_BY_ROLE = {
+      admin: [
+        {key:'platform', label:'PLATFORM CONFIG'},
+        {key:'roles', label:'ROLES & PERMISSIONS'},
+        {key:'flags', label:'FEATURE FLAGS'},
+        {key:'security', label:'SECURITY'},
+        {key:'danger', label:'DANGER ZONE'},
+      ],
+      seller: [
+        {key:'account', label:'ACCOUNT & SECURITY'},
+        {key:'notifications', label:'NOTIFICATIONS'},
+        {key:'store', label:'STORE / BRAND'},
+        {key:'fulfillment', label:'ORDER & FULFILLMENT'},
+        {key:'finance', label:'FINANCE & PAYOUT'},
+        {key:'integrations', label:'INTEGRATIONS'},
+        {key:'privacy', label:'PRIVACY / DATA'},
+        {key:'featureAccess', label:'FEATURE ACCESS STATUS'},
+      ],
+      creator: [
+        {key:'account', label:'ACCOUNT & SECURITY'},
+        {key:'notifications', label:'NOTIFICATIONS'},
+        {key:'creator', label:'CREATOR / CONTENT'},
+        {key:'publishing', label:'PUBLISHING'},
+        {key:'finance', label:'FINANCE & PAYOUT'},
+        {key:'integrations', label:'INTEGRATIONS'},
+        {key:'privacy', label:'PRIVACY / DATA'},
+        {key:'featureAccess', label:'FEATURE ACCESS STATUS'},
+      ],
+      consumer: [
+        {key:'account', label:'ACCOUNT & SECURITY'},
+        {key:'notifications', label:'NOTIFICATIONS'},
+        {key:'privacy', label:'PRIVACY'},
+        {key:'communication', label:'COMMUNICATION'},
+      ],
+    };
+    const settingsTabsForRole = SETTINGS_TABS_BY_ROLE[settingsRoleKey] || SETTINGS_TABS_BY_ROLE.admin;
+    let settingsTab = this.state.settingsTab || settingsTabsForRole[0].key;
+    if (!settingsTabsForRole.some(t => t.key === settingsTab)) settingsTab = settingsTabsForRole[0].key;
+    const settingsTabDefs = settingsTabsForRole.map(t => ({
+      ...t,
+      onClick: () => this.setState({settingsTab: t.key}),
+      tabStyle: t.key===settingsTab ? 'background:linear-gradient(90deg,#C8321A,#EF3C23);color:#fff' : 'color:#374151',
+    }));
+    const isSettingsAdminShell = settingsRoleKey === 'admin';
+    const isSettingsSellerShell = settingsRoleKey === 'seller';
+    const isSettingsCreatorShell = settingsRoleKey === 'creator';
+    const isSettingsConsumerShell = settingsRoleKey === 'consumer';
+    const isSettingsPlatform = isSettingsAdminShell && settingsTab === 'platform';
+    const isSettingsRoles = isSettingsAdminShell && settingsTab === 'roles';
+    const isSettingsFeatureFlags = isSettingsAdminShell && settingsTab === 'flags';
+    const isSettingsSecurity = isSettingsAdminShell && settingsTab === 'security';
+    const isSettingsDanger = isSettingsAdminShell && settingsTab === 'danger';
+    const isSettingsAccount = settingsTab === 'account';
+    const isSettingsNotifications = settingsTab === 'notifications';
+    const isSettingsStore = settingsTab === 'store';
+    const isSettingsFulfillment = settingsTab === 'fulfillment';
+    const isSettingsFinancePrefs = settingsTab === 'finance';
+    const isSettingsIntegrations = settingsTab === 'integrations';
+    const isSettingsPrivacy = settingsTab === 'privacy';
+    const isSettingsFeatureAccessStatus = settingsTab === 'featureAccess';
+    const isSettingsCreatorPrefs = settingsTab === 'creator';
+    const isSettingsPublishing = settingsTab === 'publishing';
+    const isSettingsCommunication = settingsTab === 'communication';
+    const partnerEntitlements = window.__CMS_MIRROR_ENTITLEMENTS__ || {};
+    const partnerEntitlementRows = Object.keys(partnerEntitlements).map(function(k) {
+      return { key: k, label: k.replace(/([A-Z])/g, ' $1').replace(/^./, function(c){ return c.toUpperCase(); }), on: partnerEntitlements[k] !== false };
+    });
     const settings2FA = this.state.settings2FA !== false;
     const settingsMaintenanceMode = this.state.settingsMaintenanceMode !== false;
     const rolePersonas = [
@@ -13962,7 +14213,10 @@ class Component extends DCLogic {
       perms: rp.perms.map((v,i) => {
         const key = rolePermStateKey(rp.role,i);
         const checked = this.state[key] !== undefined ? this.state[key] : !!v;
-        return {checked, onToggle: () => this.setState({[key]: !checked})};
+        return {checked, onToggle: () => {
+          if (!this.cmsMirrorIsPlatformAdmin()) return this.rejectPartnerAdminSettings();
+          this.setState({[key]: !checked});
+        }};
       }),
     }));
     const settingsFeatureFlagsList = [
@@ -13973,7 +14227,10 @@ class Component extends DCLogic {
       {key:'promoCodesFlag', icon:'🔒', name:'Enable Promo Codes', desc:'Turn on support for coupon-based discounts and interactive client-side rewards page.'},
       {key:'brandDealsPage', icon:'✉', name:'Enable Brand Deals Page', desc:'Unlock custom listings for special curated bundle offers and creator-sponsored products.'},
       {key:'comparisonEngine', icon:'🗄', name:'Enable Comparison Engine', desc:'Turn on side-by-side product comparisons of user choices on the frontend catalog.'},
-    ].map(fl => ({...fl, enabled: this.state[`flag_${fl.key}`] !== false, onToggle: () => this.setState({[`flag_${fl.key}`]: this.state[`flag_${fl.key}`] === false})}));
+    ].map(fl => ({...fl, enabled: this.state[`flag_${fl.key}`] !== false, onToggle: () => {
+      if (!this.cmsMirrorIsPlatformAdmin()) return this.rejectPartnerAdminSettings();
+      this.setState({[`flag_${fl.key}`]: this.state[`flag_${fl.key}`] === false});
+    }}));
     const settingsSecurityLogs = [
       {action:'Updated Role Permissions', by:'Abdur Rahman', role:'SUPER ADMIN', time:'22-Jun-2026 14:15', ip:'192.168.1.102'},
       {action:'Maintenance Mode Toggled (OFF)', by:'Abdur Rahman', role:'SUPER ADMIN', time:'22-Jun-2026 11:02', ip:'192.168.1.102'},
@@ -15930,6 +16187,19 @@ class Component extends DCLogic {
       sellerCustSearchValue: this.state.sellerCustSearch||'', setSellerCustSearch: this.setSellerCustSearch,
       setSellerCustSegment: this.setSellerCustSegment, closeSellerCustProfile: this.closeSellerCustProfile,
       settingsTabDefs, isSettingsPlatform, isSettingsRoles, isSettingsFeatureFlags, isSettingsSecurity, isSettingsDanger,
+      isSettingsAdminShell, isSettingsSellerShell, isSettingsCreatorShell, isSettingsConsumerShell,
+      isSettingsAccount, isSettingsNotifications, isSettingsStore, isSettingsFulfillment, isSettingsFinancePrefs,
+      isSettingsIntegrations, isSettingsPrivacy, isSettingsFeatureAccessStatus, isSettingsCreatorPrefs,
+      isSettingsPublishing, isSettingsCommunication, partnerEntitlementRows, hasPartnerEntitlementRows: partnerEntitlementRows.length > 0,
+      openBrandStudioFromSettings: this.openBrandStudioFromSettings,
+      openCreatorStudioFromSettings: this.openCreatorStudioFromSettings,
+      openCourierFromSettings: this.openCourierFromSettings,
+      openGuidesFromSettings: this.openGuidesFromSettings,
+      openEarningsFromSettings: this.openEarningsFromSettings,
+      openPayoutsFromSettings: this.openPayoutsFromSettings,
+      openMessagesFromSettings: this.openMessagesFromSettings,
+      openProfileFromSettings: this.openProfileFromSettings,
+      openPreviewWebsite: this.openPreviewWebsite,
       settings2FA, toggle2FA: this.toggle2FA, inviteAdminUser: this.inviteAdminUser,
       settingsMaintenanceMode, toggleMaintenanceMode: this.toggleMaintenanceMode, runDbOptimization: this.runDbOptimization, configureSmtp: this.configureSmtp,
       rolePermissionMatrix, settingsFeatureFlagsList, settingsSecurityLogs,
@@ -16058,7 +16328,7 @@ class Component extends DCLogic {
       creatorsSorted, creatorSelectedCount, creatorAllSelected, clearCreatorSelection: this.clearCreatorSelection,
       toggleCreatorSelectAllHandler: this.toggleCreatorSelectAll(creatorsSorted.map(c=>c.name)),
       creatorSearchValue: this.state.creatorSearch || '', setCreatorSearch: this.setCreatorSearch,
-      isWebsiteCms, isHomepageManager, isContentManagementStudio, cmsSubNavGroups, cmsSubPageLabel, cmsStats, cmsSectionRows, cmsMiddleSections,
+      isWebsiteCms, isHomepageManager, isContentManagementStudio, isSitePagesCms, cmsTopTabs, cmsSubPageLabel, cmsLivePreviewUrl, cmsSitePagesView, cmsStats, cmsSectionRows, cmsMiddleSections,
       cmsSectionById, cmsNavRow, cmsPreviewCategories, cmsPreviewProducts, cmsPreviewBrands,
       cmsLivePreviewOpen: this.state.cmsLivePreviewOpen, toggleCmsLivePreview: this.toggleCmsLivePreview,
       publishCmsChanges: this.publishCmsChanges, stopClickPropagation: this.stopClickPropagation,
@@ -17005,8 +17275,8 @@ class Component extends DCLogic {
 window.__CMS_MIRROR_ROLE_NAV__ = {
   super_admin: null,
   admin: null,
-  seller: ['dashboard','brands','brandProfile','products','contentStudio','adsDealsStudio','orders','sellerCustomers','returnsRefunds','promoCodes','messages','notifications','reviews','finance','feesAdjustments','payouts','courierProviders','shipmentOperations','courierAnalytics','myCashbook','settings'],
-  creator: ['dashboard','creators','creatorProfile','contentStudio','adsDealsStudio','creatorEconomy','sellerCustomers','messages','notifications','reviews','finance','feesAdjustments','payouts','myCashbook','settings'],
+  seller: ['dashboard','brands','brandProfile','products','contentStudio','adsDealsStudio','orders','sellerCustomers','returnsRefunds','promoCodes','messages','notifications','reviews','finance','myEarnings','feesAdjustments','payouts','courierProviders','shipmentOperations','courierAnalytics','myCashbook','settings'],
+  creator: ['dashboard','creators','creatorProfile','contentStudio','adsDealsStudio','creatorEconomy','sellerCustomers','messages','notifications','reviews','finance','myEarnings','feesAdjustments','payouts','myCashbook','settings'],
   moderator: ['dashboard','moderationCenter','reviews','messages'],
   finance_manager: ['dashboard','payouts','feeCharges','finance'],
   support_agent: ['dashboard','messages','reviews'],
@@ -17020,6 +17290,11 @@ window.__CMS_MIRROR_PAGE_ALLOWED__ = function(key) {
   return allowed.indexOf(key) >= 0;
 };
 window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
+  // Host posts the role tree from nav.ts (already entitlement-filtered). Prefer it
+  // so we never intersect the Admin catalog and drop partner-only page keys.
+  if (window.__CMS_MIRROR_NAV_GROUPS__ && window.__CMS_MIRROR_NAV_GROUPS__.length) {
+    return window.__CMS_MIRROR_NAV_GROUPS__;
+  }
   var role = window.__CMS_MIRROR_ROLE__ || 'super_admin';
   var allowed = window.__CMS_MIRROR_ROLE_NAV__[role];
   if (arguments.length > 1 && arguments[1]) allowed = arguments[1];
@@ -17162,6 +17437,14 @@ window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
     if (e.data.type === 'cms-mirror-set-state') {
       if (e.data.role) window.__CMS_MIRROR_ROLE__ = e.data.role;
       if (e.data.allowedKeys) window.__CMS_MIRROR_ALLOWED_KEYS__ = e.data.allowedKeys;
+      if (e.data.storefrontUrl) window.__CMS_MIRROR_STOREFRONT_URL__ = e.data.storefrontUrl;
+      if (e.data.previewUrl) window.__CMS_MIRROR_PREVIEW_URL__ = e.data.previewUrl;
+      if (e.data.entitlements) window.__CMS_MIRROR_ENTITLEMENTS__ = e.data.entitlements;
+      if (e.data.navGroups && e.data.navGroups.length) {
+        window.__CMS_MIRROR_NAV_GROUPS__ = e.data.navGroups;
+      } else if (e.data.role && e.data.role !== 'seller' && e.data.role !== 'creator' && e.data.role !== 'consumer') {
+        window.__CMS_MIRROR_NAV_GROUPS__ = null;
+      }
       if (e.data.userId) window.__CMS_MIRROR_USER_ID__ = e.data.userId;
       if (e.data.displayName) window.__CMS_MIRROR_DISPLAY_NAME__ = e.data.displayName;
 

@@ -1,5 +1,5 @@
 import React, { Suspense, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useImpersonation } from '../../contexts/ImpersonationContext';
 import { useEntitlements } from '../../contexts/EntitlementsContext';
@@ -8,12 +8,10 @@ import { NotificationBellDropdown } from '../account/NotificationBellDropdown';
 import { GlobalDashboardSearch } from '../common/GlobalDashboardSearch';
 import { AdminPageSkeleton } from '../common/skeletons';
 import {
-  NAV_DEFS,
-  PAGE_KEY_TO_PATH,
   PAGE_META,
-  allowedPageKeysForRole,
+  applyEntitlementNavFilter,
+  navGroupsForRole,
   pathToPageKey,
-  type CmsNavGroup,
 } from '../../cms-mirror/nav';
 import {
   formatRoleLabel,
@@ -29,162 +27,6 @@ export type AdminWorkspaceLayoutProps = {
   pageSubtitle?: string;
 };
 
-/** Seller/Creator chrome must include identity profile keys missing from admin NAV_DEFS. */
-function filterNavForRole(role: string | undefined): CmsNavGroup[] {
-  if (role === 'consumer') {
-    return [
-      {
-        title: 'OVERVIEW',
-        items: [{ key: 'dashboard', label: 'Dashboard', path: PAGE_KEY_TO_PATH.dashboard }],
-      },
-      {
-        title: 'MY ACCOUNT',
-        items: [
-          { key: 'consumerProfile', label: 'My Profile', path: PAGE_KEY_TO_PATH.consumerProfile },
-          { key: 'orders', label: 'My Orders', path: PAGE_KEY_TO_PATH.orders },
-          { key: 'settings', label: 'Settings', path: PAGE_KEY_TO_PATH.settings },
-        ],
-      },
-    ];
-  }
-  if (role === 'seller') {
-    return [
-      {
-        title: 'OVERVIEW',
-        items: [{ key: 'dashboard', label: 'Dashboard', path: PAGE_KEY_TO_PATH.dashboard }],
-      },
-      {
-        title: 'BRAND & CATALOG',
-        items: [
-          { key: 'brands', label: 'Brand Management Studio', path: PAGE_KEY_TO_PATH.brands },
-          { key: 'brandProfile', label: 'Seller Profile', path: PAGE_KEY_TO_PATH.brandProfile },
-          { key: 'products', label: 'Products & Inventory', path: PAGE_KEY_TO_PATH.products },
-        ],
-      },
-      {
-        title: 'MARKETING & CONTENT',
-        items: [
-          { key: 'adsDealsStudio', label: 'Ads & Deals Studio', tag: 'NEW', path: PAGE_KEY_TO_PATH.adsDealsStudio },
-        ],
-      },
-      {
-        title: 'COMMERCE',
-        items: [
-          { key: 'orders', label: 'Orders Hub', path: PAGE_KEY_TO_PATH.orders },
-          { key: 'sellerCustomers', label: 'My Customers', path: PAGE_KEY_TO_PATH.sellerCustomers },
-          { key: 'returnsRefunds', label: 'Returns & Refunds', path: PAGE_KEY_TO_PATH.returnsRefunds },
-          { key: 'promoCodes', label: 'Promo Codes & Vouchers', path: PAGE_KEY_TO_PATH.promoCodes },
-        ],
-      },
-      {
-        title: 'LOGISTICS MANAGEMENT',
-        items: [
-          { key: 'courierProviders', label: 'Courier Providers', path: PAGE_KEY_TO_PATH.courierProviders },
-          { key: 'shipmentOperations', label: 'Shipment Operations', path: PAGE_KEY_TO_PATH.shipmentOperations },
-          { key: 'courierAnalytics', label: 'Courier Analytics', path: PAGE_KEY_TO_PATH.courierAnalytics },
-        ],
-      },
-      {
-        title: 'TRUST & SAFETY',
-        items: [{ key: 'reviews', label: 'Reviews', path: PAGE_KEY_TO_PATH.reviews }],
-      },
-      {
-        title: 'COMMUNICATION',
-        items: [{ key: 'messages', label: 'Messages', tag: '12', path: PAGE_KEY_TO_PATH.messages }],
-      },
-      {
-        title: 'FINANCE & PAYOUTS',
-        items: [
-          { key: 'finance', label: 'Finance & Payouts', path: PAGE_KEY_TO_PATH.finance },
-          { key: 'myEarnings', label: 'My Earnings', path: PAGE_KEY_TO_PATH.myEarnings },
-          { key: 'myCashbook', label: 'Cashbooks', tag: 'PRIVATE', path: PAGE_KEY_TO_PATH.myCashbook },
-          { key: 'feesAdjustments', label: 'Fees & Adjustments', path: PAGE_KEY_TO_PATH.feesAdjustments },
-          { key: 'payouts', label: 'Payouts / Withdrawals', path: PAGE_KEY_TO_PATH.payouts },
-        ],
-      },
-      {
-        title: 'SETTINGS',
-        items: [{ key: 'settings', label: 'Settings', path: PAGE_KEY_TO_PATH.settings }],
-      },
-    ];
-  }
-
-  if (role === 'creator') {
-    return [
-      {
-        title: 'OVERVIEW',
-        items: [{ key: 'dashboard', label: 'Dashboard', path: PAGE_KEY_TO_PATH.dashboard }],
-      },
-      {
-        title: 'PEOPLE',
-        items: [
-          { key: 'creators', label: 'Creator Studio', path: PAGE_KEY_TO_PATH.creators },
-          { key: 'creatorProfile', label: 'Creator Profile', path: PAGE_KEY_TO_PATH.creatorProfile },
-          { key: 'creatorEconomy', label: 'Creator Economy', path: PAGE_KEY_TO_PATH.creatorEconomy },
-        ],
-      },
-      {
-        title: 'COMMERCE',
-        items: [
-          { key: 'sellerCustomers', label: 'My Customers', path: PAGE_KEY_TO_PATH.sellerCustomers },
-        ],
-      },
-      {
-        title: 'MARKETING & CONTENT',
-        items: [
-          { key: 'adsDealsStudio', label: 'Ads & Deals Studio', tag: 'NEW', path: PAGE_KEY_TO_PATH.adsDealsStudio },
-          { key: 'contentStudio', label: 'Guide Management', tag: 'NEW', path: PAGE_KEY_TO_PATH.contentStudio },
-        ],
-      },
-      {
-        title: 'TRUST & SAFETY',
-        items: [{ key: 'reviews', label: 'Reviews', path: PAGE_KEY_TO_PATH.reviews }],
-      },
-      {
-        title: 'COMMUNICATION',
-        items: [{ key: 'messages', label: 'Messages', tag: '12', path: PAGE_KEY_TO_PATH.messages }],
-      },
-      {
-        title: 'FINANCE & PAYOUTS',
-        items: [
-          { key: 'finance', label: 'Finance & Payouts', path: PAGE_KEY_TO_PATH.finance },
-          { key: 'myEarnings', label: 'My Earnings', path: PAGE_KEY_TO_PATH.myEarnings },
-          { key: 'myCashbook', label: 'Cashbooks', tag: 'PRIVATE', path: PAGE_KEY_TO_PATH.myCashbook },
-          { key: 'feesAdjustments', label: 'Fees & Adjustments', path: PAGE_KEY_TO_PATH.feesAdjustments },
-          { key: 'payouts', label: 'Payouts / Withdrawals', path: PAGE_KEY_TO_PATH.payouts },
-        ],
-      },
-      {
-        title: 'SETTINGS',
-        items: [{ key: 'settings', label: 'Settings', path: PAGE_KEY_TO_PATH.settings }],
-      },
-    ];
-  }
-
-  const allowed = allowedPageKeysForRole(role);
-  if (!allowed) return NAV_DEFS;
-
-  return NAV_DEFS.map((group) => ({
-    ...group,
-    items: group.items.filter((item) => allowed.includes(item.key)),
-  })).filter((group) => group.items.length > 0);
-}
-
-function applyEntitlementNavFilter(
-  groups: CmsNavGroup[],
-  filterAllowedPageKeys: (keys: string[] | null) => string[] | null,
-  role: string | undefined,
-): CmsNavGroup[] {
-  const allowed = filterAllowedPageKeys(allowedPageKeysForRole(role));
-  if (!allowed) return groups;
-  return groups
-    .map((group) => ({
-      ...group,
-      items: group.items.filter((item) => allowed.includes(item.key)),
-    }))
-    .filter((group) => group.items.length > 0);
-}
-
 /**
  * Shared React Admin workspace chrome — visual parity with the live Admin CMS shell.
  * Presentation only; does not change RBAC, auth, or backend behavior.
@@ -198,7 +40,6 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
   const { filterAllowedPageKeys } = useEntitlements();
   const { state: impersonation, exitImpersonation } = useImpersonation();
   const location = useLocation();
-  const navigate = useNavigate();
   const [navSearch, setNavSearch] = useState('');
 
   const activePageKey = pathToPageKey(location.pathname);
@@ -206,7 +47,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
 
   const navGroups = useMemo(() => {
     const roleFiltered = applyEntitlementNavFilter(
-      filterNavForRole(role),
+      navGroupsForRole(role),
       filterAllowedPageKeys,
       role,
     );

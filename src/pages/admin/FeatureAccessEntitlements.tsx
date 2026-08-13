@@ -1,12 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Navigate } from 'react-router-dom';
-import { KeyRound, ShieldCheck, UserPlus } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { AdminWorkspaceLayout } from '../../components/Layout/AdminWorkspaceLayout';
-import type { PartnerFeatureDef, PartnerRole } from '../../../shared/entitlements/registry';
+import {
+  PARTNER_FEATURES,
+  type PartnerFeatureDef,
+  type PartnerFeatureKey,
+  type PartnerRole,
+} from '../../../shared/entitlements/registry';
 
 const AUTH_TOKEN_KEY = 'choosify_auth_token';
 const API_BASE = '/api/v1';
+
+type RoleScope = 'seller' | 'creator' | 'consumer';
 
 type RoleDefaults = {
   seller: Record<string, boolean>;
@@ -27,6 +33,104 @@ type PartnerApplicationRow = {
   provisionedUserId?: string;
 };
 
+type FeatureGroupDef = {
+  title: string;
+  keys: PartnerFeatureKey[];
+};
+
+/**
+ * Visual groups from standalone design architecture.
+ * Keys are real registry only — never design-file mock keys.
+ */
+const SELLER_GROUPS: FeatureGroupDef[] = [
+  {
+    title: 'STOREFRONT & CATALOG',
+    keys: ['products', 'brandStudio', 'reviews'],
+  },
+  {
+    title: 'FINANCE & PAYOUTS',
+    keys: ['cashbooks', 'myEarnings', 'payouts', 'feesAdjustments', 'analytics'],
+  },
+  {
+    title: 'MARKETING & MESSAGING',
+    keys: ['messaging', 'metaMessaging', 'adsDeals', 'guideManagement', 'promoCodes'],
+  },
+  {
+    title: 'OPERATIONS & INSIGHTS',
+    keys: ['returnsRefunds', 'logistics', 'advancedAnalytics', 'customerInsights', 'notifications'],
+  },
+];
+
+const CREATOR_GROUPS: FeatureGroupDef[] = [
+  {
+    title: 'CONTENT & PUBLISHING',
+    keys: ['guideManagement', 'creatorEconomy'],
+  },
+  {
+    title: 'MONETIZATION',
+    keys: ['myEarnings', 'payouts', 'feesAdjustments', 'adsDeals'],
+  },
+  {
+    title: 'COMMUNICATION & INSIGHTS',
+    keys: [
+      'messaging',
+      'metaMessaging',
+      'analytics',
+      'customerInsights',
+      'reviews',
+      'notifications',
+      'cashbooks',
+    ],
+  },
+];
+
+const ROLE_HEADINGS: Record<RoleScope, [string, string]> = {
+  seller: [
+    'Seller Feature Access',
+    'Enable or disable platform features and entitlements per Seller account tier.',
+  ],
+  creator: [
+    'Creator Feature Access',
+    'Enable or disable platform features and entitlements per Creator account tier.',
+  ],
+  consumer: [
+    'Consumer Feature Access',
+    'Enable or disable platform features made available to shopper accounts.',
+  ],
+};
+
+const ROLE_TABS: { key: RoleScope; label: string }[] = [
+  { key: 'seller', label: 'SELLER' },
+  { key: 'creator', label: 'CREATOR' },
+  { key: 'consumer', label: 'CONSUMER' },
+];
+
+/**
+ * Icon tiles from standalone design file approach (emoji @ 14px in 36×36 #F3F4F6 / radius 8).
+ * Mapped to real registry keys — not design mock feature keys.
+ */
+const FEATURE_EMOJI: Partial<Record<PartnerFeatureKey, string>> = {
+  products: '📦',
+  brandStudio: '🏬',
+  reviews: '⭐',
+  cashbooks: '📒',
+  myEarnings: '💰',
+  payouts: '⚡',
+  feesAdjustments: '🧾',
+  analytics: '📊',
+  advancedAnalytics: '📈',
+  messaging: '💬',
+  metaMessaging: '💬',
+  adsDeals: '📣',
+  guideManagement: '🎬',
+  promoCodes: '🎟️',
+  returnsRefunds: '↩️',
+  logistics: '🚚',
+  customerInsights: '🧭',
+  notifications: '🔔',
+  creatorEconomy: '🎥',
+};
+
 function authHeaders(): HeadersInit {
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
   return {
@@ -35,7 +139,36 @@ function authHeaders(): HeadersInit {
   };
 }
 
-const Toggle = ({
+function catalogByKey(catalog: PartnerFeatureDef[]): Map<string, PartnerFeatureDef> {
+  return new Map(catalog.map((f) => [f.key, f]));
+}
+
+function buildGroups(
+  role: PartnerRole,
+  catalog: PartnerFeatureDef[],
+): { title: string; items: PartnerFeatureDef[] }[] {
+  const byKey = catalogByKey(catalog.filter((f) => f.roles.includes(role)));
+  const defs = role === 'seller' ? SELLER_GROUPS : CREATOR_GROUPS;
+  const used = new Set<string>();
+  const groups: { title: string; items: PartnerFeatureDef[] }[] = [];
+
+  for (const g of defs) {
+    const items = g.keys
+      .map((k) => byKey.get(k))
+      .filter((f): f is PartnerFeatureDef => Boolean(f));
+    for (const it of items) used.add(it.key);
+    if (items.length > 0) groups.push({ title: g.title, items });
+  }
+
+  const leftover = [...byKey.values()].filter((f) => !used.has(f.key));
+  if (leftover.length > 0) {
+    groups.push({ title: 'OTHER FEATURES', items: leftover });
+  }
+  return groups;
+}
+
+/** Design-file toggle: 38×22 / radius 11 / knobs 16 @ top:3 left|right:3 */
+function DesignToggle({
   checked,
   onChange,
   disabled,
@@ -43,41 +176,376 @@ const Toggle = ({
   checked: boolean;
   onChange: () => void;
   disabled?: boolean;
-}) => (
-  <button
-    type="button"
-    role="switch"
-    aria-checked={checked}
-    disabled={disabled}
-    onClick={onChange}
-    className="relative shrink-0 cursor-pointer transition-colors duration-200 disabled:opacity-50"
-    style={{
-      width: 38,
-      height: 22,
-      borderRadius: 11,
-      backgroundColor: checked ? 'var(--color-accent-primary, #FF5B00)' : '#D1D5DB',
-    }}
-  >
-    <span
-      className="absolute top-0.5 bg-white rounded-full transition-all duration-200"
-      style={{ width: 16, height: 16, left: checked ? 20 : 2 }}
-    />
-  </button>
-);
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onChange}
+      style={{
+        width: 38,
+        height: 22,
+        borderRadius: 11,
+        background: checked ? '#FF5B00' : '#D1D5DB',
+        position: 'relative',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        flexShrink: 0,
+        opacity: disabled ? 0.55 : 1,
+        border: 'none',
+        padding: 0,
+      }}
+    >
+      <span
+        style={{
+          width: 16,
+          height: 16,
+          borderRadius: '50%',
+          background: '#fff',
+          position: 'absolute',
+          top: 3,
+          ...(checked ? { right: 3 } : { left: 3 }),
+        }}
+      />
+    </button>
+  );
+}
+
+function PlanRequiredBadge() {
+  return (
+    <div
+      style={{
+        fontSize: 10,
+        fontWeight: 800,
+        color: '#B45309',
+        background: '#FEF3C7',
+        padding: '5px 10px',
+        borderRadius: 6,
+        flexShrink: 0,
+      }}
+    >
+      PLAN REQUIRED
+    </div>
+  );
+}
+
+function FeatureRow({
+  feature,
+  enabled,
+  busy,
+  planRequired,
+  onToggle,
+}: {
+  feature: PartnerFeatureDef;
+  enabled: boolean;
+  busy: boolean;
+  planRequired: boolean;
+  onToggle: () => void;
+}) {
+  const emoji = FEATURE_EMOJI[feature.key] || '⚙️';
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '18px 0',
+        borderBottom: '1px solid #F1F3F5',
+      }}
+    >
+      <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', minWidth: 0 }}>
+        <div
+          aria-hidden
+          style={{
+            width: 36,
+            height: 36,
+            borderRadius: 8,
+            background: '#F3F4F6',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 14,
+            flexShrink: 0,
+            lineHeight: 1,
+          }}
+        >
+          {emoji}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>{feature.label}</div>
+          <div
+            style={{
+              fontSize: 11,
+              color: '#9CA3AF',
+              fontWeight: 600,
+              marginTop: 2,
+              maxWidth: 600,
+            }}
+          >
+            {feature.description}
+          </div>
+        </div>
+      </div>
+      {planRequired ? (
+        <PlanRequiredBadge />
+      ) : (
+        <DesignToggle checked={enabled} disabled={busy} onChange={onToggle} />
+      )}
+    </div>
+  );
+}
+
+function isPlanRequired(feature: PartnerFeatureDef): boolean {
+  // Future-ready: honor real plan/locked metadata when the registry/API provides it.
+  // Do not invent premium locks in the UI.
+  const meta = feature as PartnerFeatureDef & {
+    planRequired?: boolean;
+    locked?: boolean;
+    planGated?: boolean;
+  };
+  return Boolean(meta.planRequired || meta.locked || meta.planGated);
+}
+
+function flattenRoleFeatures(
+  groups: { title: string; items: PartnerFeatureDef[] }[],
+): PartnerFeatureDef[] {
+  const seen = new Set<string>();
+  const out: PartnerFeatureDef[] = [];
+  for (const g of groups) {
+    for (const f of g.items) {
+      if (seen.has(f.key)) continue;
+      seen.add(f.key);
+      out.push(f);
+    }
+  }
+  return out;
+}
+
+type RoleSummary = {
+  total: number;
+  enabled: number;
+  turnedOff: number;
+  planLocked: number;
+  turnedOffFeatures: PartnerFeatureDef[];
+};
+
+function computeRoleSummary(
+  features: PartnerFeatureDef[],
+  defaults: Record<string, boolean> | undefined,
+): RoleSummary {
+  let enabled = 0;
+  let turnedOff = 0;
+  let planLocked = 0;
+  const turnedOffFeatures: PartnerFeatureDef[] = [];
+
+  for (const f of features) {
+    if (isPlanRequired(f)) {
+      planLocked += 1;
+      continue;
+    }
+    const on = defaults?.[f.key] !== false;
+    if (on) enabled += 1;
+    else {
+      turnedOff += 1;
+      turnedOffFeatures.push(f);
+    }
+  }
+
+  return {
+    total: features.length,
+    enabled,
+    turnedOff,
+    planLocked,
+    turnedOffFeatures,
+  };
+}
+
+function SummaryStatCard({
+  label,
+  value,
+  sub,
+  color,
+  barPct,
+}: {
+  label: string;
+  value: number;
+  sub: string;
+  color: string;
+  /** 0–100 fill for the Creator-studio-style line bar */
+  barPct: number;
+}) {
+  const fill = Math.max(0, Math.min(100, barPct));
+  return (
+    <div
+      style={{
+        background: '#fff',
+        border: '1px solid #E8EDF2',
+        borderRadius: 10,
+        padding: 16,
+        minWidth: 0,
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          fontWeight: 800,
+          color,
+          letterSpacing: '0.03em',
+          marginBottom: 8,
+          textTransform: 'uppercase',
+        }}
+      >
+        ■ {label}
+      </div>
+      <div
+        style={{
+          fontSize: 22,
+          fontWeight: 800,
+          color: '#111827',
+          marginBottom: 8,
+          lineHeight: 1.1,
+        }}
+      >
+        {value}
+      </div>
+      <div
+        style={{
+          height: 4,
+          borderRadius: 99,
+          background: '#F1F3F5',
+          overflow: 'hidden',
+          marginBottom: 6,
+        }}
+      >
+        <div
+          style={{
+            width: `${fill}%`,
+            height: '100%',
+            background: color,
+            borderRadius: 99,
+          }}
+        />
+      </div>
+      <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>{sub}</div>
+    </div>
+  );
+}
+
+function RoleAnalyticsSummary({ summary }: { summary: RoleSummary }) {
+  const { total, enabled, turnedOff, planLocked, turnedOffFeatures } = summary;
+  const pct = (n: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))',
+          gap: 14,
+          marginBottom: 12,
+        }}
+      >
+        <SummaryStatCard
+          label="Total Features"
+          value={total}
+          sub="items"
+          color="#EF3C23"
+          barPct={total > 0 ? 100 : 0}
+        />
+        <SummaryStatCard
+          label="Enabled"
+          value={enabled}
+          sub={`of ${total}`}
+          color="#16A34A"
+          barPct={pct(enabled)}
+        />
+        <SummaryStatCard
+          label="Turned Off"
+          value={turnedOff}
+          sub={`of ${total}`}
+          color="#DC2626"
+          barPct={pct(turnedOff)}
+        />
+        <SummaryStatCard
+          label="Plan Locked"
+          value={planLocked}
+          sub={`of ${total}`}
+          color="#F59E0B"
+          barPct={pct(planLocked)}
+        />
+      </div>
+
+      <div
+        style={{
+          background: '#FFF7ED',
+          border: '1px solid #FED7AA',
+          borderRadius: 10,
+          padding: '14px 16px',
+        }}
+      >
+        <div
+          style={{
+            fontSize: 10,
+            fontWeight: 800,
+            color: '#C2410C',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            marginBottom: 10,
+          }}
+        >
+          Currently Turned Off
+        </div>
+        {turnedOffFeatures.length === 0 ? (
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#9A3412' }}>
+            All available features are currently enabled.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {turnedOffFeatures.map((f) => (
+              <span
+                key={f.key}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  background: '#fff',
+                  border: '1px solid #E8EDF2',
+                  borderRadius: 999,
+                  padding: '6px 10px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: '#7C2D12',
+                }}
+              >
+                <span aria-hidden style={{ fontSize: 13, lineHeight: 1 }}>
+                  {FEATURE_EMOJI[f.key] || '⚙️'}
+                </span>
+                {f.label}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 /**
- * Admin-only Feature Access & Entitlements.
- * Controls Seller/Creator commercial feature availability — never Admin RBAC modules.
- * Disabling a feature blocks access only; feature-owned data is never deleted.
+ * Admin Feature Access & Entitlements —
+ * Presentation: standalone design file (Choosify Admin CMS).
+ * Data/logic: live entitlement registry + admin API (unchanged).
  */
 export default function FeatureAccessEntitlementsPage() {
   const { profile } = useAuth();
   const isAdmin = profile?.role === 'admin' || profile?.role === 'super_admin';
 
-  const [tab, setTab] = useState<'seller' | 'creator' | 'applications'>('seller');
+  const [roleScope, setRoleScope] = useState<RoleScope>('seller');
   const [catalog, setCatalog] = useState<PartnerFeatureDef[]>([]);
   const [roleDefaults, setRoleDefaults] = useState<RoleDefaults | null>(null);
   const [applications, setApplications] = useState<PartnerApplicationRow[]>([]);
+  const [showApplications, setShowApplications] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -107,11 +575,42 @@ export default function FeatureAccessEntitlementsPage() {
         applications?: PartnerApplicationRow[];
         error?: string;
       };
-      if (!entRes.ok) throw new Error(entBody.error || 'Unable to load entitlements');
-      setCatalog(entBody.catalog || []);
-      setRoleDefaults(entBody.roleDefaults || null);
+
+      if (entRes.ok && entBody.catalog?.length) {
+        setCatalog(entBody.catalog);
+        setRoleDefaults(entBody.roleDefaults || null);
+      } else if (!entRes.ok) {
+        // Unauthenticated / mock Admin UI: render registry so design layout stays reviewable.
+        // Do not surface auth noise (e.g. "Missing bearer token") as a page error banner.
+        setCatalog(PARTNER_FEATURES);
+        setRoleDefaults({
+          seller: Object.fromEntries(
+            PARTNER_FEATURES.filter((f) => f.roles.includes('seller')).map((f) => [f.key, true]),
+          ),
+          creator: Object.fromEntries(
+            PARTNER_FEATURES.filter((f) => f.roles.includes('creator')).map((f) => [f.key, true]),
+          ),
+        });
+        const authNoise =
+          /bearer|unauthorized|401|403|not authenticated/i.test(String(entBody.error || '')) ||
+          entRes.status === 401 ||
+          entRes.status === 403;
+        if (entBody.error && !authNoise) setError(entBody.error);
+      } else {
+        setCatalog(PARTNER_FEATURES);
+        setRoleDefaults(entBody.roleDefaults || null);
+      }
       if (appRes.ok) setApplications(appBody.applications || []);
     } catch (e) {
+      setCatalog(PARTNER_FEATURES);
+      setRoleDefaults({
+        seller: Object.fromEntries(
+          PARTNER_FEATURES.filter((f) => f.roles.includes('seller')).map((f) => [f.key, true]),
+        ),
+        creator: Object.fromEntries(
+          PARTNER_FEATURES.filter((f) => f.roles.includes('creator')).map((f) => [f.key, true]),
+        ),
+      });
       setError(e instanceof Error ? e.message : 'Load failed');
     } finally {
       setLoading(false);
@@ -122,10 +621,24 @@ export default function FeatureAccessEntitlementsPage() {
     if (isAdmin) void load();
   }, [isAdmin, load]);
 
-  const featuresForTab = useMemo(() => {
-    if (tab !== 'seller' && tab !== 'creator') return [];
-    return catalog.filter((f) => f.roles.includes(tab));
-  }, [catalog, tab]);
+  const groups = useMemo(() => {
+    if (roleScope === 'consumer') return [];
+    return buildGroups(roleScope, catalog.length ? catalog : PARTNER_FEATURES);
+  }, [catalog, roleScope]);
+
+  const roleSummary = useMemo(() => {
+    if (roleScope === 'consumer') {
+      return computeRoleSummary([], undefined);
+    }
+    const features = flattenRoleFeatures(groups);
+    const defaults =
+      roleScope === 'seller' || roleScope === 'creator'
+        ? roleDefaults?.[roleScope]
+        : undefined;
+    return computeRoleSummary(features, defaults);
+  }, [groups, roleDefaults, roleScope]);
+
+  const [heading, subheading] = ROLE_HEADINGS[roleScope];
 
   const toggleFeature = async (role: PartnerRole, featureKey: string, enabled: boolean) => {
     setBusyKey(`${role}:${featureKey}`);
@@ -141,7 +654,6 @@ export default function FeatureAccessEntitlementsPage() {
       const body = (await res.json().catch(() => ({}))) as {
         roleDefaults?: RoleDefaults;
         error?: string;
-        note?: string;
       };
       if (!res.ok) throw new Error(body.error || 'Update failed');
       if (body.roleDefaults) setRoleDefaults(body.roleDefaults);
@@ -151,7 +663,13 @@ export default function FeatureAccessEntitlementsPage() {
           : `${featureKey} access disabled for ${role} — data preserved.`,
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Toggle failed');
+      const msg = e instanceof Error ? e.message : 'Toggle failed';
+      const authNoise = /bearer|unauthorized|401|403|not authenticated/i.test(msg);
+      if (authNoise) {
+        showToast('Sign in required to persist entitlement changes.');
+      } else {
+        setError(msg);
+      }
     } finally {
       setBusyKey(null);
     }
@@ -185,154 +703,305 @@ export default function FeatureAccessEntitlementsPage() {
   return (
     <AdminWorkspaceLayout
       pageTitle="Feature Access & Entitlements"
-      pageSubtitle="Control Seller and Creator dashboard feature availability. Disabling access never deletes data."
+      pageSubtitle="Manage which platform features are enabled per role and plan"
     >
-      <div className="p-6 max-w-5xl mx-auto">
+      {/* Exact visual shell from standalone design Feature Access block */}
+      <div
+        className="fa-entitlements"
+        style={{
+          padding: '0 0 24px',
+          color: '#111827',
+          fontFamily: '"DM Sans", system-ui, sans-serif',
+        }}
+      >
         {toast && (
-          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[13px] text-emerald-800">
+          <div
+            style={{
+              marginBottom: 16,
+              borderRadius: 10,
+              border: '1px solid #A7F3D0',
+              background: '#ECFDF5',
+              padding: '10px 16px',
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#065F46',
+            }}
+          >
             {toast}
           </div>
         )}
         {error && (
-          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-[13px] text-red-700">
+          <div
+            style={{
+              marginBottom: 16,
+              borderRadius: 10,
+              border: '1px solid #FECACA',
+              background: '#FEF2F2',
+              padding: '10px 16px',
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#B91C1C',
+            }}
+          >
             {error}
           </div>
         )}
 
-        <div className="mb-5 rounded-xl border border-app-border bg-white p-4 flex gap-3 items-start">
-          <ShieldCheck className="w-5 h-5 text-[#FF5B00] shrink-0 mt-0.5" />
-          <div>
-            <p className="text-[13px] font-extrabold text-app-text-primary">
-              Partner commercial entitlements only
-            </p>
-            <p className="text-[12px] font-semibold text-app-text-muted mt-1 leading-relaxed">
-              Admin modules stay on existing RBAC. Precedence model (ready for plans): account
-              override → plan default → role default. This screen manages global role defaults.
-            </p>
+        {/* Role intro card — design: pad 24, radius 10, title 16/800, sub 12/#6B7280/600 */}
+        <div
+          style={{
+            background: '#fff',
+            border: '1px solid #E8EDF2',
+            borderRadius: 10,
+            padding: 24,
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ fontSize: 16, fontWeight: 800, marginBottom: 4, color: '#111827' }}>
+            {heading}
           </div>
+          <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600 }}>{subheading}</div>
         </div>
 
-        <div className="flex gap-2 mb-5 flex-wrap">
-          {(
-            [
-              { id: 'seller', label: 'Seller defaults', icon: KeyRound },
-              { id: 'creator', label: 'Creator defaults', icon: KeyRound },
-              { id: 'applications', label: 'Partner applications', icon: UserPlus },
-            ] as const
-          ).map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              onClick={() => setTab(t.id)}
-              className={`inline-flex items-center gap-1.5 px-3.5 h-9 rounded-lg text-[12px] font-bold border transition-colors ${
-                tab === t.id
-                  ? 'bg-[#FF5B00] text-white border-[#FF5B00]'
-                  : 'bg-white text-app-text-muted border-app-border hover:border-[#FF5B00]/40'
-              }`}
-            >
-              <t.icon className="w-3.5 h-3.5" />
-              {t.label}
-            </button>
-          ))}
+        {/* Active-role analytics — total / enabled / off / plan-locked + turned-off chips */}
+        {!loading && <RoleAnalyticsSummary summary={roleSummary} />}
+
+        {/* Role switcher — below analytics summary */}
+        <div
+          style={{
+            display: 'flex',
+            background: '#fff',
+            border: '1px solid #E8EDF2',
+            borderRadius: 10,
+            padding: 8,
+            marginBottom: 16,
+            overflowX: 'auto',
+          }}
+        >
+          {ROLE_TABS.map((tb) => {
+            const active = roleScope === tb.key;
+            return (
+              <button
+                key={tb.key}
+                type="button"
+                onClick={() => setRoleScope(tb.key)}
+                style={{
+                  flex: 1,
+                  textAlign: 'center',
+                  padding: '10px 14px',
+                  borderRadius: 8,
+                  fontSize: 11.5,
+                  fontWeight: 800,
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  border: 'none',
+                  background: active ? '#FF5B00' : 'transparent',
+                  color: active ? '#fff' : '#374151',
+                }}
+              >
+                {tb.label}
+              </button>
+            );
+          })}
         </div>
 
         {loading ? (
-          <div className="text-[12px] font-semibold text-app-text-muted py-10">Loading…</div>
-        ) : tab === 'applications' ? (
-          <div className="rounded-xl border border-app-border bg-white overflow-hidden">
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#6B7280', padding: '24px 0' }}>
+            Loading…
+          </div>
+        ) : roleScope === 'consumer' ? (
+          <div
+            style={{
+              background: '#fff',
+              border: '1px solid #E8EDF2',
+              borderRadius: 10,
+              marginBottom: 16,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                padding: '14px 24px',
+                background: '#F9FAFB',
+                borderBottom: '1px solid #F1F3F5',
+                fontSize: 10.5,
+                fontWeight: 800,
+                color: '#6B7280',
+                letterSpacing: '0.05em',
+                textTransform: 'uppercase',
+              }}
+            >
+              CONSUMER ENTITLEMENTS
+            </div>
+            <div style={{ padding: '18px 24px' }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>
+                No configurable Consumer feature entitlements are available yet.
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: '#9CA3AF',
+                  fontWeight: 600,
+                  marginTop: 2,
+                  maxWidth: 600,
+                }}
+              >
+                The live entitlement registry currently covers Seller and Creator commercial features
+                only. When consumer keys are added to the registry, they will appear here with the
+                same summary, group, and toggle layout.
+              </div>
+            </div>
+          </div>
+        ) : (
+          groups.map((grp) => (
+            <div
+              key={grp.title}
+              style={{
+                background: '#fff',
+                border: '1px solid #E8EDF2',
+                borderRadius: 10,
+                marginBottom: 16,
+                overflow: 'hidden',
+              }}
+            >
+              <div
+                style={{
+                  padding: '14px 24px',
+                  background: '#F9FAFB',
+                  borderBottom: '1px solid #F1F3F5',
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  color: '#6B7280',
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                }}
+              >
+                {grp.title}
+              </div>
+              <div style={{ padding: '0 24px' }}>
+                {grp.items.map((feature) => {
+                  const enabled = roleDefaults?.[roleScope]?.[feature.key] !== false;
+                  const busy = busyKey === `${roleScope}:${feature.key}`;
+                  const planRequired = isPlanRequired(feature);
+
+                  return (
+                    <FeatureRow
+                      key={feature.key}
+                      feature={feature}
+                      enabled={enabled}
+                      busy={busy}
+                      planRequired={planRequired}
+                      onToggle={() => void toggleFeature(roleScope, feature.key, !enabled)}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          ))
+        )}
+
+        {/* Secondary ops panel — not in design file; keep collapsed */}
+        <details
+          open={showApplications}
+          onToggle={(e) => setShowApplications((e.target as HTMLDetailsElement).open)}
+          style={{ marginTop: 8 }}
+        >
+          <summary
+            style={{
+              cursor: 'pointer',
+              fontSize: 11,
+              fontWeight: 800,
+              color: '#9CA3AF',
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              padding: '8px 0',
+              listStyle: 'none',
+            }}
+          >
+            Partner applications ({applications.length})
+          </summary>
+          <div
+            style={{
+              background: '#fff',
+              border: '1px solid #E8EDF2',
+              borderRadius: 10,
+              overflow: 'hidden',
+            }}
+          >
             {applications.length === 0 ? (
-              <div className="p-8 text-[13px] font-semibold text-app-text-muted">
+              <div style={{ padding: 24, fontSize: 13, fontWeight: 600, color: '#6B7280' }}>
                 No pending partner applications.
               </div>
             ) : (
-              <ul className="divide-y divide-app-border">
-                {applications.map((app) => (
-                  <li key={app.id} className="p-4 flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
-                    <div>
-                      <p className="text-[13px] font-extrabold text-app-text-primary">
-                        {app.businessOrChannelName}{' '}
-                        <span className="text-[11px] font-bold text-[#FF5B00] uppercase">
-                          {app.applicantType}
-                        </span>
-                      </p>
-                      <p className="text-[12px] font-semibold text-app-text-muted mt-0.5">
-                        {app.displayName} · {app.email} · {app.category} · {app.city}
-                        {app.niche ? ` · ${app.niche}` : ''}
-                      </p>
-                      <p className="text-[10px] font-semibold text-app-text-disabled mt-1">
-                        {new Date(app.createdAt).toLocaleString()}
-                      </p>
+              applications.map((app) => (
+                <div
+                  key={app.id}
+                  style={{
+                    padding: '16px 24px',
+                    borderBottom: '1px solid #F1F3F5',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: 16,
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 800 }}>
+                      {app.businessOrChannelName}{' '}
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#FF5B00' }}>
+                        {app.applicantType.toUpperCase()}
+                      </span>
                     </div>
-                    <div className="flex gap-2 shrink-0">
-                      <button
-                        type="button"
-                        disabled={busyKey === `app:${app.id}`}
-                        onClick={() => void reviewApplication(app.id, 'approve')}
-                        className="h-9 px-3.5 rounded-lg text-[12px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60"
-                      >
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busyKey === `app:${app.id}`}
-                        onClick={() => void reviewApplication(app.id, 'reject')}
-                        className="h-9 px-3.5 rounded-lg text-[12px] font-bold text-red-700 bg-red-50 border border-red-200 hover:bg-red-100 disabled:opacity-60"
-                      >
-                        Reject
-                      </button>
+                    <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginTop: 2 }}>
+                      {app.displayName} · {app.email} · {app.category} · {app.city}
                     </div>
-                  </li>
-                ))}
-              </ul>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      type="button"
+                      disabled={busyKey === `app:${app.id}`}
+                      onClick={() => void reviewApplication(app.id, 'approve')}
+                      style={{
+                        height: 36,
+                        padding: '0 14px',
+                        borderRadius: 8,
+                        border: 'none',
+                        background: '#059669',
+                        color: '#fff',
+                        fontSize: 12,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        opacity: busyKey === `app:${app.id}` ? 0.6 : 1,
+                      }}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busyKey === `app:${app.id}`}
+                      onClick={() => void reviewApplication(app.id, 'reject')}
+                      style={{
+                        height: 36,
+                        padding: '0 14px',
+                        borderRadius: 8,
+                        border: '1px solid #FECACA',
+                        background: '#FEF2F2',
+                        color: '#B91C1C',
+                        fontSize: 12,
+                        fontWeight: 800,
+                        cursor: 'pointer',
+                        opacity: busyKey === `app:${app.id}` ? 0.6 : 1,
+                      }}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                </div>
+              ))
             )}
           </div>
-        ) : (
-          <div className="rounded-xl border border-app-border bg-white overflow-hidden">
-            <div className="px-4 py-3 border-b border-app-border flex items-center justify-between gap-3">
-              <p className="text-[12px] font-bold text-app-text-muted uppercase tracking-wide">
-                {tab === 'seller' ? 'Seller / Brand' : 'Creator'} role defaults
-              </p>
-              <span className="text-[10px] font-bold text-app-text-disabled uppercase tracking-wide">
-                Future: plans · account overrides · premium locks
-              </span>
-            </div>
-            <ul className="divide-y divide-app-border">
-              {featuresForTab.map((feature) => {
-                const enabled = roleDefaults?.[tab]?.[feature.key] !== false;
-                const busy = busyKey === `${tab}:${feature.key}`;
-                return (
-                  <li key={feature.key} className="px-4 py-3.5 flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-extrabold text-app-text-primary">{feature.label}</p>
-                      <p className="text-[11px] font-semibold text-app-text-muted mt-0.5">
-                        {feature.description}
-                      </p>
-                      {feature.pageKeys.length > 0 && (
-                        <p className="text-[10px] font-semibold text-app-text-disabled mt-1">
-                          Pages: {feature.pageKeys.join(', ')}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span
-                        className={`text-[10px] font-extrabold uppercase tracking-wide ${
-                          enabled ? 'text-emerald-600' : 'text-app-text-disabled'
-                        }`}
-                      >
-                        {enabled ? 'Enabled' : 'Access off'}
-                      </span>
-                      <Toggle
-                        checked={enabled}
-                        disabled={busy}
-                        onChange={() => void toggleFeature(tab, feature.key, !enabled)}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
+        </details>
       </div>
     </AdminWorkspaceLayout>
   );

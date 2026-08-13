@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useRbac } from '../contexts/RbacContext';
 import { useEntitlements } from '../contexts/EntitlementsContext';
 import { allowedPageKeysForRole, pathToPageKey } from '../cms-mirror/nav';
+import { isEntitlementControlledPageKey, type PartnerRole } from '../../shared/entitlements/registry';
 
 /**
  * Gate /admin/* by RBAC matrix, but never block pages that the CMS-mirror
@@ -16,13 +17,24 @@ export const RoleGuard: React.FC<{ children: React.ReactNode }> = ({ children })
   const location = useLocation();
   const { profile } = useAuth();
   const { canAccessPath } = useRbac();
-  const { filterAllowedPageKeys } = useEntitlements();
+  const { filterAllowedPageKeys, status } = useEntitlements();
 
   if (!location.pathname.startsWith('/admin')) {
     return <>{children}</>;
   }
 
   const pageKey = pathToPageKey(location.pathname);
+  const role = String(profile?.role || '').toLowerCase();
+  const partnerRole: PartnerRole | null =
+    role === 'seller' || role === 'verified_seller' ? 'seller' : role === 'creator' ? 'creator' : null;
+  // Nav may stay complete while entitlements load; gated ROUTES must not fail-open.
+  if (
+    partnerRole &&
+    (status === 'loading' || status === 'idle') &&
+    isEntitlementControlledPageKey(partnerRole, pageKey)
+  ) {
+    return null;
+  }
   const mirrorKeys = filterAllowedPageKeys(allowedPageKeysForRole(profile?.role));
   const allowedByMirror = !mirrorKeys || mirrorKeys.includes(pageKey);
 

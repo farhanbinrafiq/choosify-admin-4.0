@@ -90,8 +90,34 @@
 
 .admin-workspace__nav {
   flex: 1;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 4px 12px 12px;
+  /*
+   * Overlay scrollbar (Chromium) — no reserved classic Windows track.
+   * Matches cms-mirror Dashboard: nav stays scrollable, gutter does not steal width.
+   */
+  overflow-y: overlay;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+  scrollbar-gutter: auto;
+}
+
+.admin-workspace__nav::-webkit-scrollbar {
+  width: 8px;
+}
+
+.admin-workspace__nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.admin-workspace__nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 4px;
+}
+
+.admin-workspace__nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
 }
 
 .admin-workspace__nav-group {
@@ -237,18 +263,40 @@
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 0 32px;
+  /* Storefront nav: gap-2 sm:gap-3 */
+  gap: 8px;
+  /* Storefront nav: px-3 sm:px-4 lg:px-6 xl:px-8 → 12 / 16 / 24 / 32 */
+  padding: 0 16px;
   position: sticky;
   top: 0;
   z-index: 10;
   flex-shrink: 0;
 }
 
+@media (min-width: 640px) {
+  .admin-workspace__topbar {
+    gap: 12px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .admin-workspace__topbar {
+    padding: 0 24px;
+  }
+}
+
+@media (min-width: 1280px) {
+  .admin-workspace__topbar {
+    padding: 0 32px;
+  }
+}
+
 .admin-workspace__topbar-title-block {
-  flex-shrink: 0;
+  /* Allow shrink so long page titles never starve the search flex band
+     (storefront left cluster ≈ logo footprint, not a fixed 280px). */
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: min(280px, 28vw);
+  max-width: min(220px, 20vw);
 }
 
 .admin-workspace__topbar-title {
@@ -273,11 +321,37 @@
   text-overflow: ellipsis;
 }
 
-/* Search consumes ALL remaining center space until bell/avatar */
+/* Search consumes ALL remaining center space until bell/avatar —
+   mirrors Choosify-Web Navbar: flex-1 min-w-0 + horizontal padding band */
 .admin-workspace__topbar-search-wrap {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-width: 0;
   max-width: none;
+  width: auto;
+  /* Storefront: px-1 sm:px-3 md:px-4 lg:px-5 */
+  padding-left: 4px;
+  padding-right: 4px;
+}
+
+@media (min-width: 640px) {
+  .admin-workspace__topbar-search-wrap {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+
+@media (min-width: 768px) {
+  .admin-workspace__topbar-search-wrap {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .admin-workspace__topbar-search-wrap {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
 }
 
 .admin-workspace__topbar-actions {

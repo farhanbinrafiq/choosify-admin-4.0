@@ -839,13 +839,13 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
             <Menu className="w-4 h-4" />
           </button>
 
-          <div className="flex flex-col min-w-0 shrink-0 max-w-[min(280px,28vw)]">
+          <div className="flex flex-col min-w-0 shrink max-w-[min(220px,20vw)]">
             <h1 className="text-[15px] font-extrabold text-white leading-tight truncate">{currentPageTitle}</h1>
             <p className="text-[11px] text-white/50 truncate">{currentPageSubtitle}</p>
           </div>
 
-          {/* Flexible center search — consumes all space until bell/avatar (storefront navbar-fluid pattern) */}
-          <div className="relative flex-1 min-w-0 px-1 sm:px-2">
+          {/* Flexible center search — Choosify-Web navbar-fluid: flex-1 + pad band */}
+          <div className="relative flex-1 min-w-0 basis-0 px-1 sm:px-3 md:px-4 lg:px-5">
             <GlobalDashboardSearch variant="header" className="w-full" ready={Boolean(profile?.role)} />
           </div>
 

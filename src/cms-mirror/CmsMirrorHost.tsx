@@ -4,17 +4,26 @@ import { useAuth } from '../contexts/AuthContext';
 import { useImpersonation } from '../contexts/ImpersonationContext';
 import { useRbac } from '../contexts/RbacContext';
 import { useEntitlements } from '../contexts/EntitlementsContext';
-import { PAGE_KEY_TO_PATH, allowedPageKeysForRole, pathToPageKey, resolveAdminPageKey } from './nav';
+import {
+  PAGE_KEY_TO_PATH,
+  allowedPageKeysForRole,
+  applyEntitlementNavFilter,
+  navGroupsForMirror,
+  navGroupsForRole,
+  pathToPageKey,
+  resolveAdminPageKey,
+} from './nav';
 import { UserProfileDropdown } from '../components/account/UserProfileDropdown';
 import { GlobalDashboardSearch } from '../components/common/GlobalDashboardSearch';
 import { AdminPageSkeleton, DashboardSearchSkeleton, SkeletonAvatar } from '../components/common/skeletons';
 import { formatRoleLabel, getAvatarUrl } from '../lib/userDisplay';
+import { getLivePreviewStorefrontUrl, getPublishedStorefrontUrl } from '../lib/storefrontUrls';
 import './tokens.css';
 
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 
 /** Bump when public/cms-mirror/app.html behavior changes so the iframe never serves a stale 304. */
-const CMS_MIRROR_ASSET_VERSION = '20260812-entitlement-nav-filter-1';
+const CMS_MIRROR_ASSET_VERSION = '20260813-settings-wm-restore-2';
 
 function pageSkeletonVariant(pageKey: string): 'dashboard' | 'profile' | 'orders' | 'products' | 'generic' {
   if (pageKey === 'dashboard') return 'dashboard';
@@ -106,7 +115,7 @@ export const CmsMirrorHost: React.FC = () => {
     }
   }, [brandDetail.id, brandDetail.name]);
 
-  const { filterAllowedPageKeys } = useEntitlements();
+  const { filterAllowedPageKeys, status: entitlementStatus, entitlements } = useEntitlements();
 
   const postMirrorState = useCallback(
     (page: string, nextRole: string | undefined) => {
@@ -115,6 +124,14 @@ export const CmsMirrorHost: React.FC = () => {
       if (!win) return;
       try {
         const tabParam = new URLSearchParams(location.search).get('tab');
+        const allowedKeys = filterAllowedPageKeys(allowedPageKeysForRole(nextRole));
+        const partnerChrome =
+          nextRole === 'seller' || nextRole === 'creator' || nextRole === 'consumer';
+        const navGroups = partnerChrome
+          ? navGroupsForMirror(
+              applyEntitlementNavFilter(navGroupsForRole(nextRole), filterAllowedPageKeys, nextRole),
+            )
+          : null;
         win.postMessage(
           {
             type: 'cms-mirror-set-state',
@@ -124,7 +141,8 @@ export const CmsMirrorHost: React.FC = () => {
               page === 'myEarnings' && (tabParam === 'payment' || tabParam === 'overview')
                 ? tabParam
                 : undefined,
-            allowedKeys: filterAllowedPageKeys(allowedPageKeysForRole(nextRole)),
+            allowedKeys,
+            navGroups,
             userId: profile?.id || null,
             displayName: profile?.displayName || null,
             email: profile?.email || null,
@@ -134,6 +152,9 @@ export const CmsMirrorHost: React.FC = () => {
             bio: profile?.bio || null,
             choosifyUserId: profile?.choosifyUserId || null,
             canImpersonate,
+            storefrontUrl: getPublishedStorefrontUrl(),
+            previewUrl: getLivePreviewStorefrontUrl(),
+            entitlements,
           },
           '*',
         );
@@ -175,6 +196,8 @@ export const CmsMirrorHost: React.FC = () => {
       location.search,
       canImpersonate,
       filterAllowedPageKeys,
+      entitlementStatus,
+      entitlements,
     ],
   );
 
@@ -212,6 +235,9 @@ export const CmsMirrorHost: React.FC = () => {
 
   /** Pin React search overlay to the iframe flex search slot (storefront-width parity). */
   useEffect(() => {
+    let slotRo: ResizeObserver | null = null;
+    let observedSlot: Element | null = null;
+
     const syncSearchSlot = () => {
       const anchor = searchAnchorRef.current;
       const iframe = iframeRef.current;
@@ -220,12 +246,39 @@ export const CmsMirrorHost: React.FC = () => {
         const doc = iframe.contentDocument;
         const slot = doc?.querySelector('[data-cms-search-slot]') as HTMLElement | null;
         if (!slot) return;
+
+        // Observe the live flex slot so title/control width changes reflow the overlay.
+        if (slot !== observedSlot) {
+          slotRo?.disconnect();
+          observedSlot = slot;
+          if (typeof ResizeObserver !== 'undefined') {
+            slotRo = new ResizeObserver(() => syncSearchSlot());
+            slotRo.observe(slot);
+          }
+        }
+
+        const iframeRect = iframe.getBoundingClientRect();
         const rect = slot.getBoundingClientRect();
         if (rect.width < 40 || rect.height < 8) return;
-        anchor.style.top = `${Math.round(rect.top)}px`;
-        anchor.style.left = `${Math.round(rect.left)}px`;
-        anchor.style.width = `${Math.round(rect.width)}px`;
+
+        // Content box of the padded flex-1 band — same region Choosify-Web
+        // `navbar-fluid` fills inside `px-1 sm:px-3 md:px-4 lg:px-5`.
+        const cs = doc.defaultView?.getComputedStyle(slot);
+        const padL = cs ? parseFloat(cs.paddingLeft) || 0 : 0;
+        const padR = cs ? parseFloat(cs.paddingRight) || 0 : 0;
+
+        const left = iframeRect.left + rect.left + padL;
+        const rightEdge = iframeRect.left + rect.right - padR;
+        const top = iframeRect.top + rect.top;
+
+        // Stretch with left+right (width:auto) — never lock a short fixed width.
+        anchor.style.top = `${Math.round(top)}px`;
+        anchor.style.left = `${Math.round(left)}px`;
+        anchor.style.right = `${Math.round(Math.max(0, window.innerWidth - rightEdge))}px`;
+        anchor.style.width = 'auto';
+        anchor.style.maxWidth = 'none';
         anchor.style.height = `${Math.round(Math.max(rect.height, 40))}px`;
+        anchor.style.padding = '0';
         setSlotReady(true);
       } catch {
         /* cross-origin / unloaded */
@@ -241,6 +294,7 @@ export const CmsMirrorHost: React.FC = () => {
       window.clearInterval(interval);
       window.removeEventListener('resize', syncSearchSlot);
       iframe?.removeEventListener('load', syncSearchSlot);
+      slotRo?.disconnect();
     };
   }, [knownPageKey, pageKey, role, impersonation.active]);
 

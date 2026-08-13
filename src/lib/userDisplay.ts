@@ -64,3 +64,8 @@ export function resolveOwnProfileRoute(
   if (!profile) return '/admin/profile';
   return getMyProfilePath(profile);
 }
+
+/** Authoritative Settings destination — same as left-nav Settings for every role. */
+export function getSettingsPath(): string {
+  return '/admin/settings';
+}

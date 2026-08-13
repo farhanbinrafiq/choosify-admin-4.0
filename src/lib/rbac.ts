@@ -53,6 +53,16 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<string, Record<PermissionKey, bool
     taxonomy: false,
     impersonate: false,
   },
+  consumer: {
+    content: false,
+    users: true,
+    finance: false,
+    brand: false,
+    system: true,
+    analytics: true,
+    taxonomy: false,
+    impersonate: false,
+  },
   moderator: {
     content: true,
     users: false,

@@ -116,22 +116,35 @@
 
 .cms-mirror-search-anchor {
   position: fixed;
-  /* Geometry synced to iframe [data-cms-search-slot] by CmsMirrorHost */
-  top: 12px;
-  left: 280px;
-  width: 420px;
-  height: 40px;
-  z-index: 55;
+  /*
+   * Geometry synced to iframe [data-cms-search-slot] by CmsMirrorHost.
+   * Fallback matches Choosify-Web navbar-fluid middle band:
+   *   [ sidebar + title ] [ -------- SEARCH -------- ] [ bell + avatar ]
+   * Never use a short fixed width (legacy 420px).
+   *
+   * Padding lives on the iframe slot (storefront px-1→lg:px-5), NOT here —
+   * double-padding was shrinking the visible pill vs the flex content box.
+   */
+  top: 10px;
+  left: calc(var(--cms-sidebar-width, 240px) + 32px + min(280px, 28vw) + 12px);
+  right: 96px;
+  width: auto;
   max-width: none;
+  height: 44px;
+  z-index: 55;
   margin: 0;
+  padding: 0;
   pointer-events: none;
   box-sizing: border-box;
+  display: flex;
+  align-items: center;
 }
 
 .cms-mirror-search-anchor > * {
   pointer-events: auto;
   width: 100%;
-  height: 100%;
+  height: auto;
+  max-height: 100%;
 }
 
 .cms-mirror-host--impersonating .cms-mirror-search-anchor {

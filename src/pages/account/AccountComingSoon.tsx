@@ -2,6 +2,10 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft, Construction } from 'lucide-react';
 
+/**
+ * LEGACY / DEAD — not mounted.
+ * `/admin/account/settings` and `/admin/account/security` redirect to `/admin/settings`.
+ */
 type AccountComingSoonProps = {
   title: string;
   description: string;

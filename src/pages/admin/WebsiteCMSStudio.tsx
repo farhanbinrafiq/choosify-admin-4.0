@@ -1,3 +1,8 @@
+/**
+ * LEGACY / DEAD — not mounted.
+ * Live Website Manager SoT is cms-mirror `/admin/website-cms` (app.html CMS_SUBNAV horizontal tabs).
+ * Do not re-route Admin sidebar Website Manager here (left-rail + hardcoded choosify.bd).
+ */
 import React, { useState, useEffect } from 'react';
 import { 
   Layout, Compass, Tag, Building2, Megaphone, Folder, 

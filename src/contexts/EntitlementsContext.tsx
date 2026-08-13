@@ -1,16 +1,19 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useAuth } from './AuthContext';
+import type { PartnerRole } from '../../shared/entitlements/registry';
 import {
-  featureKeysForRole,
-  pageKeysDisabledByFeatures,
-  type PartnerRole,
-} from '../../shared/entitlements/registry';
+  deniedAllForRole,
+  filterRolePageKeysByEntitlements,
+  type EntitlementNavStatus,
+} from '../../shared/entitlements/navFilter';
 
 const AUTH_TOKEN_KEY = 'choosify_auth_token';
 const API_BASE = '/api/v1';
 
 type EntitlementsContextValue = {
   loading: boolean;
+  /** How the current entitlement map was obtained — drives nav vs route fail-closed. */
+  status: EntitlementNavStatus;
   entitlements: Record<string, boolean>;
   refresh: () => Promise<void>;
   isFeatureEnabled: (featureKey: string) => boolean;
@@ -20,6 +23,7 @@ type EntitlementsContextValue = {
 
 const EntitlementsContext = createContext<EntitlementsContextValue>({
   loading: false,
+  status: 'idle',
   entitlements: {},
   refresh: async () => {},
   isFeatureEnabled: () => true,
@@ -37,28 +41,32 @@ function partnerRoleOf(role: string | undefined | null): PartnerRole | null {
   return null;
 }
 
-/** Fail-closed placeholder when /entitlements/me cannot be loaded for a partner. */
-function deniedAllForRole(role: PartnerRole): Record<string, boolean> {
-  return Object.fromEntries(featureKeysForRole(role).map((k) => [k, false]));
-}
-
 export const EntitlementsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<EntitlementNavStatus>('idle');
   const [entitlements, setEntitlements] = useState<Record<string, boolean>>({});
 
   const refresh = useCallback(async () => {
     const partnerRole = partnerRoleOf(profile?.role);
     if (!partnerRole) {
       setEntitlements({});
+      setStatus('ready');
+      setLoading(false);
       return;
     }
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (!token) {
+      // TempRoleSwitcher / mock session: no partner JWT, so no entitlement payload.
+      // Do NOT persist deny-all — that wiped Seller/Creator chrome on every QA switch.
+      // APIs still 401 without a bearer token.
       setEntitlements({});
+      setStatus('mock');
+      setLoading(false);
       return;
     }
     setLoading(true);
+    setStatus('loading');
     try {
       const res = await fetch(`${API_BASE}/entitlements/me`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -68,12 +76,15 @@ export const EntitlementsProvider: React.FC<{ children: React.ReactNode }> = ({ 
       };
       if (res.ok && body.entitlements) {
         setEntitlements(body.entitlements);
+        setStatus('ready');
       } else {
-        // Do not fail-open (empty {}) — that re-shows disabled nav items.
+        // Real partner JWT but resolver failed — fail-closed gated pages/APIs only.
         setEntitlements(deniedAllForRole(partnerRole));
+        setStatus('failed');
       }
     } catch {
       setEntitlements(deniedAllForRole(partnerRole));
+      setStatus('failed');
     } finally {
       setLoading(false);
     }
@@ -87,38 +98,39 @@ export const EntitlementsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     (featureKey: string) => {
       const partnerRole = partnerRoleOf(profile?.role);
       if (!partnerRole) return true;
-      if (!(featureKey in entitlements)) return false;
+      if (status === 'idle' || status === 'mock' || status === 'loading') {
+        if (featureKey in entitlements) return Boolean(entitlements[featureKey]);
+        return true;
+      }
+      if (status === 'failed') return false;
+      // Successful map: missing key ≠ disabled (core / unmapped features stay on).
+      if (!(featureKey in entitlements)) return true;
       return Boolean(entitlements[featureKey]);
     },
-    [entitlements, profile?.role],
+    [entitlements, profile?.role, status],
   );
 
   const filterAllowedPageKeys = useCallback(
-    (roleKeys: string[] | null) => {
-      if (!roleKeys) return roleKeys;
-      const partnerRole = partnerRoleOf(profile?.role);
-      if (!partnerRole) return roleKeys;
-      // Until first successful entitlement payload, withhold gated pages (fail closed).
-      if (!Object.keys(entitlements).length) {
-        const disabled = pageKeysDisabledByFeatures(partnerRole, deniedAllForRole(partnerRole));
-        return roleKeys.filter((k) => !disabled.has(k));
-      }
-      const disabled = pageKeysDisabledByFeatures(partnerRole, entitlements);
-      if (!disabled.size) return roleKeys;
-      return roleKeys.filter((k) => !disabled.has(k));
-    },
-    [entitlements, profile?.role],
+    (roleKeys: string[] | null) =>
+      filterRolePageKeysByEntitlements({
+        roleKeys,
+        partnerRole: partnerRoleOf(profile?.role),
+        entitlements,
+        status,
+      }),
+    [entitlements, profile?.role, status],
   );
 
   const value = useMemo(
     () => ({
       loading,
+      status,
       entitlements,
       refresh,
       isFeatureEnabled,
       filterAllowedPageKeys,
     }),
-    [loading, entitlements, refresh, isFeatureEnabled, filterAllowedPageKeys],
+    [loading, status, entitlements, refresh, isFeatureEnabled, filterAllowedPageKeys],
   );
 
   return <EntitlementsContext.Provider value={value}>{children}</EntitlementsContext.Provider>;

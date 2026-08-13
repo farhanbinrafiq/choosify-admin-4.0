@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { Lock, Pencil, RefreshCw, Settings, Undo2, User } from 'lucide-react';
+import { Pencil, RefreshCw, Settings, Undo2, User } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useRbac } from '../../contexts/RbacContext';
 import {
   formatRoleLabel,
   getAvatarUrl,
   getMyProfilePath,
+  getSettingsPath,
   getUserInitials,
 } from '../../lib/userDisplay';
 import { AvatarCropModal } from './AvatarCropModal';
@@ -50,7 +50,6 @@ function writeStoredAvatar(userId: string, dataUrl: string): void {
 
 export function UserProfileDropdown({ variant = 'header', className = '' }: UserProfileDropdownProps) {
   const { profile, logout } = useAuth();
-  const { canAccessPath } = useRbac();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
@@ -180,25 +179,13 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
               go(getMyProfilePath(profile));
             },
           },
-        ];
-
-        if (canAccessPath('/admin/account/settings')) {
-          items.push({
+          {
             id: 'settings',
             label: 'Account Settings',
             icon: <Settings className="w-[18px] h-[18px] text-[#6B7280]" aria-hidden strokeWidth={2.25} />,
-            onSelect: () => go('/admin/account/settings'),
-          });
-        }
-
-        if (canAccessPath('/admin/account/security')) {
-          items.push({
-            id: 'security',
-            label: 'Security',
-            icon: <Lock className="w-[18px] h-[18px] text-[#D97706]" aria-hidden strokeWidth={2.25} />,
-            onSelect: () => go('/admin/account/security'),
-          });
-        }
+            onSelect: () => go(getSettingsPath()),
+          },
+        ];
 
         return items;
       })()
@@ -464,7 +451,7 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
                 <span className="shrink-0 w-5 flex justify-center">
                   <Undo2 className="w-[18px] h-[18px]" aria-hidden strokeWidth={2.25} />
                 </span>
-                Logout
+                Log Out
               </button>
             </div>
           </motion.div>
