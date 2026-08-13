@@ -3,6 +3,7 @@ import { created, success } from '../lib/apiResponse';
 import { authenticateRequest } from '../middleware/auth';
 import { requireRole } from '../middleware/authorization';
 import { requirePartnerEntitlement } from '../entitlements/entitlementMiddleware';
+import { requireMarketplaceAccess } from '../entitlements/marketplaceAccessMiddleware';
 import { ROLES } from '../permissions/roles';
 import {
   archiveNotification,
@@ -31,7 +32,7 @@ import type { NotificationCenterFilter } from './communicationTypes';
 
 export const communicationRouter = Router();
 
-const requireAuth = [authenticateRequest, requirePartnerEntitlement];
+const requireAuth = [authenticateRequest, requirePartnerEntitlement, requireMarketplaceAccess];
 const requireAdmin = [authenticateRequest, requireRole(ROLES.ADMIN)];
 
 function parseBool(value: unknown): boolean | undefined {

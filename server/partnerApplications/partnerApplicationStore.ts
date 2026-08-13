@@ -8,7 +8,7 @@ export type PartnerApplication = {
   applicantType: PartnerApplicantType;
   status: PartnerApplicationStatus;
   email: string;
-  /** Argon2 hash only — never plaintext. Cleared after approve/reject. */
+  /** Argon2 hash only — never plaintext. Cleared to [provisioned] after account creation. */
   passwordHash: string;
   displayName: string;
   phone: string;
@@ -33,8 +33,13 @@ export type PartnerApplication = {
   reviewedAt?: string;
   reviewedByUserId?: string;
   reviewNote?: string;
-  /** Set when approved and user provisioned */
+  /** Set when the users row is created (at apply for new lifecycle, or at approve for legacy). */
   provisionedUserId?: string;
+  /** Catalog brand id (seller) or creator id. Set at apply so approval never mints another identity. */
+  catalogEntityId?: string;
+  adminNotes?: string;
+  resubmissionRequested?: boolean;
+  reviewHistory?: Array<{ at: string; by: string; action: string; note?: string }>;
 };
 
 let applications: PartnerApplication[] = [];
@@ -65,6 +70,20 @@ export const partnerApplicationStore = {
     return (
       applications.find((a) => a.email === normalized && a.status === 'pending') || null
     );
+  },
+
+  findForActor: (params: { userId?: string; email?: string }) => {
+    const uid = params.userId?.trim();
+    const email = params.email?.trim().toLowerCase();
+    const matches = applications.filter((a) => {
+      if (uid && (a.provisionedUserId === uid || a.existingUserId === uid)) return true;
+      if (email && a.email === email) return true;
+      return false;
+    });
+    if (!matches.length) return null;
+    const pending = matches.find((a) => a.status === 'pending');
+    if (pending) return pending;
+    return [...matches].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] || null;
   },
 
   create: (input: Omit<PartnerApplication, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => {

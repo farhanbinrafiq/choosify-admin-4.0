@@ -7,23 +7,28 @@ import { useEntitlements } from '../contexts/EntitlementsContext';
 import {
   PAGE_KEY_TO_PATH,
   allowedPageKeysForRole,
-  applyEntitlementNavFilter,
   navGroupsForMirror,
-  navGroupsForRole,
+  partnerNavGroupsForSession,
   pathToPageKey,
   resolveAdminPageKey,
 } from './nav';
 import { UserProfileDropdown } from '../components/account/UserProfileDropdown';
 import { GlobalDashboardSearch } from '../components/common/GlobalDashboardSearch';
 import { AdminPageSkeleton, DashboardSearchSkeleton, SkeletonAvatar } from '../components/common/skeletons';
-import { formatRoleLabel, getAvatarUrl } from '../lib/userDisplay';
+import { formatRoleLabel, getAvatarUrl, getMyProfilePath } from '../lib/userDisplay';
 import { getLivePreviewStorefrontUrl, getPublishedStorefrontUrl } from '../lib/storefrontUrls';
+import {
+  MARKETPLACE_PENDING_ALLOWED_PAGE_KEYS,
+  MarketplaceAccessLockPanel,
+  partnerMarketplaceLocked,
+} from '../components/MarketplaceAccessLock';
+import { useNavAttention } from '../contexts/NavAttentionContext';
 import './tokens.css';
 
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 
 /** Bump when public/cms-mirror/app.html behavior changes so the iframe never serves a stale 304. */
-const CMS_MIRROR_ASSET_VERSION = '20260813-settings-wm-restore-2';
+const CMS_MIRROR_ASSET_VERSION = '20260813-partner-restricted-nav-2';
 
 function pageSkeletonVariant(pageKey: string): 'dashboard' | 'profile' | 'orders' | 'products' | 'generic' {
   if (pageKey === 'dashboard') return 'dashboard';
@@ -116,6 +121,7 @@ export const CmsMirrorHost: React.FC = () => {
   }, [brandDetail.id, brandDetail.name]);
 
   const { filterAllowedPageKeys, status: entitlementStatus, entitlements } = useEntitlements();
+  const { counts: navAttention, refresh: refreshNavAttention } = useNavAttention();
 
   const postMirrorState = useCallback(
     (page: string, nextRole: string | undefined) => {
@@ -124,12 +130,19 @@ export const CmsMirrorHost: React.FC = () => {
       if (!win) return;
       try {
         const tabParam = new URLSearchParams(location.search).get('tab');
-        const allowedKeys = filterAllowedPageKeys(allowedPageKeysForRole(nextRole));
+        const marketplaceLocked = partnerMarketplaceLocked(profile);
+        const allowedKeys = marketplaceLocked
+          ? allowedPageKeysForRole(nextRole)
+          : filterAllowedPageKeys(allowedPageKeysForRole(nextRole));
         const partnerChrome =
           nextRole === 'seller' || nextRole === 'creator' || nextRole === 'consumer';
         const navGroups = partnerChrome
           ? navGroupsForMirror(
-              applyEntitlementNavFilter(navGroupsForRole(nextRole), filterAllowedPageKeys, nextRole),
+              partnerNavGroupsForSession({
+                role: nextRole,
+                marketplaceAccess: profile?.marketplaceAccess,
+                filterAllowedPageKeys,
+              }),
             )
           : null;
         win.postMessage(
@@ -155,6 +168,11 @@ export const CmsMirrorHost: React.FC = () => {
             storefrontUrl: getPublishedStorefrontUrl(),
             previewUrl: getLivePreviewStorefrontUrl(),
             entitlements,
+            marketplaceAccess: profile?.marketplaceAccess !== false,
+            partnerApplicationStatus: profile?.partnerApplicationStatus || null,
+            identityVerified: profile?.identityVerified === true,
+            resubmissionRequested: profile?.resubmissionRequested === true,
+            navAttention,
           },
           '*',
         );
@@ -198,6 +216,11 @@ export const CmsMirrorHost: React.FC = () => {
       filterAllowedPageKeys,
       entitlementStatus,
       entitlements,
+      profile?.marketplaceAccess,
+      profile?.partnerApplicationStatus,
+      profile?.identityVerified,
+      profile?.resubmissionRequested,
+      navAttention,
     ],
   );
 
@@ -336,6 +359,10 @@ export const CmsMirrorHost: React.FC = () => {
         });
         return;
       }
+      if (data?.type === 'cms-mirror-nav-attention-refresh') {
+        void refreshNavAttention();
+        return;
+      }
       if (data?.type === 'cms-mirror-navigate' && typeof data.path === 'string') {
         if (data.path !== location.pathname) {
           navigate(data.path, { replace: Boolean(data.replace) });
@@ -354,7 +381,7 @@ export const CmsMirrorHost: React.FC = () => {
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [canImpersonate, location.pathname, navigate, postAuthTokenToMirror, profile?.id]);
+  }, [canImpersonate, location.pathname, navigate, postAuthTokenToMirror, profile?.id, refreshNavAttention]);
 
   const onIframeLoad = () => {
     setIframeReady(true);
@@ -495,6 +522,12 @@ export const CmsMirrorHost: React.FC = () => {
         allow="clipboard-read; clipboard-write"
         className={!shellInteractive ? 'cms-mirror-iframe--booting' : undefined}
       />
+
+      {partnerMarketplaceLocked(profile) && !MARKETPLACE_PENDING_ALLOWED_PAGE_KEYS.has(pageKey) ? (
+        <div className="cms-mirror-marketplace-lock" role="status">
+          <MarketplaceAccessLockPanel profilePath={getMyProfilePath(profile)} />
+        </div>
+      ) : null}
 
       {loginAsTarget && (
         <div className="cms-mirror-login-as-modal" role="dialog" aria-modal="true" aria-labelledby="login-as-title">

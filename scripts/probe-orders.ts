@@ -66,20 +66,53 @@ async function registerConsumer(email: string) {
   return { token: body.customToken as string, uid: body.uid as string };
 }
 
-async function upgradeToSeller(token: string, storeName: string) {
-  const res = await fetch(`${base}/auth/upgrade-to-seller`, {
+async function provisionSellerViaPartnerApplication(opts: {
+  email: string;
+  password: string;
+  storeName: string;
+  adminToken: string;
+}) {
+  const applyRes = await fetch(`${base}/auth/partner-apply`, {
     method: 'POST',
-    headers: authHeaders(token),
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      storeName,
+      applicantType: 'seller',
+      email: opts.email,
+      password: opts.password,
+      displayName: opts.storeName,
+      businessOrChannelName: opts.storeName,
       phone: '+8801711000099',
       category: 'General',
       city: 'Dhaka',
     }),
   });
-  const body = (await json(res)) as { accessToken?: string; uid?: string };
-  if (!res.ok || !body.accessToken) throw new Error(`upgrade failed: ${res.status} ${JSON.stringify(body)}`);
-  return { token: body.accessToken as string, uid: body.uid as string };
+  const applyBody = await json(applyRes);
+  if (applyRes.status !== 201) {
+    throw new Error(`partner-apply failed: ${applyRes.status} ${JSON.stringify(applyBody)}`);
+  }
+  const listRes = await fetch(`${base}/operations/partner-applications?status=pending`, {
+    headers: { Authorization: `Bearer ${opts.adminToken}` },
+  });
+  const listBody = (await json(listRes)) as {
+    applications?: Array<{ id: string; email?: string; catalogEntityId?: string }>;
+  };
+  const app = (listBody.applications || []).find((a) => a.email === opts.email);
+  if (!app) throw new Error(`pending application missing for ${opts.email}`);
+  const approveRes = await fetch(`${base}/operations/partner-applications/${app.id}/approve`, {
+    method: 'POST',
+    headers: authHeaders(opts.adminToken),
+    body: JSON.stringify({ note: 'orders probe' }),
+  });
+  if (!approveRes.ok) throw new Error(`approve failed: ${approveRes.status}`);
+  const logged = await login(opts.email, opts.password);
+  const brandsRes = await fetch(`${base}/catalog/brands`, {
+    headers: { Authorization: `Bearer ${logged.token}` },
+  });
+  const brandsBody = (await json(brandsRes)) as { data?: Array<{ id: string }> };
+  const brandId = app.catalogEntityId || brandsBody.data?.[0]?.id;
+  if (!brandId) throw new Error(`provisioned brand missing for ${opts.email}`);
+  await grantMarketplace(opts.adminToken, brandId);
+  return { token: logged.token, uid: logged.uid, brandId };
 }
 
 async function createBrand(token: string, name: string) {
@@ -248,19 +281,29 @@ async function main() {
   const admin = await login(ADMIN_EMAIL, DEV_PASSWORD);
   const categoryId = await firstCategoryId(admin.token);
 
-  const sellerAReg = await registerConsumer(`orders-seller-a-${RUN_ID}@probe.local`);
-  const sellerA = await upgradeToSeller(sellerAReg.token, `Orders Seller A ${RUN_ID}`);
+  const sellerAEmail = `orders-seller-a-${RUN_ID}@probe.local`;
+  const sellerAReg = await registerConsumer(sellerAEmail);
+  const sellerA = await provisionSellerViaPartnerApplication({
+    email: sellerAEmail,
+    password: 'Probe!2026xx',
+    storeName: `Orders Seller A ${RUN_ID}`,
+    adminToken: admin.token,
+  });
   const sellerAUid = sellerA.uid || sellerAReg.uid;
-  const brandAId = await createBrand(sellerA.token, `Orders Brand A ${RUN_ID}`);
+  const brandAId = sellerA.brandId;
   const brandA2Id = await createBrand(sellerA.token, `Orders Brand A2 ${RUN_ID}`);
-  await grantMarketplace(admin.token, brandAId);
   await grantMarketplace(admin.token, brandA2Id);
 
-  const sellerBReg = await registerConsumer(`orders-seller-b-${RUN_ID}@probe.local`);
-  const sellerB = await upgradeToSeller(sellerBReg.token, `Orders Seller B ${RUN_ID}`);
+  const sellerBEmail = `orders-seller-b-${RUN_ID}@probe.local`;
+  const sellerBReg = await registerConsumer(sellerBEmail);
+  const sellerB = await provisionSellerViaPartnerApplication({
+    email: sellerBEmail,
+    password: 'Probe!2026xx',
+    storeName: `Orders Seller B ${RUN_ID}`,
+    adminToken: admin.token,
+  });
   const sellerBUid = sellerB.uid || sellerBReg.uid;
-  const brandBId = await createBrand(sellerB.token, `Orders Brand B ${RUN_ID}`);
-  await grantMarketplace(admin.token, brandBId);
+  const brandBId = sellerB.brandId;
 
   const productA = await createProduct(sellerA.token, {
     brandId: brandAId,

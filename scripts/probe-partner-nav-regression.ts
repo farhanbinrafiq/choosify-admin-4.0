@@ -18,6 +18,7 @@ import {
   SELLER_NAV_GROUPS,
   corePageKeysForRole,
   pageKeysFromNavGroups,
+  partnerNavGroupsForSession,
 } from '../src/cms-mirror/nav';
 import { PARTNER_FEATURES } from '../shared/entitlements/registry';
 import {
@@ -151,6 +152,39 @@ function main() {
     status: 'ready',
   });
   assert(adminKeys === null, 'Admin filter must remain unrestricted (null)');
+
+  const pendingSellerNav = partnerNavGroupsForSession({
+    role: 'seller',
+    marketplaceAccess: false,
+    filterAllowedPageKeys: () => ['dashboard', 'brandProfile', 'settings'],
+  });
+  const pendingSellerKeys = pageKeysFromNavGroups(pendingSellerNav);
+  assert(
+    pendingSellerKeys.includes('products') && pendingSellerKeys.includes('orders') && pendingSellerKeys.includes('myCashbook'),
+    `Pending seller must keep commercial nav visible: ${pendingSellerKeys.join(',')}`,
+  );
+  assert(
+    pendingSellerNav.flatMap((g) => g.items).some((i) => i.key === 'products' && i.lock === 'marketplace'),
+    'Pending seller products must be LOCKED_BY_MARKETPLACE_ACCESS',
+  );
+  assert(
+    pendingSellerNav.flatMap((g) => g.items).every((i) => i.key !== 'brandProfile' || !i.lock),
+    'Pending seller profile must stay available',
+  );
+
+  const pendingCreatorNav = partnerNavGroupsForSession({
+    role: 'creator',
+    marketplaceAccess: false,
+    filterAllowedPageKeys: () => ['dashboard'],
+  });
+  assert(
+    pageKeysFromNavGroups(pendingCreatorNav).includes('creatorEconomy'),
+    'Pending creator must keep Creator Economy visible',
+  );
+  assert(
+    pendingCreatorNav.flatMap((g) => g.items).some((i) => i.key === 'creatorEconomy' && i.lock === 'marketplace'),
+    'Pending creator economy must be locked',
+  );
 
   if (fails.length) {
     console.error('FAIL probe-partner-nav-regression');

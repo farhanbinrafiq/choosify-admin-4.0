@@ -37,6 +37,11 @@ export interface UserProfile {
   bio?: string;
   /** Permanent human-readable Choosify User ID (CF-00001…). Immutable. */
   choosifyUserId?: string;
+  partnerApplicationStatus?: 'pending' | 'approved' | 'rejected' | null;
+  identityVerified?: boolean;
+  marketplaceAccess?: boolean;
+  partnerApplicationId?: string | null;
+  resubmissionRequested?: boolean;
 }
 
 export interface SellerBrandRelation {
@@ -259,7 +264,35 @@ async function resolveAuthProfile(token: string) {
     website?: string;
     bio?: string;
     choosifyUserId?: string | null;
+    partnerApplicationStatus?: 'pending' | 'approved' | 'rejected' | null;
+    identityVerified?: boolean;
+    marketplaceAccess?: boolean;
+    partnerApplicationId?: string | null;
+    resubmissionRequested?: boolean;
   }>;
+}
+
+function partnerLifecycleFromRemote(remote: {
+  partnerApplicationStatus?: 'pending' | 'approved' | 'rejected' | null;
+  identityVerified?: boolean;
+  marketplaceAccess?: boolean;
+  partnerApplicationId?: string | null;
+  resubmissionRequested?: boolean;
+}): Pick<
+  UserProfile,
+  | 'partnerApplicationStatus'
+  | 'identityVerified'
+  | 'marketplaceAccess'
+  | 'partnerApplicationId'
+  | 'resubmissionRequested'
+> {
+  return {
+    partnerApplicationStatus: remote.partnerApplicationStatus ?? null,
+    identityVerified: remote.identityVerified === true,
+    marketplaceAccess: remote.marketplaceAccess !== false,
+    partnerApplicationId: remote.partnerApplicationId ?? null,
+    resubmissionRequested: remote.resubmissionRequested === true,
+  };
 }
 
 const AuthContext = createContext<AuthContextType>({ 
@@ -343,6 +376,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 website: remote.website,
                 bio: remote.bio,
                 choosifyUserId: remote.choosifyUserId || undefined,
+                ...partnerLifecycleFromRemote(remote),
               });
               console.info('[Auth] Session restored', { uid: remote.uid, role: remote.role });
             }
@@ -481,6 +515,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       website?: string;
       bio?: string;
       choosifyUserId?: string | null;
+      partnerApplicationStatus?: 'pending' | 'approved' | 'rejected' | null;
+      identityVerified?: boolean;
+      marketplaceAccess?: boolean;
+      partnerApplicationId?: string | null;
+      resubmissionRequested?: boolean;
     };
 
     if (!response.ok || !payload.accessToken) {
@@ -502,6 +541,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       website: payload.website,
       bio: payload.bio,
       choosifyUserId: payload.choosifyUserId || undefined,
+      ...partnerLifecycleFromRemote(payload),
     };
     // Prefer /auth/me so changeNextLogin and identity extras are authoritative after login.
     try {
@@ -516,6 +556,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         website: remote.website,
         bio: remote.bio,
         choosifyUserId: remote.choosifyUserId || undefined,
+        ...partnerLifecycleFromRemote(remote),
       };
     } catch (error) {
       console.warn('[Auth] Post-login /auth/me failed; using login payload', error);
@@ -619,13 +660,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       throw err;
     }
 
-    // Explicit: no JWT / no role grant on submit
+    // Account is provisioned on submit; caller redirects to login (no JWT here).
     return {
       applicationId: payload.applicationId || '',
       status: 'pending' as const,
       message:
         payload.message ||
-        'Application received. Choosify Admin will review your partner request.',
+        'Application received. You can sign in now. Marketplace features stay locked until Admin verifies your identity and enables Marketplace Access.',
     };
   };
 

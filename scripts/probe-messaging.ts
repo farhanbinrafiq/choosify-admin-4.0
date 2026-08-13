@@ -134,7 +134,9 @@ async function provisionSellerViaPartnerApp(
   const listRes = await fetch(`${base}/operations/partner-applications?status=pending`, {
     headers: authHeaders(adminToken),
   });
-  const listBody = (await json(listRes)) as { applications?: Array<{ id: string; email?: string }> };
+  const listBody = (await json(listRes)) as {
+    applications?: Array<{ id: string; email?: string; catalogEntityId?: string }>;
+  };
   const app = (listBody.applications || []).find((a) => a.email === email);
   if (!app) throw new Error(`pending application missing for ${email}`);
   const approveRes = await fetch(`${base}/operations/partner-applications/${app.id}/approve`, {
@@ -143,7 +145,11 @@ async function provisionSellerViaPartnerApp(
     body: JSON.stringify({ note: 'messaging probe' }),
   });
   if (!approveRes.ok) throw new Error(`approve failed: ${approveRes.status}`);
-  return login(email, password);
+  const logged = await login(email, password);
+  const brandId = String(app.catalogEntityId || '');
+  if (!brandId) throw new Error(`provisioned brand missing for ${email}`);
+  await grantMarketplace(adminToken, brandId);
+  return { ...logged, brandId };
 }
 
 async function createBrand(token: string, name: string) {
@@ -591,8 +597,7 @@ async function main() {
     `msg-seller-a-${RUN_ID}@probe.local`,
     `Msg Seller A ${RUN_ID}`,
   );
-  const brandA = await createBrand(sellerA.token, `Msg Brand A ${RUN_ID}`);
-  await grantMarketplace(admin.token, brandA);
+  const brandA = sellerA.brandId;
   const productA = await createProduct(sellerA.token, {
     brandId: brandA,
     categoryId: catId,
@@ -606,8 +611,7 @@ async function main() {
     `msg-seller-b-${RUN_ID}@probe.local`,
     `Msg Seller B ${RUN_ID}`,
   );
-  const brandB = await createBrand(sellerB.token, `Msg Brand B ${RUN_ID}`);
-  await grantMarketplace(admin.token, brandB);
+  const brandB = sellerB.brandId;
   const productB = await createProduct(sellerB.token, {
     brandId: brandB,
     categoryId: catId,

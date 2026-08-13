@@ -56,6 +56,10 @@ import { sellerProfiles, users } from './db/schema';
 import { hasRole } from './permissions/authorization';
 import { ROLES, toUserRole, type UserRole } from './permissions/roles';
 import { publishEvent } from './events/eventBus';
+import {
+  publicLifecycleFields,
+  resolvePartnerLifecycle,
+} from './partnerApplications/partnerLifecycle';
 
 export const authRouter = Router();
 
@@ -156,6 +160,11 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
         error: error instanceof Error ? error.message : String(error),
       });
     }
+    const life = await resolvePartnerLifecycle({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+    });
     res.json({
       uid: user.id,
       email: user.email,
@@ -164,6 +173,7 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
       accessToken,
       choosifyUserId: choosifyUserId || null,
       changeNextLogin: extras?.changeNextLogin === true,
+      ...publicLifecycleFields(life),
       ...(extras?.lastNameChangedAt && { lastNameChangedAt: extras.lastNameChangedAt }),
       ...(extras?.username && { username: extras.username }),
       ...(extras?.website && { website: extras.website }),
@@ -287,8 +297,8 @@ authRouter.post(
 /**
  * Consumer -> Seller upgrade — CLOSED.
  * Self-grant of Seller role is no longer allowed. Consumers must submit a
- * Partner Application (`POST /auth/partner-apply`); Admin approval upgrades
- * the same uid/CF ID without creating a duplicate identity.
+ * Partner Application (`POST /auth/partner-apply`). Apply provisions a restricted
+ * partner account on the same uid/CF ID; Admin later enables Marketplace Access.
  */
 authRouter.post('/auth/upgrade-to-seller', (_req, res) => {
   res.status(403).json({
@@ -418,6 +428,11 @@ authRouter.get('/auth/me', async (req, res) => {
     } catch {
       /* optional seller profile */
     }
+    const life = await resolvePartnerLifecycle({
+      userId: user.uid,
+      email: user.email,
+      role: user.role,
+    });
     res.json({
       uid: user.uid,
       email: user.email,
@@ -425,6 +440,7 @@ authRouter.get('/auth/me', async (req, res) => {
       role: user.role,
       choosifyUserId,
       changeNextLogin: extras?.changeNextLogin === true,
+      ...publicLifecycleFields(life),
       ...(extras?.lastNameChangedAt && { lastNameChangedAt: extras.lastNameChangedAt }),
       ...(extras?.username && { username: extras.username }),
       ...(website && { website }),

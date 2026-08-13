@@ -51,6 +51,7 @@ import { diagnosticsRouter } from "./routes/diagnostics";
 import { dashboardSearchRouter } from "./dashboardSearch/dashboardSearchRouter";
 import { entitlementsRouter } from "./entitlements/entitlementsRouter";
 import { partnerApplicationRouter } from "./partnerApplications/partnerApplicationRouter";
+import { navAttentionRouter } from "./dashboard/navAttentionRouter";
 import { hydratePartnerEntitlementsPersistence } from "./entitlements/entitlementPersistence";
 
 dotenv.config();
@@ -58,6 +59,23 @@ validateEnvironment();
 ensureConversationMemoryHydrated();
 bootstrapConversationEventSubscribers();
 hydratePartnerEntitlementsPersistence();
+
+void import('./partnerApplications/partnerApplicationService')
+  .then(async ({ ensureLegacyPendingApplicationsProvisioned }) => {
+    const result = await ensureLegacyPendingApplicationsProvisioned();
+    console.log(
+      `[PartnerOnboarding] Legacy pending provision — linked=${result.linked} provisioned=${result.provisioned} skipped=${result.skipped}`,
+    );
+    if (result.errors.length) {
+      console.warn('[PartnerOnboarding] Legacy pending gaps:', result.errors.slice(0, 20));
+    }
+  })
+  .catch((error) => {
+    console.warn(
+      '[PartnerOnboarding] Legacy pending provision skipped:',
+      error instanceof Error ? error.message : String(error),
+    );
+  });
 
 // Ensure Choosify User ID schema + idempotent backfill on boot (non-blocking failure).
 void import('./auth/choosifyUserId')
@@ -154,6 +172,7 @@ export function createApp(): Express {
   app.use("/api/v1", paymentsRouter);
   app.use("/api/v1", authRouter);
   app.use("/api/v1", partnerApplicationRouter);
+  app.use("/api/v1", navAttentionRouter);
   app.use("/api/v1", entitlementsRouter);
   app.use("/api/v1", conversationRouter);
 

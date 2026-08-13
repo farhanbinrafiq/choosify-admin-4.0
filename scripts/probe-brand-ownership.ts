@@ -119,6 +119,15 @@ async function approvePendingByEmail(adminToken: string, email: string) {
   return { status: approveRes.status, body: approveBody, applicationId: app.id };
 }
 
+async function grantBrandMarketplace(adminToken: string, brandId: string) {
+  const res = await fetch(`${base}/catalog/brands/${encodeURIComponent(brandId)}/marketplace-access`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({ status: 'granted' }),
+  });
+  return { status: res.status, body: await json(res) };
+}
+
 async function createBrand(token: string, name: string) {
   const res = await fetch(`${base}/catalog/brands`, {
     method: 'POST',
@@ -135,7 +144,9 @@ async function listBrands(token?: string) {
   const res = await fetch(`${base}/catalog/brands`, {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
-  const body = (await json(res)) as { data?: Array<{ id: string; name: string; sellerId?: string }> };
+  const body = (await json(res)) as {
+    data?: Array<{ id: string; name: string; sellerId?: string; marketplaceAccess?: boolean }>;
+  };
   return { status: res.status, brands: body.data || [] };
 }
 
@@ -261,9 +272,18 @@ async function main() {
   const sellerBToken = sellerB.token;
   const sellerBUid = sellerB.uid;
 
-  // 4/23: brand-new Seller has zero Brands — no auto-created draft, no mock/seeded names.
+  // Restricted onboarding provisions the catalog Brand at apply; identity approve does not
+  // grant Marketplace Access. Extra Brands stay locked until Admin enables access.
   const freshList = await listBrands(sellerAToken);
-  assert(freshList.status === 200 && freshList.brands.length === 0, 'Seller with zero Brands gets no auto-created Brand', freshList);
+  const provisioned = freshList.brands[0];
+  assert(
+    freshList.status === 200 &&
+      freshList.brands.length === 1 &&
+      provisioned?.sellerId === sellerAUid &&
+      provisioned?.marketplaceAccess === false,
+    'Apply provisions exactly one catalog Brand with Marketplace Access off',
+    freshList,
+  );
   const leakedNames = ['walton', 'aarong', 'samsung', 'apex', 'xiaomi', 'unilever'];
   assert(
     !freshList.brands.some((b) => leakedNames.some((n) => b.name.toLowerCase().includes(n))),
@@ -271,19 +291,28 @@ async function main() {
     freshList.brands.map((b) => b.name),
   );
 
-  // 5/6/7: Seller can create a first and second Brand; both stamped with own sellerId.
-  const brand1 = await createBrand(sellerAToken, `Probe Brand One ${RUN_ID}`);
+  const lockedCreate = await createBrand(sellerAToken, `Probe Brand Locked ${RUN_ID}`);
   assert(
-    brand1.status === 201 && brand1.brand?.sellerId === sellerAUid && brand1.brand?.marketplaceAccess === false,
-    'Seller can create first Brand (server-stamped sellerId, marketplaceAccess off by default)',
-    brand1,
+    lockedCreate.status === 403,
+    'Marketplace Access pending blocks creating additional Brands',
+    lockedCreate,
   );
+
+  const grantA = await grantBrandMarketplace(admin.token, provisioned.id);
+  assert(grantA.status === 200, 'Admin enables Marketplace Access on the provisioned Brand', grantA);
+
+  const brand1 = { status: 200, brand: provisioned };
   const brand2 = await createBrand(sellerAToken, `Probe Brand Two ${RUN_ID}`);
-  assert(brand2.status === 201 && brand2.brand?.sellerId === sellerAUid, 'Seller can create a second Brand', brand2);
+  assert(
+    brand2.status === 201 && brand2.brand?.sellerId === sellerAUid,
+    'Seller can create a second Brand after Marketplace Access',
+    brand2,
+  );
 
   const ownedList = await listBrands(sellerAToken);
   assert(
-    ownedList.brands.length === 2 && ownedList.brands.every((b) => b.sellerId === sellerAUid || b.sellerId === undefined),
+    ownedList.brands.length === 2 &&
+      ownedList.brands.every((b) => b.sellerId === sellerAUid || b.sellerId === undefined),
     'Seller sees only their own owned Brands',
     ownedList,
   );

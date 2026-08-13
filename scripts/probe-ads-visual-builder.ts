@@ -112,6 +112,14 @@ async function main() {
     const me = await req('GET', '/auth/me', { token: sellerToken, expect: [200] });
     const sellerId = String(me.body.uid || me.body.id || '');
     mark('seller-provisioned', Boolean(sellerToken && sellerId));
+    const catalogId = String(sellerApp.catalogEntityId || '');
+    if (catalogId) {
+      await req('PATCH', `/catalog/brands/${encodeURIComponent(catalogId)}/marketplace-access`, {
+        token: admin.token,
+        body: { status: 'granted' },
+        expect: [200],
+      });
+    }
 
     let creatorToken = '';
     try {

@@ -1,6 +1,7 @@
 import React, { Suspense, lazy, useEffect, useMemo } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useSearchParams, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { NavAttentionProvider } from './contexts/NavAttentionContext';
 import { ImpersonationProvider } from './contexts/ImpersonationContext';
 import { EntitlementsProvider, useEntitlements } from './contexts/EntitlementsContext';
 import { AdminLayout } from './components/AdminLayout';
@@ -19,6 +20,7 @@ import { InventoryProvider } from './contexts/InventoryContext';
 import { FeeChargesProvider } from './contexts/FeeChargesContext';
 import { catalogApi } from './services/catalogApi';
 import { getMyProfilePath } from './lib/userDisplay';
+import { MarketplaceAccessGate } from './components/MarketplaceAccessLock';
 import { AdminPageSkeleton } from './components/common/skeletons';
 
 const routeSuspenseFallback = <AdminPageSkeleton variant="generic" />;
@@ -243,6 +245,9 @@ const SellerBrandStudioHome: React.FC = () => {
 
 const BrandStudioHomeEntry: React.FC = () => {
   const { profile } = useAuth();
+  if (profile?.role === 'seller' && profile.marketplaceAccess === false) {
+    return <CmsMirrorHost />;
+  }
   if (profile?.role === 'seller') {
     return <SellerBrandStudioHome />;
   }
@@ -341,6 +346,9 @@ const CreatorStudioHome: React.FC = () => {
 
 const CreatorStudioHomeEntry: React.FC = () => {
   const { profile } = useAuth();
+  if (profile?.role === 'creator' && profile.marketplaceAccess === false) {
+    return <CmsMirrorHost />;
+  }
   if (profile?.role === 'creator') {
     return <CreatorStudioHome />;
   }
@@ -451,6 +459,7 @@ export default function App() {
         <AdsProvider>
         <Router>
         <AuthProvider>
+          <NavAttentionProvider>
           <EntitlementsProvider>
           <RbacProvider>
           <ImpersonationProvider>
@@ -533,9 +542,11 @@ export default function App() {
                 <ProtectedRoute>
                   <BrandStudioRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={routeSuspenseFallback}>
-                        <BrandEditStudio />
-                      </Suspense>
+                      <MarketplaceAccessGate>
+                        <Suspense fallback={routeSuspenseFallback}>
+                          <BrandEditStudio />
+                        </Suspense>
+                      </MarketplaceAccessGate>
                     </AdminWorkspaceLayout>
                   </BrandStudioRoleGate>
                 </ProtectedRoute>
@@ -547,9 +558,11 @@ export default function App() {
                 <ProtectedRoute>
                   <BrandStudioRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={routeSuspenseFallback}>
-                        <BrandEditStudio />
-                      </Suspense>
+                      <MarketplaceAccessGate>
+                        <Suspense fallback={routeSuspenseFallback}>
+                          <BrandEditStudio />
+                        </Suspense>
+                      </MarketplaceAccessGate>
                     </AdminWorkspaceLayout>
                   </BrandStudioRoleGate>
                 </ProtectedRoute>
@@ -567,9 +580,11 @@ export default function App() {
                 <ProtectedRoute>
                   <ProductVisualBuilderRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={routeSuspenseFallback}>
-                        <ProductEditStudio />
-                      </Suspense>
+                      <MarketplaceAccessGate>
+                        <Suspense fallback={routeSuspenseFallback}>
+                          <ProductEditStudio />
+                        </Suspense>
+                      </MarketplaceAccessGate>
                     </AdminWorkspaceLayout>
                   </ProductVisualBuilderRoleGate>
                 </ProtectedRoute>
@@ -581,9 +596,11 @@ export default function App() {
                 <ProtectedRoute>
                   <ProductVisualBuilderRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={routeSuspenseFallback}>
-                        <ProductEditStudio />
-                      </Suspense>
+                      <MarketplaceAccessGate>
+                        <Suspense fallback={routeSuspenseFallback}>
+                          <ProductEditStudio />
+                        </Suspense>
+                      </MarketplaceAccessGate>
                     </AdminWorkspaceLayout>
                   </ProductVisualBuilderRoleGate>
                 </ProtectedRoute>
@@ -619,9 +636,11 @@ export default function App() {
                 <ProtectedRoute>
                   <CreatorVisualBuilderRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={routeSuspenseFallback}>
-                        <CreatorEditStudio />
-                      </Suspense>
+                      <MarketplaceAccessGate>
+                        <Suspense fallback={routeSuspenseFallback}>
+                          <CreatorEditStudio />
+                        </Suspense>
+                      </MarketplaceAccessGate>
                     </AdminWorkspaceLayout>
                   </CreatorVisualBuilderRoleGate>
                 </ProtectedRoute>
@@ -633,9 +652,11 @@ export default function App() {
                 <ProtectedRoute>
                   <CreatorVisualBuilderRoleGate>
                     <AdminWorkspaceLayout>
-                      <Suspense fallback={routeSuspenseFallback}>
-                        <CreatorEditStudio />
-                      </Suspense>
+                      <MarketplaceAccessGate>
+                        <Suspense fallback={routeSuspenseFallback}>
+                          <CreatorEditStudio />
+                        </Suspense>
+                      </MarketplaceAccessGate>
                     </AdminWorkspaceLayout>
                   </CreatorVisualBuilderRoleGate>
                 </ProtectedRoute>
@@ -851,6 +872,7 @@ export default function App() {
           </ImpersonationProvider>
           </RbacProvider>
           </EntitlementsProvider>
+          </NavAttentionProvider>
         </AuthProvider>
     </Router>
     </AdsProvider>

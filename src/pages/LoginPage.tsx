@@ -18,7 +18,7 @@ export default function LoginPage() {
   const nextPath = searchParams.get('next')?.trim() || '';
   const roleFromQuery = resolveRoleParam(searchParams.get('role'));
 
-  const [email, setEmail] = useState(prefillEmail || 'admin@choosify.bd');
+  const [email, setEmail] = useState(prefillEmail || 'admin@choosify.com.bd');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -126,7 +126,7 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@choosify.bd"
+                placeholder="admin@choosify.com.bd"
                 className="flex-1 bg-transparent border-0 outline-none text-[13px] font-semibold text-[#111827] placeholder:text-[#9CA3AF]"
               />
             </div>

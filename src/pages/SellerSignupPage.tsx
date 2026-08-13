@@ -12,7 +12,8 @@ type ApplicantType = 'seller' | 'creator';
 /**
  * Unified Partner Application page — Seller/Brand + Creator.
  * Visual system: exact dashboard login tokens (choosify-dark-surface, btn-brand-gradient, login inputs).
- * Submitting requests a role only — Admin approval provisions access (no self-grant).
+ * Submitting creates a restricted Seller/Creator account immediately.
+ * Admin later verifies identity and enables Marketplace Access (no self-grant).
  */
 export default function SellerSignupPage() {
   const [searchParams] = useSearchParams();
@@ -126,7 +127,7 @@ export default function SellerSignupPage() {
       });
       setInfo(
         result.message ||
-          'Application received. Choosify Admin will review your request. You cannot access partner tools until approved.',
+          'Application received. You can sign in now. Marketplace features stay locked until Admin verifies your identity and enables Marketplace Access.',
       );
       window.setTimeout(() => {
         navigate(`/login?email=${encodeURIComponent(email.trim().toLowerCase())}`);

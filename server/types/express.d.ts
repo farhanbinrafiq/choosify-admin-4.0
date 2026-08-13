@@ -16,6 +16,8 @@ declare global {
       impersonationSessionId?: string;
       realActorUserId?: string;
       realActorRole?: string;
+      /** Set by requireMarketplaceAccess — true when commercial APIs must stay locked. */
+      partnerMarketplaceLocked?: boolean;
     }
 
     interface Locals {

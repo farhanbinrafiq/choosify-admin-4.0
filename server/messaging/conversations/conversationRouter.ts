@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { CommerceError } from '../../commerce/cartService';
 import { authenticateRequest } from '../../middleware/auth';
 import { requirePartnerEntitlement } from '../../entitlements/entitlementMiddleware';
+import { requireMarketplaceAccess } from '../../entitlements/marketplaceAccessMiddleware';
 import { Logger } from '../../lib/logger';
 import { conversationMemoryFlushNow } from './conversationMemoryBackend';
 import {
@@ -39,7 +40,7 @@ function flushIfMemoryDisk(): void {
   }
 }
 
-const requireAuth = [authenticateRequest, requirePartnerEntitlement];
+const requireAuth = [authenticateRequest, requirePartnerEntitlement, requireMarketplaceAccess];
 
 function actorOf(req: {
   userId?: string;

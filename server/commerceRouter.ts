@@ -6,6 +6,7 @@
 
 import { Router } from 'express';
 import { authenticateRequest } from './middleware/auth';
+import { requireMarketplaceAccess } from './entitlements/marketplaceAccessMiddleware';
 import {
   addCartItem,
   clearCart,
@@ -36,7 +37,7 @@ import { getRecentPublishedEvents } from './events/eventBus';
 
 export const commerceRouter = Router();
 
-const requireAuth = [authenticateRequest];
+const requireAuth = [authenticateRequest, requireMarketplaceAccess];
 
 function actorId(req: { userId?: string; user?: { uid?: string } }): string {
   return req.userId || req.user?.uid || '';

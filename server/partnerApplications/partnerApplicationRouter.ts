@@ -4,9 +4,12 @@ import { requireRole } from '../middleware/authorization';
 import { ROLES } from '../permissions/roles';
 import { partnerApplicationStore } from './partnerApplicationStore';
 import {
+  acknowledgePartnerResubmission,
   approvePartnerApplication,
   rejectPartnerApplication,
+  requestPartnerResubmission,
   sanitizeApplication,
+  savePartnerAdminNotes,
   submitPartnerApplication,
 } from './partnerApplicationService';
 import { Logger } from '../lib/logger';
@@ -100,6 +103,44 @@ partnerApplicationRouter.post('/auth/partner-apply', async (req, res) => {
   }
 });
 
+partnerApplicationRouter.get('/auth/partner-applications/me', authenticateRequest, (req, res) => {
+  const app = partnerApplicationStore.findForActor({
+    userId: req.userId || req.user?.uid,
+    email: req.user?.email,
+  });
+  if (!app) {
+    res.status(404).json({ success: false, error: 'No partner application for this account' });
+    return;
+  }
+  res.json({ success: true, application: sanitizeApplication(app) });
+});
+
+partnerApplicationRouter.post(
+  '/auth/partner-applications/me/resubmit',
+  authenticateRequest,
+  async (req, res) => {
+    try {
+      const updated = await acknowledgePartnerResubmission({
+        userId: req.userId || req.user?.uid || '',
+        email: req.user?.email,
+        note:
+          typeof (req.body as { note?: string })?.note === 'string'
+            ? (req.body as { note?: string }).note
+            : undefined,
+      });
+      res.json({ success: true, application: sanitizeApplication(updated) });
+    } catch (error) {
+      const status = (error as Error & { status?: number }).status || 500;
+      const code = (error as Error & { code?: string }).code;
+      res.status(status).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Resubmit failed',
+        code,
+      });
+    }
+  },
+);
+
 partnerApplicationRouter.get('/operations/partner-applications', ...requireAdmin, (req, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : undefined;
   const rows = partnerApplicationStore.list(
@@ -154,6 +195,51 @@ partnerApplicationRouter.post(
       res.status(status).json({
         success: false,
         error: error instanceof Error ? error.message : 'Reject failed',
+      });
+    }
+  },
+);
+
+partnerApplicationRouter.post(
+  '/operations/partner-applications/:id/resubmit',
+  ...requireAdmin,
+  async (req, res) => {
+    try {
+      const updated = await requestPartnerResubmission({
+        applicationId: req.params.id,
+        adminUserId: req.userId || req.user?.uid || '',
+        reviewNote:
+          typeof (req.body as { note?: string })?.note === 'string'
+            ? (req.body as { note?: string }).note
+            : undefined,
+      });
+      res.json({ success: true, application: sanitizeApplication(updated) });
+    } catch (error) {
+      const status = (error as Error & { status?: number }).status || 500;
+      res.status(status).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Resubmit request failed',
+      });
+    }
+  },
+);
+
+partnerApplicationRouter.patch(
+  '/operations/partner-applications/:id/notes',
+  ...requireAdmin,
+  async (req, res) => {
+    try {
+      const updated = await savePartnerAdminNotes({
+        applicationId: req.params.id,
+        adminUserId: req.userId || req.user?.uid || '',
+        adminNotes: String((req.body as { adminNotes?: string })?.adminNotes || ''),
+      });
+      res.json({ success: true, application: sanitizeApplication(updated) });
+    } catch (error) {
+      const status = (error as Error & { status?: number }).status || 500;
+      res.status(status).json({
+        success: false,
+        error: error instanceof Error ? error.message : 'Save notes failed',
       });
     }
   },

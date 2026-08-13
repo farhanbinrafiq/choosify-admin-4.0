@@ -429,6 +429,20 @@
   font-weight: 700;
 }
 
+.cms-mirror-marketplace-lock {
+  position: absolute;
+  top: 64px;
+  left: 250px;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  background: rgba(248, 249, 252, 0.92);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+}
+
 @keyframes cms-skel-pulse {
   0%,
   100% {

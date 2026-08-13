@@ -210,6 +210,40 @@
       .then(function (r) { return (r && r.data) || r; });
   }
 
+  function listPartnerApplications(status) {
+    var qs = status ? ('?status=' + encodeURIComponent(status)) : '';
+    return request('/operations/partner-applications' + qs).then(function (r) {
+      return (r && r.applications) || [];
+    });
+  }
+
+  function notifyNavAttentionRefresh() {
+    try {
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: 'cms-mirror-nav-attention-refresh' }, '*');
+      }
+    } catch (_) {}
+  }
+
+  function reviewPartnerApplication(id, action, note) {
+    return request(
+      '/operations/partner-applications/' + encodeURIComponent(id) + '/' + action,
+      'POST',
+      note ? { note: note } : {},
+    ).then(function (r) {
+      notifyNavAttentionRefresh();
+      return (r && r.application) || r;
+    });
+  }
+
+  function savePartnerApplicationNotes(id, adminNotes) {
+    return request(
+      '/operations/partner-applications/' + encodeURIComponent(id) + '/notes',
+      'PATCH',
+      { adminNotes: adminNotes || '' },
+    ).then(function (r) { return (r && r.application) || r; });
+  }
+
   function listCreators() {
     return request('/catalog/creators').then(function (r) { return (r && r.data) || []; });
   }
@@ -682,6 +716,9 @@
     getOrderShipment: getOrderShipment,
     patchBrand: patchBrand,
     setBrandMarketplaceAccess: setBrandMarketplaceAccess,
+    listPartnerApplications: listPartnerApplications,
+    reviewPartnerApplication: reviewPartnerApplication,
+    savePartnerApplicationNotes: savePartnerApplicationNotes,
     listCreators: listCreators,
     lookupUserAccount: lookupUserAccount,
     listUserDirectory: listUserDirectory,

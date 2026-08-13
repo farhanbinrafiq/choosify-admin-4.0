@@ -2,11 +2,15 @@ import { PARTNER_FEATURES, type PartnerRole } from '../../shared/entitlements/re
 
 /** Exact navDefs + pageMeta from Choosify Admin CMS (standalone).html */
 
+export type NavLockReason = 'marketplace' | 'entitlement';
+
 export type CmsNavItem = {
   key: string;
   label: string;
   tag?: string;
   path: string;
+  /** Visible-but-disabled annotation. Never hide role allowlist for marketplace lock. */
+  lock?: NavLockReason;
 };
 
 export type CmsNavGroup = {
@@ -523,16 +527,68 @@ export function applyEntitlementNavFilter(
     .filter((group) => group.items.length > 0);
 }
 
+/** Identity / review surfaces that stay available while Marketplace Access is false. */
+export const PARTNER_IDENTITY_PAGE_KEYS: Record<'seller' | 'creator', readonly string[]> = {
+  seller: ['dashboard', 'brandProfile', 'settings', 'notifications'],
+  creator: ['dashboard', 'creatorProfile', 'settings', 'notifications'],
+};
+
+export function identityPageKeysForRole(role: string | undefined | null): Set<string> {
+  if (role === 'creator') return new Set(PARTNER_IDENTITY_PAGE_KEYS.creator);
+  if (role === 'seller' || role === 'verified_seller') return new Set(PARTNER_IDENTITY_PAGE_KEYS.seller);
+  return new Set();
+}
+
+export function pageLockedByMarketplaceAccess(params: {
+  role: string | undefined | null;
+  pageKey: string;
+  marketplaceAccess: boolean | undefined;
+}): boolean {
+  const role = params.role === 'verified_seller' ? 'seller' : params.role;
+  if (role !== 'seller' && role !== 'creator') return false;
+  if (params.marketplaceAccess !== false) return false;
+  return !identityPageKeysForRole(role).has(params.pageKey);
+}
+
+/**
+ * Role allowlist first. While Marketplace Access is pending, do not hide commercial
+ * modules via entitlements — annotate them LOCKED_BY_MARKETPLACE_ACCESS instead.
+ * After access is granted, Feature Access entitlement hiding still applies.
+ */
+export function partnerNavGroupsForSession(params: {
+  role: string | undefined;
+  marketplaceAccess: boolean | undefined;
+  filterAllowedPageKeys: (keys: string[] | null) => string[] | null;
+}): CmsNavGroup[] {
+  const { role, marketplaceAccess, filterAllowedPageKeys } = params;
+  const base = navGroupsForRole(role);
+  const pendingLock =
+    (role === 'seller' || role === 'creator' || role === 'verified_seller') &&
+    marketplaceAccess === false;
+  const groups = pendingLock
+    ? base
+    : applyEntitlementNavFilter(base, filterAllowedPageKeys, role);
+  if (!pendingLock) return groups;
+  const identity = identityPageKeysForRole(role);
+  return groups.map((group) => ({
+    ...group,
+    items: group.items.map((item) =>
+      identity.has(item.key) ? item : { ...item, lock: 'marketplace' as const },
+    ),
+  }));
+}
+
 /** Iframe navDefs shape (no React paths). */
 export function navGroupsForMirror(
   groups: CmsNavGroup[],
-): Array<{ title: string; items: Array<{ key: string; label: string; tag?: string }> }> {
+): Array<{ title: string; items: Array<{ key: string; label: string; tag?: string; lock?: NavLockReason }> }> {
   return groups.map((group) => ({
     title: group.title,
-    items: group.items.map(({ key, label, tag }) => ({
+    items: group.items.map(({ key, label, tag, lock }) => ({
       key,
       label,
       ...(tag ? { tag } : {}),
+      ...(lock ? { lock } : {}),
     })),
   }));
 }

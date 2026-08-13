@@ -25,6 +25,7 @@ import { validate } from './middleware/validate';
 import { authenticateRequest } from './middleware/auth';
 import { requireRole } from './middleware/authorization';
 import { requirePartnerEntitlement } from './entitlements/entitlementMiddleware';
+import { requireMarketplaceAccess } from './entitlements/marketplaceAccessMiddleware';
 import { requireModerator as requireModeratorRole } from './middleware/requireModerator';
 import { hasRole } from './permissions/authorization';
 import { ROLES } from './permissions/roles';
@@ -44,7 +45,7 @@ import { publishEvent } from './events/eventBus';
 
 export const operationsRouter = Router();
 
-const requireAuth = [authenticateRequest, requirePartnerEntitlement];
+const requireAuth = [authenticateRequest, requirePartnerEntitlement, requireMarketplaceAccess];
 /** Admin or super_admin (via ROLE_INHERITANCE). */
 const requireAdmin = [authenticateRequest, requireRole(ROLES.ADMIN)];
 /** Moderator+ (admin/super_admin inherit moderator). */

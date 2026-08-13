@@ -151,7 +151,8 @@ async function main() {
     await new Promise((r) => setTimeout(r, 600));
     const s = snap();
     soft(!s.includes(password), 'SNAPSHOT PLAINTEXT PASSWORD BLOCKER');
-    soft(s.includes('$argon2'), 'snapshot missing argon2');
+    // Provision-at-apply clears the application hash; argon2 must not linger in the snapshot.
+    soft(!s.includes('$argon2'), 'snapshot retained argon2 after account provision');
     notes.push(`snapshot plaintext=${s.includes(password)} argon2=${s.includes('$argon2')}`);
   }
 
@@ -170,7 +171,10 @@ async function main() {
         niche: 'x',
       },
     });
-    soft(dup.status === 409 && dup.body.code === 'APPLICATION_PENDING', `dup pending → ${dup.status} ${dup.body.code}`);
+    soft(
+      dup.status === 409 && (dup.body.code === 'APPLICATION_PENDING' || dup.body.code === 'PARTNER_EXISTS'),
+      `dup pending → ${dup.status} ${dup.body.code}`,
+    );
 
     const adminEmailApply = await req('/auth/partner-apply', {
       body: {
@@ -231,6 +235,8 @@ async function main() {
 
   console.log('=== admin authz + approve + login ===');
   const adminToken = await login(ADMIN_EMAIL, ADMIN_PASS);
+  let sellerApp: Json | undefined;
+  let creatorApp: Json | undefined;
   {
     const unauth = await req('/operations/partner-applications');
     soft(unauth.status === 401, `unauth ${unauth.status}`);
@@ -238,11 +244,20 @@ async function main() {
     const list = await req('/operations/partner-applications?status=pending', { token: adminToken });
     assert(list.status === 200, 'list pending');
     const apps = (list.body.applications as Json[]) || [];
-    const sellerApp = apps.find((a) => a.email === sellerEmail);
-    const creatorApp = apps.find((a) => a.email === creatorEmail);
+    sellerApp = apps.find((a) => a.email === sellerEmail);
+    creatorApp = apps.find((a) => a.email === creatorEmail);
     assert(sellerApp && creatorApp, 'pending seller+creator missing');
     soft(!('passwordHash' in sellerApp!), 'admin UI/API hash leak');
     soft(!('password' in sellerApp!), 'admin password leak');
+
+    const pendingSellerLogin = await req('/auth/login', {
+      method: 'POST',
+      body: { email: sellerEmail, password },
+    });
+    soft(pendingSellerLogin.status === 200, `pending seller login ${pendingSellerLogin.status}`);
+    soft(pendingSellerLogin.body.role === 'seller', `pending seller role=${pendingSellerLogin.body.role}`);
+    soft(pendingSellerLogin.body.marketplaceAccess === false, 'pending seller marketplace locked');
+    notes.push('pending seller login OK before identity approve');
 
     for (const app of [sellerApp!, creatorApp!]) {
       const appr = await req(`/operations/partner-applications/${app.id}/approve`, {
@@ -261,6 +276,21 @@ async function main() {
   const sellerToken = await login(sellerEmail, password);
   const creatorToken = await login(creatorEmail, password);
   notes.push('approved seller+creator login OK (argon2 hash provisioned)');
+
+  {
+    const grantedSeller = await req(
+      `/catalog/brands/${encodeURIComponent(String(sellerApp!.catalogEntityId || ''))}/marketplace-access`,
+      { method: 'PATCH', token: adminToken, body: { status: 'granted' } },
+    );
+    soft(grantedSeller.status === 200, `grant seller marketplace ${grantedSeller.status}`);
+    if (creatorApp?.catalogEntityId) {
+      await req(`/catalog/creators/${encodeURIComponent(String(creatorApp.catalogEntityId))}`, {
+        method: 'PATCH',
+        token: adminToken,
+        body: { status: 'live', verifiedStatus: true },
+      });
+    }
+  }
 
   {
     const meS = await req('/auth/me', { token: sellerToken });

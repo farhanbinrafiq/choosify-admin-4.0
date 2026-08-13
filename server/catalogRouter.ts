@@ -29,6 +29,7 @@ import {
 } from './validation/catalog/draftSchemas';
 import { authenticateRequest, softAuthenticateRequest } from './middleware/auth';
 import { requirePartnerEntitlement } from './entitlements/entitlementMiddleware';
+import { requireMarketplaceAccess } from './entitlements/marketplaceAccessMiddleware';
 import { requireAnyPermission } from './middleware/authorization';
 import { requireBrandStudioWrite } from './middleware/brandStudioAuth';
 import { requireCreatorStudioWrite } from './middleware/creatorStudioAuth';
@@ -97,7 +98,7 @@ import { normalizeReferenceIdQuery } from '../shared/referenceIds/registry';
 
 export const catalogRouter = Router();
 
-const requireAuth = [authenticateRequest, requirePartnerEntitlement];
+const requireAuth = [authenticateRequest, requirePartnerEntitlement, requireMarketplaceAccess];
 /** Platform admin (ADMIN inherits via ROLE_INHERITANCE; SUPER_ADMIN too). */
 const requireCmsWrite = [authenticateRequest, requirePartnerEntitlement, requireAnyPermission([PERMISSIONS.CMS_EDIT])];
 /** Admin-only category tree + attribute schema (IS-003 §52). */
@@ -110,25 +111,29 @@ const requireAttributeManage = [
   requireAnyPermission([PERMISSIONS.ATTRIBUTE_MANAGE]),
 ];
 /** Brand Studio profile writes: cms:edit OR owning seller. */
-const requireBrandStudioBrandWrite = [authenticateRequest, requirePartnerEntitlement, requireBrandStudioWrite];
+const requireBrandStudioBrandWrite = [authenticateRequest, requirePartnerEntitlement, requireMarketplaceAccess, requireBrandStudioWrite];
 const requireProductCreate = [
   authenticateRequest,
   requirePartnerEntitlement,
+  requireMarketplaceAccess,
   requireAnyPermission([PERMISSIONS.PRODUCT_CREATE]),
 ];
 const requireProductEdit = [
   authenticateRequest,
   requirePartnerEntitlement,
+  requireMarketplaceAccess,
   requireAnyPermission([PERMISSIONS.PRODUCT_EDIT]),
 ];
 const requireProductDelete = [
   authenticateRequest,
   requirePartnerEntitlement,
+  requireMarketplaceAccess,
   requireAnyPermission([PERMISSIONS.PRODUCT_DELETE]),
 ];
 const requireCatalogMedia = [
   authenticateRequest,
   requirePartnerEntitlement,
+  requireMarketplaceAccess,
   requireAnyPermission([
     PERMISSIONS.PRODUCT_CREATE,
     PERMISSIONS.PRODUCT_EDIT,
@@ -139,6 +144,7 @@ const requireCatalogMedia = [
 const requireCatalogDraftWrite = [
   authenticateRequest,
   requirePartnerEntitlement,
+  requireMarketplaceAccess,
   requireAnyPermission([PERMISSIONS.PRODUCT_EDIT, PERMISSIONS.CMS_EDIT]),
 ];
 
@@ -195,7 +201,20 @@ function preserveBrandPrivilegedFieldsOnUpdate(
   };
 }
 
-/** Reject Seller/Creator attempts to mutate Marketplace Access via brand PATCH/PUT. */
+/** Pending partners may PATCH identity fields but cannot self-publish / self-verify. */
+function stripPendingCreatorPublish(
+  req: Request,
+  existing: { status?: string; verifiedStatus?: boolean } | null | undefined,
+  payload: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!req.partnerMarketplaceLocked || userIsPlatformAdmin(req)) return payload;
+  return {
+    ...payload,
+    status: existing?.status,
+    verifiedStatus: existing?.verifiedStatus,
+  };
+}
+
 function rejectUnauthorizedMarketplaceAccessMutation(
   req: Request,
   res: { status: (code: number) => { json: (body: unknown) => void } },
@@ -209,6 +228,7 @@ function rejectUnauthorizedMarketplaceAccessMutation(
     || Object.prototype.hasOwnProperty.call(body, 'marketplaceStatus')) {
     res.status(403).json({
       error: 'Marketplace Access can only be changed by platform administrators',
+      code: 'MARKETPLACE_ACCESS_REQUIRED',
     });
     return true;
   }
@@ -1852,7 +1872,10 @@ catalogRouter.patch('/catalog/brands/:id', ...requireBrandStudioBrandWrite, asyn
  */
 catalogRouter.patch(
   '/catalog/brands/:id/marketplace-access',
-  ...requireCmsWrite,
+  authenticateRequest,
+  requirePartnerEntitlement,
+  requireMarketplaceAccess,
+  requireAnyPermission([PERMISSIONS.CMS_EDIT]),
   async (req, res) => {
     try {
       const existing = await catalogStore.getBrand(req.params.id);
@@ -2152,17 +2175,18 @@ catalogRouter.get('/catalog/creators', softAuthenticateRequest, async (req, res)
   }
 });
 
-const requireCreatorStudioWriteMw = [authenticateRequest, requireCreatorStudioWrite];
+const requireCreatorStudioWriteMw = [authenticateRequest, requirePartnerEntitlement, requireMarketplaceAccess, requireCreatorStudioWrite];
 
 catalogRouter.put('/catalog/creators/:id', ...requireCreatorStudioWriteMw, async (req, res) => {
   try {
     const existing = await catalogStore.getCreator(req.params.id);
-    const payload =
+    const scoped =
       userIsCreatorRole(req) &&
       req.userId &&
       !hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)
         ? { ...req.body, userId: existing?.userId || req.userId }
         : req.body;
+    const payload = stripPendingCreatorPublish(req, existing, scoped as Record<string, unknown>);
     const normalized = normalizeCreatorInput({ ...payload, id: req.params.id }, existing || undefined);
     const saved = await catalogStore.upsertCreator(normalized);
     res.json({ success: true, data: saved });
@@ -2178,12 +2202,13 @@ catalogRouter.patch('/catalog/creators/:id', ...requireCreatorStudioWriteMw, asy
       res.status(404).json({ error: 'Creator not found' });
       return;
     }
-    const payload =
+    const scoped =
       userIsCreatorRole(req) &&
       req.userId &&
       !hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)
         ? { ...req.body, userId: existing.userId }
         : req.body;
+    const payload = stripPendingCreatorPublish(req, existing, scoped as Record<string, unknown>);
     const normalized = normalizeCreatorInput({ ...existing, ...payload, id: req.params.id }, existing);
     const saved = await catalogStore.upsertCreator(normalized);
     res.json({ success: true, data: saved });

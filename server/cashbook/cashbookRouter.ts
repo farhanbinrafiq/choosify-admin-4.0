@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authenticateRequest } from '../middleware/auth';
 import { requirePartnerEntitlement } from '../entitlements/entitlementMiddleware';
+import { requireMarketplaceAccess } from '../entitlements/marketplaceAccessMiddleware';
 import { CommerceError } from '../commerce/cartService';
 import { Logger } from '../lib/logger';
 import {
@@ -14,7 +15,7 @@ import { getFinanceSummaryForActor } from './financeSummaryService';
 
 export const cashbookRouter = Router();
 /** Auth + partner entitlement (admins/staff pass through; disable = access only, never deletes data). */
-const requireAuth = [authenticateRequest, requirePartnerEntitlement];
+const requireAuth = [authenticateRequest, requirePartnerEntitlement, requireMarketplaceAccess];
 
 function actorOf(req: {
   userId?: string;

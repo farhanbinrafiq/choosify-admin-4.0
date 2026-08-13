@@ -9,10 +9,11 @@ import { GlobalDashboardSearch } from '../common/GlobalDashboardSearch';
 import { AdminPageSkeleton } from '../common/skeletons';
 import {
   PAGE_META,
-  applyEntitlementNavFilter,
-  navGroupsForRole,
+  partnerNavGroupsForSession,
   pathToPageKey,
 } from '../../cms-mirror/nav';
+import { useNavAttention } from '../../contexts/NavAttentionContext';
+import { formatNavAttentionCount } from '../../services/navAttentionApi';
 import {
   formatRoleLabel,
   getAvatarUrl,
@@ -38,6 +39,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
 }) => {
   const { profile } = useAuth();
   const { filterAllowedPageKeys } = useEntitlements();
+  const { counts: navAttention } = useNavAttention();
   const { state: impersonation, exitImpersonation } = useImpersonation();
   const location = useLocation();
   const [navSearch, setNavSearch] = useState('');
@@ -46,11 +48,11 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
   const role = profile?.role;
 
   const navGroups = useMemo(() => {
-    const roleFiltered = applyEntitlementNavFilter(
-      navGroupsForRole(role),
-      filterAllowedPageKeys,
+    const roleFiltered = partnerNavGroupsForSession({
       role,
-    );
+      marketplaceAccess: profile?.marketplaceAccess,
+      filterAllowedPageKeys,
+    });
     const q = navSearch.trim().toLowerCase();
     if (!q) return roleFiltered;
     return roleFiltered
@@ -59,7 +61,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
         items: group.items.filter((item) => item.label.toLowerCase().includes(q)),
       }))
       .filter((group) => group.items.length > 0);
-  }, [role, navSearch, filterAllowedPageKeys]);
+  }, [role, navSearch, filterAllowedPageKeys, profile?.marketplaceAccess]);
 
   const metaBase = PAGE_META[activePageKey] || PAGE_META.dashboard;
   const meta: [string, string] =
@@ -123,15 +125,34 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
               <div className="admin-workspace__nav-group-title">{group.title}</div>
               {group.items.map((item) => {
                 const active = isNavActive(item.path, item.key);
+                const attention = navAttention[item.key];
+                const attentionCount = attention && attention.count > 0 ? attention.count : 0;
+                const locked = item.lock === 'marketplace';
                 return (
                   <Link
                     key={item.key}
                     to={item.path}
-                    className={`admin-workspace__nav-item${active ? ' admin-workspace__nav-item--active' : ''}`}
+                    className={`admin-workspace__nav-item${active ? ' admin-workspace__nav-item--active' : ''}${locked ? ' admin-workspace__nav-item--locked' : ''}`}
                     aria-current={active ? 'page' : undefined}
+                    aria-disabled={locked || undefined}
+                    title={locked ? 'Marketplace Access Pending' : undefined}
                   >
                     <span className="admin-workspace__nav-bar" aria-hidden />
                     <span className="admin-workspace__nav-label">{item.label}</span>
+                    {attentionCount > 0 ? (
+                      <span
+                        className="admin-workspace__nav-attention"
+                        title={attention.label}
+                        aria-label={attention.label}
+                      >
+                        {formatNavAttentionCount(attentionCount)}
+                      </span>
+                    ) : null}
+                    {locked ? (
+                      <span className="admin-workspace__nav-lock" title="Marketplace Access Pending">
+                        LOCK
+                      </span>
+                    ) : null}
                     {item.tag ? <span className="admin-workspace__nav-tag">{item.tag}</span> : null}
                   </Link>
                 );

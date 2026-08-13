@@ -8,7 +8,7 @@
 <script src="/cms-mirror/react-dom.production.min.js"></script>
 <script src="/cms-mirror/dc-runtime.js"></script>
 <script src="/cms-mirror/omelette.js"></script>
-  <script src="./studio-profile-api.js?v=20260810-my-customers-1"></script>
+  <script src="./studio-profile-api.js?v=20260813-nav-attention"></script>
 <script>
 window.addEventListener('message', function(ev) {
   var data = ev && ev.data;
@@ -301,9 +301,11 @@ window.addEventListener('message', function(ev) {
         <div style="margin-bottom:18px">
           <div style="{{ groupTitleStyle }}">{{ grp.title }}</div>
           <sc-for list="{{ grp.items }}" as="item" hint-placeholder-count="3">
-            <div style="{{ item.rowStyle }}" sc-camel-on-click="{{ item.onClick }}">
+            <div style="{{ item.rowStyle }}" sc-camel-on-click="{{ item.onClick }}" title="{{ item.lockTitle }}">
               <div style="{{ item.barStyle }}"></div>
               <span style="{{ item.labelStyle }}">{{ item.label }}</span>
+              <sc-if value="{{ item.showAttention }}" hint-placeholder-val="{{ false }}"><span title="{{ item.attentionLabel }}" style="{{ item.attentionStyle }}">{{ item.attentionDisplay }}</span></sc-if>
+              <sc-if value="{{ item.showLock }}" hint-placeholder-val="{{ false }}"><span style="{{ item.lockStyle }}">LOCK</span></sc-if>
               <sc-if value="{{ item.tag }}" hint-placeholder-val="{{ false }}"><span style="{{ item.tagStyle }}">{{ item.tag }}</span></sc-if>
             </div>
           </sc-for>
@@ -496,6 +498,15 @@ window.addEventListener('message', function(ev) {
 
       <!-- ===== DASHBOARD ===== -->
       <sc-if value="{{ isDashboard }}" hint-placeholder-val="{{ true }}">
+        <sc-if value="{{ showPartnerUnderReviewBanner }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-bottom:18px;border:1px solid #FDE68A;background:#FFFBEB;border-radius:12px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px">
+            <span style="font-size:10px;font-weight:800;letter-spacing:0.12em;color:#B45309;background:#FEF3C7;padding:4px 8px;border-radius:6px;flex-shrink:0">{{ partnerReviewBadge }}</span>
+            <div>
+              <div style="font-size:13px;font-weight:800;color:#92400E">{{ partnerReviewHeadline }}</div>
+              <div style="font-size:12px;font-weight:600;color:#A16207;margin-top:4px;line-height:1.45">{{ partnerReviewMessage }}</div>
+            </div>
+          </div>
+        </sc-if>
         <div style="display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px;flex-wrap:wrap">
           <div>
             <div style="font-size:20px;font-weight:800;letter-spacing:-0.3px">{{ dashboardTitle }}</div>
@@ -1819,7 +1830,7 @@ window.addEventListener('message', function(ev) {
                 <div style="width:56px;height:56px;border-radius:12px;overflow:hidden;background:#fff;border:1px solid #E8EDF2;margin-top:-42px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,0.08)">
                   <x-import component-from-global-scope="image-slot" from="48b1f74f-652c-4fc3-bbaa-6fa4b5d2e5a6#/image-slot.js" id="brand-profile-thumb" shape="rect" placeholder="Logo" hint-size="56px,56px" src="/cms-mirror/e61083a9-f6de-4276-a1a5-9fffa67e8429.webp"></x-import>
                 </div>
-                <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13.5px;font-weight:800">{{ selectedBrand.name }}</span><sc-if value="{{ selectedBrand.verified }}" hint-placeholder-val="{{ false }}"><span style="background:rgba(21,128,61,0.12);color:#15803D;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px">VERIFIED OWNER</span></sc-if></div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800">{{ selectedBrand.name }}</span><sc-if value="{{ selectedBrand.underReview }}" hint-placeholder-val="{{ false }}"><span style="background:#EFF6FF;color:#2563EB;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px">UNDER REVIEW</span></sc-if><sc-if value="{{ selectedBrand.showVerifiedOwner }}" hint-placeholder-val="{{ false }}"><span style="background:rgba(21,128,61,0.12);color:#15803D;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px">VERIFIED OWNER</span></sc-if></div>
                 <div style="font-size:11px;color:#2563EB;font-weight:600;margin-top:2px">@brand_{{ selectedBrand.initial }}</div>
                 <div style="font-size:11.5px;color:#374151;font-weight:600;margin-top:8px;line-height:1.5">{{ selectedBrand.tagline }}</div>
                 <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
@@ -1946,8 +1957,11 @@ window.addEventListener('message', function(ev) {
                     <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">AUTO-REINSTATE</div><div style="font-size:11.5px;font-weight:700;margin-top:3px">{{ selectedBrand.profileSuspensionInfo.autoReinstateLabel }}</div></div>
                   </div>
                 </sc-if>
-                <sc-if value="{{ !selectedBrand.profileSuspensionInfo }}" hint-placeholder-val="{{ true }}">
+                <sc-if value="{{ selectedBrand.profileAccessActive }}" hint-placeholder-val="{{ false }}">
                   <div style="font-size:11.5px;color:#16A34A;font-weight:700">✓ Live on marketplace — visible to buyers.</div>
+                </sc-if>
+                <sc-if value="{{ selectedBrand.profileAccessPending }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:11.5px;color:#B45309;font-weight:700">Marketplace Access Pending — not visible to buyers until Choosify enables Marketplace Access.</div>
                 </sc-if>
               </div>
             </sc-if>
@@ -1961,6 +1975,27 @@ window.addEventListener('message', function(ev) {
                   </div>
                   <span style="background:#F0FDF4;color:#16A34A;font-size:10px;font-weight:800;padding:6px 12px;border-radius:7px;white-space:nowrap">{{ selectedBrand.verificationStatusLabel }}</span>
                 </div>
+                <sc-if value="{{ selectedBrand.showPartnerReviewActions }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:14px 16px;margin-bottom:16px">
+                    <div style="font-size:11px;font-weight:800;color:#1D4ED8;letter-spacing:0.04em;margin-bottom:8px">ADMIN REVIEW</div>
+                    <div style="font-size:12px;font-weight:700;margin-bottom:6px">{{ selectedBrand.partnerApplicantName }} · {{ selectedBrand.partnerApplicantEmail }}</div>
+                    <div style="font-size:11px;color:#374151;font-weight:600;margin-bottom:10px">{{ selectedBrand.partnerBusinessSummary }}</div>
+                    <textarea value="{{ selectedBrand.partnerAdminNotesValue }}" sc-camel-on-change="{{ selectedBrand.onPartnerNotesChange }}" placeholder="Internal Admin notes (not visible to the seller)..." rows="3" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid #BFDBFE;padding:10px 12px;font-size:12px;resize:vertical;margin-bottom:10px"></textarea>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px">
+                      <button sc-camel-on-click="{{ selectedBrand.onSavePartnerNotes }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer">Save notes</button>
+                      <button sc-camel-on-click="{{ selectedBrand.onRequestResubmission }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer">Request Resubmission</button>
+                      <button sc-camel-on-click="{{ selectedBrand.onRejectPartner }}" style="background:#FEF2F2;border:1px solid #FCA5A5;color:#DC2626;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer">Reject Seller</button>
+                      <button sc-camel-on-click="{{ selectedBrand.onApproveIdentity }}" style="background:#16A34A;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:11px;font-weight:800;cursor:pointer">Approve Identity / Verification</button>
+                      <button sc-camel-on-click="{{ selectedBrand.onEnableMarketplace }}" style="background:linear-gradient(90deg,#C8321A,#EF3C23);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:11px;font-weight:800;cursor:pointer">Enable Marketplace Access</button>
+                    </div>
+                    <sc-if value="{{ selectedBrand.hasPartnerHistory }}" hint-placeholder-val="{{ false }}">
+                      <div style="font-size:10px;font-weight:800;color:#9CA3AF;letter-spacing:0.04em;margin:12px 0 8px">REVIEW HISTORY</div>
+                      <sc-for list="{{ selectedBrand.partnerReviewHistory }}" as="ev" hint-placeholder-count="2">
+                        <div style="font-size:11px;font-weight:700;margin-bottom:6px">{{ ev.action }} · {{ ev.time }}<div style="font-size:10px;color:#6B7280;font-weight:600">{{ ev.note }}</div></div>
+                      </sc-for>
+                    </sc-if>
+                  </div>
+                </sc-if>
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
                   <div style="background:#F9FAFB;border-radius:8px;padding:14px">
                     <div style="font-size:9.5px;font-weight:800;color:#9CA3AF">TRADE LICENSE REGISTRATION</div>
@@ -3000,7 +3035,7 @@ window.addEventListener('message', function(ev) {
                 <div style="width:56px;height:56px;border-radius:50%;overflow:hidden;background:#fff;border:1px solid #E8EDF2;margin-top:-42px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,0.08)">
                   <x-import component-from-global-scope="image-slot" from="48b1f74f-652c-4fc3-bbaa-6fa4b5d2e5a6#/image-slot.js" id="creator-profile-thumb" shape="circle" placeholder="Photo" hint-size="56px,56px" src="/cms-mirror/7bdd8cb4-702b-4356-be18-066f4c21b10e.webp"></x-import>
                 </div>
-                <div style="display:flex;align-items:center;gap:8px"><span style="font-size:13.5px;font-weight:800">{{ selectedCreator.name }}</span><sc-if value="{{ selectedCreator.verified }}" hint-placeholder-val="{{ false }}"><span style="background:rgba(21,128,61,0.12);color:#15803D;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px">VERIFIED</span></sc-if></div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800">{{ selectedCreator.name }}</span><sc-if value="{{ selectedCreator.underReview }}" hint-placeholder-val="{{ false }}"><span style="background:#EFF6FF;color:#2563EB;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px">UNDER REVIEW</span></sc-if><sc-if value="{{ selectedCreator.showVerifiedBadge }}" hint-placeholder-val="{{ false }}"><span style="background:rgba(21,128,61,0.12);color:#15803D;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px">VERIFIED</span></sc-if></div>
                 <div style="font-size:11px;color:#2563EB;font-weight:600;margin-top:2px">{{ selectedCreator.handle }}</div>
                 <div style="font-size:11.5px;color:#374151;font-weight:600;margin-top:8px;line-height:1.5">{{ selectedCreator.bio }}</div>
                 <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
@@ -3104,8 +3139,11 @@ window.addEventListener('message', function(ev) {
                     <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">AUTO-REINSTATE</div><div style="font-size:11.5px;font-weight:700;margin-top:3px">{{ selectedCreator.profileSuspensionInfo.autoReinstateLabel }}</div></div>
                   </div>
                 </sc-if>
-                <sc-if value="{{ !selectedCreator.profileSuspensionInfo }}" hint-placeholder-val="{{ true }}">
+                <sc-if value="{{ selectedCreator.profileAccessActive }}" hint-placeholder-val="{{ false }}">
                   <div style="font-size:11.5px;color:#16A34A;font-weight:700">✓ Live on marketplace — visible to buyers.</div>
+                </sc-if>
+                <sc-if value="{{ selectedCreator.profileAccessPending }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:11.5px;color:#B45309;font-weight:700">Marketplace Access Pending — not visible to buyers until Choosify enables Marketplace Access.</div>
                 </sc-if>
               </div>
             </sc-if>
@@ -3121,6 +3159,27 @@ window.addEventListener('message', function(ev) {
                   </div>
                   <span style="background:#F0FDF4;color:#16A34A;font-size:10px;font-weight:800;padding:6px 12px;border-radius:7px;white-space:nowrap">{{ selectedCreator.verificationStatusLabel }}</span>
                 </div>
+                <sc-if value="{{ selectedCreator.showPartnerReviewActions }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:14px 16px;margin-bottom:16px">
+                    <div style="font-size:11px;font-weight:800;color:#1D4ED8;letter-spacing:0.04em;margin-bottom:8px">ADMIN REVIEW</div>
+                    <div style="font-size:12px;font-weight:700;margin-bottom:6px">{{ selectedCreator.partnerApplicantName }} · {{ selectedCreator.partnerApplicantEmail }}</div>
+                    <div style="font-size:11px;color:#374151;font-weight:600;margin-bottom:10px">{{ selectedCreator.partnerBusinessSummary }}</div>
+                    <textarea value="{{ selectedCreator.partnerAdminNotesValue }}" sc-camel-on-change="{{ selectedCreator.onPartnerNotesChange }}" placeholder="Internal Admin notes (not visible to the creator)..." rows="3" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid #BFDBFE;padding:10px 12px;font-size:12px;resize:vertical;margin-bottom:10px"></textarea>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px">
+                      <button sc-camel-on-click="{{ selectedCreator.onSavePartnerNotes }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer">Save notes</button>
+                      <button sc-camel-on-click="{{ selectedCreator.onRequestResubmission }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer">Request Resubmission</button>
+                      <button sc-camel-on-click="{{ selectedCreator.onRejectPartner }}" style="background:#FEF2F2;border:1px solid #FCA5A5;color:#DC2626;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer">Reject Creator</button>
+                      <button sc-camel-on-click="{{ selectedCreator.onApproveIdentity }}" style="background:#16A34A;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:11px;font-weight:800;cursor:pointer">Approve Identity / Verification</button>
+                      <button sc-camel-on-click="{{ selectedCreator.onEnableMarketplace }}" style="background:linear-gradient(90deg,#C8321A,#EF3C23);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:11px;font-weight:800;cursor:pointer">Enable Marketplace Access</button>
+                    </div>
+                    <sc-if value="{{ selectedCreator.hasPartnerHistory }}" hint-placeholder-val="{{ false }}">
+                      <div style="font-size:10px;font-weight:800;color:#9CA3AF;letter-spacing:0.04em;margin:12px 0 8px">REVIEW HISTORY</div>
+                      <sc-for list="{{ selectedCreator.partnerReviewHistory }}" as="ev" hint-placeholder-count="2">
+                        <div style="font-size:11px;font-weight:700;margin-bottom:6px">{{ ev.action }} · {{ ev.time }}<div style="font-size:10px;color:#6B7280;font-weight:600">{{ ev.note }}</div></div>
+                      </sc-for>
+                    </sc-if>
+                  </div>
+                </sc-if>
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
                   <div style="background:#F9FAFB;border-radius:8px;padding:14px">
                     <div style="font-size:9.5px;font-weight:800;color:#9CA3AF">PLATFORM OWNERSHIP PROOF</div>
@@ -8694,6 +8753,18 @@ try {
   window.normalizeChoosifyUserIdQuery = normalizeChoosifyUserIdQuery;
   window.matchesChoosifyUserIdSearch = matchesChoosifyUserIdSearch;
   window.__CMS_MIRROR_RESOLVE_CF_ID__ = resolveProfileChoosifyUserId;
+  window.sellerAppNeedsAdminAttention = function(a, brands) {
+    if (!a || a.applicantType !== 'seller') return false;
+    if (a.status === 'pending' || a.status === 'rejected') return true;
+    if (a.status !== 'approved') return false;
+    var list = Array.isArray(brands) ? brands : [];
+    var brand = list.find(function(b) {
+      return (a.catalogEntityId && b.catalogId === a.catalogEntityId) || (a.provisionedUserId && b.sellerId === a.provisionedUserId);
+    });
+    if (!brand) return true;
+    var granted = brand.marketplaceAccess === true || brand.marketplaceStatus === 'granted' || brand.marketplaceStatus === 'restored';
+    return !granted;
+  };
 } catch (_) {}
 
 class Component extends DCLogic {
@@ -9760,6 +9831,8 @@ class Component extends DCLogic {
         : 'Platform-administered status. Contact Choosify Admin to change Marketplace Access.',
       profileAccessLabel: resolved.label,
       profileAccessColor: resolved.color,
+      profileAccessActive: active,
+      profileAccessPending: !active && !(ov && ov.suspensionInfo),
       profileAccessToggleStyle: active
         ? 'width:38px;height:20px;border-radius:99px;background:#16A34A;position:relative;cursor:pointer;flex-shrink:0'
         : 'width:38px;height:20px;border-radius:99px;background:#D1D5DB;position:relative;cursor:pointer;flex-shrink:0',
@@ -12276,15 +12349,32 @@ class Component extends DCLogic {
       title: g.title,
       items: g.items.map(it => {
         const active = it.key === page;
+        const attentionMap = window.__CMS_MIRROR_NAV_ATTENTION__ || {};
+        const attention = attentionMap[it.key];
+        const attentionCount = attention && attention.count > 0 ? Number(attention.count) : 0;
+        const showAttention = attentionCount > 0;
+        const mirrorRole = window.__CMS_MIRROR_ROLE__ || '';
+        const identityPages = mirrorRole === 'creator'
+          ? { dashboard: 1, creatorProfile: 1, settings: 1, notifications: 1 }
+          : { dashboard: 1, brandProfile: 1, settings: 1, notifications: 1 };
+        const marketplacePending = (mirrorRole === 'seller' || mirrorRole === 'creator') && window.__CMS_MIRROR_MARKETPLACE_ACCESS__ === false;
+        const showLock = it.lock === 'marketplace' || (marketplacePending && !identityPages[it.key]);
         return {
           key: it.key,
           label: it.label,
           tag: it.tag || null,
-          tagStyle: 'font-size:8px;font-weight:800;color:#EF3C23;background:rgba(239,60,35,0.14);padding:2px 6px;border-radius:4px;letter-spacing:0.04em;margin-left:auto',
+          tagStyle: `font-size:8px;font-weight:800;color:#EF3C23;background:rgba(239,60,35,0.14);padding:2px 6px;border-radius:4px;letter-spacing:0.04em;flex-shrink:0;${showAttention || showLock ? '' : 'margin-left:auto'}`,
+          showAttention,
+          attentionDisplay: attentionCount > 99 ? '99+' : String(attentionCount),
+          attentionLabel: (attention && attention.label) || '',
+          attentionStyle: 'flex-shrink:0;margin-left:auto;min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:linear-gradient(90deg,#C8321A,#EF3C23);color:#fff;font-size:10px;font-weight:800;line-height:18px;text-align:center',
+          showLock,
+          lockTitle: showLock ? 'Marketplace Access Pending' : '',
+          lockStyle: 'flex-shrink:0;font-size:8px;font-weight:800;letter-spacing:0.06em;color:#FBBF24;background:rgba(251,191,36,0.16);padding:2px 6px;border-radius:4px',
           onClick: () => this.setPage(it.key),
-          rowStyle: `display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;margin-bottom:2px;background:${active ? 'rgba(239,60,35,0.16)' : 'transparent'}`,
+          rowStyle: `display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;margin-bottom:2px;opacity:${showLock ? '0.72' : '1'};background:${active ? 'rgba(239,60,35,0.16)' : 'transparent'}`,
           barStyle: `width:3px;height:16px;border-radius:2px;background:${active ? '#EF3C23' : 'transparent'};flex-shrink:0`,
-          labelStyle: `font-size:13px;font-weight:${active?700:600};color:${active ? '#EF3C23' : 'rgba(255,255,255,0.8)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis`,
+          labelStyle: `font-size:13px;font-weight:${active?700:600};color:${active ? '#EF3C23' : (showLock ? 'rgba(255,255,255,0.55)' : 'rgba(255,255,255,0.8)')};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0`,
         };
       }),
     }));
@@ -12732,6 +12822,13 @@ class Component extends DCLogic {
     let showWebsiteManagerButton = isAdminMirrorRole;
     let showDashboardCmsHealth = isAdminMirrorRole;
     let showDashboardTrust = isAdminMirrorRole;
+    const marketplacePendingDash = (isSellerMirrorRole || isCreatorMirrorRole) && window.__CMS_MIRROR_MARKETPLACE_ACCESS__ === false;
+    const resubmissionRequested = !!window.__CMS_MIRROR_RESUBMISSION_REQUESTED__;
+    const partnerAppStatus = window.__CMS_MIRROR_PARTNER_APPLICATION_STATUS__ || '';
+    const showPartnerUnderReviewBanner = marketplacePendingDash;
+    const partnerReviewBadge = resubmissionRequested ? 'VERIFICATION REQUIRED' : (partnerAppStatus === 'rejected' ? 'REJECTED' : 'UNDER REVIEW');
+    const partnerReviewHeadline = 'Marketplace Access Pending';
+    const partnerReviewMessage = 'Your account is currently under review. Operational marketplace features stay locked until Choosify verifies your account and enables Marketplace Access.';
     let statCards;
     let actionQueues = [];
     let dashboardLeftPanels = [];
@@ -14976,7 +15073,7 @@ class Component extends DCLogic {
     const brandTabDefsAdmin = [
       {key:'all', icon:'👥', label:'All Brands', count: brands.length},
       {key:'verified', icon:'✔️', label:'Verified Brands', count: brands.filter(b=>b.ownership==='VERIFIED OWNER').length},
-      {key:'requests', icon:'🆕', label:'Requests', count: Component.BRAND_REQUESTS.length},
+      {key:'requests', icon:'🆕', label:'Requests', count: (window.__CMS_MIRROR_PARTNER_APPS__ || []).filter(function(a){ return window.sellerAppNeedsAdminAttention && window.sellerAppNeedsAdminAttention(a, Component.BRANDS); }).length},
       {key:'activeSellers', icon:'🏪', label:'Active Sellers', count: brands.filter(b=>b.isActiveSeller).length},
       {key:'claims', icon:'📋', label:'Ownership Claims', count: Component.BRAND_CLAIMS.length},
       {key:'flagged', icon:'🚩', label:'Flagged', count: brands.filter(b=>b.isFlagged).length},
@@ -15046,10 +15143,50 @@ class Component extends DCLogic {
     const brandSelectedCount = this.state.brandSelectedIds.length;
     const brandAllSelected = brandsSorted.length > 0 && brandSelectedCount === brandsSorted.length;
 
-    const selReqRaw = Component.BRAND_REQUESTS.find(r => r.id === this.state.selectedRequestId) || null;
-    const isRequestsList = isBrandRequestsTab && !selReqRaw;
-    const isRequestDetail = isBrandRequestsTab && !!selReqRaw;
-    const brandRequests = Component.BRAND_REQUESTS.map(r => ({...r, onClick: () => this.setState({selectedRequestId: r.id})}));
+    const partnerApps = Array.isArray(window.__CMS_MIRROR_PARTNER_APPS__) ? window.__CMS_MIRROR_PARTNER_APPS__ : [];
+    const pendingSellerApps = partnerApps.filter((a) => a && window.sellerAppNeedsAdminAttention(a, Component.BRANDS));
+    const selReqRaw = null;
+    const isRequestsList = isBrandRequestsTab && !this.state.selectedBrandName;
+    const isRequestDetail = false;
+    const brandRequests = pendingSellerApps.map((a) => ({
+      id: a.id,
+      name: a.displayName || a.businessOrChannelName,
+      businessName: a.businessOrChannelName,
+      email: a.email,
+      appDate: (a.createdAt || '').slice(0, 10),
+      businessCategory: a.category,
+      status: a.resubmissionRequested ? 'Resubmission requested' : 'Under Review',
+      onClick: () => {
+        const brandName = a.businessOrChannelName;
+        const hasBrand = Component.BRANDS.some((b) => b.name === brandName || b.catalogId === a.catalogEntityId || b.sellerId === a.provisionedUserId);
+        if (!hasBrand) {
+          Component.BRANDS = Component.BRANDS.concat([{
+            catalogId: a.catalogEntityId || null,
+            name: brandName,
+            category: a.category || 'General',
+            productsCount: 0,
+            status: 'Pending',
+            joined: (a.createdAt || '').slice(0, 4),
+            verified: false,
+            trustScore: 0,
+            loves: 0,
+            followers: 0,
+            tagline: '',
+            email: a.email,
+            phone: a.phone,
+            address: a.city,
+            website: a.website || '',
+            sellerId: a.provisionedUserId || null,
+            marketplaceAccess: false,
+            marketplaceStatus: 'not_granted',
+            claimStatus: 'pending',
+            partnerApplicationId: a.id,
+          }]);
+        }
+        const match = Component.BRANDS.find((b) => b.catalogId === a.catalogEntityId || b.sellerId === a.provisionedUserId || b.name === brandName);
+        this.setState({ selectedBrandName: match ? match.name : brandName, brandProfileTab: 'verification', brandTab: 'requests' });
+      },
+    }));
     let selectedRequest = null;
     if (selReqRaw) {
       const rTab = this.state.requestDetailTab || 'personal';
@@ -15257,6 +15394,103 @@ class Component extends DCLogic {
       selectedBrand.choosifyUserId = (typeof window.resolveProfileChoosifyUserId === 'function'
         ? window.resolveProfileChoosifyUserId(b.sellerId || window.__CMS_MIRROR_USER_ID__, b.choosifyUserId, window.__CMS_MIRROR_EMAIL__)
         : (window.__CMS_MIRROR_CHOOSIFY_USER_ID__ || '—')) || '—';
+      {
+        const apps = Array.isArray(window.__CMS_MIRROR_PARTNER_APPS__) ? window.__CMS_MIRROR_PARTNER_APPS__ : [];
+        const app = apps.find((row) =>
+          (b.partnerApplicationId && row.id === b.partnerApplicationId)
+          || (b.catalogId && row.catalogEntityId === b.catalogId)
+          || (b.sellerId && row.provisionedUserId === b.sellerId)
+        ) || null;
+        const role = window.__CMS_MIRROR_ROLE__ || '';
+        const isAdminReviewer = role === 'admin' || role === 'super_admin';
+        selectedBrand.underReview = !!(app && app.status === 'pending')
+          || (window.__CMS_MIRROR_PARTNER_APPLICATION_STATUS__ === 'pending' && role === 'seller');
+        selectedBrand.showVerifiedOwner = !!b.verified && !selectedBrand.underReview;
+        selectedBrand.showPartnerReviewActions = !!(isAdminReviewer && app && (app.status === 'pending' || app.status === 'rejected' || app.status === 'approved'));
+        selectedBrand.partnerApplicantName = app ? (app.displayName || '') : '';
+        selectedBrand.partnerApplicantEmail = app ? (app.email || '') : '';
+        selectedBrand.partnerBusinessSummary = app
+          ? [app.businessOrChannelName, app.phone, app.city, app.category].filter(Boolean).join(' · ')
+          : '';
+        selectedBrand.partnerAdminNotesValue = this.state.partnerAdminNotesDraft || (app && app.adminNotes) || '';
+        selectedBrand.onPartnerNotesChange = (e) => this.setState({ partnerAdminNotesDraft: e && e.target ? e.target.value : '' });
+        selectedBrand.hasPartnerHistory = !!(app && app.reviewHistory && app.reviewHistory.length);
+        selectedBrand.partnerReviewHistory = ((app && app.reviewHistory) || []).map((ev) => ({
+          action: String(ev.action || '').replace(/_/g, ' '),
+          time: (ev.at || '').replace('T', ' ').slice(0, 16),
+          note: ev.note || '',
+        }));
+        const refreshApps = async () => {
+          const api = window.CmsStudioProfileApi;
+          if (!api || typeof api.listPartnerApplications !== 'function') return;
+          try {
+            window.__CMS_MIRROR_PARTNER_APPS__ = await api.listPartnerApplications();
+          } catch (_) {}
+          this.setState({ _partnerAppsTick: Date.now() });
+        };
+        selectedBrand.onSavePartnerNotes = async () => {
+          if (!app) return;
+          const api = window.CmsStudioProfileApi;
+          try {
+            await api.savePartnerApplicationNotes(app.id, this.state.partnerAdminNotesDraft || '');
+            this.showToast('Admin notes saved');
+            await refreshApps();
+          } catch (err) {
+            this.showToast('Save notes failed: ' + (err && err.message ? err.message : err));
+          }
+        };
+        selectedBrand.onRequestResubmission = async () => {
+          if (!app) return;
+          try {
+            await window.CmsStudioProfileApi.reviewPartnerApplication(app.id, 'resubmit', this.state.partnerAdminNotesDraft || 'Please resubmit');
+            this.showToast('Resubmission requested');
+            await refreshApps();
+          } catch (err) {
+            this.showToast('Resubmit failed: ' + (err && err.message ? err.message : err));
+          }
+        };
+        selectedBrand.onRejectPartner = async () => {
+          if (!app) return;
+          try {
+            await window.CmsStudioProfileApi.reviewPartnerApplication(app.id, 'reject', this.state.partnerAdminNotesDraft || '');
+            this.showToast('Seller application rejected');
+            await refreshApps();
+            this.setState({ selectedBrandName: null, brandTab: 'requests' });
+          } catch (err) {
+            this.showToast('Reject failed: ' + (err && err.message ? err.message : err));
+          }
+        };
+        selectedBrand.onApproveIdentity = async () => {
+          if (!app) return;
+          try {
+            await window.CmsStudioProfileApi.reviewPartnerApplication(app.id, 'approve', this.state.partnerAdminNotesDraft || '');
+            this.showToast('Identity verified');
+            await refreshApps();
+            Component.BRANDS = Component.BRANDS.map((row) => row.name !== b.name ? row : Object.assign({}, row, { verified: true, claimStatus: 'verified', status: 'Active' }));
+            this.setState({ _partnerAppsTick: Date.now() });
+          } catch (err) {
+            this.showToast('Approve failed: ' + (err && err.message ? err.message : err));
+          }
+        };
+        selectedBrand.onEnableMarketplace = async () => {
+          const api = window.CmsStudioProfileApi;
+          if (!api || !b.catalogId) {
+            this.showToast('Marketplace Access requires a catalog brand');
+            return;
+          }
+          try {
+            const saved = await api.setBrandMarketplaceAccess(b.catalogId, 'granted');
+            Component.BRANDS = Component.BRANDS.map((row) => row.name !== b.name ? row : Object.assign({}, row, {
+              marketplaceAccess: !!(saved && saved.marketplaceAccess),
+              marketplaceStatus: (saved && saved.marketplaceStatus) || 'granted',
+            }));
+            this.showToast('Marketplace Access enabled');
+            this.setState({ _partnerAppsTick: Date.now() });
+          } catch (err) {
+            this.showToast('Marketplace Access failed: ' + (err && err.message ? err.message : err));
+          }
+        };
+      }
       selectedBrand.onEditIdentity = () => this.openOwnerIdentityEdit('seller');
       selectedBrand.onEnterAdminEdit = () => this.requestAdminEditMode('seller');
       selectedBrand.profileTabs = __profileTabDefs.map(t => ({...t, active: t.key===pTab, onClick: () => this.setBrandProfileTab(t.key),
@@ -15723,6 +15957,31 @@ class Component extends DCLogic {
         choosifyUserId: (typeof window.resolveProfileChoosifyUserId === 'function'
           ? window.resolveProfileChoosifyUserId(c.userId, c.choosifyUserId)
           : '—') || '—',
+        underReview: (function(){
+          var apps = Array.isArray(window.__CMS_MIRROR_PARTNER_APPS__) ? window.__CMS_MIRROR_PARTNER_APPS__ : [];
+          var app = apps.find(function(row){ return row.applicantType === 'creator' && (row.catalogEntityId === c.catalogId || row.provisionedUserId === c.userId); });
+          if (app) return app.status === 'pending';
+          return window.__CMS_MIRROR_PARTNER_APPLICATION_STATUS__ === 'pending' && (window.__CMS_MIRROR_ROLE__ || '') === 'creator';
+        })(),
+        showVerifiedBadge: (function(){
+          var apps = Array.isArray(window.__CMS_MIRROR_PARTNER_APPS__) ? window.__CMS_MIRROR_PARTNER_APPS__ : [];
+          var app = apps.find(function(row){ return row.applicantType === 'creator' && (row.catalogEntityId === c.catalogId || row.provisionedUserId === c.userId); });
+          var pending = app ? app.status === 'pending' : (window.__CMS_MIRROR_PARTNER_APPLICATION_STATUS__ === 'pending' && (window.__CMS_MIRROR_ROLE__ || '') === 'creator');
+          return !pending && !!(c.verified || c.status === 'Active');
+        })(),
+        showPartnerReviewActions: false,
+        partnerApplicantName: '',
+        partnerApplicantEmail: '',
+        partnerBusinessSummary: '',
+        partnerAdminNotesValue: '',
+        onPartnerNotesChange: function(){},
+        hasPartnerHistory: false,
+        partnerReviewHistory: [],
+        onSavePartnerNotes: function(){},
+        onRequestResubmission: function(){},
+        onRejectPartner: function(){},
+        onApproveIdentity: function(){},
+        onEnableMarketplace: function(){},
         commsPrefs: [
           {label:'Email Alerts', desc:'Creator and account alerts by email.', checked: this.state.ownerPrefsLoaded ? !!this.state.ownerPrefEmail : false, onToggle: this.toggleOwnerPref('email')},
           {label:'WhatsApp Notifications', desc:'Creator alerts on WhatsApp.', checked: this.state.ownerPrefsLoaded ? !!this.state.ownerPrefWhatsapp : false, onToggle: this.toggleOwnerPref('whatsapp')},
@@ -15756,6 +16015,96 @@ class Component extends DCLogic {
         onEdit: () => this.showToast('Opening hero banner editor'),
         onManage: () => this.showToast('Opening content manager'),
       };
+      {
+        const apps = Array.isArray(window.__CMS_MIRROR_PARTNER_APPS__) ? window.__CMS_MIRROR_PARTNER_APPS__ : [];
+        const app = apps.find((row) =>
+          row.applicantType === 'creator'
+          && ((c.catalogId && row.catalogEntityId === c.catalogId) || (c.userId && row.provisionedUserId === c.userId))
+        ) || null;
+        const role = window.__CMS_MIRROR_ROLE__ || '';
+        const isAdminReviewer = role === 'admin' || role === 'super_admin';
+        selectedCreator.showPartnerReviewActions = !!(isAdminReviewer && app && (app.status === 'pending' || app.status === 'rejected' || app.status === 'approved'));
+        selectedCreator.partnerApplicantName = app ? (app.displayName || '') : '';
+        selectedCreator.partnerApplicantEmail = app ? (app.email || '') : '';
+        selectedCreator.partnerBusinessSummary = app
+          ? [app.businessOrChannelName, app.phone, app.city, app.category].filter(Boolean).join(' · ')
+          : '';
+        selectedCreator.partnerAdminNotesValue = this.state.partnerAdminNotesDraft || (app && app.adminNotes) || '';
+        selectedCreator.onPartnerNotesChange = (e) => this.setState({ partnerAdminNotesDraft: e && e.target ? e.target.value : '' });
+        selectedCreator.hasPartnerHistory = !!(app && app.reviewHistory && app.reviewHistory.length);
+        selectedCreator.partnerReviewHistory = ((app && app.reviewHistory) || []).map((ev) => ({
+          action: String(ev.action || '').replace(/_/g, ' '),
+          time: (ev.at || '').replace('T', ' ').slice(0, 16),
+          note: ev.note || '',
+        }));
+        const refreshApps = async () => {
+          const api = window.CmsStudioProfileApi;
+          if (!api || typeof api.listPartnerApplications !== 'function') return;
+          try {
+            window.__CMS_MIRROR_PARTNER_APPS__ = await api.listPartnerApplications();
+          } catch (_) {}
+          this.setState({ _partnerAppsTick: Date.now() });
+        };
+        selectedCreator.onSavePartnerNotes = async () => {
+          if (!app) return;
+          try {
+            await window.CmsStudioProfileApi.savePartnerApplicationNotes(app.id, this.state.partnerAdminNotesDraft || '');
+            this.showToast('Admin notes saved');
+            await refreshApps();
+          } catch (err) {
+            this.showToast('Save notes failed: ' + (err && err.message ? err.message : err));
+          }
+        };
+        selectedCreator.onRequestResubmission = async () => {
+          if (!app) return;
+          try {
+            await window.CmsStudioProfileApi.reviewPartnerApplication(app.id, 'resubmit', this.state.partnerAdminNotesDraft || 'Please resubmit');
+            this.showToast('Resubmission requested');
+            await refreshApps();
+          } catch (err) {
+            this.showToast('Resubmit failed: ' + (err && err.message ? err.message : err));
+          }
+        };
+        selectedCreator.onRejectPartner = async () => {
+          if (!app) return;
+          try {
+            await window.CmsStudioProfileApi.reviewPartnerApplication(app.id, 'reject', this.state.partnerAdminNotesDraft || '');
+            this.showToast('Creator application rejected');
+            await refreshApps();
+            this.setState({ selectedCreatorName: null });
+          } catch (err) {
+            this.showToast('Reject failed: ' + (err && err.message ? err.message : err));
+          }
+        };
+        selectedCreator.onApproveIdentity = async () => {
+          if (!app) return;
+          try {
+            await window.CmsStudioProfileApi.reviewPartnerApplication(app.id, 'approve', this.state.partnerAdminNotesDraft || '');
+            this.showToast('Identity verified');
+            await refreshApps();
+            Component.CREATORS = Component.CREATORS.map((row) => row.name !== c.name ? row : Object.assign({}, row, { verified: true, status: 'Active' }));
+            this.setState({ _partnerAppsTick: Date.now() });
+          } catch (err) {
+            this.showToast('Approve failed: ' + (err && err.message ? err.message : err));
+          }
+        };
+        selectedCreator.onEnableMarketplace = async () => {
+          const api = window.CmsStudioProfileApi;
+          const catalogId = c.catalogId || (app && app.catalogEntityId);
+          if (!api || !catalogId) {
+            this.showToast('Marketplace Access requires a catalog creator');
+            return;
+          }
+          try {
+            await api.patchCreator(catalogId, { status: 'live', verifiedStatus: true });
+            Component.CREATORS = Component.CREATORS.map((row) => row.name !== c.name ? row : Object.assign({}, row, { status: 'live', verified: true }));
+            this.showToast('Marketplace Access enabled');
+            this.setState({ _partnerAppsTick: Date.now() });
+          } catch (err) {
+            this.showToast('Marketplace Access failed: ' + (err && err.message ? err.message : err));
+          }
+        };
+      }
       selectedCreator.hasKycDocs = selectedCreator.kyc.docs.length > 0;
       const creatorMonthlyBase = ((c.followers||10000) / 1000) * 40;
       selectedCreator.earnings = this.applyFinanceSummaryToEarnings(this.buildEarnings(c.name, creatorMonthlyBase), this.state.financeSummaryCache);
@@ -16372,6 +16721,7 @@ class Component extends DCLogic {
       dashboardTrendTitle, dashboardTrendSubtitle, dashboardActionCenterTitle,
       dashboardChartEmpty, dashboardChartEmptyMessage, dashboardLeftPanels, dashboardRightPanels,
       showWebsiteManagerButton, showDashboardCmsHealth, showDashboardTrust, openWebsiteCms,
+      showPartnerUnderReviewBanner, partnerReviewBadge, partnerReviewHeadline, partnerReviewMessage,
       trustDashboardMetrics, trustAlertCount, trustAlertCountPlural, goToTrustCenter,
       productFilters, products, productCount, brands, categories, creators, deals, orders, users,
       productStats, combinedProductStats, popularityInsights, topPerformingCategories, conversionSparkline,
@@ -17199,6 +17549,14 @@ class Component extends DCLogic {
           });
           try { self.setState({}); } catch (_) {}
         }
+        if (api && typeof api.listPartnerApplications === 'function') {
+          try {
+            window.__CMS_MIRROR_PARTNER_APPS__ = await api.listPartnerApplications();
+            try { self.setState({ _partnerAppsTick: Date.now() }); } catch (_) {}
+          } catch (_) {
+            window.__CMS_MIRROR_PARTNER_APPS__ = window.__CMS_MIRROR_PARTNER_APPS__ || [];
+          }
+        }
         // Merge live creators (with userId) so Creator CF ID can resolve from auth directory.
         try {
           var allCreators = await api.listCreators();
@@ -17467,6 +17825,19 @@ window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
           if (e.data.choosifyUserId != null) window.__CMS_MIRROR_CHOOSIFY_USER_ID__ = e.data.choosifyUserId;
       if (e.data.email) window.__CMS_MIRROR_EMAIL__ = e.data.email;
       if (e.data.canImpersonate !== undefined) window.__CMS_MIRROR_CAN_IMPERSONATE__ = !!e.data.canImpersonate;
+      if (e.data.marketplaceAccess !== undefined) window.__CMS_MIRROR_MARKETPLACE_ACCESS__ = !!e.data.marketplaceAccess;
+      if (e.data.partnerApplicationStatus !== undefined) window.__CMS_MIRROR_PARTNER_APPLICATION_STATUS__ = e.data.partnerApplicationStatus;
+      if (e.data.identityVerified !== undefined) window.__CMS_MIRROR_IDENTITY_VERIFIED__ = !!e.data.identityVerified;
+      if (e.data.resubmissionRequested !== undefined) window.__CMS_MIRROR_RESUBMISSION_REQUESTED__ = !!e.data.resubmissionRequested;
+      if (e.data.navAttention !== undefined) {
+        window.__CMS_MIRROR_NAV_ATTENTION__ = e.data.navAttention || {};
+        try {
+          var __navInst = window.__CMS_MIRROR_INSTANCE__;
+          if (__navInst && typeof __navInst.setState === 'function') {
+            __navInst.setState({ _navAttentionTick: Date.now() });
+          }
+        } catch (_) {}
+      }
       // Seller: wipe platform seed catalog/orders immediately so analytics never flash platform totals.
       if ((e.data.role || window.__CMS_MIRROR_ROLE__) === 'seller') {
         try {

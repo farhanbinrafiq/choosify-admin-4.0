@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authenticateRequest } from '../middleware/auth';
+import { requireMarketplaceAccess } from '../entitlements/marketplaceAccessMiddleware';
 import { operationsStore } from '../operations/operationsStore';
 import { scheduleOperationsPersist } from '../operations/operationsPersistence';
 import { Logger } from '../lib/logger';
@@ -15,7 +16,7 @@ import { sslcommerzProvider } from './sslcommerzProvider';
 
 export const paymentsRouter = Router();
 
-const requireAuth = [authenticateRequest];
+const requireAuth = [authenticateRequest, requireMarketplaceAccess];
 
 function publicApiBase(req: { protocol: string; get: (h: string) => string | undefined }): string {
   const envBase = (process.env.PUBLIC_API_BASE_URL || process.env.API_PUBLIC_URL || '').replace(
