@@ -60,6 +60,7 @@ import {
   publicLifecycleFields,
   resolvePartnerLifecycle,
 } from './partnerApplications/partnerLifecycle';
+import { accountStatusPayload } from './profileStatusFacts';
 
 export const authRouter = Router();
 
@@ -1318,6 +1319,11 @@ authRouter.get('/auth/users/:userId', ...requireAdmin, async (req, res) => {
       res.status(404).json({ success: false, error: 'User not found' });
       return;
     }
+    const status = await accountStatusPayload({
+      id: user.id,
+      role: user.role,
+      email: user.email,
+    });
     res.json({
       success: true,
       data: {
@@ -1327,6 +1333,7 @@ authRouter.get('/auth/users/:userId', ...requireAdmin, async (req, res) => {
         role: user.role,
         choosifyUserId: user.choosifyUserId,
         createdAt: user.createdAt,
+        ...status,
       },
     });
   } catch (error) {

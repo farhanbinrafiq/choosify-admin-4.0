@@ -93,8 +93,17 @@ const GROUP_ICONS: Record<DashboardSearchGroup, React.ComponentType<{ size?: num
 };
 
 
+/** Normalize copied CF/BR/PR ids: unicode dashes, spaces inside the id. */
+function normalizeDashboardSearchQuery(raw: string): string {
+  return String(raw || '')
+    .trim()
+    .replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/\s*-\s*/g, '-');
+}
+
 function referenceIdLike(q: string): boolean {
-  return /^[A-Z]{2,3}-\d{1,}$/.test(q.toUpperCase());
+  return /^[A-Z]{2,4}-\d{1,}$/.test(normalizeDashboardSearchQuery(q).toUpperCase());
 }
 
 
@@ -122,7 +131,7 @@ export function GlobalDashboardSearch(props: {
   const navigate = useNavigate();
   const { profile } = useAuth();
   const { can } = useRbac();
-  const { startImpersonation } = useImpersonation();
+  const { openLoginAsConfirm } = useImpersonation();
   const actorKey = normalizeActorKey(profile);
   const token = getAuthToken();
   const searchContextReady = Boolean(ready && profile?.role && (token || profile?.id));
@@ -133,6 +142,7 @@ export function GlobalDashboardSearch(props: {
   const [loading, setLoading] = useState(false);
   const [groups, setGroups] = useState<DashboardSearchResponse['groups']>([]);
   const [noResults, setNoResults] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>([]);
   const [recentlyViewed, setRecentlyViewed] = useState<DashboardRecentlyViewedItem[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -155,6 +165,7 @@ export function GlobalDashboardSearch(props: {
     setFocused(false);
     setGroups([]);
     setNoResults(false);
+    setSearchError(null);
     setActiveIndex(-1);
     setMobileExpanded(false);
     setRecent(loadRecentSearches(actorKey));
@@ -248,53 +259,69 @@ export function GlobalDashboardSearch(props: {
     if (!shouldSearch) {
       setGroups([]);
       setNoResults(false);
+      setSearchError(null);
       setLoading(false);
       return;
     }
 
+    setLoading(true);
+    setNoResults(false);
+    setSearchError(null);
 
     const controller = new AbortController();
     const t = window.setTimeout(async () => {
-      if (!token || !searchContextReady) {
+      const liveToken = getAuthToken();
+      if (!liveToken) {
         setGroups([]);
         setNoResults(false);
+        setSearchError('Sign in with Super Admin to search accounts (TEMP ROLES has no API token).');
+        setLoading(false);
         return;
       }
-      setLoading(true);
       try {
-        const url = `/api/v1/search?q=${encodeURIComponent(query.trim())}&limitPerGroup=5`;
+        const q = normalizeDashboardSearchQuery(query);
+        const url = `/api/v1/search?q=${encodeURIComponent(q)}&limitPerGroup=5`;
         const res = await fetch(url, {
           signal: controller.signal,
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${liveToken}` },
         });
-        const body = (await res.json()) as DashboardSearchResponse;
-        if (!controller.signal.aborted) {
-          const ok = body?.success;
-          if (!ok || !body.groups?.length) {
-            setGroups([]);
-            setNoResults(true);
-          } else {
-            setGroups(body.groups);
-            setNoResults(false);
-          }
+        if (controller.signal.aborted) return;
+        if (!res.ok) {
+          setGroups([]);
+          setNoResults(false);
+          setSearchError(
+            res.status === 401 || res.status === 403
+              ? 'Search requires a signed-in admin session.'
+              : 'Search failed. Try again.',
+          );
           setActiveIndex(-1);
+          return;
         }
-      } catch {
-        if (!controller.signal.aborted) {
+        const body = (await res.json()) as DashboardSearchResponse;
+        if (controller.signal.aborted) return;
+        if (!body?.success || !body.groups?.length) {
           setGroups([]);
           setNoResults(true);
+        } else {
+          setGroups(body.groups);
+          setNoResults(false);
         }
+        setActiveIndex(-1);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setGroups([]);
+        setNoResults(false);
+        setSearchError(err instanceof Error && err.name === 'AbortError' ? null : 'Search failed. Try again.');
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
-    }, 250);
-
+    }, 200);
 
     return () => {
       controller.abort();
       window.clearTimeout(t);
     };
-  }, [query, focused, shouldSearch, token, searchContextReady]);
+  }, [query, focused, shouldSearch, searchContextReady]);
 
 
   useLayoutEffect(() => {
@@ -439,7 +466,9 @@ export function GlobalDashboardSearch(props: {
 
 
   const placeholder =
-    variant === 'topbar' ? 'Search orders, products, customers, pages…' : 'Search dashboard…';
+    variant === 'topbar'
+      ? 'Search CF ID, orders, products, customers, pages…'
+      : 'Search dashboard…';
 
 
   const showDropdown = focused;
@@ -605,13 +634,23 @@ export function GlobalDashboardSearch(props: {
       );
     }
 
+    if (searchError) {
+      return (
+        <div className="choosify-omni-search-dropdown--empty p-8 text-center text-gray-500 font-sans text-xs">
+          <div>
+            <p className="font-bold uppercase tracking-wider text-gray-400 mb-1">Search unavailable</p>
+            {searchError}
+          </div>
+        </div>
+      );
+    }
 
     if (noResults || flatResults.length === 0) {
       return (
         <div className="choosify-omni-search-dropdown--empty p-8 text-center text-gray-500 font-sans text-xs">
           <div>
             <p className="font-bold uppercase tracking-wider text-gray-400 mb-1">No matches</p>
-            No results found for &quot;{query.trim()}&quot;
+            No results found for &quot;{query.trim()}&quot;. Use the top SEARCH bar (not the in-page list filter).
           </div>
         </div>
       );
@@ -634,7 +673,18 @@ export function GlobalDashboardSearch(props: {
               return (
                 <div
                   key={`${item.type}-${item.id}`}
-                  onClick={() => navigateToResult(item)}
+                  role="option"
+                  aria-selected={isActive}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigateToResult(item);
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    navigateToResult(item);
+                  }}
                   onMouseEnter={() => setActiveIndex(idx)}
                   className={cn(
                     'flex items-center justify-between gap-3 px-3 py-2 rounded-[5px] cursor-pointer transition-colors',
@@ -662,21 +712,26 @@ export function GlobalDashboardSearch(props: {
                       <button
                         type="button"
                         title="Login as user"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
                         onClick={(e) => {
+                          e.preventDefault();
                           e.stopPropagation();
                           const subtitle = String(item.subtitle || '');
                           const roleGuess = /seller/i.test(subtitle)
-                            ? 'seller'
+                            ? 'Seller'
                             : /creator/i.test(subtitle)
-                              ? 'creator'
-                              : 'consumer';
-                          const path =
-                            roleGuess === 'seller'
-                              ? `/seller/${encodeURIComponent(item.id)}`
-                              : roleGuess === 'creator'
-                                ? `/creator/${encodeURIComponent(item.id)}`
-                                : `/consumer/${encodeURIComponent(item.id)}`;
-                          navigate(`${path}?impersonate=1`);
+                              ? 'Creator'
+                              : 'Consumer';
+                          openLoginAsConfirm({
+                            targetUserId: item.id,
+                            displayName: item.title || 'User',
+                            roleLabel: roleGuess,
+                            choosifyUserId: item.publicId,
+                            email: subtitle,
+                          });
                           setFocused(false);
                           setQuery('');
                         }}

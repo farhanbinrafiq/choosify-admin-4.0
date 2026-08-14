@@ -123,7 +123,7 @@ export function NotificationBellDropdown({ className = '' }: NotificationBellDro
           setDetailId(null);
         }}
       >
-        <Bell size={18} strokeWidth={1.6} aria-hidden />
+        <Bell size={19} strokeWidth={2} aria-hidden />
         {unread > 0 ? (
           <span className="admin-workspace__topbar-badge">{unread > 99 ? '99+' : unread}</span>
         ) : null}

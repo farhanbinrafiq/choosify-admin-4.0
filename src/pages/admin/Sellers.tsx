@@ -110,7 +110,6 @@ export default function SellersPage() {
   const { 
     profiles, 
     claims, 
-    logs, 
     createProfile, 
     updateProfile, 
     deleteProfile, 
@@ -1114,11 +1113,7 @@ export default function SellersPage() {
                 })}
               </div>
 
-              {/* Main Workspace Layout */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* Claims Left Card List Column */}
-                <div className="lg:col-span-2 space-y-4">
+              <div className="space-y-4">
                   {filteredClaims.length === 0 ? (
                     <div className="bg-app-card border border-app-border rounded-2xl p-12 text-center text-slate-500">
                       <Sliders className="w-10 h-10 text-slate-600 mx-auto mb-3 animate-pulse" />
@@ -1456,32 +1451,6 @@ export default function SellersPage() {
                       );
                     })
                   )}
-                </div>
-
-                {/* Right Column: Immutable security trail logs */}
-                <div className="lg:col-span-1 space-y-4">
-                  <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
-                    <div className="border-b border-app-border pb-2.5">
-                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest block">🛡️ Studio Audit Security Trail</span>
-                      <span className="text-[9.5px] text-app-text-secondary block mt-0.5">Immutable record tracker for compliance operations</span>
-                    </div>
-
-                    <div className="space-y-3 max-h-[480px] overflow-y-auto custom-scrollbar pr-1">
-                      {logs.map(lg => (
-                        <div key={lg.id} className="p-3 bg-app-bg/55 border border-app-border rounded-lg text-xs space-y-1">
-                          <div className="flex justify-between items-center">
-                            <span className="font-bold text-[#F4631E] truncate max-w-[120px]">{lg.brandName}</span>
-                            <span className="text-[9px] text-slate-500 font-mono">{new Date(lg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                          </div>
-                          <p className="text-[10px] text-app-text-secondary block font-semibold">{lg.action}</p>
-                          <p className="text-[10px] text-slate-500 leading-normal">{lg.reason}</p>
-                          <span className="text-[9px] text-slate-600 font-mono block text-right">By {lg.adminUser}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
               </div>
             </div>
           );

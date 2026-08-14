@@ -112,6 +112,14 @@ export async function assertCanSendMessage(
     return senderRole;
   }
 
+  if (conv.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET) {
+    const isOpener =
+      conv.consumerId === actor.userId ||
+      conv.participants.some((p) => p.userId === actor.userId);
+    if (isOpener) return senderRole;
+    throw new CommerceError('Not authorized for this support conversation', 403);
+  }
+
   if (senderRole === 'consumer') {
     if (conv.consumerId !== actor.userId) {
       throw new CommerceError('Consumers may only message in their own conversations', 403);

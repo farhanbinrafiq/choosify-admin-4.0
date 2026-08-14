@@ -5,6 +5,7 @@ import { useImpersonation } from '../../contexts/ImpersonationContext';
 import { useEntitlements } from '../../contexts/EntitlementsContext';
 import { UserProfileDropdown } from '../account/UserProfileDropdown';
 import { NotificationBellDropdown } from '../account/NotificationBellDropdown';
+import { DashboardHeaderMessageButton } from '../account/DashboardHeaderMessageButton';
 import { GlobalDashboardSearch } from '../common/GlobalDashboardSearch';
 import { AdminPageSkeleton } from '../common/skeletons';
 import {
@@ -191,6 +192,7 @@ export const AdminWorkspaceLayout: React.FC<AdminWorkspaceLayoutProps> = ({
             <GlobalDashboardSearch variant="topbar" className="w-full" ready={Boolean(profile?.role)} />
           </div>
           <div className="admin-workspace__topbar-actions">
+            <DashboardHeaderMessageButton />
             <NotificationBellDropdown />
             <div className="admin-workspace__topbar-divider" aria-hidden />
             <UserProfileDropdown variant="header" />

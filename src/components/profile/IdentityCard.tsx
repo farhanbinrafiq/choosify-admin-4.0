@@ -1,6 +1,8 @@
 import React from 'react';
 import { Phone, MessageSquare } from 'lucide-react';
 import { profileShellClasses, type ProfileShellVariant } from './profileTheme';
+import { ProfileStatusBadges } from './ProfileStatusBadges';
+import type { ResolvedProfileStatus } from '../../lib/profileStatus';
 
 export interface IdentityBadge {
   label: string;
@@ -21,6 +23,9 @@ interface IdentityCardProps {
   handle?: string;
   persona?: string;
   badges?: IdentityBadge[];
+  /** Universal account status — rendered below name/handle, before Role / CF ID. */
+  profileStatus?: ResolvedProfileStatus | null;
+  showStatusHint?: boolean;
   fields?: IdentityField[];
   onPhoneClick?: () => void;
   onMessageClick?: () => void;
@@ -36,6 +41,8 @@ export default function IdentityCard({
   handle,
   persona,
   badges = [],
+  profileStatus = null,
+  showStatusHint = false,
   fields = [],
   onPhoneClick,
   onMessageClick,
@@ -99,21 +106,25 @@ export default function IdentityCard({
         </div>
 
         <div className="space-y-1.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className={`${t.identityName} tracking-tight`}>{name}</h2>
-            {badges.map((badge, idx) => (
-              <span
-                key={idx}
-                className={`px-2 py-0.5 rounded-[2px] text-[8.5px] uppercase tracking-widest font-extrabold border ${
-                  badge.colorClass || 'bg-blue-500/10 text-blue-400 border-blue-500/20'
-                }`}
-              >
-                {badge.label}
-              </span>
-            ))}
-          </div>
+          <h2 className={`${t.identityName} tracking-tight`}>{name}</h2>
           {handle && <p className={`${t.identityHandle} font-mono block`}>{handle}</p>}
-          {persona && <p className={t.identityPersona}>{persona}</p>}
+          {profileStatus ? (
+            <ProfileStatusBadges status={profileStatus} showHint={showStatusHint} />
+          ) : badges.length > 0 ? (
+            <div className="flex items-center gap-2 flex-wrap pt-0.5">
+              {badges.map((badge, idx) => (
+                <span
+                  key={idx}
+                  className={`px-2 py-0.5 rounded-[2px] text-[8.5px] uppercase tracking-widest font-extrabold border ${
+                    badge.colorClass || 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                  }`}
+                >
+                  {badge.label}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {persona && <p className={`${t.identityPersona} pt-0.5`}>{persona}</p>}
         </div>
 
         {fields.length > 0 && (

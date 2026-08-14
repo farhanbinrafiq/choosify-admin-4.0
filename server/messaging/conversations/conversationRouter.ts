@@ -14,9 +14,10 @@ import {
   createCounterOffer,
   createProductInquiry,
   createServiceInquiry,
-  createSupportTicket,
   disconnectSocialInbox,
+  ensureActiveSupportConversation,
   enterConversationAsAdmin,
+  findActiveSupportConversationForUser,
   getConversationForActor,
   listConversationsForActor,
   listMessagesForActor,
@@ -24,6 +25,7 @@ import {
   respondCounterOffer,
   searchConversationsForActor,
   sendMessage,
+  resolveSupportTicket,
 } from './conversationService';
 import {
   assertMessagingPersistenceReady,
@@ -306,12 +308,117 @@ conversationRouter.delete('/seller/social-inbox/:channel', ...requireAuth, async
   }
 });
 
+conversationRouter.get('/support/conversations/active', ...requireAuth, async (req, res) => {
+  try {
+    const actor = actorOf(req);
+    const found = await findActiveSupportConversationForUser(actor.userId);
+    if (!found) {
+      res.status(404).json({ success: false, error: 'No active support conversation' });
+      return;
+    }
+    res.json({ success: true, data: { ...found, created: false } });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+conversationRouter.get('/support/conversations', ...requireAuth, async (req, res) => {
+  try {
+    const rows = await listConversationsForActor(actorOf(req), { contextType: 'support_ticket' });
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+conversationRouter.get('/support/conversations/:id/messages', ...requireAuth, async (req, res) => {
+  try {
+    const conv = await getConversationForActor(req.params.id, actorOf(req));
+    if (conv.contextType !== 'support_ticket') {
+      res.status(400).json({ success: false, error: 'Not a support conversation' });
+      return;
+    }
+    const messages = await listMessagesForActor(conv.id, actorOf(req));
+    res.json({ success: true, data: messages });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+conversationRouter.post('/support/conversations/ensure', ...requireAuth, async (req, res) => {
+  try {
+    const result = await ensureActiveSupportConversation({
+      actor: actorOf(req),
+      subject: req.body?.subject ? String(req.body.subject) : undefined,
+      body: req.body?.body ? String(req.body.body) : undefined,
+    });
+    flushIfMemoryDisk();
+    res.status(result.created ? 201 : 200).json({ success: true, data: result });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
 conversationRouter.post('/support/tickets', ...requireAuth, async (req, res) => {
   try {
-    const result = await createSupportTicket({
+    const result = await ensureActiveSupportConversation({
       actor: actorOf(req),
-      subject: String(req.body?.subject || ''),
-      body: String(req.body?.body || ''),
+      subject: req.body?.subject ? String(req.body.subject) : undefined,
+      body: req.body?.body ? String(req.body.body) : undefined,
+    });
+    flushIfMemoryDisk();
+    res.status(result.created ? 201 : 200).json({ success: true, data: result });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+conversationRouter.post('/support/tickets/:id/resolve', ...requireAuth, async (req, res) => {
+  try {
+    const result = await resolveSupportTicket({
+      actor: actorOf(req),
+      ticketId: req.params.id,
+      status: req.body?.status === 'closed' ? 'closed' : 'resolved',
+    });
+    flushIfMemoryDisk();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+conversationRouter.post('/support/conversations/:id/resolve', ...requireAuth, async (req, res) => {
+  try {
+    const result = await resolveSupportTicket({
+      actor: actorOf(req),
+      conversationId: req.params.id,
+      status: req.body?.status === 'closed' ? 'closed' : 'resolved',
+    });
+    flushIfMemoryDisk();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+conversationRouter.post('/support/conversations/:id/messages', ...requireAuth, async (req, res) => {
+  try {
+    const conv = await getConversationForActor(req.params.id, actorOf(req));
+    if (conv.contextType !== 'support_ticket') {
+      res.status(400).json({ success: false, error: 'Not a support conversation' });
+      return;
+    }
+    const actor = actorOf(req);
+    const isOpener =
+      conv.consumerId === actor.userId ||
+      conv.participants.some((p) => p.userId === actor.userId);
+    const body = req.body || {};
+    const result = await sendMessage({
+      conversationId: conv.id,
+      actor,
+      body: String(body.body || body.content?.body || ''),
+      messageType: body.messageType,
+      requireAdminEntry: isOpener ? false : undefined,
     });
     flushIfMemoryDisk();
     res.status(201).json({ success: true, data: result });

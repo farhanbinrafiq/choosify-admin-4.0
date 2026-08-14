@@ -38,6 +38,7 @@ import { catalogStore } from '../lib/vercel-catalog/catalogStore';
 import { normalizeBrandInput } from './catalogContract';
 import { normalizeCreatorInput } from '../lib/vercel-catalog/catalogEditorialContract';
 import { recordSuspiciousRequest, recordClaimConfirmAttempt } from './lib/abuseProtection';
+import { batchAccountPrimaryLabels } from './profileStatusFacts';
 import { Logger } from './lib/logger';
 import { createNotification } from './communication/notificationService';
 import { COMMUNICATION_TYPES, DELIVERY_CHANNELS } from './communication/communicationTypes';
@@ -299,9 +300,15 @@ async function applyEntityVerificationSideEffect(
         );
         await catalogStore.upsertBrand(normalized);
       } else {
-        // Rejected claims fall back to community (unverified listing).
+        const otherOwner =
+          Boolean(existing.sellerId) && existing.sellerId !== row.submitted_by;
         const normalized = normalizeBrandInput(
-          { ...existing, claimStatus: 'community', verifiedStatus: false },
+          {
+            ...existing,
+            claimStatus: otherOwner && existing.verifiedStatus ? 'verified' : 'community',
+            verifiedStatus: otherOwner ? Boolean(existing.verifiedStatus) : false,
+            sellerId: otherOwner ? existing.sellerId : existing.sellerId,
+          },
           existing,
         );
         await catalogStore.upsertBrand(normalized);
@@ -313,8 +320,14 @@ async function applyEntityVerificationSideEffect(
     if (!existing) {
       return { ok: false, error: `Creator ${row.entityId} not found in catalog` };
     }
+    const otherOwner = Boolean(existing.userId) && existing.userId !== row.submitted_by;
     const normalized = normalizeCreatorInput(
-      { ...existing, verifiedStatus: decision === 'approved' },
+      {
+        ...existing,
+        verifiedStatus:
+          decision === 'approved' ? true : otherOwner ? Boolean(existing.verifiedStatus) : false,
+        userId: decision === 'approved' ? row.submitted_by || existing.userId : existing.userId,
+      },
       existing,
     );
     await catalogStore.upsertCreator(normalized);
@@ -2025,6 +2038,10 @@ operationsRouter.get('/operations/users', async (_req, res) => {
         .map((part) => part[0]?.toUpperCase() || '')
         .join('') || 'U';
 
+    const labels = await batchAccountPrimaryLabels(
+      rows.map((u) => ({ id: u.id, role: u.role, email: u.email })),
+    );
+
     const authUsers = rows.map((u) => {
       const name = u.displayName || u.email || 'User';
       const joined = u.createdAt ? String(u.createdAt).slice(0, 10) : '—';
@@ -2033,7 +2050,7 @@ operationsRouter.get('/operations/users', async (_req, res) => {
         name,
         email: u.email,
         role: mapRole(u.role),
-        status: 'Active' as const,
+        status: labels.get(u.id) || 'Active',
         joined,
         active: joined,
         initials: initials(name),
@@ -2165,6 +2182,18 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
       res.status(400).json({ error: 'Each document requires type, name, and doc_url' });
       return;
     }
+  }
+
+  const activeClaim = operationsStore.listVerifications({ entityType, entityId }).find((row) => {
+    const s = String(row.status || '');
+    return s === 'Submitted' || s === 'Under Review' || s === 'Draft';
+  });
+  if (activeClaim) {
+    res.status(409).json({
+      error: 'An active ownership claim already exists for this profile',
+      existingVerificationId: activeClaim.id,
+    });
+    return;
   }
 
   const status =
@@ -2487,12 +2516,39 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
     res.status(403).json({ error: 'Cannot approve or reject your own verification request' });
     return;
   }
-  const decision = req.body?.status === 'rejected' ? 'rejected' : req.body?.status === 'approved' ? 'approved' : '';
+  const rawStatus = String(req.body?.status || '').toLowerCase().replace(/[\s-]+/g, '_');
+  const feedback = String(req.body?.feedback || req.body?.adminComment || '').trim();
+  if (rawStatus === 'under_review' || rawStatus === 'request_info' || rawStatus === 'resubmit') {
+    if (!feedback) {
+      res.status(400).json({ error: 'feedback is required' });
+      return;
+    }
+    const actor = req.user?.displayName || req.userId || 'Administrative Auditor';
+    const saved = operationsStore.updateVerification(req.params.id, {
+      status: 'Under Review',
+      audit_trail: [
+        ...existing.audit_trail,
+        {
+          timestamp: new Date().toISOString(),
+          action: 'Additional Information Requested',
+          actor,
+          details: feedback,
+        },
+      ],
+    });
+    scheduleOperationsPersist();
+    Logger.audit('verification.info_requested', {
+      actorId: req.userId,
+      verificationId: existing.id,
+    });
+    res.json({ success: true, data: saved });
+    return;
+  }
+  const decision = rawStatus === 'rejected' ? 'rejected' : rawStatus === 'approved' ? 'approved' : '';
   if (!decision) {
     res.status(400).json({ error: 'status must be approved or rejected' });
     return;
   }
-  const feedback = String(req.body?.feedback || req.body?.adminComment || '').trim();
   if (!feedback) {
     res.status(400).json({ error: 'feedback is required' });
     return;

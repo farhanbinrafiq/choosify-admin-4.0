@@ -73,8 +73,10 @@ function groupForResultType(type: DashboardSearchItem['type']): DashboardSearchG
 
 function routeForUser(user: { id: string; role?: string | null }) {
   const role = (user.role || '').toLowerCase();
-  if (role === 'seller' || role === 'verified_seller') return `/admin/brand-profile`;
-  if (role === 'creator') return `/admin/creator-profile/${encodeURIComponent(user.id)}`;
+  if (role === 'seller' || role === 'verified_seller') {
+    return `/admin/brand-studio?sellerId=${encodeURIComponent(user.id)}`;
+  }
+  if (role === 'creator') return `/admin/creators/${encodeURIComponent(user.id)}`;
   return `/admin/consumers/${encodeURIComponent(user.id)}`;
 }
 
@@ -226,7 +228,10 @@ export async function searchDashboardForActor(params: {
   const { actor, q } = params;
   const limitPerGroup = params.limitPerGroup ?? 5;
 
-  const needle = q.trim();
+  const needle = String(q || '')
+    .trim()
+    .replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-')
+    .replace(/\s*-\s*/g, '-');
   const lower = needle.toLowerCase();
   if (!needle) {
     return { groups: [], total: 0 };

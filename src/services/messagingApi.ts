@@ -57,9 +57,12 @@ export type ApiMessage = {
 };
 
 export const messagingApi = {
-  listConversations: (params?: { brandId?: string }) => {
-    const q = params?.brandId ? `?brandId=${encodeURIComponent(params.brandId)}` : '';
-    return authJson<ApiConversation[]>(`/conversations${q}`);
+  listConversations: (params?: { brandId?: string; contextType?: string }) => {
+    const q = new URLSearchParams();
+    if (params?.brandId) q.set('brandId', params.brandId);
+    if (params?.contextType) q.set('contextType', params.contextType);
+    const qs = q.toString();
+    return authJson<ApiConversation[]>(`/conversations${qs ? `?${qs}` : ''}`);
   },
   listMessages: (conversationId: string) =>
     authJson<ApiMessage[]>(`/conversations/${encodeURIComponent(conversationId)}/messages`),
@@ -67,5 +70,31 @@ export const messagingApi = {
     authJson<{ conversation: ApiConversation; message: ApiMessage }>(
       `/conversations/${encodeURIComponent(conversationId)}/messages`,
       { method: 'POST', body: JSON.stringify({ body }) },
+    ),
+  ensureActiveSupportConversation: (payload?: { subject?: string; body?: string }) =>
+    authJson<{
+      created: boolean;
+      ticket: { id: string; conversationId: string; openerId: string; subject: string; status: string };
+      conversation: ApiConversation;
+      message?: ApiMessage | null;
+    }>('/support/conversations/ensure', {
+      method: 'POST',
+      body: JSON.stringify(payload || {}),
+    }),
+  getActiveSupportConversation: () =>
+    authJson<{
+      created: boolean;
+      ticket: { id: string; conversationId: string; openerId: string; subject: string; status: string };
+      conversation: ApiConversation;
+    }>('/support/conversations/active'),
+  sendSupportMessage: (conversationId: string, body: string) =>
+    authJson<{ conversation: ApiConversation; message: ApiMessage }>(
+      `/support/conversations/${encodeURIComponent(conversationId)}/messages`,
+      { method: 'POST', body: JSON.stringify({ body }) },
+    ),
+  resolveSupportConversation: (conversationId: string, status?: 'resolved' | 'closed') =>
+    authJson<{ ticket: { id: string; status: string }; conversation: ApiConversation }>(
+      `/support/conversations/${encodeURIComponent(conversationId)}/resolve`,
+      { method: 'POST', body: JSON.stringify({ status: status || 'resolved' }) },
     ),
 };

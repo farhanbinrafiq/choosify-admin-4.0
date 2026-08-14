@@ -42,9 +42,12 @@ import {
 } from './conversationPermissions';
 import { mirrorConversationToOmni, mirrorMessageToOmni } from './omniBridge';
 import {
+  ACTIVE_SUPPORT_TICKET_STATUSES,
+  CLOSED_SUPPORT_TICKET_STATUSES,
   CONVERSATION_CONTEXT_TYPES,
   CONVERSATION_STATUSES,
   MESSAGE_TYPES,
+  SUPPORT_TICKET_STATUSES,
   type CommerceAttachment,
   type CommerceConversation,
   type CommerceMessage,
@@ -53,6 +56,7 @@ import {
   type SocialInboxConnection,
   type SourceChannel,
   type SupportTicket,
+  type SupportTicketStatus,
 } from './types';
 
 const COUNTER_OFFER_TTL_MS = 8 * 60 * 60 * 1000; // IS-005 §26 — 8 hours
@@ -114,6 +118,26 @@ export function inquiryReconcileKey(kind: 'product' | 'service', listingId: stri
 
 export function supportReconcileKey(ticketId: string): string {
   return `support:${ticketId}`;
+}
+
+/** One active platform-support conversation per authenticated user. */
+export function activeSupportReconcileKey(userId: string): string {
+  return `support:active:${userId}`;
+}
+
+export function closedSupportReconcileKey(ticketId: string): string {
+  return `support:closed:${ticketId}`;
+}
+
+export function isActiveSupportConversation(
+  ticket: SupportTicket | null | undefined,
+  conv?: CommerceConversation | null,
+): boolean {
+  if (!ticket) return false;
+  if (CLOSED_SUPPORT_TICKET_STATUSES.has(ticket.status)) return false;
+  if (!ACTIVE_SUPPORT_TICKET_STATUSES.has(ticket.status)) return false;
+  if (!conv) return true;
+  return conv.status === CONVERSATION_STATUSES.ACTIVE;
 }
 
 type EnsureOrderInput = {
@@ -819,17 +843,95 @@ export async function enterConversationAsAdmin(input: {
   return { conversation: conv, entryId: entry.id };
 }
 
+export async function findActiveSupportConversationForUser(
+  userId: string,
+): Promise<{ ticket: SupportTicket; conversation: CommerceConversation } | null> {
+  if (!userId) return null;
+  const byKey = await getConversationByReconcileKey(activeSupportReconcileKey(userId));
+  if (byKey && byKey.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET) {
+    const tickets = await listSupportTickets();
+    const ticket = tickets.find((t) => t.conversationId === byKey.id && t.openerId === userId) || null;
+    if (ticket && isActiveSupportConversation(ticket, byKey)) {
+      return { ticket, conversation: byKey };
+    }
+  }
+  const tickets = await listSupportTickets();
+  const mine = tickets.filter((t) => t.openerId === userId);
+  for (const ticket of mine) {
+    const conv = await getConversation(ticket.conversationId);
+    if (conv && isActiveSupportConversation(ticket, conv)) {
+      return { ticket, conversation: conv };
+    }
+  }
+  return null;
+}
+
+export async function ensureActiveSupportConversation(input: {
+  actor: MessagingActor;
+  subject?: string;
+  body?: string;
+}): Promise<{
+  ticket: SupportTicket;
+  conversation: CommerceConversation;
+  message: CommerceMessage | null;
+  created: boolean;
+}> {
+  if (!input.actor?.userId) throw new CommerceError('Authentication required', 401);
+
+  const existing = await findActiveSupportConversationForUser(input.actor.userId);
+  if (existing) {
+    return { ...existing, message: null, created: false };
+  }
+
+  const created = await createSupportTicket({
+    actor: input.actor,
+    subject: input.subject,
+    body: input.body,
+  });
+  return { ...created, created: true };
+}
+
 export async function createSupportTicket(input: {
   actor: MessagingActor;
-  subject: string;
-  body: string;
+  subject?: string;
+  body?: string;
 }): Promise<{ ticket: SupportTicket; conversation: CommerceConversation; message: CommerceMessage }> {
-  const subject = String(input.subject || '').trim();
-  const body = String(input.body || '').trim();
-  if (!subject || !body) throw new CommerceError('subject and body required', 400);
+  if (!input.actor?.userId) throw new CommerceError('Authentication required', 401);
+
+  const racedExisting = await findActiveSupportConversationForUser(input.actor.userId);
+  if (racedExisting) {
+    const messages = await listMessages(racedExisting.conversation.id);
+    return {
+      ticket: racedExisting.ticket,
+      conversation: racedExisting.conversation,
+      message: messages[0] || (await persistMessageInternal({
+        conversation: racedExisting.conversation,
+        senderId: input.actor.userId,
+        senderRole: resolveSenderRole(input.actor.role),
+        body: String(input.body || 'Hello, I need help from Choosify Support.').trim() || 'Hello, I need help from Choosify Support.',
+        messageType: MESSAGE_TYPES.TEXT,
+      })),
+    };
+  }
+
+  const subject = String(input.subject || 'Support request').trim() || 'Support request';
+  const body =
+    String(input.body || 'Hello, I need help from Choosify Support.').trim() ||
+    'Hello, I need help from Choosify Support.';
 
   const ticketId = newId('ticket');
   const now = nowIso();
+  const key = activeSupportReconcileKey(input.actor.userId);
+  const racedKey = await getConversationByReconcileKey(key);
+  if (racedKey) {
+    const tickets = await listSupportTickets();
+    const ticket = tickets.find((t) => t.conversationId === racedKey.id && t.openerId === input.actor.userId);
+    if (ticket && isActiveSupportConversation(ticket, racedKey)) {
+      const messages = await listMessages(racedKey.id);
+      return { ticket, conversation: racedKey, message: messages[0] };
+    }
+  }
+
   const conversation: CommerceConversation = {
     id: newId('conv'),
     contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
@@ -843,8 +945,8 @@ export async function createSupportTicket(input: {
     ],
     createdAt: now,
     updatedAt: now,
-    reconcileKey: supportReconcileKey(ticketId),
-    metadata: { supportTicket: true, subject },
+    reconcileKey: key,
+    metadata: { supportTicket: true, subject, openerId: input.actor.userId },
   };
   const savedConv = await saveConversation(conversation);
   const ticket = await saveSupportTicket({
@@ -852,7 +954,7 @@ export async function createSupportTicket(input: {
     conversationId: savedConv.id,
     openerId: input.actor.userId,
     subject,
-    status: 'open',
+    status: SUPPORT_TICKET_STATUSES.OPEN,
     createdAt: now,
     updatedAt: now,
   });
@@ -871,6 +973,50 @@ export async function createSupportTicket(input: {
   return { ticket, conversation: savedConv, message };
 }
 
+export async function resolveSupportTicket(input: {
+  actor: MessagingActor;
+  ticketId?: string;
+  conversationId?: string;
+  status?: SupportTicketStatus;
+}): Promise<{ ticket: SupportTicket; conversation: CommerceConversation }> {
+  if (!input.actor?.userId) throw new CommerceError('Authentication required', 401);
+  if (!isAdminEnterRole(input.actor.role)) {
+    throw new CommerceError('Only support staff may close a support conversation', 403);
+  }
+  const nextStatus: SupportTicketStatus =
+    input.status === SUPPORT_TICKET_STATUSES.CLOSED
+      ? SUPPORT_TICKET_STATUSES.CLOSED
+      : SUPPORT_TICKET_STATUSES.RESOLVED;
+  const tickets = await listSupportTickets();
+  const ticket = tickets.find((t) =>
+    (input.ticketId && t.id === input.ticketId) ||
+    (input.conversationId && t.conversationId === input.conversationId),
+  );
+  if (!ticket) throw new CommerceError('Support ticket not found', 404);
+  const conv = await getConversation(ticket.conversationId);
+  if (!conv) throw new CommerceError('Conversation not found', 404);
+  await assertCanReadConversation(conv, input.actor);
+
+  const now = nowIso();
+  const closedConv = await saveConversation({
+    ...markClosed(conv, now),
+    reconcileKey: closedSupportReconcileKey(ticket.id),
+    metadata: { ...conv.metadata, supportTicket: true, resolvedBy: input.actor.userId },
+  });
+  const savedTicket = await saveSupportTicket({
+    ...ticket,
+    status: nextStatus,
+    updatedAt: now,
+  });
+  Logger.audit('messaging.support_resolved', {
+    ticketId: savedTicket.id,
+    conversationId: closedConv.id,
+    adminId: input.actor.userId,
+    status: nextStatus,
+  });
+  return { ticket: savedTicket, conversation: closedConv };
+}
+
 export async function listConversationsForActor(
   actor: MessagingActor,
   filters?: { brandId?: string; contextType?: string; sourceChannel?: string },
@@ -878,12 +1024,15 @@ export async function listConversationsForActor(
   const all = await listConversations();
   const out: CommerceConversation[] = [];
   for (const c of all) {
-    // Support tickets stay on support track — sellers don't see them in commerce inbox
+    // Support tickets stay off the seller commerce inbox unless this seller opened them.
     if (
       c.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET &&
       resolveSenderRole(actor.role) === 'seller'
     ) {
-      continue;
+      const isOwn =
+        c.consumerId === actor.userId ||
+        c.participants.some((p) => p.userId === actor.userId);
+      if (!isOwn) continue;
     }
     try {
       await assertCanReadConversation(c, actor);
@@ -1038,4 +1187,6 @@ export {
   listAdminEntries,
   consumerInitiated,
   markClosed,
+  ACTIVE_SUPPORT_TICKET_STATUSES,
+  CLOSED_SUPPORT_TICKET_STATUSES,
 };

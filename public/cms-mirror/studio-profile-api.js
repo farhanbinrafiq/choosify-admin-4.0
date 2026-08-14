@@ -65,7 +65,7 @@
       } catch (_) { /* ignore */ }
       setTimeout(function () {
         finish(authToken());
-      }, 400);
+      }, 1500);
     });
   }
 
@@ -212,8 +212,26 @@
 
   function listPartnerApplications(status) {
     var qs = status ? ('?status=' + encodeURIComponent(status)) : '';
-    return request('/operations/partner-applications' + qs).then(function (r) {
-      return (r && r.applications) || [];
+    // Admin-only endpoint — wait for the posted bearer token. A token-less GET
+    // 401s and the brands hydrate used to swallow that into an empty Requests tab.
+    return ensureAuthToken().then(function (token) {
+      if (!token) throw new Error('Missing bearer token');
+      var headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token };
+      return fetch(API_BASE + '/operations/partner-applications' + qs, {
+        method: 'GET',
+        headers: headers,
+        credentials: 'include',
+      }).then(function (res) {
+        return res.text().then(function (text) {
+          var parsed = null;
+          try { parsed = text ? JSON.parse(text) : null; } catch (_) { parsed = { error: text }; }
+          if (!res.ok) {
+            var msg = (parsed && (parsed.error || parsed.message)) || ('Request failed (' + res.status + ')');
+            throw new Error(msg);
+          }
+          return (parsed && parsed.applications) || [];
+        });
+      });
     });
   }
 
@@ -242,6 +260,46 @@
       'PATCH',
       { adminNotes: adminNotes || '' },
     ).then(function (r) { return (r && r.application) || r; });
+  }
+
+  function listVerifications(params) {
+    var q = new URLSearchParams();
+    if (params && params.entityType) q.set('entityType', params.entityType);
+    if (params && params.status) q.set('status', params.status);
+    if (params && params.entityId) q.set('entityId', params.entityId);
+    var qs = q.toString();
+    return ensureAuthToken().then(function (token) {
+      if (!token) throw new Error('Missing bearer token');
+      var headers = { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token };
+      return fetch(API_BASE + '/operations/verifications' + (qs ? ('?' + qs) : ''), {
+        method: 'GET',
+        headers: headers,
+        credentials: 'include',
+      }).then(function (res) {
+        return res.text().then(function (text) {
+          var parsed = null;
+          try { parsed = text ? JSON.parse(text) : null; } catch (_) { parsed = { error: text }; }
+          if (!res.ok) {
+            var msg = (parsed && (parsed.error || parsed.message)) || ('Request failed (' + res.status + ')');
+            throw new Error(msg);
+          }
+          if (Array.isArray(parsed)) return parsed;
+          if (parsed && Array.isArray(parsed.data)) return parsed.data;
+          return [];
+        });
+      });
+    });
+  }
+
+  function reviewVerification(id, payload) {
+    return request(
+      '/operations/verifications/' + encodeURIComponent(id) + '/review',
+      'PATCH',
+      payload || {},
+    ).then(function (r) {
+      notifyNavAttentionRefresh();
+      return (r && r.data) ? r.data : r;
+    });
   }
 
   function listCreators() {
@@ -719,6 +777,8 @@
     listPartnerApplications: listPartnerApplications,
     reviewPartnerApplication: reviewPartnerApplication,
     savePartnerApplicationNotes: savePartnerApplicationNotes,
+    listVerifications: listVerifications,
+    reviewVerification: reviewVerification,
     listCreators: listCreators,
     lookupUserAccount: lookupUserAccount,
     listUserDirectory: listUserDirectory,
@@ -778,6 +838,39 @@
     },
     deleteCashbookEntry: function (entryId) {
       return request('/cashbooks/entries/' + encodeURIComponent(entryId), 'DELETE');
+    },
+    ensureActiveSupportConversation: function (payload) {
+      return ensureAuthToken().then(function (token) {
+        if (!token) throw new Error('Authentication required');
+        return request('/support/conversations/ensure', 'POST', payload || {});
+      }).then(function (body) {
+        return (body && body.data) ? body.data : body;
+      });
+    },
+    listSupportConversations: function () {
+      return ensureAuthToken().then(function (token) {
+        if (!token) return [];
+        return request('/support/conversations', 'GET');
+      }).then(function (body) {
+        if (Array.isArray(body)) return body;
+        if (body && Array.isArray(body.data)) return body.data;
+        return [];
+      }).catch(function () { return []; });
+    },
+    listConversationMessages: function (conversationId) {
+      return ensureAuthToken().then(function () {
+        return request('/support/conversations/' + encodeURIComponent(conversationId) + '/messages', 'GET');
+      }).then(function (body) {
+        if (Array.isArray(body)) return body;
+        if (body && Array.isArray(body.data)) return body.data;
+        return [];
+      });
+    },
+    sendSupportMessage: function (conversationId, text) {
+      return request('/support/conversations/' + encodeURIComponent(conversationId) + '/messages', 'POST', { body: text });
+    },
+    resolveSupportConversation: function (conversationId) {
+      return request('/support/conversations/' + encodeURIComponent(conversationId) + '/resolve', 'POST', { status: 'resolved' });
     },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

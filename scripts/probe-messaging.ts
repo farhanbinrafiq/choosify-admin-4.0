@@ -21,6 +21,8 @@ import {
   createCounterOffer,
   respondCounterOffer,
   createSupportTicket,
+  ensureActiveSupportConversation,
+  resolveSupportTicket,
   listConversationsForActor,
 } from '../server/messaging/conversations/conversationService';
 import { bootstrapConversationEventSubscribers } from '../server/messaging/conversations/conversationEvents';
@@ -552,6 +554,47 @@ async function runInProcessGuarantees() {
     'Support ticket boundary (not in seller commerce inbox)',
   );
 
+  const sellerSupport1 = await ensureActiveSupportConversation({
+    actor: { userId: 'sell_a', role: 'seller' },
+    subject: 'Seller help',
+    body: 'Need seller help',
+  });
+  const sellerSupport2 = await ensureActiveSupportConversation({
+    actor: { userId: 'sell_a', role: 'seller' },
+  });
+  assert(
+    sellerSupport1.conversation.id === sellerSupport2.conversation.id && sellerSupport2.created === false,
+    'ensureActiveSupportConversation is idempotent for one active thread',
+  );
+  const sellerListOwn = await listConversationsForActor({ userId: 'sell_a', role: 'seller' });
+  assert(
+    sellerListOwn.some((c) => c.id === sellerSupport1.conversation.id),
+    'Seller can see their own support thread',
+  );
+  const resolved = await resolveSupportTicket({
+    actor: { userId: 'admin_a', role: 'admin' },
+    conversationId: sellerSupport1.conversation.id,
+  });
+  assert(resolved.ticket.status === 'resolved', 'Admin can resolve support ticket');
+  const sellerSupport3 = await ensureActiveSupportConversation({
+    actor: { userId: 'sell_a', role: 'seller' },
+  });
+  const creatorSupport1 = await ensureActiveSupportConversation({
+    actor: { userId: 'creator_a', role: 'creator' },
+  });
+  const creatorSupport2 = await ensureActiveSupportConversation({
+    actor: { userId: 'creator_a', role: 'creator' },
+  });
+  assert(
+    creatorSupport1.conversation.id === creatorSupport2.conversation.id && creatorSupport2.created === false,
+    'Creator ensureActiveSupportConversation is idempotent',
+  );
+  const sellerCannotSeeCreator = await listConversationsForActor({ userId: 'sell_a', role: 'seller' });
+  assert(
+    !sellerCannotSeeCreator.some((c) => c.id === creatorSupport1.conversation.id),
+    'Seller cannot see another user support thread',
+  );
+
   const createdEvents = events.filter((e) => e.eventName === 'ConversationCreated');
   assert(createdEvents.length >= 1, '23. ConversationCreated events emitted');
 
@@ -678,6 +721,83 @@ async function main() {
     });
     assert(enter.ok, 'HTTP Admin enter');
   }
+
+  const ensureA1 = await fetch(`${base}/support/conversations/ensure`, {
+    method: 'POST',
+    headers: authHeaders(sellerA.token),
+    body: JSON.stringify({ subject: 'Seller support', body: 'Need help' }),
+  });
+  const ensureA1Body = (await json(ensureA1)) as {
+    data?: { created?: boolean; conversation?: { id: string; contextType: string } };
+  };
+  const supportAId = ensureA1Body.data?.conversation?.id;
+  assert(
+    ensureA1.ok && Boolean(supportAId) && ensureA1Body.data?.conversation?.contextType === 'support_ticket',
+    'HTTP seller ensure creates support_ticket',
+  );
+  const ensureA2 = await fetch(`${base}/support/conversations/ensure`, {
+    method: 'POST',
+    headers: authHeaders(sellerA.token),
+    body: JSON.stringify({}),
+  });
+  const ensureA2Body = (await json(ensureA2)) as {
+    data?: { created?: boolean; conversation?: { id: string } };
+  };
+  assert(
+    ensureA2.status === 200 &&
+      ensureA2Body.data?.created === false &&
+      ensureA2Body.data?.conversation?.id === supportAId,
+    'HTTP seller ensure is idempotent for the active thread',
+  );
+
+  const steal = await fetch(`${base}/support/conversations/${supportAId}/messages`, {
+    headers: authHeaders(sellerB.token),
+  });
+  assert(steal.status === 403 || steal.status === 404, 'Seller B cannot read Seller A support thread');
+
+  const resolveA = await fetch(`${base}/support/conversations/${supportAId}/resolve`, {
+    method: 'POST',
+    headers: authHeaders(admin.token),
+    body: JSON.stringify({ status: 'resolved' }),
+  });
+  assert(resolveA.ok, 'HTTP admin can resolve seller support thread');
+  const ensureA3 = await fetch(`${base}/support/conversations/ensure`, {
+    method: 'POST',
+    headers: authHeaders(sellerA.token),
+    body: JSON.stringify({}),
+  });
+  const ensureA3Body = (await json(ensureA3)) as {
+    data?: { created?: boolean; conversation?: { id: string } };
+  };
+  assert(
+    ensureA3.status === 201 &&
+      ensureA3Body.data?.created === true &&
+      ensureA3Body.data?.conversation?.id !== supportAId,
+    'HTTP closed support thread does not block a new thread',
+  );
+
+  const ensureCons1 = await fetch(`${base}/support/conversations/ensure`, {
+    method: 'POST',
+    headers: authHeaders(consumer.token),
+    body: JSON.stringify({}),
+  });
+  const ensureCons1Body = (await json(ensureCons1)) as {
+    data?: { conversation?: { id: string } };
+  };
+  const consumerSupportId = ensureCons1Body.data?.conversation?.id;
+  assert(ensureCons1.ok && Boolean(consumerSupportId), 'HTTP consumer ensure creates support thread');
+  const sellerListOwnSupport = await fetch(`${base}/support/conversations`, {
+    headers: authHeaders(sellerA.token),
+  });
+  const sellerListOwnSupportBody = (await json(sellerListOwnSupport)) as {
+    data?: Array<{ id: string }>;
+  };
+  const sellerSupportIds = new Set((sellerListOwnSupportBody.data || []).map((c) => c.id));
+  assert(
+    sellerSupportIds.has(ensureA3Body.data?.conversation?.id || '') &&
+      !sellerSupportIds.has(consumerSupportId || ''),
+    'Seller support list is own-thread scoped',
+  );
 
   const legacy = await fetch(`${root}/api/conversations`);
   assert(legacy.ok, '24. legacy API compatibility (GET /api/conversations)');

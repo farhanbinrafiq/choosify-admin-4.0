@@ -41,7 +41,11 @@ export function formatChoosifyUserId(sequence: number): string {
 
 /** Parse CF-00127 / 00127 / 127 → canonical CF-00127. */
 export function normalizeChoosifyUserIdQuery(raw: string): string | null {
-  const trimmed = String(raw || '').trim().toUpperCase();
+  const trimmed = String(raw || '')
+    .trim()
+    .replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-')
+    .replace(/\s+/g, '')
+    .toUpperCase();
   if (!trimmed) return null;
   const digits = trimmed.startsWith(CF_PREFIX) ? trimmed.slice(CF_PREFIX.length) : trimmed;
   if (!/^\d+$/.test(digits)) return null;

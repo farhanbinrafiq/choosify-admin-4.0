@@ -5,6 +5,7 @@ import { operationsApi } from '../../services/operationsApi';
 import { Badge } from '../../components/ui/Badge';
 import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
 import { BulkActionBar, BulkAction } from '../../components/ui/BulkActionBar';
+import { listStatusClass } from '../../lib/profileStatus';
 import {
   Search, 
   Filter, 
@@ -34,7 +35,7 @@ interface MockUser {
   name: string;
   email: string;
   role: 'Consumer' | 'Creator' | 'Seller' | 'Admin';
-  status: 'Active' | 'Banned' | 'Inactive';
+  status: string;
   joined: string;
   active: string;
   initials: string;
@@ -372,14 +373,17 @@ export default function ConsumersPage() {
       key: 'status',
       header: 'Status Badge',
       sortValue: (u) => u.status,
-      render: (u) => (
+      render: (u) => {
+        const tone = listStatusClass(u.status);
+        return (
         <div className="flex items-center gap-2 shrink-0">
-          <div className={`w-1.5 h-1.5 rounded-full ${u.status === 'Active' ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]' : 'bg-red-500'}`} />
-          <span className={`text-[10px] font-bold uppercase tracking-wider ${u.status === 'Active' ? 'text-green-500' : 'text-red-500'}`}>
+          <div className={`w-1.5 h-1.5 rounded-full ${tone.dot}`} />
+          <span className={`text-[10px] font-bold uppercase tracking-wider ${tone.text}`}>
             {u.status}
           </span>
         </div>
-      ),
+        );
+      },
     });
 
     if (!isCreatorView) {

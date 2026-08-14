@@ -20,6 +20,7 @@ import { InventoryProvider } from './contexts/InventoryContext';
 import { FeeChargesProvider } from './contexts/FeeChargesContext';
 import { catalogApi } from './services/catalogApi';
 import { getMyProfilePath } from './lib/userDisplay';
+import { inspectionUniversalPath } from './lib/impersonationRouting';
 import { MarketplaceAccessGate } from './components/MarketplaceAccessLock';
 import { AdminPageSkeleton } from './components/common/skeletons';
 
@@ -119,17 +120,38 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) =
 
 /**
  * If the URL is the signed-in user's own profile, send them to the canonical
- * cms-mirror self-profile path. Otherwise keep UnifiedProfileShell for Admin inspection.
+ * cms-mirror self-profile path. Admin inspection of others goes to the current
+ * universal cms-mirror profile — never UnifiedProfileShell (legacy).
  */
 const OwnProfileRedirect: React.FC<{ role: 'seller' | 'creator' | 'consumer' }> = ({ role }) => {
   const { id } = useParams();
   const { profile } = useAuth();
+  const [searchParams] = useSearchParams();
   if (profile?.id && id && decodeURIComponent(id) === profile.id) {
     return <Navigate to={getMyProfilePath(profile)} replace />;
   }
+  const decoded = id ? decodeURIComponent(id) : '';
+  if (!decoded) return <Navigate to="/admin/dashboard" replace />;
+  const target = inspectionUniversalPath(role, decoded);
+  if (searchParams.get('impersonate') === '1') {
+    const join = target.includes('?') ? '&' : '?';
+    return <Navigate to={`${target}${join}impersonate=1`} replace />;
+  }
+  return <Navigate to={target} replace />;
+};
+
+/** Legacy /upe/consumer|seller|creator → current universal cms-mirror inspection routes. */
+const UpeInspectionRedirect: React.FC = () => {
+  const { entityType, entityId } = useParams();
+  const kind = String(entityType || '').toLowerCase();
+  if (kind === 'consumer' || kind === 'seller' || kind === 'creator') {
+    const decoded = entityId ? decodeURIComponent(entityId) : '';
+    if (!decoded) return <Navigate to="/admin/dashboard" replace />;
+    return <Navigate to={inspectionUniversalPath(kind, decoded)} replace />;
+  }
   return (
     <AdminLayout>
-      <Suspense fallback={routeSuspenseFallback}>
+      <Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Unified Profile...</div>}>
         <UnifiedProfileShell />
       </Suspense>
     </AdminLayout>
@@ -490,7 +512,7 @@ export default function App() {
             />
             <Route path="/signup" element={<SignupRoute />} />
             <Route path="/products/:id" element={<Suspense fallback={routeSuspenseFallback}><ProductDetailPage /></Suspense>} />
-            <Route path="/upe/:entityType/:entityId" element={<ProtectedRoute><AdminLayout><Suspense fallback={<div className="p-10 text-[#374151] font-mono text-[10px] uppercase tracking-[4px] opacity-60">Loading Unified Profile...</div>}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
+            <Route path="/upe/:entityType/:entityId" element={<ProtectedRoute><UpeInspectionRedirect /></ProtectedRoute>} />
             
             {/*
               Entity profile routes — Admin inspection / deep links only.

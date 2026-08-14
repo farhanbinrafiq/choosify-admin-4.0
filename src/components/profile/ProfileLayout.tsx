@@ -25,6 +25,8 @@ export interface ProfileLayoutProps {
   handle?: string;
   persona?: string;
   identityBadges?: IdentityBadge[];
+  profileStatus?: import('../../lib/profileStatus').ResolvedProfileStatus | null;
+  showStatusHint?: boolean;
   identityFields?: IdentityField[];
   onPhoneClick?: () => void;
   onMessageClick?: () => void;
@@ -89,6 +91,8 @@ export default function ProfileLayout({
   handle,
   persona,
   identityBadges,
+  profileStatus,
+  showStatusHint,
   identityFields,
   onPhoneClick,
   onMessageClick,
@@ -147,6 +151,8 @@ export default function ProfileLayout({
             handle={handle}
             persona={persona}
             badges={identityBadges}
+            profileStatus={profileStatus}
+            showStatusHint={showStatusHint}
             fields={identityFields}
             onPhoneClick={onPhoneClick}
             onMessageClick={onMessageClick}

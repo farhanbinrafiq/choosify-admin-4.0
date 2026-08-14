@@ -197,10 +197,11 @@ export const NAV_DEFS: CmsNavGroup[] = [
     items: [{ key: 'dashboard', label: 'Dashboard', path: PAGE_KEY_TO_PATH.dashboard }],
   },
   {
-    title: 'PEOPLE',
+    title: 'ACCOUNT MANAGEMENT',
     items: [
-      { key: 'customers', label: 'Consumers', path: PAGE_KEY_TO_PATH.customers },
-      { key: 'creators', label: 'Creators', path: PAGE_KEY_TO_PATH.creators },
+      { key: 'brands', label: 'Seller Management Studio', path: PAGE_KEY_TO_PATH.brands },
+      { key: 'creators', label: 'Creators Management', path: PAGE_KEY_TO_PATH.creators },
+      { key: 'customers', label: 'Consumer Management', path: PAGE_KEY_TO_PATH.customers },
       { key: 'creatorEconomy', label: 'Creator Economy', path: PAGE_KEY_TO_PATH.creatorEconomy },
       { key: 'consumerProfile', label: 'My Profile', path: PAGE_KEY_TO_PATH.consumerProfile },
     ],
@@ -208,7 +209,6 @@ export const NAV_DEFS: CmsNavGroup[] = [
   {
     title: 'BRAND & CATALOG',
     items: [
-      { key: 'brands', label: 'Seller Management Studio', path: PAGE_KEY_TO_PATH.brands },
       { key: 'products', label: 'Products & Inventory', path: PAGE_KEY_TO_PATH.products },
       { key: 'categories', label: 'Category Management Studio', path: PAGE_KEY_TO_PATH.categories },
     ],
@@ -294,12 +294,12 @@ export const PAGE_META: Record<string, [string, string]> = {
   brands: ['Seller Management Studio', 'Platform seller and brand governance'],
   brandProfile: ['Seller Profile', 'Your seller account, verification, and profile settings'],
   categories: ['Category Management Studio', 'Organize your catalog'],
-  creators: ['Creators', 'Manage creator partnerships'],
+  creators: ['Creators Management', 'Manage creator partnerships'],
   creatorProfile: ['Creator Profile', 'Your creator account, verification, and profile settings'],
   consumerProfile: ['My Profile', 'Your consumer account, orders preference, and security settings'],
   deals: ['Deals', 'Promotions and discounts'],
   orders: ['Orders Hub', 'Track and fulfill customer orders'],
-  customers: ['Consumers', 'View and manage customer accounts'],
+  customers: ['Consumer Management', 'View and manage customer accounts'],
   settings: ['Settings', 'Store configuration'],
   adminProfile: ['Admin Profile', 'Account, security, RBAC scope, and preferences'],
   websiteCmsStudio: ['Website Manager', 'Manage homepage banners, pages, and site content'],

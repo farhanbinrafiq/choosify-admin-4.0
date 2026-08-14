@@ -93,14 +93,13 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Overview', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
 
-    { label: 'People', type: 'label' },
-    { label: 'Consumers', icon: Users, path: '/admin/consumers' },
-    { label: 'Creators', icon: Award, path: '/admin/creators-hub' },
-    { label: 'Creator Studio', icon: Award, path: '/admin/creator-studio' },
+    { label: 'Account Management', type: 'label' },
+    { label: 'Seller Management Studio', icon: Building2, path: '/admin/brand-studio' },
+    { label: 'Creators Management', icon: Award, path: '/admin/creator-studio' },
+    { label: 'Consumer Management', icon: Users, path: '/admin/consumers' },
     { label: 'Creator Economy', icon: TrendingUp, path: '/admin/creator-hub' },
 
     { label: 'Brand & Catalog', type: 'label' },
-    { label: 'Seller Management Studio', icon: Building2, path: '/admin/brand-studio' },
     { label: 'Products & Inventory', icon: Package, path: '/admin/products' },
     { label: 'Category Management Studio', icon: FolderOpen, path: '/admin/categories' },
 
@@ -151,13 +150,12 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Overview', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
 
-    { label: 'People', type: 'label' },
-    { label: 'Consumers', icon: Users, path: '/admin/consumers' },
-    { label: 'Creators', icon: Award, path: '/admin/creators-hub' },
-    { label: 'Creator Studio', icon: Award, path: '/admin/creator-studio' },
+    { label: 'Account Management', type: 'label' },
+    { label: 'Seller Management Studio', icon: Building2, path: '/admin/brand-studio' },
+    { label: 'Creators Management', icon: Award, path: '/admin/creator-studio' },
+    { label: 'Consumer Management', icon: Users, path: '/admin/consumers' },
 
     { label: 'Brand & Catalog', type: 'label' },
-    { label: 'Seller Management Studio', icon: Building2, path: '/admin/brand-studio' },
     { label: 'Products & Inventory', icon: Package, path: '/admin/products' },
     { label: 'Category Management Studio', icon: FolderOpen, path: '/admin/categories' },
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },

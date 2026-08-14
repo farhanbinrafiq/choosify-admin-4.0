@@ -72,7 +72,15 @@ import ContentTable from '../../../components/profile/ContentTable';
 import BrandEditStudio from '../BrandEditStudio';
 import GuideStudioCMS, { GuideStudioItem } from '../../../components/profile/GuideStudioCMS';
 import { catalogApi } from '../../../services/catalogApi';
-import type { CatalogBrand } from '../../../types/catalog';
+import type { CatalogBrand, CatalogCreator } from '../../../types/catalog';
+import {
+  kindFromRole,
+  profileRoleCardLabel,
+  resolveProfileStatus,
+  type ProfileKind,
+  type ProfileStatusFacts,
+  type ResolvedProfileStatus,
+} from '../../../lib/profileStatus';
 
 type ProfileEntityKind = 'consumer' | 'seller' | 'brand' | 'order' | 'creator' | 'admin';
 
@@ -394,7 +402,7 @@ export default function UnifiedProfileShell() {
   const { profiles: brandProfiles, addLog } = useBrandProfiles();
   const { profile: loggedInProfile } = useAuth();
   const { can } = useRbac();
-  const { state: impersonationState, startImpersonation } = useImpersonation();
+  const { state: impersonationState, openLoginAsConfirm } = useImpersonation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { triggerMessage, triggerPhone } = useContact();
 
@@ -463,7 +471,20 @@ export default function UnifiedProfileShell() {
   /** Catalog brand hydration — Brand Management ledger uses catalog ids (e.g. brand-walton). */
   const [catalogBrand, setCatalogBrand] = useState<CatalogBrand | null>(null);
   const [catalogBrandLoading, setCatalogBrandLoading] = useState(false);
+  const [catalogCreator, setCatalogCreator] = useState<CatalogCreator | null>(null);
   const [targetChoosifyUserId, setTargetChoosifyUserId] = useState<string | null>(null);
+  const [inspectedAccount, setInspectedAccount] = useState<{
+    partnerApplicationStatus?: 'pending' | 'approved' | 'rejected' | null;
+    identityVerified?: boolean;
+    marketplaceAccess?: boolean;
+    resubmissionRequested?: boolean;
+    marketplaceStatus?: ProfileStatusFacts['marketplaceStatus'];
+    creatorCatalogStatus?: ProfileStatusFacts['creatorCatalogStatus'];
+    verifiedStatus?: boolean;
+    claimStatus?: ProfileStatusFacts['claimStatus'];
+    ownershipClaimPending?: boolean;
+    role?: string;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -473,10 +494,18 @@ export default function UnifiedProfileShell() {
     );
     if (selfMatch) {
       setTargetChoosifyUserId(loggedInProfile?.choosifyUserId || null);
+      setInspectedAccount({
+        partnerApplicationStatus: loggedInProfile?.partnerApplicationStatus ?? null,
+        identityVerified: loggedInProfile?.identityVerified === true,
+        marketplaceAccess: loggedInProfile?.marketplaceAccess !== false,
+        resubmissionRequested: loggedInProfile?.resubmissionRequested === true,
+        role: loggedInProfile?.role,
+      });
       return;
     }
     if (!token) {
       setTargetChoosifyUserId(null);
+      setInspectedAccount(null);
       return;
     }
     let lookupUid: string | null = null;
@@ -487,6 +516,7 @@ export default function UnifiedProfileShell() {
     }
     if (!lookupUid) {
       setTargetChoosifyUserId(null);
+      setInspectedAccount(null);
       return;
     }
     void (async () => {
@@ -494,18 +524,36 @@ export default function UnifiedProfileShell() {
         const res = await fetch(`/api/v1/auth/users/${encodeURIComponent(lookupUid)}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        const body = (await res.json().catch(() => ({}))) as { data?: { choosifyUserId?: string } };
+        const body = (await res.json().catch(() => ({}))) as {
+          data?: {
+            choosifyUserId?: string;
+            role?: string;
+            partnerApplicationStatus?: 'pending' | 'approved' | 'rejected' | null;
+            identityVerified?: boolean;
+            marketplaceAccess?: boolean;
+            resubmissionRequested?: boolean;
+            marketplaceStatus?: ProfileStatusFacts['marketplaceStatus'];
+            creatorCatalogStatus?: ProfileStatusFacts['creatorCatalogStatus'];
+            verifiedStatus?: boolean;
+            claimStatus?: ProfileStatusFacts['claimStatus'];
+            ownershipClaimPending?: boolean;
+          };
+        };
         if (!cancelled) {
           setTargetChoosifyUserId(body.data?.choosifyUserId || null);
+          setInspectedAccount(body.data || null);
         }
       } catch {
-        if (!cancelled) setTargetChoosifyUserId(null);
+        if (!cancelled) {
+          setTargetChoosifyUserId(null);
+          setInspectedAccount(null);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [typeKey, idKey, catalogBrand?.sellerId, loggedInProfile?.id, loggedInProfile?.choosifyUserId]);
+  }, [typeKey, idKey, catalogBrand?.sellerId, loggedInProfile?.id, loggedInProfile?.choosifyUserId, loggedInProfile?.partnerApplicationStatus, loggedInProfile?.identityVerified, loggedInProfile?.marketplaceAccess, loggedInProfile?.resubmissionRequested]);
 
   useEffect(() => {
     if (typeKey === 'seller') {
@@ -519,8 +567,8 @@ export default function UnifiedProfileShell() {
   }, [typeKey, idKey]);
 
   useEffect(() => {
-    if (typeKey !== 'brand' || !idKey) {
-      setCatalogBrand(null);
+    if ((typeKey !== 'brand' && typeKey !== 'seller') || !idKey) {
+      if (typeKey !== 'brand' && typeKey !== 'seller') setCatalogBrand(null);
       setCatalogBrandLoading(false);
       return;
     }
@@ -533,6 +581,7 @@ export default function UnifiedProfileShell() {
         const match =
           rows.find((b) => b.id === idKey) ||
           rows.find((b) => b.slug === idKey) ||
+          rows.find((b) => b.sellerId === idKey) ||
           rows.find((b) => b.name.toLowerCase() === idKey.toLowerCase()) ||
           null;
         setCatalogBrand(match);
@@ -547,15 +596,37 @@ export default function UnifiedProfileShell() {
       cancelled = true;
     };
   }, [typeKey, idKey]);
+
+  useEffect(() => {
+    if (typeKey !== 'creator' || !idKey) {
+      setCatalogCreator(null);
+      return;
+    }
+    let cancelled = false;
+    catalogApi
+      .listCreators()
+      .then((rows) => {
+        if (cancelled) return;
+        const match =
+          rows.find((c) => c.userId === idKey) ||
+          rows.find((c) => c.id === idKey) ||
+          rows.find((c) => c.slug === idKey) ||
+          null;
+        setCatalogCreator(match);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogCreator(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [typeKey, idKey]);
   // Toast Notifications
   const [toast, setToast] = useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
   const showToast = (text: string, type: 'success' | 'info' | 'error' = 'success') => {
     setToast({ text, type });
     setTimeout(() => setToast(null), 3500);
   };
-
-  const [impersonationConfirmOpen, setImpersonationConfirmOpen] = useState(false);
-  const [impersonationReason, setImpersonationReason] = useState('');
 
   // State for dispatch parameters log on orders logistics
   const [transitUpdateText, setTransitUpdateText] = useState('');
@@ -1029,14 +1100,28 @@ export default function UnifiedProfileShell() {
     !isSelfProfile &&
     Boolean(idKey);
 
+  const requestShellLoginAs = () => {
+    if (!idKey) return;
+    const data = entityData as { name?: string; email?: string; choosifyUserId?: string; avatarUrl?: string };
+    openLoginAsConfirm({
+      targetUserId: idKey,
+      displayName: data?.name || 'User',
+      roleLabel: typeKey === 'seller' ? 'Seller' : typeKey === 'creator' ? 'Creator' : 'Consumer',
+      choosifyUserId: data?.choosifyUserId,
+      email: data?.email,
+      avatarUrl: data?.avatarUrl,
+    });
+  };
 
   useEffect(() => {
     if (!showLoginAsUser) return;
     if (searchParams.get('impersonate') !== '1') return;
-    setImpersonationConfirmOpen(true);
+    requestShellLoginAs();
     const next = new URLSearchParams(searchParams);
     next.delete('impersonate');
     setSearchParams(next, { replace: true });
+    // Overlay only — stay on this route.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showLoginAsUser, searchParams, setSearchParams]);
 
   const baseHeaderActions =
@@ -1063,7 +1148,7 @@ export default function UnifiedProfileShell() {
         ...baseHeaderActions,
         {
           label: 'Login As User',
-          onClick: () => setImpersonationConfirmOpen(true),
+          onClick: () => requestShellLoginAs(),
           icon: <ShieldAlert className="w-3.5 h-3.5" />,
         },
       ]
@@ -1121,20 +1206,52 @@ export default function UnifiedProfileShell() {
 
   const persona = brand ? brand.description : creator?.persona || consumer?.persona;
 
-  const identityBadges = typeKey === 'admin' ? [
-    { label: String((entityData as { role?: string }).role || 'admin').replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()), colorClass: 'bg-blue-500/10 text-blue-400 border border-blue-500/20' },
-    { label: 'Active', colorClass: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' },
-  ] : creator ? [
-    { label: creator.verificationStatus },
-    { label: creator.status, colorClass: creator.status === 'Banned' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20' }
-  ] : consumer ? [
-    { label: consumer.status, colorClass: consumer.status === 'Banned' ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20' }
-  ] : seller ? [
-    { label: seller.verificationStatus, colorClass: 'bg-green-500/10 text-green-400 border border-green-500/20' },
-    { label: seller.applicationStatus, colorClass: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' }
-  ] : brand ? [
-    { label: brand.status === 'VERIFIED_OWNER' ? 'Verified Owner' : String(brand.status), colorClass: 'bg-green-500/10 text-green-400 border border-green-500/20' }
-  ] : orderEnt ? [
+  const profileKind: ProfileKind =
+    typeKey === 'order'
+      ? 'consumer'
+      : typeKey === 'brand'
+        ? 'brand'
+        : typeKey === 'admin' || typeKey === 'seller' || typeKey === 'creator' || typeKey === 'consumer'
+          ? typeKey
+          : kindFromRole(inspectedAccount?.role || loggedInProfile?.role);
+
+  const resolvedProfileStatus: ResolvedProfileStatus | null = typeKey === 'order' ? null : resolveProfileStatus({
+    kind: profileKind,
+    partnerApplicationStatus: inspectedAccount?.partnerApplicationStatus
+      ?? (isSelfProfile ? loggedInProfile?.partnerApplicationStatus : null)
+      ?? null,
+    identityVerified: inspectedAccount?.identityVerified
+      ?? (isSelfProfile ? loggedInProfile?.identityVerified === true : undefined)
+      ?? catalogBrand?.verifiedStatus
+      ?? catalogCreator?.verifiedStatus,
+    marketplaceAccess: marketplaceAccessState.suspended
+      ? false
+      : inspectedAccount?.marketplaceAccess
+        ?? (isSelfProfile ? loggedInProfile?.marketplaceAccess !== false : undefined)
+        ?? catalogBrand?.marketplaceAccess
+        ?? (catalogCreator ? catalogCreator.status === 'live' : undefined),
+    resubmissionRequested: inspectedAccount?.resubmissionRequested
+      ?? (isSelfProfile ? loggedInProfile?.resubmissionRequested === true : undefined),
+    marketplaceStatus: marketplaceAccessState.suspended
+      ? 'suspended'
+      : inspectedAccount?.marketplaceStatus
+        ?? catalogBrand?.marketplaceStatus
+        ?? (catalogBrand
+          ? (catalogBrand.marketplaceAccess ? 'granted' : 'not_granted')
+          : null),
+    creatorCatalogStatus: inspectedAccount?.creatorCatalogStatus
+      ?? catalogCreator?.status
+      ?? null,
+    verifiedStatus: inspectedAccount?.verifiedStatus
+      ?? catalogBrand?.verifiedStatus
+      ?? catalogCreator?.verifiedStatus,
+    claimStatus: inspectedAccount?.claimStatus ?? catalogBrand?.claimStatus ?? null,
+    ownershipClaimPending: inspectedAccount?.ownershipClaimPending
+      ?? catalogBrand?.claimStatus === 'pending',
+    localSuspended: marketplaceAccessState.suspended,
+  });
+
+  const identityBadges = typeKey === 'order' && orderEnt ? [
     { label: orderEnt.status, colorClass: orderEnt.status === 'Delivered' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20' },
     { label: orderEnt.paymentStatus, colorClass: orderEnt.paymentStatus === 'Paid' ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20' }
   ] : [];
@@ -1145,30 +1262,38 @@ export default function UnifiedProfileShell() {
     (entityData as { choosifyUserId?: string } | null)?.choosifyUserId ||
     '—';
 
+  const roleField = {
+    label: 'Role',
+    value: profileRoleCardLabel(profileKind, inspectedAccount?.role || (entityData as { role?: string })?.role || loggedInProfile?.role),
+  };
+
   const identityFields = typeKey === 'admin' ? [
+    roleField,
     { label: 'Choosify User ID', value: resolvedCfId },
-    { label: 'Role', value: (entityData as any)?.role ? String((entityData as any).role).replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) : 'Admin' },
     { label: 'Email', value: (entityData as any)?.email || '—' },
-    { label: 'Status', value: 'Active' },
   ] : creator ? [
+    roleField,
     { label: 'Choosify User ID', value: resolvedCfId },
     { label: 'Email address', value: creator.email },
     { label: 'Geography Base', value: creator.address },
     { label: 'Primary Phone', value: creator.phone },
     { label: 'Last active timestamp', value: creator.lastActive, icon: <Clock className="w-3.5 h-3.5 text-app-accent-light" /> }
   ] : consumer ? [
+    roleField,
     { label: 'Choosify User ID', value: resolvedCfId },
     { label: 'Email account', value: consumer.email },
     { label: 'Geography Base', value: consumer.address },
     { label: 'Primary Phone', value: consumer.phone },
     { label: 'Connection Standing', value: consumer.lastActive, icon: <Clock className="w-3.5 h-3.5 text-app-accent-light" /> }
   ] : seller ? [
+    roleField,
     { label: 'Choosify User ID', value: resolvedCfId },
     { label: 'Corporate Email', value: seller.email },
     { label: 'Contact Phone', value: seller.phone },
     { label: 'Settlement Plan', value: seller.settlementPlan },
     { label: 'Corporate Address', value: seller.address, icon: <MapPin className="w-3.5 h-3.5 text-app-accent-light" /> }
   ] : brand ? [
+    roleField,
     { label: 'Choosify User ID', value: resolvedCfId },
     { label: 'Owner Store Name', value: brand.ownerStore },
     { label: 'Creative Industry', value: brand.industry },
@@ -1562,6 +1687,8 @@ export default function UnifiedProfileShell() {
         handle={handle}
         persona={persona}
         identityBadges={identityBadges}
+        profileStatus={resolvedProfileStatus}
+        showStatusHint={isSelfProfile && ['seller', 'creator'].includes(typeKey)}
         identityFields={identityFields}
         onPhoneClick={onPhoneClick}
         onMessageClick={onMessageClick}
@@ -3971,78 +4098,6 @@ export default function UnifiedProfileShell() {
       </ProfileLayout>
 
       {renderInspectModal()}
-
-      {impersonationConfirmOpen && (
-        <div className="fixed inset-0 z-[600] bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl border border-app-border shadow-2xl max-w-xl w-full p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-[15px] font-extrabold text-[#111827]">Login As User Confirmation</h2>
-                <p className="text-[12px] text-gray-600 font-semibold mt-2">
-                  You are about to temporarily access this account as:
-                </p>
-              </div>
-              <button
-                onClick={() => setImpersonationConfirmOpen(false)}
-                className="p-2 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer"
-                aria-label="Close confirmation"
-                type="button"
-              >
-                <X className="w-4 h-4 text-gray-500" />
-              </button>
-            </div>
-
-            <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-1">
-              <div className="text-[13px] font-extrabold text-[#111827] truncate">
-                {entityData?.name || '—'}{" "}
-                <span className="text-gray-500 font-mono font-bold">· {typeKey.toUpperCase()}</span>
-              </div>
-              <div className="text-[12px] text-gray-700 font-semibold font-mono">{resolvedCfId}</div>
-            </div>
-
-            <div className="mt-4">
-              <label className="block text-[11px] font-extrabold text-[#6B7280] tracking-wide mb-1.5">
-                Support ticket / reason
-              </label>
-              <textarea
-                value={impersonationReason}
-                onChange={(e) => setImpersonationReason(e.target.value)}
-                placeholder="Customer support investigation, order issue, profile troubleshooting…"
-                className="w-full bg-[#F8F9FC] border border-[#E8EDF2] rounded-lg px-3.5 py-2 text-[13px] font-semibold text-[#111827] outline-none min-h-[80px] resize-none"
-              />
-              <p className="text-[11px] text-gray-500 font-semibold mt-1">
-                Reason is required and will be recorded in the audit log.
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 mt-6">
-              <button
-                type="button"
-                onClick={() => setImpersonationConfirmOpen(false)}
-                className="px-4 py-2 rounded-lg border border-gray-200 text-[12px] font-extrabold text-gray-700 hover:bg-gray-50 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={impersonationReason.trim().length < 2}
-                onClick={async () => {
-                  try {
-                    const reason = impersonationReason.trim();
-                    await startImpersonation({ targetUserId: idKey || '', reason });
-                    setImpersonationConfirmOpen(false);
-                  } catch (e) {
-                    showToast(e instanceof Error ? e.message : 'Unable to start impersonation', 'error');
-                  }
-                }}
-                className="px-4 py-2 rounded-lg bg-[#EF3C23] hover:bg-[#EF3C23]/90 disabled:opacity-60 text-white text-[12px] font-extrabold cursor-pointer"
-              >
-                Continue
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

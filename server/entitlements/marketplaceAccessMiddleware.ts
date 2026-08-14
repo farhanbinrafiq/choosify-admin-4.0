@@ -37,6 +37,7 @@ export function isPartnerIdentityApiPath(path: string, method: string): boolean 
   if (m === 'POST' && p.startsWith('/api/v1/catalog/media')) return true;
   if (p.startsWith('/api/v1/operations/verifications')) return true;
   if (p.startsWith('/api/v1/operations/partner-applications')) return true;
+  if (p.startsWith('/api/v1/support/')) return true;
   if (m === 'GET' && p.startsWith('/api/v1/dashboard/nav-attention')) return true;
   if (m === 'GET' && (p.startsWith('/api/v1/notifications') || p.startsWith('/api/notifications'))) {
     return true;

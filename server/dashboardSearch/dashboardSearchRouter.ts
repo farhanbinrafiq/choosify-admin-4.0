@@ -18,13 +18,20 @@ dashboardSearchRouter.get('/search', authenticateRequest, async (req, res) => {
     return Math.min(10, Math.max(1, Math.floor(n)));
   })();
 
-  const result = await searchDashboardForActor({
-    actor: { userId: req.userId || '', role: req.userRole },
-    q,
-    limitPerGroup,
-  });
-
-  res.json({ success: true, query: q, ...result });
+  try {
+    const result = await searchDashboardForActor({
+      actor: { userId: req.userId || '', role: req.userRole },
+      q,
+      limitPerGroup,
+    });
+    res.json({ success: true, query: q, ...result });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      query: q,
+      error: error instanceof Error ? error.message : 'Search failed',
+    });
+  }
 });
 
 dashboardSearchRouter.get('/search/suggestions', authenticateRequest, async (req, res) => {
@@ -34,13 +41,19 @@ dashboardSearchRouter.get('/search/suggestions', authenticateRequest, async (req
     return;
   }
 
-  // Suggestions are a smaller subset to keep latency low.
-  const result = await searchDashboardForActor({
-    actor: { userId: req.userId || '', role: req.userRole },
-    q,
-    limitPerGroup: 3,
-  });
-
-  res.json({ success: true, query: q, ...result });
+  try {
+    const result = await searchDashboardForActor({
+      actor: { userId: req.userId || '', role: req.userRole },
+      q,
+      limitPerGroup: 3,
+    });
+    res.json({ success: true, query: q, ...result });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      query: q,
+      error: error instanceof Error ? error.message : 'Search failed',
+    });
+  }
 });
 

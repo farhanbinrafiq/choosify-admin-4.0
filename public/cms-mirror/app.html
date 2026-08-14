@@ -8,7 +8,8 @@
 <script src="/cms-mirror/react-dom.production.min.js"></script>
 <script src="/cms-mirror/dc-runtime.js"></script>
 <script src="/cms-mirror/omelette.js"></script>
-  <script src="./studio-profile-api.js?v=20260813-nav-attention"></script>
+  <script src="./studio-profile-api.js?v=20260814-claim-universal-2"></script>
+  <script src="./profile-status.js?v=20260814-profile-status-1"></script>
 <script>
 window.addEventListener('message', function(ev) {
   var data = ev && ev.data;
@@ -24,6 +25,18 @@ window.addEventListener('message', function(ev) {
     try {
       if (window.__CMS_MIRROR_INSTANCE__ && typeof window.__CMS_MIRROR_INSTANCE__.hydrateTenantWorkspace === 'function') {
         window.__CMS_MIRROR_INSTANCE__.hydrateTenantWorkspace();
+      }
+    } catch (_) {}
+  }
+  // Admin: token-less GET of partner applications used to 401 and leave Requests empty.
+  if (data.token && (window.__CMS_MIRROR_ROLE__ === 'admin' || window.__CMS_MIRROR_ROLE__ === 'super_admin')) {
+    try {
+      var inst = window.__CMS_MIRROR_INSTANCE__;
+      if (inst && typeof inst.refreshPartnerApplications === 'function') {
+        inst.refreshPartnerApplications();
+      }
+      if (inst && typeof inst.refreshVerifications === 'function') {
+        inst.refreshVerifications();
       }
     } catch (_) {}
   }
@@ -262,6 +275,10 @@ window.addEventListener('message', function(ev) {
       padding-right: 4px !important;
       box-sizing: border-box !important;
     }
+    [data-notif-root] > div:hover,
+    [data-notif-root] > div:focus-visible {
+      opacity: 0.9;
+    }
     @media (min-width: 640px) {
       [data-cms-search-slot] {
         padding-left: 12px !important;
@@ -331,9 +348,10 @@ window.addEventListener('message', function(ev) {
       <!-- Flex search slot — storefront navbar-fluid: flex:1 1 0% middle band -->
       <div data-cms-search-slot="1" aria-hidden="true" style="flex:1 1 0%;min-width:0;height:44px;visibility:hidden;pointer-events:none;padding-left:4px;padding-right:4px;box-sizing:border-box"></div>
       <div style="display:flex;align-items:center;gap:18px;flex-shrink:0">
+        <div data-cms-message-slot="1" aria-hidden="true" style="width:28px;height:28px;flex-shrink:0"></div>
         <div data-notif-root="1" style="position:relative">
           <div sc-camel-on-click="{{ toggleNotifMenu }}" style="position:relative;cursor:pointer;width:28px;height:28px;display:flex;align-items:center;justify-content:center" title="Notifications" role="button" aria-label="Notifications">
-            <svg width="18" height="18" sc-camel-view-box="0 0 20 20" fill="none" stroke="#fff" stroke-width="1.6"><path d="M4 15V9a6 6 0 0112 0v6l1.5 2h-15L4 15z"></path><path d="M8 19a2 2 0 004 0"></path></svg>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
             <sc-if value="{{ notifUnreadVisible }}" hint-placeholder-val="{{ false }}">
               <span style="position:absolute;top:-5px;right:-6px;background:linear-gradient(90deg,#C8321A,#EF3C23);color:#fff;font-size:8.5px;font-weight:700;border-radius:8px;padding:1px 4px;min-width:14px;text-align:center">{{ notifUnreadLabel }}</span>
             </sc-if>
@@ -1451,7 +1469,7 @@ window.addEventListener('message', function(ev) {
               </div>
             </sc-for>
             <sc-if value="{{ !brandRequests.length }}" hint-placeholder-val="{{ false }}">
-              <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:40px;text-align:center;color:#9CA3AF;font-size:12.5px;font-weight:600;font-style:italic">No new brand registration requests.</div>
+              <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:40px;text-align:center;color:#9CA3AF;font-size:12.5px;font-weight:600;font-style:italic">{{ requestsEmptyMessage }}</div>
             </sc-if>
           </div>
         </sc-if>
@@ -1611,44 +1629,29 @@ window.addEventListener('message', function(ev) {
             </sc-for>
           </div>
 
-          <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:16px;align-items:start">
-            <div style="display:flex;flex-direction:column;gap:14px">
-              <sc-for list="{{ brandClaims }}" as="cl" hint-placeholder-count="4">
-                <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:18px 20px">
-                  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
-                    <div><div style="display:flex;align-items:center;gap:8px"><span sc-camel-on-click="{{ cl.onOpenProfile }}" style="font-size:14px;font-weight:800;color:#2563EB;cursor:pointer">{{ cl.brand }}</span><span style="{{ cl.badgeStyle }}">{{ cl.status }}</span></div><div style="font-size:10.5px;color:#9CA3AF;font-weight:600;margin-top:2px">Claim ID: {{ cl.id }}</div></div>
-                    <span style="font-size:10.5px;color:#9CA3AF;font-weight:600">📅 {{ cl.date }}</span>
-                  </div>
-                  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-                    <div style="background:#F9FAFB;border-radius:8px;padding:12px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">CLAIMANT / REPRESENTATIVE</div><div style="font-size:12px;font-weight:700;margin-top:4px">{{ cl.claimant }} <span style="color:#9CA3AF;font-weight:600">{{ cl.claimantRole }}</span></div><div style="font-size:10.5px;color:#9CA3AF;font-weight:600">{{ cl.phone }}</div></div>
-                    <div style="background:#F9FAFB;border-radius:8px;padding:12px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">FACTUAL LEDGER DETAILS</div><div style="font-size:12px;font-weight:700;margin-top:4px">Trade License No: <span style="color:#EF3C23">{{ cl.tradeLicenseNo }}</span></div><div style="font-size:10.5px;color:#9CA3AF;font-weight:600">{{ cl.email }}</div></div>
-                  </div>
-                  <div style="font-size:10px;color:#6B7280;font-weight:700;margin-bottom:12px">DOCUMENT CHECKLIST: <sc-for list="{{ cl.checklist }}" as="cd" hint-placeholder-count="3"><span style="color:#16A34A;margin-right:8px">✓ {{ cd }}</span></sc-for></div>
-                  <div style="display:flex;justify-content:space-between;align-items:center">
-                    <span style="font-size:11px;color:#2563EB;font-weight:700;cursor:pointer">📄 Review Documents</span>
-                    <div style="display:flex;gap:8px">
-                      <button sc-camel-on-click="{{ cl.onApprove }}" style="background:#16A34A;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:10.5px;font-weight:800;cursor:pointer">APPROVE CLAIM</button>
-                      <button sc-camel-on-click="{{ cl.onReject }}" style="background:#DC2626;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:10.5px;font-weight:800;cursor:pointer">REJECT</button>
-                      <button sc-camel-on-click="{{ cl.onRequestInfo }}" style="background:#fff;border:1px solid #E8EDF2;color:#374151;border-radius:6px;padding:8px 14px;font-size:10.5px;font-weight:700;cursor:pointer">Request Info</button>
-                    </div>
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <sc-for list="{{ brandClaims }}" as="cl" hint-placeholder-count="4">
+              <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:18px 20px;cursor:pointer" sc-camel-on-click="{{ cl.onOpenProfile }}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+                  <div><div style="display:flex;align-items:center;gap:8px"><span style="font-size:14px;font-weight:800;color:#2563EB">{{ cl.brand }}</span><span style="{{ cl.badgeStyle }}">{{ cl.status }}</span></div><div style="font-size:10.5px;color:#9CA3AF;font-weight:600;margin-top:2px">Claim ID: {{ cl.id }}</div></div>
+                  <span style="font-size:10.5px;color:#9CA3AF;font-weight:600">📅 {{ cl.date }}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+                  <div style="background:#F9FAFB;border-radius:8px;padding:12px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">CLAIMANT / REPRESENTATIVE</div><div style="font-size:12px;font-weight:700;margin-top:4px">{{ cl.claimant }} <span style="color:#9CA3AF;font-weight:600">{{ cl.claimantRole }}</span></div><div style="font-size:10.5px;color:#9CA3AF;font-weight:600">{{ cl.phone }}</div></div>
+                  <div style="background:#F9FAFB;border-radius:8px;padding:12px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">FACTUAL LEDGER DETAILS</div><div style="font-size:12px;font-weight:700;margin-top:4px">Trade License No: <span style="color:#EF3C23">{{ cl.tradeLicenseNo }}</span></div><div style="font-size:10.5px;color:#9CA3AF;font-weight:600">{{ cl.email }}</div></div>
+                </div>
+                <div style="font-size:10px;color:#6B7280;font-weight:700;margin-bottom:12px">DOCUMENT CHECKLIST: <sc-for list="{{ cl.checklist }}" as="cd" hint-placeholder-count="3"><span style="color:#16A34A;margin-right:8px">✓ {{ cd }}</span></sc-for></div>
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                  <span style="font-size:11px;color:#2563EB;font-weight:700;cursor:pointer">Open Universal Seller Profile</span>
+                  <div style="display:flex;gap:8px">
+                    <button sc-camel-on-click="{{ cl.onApprove }}" style="background:#16A34A;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:10.5px;font-weight:800;cursor:pointer">REVIEW CLAIM</button>
                   </div>
                 </div>
-              </sc-for>
-            </div>
-            <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:18px">
-              <div style="font-size:12.5px;font-weight:800;margin-bottom:2px">📜 Studio Audit Security Trail</div>
-              <div style="font-size:10.5px;color:#9CA3AF;font-weight:600;margin-bottom:14px">Immutable record tracker for compliance operations</div>
-              <div style="display:flex;flex-direction:column;gap:14px">
-                <sc-for list="{{ claimsAuditTrail }}" as="at" hint-placeholder-count="4">
-                  <div style="border-top:1px solid #F1F3F5;padding-top:12px">
-                    <div style="display:flex;justify-content:space-between"><span style="font-size:11.5px;font-weight:800;color:#EF3C23">{{ at.brand }}</span><span style="font-size:10px;color:#9CA3AF;font-weight:600">{{ at.time }}</span></div>
-                    <div style="font-size:12px;font-weight:700;margin-top:2px">{{ at.title }}</div>
-                    <div style="font-size:10.5px;color:#6B7280;font-weight:600;margin-top:3px;line-height:1.4">{{ at.desc }}</div>
-                    <div style="font-size:10px;color:#9CA3AF;font-weight:600;margin-top:4px">By {{ at.by }}</div>
-                  </div>
-                </sc-for>
               </div>
-            </div>
+            </sc-for>
+            <sc-if value="{{ !brandClaims.length }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:40px;text-align:center;color:#9CA3AF;font-size:12.5px;font-weight:600;font-style:italic">{{ claimsEmptyMessage }}</div>
+            </sc-if>
           </div>
         </sc-if>
       </sc-if>
@@ -1730,11 +1733,17 @@ window.addEventListener('message', function(ev) {
               <div style="width:56px;height:56px;border-radius:50%;overflow:hidden;background:#EFF6FF;color:#2563EB;border:1px solid #E8EDF2;margin-top:-42px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,0.08);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px">{{ universalProfile.initials }}</div>
               <div style="font-size:13.5px;font-weight:800">{{ universalProfile.name }}</div>
               <div style="font-size:11px;color:#2563EB;font-weight:600;margin-top:2px">{{ universalProfile.handle }}</div>
+              <sc-if value="{{ universalProfile.profileStatus.showPills }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+                  <sc-for list="{{ universalProfile.profileStatus.pills }}" as="stPill" hint-placeholder-count="1">
+                    <span style="{{ stPill.style }}">{{ stPill.label }}</span>
+                  </sc-for>
+                </div>
+              </sc-if>
               <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
-                <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">CHOOSIFY USER ID</div><div style="font-size:11.5px;font-weight:700;margin-top:2px;font-family:ui-monospace,monospace">{{ universalProfile.choosifyUserId }}</div></div>
-                <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">ROLE</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ universalProfile.roleLabel }}</div></div>
+                <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">ROLE</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ universalProfile.roleLabel }}</div></div>
+                <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">CHOOSIFY USER ID</div><div style="font-size:11.5px;font-weight:700;margin-top:2px;font-family:ui-monospace,monospace">{{ universalProfile.choosifyUserId }}</div></div>
                 <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">EMAIL</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ universalProfile.email }}</div></div>
-                <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">STATUS</div><div style="font-size:11.5px;font-weight:700;margin-top:2px;color:#16A34A">{{ universalProfile.status }}</div></div>
               </div>
             </div>
           </div>
@@ -1801,15 +1810,15 @@ window.addEventListener('message', function(ev) {
             <div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-top:2px">{{ selectedBrand.profileHeaderSub }}</div>
           </div>
           <sc-if value="{{ !selectedBrand.hideAllBrandsBack }}" hint-placeholder-val="{{ true }}">
-            <button sc-camel-on-click="{{ selectedBrand.onBack }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:9px 14px;font-size:11.5px;font-weight:800;color:#374151;cursor:pointer">← All Brands</button>
+            <button sc-camel-on-click="{{ selectedBrand.onBack }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:9px 14px;font-size:11.5px;font-weight:800;color:#374151;cursor:pointer">{{ selectedBrand.backLabel }}</button>
           </sc-if>
         </div>
 
-        <sc-if value="{{ selectedBrand.hasActiveClaim }}" hint-placeholder-val="{{ false }}">
+        <sc-if value="{{ selectedBrand.showClaimReviewActions }}" hint-placeholder-val="{{ false }}">
           <div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:10px;padding:14px 18px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <div>
-              <span style="background:linear-gradient(90deg,#C8321A,#EF3C23);color:#fff;font-size:9px;font-weight:800;padding:3px 9px;border-radius:5px;letter-spacing:0.04em">OWNERSHIP CLAIM {{ selectedBrand.activeClaim.id }}</span>
-              <div style="font-size:11.5px;color:#374151;font-weight:700;margin-top:6px">Reviewing claim from {{ selectedBrand.activeClaim.claimant }} ({{ selectedBrand.activeClaim.claimantRole }})</div>
+              <span style="background:linear-gradient(90deg,#C8321A,#EF3C23);color:#fff;font-size:9px;font-weight:800;padding:3px 9px;border-radius:5px;letter-spacing:0.04em">OWNERSHIP CLAIM PENDING</span>
+              <div style="font-size:11.5px;color:#374151;font-weight:700;margin-top:6px">Reviewing claim from {{ selectedBrand.activeClaim.claimant }} · {{ selectedBrand.activeClaim.claimantCf }}</div>
             </div>
             <div style="display:flex;gap:8px">
               <button sc-camel-on-click="{{ selectedBrand.onApproveClaim }}" style="background:#16A34A;color:#fff;border:none;border-radius:6px;padding:9px 16px;font-size:10.5px;font-weight:800;cursor:pointer">APPROVE CLAIM</button>
@@ -1830,11 +1839,22 @@ window.addEventListener('message', function(ev) {
                 <div style="width:56px;height:56px;border-radius:12px;overflow:hidden;background:#fff;border:1px solid #E8EDF2;margin-top:-42px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,0.08)">
                   <x-import component-from-global-scope="image-slot" from="48b1f74f-652c-4fc3-bbaa-6fa4b5d2e5a6#/image-slot.js" id="brand-profile-thumb" shape="rect" placeholder="Logo" hint-size="56px,56px" src="/cms-mirror/e61083a9-f6de-4276-a1a5-9fffa67e8429.webp"></x-import>
                 </div>
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800">{{ selectedBrand.name }}</span><sc-if value="{{ selectedBrand.underReview }}" hint-placeholder-val="{{ false }}"><span style="background:#EFF6FF;color:#2563EB;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px">UNDER REVIEW</span></sc-if><sc-if value="{{ selectedBrand.showVerifiedOwner }}" hint-placeholder-val="{{ false }}"><span style="background:rgba(21,128,61,0.12);color:#15803D;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px">VERIFIED OWNER</span></sc-if></div>
+                <div style="font-size:13.5px;font-weight:800">{{ selectedBrand.name }}</div>
                 <div style="font-size:11px;color:#2563EB;font-weight:600;margin-top:2px">@brand_{{ selectedBrand.initial }}</div>
+                <sc-if value="{{ selectedBrand.profileStatus.showPills }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+                    <sc-for list="{{ selectedBrand.profileStatus.pills }}" as="stPill" hint-placeholder-count="2">
+                      <span style="{{ stPill.style }}">{{ stPill.label }}</span>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ selectedBrand.profileStatus.showHint }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:10.5px;color:#6B7280;font-weight:600;margin-top:6px;line-height:1.4">{{ selectedBrand.profileStatus.hint }}</div>
+                </sc-if>
                 <div style="font-size:11.5px;color:#374151;font-weight:600;margin-top:8px;line-height:1.5">{{ selectedBrand.tagline }}</div>
                 <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
-                  <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">CHOOSIFY USER ID</div><div style="font-size:11.5px;font-weight:700;margin-top:2px;font-family:ui-monospace,monospace">{{ selectedBrand.choosifyUserId }}</div></div><div><div style="font-size:9px;font-weight:800;color:#9CA3AF">OWNER STORE NAME</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ selectedBrand.name }} Digital Ltd</div></div>
+                  <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">ROLE</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">Seller</div></div>
+                  <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">CHOOSIFY USER ID</div><div style="font-size:11.5px;font-weight:700;margin-top:2px;font-family:ui-monospace,monospace">{{ selectedBrand.choosifyUserId }}</div></div><div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">OWNER STORE NAME</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ selectedBrand.name }} Digital Ltd</div></div>
                   <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">CREATIVE INDUSTRY</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ selectedBrand.category }}</div></div>
                   <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">CREATIVE SEGMENT</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ selectedBrand.category }}</div></div>
                   <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">OFFICIAL WEBSITE</div><div style="font-size:11.5px;font-weight:700;margin-top:2px;color:#2563EB">{{ selectedBrand.website }}</div></div>
@@ -1978,6 +1998,7 @@ window.addEventListener('message', function(ev) {
                 <sc-if value="{{ selectedBrand.showPartnerReviewActions }}" hint-placeholder-val="{{ false }}">
                   <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:14px 16px;margin-bottom:16px">
                     <div style="font-size:11px;font-weight:800;color:#1D4ED8;letter-spacing:0.04em;margin-bottom:8px">ADMIN REVIEW</div>
+                    <div style="font-size:10px;font-weight:800;color:#6B7280;margin-bottom:6px">Review Type: New Partner Application</div>
                     <div style="font-size:12px;font-weight:700;margin-bottom:6px">{{ selectedBrand.partnerApplicantName }} · {{ selectedBrand.partnerApplicantEmail }}</div>
                     <div style="font-size:11px;color:#374151;font-weight:600;margin-bottom:10px">{{ selectedBrand.partnerBusinessSummary }}</div>
                     <textarea value="{{ selectedBrand.partnerAdminNotesValue }}" sc-camel-on-change="{{ selectedBrand.onPartnerNotesChange }}" placeholder="Internal Admin notes (not visible to the seller)..." rows="3" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid #BFDBFE;padding:10px 12px;font-size:12px;resize:vertical;margin-bottom:10px"></textarea>
@@ -1994,6 +2015,34 @@ window.addEventListener('message', function(ev) {
                         <div style="font-size:11px;font-weight:700;margin-bottom:6px">{{ ev.action }} · {{ ev.time }}<div style="font-size:10px;color:#6B7280;font-weight:600">{{ ev.note }}</div></div>
                       </sc-for>
                     </sc-if>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ selectedBrand.showClaimReviewActions }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:10px;padding:14px 16px;margin-bottom:16px">
+                    <div style="font-size:11px;font-weight:800;color:#C2410C;letter-spacing:0.04em;margin-bottom:8px">ADMIN REVIEW</div>
+                    <div style="font-size:10px;font-weight:800;color:#9A3412;margin-bottom:6px">Review Type: Ownership Claim · Status: {{ selectedBrand.activeClaim.status }}</div>
+                    <div style="font-size:12px;font-weight:700;margin-bottom:4px">{{ selectedBrand.activeClaim.claimant }} · CF ID {{ selectedBrand.activeClaim.claimantCf }}</div>
+                    <div style="font-size:11px;color:#374151;font-weight:600;margin-bottom:6px">Claiming {{ selectedBrand.name }} · Claim {{ selectedBrand.activeClaim.id }}</div>
+                    <div style="font-size:11px;color:#6B7280;font-weight:600;margin-bottom:4px">Existing owner: {{ selectedBrand.activeClaim.existingOwnerState }}</div>
+                    <div style="font-size:11px;color:#6B7280;font-weight:600;margin-bottom:10px">{{ selectedBrand.activeClaim.evidenceSummary }}</div>
+                    <textarea value="{{ selectedBrand.claimAdminNotesValue }}" sc-camel-on-change="{{ selectedBrand.onClaimNotesChange }}" placeholder="Internal Admin notes / review feedback (not visible to the claimant unless you reject or request info)..." rows="3" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid #FDBA74;padding:10px 12px;font-size:12px;resize:vertical;margin-bottom:10px"></textarea>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px">
+                      <button sc-camel-on-click="{{ selectedBrand.onRequestClaimInfo }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer">Request Resubmission</button>
+                      <button sc-camel-on-click="{{ selectedBrand.onRejectClaim }}" style="background:#FEF2F2;border:1px solid #FCA5A5;color:#DC2626;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer">Reject Claim</button>
+                      <button sc-camel-on-click="{{ selectedBrand.onApproveClaim }}" style="background:#16A34A;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:11px;font-weight:800;cursor:pointer">Approve Claim</button>
+                    </div>
+                    <sc-if value="{{ selectedBrand.hasClaimHistory }}" hint-placeholder-val="{{ false }}">
+                      <div style="font-size:10px;font-weight:800;color:#9CA3AF;letter-spacing:0.04em;margin:12px 0 8px">REVIEW HISTORY</div>
+                      <sc-for list="{{ selectedBrand.claimReviewHistory }}" as="ev" hint-placeholder-count="2">
+                        <div style="font-size:11px;font-weight:700;margin-bottom:6px">{{ ev.action }} · {{ ev.time }}<div style="font-size:10px;color:#6B7280;font-weight:600">{{ ev.note }}</div></div>
+                      </sc-for>
+                    </sc-if>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ selectedBrand.showClaimantClaimNotice }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:10px;padding:14px 16px;margin-bottom:16px">
+                    <div style="font-size:11px;font-weight:800;color:#C2410C;letter-spacing:0.04em">OWNERSHIP CLAIM UNDER REVIEW</div>
+                    <div style="font-size:12px;font-weight:600;margin-top:6px;color:#374151">Choosify is reviewing your ownership claim for this profile. You will be notified when Admin completes the review.</div>
                   </div>
                 </sc-if>
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
@@ -2947,7 +2996,7 @@ window.addEventListener('message', function(ev) {
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px">
           <div>
             <div style="display:flex;align-items:center;gap:10px">
-              <span style="font-size:15.5px;font-weight:800">Creator Management Studio</span>
+              <span style="font-size:15.5px;font-weight:800">Creators Management</span>
               <span style="background:#F3F4F6;color:#6B7280;font-size:9px;font-weight:800;padding:4px 9px;border-radius:6px;letter-spacing:0.03em">CONTENT ECOSYSTEM</span>
             </div>
             <div style="font-size:12px;color:#6B7280;font-weight:600;margin-top:4px">Creator directory, editorial guide studio, brand partnership tracking, and trust score monitoring.</div>
@@ -2967,11 +3016,54 @@ window.addEventListener('message', function(ev) {
         </div>
 
         <div style="display:flex;gap:6px;background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:8px;margin-bottom:12px;overflow-x:auto">
-          <sc-for list="{{ creatorTabDefs }}" as="tb" hint-placeholder-count="4">
+          <sc-for list="{{ creatorTabDefs }}" as="tb" hint-placeholder-count="5">
             <div sc-camel-on-click="{{ tb.onClick }}" style="padding:9px 16px;border-radius:8px;font-size:11.5px;font-weight:800;cursor:pointer;white-space:nowrap;{{ tb.tabStyle }}">{{ tb.label }} ({{ tb.count }})</div>
           </sc-for>
         </div>
 
+        <sc-if value="{{ isCreatorRequestsList }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <sc-for list="{{ creatorRequests }}" as="rq" hint-placeholder-count="2">
+              <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:18px 20px;cursor:pointer" sc-camel-on-click="{{ rq.onClick }}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+                  <div><div style="font-size:14px;font-weight:800">{{ rq.name }}</div><div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-top:2px">{{ rq.businessName }} · Application ID: <span style="color:#EF3C23;font-weight:800">{{ rq.id }}</span></div></div>
+                  <span style="background:#EFF6FF;color:#2563EB;font-size:9.5px;font-weight:800;padding:5px 11px;border-radius:6px">{{ rq.status }}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+                  <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">EMAIL</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ rq.email }}</div></div>
+                  <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">APPLICATION DATE</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ rq.appDate }}</div></div>
+                  <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">CATEGORY</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ rq.businessCategory }}</div></div>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ !creatorRequests.length }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:40px;text-align:center;color:#9CA3AF;font-size:12.5px;font-weight:600;font-style:italic">{{ creatorRequestsEmptyMessage }}</div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isCreatorClaimsList }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <sc-for list="{{ creatorClaims }}" as="cl" hint-placeholder-count="2">
+              <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:18px 20px;cursor:pointer" sc-camel-on-click="{{ cl.onOpenProfile }}">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+                  <div><div style="font-size:14px;font-weight:800;color:#2563EB">{{ cl.name }}</div><div style="font-size:11.5px;color:#9CA3AF;font-weight:600;margin-top:2px">Claimant: {{ cl.claimant }} {{ cl.claimantRole }} · Claim ID: <span style="color:#EF3C23;font-weight:800">{{ cl.id }}</span></div></div>
+                  <span style="background:#FFF7ED;color:#C2410C;font-size:9.5px;font-weight:800;padding:5px 11px;border-radius:6px">{{ cl.status }}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
+                  <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">SUBMITTED</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ cl.date }}</div></div>
+                  <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">EVIDENCE</div><div style="font-size:11.5px;font-weight:700;margin-top:2px"><sc-for list="{{ cl.checklist }}" as="cd" hint-placeholder-count="2"><span>{{ cd }} </span></sc-for></div></div>
+                  <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">OPEN</div><div style="font-size:11.5px;font-weight:700;margin-top:2px;color:#2563EB">Universal Creator Profile</div></div>
+                </div>
+              </div>
+            </sc-for>
+            <sc-if value="{{ !creatorClaims.length }}" hint-placeholder-val="{{ false }}">
+              <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:40px;text-align:center;color:#9CA3AF;font-size:12.5px;font-weight:600;font-style:italic">{{ creatorClaimsEmptyMessage }}</div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ showCreatorTable }}" hint-placeholder-val="{{ true }}">
         <div style="display:flex;gap:10px;background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:10px;margin-bottom:12px;flex-wrap:wrap">
           <input value="{{ creatorSearchValue }}" sc-camel-on-change="{{ setCreatorSearch }}" placeholder="Search by creator, handle, platform, expertise, or CF ID..." style="flex:1;min-width:220px;height:38px;border-radius:8px;border:1px solid #E8EDF2;padding:0 14px;font-size:12.5px">
           <sc-raw-select value="{{ creatorSort }}" sc-camel-on-change="{{ setCreatorSort }}" style="height:38px;border-radius:8px;border:1px solid #E8EDF2;padding:0 12px;font-size:12px;color:#111827">
@@ -3010,6 +3102,7 @@ window.addEventListener('message', function(ev) {
             <div style="text-align:center;color:#9CA3AF;font-size:12.5px;font-weight:600;font-style:italic;padding:40px 0">No creators match this filter yet.</div>
           </sc-if>
         </div>
+        </sc-if>
       </sc-if>
 
       <!-- ===== CREATOR PROFILE STUDIO ===== -->
@@ -3035,11 +3128,21 @@ window.addEventListener('message', function(ev) {
                 <div style="width:56px;height:56px;border-radius:50%;overflow:hidden;background:#fff;border:1px solid #E8EDF2;margin-top:-42px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,0.08)">
                   <x-import component-from-global-scope="image-slot" from="48b1f74f-652c-4fc3-bbaa-6fa4b5d2e5a6#/image-slot.js" id="creator-profile-thumb" shape="circle" placeholder="Photo" hint-size="56px,56px" src="/cms-mirror/7bdd8cb4-702b-4356-be18-066f4c21b10e.webp"></x-import>
                 </div>
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><span style="font-size:13.5px;font-weight:800">{{ selectedCreator.name }}</span><sc-if value="{{ selectedCreator.underReview }}" hint-placeholder-val="{{ false }}"><span style="background:#EFF6FF;color:#2563EB;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px">UNDER REVIEW</span></sc-if><sc-if value="{{ selectedCreator.showVerifiedBadge }}" hint-placeholder-val="{{ false }}"><span style="background:rgba(21,128,61,0.12);color:#15803D;font-size:9px;font-weight:800;padding:3px 8px;border-radius:20px">VERIFIED</span></sc-if></div>
+                <div style="font-size:13.5px;font-weight:800">{{ selectedCreator.name }}</div>
                 <div style="font-size:11px;color:#2563EB;font-weight:600;margin-top:2px">{{ selectedCreator.handle }}</div>
+                <sc-if value="{{ selectedCreator.profileStatus.showPills }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+                    <sc-for list="{{ selectedCreator.profileStatus.pills }}" as="stPill" hint-placeholder-count="2">
+                      <span style="{{ stPill.style }}">{{ stPill.label }}</span>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ selectedCreator.profileStatus.showHint }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:10.5px;color:#6B7280;font-weight:600;margin-top:6px;line-height:1.4">{{ selectedCreator.profileStatus.hint }}</div>
+                </sc-if>
                 <div style="font-size:11.5px;color:#374151;font-weight:600;margin-top:8px;line-height:1.5">{{ selectedCreator.bio }}</div>
                 <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
-                  <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">ROLE</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ selectedCreator.role }}</div></div>
+                  <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">ROLE</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">Content Creator</div></div>
                   <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">CHOOSIFY USER ID</div><div style="font-size:11.5px;font-weight:700;margin-top:2px;font-family:ui-monospace,monospace">{{ selectedCreator.choosifyUserId }}</div></div><div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">PRIMARY PLATFORM</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ selectedCreator.platform }}</div></div>
                   <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">LOCATION</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ selectedCreator.location }}</div></div>
                   <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">BEST FOR</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ selectedCreator.bestFor }}</div></div>
@@ -3162,6 +3265,7 @@ window.addEventListener('message', function(ev) {
                 <sc-if value="{{ selectedCreator.showPartnerReviewActions }}" hint-placeholder-val="{{ false }}">
                   <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:10px;padding:14px 16px;margin-bottom:16px">
                     <div style="font-size:11px;font-weight:800;color:#1D4ED8;letter-spacing:0.04em;margin-bottom:8px">ADMIN REVIEW</div>
+                    <div style="font-size:10px;font-weight:800;color:#6B7280;margin-bottom:6px">Review Type: New Partner Application</div>
                     <div style="font-size:12px;font-weight:700;margin-bottom:6px">{{ selectedCreator.partnerApplicantName }} · {{ selectedCreator.partnerApplicantEmail }}</div>
                     <div style="font-size:11px;color:#374151;font-weight:600;margin-bottom:10px">{{ selectedCreator.partnerBusinessSummary }}</div>
                     <textarea value="{{ selectedCreator.partnerAdminNotesValue }}" sc-camel-on-change="{{ selectedCreator.onPartnerNotesChange }}" placeholder="Internal Admin notes (not visible to the creator)..." rows="3" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid #BFDBFE;padding:10px 12px;font-size:12px;resize:vertical;margin-bottom:10px"></textarea>
@@ -3178,6 +3282,34 @@ window.addEventListener('message', function(ev) {
                         <div style="font-size:11px;font-weight:700;margin-bottom:6px">{{ ev.action }} · {{ ev.time }}<div style="font-size:10px;color:#6B7280;font-weight:600">{{ ev.note }}</div></div>
                       </sc-for>
                     </sc-if>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ selectedCreator.showClaimReviewActions }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:10px;padding:14px 16px;margin-bottom:16px">
+                    <div style="font-size:11px;font-weight:800;color:#C2410C;letter-spacing:0.04em;margin-bottom:8px">ADMIN REVIEW</div>
+                    <div style="font-size:10px;font-weight:800;color:#9A3412;margin-bottom:6px">Review Type: Ownership Claim · Status: {{ selectedCreator.activeClaim.status }}</div>
+                    <div style="font-size:12px;font-weight:700;margin-bottom:4px">{{ selectedCreator.activeClaim.claimant }} · CF ID {{ selectedCreator.activeClaim.claimantCf }}</div>
+                    <div style="font-size:11px;color:#374151;font-weight:600;margin-bottom:6px">Claiming {{ selectedCreator.name }} · Claim {{ selectedCreator.activeClaim.id }}</div>
+                    <div style="font-size:11px;color:#6B7280;font-weight:600;margin-bottom:4px">Existing owner: {{ selectedCreator.activeClaim.existingOwnerState }}</div>
+                    <div style="font-size:11px;color:#6B7280;font-weight:600;margin-bottom:10px">{{ selectedCreator.activeClaim.evidenceSummary }}</div>
+                    <textarea value="{{ selectedCreator.claimAdminNotesValue }}" sc-camel-on-change="{{ selectedCreator.onClaimNotesChange }}" placeholder="Internal Admin notes / review feedback..." rows="3" style="width:100%;box-sizing:border-box;border-radius:8px;border:1px solid #FDBA74;padding:10px 12px;font-size:12px;resize:vertical;margin-bottom:10px"></textarea>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px">
+                      <button sc-camel-on-click="{{ selectedCreator.onRequestClaimInfo }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer">Request Resubmission</button>
+                      <button sc-camel-on-click="{{ selectedCreator.onRejectClaim }}" style="background:#FEF2F2;border:1px solid #FCA5A5;color:#DC2626;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:800;cursor:pointer">Reject Claim</button>
+                      <button sc-camel-on-click="{{ selectedCreator.onApproveClaim }}" style="background:#16A34A;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:11px;font-weight:800;cursor:pointer">Approve Claim</button>
+                    </div>
+                    <sc-if value="{{ selectedCreator.hasClaimHistory }}" hint-placeholder-val="{{ false }}">
+                      <div style="font-size:10px;font-weight:800;color:#9CA3AF;letter-spacing:0.04em;margin:12px 0 8px">REVIEW HISTORY</div>
+                      <sc-for list="{{ selectedCreator.claimReviewHistory }}" as="ev" hint-placeholder-count="2">
+                        <div style="font-size:11px;font-weight:700;margin-bottom:6px">{{ ev.action }} · {{ ev.time }}<div style="font-size:10px;color:#6B7280;font-weight:600">{{ ev.note }}</div></div>
+                      </sc-for>
+                    </sc-if>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ selectedCreator.showClaimantClaimNotice }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:10px;padding:14px 16px;margin-bottom:16px">
+                    <div style="font-size:11px;font-weight:800;color:#C2410C;letter-spacing:0.04em">OWNERSHIP CLAIM UNDER REVIEW</div>
+                    <div style="font-size:12px;font-weight:600;margin-top:6px;color:#374151">Choosify is reviewing your ownership claim for this creator profile.</div>
                   </div>
                 </sc-if>
                 <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
@@ -4099,7 +4231,7 @@ window.addEventListener('message', function(ev) {
       <sc-if value="{{ isCustomerList }}" hint-placeholder-val="{{ false }}">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px">
           <div>
-            <div style="font-size:15.5px;font-weight:800">Consumer Management Hub</div>
+            <div style="font-size:15.5px;font-weight:800">Consumer Management</div>
             <div style="font-size:12px;color:#6B7280;font-weight:600;margin-top:2px">Manage registered platform buyers, behavior intent patterns, and audit safety ratings.</div>
           </div>
           <div style="display:flex;gap:10px">
@@ -4205,8 +4337,16 @@ window.addEventListener('message', function(ev) {
                 <div style="width:56px;height:56px;border-radius:50%;background:#fff;border:1px solid #E8EDF2;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px;margin-top:-42px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,0.08)">{{ selectedCustomer.initial }}</div>
                 <div style="font-size:13.5px;font-weight:800">{{ selectedCustomer.name }}</div>
                 <div style="font-size:11px;color:#2563EB;font-weight:600;margin-top:2px">{{ selectedCustomer.email }}</div>
+                <sc-if value="{{ selectedCustomer.profileStatus.showPills }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+                    <sc-for list="{{ selectedCustomer.profileStatus.pills }}" as="stPill" hint-placeholder-count="1">
+                      <span style="{{ stPill.style }}">{{ stPill.label }}</span>
+                    </sc-for>
+                  </div>
+                </sc-if>
                 <div style="display:flex;flex-direction:column;gap:10px;margin-top:14px">
-                  <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">CHOOSIFY USER ID</div><div style="font-size:11.5px;font-weight:700;margin-top:2px;font-family:ui-monospace,monospace">{{ selectedCustomer.choosifyUserId }}</div></div>
+                  <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">ROLE</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">Consumer</div></div>
+                  <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">CHOOSIFY USER ID</div><div style="font-size:11.5px;font-weight:700;margin-top:2px;font-family:ui-monospace,monospace">{{ selectedCustomer.choosifyUserId }}</div></div>
                   <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">EMAIL ACCOUNT</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ selectedCustomer.email }}</div></div>
                   <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">GEOGRAPHY BASE</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ selectedCustomer.geography }}</div></div>
                   <div style="border-top:1px solid #F1F3F5;padding-top:8px"><div style="font-size:9px;font-weight:800;color:#9CA3AF">PRIMARY PHONE</div><div style="font-size:11.5px;font-weight:700;margin-top:2px">{{ selectedCustomer.phone }}</div></div>
@@ -4235,7 +4375,7 @@ window.addEventListener('message', function(ev) {
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px">
               <div style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:14px">
                 <div style="font-size:9px;font-weight:800;color:#9CA3AF">TOTAL REVENUE LTV</div>
-                <div style="font-size:16px;font-weight:800;color:#16A34A;margin-top:4px">৳{{ selectedCustomer.spent }}</div>
+                <div style="font-size:16px;font-weight:800;color:#16A34A;margin-top:4px">{{ selectedCustomer.spentLabel }}</div>
               </div>
               <div style="background:#fff;border:1px solid #E8EDF2;border-radius:8px;padding:14px">
                 <div style="font-size:9px;font-weight:800;color:#9CA3AF">SECURE WALLET STANDING</div>
@@ -4266,17 +4406,23 @@ window.addEventListener('message', function(ev) {
                   <div style="background:#F9FAFB;border-radius:8px;padding:12px">
                     <div style="display:flex;justify-content:space-between"><span style="font-size:9.5px;font-weight:800;color:#9CA3AF">DEFAULT SHIPPING</span><span style="font-size:8.5px;font-weight:800;color:#EF3C23">DEFAULT</span></div>
                     <div style="font-size:11.5px;font-weight:700;margin:8px 0">{{ selectedCustomer.addresses.default }}</div>
+                    <sc-if value="{{ selectedCustomer.hasDefaultAddress }}" hint-placeholder-val="{{ false }}">
                     <div style="font-size:10.5px;color:#2563EB;font-weight:700">Save Changes</div>
+                    </sc-if>
                   </div>
                   <div style="background:#F9FAFB;border-radius:8px;padding:12px">
                     <div style="font-size:9.5px;font-weight:800;color:#9CA3AF">ALTERNATIVE SHIPPING</div>
                     <div style="font-size:11.5px;font-weight:700;margin:8px 0">{{ selectedCustomer.addresses.alt }}</div>
+                    <sc-if value="{{ selectedCustomer.hasAltAddress }}" hint-placeholder-val="{{ false }}">
                     <div style="font-size:10.5px;color:#2563EB;font-weight:700">Save Changes</div>
+                    </sc-if>
                   </div>
                   <div style="background:#F9FAFB;border-radius:8px;padding:12px">
                     <div style="font-size:9.5px;font-weight:800;color:#9CA3AF">BILLING ADDRESS</div>
                     <div style="font-size:11.5px;font-weight:700;margin:8px 0">{{ selectedCustomer.addresses.billing }}</div>
+                    <sc-if value="{{ selectedCustomer.hasBillingAddress }}" hint-placeholder-val="{{ false }}">
                     <div style="font-size:10.5px;color:#2563EB;font-weight:700">Save Changes</div>
+                    </sc-if>
                   </div>
                 </div>
               </div>
@@ -4301,8 +4447,11 @@ window.addEventListener('message', function(ev) {
                     <div><div style="font-size:9px;font-weight:800;color:#9CA3AF">AUTO-REINSTATE</div><div style="font-size:11.5px;font-weight:700;margin-top:3px">{{ selectedCustomer.profileSuspensionInfo.autoReinstateLabel }}</div></div>
                   </div>
                 </sc-if>
-                <sc-if value="{{ !selectedCustomer.profileSuspensionInfo }}" hint-placeholder-val="{{ true }}">
+                <sc-if value="{{ selectedCustomer.profileAccessActive }}" hint-placeholder-val="{{ true }}">
                   <div style="font-size:11.5px;color:#16A34A;font-weight:700">✓ Account active — full marketplace access.</div>
+                </sc-if>
+                <sc-if value="{{ selectedCustomer.profileAccessPending }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:11.5px;color:#B45309;font-weight:700">Marketplace shopping access is off for this consumer.</div>
                 </sc-if>
               </div>
 
@@ -5807,13 +5956,13 @@ window.addEventListener('message', function(ev) {
         </div>
 
         <sc-if value="{{ !showUnifiedInbox }}" hint-placeholder-val="{{ true }}">
-        <div style="display:grid;grid-template-columns:230px 1fr 240px;gap:0;background:#fff;border:1px solid #E8EDF2;border-radius:10px;overflow:hidden;min-height:640px">
+        <div style="display:grid;grid-template-columns:minmax(220px,280px) 1fr minmax(200px,240px);gap:0;background:#fff;border:1px solid #E8EDF2;border-radius:10px;overflow:hidden;min-height:640px">
           <!-- CONVERSATIONS LIST -->
           <div style="border-right:1px solid #E8EDF2;display:flex;flex-direction:column;min-width:0;overflow:hidden">
             <div style="padding:16px;border-bottom:1px solid #E8EDF2">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <div style="display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-bottom:12px">
                 <span style="font-size:12.5px;font-weight:800">Your conversations</span>
-                <span style="width:26px;height:26px;border-radius:8px;background:#FFF7ED;color:#EF3C23;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800;cursor:pointer">+</span>
+                <button sc-camel-on-click="{{ contactSupport }}" title="Contact Choosify Support" style="background:linear-gradient(90deg,#C8321A,#EF3C23);color:#fff;border:none;border-radius:8px;padding:8px 10px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap;width:100%;box-sizing:border-box;letter-spacing:0.02em">CONTACT SUPPORT</button>
               </div>
               <input placeholder="Search transactions / order references..." style="width:100%;box-sizing:border-box;height:34px;border-radius:7px;border:1px solid #E8EDF2;padding:0 10px;font-size:11.5px;margin-bottom:10px">
               <div style="display:flex;gap:6px;flex-wrap:wrap">
@@ -5832,7 +5981,7 @@ window.addEventListener('message', function(ev) {
                       <div style="min-width:0">
                         <div style="font-size:12px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ th.customerName }}</div>
                         <div style="font-size:10.5px;color:#9CA3AF;font-weight:600;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px">{{ th.preview }}</div>
-                        <span style="display:inline-block;margin-top:5px;background:#FFF7ED;color:#EF3C23;font-size:9px;font-weight:800;padding:2px 7px;border-radius:5px">Support</span>
+                        <sc-if value="{{ th.isSupport }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;margin-top:5px;background:#FFF7ED;color:#EF3C23;font-size:9px;font-weight:800;padding:2px 7px;border-radius:5px">Support</span></sc-if>
                       </div>
                     </div>
                   </div>
@@ -5850,7 +5999,12 @@ window.addEventListener('message', function(ev) {
                 <div style="font-size:10.5px;color:#16A34A;font-weight:700">● Online</div>
               </div>
               <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-                <button style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:8px 14px;font-size:11px;font-weight:800;color:#374151;cursor:pointer">⚑ Report to Support</button>
+                <sc-if value="{{ selectedThreadDetail.showResolveSupport }}" hint-placeholder-val="{{ false }}">
+                  <button sc-camel-on-click="{{ resolveSupportThread }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:8px 14px;font-size:11px;font-weight:800;color:#374151;cursor:pointer">✓ Resolve support</button>
+                </sc-if>
+                <sc-if value="{{ !selectedThreadDetail.isSupport }}" hint-placeholder-val="{{ true }}">
+                  <button style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:8px 14px;font-size:11px;font-weight:800;color:#374151;cursor:pointer">⚑ Report to Support</button>
+                </sc-if>
                 <span style="width:30px;height:30px;border-radius:7px;border:1px solid #E8EDF2;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:#6B7280">⋮</span>
               </div>
             </div>
@@ -8715,6 +8869,38 @@ function cfIdLabelForUid(accountUserId, entityCfId, email) {
     return '';
   }
 }
+function cmsProfileStatusView(kind, entity, isOwner) {
+  try {
+    if (typeof window.buildProfileStatusView !== 'function') {
+      return { showPills: true, pills: [{ key: 'ACTIVE', label: 'Active', style: 'background:rgba(22,163,74,0.12);color:#15803D;border:1px solid rgba(21,128,61,0.22);font-size:9px;font-weight:800;padding:3px 8px;border-radius:999px;letter-spacing:0.04em;text-transform:uppercase;white-space:nowrap' }], showHint: false, hint: '', primaryLabel: 'Active' };
+    }
+    var facts = { kind: kind || 'consumer' };
+    entity = entity || {};
+    if (isOwner) {
+      facts.partnerApplicationStatus = window.__CMS_MIRROR_PARTNER_APPLICATION_STATUS__ || entity.partnerApplicationStatus || null;
+      facts.identityVerified = window.__CMS_MIRROR_IDENTITY_VERIFIED__ === true || !!entity.verifiedStatus || !!entity.verified;
+      facts.marketplaceAccess = window.__CMS_MIRROR_MARKETPLACE_ACCESS__ !== false;
+      facts.resubmissionRequested = window.__CMS_MIRROR_RESUBMISSION_REQUESTED__ === true || !!entity.resubmissionRequested;
+    } else {
+      facts.partnerApplicationStatus = entity.partnerApplicationStatus || null;
+      facts.identityVerified = !!entity.identityVerified || !!entity.verifiedStatus || !!entity.verified;
+      facts.marketplaceAccess = typeof entity.marketplaceAccess === 'boolean' ? entity.marketplaceAccess : true;
+      facts.resubmissionRequested = !!entity.resubmissionRequested;
+    }
+    if (entity.marketplaceStatus) facts.marketplaceStatus = entity.marketplaceStatus;
+    if (typeof entity.marketplaceAccess === 'boolean' && !isOwner) facts.marketplaceAccess = entity.marketplaceAccess;
+    if (entity.claimStatus) facts.claimStatus = entity.claimStatus;
+    if (entity.ownershipClaimPending) facts.ownershipClaimPending = true;
+    if (entity.creatorCatalogStatus) facts.creatorCatalogStatus = entity.creatorCatalogStatus;
+    if (entity.status === 'live' || entity.status === 'draft' || entity.status === 'archived') facts.creatorCatalogStatus = entity.status;
+    if (entity.localSuspended) facts.localSuspended = true;
+    var showHint = !!isOwner && (kind === 'seller' || kind === 'creator' || kind === 'brand');
+    return window.buildProfileStatusView(facts, { showHint: showHint });
+  } catch (_) {
+    return { showPills: false, pills: [], showHint: false, hint: '', primaryLabel: 'Active' };
+  }
+}
+window.cmsProfileStatusView = cmsProfileStatusView;
 /** Parse CF-00127 / 00127 / 127 → canonical CF-00127 (Admin list search). */
 function normalizeChoosifyUserIdQuery(raw) {
   try {
@@ -8764,6 +8950,62 @@ try {
     if (!brand) return true;
     var granted = brand.marketplaceAccess === true || brand.marketplaceStatus === 'granted' || brand.marketplaceStatus === 'restored';
     return !granted;
+  };
+  window.creatorAppNeedsAdminAttention = function(a, creators) {
+    if (!a || a.applicantType !== 'creator') return false;
+    if (a.status === 'pending' || a.status === 'rejected') return true;
+    if (a.status !== 'approved') return false;
+    var list = Array.isArray(creators) ? creators : [];
+    var creator = list.find(function(c) {
+      return (a.catalogEntityId && c.catalogId === a.catalogEntityId) || (a.provisionedUserId && c.userId === a.provisionedUserId);
+    });
+    if (!creator) return true;
+    var granted = creator.marketplaceAccess === true
+      || creator.marketplaceStatus === 'granted'
+      || creator.marketplaceStatus === 'restored'
+      || creator.status === 'live';
+    return !granted;
+  };
+  window.indexUserDirectory = function(rows) {
+    var byEmail = {};
+    var byCf = {};
+    var byName = {};
+    (Array.isArray(rows) ? rows : []).forEach(function(r) {
+      if (!r || !r.uid) return;
+      if (r.email) byEmail[String(r.email).toLowerCase()] = r.uid;
+      if (r.choosifyUserId) byCf[String(r.choosifyUserId).toUpperCase()] = r.uid;
+      var nm = String(r.displayName || '').trim().toLowerCase();
+      if (nm) {
+        if (!byName[nm]) byName[nm] = [];
+        byName[nm].push(r.uid);
+      }
+    });
+    window.__CMS_MIRROR_DIR_ROWS__ = Array.isArray(rows) ? rows : [];
+    window.__CMS_MIRROR_UID_BY_EMAIL__ = byEmail;
+    window.__CMS_MIRROR_UID_BY_CF__ = byCf;
+    window.__CMS_MIRROR_UID_BY_NAME__ = byName;
+  };
+  window.resolveProfileAccountUid = function(profile) {
+    if (!profile) return '';
+    var direct = profile.sellerId || profile.userId || profile.uid || profile.targetUserId || '';
+    if (direct && String(direct).length >= 8 && !/^[0-9]+$/.test(String(direct))) return String(direct);
+    var email = String(profile.email || profile.contactEmail || '').trim().toLowerCase();
+    var byEmail = window.__CMS_MIRROR_UID_BY_EMAIL__ || {};
+    if (email && byEmail[email]) return byEmail[email];
+    var cf = String(profile.choosifyUserId || '').trim().toUpperCase();
+    var byCf = window.__CMS_MIRROR_UID_BY_CF__ || {};
+    if (cf && byCf[cf]) return byCf[cf];
+    var name = String(profile.displayName || profile.name || '').trim().toLowerCase();
+    var byName = window.__CMS_MIRROR_UID_BY_NAME__ || {};
+    if (name && byName[name] && byName[name].length === 1) return byName[name][0];
+    return '';
+  };
+  window.canShowLoginAsUser = function(profile) {
+    if (!window.__CMS_MIRROR_CAN_IMPERSONATE__) return false;
+    var uid = window.resolveProfileAccountUid(profile);
+    var selfUid = window.__CMS_MIRROR_USER_ID__ || window.__CMS_MIRROR_UID__ || '';
+    if (uid && selfUid && String(uid) === String(selfUid)) return false;
+    return true;
   };
 } catch (_) {}
 
@@ -9519,12 +9761,15 @@ class Component extends DCLogic {
     cmsPromoSections: Component.CMS_PROMO_SECTIONS.map(p=>({...p})),
     cmsGlobalSettings: {websiteName:'Choosify Bangladesh', currency:'BDT (৳)', timezone:'Asia/Dhaka (GMT+6)', email:'hello@choosify.bd', phone:'+880 1800-CHOOSIFY', announcementText:'🎉 Welcome to Choosify Bangladesh — Discover trusted brands', announcementActive:true, maintenanceMode:false},
     selectedBrandName: null,
-    brandTab: 'all',
+    brandTab: 'requests',
+    partnerAppsLoading: false,
+    partnerAppsError: null,
     brandSort: 'az',
     brandSearch: '',
     brandSelectedIds: [],
     brandAccessOverrides: {},
     creatorSort: 'az',
+    creatorStatusFilter: 'requests',
     creatorSelectedIds: [],
     creatorAccessOverrides: {},
     customerSort: 'az',
@@ -9578,6 +9823,7 @@ class Component extends DCLogic {
     contentSearch: '',
     contentSelectedIds: new Set(),
     selectedThreadId: Component.MESSAGE_THREADS[0].id,
+    liveSupportThreads: [],
     threadReplyText: '',
     threadReadStates: {},
     threadTracking: {},
@@ -9609,9 +9855,11 @@ class Component extends DCLogic {
     cashbookCategoriesList: Component.CASHBOOK_CATEGORIES.slice(),
     cashbookCategoryCustomMode: false, cashbookCategoryCustomText: '',
     cashbookDeleteBookId: null, cashbookDeleteConfirmText: '', cashbookDeleteBusy: false,
-    brandDocOverrides: {}, brandDocComments: {}, brandDocsRequired: {},
+    brandDocOverrides: {}, brandDocComments: {},     brandDocsRequired: {},
     creatorDocOverrides: {}, creatorDocComments: {}, creatorDocsRequired: {},
     viewingClaimId: null,
+    viewingCreatorClaimId: null,
+    claimAdminNotesDraft: '',
     creatorEconomyTab: 'analytics', showCampaignForm: false,
     sellerCustomersList: [],
     sellerCustSearch: '',
@@ -9659,7 +9907,265 @@ class Component extends DCLogic {
     }
     this.setState({selectedBrandName: name, brandProfileTab: 'account'});
   };
-  setBrandTab = (t) => this.setState({brandTab: t});
+  refreshPartnerApplications = async () => {
+    const api = window.CmsStudioProfileApi;
+    if (!api || typeof api.listPartnerApplications !== 'function') return;
+    try { this.setState({ partnerAppsLoading: true, partnerAppsError: null }); } catch (_) {}
+    try {
+      window.__CMS_MIRROR_PARTNER_APPS__ = await api.listPartnerApplications();
+      try { this.setState({ partnerAppsLoading: false, partnerAppsError: null, _partnerAppsTick: Date.now() }); } catch (_) {}
+    } catch (err) {
+      window.__CMS_MIRROR_PARTNER_APPS__ = window.__CMS_MIRROR_PARTNER_APPS__ || [];
+      try {
+        this.setState({
+          partnerAppsLoading: false,
+          partnerAppsError: (err && err.message) || 'Could not load seller requests',
+          _partnerAppsTick: Date.now(),
+        });
+      } catch (_) {}
+    }
+  };
+  isPendingOwnershipClaim = (row) => {
+    const s = String((row && row.status) || '');
+    return s === 'Submitted' || s === 'Under Review';
+  };
+  listCachedVerifications = () => (
+    Array.isArray(window.__CMS_MIRROR_VERIFICATIONS__) ? window.__CMS_MIRROR_VERIFICATIONS__ : []
+  );
+  claimMatchesEntity = (row, entityType, entity) => {
+    if (!row || !entity) return false;
+    const rowType = row.entityType || 'brand';
+    if (rowType !== entityType) return false;
+    const catalogId = entity.catalogId || entity.id || null;
+    const name = entity.name || '';
+    if (catalogId && (row.entityId === catalogId || row.brand_id === catalogId)) return true;
+    if (name && (row.entityName === name || row.brand_name === name)) return true;
+    return false;
+  };
+  findPendingClaimForEntity = (entityType, entity) => {
+    return this.listCachedVerifications().find((row) =>
+      this.isPendingOwnershipClaim(row) && this.claimMatchesEntity(row, entityType, entity)
+    ) || null;
+  };
+  mapVerificationToActiveClaim = (row, entity) => {
+    if (!row) return {};
+    const docs = Array.isArray(row.documents) ? row.documents : [];
+    const evidenceSummary = docs.map((d) => d.name || d.type).filter(Boolean).join(', ') || 'No documents attached';
+    const claimantCf = (typeof window.cfIdLabelForUid === 'function'
+      ? window.cfIdLabelForUid(row.submitted_by)
+      : '') || '—';
+    const ownerId = (entity && (entity.sellerId || entity.userId)) || '';
+    const claimantId = row.submitted_by || '';
+    let existingOwnerState = 'No verified owner on file';
+    if (ownerId && claimantId && ownerId === claimantId) {
+      existingOwnerState = 'Claimant is the current associated account';
+    } else if (ownerId) {
+      existingOwnerState = 'Existing owner association on file (not the claimant)';
+    }
+    return {
+      id: row.id,
+      status: row.status,
+      claimant: row.submitted_by_name || row.submitted_by || 'Claimant',
+      claimantCf,
+      claimantRole: '',
+      evidenceSummary,
+      submittedBy: row.submitted_by,
+      existingOwnerState,
+    };
+  };
+  pendingOwnershipClaims = (entityType) => {
+    return this.listCachedVerifications().filter((row) => {
+      if (!this.isPendingOwnershipClaim(row)) return false;
+      if (entityType === 'creator') return row.entityType === 'creator';
+      return row.entityType !== 'creator';
+    });
+  };
+  mapVerificationToQueueItem = (row, kind) => {
+    const docs = Array.isArray(row.documents) ? row.documents : [];
+    const checklist = docs.map((d) => d.name || d.type).filter(Boolean);
+    const name = row.entityName || row.brand_name || 'Profile';
+    const claimantCf = (typeof window.cfIdLabelForUid === 'function'
+      ? window.cfIdLabelForUid(row.submitted_by)
+      : '') || '';
+    const openProfile = () => {
+      if (kind === 'creator') this.selectCreatorFromClaim(name, row.id);
+      else this.selectBrandFromClaim(name, row.id);
+    };
+    return {
+      id: row.id,
+      brand: name,
+      name,
+      status: row.status === 'Submitted' ? 'Pending Review' : row.status,
+      badgeStyle: this.statusStyle(row.status === 'Submitted' ? 'Pending' : row.status === 'Rejected' ? 'Rejected' : 'Active'),
+      claimant: row.submitted_by_name || row.submitted_by || 'Claimant',
+      claimantRole: claimantCf && claimantCf !== '—' ? ('· ' + claimantCf) : '',
+      phone: '—',
+      email: '—',
+      tradeLicenseNo: '—',
+      date: String(row.created_at || row.createdAt || '').slice(0, 10) || '—',
+      checklist: checklist.length ? checklist : ['Documents submitted'],
+      onOpenProfile: openProfile,
+      onApprove: openProfile,
+      onReject: openProfile,
+      onRequestInfo: openProfile,
+    };
+  };
+  applyClaimReviewToProfile = (selected, entityKind, entity, partnerApp) => {
+    if (!selected) return;
+    const role = window.__CMS_MIRROR_ROLE__ || '';
+    const isAdminReviewer = role === 'admin' || role === 'super_admin';
+    const viewingId = entityKind === 'creator' ? this.state.viewingCreatorClaimId : this.state.viewingClaimId;
+    const pending = this.findPendingClaimForEntity(entityKind, entity);
+    const viewingRow = viewingId
+      ? this.listCachedVerifications().find((r) => r.id === viewingId) || null
+      : null;
+    const row = (viewingRow && this.claimMatchesEntity(viewingRow, entityKind, entity) ? viewingRow : null) || pending;
+    const openedFromClaims = !!viewingId;
+    const partnerPending = !!(partnerApp && (partnerApp.status === 'pending' || partnerApp.resubmissionRequested));
+    const preferClaim = openedFromClaims || (!!row && this.isPendingOwnershipClaim(row) && !partnerPending);
+    if (preferClaim) selected.showPartnerReviewActions = false;
+    selected.activeClaim = this.mapVerificationToActiveClaim(row, entity);
+    selected.hasActiveClaim = !!row;
+    const history = this.mapClaimHistory(row);
+    selected.hasClaimHistory = history.length > 0;
+    selected.claimReviewHistory = history;
+    selected.claimAdminNotesValue = this.state.claimAdminNotesDraft || '';
+    selected.onClaimNotesChange = (e) => this.setState({ claimAdminNotesDraft: e && e.target ? e.target.value : '' });
+    selected.showClaimReviewActions = !!(isAdminReviewer && row && this.isPendingOwnershipClaim(row) && preferClaim);
+    selected.onApproveClaim = this.resolveClaimReview('approved', entityKind);
+    selected.onRejectClaim = this.resolveClaimReview('rejected', entityKind);
+    selected.onRequestClaimInfo = this.resolveClaimReview('resubmit', entityKind);
+    const uid = window.__CMS_MIRROR_UID__ || window.__CMS_MIRROR_USER_ID__ || '';
+    const isClaimant = !!(row && row.submitted_by && uid && row.submitted_by === uid);
+    selected.showClaimantClaimNotice = !!(!isAdminReviewer && isClaimant && row && this.isPendingOwnershipClaim(row));
+  };
+  mapClaimHistory = (row) => {
+    if (!row) return [];
+    const audit = (row.audit_trail || []).map((ev) => ({
+      action: ev.action || 'Update',
+      time: String(ev.timestamp || '').replace('T', ' ').slice(0, 16),
+      note: ev.details || '',
+    }));
+    const reviews = (row.reviews || []).map((rv) => ({
+      action: String(rv.status || 'review').replace(/_/g, ' '),
+      time: String(rv.reviewed_at || '').replace('T', ' ').slice(0, 16),
+      note: rv.feedback || '',
+    }));
+    return audit.concat(reviews);
+  };
+  refreshVerifications = async () => {
+    const api = window.CmsStudioProfileApi;
+    if (!api || typeof api.listVerifications !== 'function') return;
+    try { this.setState({ verificationsLoading: true, verificationsError: null }); } catch (_) {}
+    try {
+      window.__CMS_MIRROR_VERIFICATIONS__ = await api.listVerifications();
+      const ids = (window.__CMS_MIRROR_VERIFICATIONS__ || []).map((r) => r && r.submitted_by).filter(Boolean);
+      if (ids.length && typeof this.prefetchChoosifyUserIds === 'function') {
+        void this.prefetchChoosifyUserIds(ids);
+      }
+      try { this.setState({ verificationsLoading: false, verificationsError: null, _verificationsTick: Date.now() }); } catch (_) {}
+    } catch (err) {
+      window.__CMS_MIRROR_VERIFICATIONS__ = window.__CMS_MIRROR_VERIFICATIONS__ || [];
+      try {
+        this.setState({
+          verificationsLoading: false,
+          verificationsError: (err && err.message) || 'Could not load ownership claims',
+          _verificationsTick: Date.now(),
+        });
+      } catch (_) {}
+    }
+  };
+  resolveClaimReview = (decision, entityKind) => async () => {
+    const api = window.CmsStudioProfileApi;
+    if (!api || typeof api.reviewVerification !== 'function') {
+      this.showToast('Claim review API unavailable');
+      return;
+    }
+    const viewingId = entityKind === 'creator' ? this.state.viewingCreatorClaimId : this.state.viewingClaimId;
+    let row = this.listCachedVerifications().find((r) => r.id === viewingId) || null;
+    if (!row) {
+      if (entityKind === 'creator') {
+        const c = (Component.CREATORS || []).find((x) => x.name === this.state.selectedCreatorName);
+        row = this.findPendingClaimForEntity('creator', c);
+      } else {
+        const b = (Component.BRANDS || []).find((x) => x.name === this.state.selectedBrandName);
+        row = this.findPendingClaimForEntity('brand', b);
+      }
+    }
+    if (!row) {
+      this.showToast('No pending ownership claim on this profile');
+      return;
+    }
+    const notes = String(this.state.claimAdminNotesDraft || '').trim();
+    const feedback = notes
+      || (decision === 'approved'
+        ? 'Ownership claim approved'
+        : decision === 'rejected'
+          ? 'Ownership claim rejected'
+          : 'Please provide additional evidence and resubmit');
+    const status = decision === 'approved' ? 'approved' : decision === 'rejected' ? 'rejected' : 'resubmit';
+    try {
+      await api.reviewVerification(row.id, { status, feedback });
+      await this.refreshVerifications();
+      if (decision === 'approved') {
+        if (entityKind === 'creator') {
+          Component.CREATORS = (Component.CREATORS || []).map((c) => {
+            if (!this.claimMatchesEntity(row, 'creator', c)) return c;
+            return Object.assign({}, c, {
+              verified: true,
+              userId: row.submitted_by || c.userId,
+              claimStatus: 'verified',
+              status: c.status === 'Pending' ? 'Active' : c.status,
+            });
+          });
+          this.showToast('Ownership claim approved');
+          this.setState({ viewingCreatorClaimId: null, claimAdminNotesDraft: '' });
+        } else {
+          Component.BRANDS = (Component.BRANDS || []).map((b) => {
+            if (!this.claimMatchesEntity(row, 'brand', b)) return b;
+            return Object.assign({}, b, {
+              verified: true,
+              claimStatus: 'verified',
+              sellerId: row.submitted_by || b.sellerId,
+              status: b.status === 'Pending' ? 'Active' : b.status,
+            });
+          });
+          this.showToast('Ownership claim approved');
+          this.setState({ viewingClaimId: null, claimAdminNotesDraft: '' });
+        }
+      } else if (decision === 'rejected') {
+        this.showToast('Ownership claim rejected');
+        if (entityKind === 'creator') {
+          this.setState({ viewingCreatorClaimId: null, claimAdminNotesDraft: '' });
+        } else {
+          this.setState({ viewingClaimId: null, claimAdminNotesDraft: '' });
+        }
+      } else {
+        this.showToast('Additional information requested');
+        this.setState({ claimAdminNotesDraft: '' });
+      }
+    } catch (err) {
+      this.showToast('Claim review failed: ' + (err && err.message ? err.message : err));
+    }
+  };
+  setBrandTab = (t) => {
+    this.setState({
+      brandTab: t,
+      selectedBrandName: (t === 'requests' || t === 'claims') ? null : this.state.selectedBrandName,
+      viewingClaimId: t === 'claims' ? null : this.state.viewingClaimId,
+    });
+    if (t === 'requests') void this.refreshPartnerApplications();
+    if (t === 'claims') void this.refreshVerifications();
+  };
+  setCreatorTab = (t) => {
+    this.setState({
+      creatorStatusFilter: t,
+      selectedCreatorName: (t === 'requests' || t === 'claims') ? null : this.state.selectedCreatorName,
+      viewingCreatorClaimId: t === 'claims' ? null : this.state.viewingCreatorClaimId,
+    });
+    if (t === 'requests') void this.refreshPartnerApplications();
+    if (t === 'claims') void this.refreshVerifications();
+  };
   /** Seller: open storefront-parity Brand Studio (React BrandEditStudio), not in-iframe portfolio. */
   openSellerBrandStudio = (catalogId, brandName) => {
     const id = catalogId || null;
@@ -9816,6 +10322,12 @@ class Component extends DCLogic {
       if (entity.status === 'Active' || entity.status === 'live') return { label: 'Active', color: '#16A34A', active: true };
       return { label: 'Inactive', color: '#9CA3AF', active: false };
     }
+    if (type === 'customer' && entity) {
+      const st = String(entity.status || entity.connectionStanding || 'Active');
+      if (/suspend/i.test(st) || /ban/i.test(st)) return { label: 'Suspended', color: '#DC2626', active: false };
+      if (/inactive|pending/i.test(st)) return { label: 'Inactive', color: '#9CA3AF', active: false };
+      return { label: 'Active', color: '#16A34A', active: true };
+    }
     return { label: 'Inactive', color: '#9CA3AF', active: false };
   };
   computeProfileAccess = (name, type, entity) => {
@@ -9826,9 +10338,13 @@ class Component extends DCLogic {
     const active = resolved.active;
     return {
       canManageMarketplaceAccess: canManage,
-      marketplaceAccessHint: canManage
+      marketplaceAccessHint: type === 'customer'
+        ? (canManage
+          ? 'Suspend or reinstate this consumer’s ability to shop on Choosify.'
+          : 'Platform-administered account status.')
+        : (canManage
         ? 'Suspend or reinstate storefront visibility, with an optional auto-reinstate timer.'
-        : 'Platform-administered status. Contact Choosify Admin to change Marketplace Access.',
+        : 'Platform-administered status. Contact Choosify Admin to change Marketplace Access.'),
       profileAccessLabel: resolved.label,
       profileAccessColor: resolved.color,
       profileAccessActive: active,
@@ -9845,7 +10361,83 @@ class Component extends DCLogic {
       profileSuspensionInfo: (ov && ov.suspensionInfo) ? {...ov.suspensionInfo, autoReinstateLabel: ov.suspensionInfo.autoReinstateAt || 'Manual reinstate only'} : null,
     };
   };
-  selectBrandFromClaim = (name, claimId) => this.setState({selectedBrandName: name, brandProfileTab: 'account', viewingClaimId: claimId});
+  selectBrandFromClaim = (name, claimId) => {
+    const claim = this.listCachedVerifications().find((r) => r.id === claimId) || null;
+    const entityId = claim && (claim.entityId || claim.brand_id);
+    const brandName = (claim && (claim.entityName || claim.brand_name)) || name;
+    let match = (Component.BRANDS || []).find((b) =>
+      (entityId && (b.catalogId === entityId || b.id === entityId))
+      || b.name === brandName
+      || b.name === name
+    );
+    if (!match && brandName) {
+      Component.BRANDS = (Component.BRANDS || []).concat([{
+        catalogId: entityId || null,
+        name: brandName,
+        category: 'General',
+        productsCount: 0,
+        status: 'Pending',
+        joined: String((claim && claim.created_at) || '').slice(0, 4),
+        verified: false,
+        trustScore: 0,
+        loves: 0,
+        followers: 0,
+        tagline: '',
+        claimStatus: 'pending',
+        sellerId: null,
+      }]);
+      match = Component.BRANDS.find((b) => b.name === brandName);
+    }
+    if (claim && claim.submitted_by && typeof this.prefetchChoosifyUserIds === 'function') {
+      void this.prefetchChoosifyUserIds([claim.submitted_by]);
+    }
+    this.setState({
+      selectedBrandName: match ? match.name : brandName,
+      brandProfileTab: 'verification',
+      viewingClaimId: claimId,
+      brandTab: 'claims',
+      claimAdminNotesDraft: '',
+    });
+  };
+  selectCreatorFromClaim = (name, claimId) => {
+    const claim = this.listCachedVerifications().find((r) => r.id === claimId) || null;
+    const entityId = claim && claim.entityId;
+    const creatorName = (claim && claim.entityName) || name;
+    let match = (Component.CREATORS || []).find((c) =>
+      (entityId && c.catalogId === entityId)
+      || c.name === creatorName
+      || c.name === name
+    );
+    if (!match && creatorName) {
+      Component.CREATORS = (Component.CREATORS || []).concat([{
+        catalogId: entityId || null,
+        name: creatorName,
+        platform: 'YouTube',
+        followers: 0,
+        videos: 0,
+        status: 'Pending',
+        joined: String((claim && claim.created_at) || '').slice(0, 4),
+        verified: false,
+        trustScore: 0,
+        handle: '@' + String(creatorName || 'creator').toLowerCase().replace(/\s+/g, ''),
+        location: 'Bangladesh',
+        bestFor: 'General',
+        userId: null,
+        claimStatus: 'pending',
+      }]);
+      match = Component.CREATORS.find((c) => c.name === creatorName);
+    }
+    if (claim && claim.submitted_by && typeof this.prefetchChoosifyUserIds === 'function') {
+      void this.prefetchChoosifyUserIds([claim.submitted_by]);
+    }
+    this.setState({
+      selectedCreatorName: match ? match.name : creatorName,
+      creatorProfileTab: 'verification',
+      viewingCreatorClaimId: claimId,
+      creatorStatusFilter: 'claims',
+      claimAdminNotesDraft: '',
+    });
+  };
   setBrandProfileTab = (t) => this.setState({brandProfileTab: t, brandStudioEditSection: t === 'portfolio' ? this.state.brandStudioEditSection : null, brandStudioSectionSnapshot: t === 'portfolio' ? this.state.brandStudioSectionSnapshot : null});
   setUniversalProfileTab = (t) => this.setState({ universalProfileTab: t });
   setUniversalProfileSearch = (e) => this.setState({ universalProfileSearch: (e && e.target && e.target.value) || '' });
@@ -9999,9 +10591,13 @@ class Component extends DCLogic {
         window.parent.postMessage({ type: 'cms-mirror-navigate', path: '/admin/brand-studio', replace: true }, '*');
       }
     } catch (e) {}
-    this.setState({selectedBrandName: null, viewingClaimId: null});
+    this.setState({
+      selectedBrandName: null,
+      viewingClaimId: null,
+      brandTab: this.state.brandTab === 'requests' ? 'requests' : (this.state.brandTab || 'all'),
+    });
   };
-  resolveActiveClaim = (label) => () => { const id = this.state.viewingClaimId; const claim = Component.BRAND_CLAIMS.find(c => c.id === id); if (claim) this.showToast(`${claim.brand} ownership claim ${label}`); this.setState({selectedBrandName: null, viewingClaimId: null, brandTab: 'claims'}); };
+  resolveActiveClaim = (label) => this.resolveClaimReview(label === 'approved' ? 'approved' : label === 'rejected' ? 'rejected' : 'resubmit', 'brand');
 
   selectCategory = (slug) => this.setState({selectedCategorySlug: slug});
   updateCategoryField = (field) => (e) => {
@@ -10028,7 +10624,7 @@ class Component extends DCLogic {
     if (c && c.userId && typeof this.prefetchChoosifyUserIds === 'function') {
       void this.prefetchChoosifyUserIds([c.userId]);
     }
-    this.setState({selectedCreatorName: name});
+    this.setState({selectedCreatorName: name, creatorProfileTab: 'account'});
   };
   backToCreators = () => {
     if ((window.__CMS_MIRROR_ROLE__ || '') === 'creator') {
@@ -11573,13 +12169,119 @@ class Component extends DCLogic {
   setContentSearch = (e) => this.setState({contentSearch: e.target.value});
 
   selectThread = (id) => this.setState(s => ({selectedThreadId: id, threadReadStates: {...s.threadReadStates, [id]: true}}));
+  mapSupportConversationToThread = (conv, messages) => {
+    const msgs = Array.isArray(messages) ? messages : [];
+    const last = msgs[msgs.length - 1];
+    const subject = (conv && conv.metadata && conv.metadata.subject) || 'Support request';
+    const status = String((conv && conv.status) || 'active');
+    const closed = status === 'closed' || status === 'read_only';
+    return {
+      id: conv.id,
+      customerName: 'Choosify Support',
+      subject: subject,
+      preview: conv.lastMessagePreview || (last && last.body) || 'Support conversation',
+      unread: false,
+      threadCode: conv.conversationReferenceId || conv.id,
+      isSupport: true,
+      conversationStatus: status,
+      supportClosed: closed,
+      messages: msgs.map((m) => ({
+        sender: (m.senderRole === 'admin' || m.senderRole === 'system') ? 'Choosify Support' : 'You',
+        role: (m.senderRole === 'admin' || m.senderRole === 'system') ? 'SELLER' : 'CUSTOMER',
+        text: m.body,
+        time: m.createdAt,
+      })),
+      order: { ref: '—', product: 'Platform support', brand: 'Choosify', value: 0, source: 'Support', commission: 0, netEarnings: 0, fulfillmentStep: 0, courier: '', trackingId: '', transitStatus: '' },
+    };
+  };
+  refreshLiveSupportThreads = async (selectId) => {
+    const api = window.CmsStudioProfileApi;
+    if (!api || typeof api.listSupportConversations !== 'function') return;
+    try {
+      const convs = await api.listSupportConversations();
+      const threads = [];
+      for (let i = 0; i < (convs || []).length; i++) {
+        const conv = convs[i];
+        if (!conv || !conv.id) continue;
+        let messages = [];
+        try {
+          if (typeof api.listConversationMessages === 'function') {
+            messages = await api.listConversationMessages(conv.id);
+          }
+        } catch (_) { messages = []; }
+        threads.push(this.mapSupportConversationToThread(conv, messages));
+      }
+      const next = { liveSupportThreads: threads };
+      if (selectId) next.selectedThreadId = selectId;
+      this.setState(next);
+    } catch (_) {
+      /* keep last known live threads */
+    }
+  };
+  contactSupport = async () => {
+    const api = window.CmsStudioProfileApi;
+    if (!api || typeof api.ensureActiveSupportConversation !== 'function') {
+      this.showToast('Support is unavailable without a signed-in session.');
+      return;
+    }
+    try {
+      const data = await api.ensureActiveSupportConversation();
+      const conv = data && data.conversation;
+      if (!conv || !conv.id) {
+        this.showToast('Could not open support conversation.');
+        return;
+      }
+      await this.refreshLiveSupportThreads(conv.id);
+      this.setState({ selectedThreadId: conv.id, showUnifiedInbox: false });
+      this.showToast(data.created
+        ? 'Support conversation opened.'
+        : 'You already have an active support conversation.');
+    } catch (err) {
+      this.showToast('Could not open support: ' + ((err && err.message) || err));
+    }
+  };
+  resolveSupportThread = async () => {
+    const api = window.CmsStudioProfileApi;
+    const id = this.state.selectedThreadId;
+    if (!api || !id || typeof api.resolveSupportConversation !== 'function') return;
+    try {
+      await api.resolveSupportConversation(id);
+      await this.refreshLiveSupportThreads(id);
+      this.showToast('Support conversation resolved. Contact Support will open a new thread next time.');
+    } catch (err) {
+      this.showToast('Could not resolve: ' + ((err && err.message) || err));
+    }
+  };
   markAllThreadsRead = () => this.setState(s => {
     const n = {...s.threadReadStates};
     Component.MESSAGE_THREADS.forEach(t => n[t.id] = true);
+    (s.liveSupportThreads || []).forEach(t => n[t.id] = true);
     return {threadReadStates: n};
   });
   setThreadReply = (e) => this.setState({threadReplyText: e.target.value});
-  sendThreadReply = () => { if (!this.state.threadReplyText.trim()) return; this.showToast('Reply sent'); this.setState({threadReplyText:''}); };
+  sendThreadReply = async () => {
+    const text = (this.state.threadReplyText || '').trim();
+    if (!text) return;
+    const id = this.state.selectedThreadId;
+    const live = (this.state.liveSupportThreads || []).find((t) => t.id === id);
+    if (live) {
+      const api = window.CmsStudioProfileApi;
+      if (!api || typeof api.sendSupportMessage !== 'function') {
+        this.showToast('Could not send support message.');
+        return;
+      }
+      try {
+        await api.sendSupportMessage(id, text);
+        this.setState({ threadReplyText: '' });
+        await this.refreshLiveSupportThreads(id);
+      } catch (err) {
+        this.showToast((err && err.message) || 'Reply failed');
+      }
+      return;
+    }
+    this.showToast('Reply sent');
+    this.setState({threadReplyText:''});
+  };
   setThreadTrackingField = (threadId, field) => (e) => {
     const v = e.target.value;
     this.setState(s => ({threadTracking: {...s.threadTracking, [threadId]: {...s.threadTracking[threadId], [field]: v}}}));
@@ -11865,7 +12567,7 @@ class Component extends DCLogic {
   openRecord = (record) => (e) => { if (e) e.stopPropagation(); this.setState({viewingRecord: record}); };
   closeRecord = () => this.setState({viewingRecord: null});
 
-  fmtMoney = (n) => '৳' + n.toLocaleString('en-US');
+  fmtMoney = (n) => '৳' + Number(n || 0).toLocaleString('en-US');
 
   statusStyle(status) {
     const map = {
@@ -11945,8 +12647,34 @@ class Component extends DCLogic {
         refreshCustomers();
         return;
       }
+      if (role !== 'seller' && p === 'brands') {
+        this.setState({
+          page: p,
+          selectedBrandName: null,
+          viewingClaimId: null,
+          brandTab: 'requests',
+          editingProduct: null,
+          productsView: 'catalog',
+        });
+        void this.refreshPartnerApplications();
+        refreshCustomers();
+        return;
+      }
+      if (role !== 'creator' && p === 'creators') {
+        this.setState({
+          page: p,
+          selectedCreatorName: null,
+          creatorStatusFilter: 'requests',
+          editingProduct: null,
+          productsView: 'catalog',
+        });
+        void this.refreshPartnerApplications();
+        refreshCustomers();
+        return;
+      }
       this.setState({page: p, editingProduct: null, productsView: 'catalog'});
       refreshCustomers();
+      if (p === 'messages') void this.refreshLiveSupportThreads();
     };
   goToInventoryStock = () => this.setState({productsView: 'inventory'});
   backToProductCatalog = () => this.setState({productsView: 'catalog'});
@@ -12326,8 +13054,8 @@ class Component extends DCLogic {
 
     let navDefs = [
       {title:'OVERVIEW', items:[{key:'dashboard',label:'Dashboard'}]},
-      {title:'PEOPLE', items:[{key:'customers',label:'Consumers'},{key:'creators',label:'Creators'},{key:'creatorEconomy',label:'Creator Economy'}]},
-      {title:'BRAND & CATALOG', items:[{key:'brands',label:'Seller Management Studio'},{key:'products',label:'Products & Inventory'},{key:'categories',label:'Category Management Studio'}]},
+      {title:'ACCOUNT MANAGEMENT', items:[{key:'brands',label:'Seller Management Studio'},{key:'creators',label:'Creators Management'},{key:'customers',label:'Consumer Management'},{key:'creatorEconomy',label:'Creator Economy'}]},
+      {title:'BRAND & CATALOG', items:[{key:'products',label:'Products & Inventory'},{key:'categories',label:'Category Management Studio'}]},
       {title:'COMMERCE', items:[{key:'orders',label:'Orders Hub'},{key:'returnsRefunds',label:'Returns & Refunds'}]},
       {title:'MARKETING & CONTENT', items:[{key:'adsDealsStudio',label:'Ads & Deals Studio',tag:'NEW'},{key:'contentStudio',label:'Guide Management',tag:'NEW'}]},
       {title:'LOGISTICS MANAGEMENT', items:[{key:'courierProviders',label:'Courier Providers'},{key:'shipmentOperations',label:'Shipment Operations'},{key:'courierAnalytics',label:'Courier Analytics'}]},
@@ -12391,13 +13119,15 @@ class Component extends DCLogic {
       finance:['Finance & Payouts','Current eligible earnings, commission, and net withdrawable'],
       myEarnings:['My Earnings','Earnings overview and payout Payment Info'],
       categories:['Category Management Studio','Organize your catalog'],
-      creators:['Creator Studio','Build and publish editorial buying guides'],
+      creators:((window.__CMS_MIRROR_ROLE__||'')==='creator'
+        ? ['Creator Studio','Build and publish editorial buying guides']
+        : ['Creators Management','Manage creator partnerships']),
       creatorProfile:['Creator Profile','Your creator account, verification, and profile settings'],
       adminProfile:['Admin Profile','Account, security, RBAC scope, and preferences'],
       consumerProfile:['My Profile','Your consumer account, orders preference, and security settings'],
       deals:['Deals','Promotions and discounts'],
       orders:['Orders Hub','Track and fulfill customer orders'],
-      customers:['Consumers','View and manage customer accounts'],
+      customers:['Consumer Management','View and manage customer accounts'],
       settings:['Settings','Store configuration'],
       websiteCmsStudio:['Website Manager','Manage homepage banners, pages, and site content'],
       adsDealsStudio:['Ads & Deals Studio','Manage sponsored ads, deals, coupons, and paid placements'],
@@ -13038,7 +13768,7 @@ class Component extends DCLogic {
         {label:'Seller Management Studio', sub:'Verified merchants & listings', onClick: () => this.setPage('brands')},
         {label:'Products & Inventory', sub:'Platform catalog & stock', onClick: () => this.setPage('products')},
         {label:'Category Management Studio', sub:'Navigation & discovery structure', onClick: () => this.setPage('categories')},
-        {label:'Creator Management', sub:'Guides & creator economy', onClick: () => this.setPage('creators')},
+        {label:'Creators Management', sub:'Guides & creator economy', onClick: () => this.setPage('creators')},
         {label:'Ads & Deals Studio', sub:'Sponsored placements', onClick: () => this.setPage('adsDealsStudio')},
         {label:'Trust Center', sub:'Moderation & safety signals', onClick: () => this.setPage('trustCenter')},
       ];
@@ -14348,35 +15078,47 @@ class Component extends DCLogic {
 
     const isMessagesStudio = page === 'messages';
     const threadTrackingState = this.state.threadTracking;
-    const messageThreads = Component.MESSAGE_THREADS.map(t => ({
+    const liveSupportThreads = (this.state.liveSupportThreads || []).map(t => ({
       ...t,
       isRead: !!this.state.threadReadStates[t.id],
       isActive: t.id === this.state.selectedThreadId,
       rowStyle: `padding:14px 16px;border-left:3px solid ${t.id===this.state.selectedThreadId?'#EF3C23':'transparent'};background:${t.id===this.state.selectedThreadId?'#FFF7ED':'#fff'};cursor:pointer;border-bottom:1px solid #F1F3F5`,
       onClick: () => this.selectThread(t.id),
     }));
-    const selThread = Component.MESSAGE_THREADS.find(t => t.id === this.state.selectedThreadId) || Component.MESSAGE_THREADS[0];
-    const threadMessages = selThread.messages.map(m => ({
+    const mockMessageThreads = Component.MESSAGE_THREADS.map(t => ({
+      ...t,
+      isSupport: false,
+      isRead: !!this.state.threadReadStates[t.id],
+      isActive: t.id === this.state.selectedThreadId,
+      rowStyle: `padding:14px 16px;border-left:3px solid ${t.id===this.state.selectedThreadId?'#EF3C23':'transparent'};background:${t.id===this.state.selectedThreadId?'#FFF7ED':'#fff'};cursor:pointer;border-bottom:1px solid #F1F3F5`,
+      onClick: () => this.selectThread(t.id),
+    }));
+    const messageThreads = liveSupportThreads.concat(mockMessageThreads);
+    const selThread = messageThreads.find(t => t.id === this.state.selectedThreadId) || messageThreads[0] || Component.MESSAGE_THREADS[0];
+    const threadMessages = (selThread.messages || []).map(m => ({
       ...m, isCustomer: m.role === 'CUSTOMER',
       roleStyle: m.role === 'CUSTOMER' ? 'color:#EF3C23;font-size:9.5px;font-weight:800;letter-spacing:0.04em' : 'color:#2563EB;font-size:9.5px;font-weight:800;letter-spacing:0.04em',
     }));
     const trackOverride = threadTrackingState[selThread.id] || {};
+    const selOrder = selThread.order || { ref: '—', product: '—', brand: '—', value: 0, source: '—', commission: 0, netEarnings: 0, fulfillmentStep: 0, courier: '', trackingId: '', transitStatus: '' };
     const selectedThreadDetail = {
       ...selThread,
-      valueLabel: this.fmtMoney(selThread.order.value),
-      commissionLabel: this.fmtMoney(selThread.order.commission),
-      netEarningsLabel: this.fmtMoney(selThread.order.netEarnings),
-      courierValue: trackOverride.courier ?? selThread.order.courier,
-      trackingIdValue: trackOverride.trackingId ?? selThread.order.trackingId,
-      transitStatusValue: trackOverride.transitStatus ?? selThread.order.transitStatus,
+      isSupport: !!selThread.isSupport,
+      showResolveSupport: !!selThread.isSupport && !selThread.supportClosed && (mirrorRole === 'admin' || mirrorRole === 'super_admin' || mirrorRole === 'moderator' || mirrorRole === 'support_agent'),
+      valueLabel: this.fmtMoney(selOrder.value),
+      commissionLabel: this.fmtMoney(selOrder.commission),
+      netEarningsLabel: this.fmtMoney(selOrder.netEarnings),
+      courierValue: trackOverride.courier ?? selOrder.courier,
+      trackingIdValue: trackOverride.trackingId ?? selOrder.trackingId,
+      transitStatusValue: trackOverride.transitStatus ?? selOrder.transitStatus,
       fulfillmentSteps: ['PLACED','APPROVED','DISPATCHED','COMPLETED'].map((label,i) => ({
-        label, num: i+1, done: i+1 <= selThread.order.fulfillmentStep,
+        label, num: i+1, done: i+1 <= selOrder.fulfillmentStep,
       })),
       onCourierChange: this.setThreadTrackingField(selThread.id, 'courier'),
       onTrackingIdChange: this.setThreadTrackingField(selThread.id, 'trackingId'),
       onTransitStatusChange: this.setThreadTrackingField(selThread.id, 'transitStatus'),
     };
-    const unreadThreadCount = Component.MESSAGE_THREADS.filter(t => !this.state.threadReadStates[t.id]).length;
+    const unreadThreadCount = messageThreads.filter(t => !this.state.threadReadStates[t.id]).length;
 
     const CHANNEL_META = {whatsapp:{logo:'uploads/whatsapp-color-svgrepo-com.svg',bg:'#fff'},messenger:{logo:'uploads/messenger-color-svgrepo-com.svg',bg:'#fff'},instagram:{logo:'uploads/instagram-2-1-logo-svgrepo-com.svg',bg:'#fff'}};
     const channelBadgeStyle = (ch) => `display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:${CHANNEL_META[ch].bg};border:1px solid #E8EDF2;padding:2px;line-height:1`;
@@ -14463,6 +15205,9 @@ class Component extends DCLogic {
       email: __upEmail,
       roleLabel: __upRoleLabel,
       status: 'Active',
+      profileStatus: (typeof window.cmsProfileStatusView === 'function'
+        ? window.cmsProfileStatusView(isAdminSelfProfilePage ? 'admin' : 'consumer', {}, true)
+        : { showPills: true, pills: [], showHint: false, hint: '' }),
       choosifyUserId: __upCf,
       initials: __upInitials,
       kpis: isAdminSelfProfilePage
@@ -15070,12 +15815,14 @@ class Component extends DCLogic {
     const isSellerBrandList = (window.__CMS_MIRROR_ROLE__ || '') === 'seller';
     const showBrandAdminChrome = !isSellerBrandList;
     const brandTab = isSellerBrandList ? 'all' : (this.state.brandTab || 'all');
+    const pendingBrandClaimRows = this.pendingOwnershipClaims('brand');
+    const pendingCreatorClaimRows = this.pendingOwnershipClaims('creator');
     const brandTabDefsAdmin = [
       {key:'all', icon:'👥', label:'All Brands', count: brands.length},
       {key:'verified', icon:'✔️', label:'Verified Brands', count: brands.filter(b=>b.ownership==='VERIFIED OWNER').length},
       {key:'requests', icon:'🆕', label:'Requests', count: (window.__CMS_MIRROR_PARTNER_APPS__ || []).filter(function(a){ return window.sellerAppNeedsAdminAttention && window.sellerAppNeedsAdminAttention(a, Component.BRANDS); }).length},
       {key:'activeSellers', icon:'🏪', label:'Active Sellers', count: brands.filter(b=>b.isActiveSeller).length},
-      {key:'claims', icon:'📋', label:'Ownership Claims', count: Component.BRAND_CLAIMS.length},
+      {key:'claims', icon:'📋', label:'Ownership Claims', count: pendingBrandClaimRows.length},
       {key:'flagged', icon:'🚩', label:'Flagged', count: brands.filter(b=>b.isFlagged).length},
       {key:'inactive', icon:'⏸️', label:'Inactive', count: brands.filter(b=>b.isInactive).length},
       {key:'suspended', icon:'🔒', label:'Suspended', count: brands.filter(b=>b.isSuspended).length},
@@ -15145,6 +15892,13 @@ class Component extends DCLogic {
 
     const partnerApps = Array.isArray(window.__CMS_MIRROR_PARTNER_APPS__) ? window.__CMS_MIRROR_PARTNER_APPS__ : [];
     const pendingSellerApps = partnerApps.filter((a) => a && window.sellerAppNeedsAdminAttention(a, Component.BRANDS));
+    const requestsEmptyMessage = this.state.partnerAppsLoading
+      ? 'Loading seller requests…'
+      : (this.state.partnerAppsError
+        ? String(this.state.partnerAppsError)
+        : (window.__CMS_MIRROR_AUTH_TOKEN__
+          ? 'No new brand registration requests.'
+          : 'Sign in as Super Admin (admin@choosify.com.bd) to load seller requests. TEMP ROLES Admin has no API token.'));
     const selReqRaw = null;
     const isRequestsList = isBrandRequestsTab && !this.state.selectedBrandName;
     const isRequestDetail = false;
@@ -15217,25 +15971,21 @@ class Component extends DCLogic {
       };
     }
 
-    const brandClaims = Component.BRAND_CLAIMS.map(c => ({
-      ...c,
-      badgeStyle: this.statusStyle(c.status === 'Pending Review' ? 'Pending' : c.status === 'Rejected' ? 'Rejected' : 'Active'),
-      onApprove: () => this.showToast(`${c.brand} ownership claim approved`),
-      onReject: () => this.showToast(`${c.brand} ownership claim rejected`),
-      onRequestInfo: () => this.showToast(`Requested more info for ${c.brand} claim`),
-      onOpenProfile: () => this.selectBrandFromClaim(c.brand, c.id),
-    }));
+    const brandClaims = pendingBrandClaimRows.map((row) => this.mapVerificationToQueueItem(row, 'brand'));
+    const claimsEmptyMessage = this.state.verificationsError
+      ? this.state.verificationsError
+      : (this.state.verificationsLoading ? 'Loading ownership claims…' : 'No pending seller ownership claims.');
+    const now = new Date();
+    const approvedBrandClaimsThisMonth = this.listCachedVerifications().filter((r) => {
+      if (r.entityType === 'creator' || r.status !== 'Approved') return false;
+      const d = new Date(r.updated_at || r.created_at || 0);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    }).length;
     const claimsStats = [
       {label:'TOTAL CLAIMS', value: brandClaims.length},
       {label:'PENDING', value: brandClaims.filter(c=>c.status==='Pending Review').length},
       {label:'UNDER REVIEW', value: brandClaims.filter(c=>c.status==='Under Review').length},
-      {label:'APPROVED THIS MONTH', value: 0},
-    ];
-    const claimsAuditTrail = [
-      {brand:'Aarong Digital Ltd', title:'Account Restored', desc:'Lifted suspension flags and restored operations.', by:'Global Manager (Admin)', time:'04:36 PM'},
-      {brand:'Aarong Digital Ltd', title:'Account Suspended', desc:'Executed regulatory lockdown due to audit investigations.', by:'Global Manager (Admin)', time:'04:36 PM'},
-      {brand:'Apex', title:'Brand Claim Approved', desc:'Claim request clm_apex_001 approved automatically. Verified corporate email presence and signed license agreements.', by:'Tanvir Hossain (Admin)', time:'04:15 PM'},
-      {brand:'Walton', title:'Profile Created (Unclaimed)', desc:'Initiated SEO pre-builder content to acquire local electronic retail audiences.', by:'Abdur Rahman (Super Admin)', time:'03:08 PM'},
+      {label:'APPROVED THIS MONTH', value: approvedBrandClaimsThisMonth},
     ];
     const brandStudioStats = [
       {label:'Unclaimed Profiles', value: String(brands.filter(b=>b.ownership==='UNCLAIMED').length), color:'#DC2626', sub:'SEO Index Enabled'},
@@ -15297,12 +16047,13 @@ class Component extends DCLogic {
         hasCreators: creatorVideos.length > 0,
         featuredVideo, thumbVideos,
         onBack: this.backToBrands,
+        backLabel: this.state.brandTab === 'requests' ? '← Requests' : '← All Brands',
         onLove: () => this.showToast(`Loved ${b.name}`),
         onCall: () => this.showToast(`Calling ${b.name}...`),
         onMessage: () => this.showToast(`Opening message thread with ${b.name}`),
-        showLoginAsUser: !!(window.__CMS_MIRROR_CAN_IMPERSONATE__ && b.sellerId && b.sellerId !== (window.__CMS_MIRROR_USER_ID__ || window.__CMS_MIRROR_UID__ || '')),
+        showLoginAsUser: typeof window.canShowLoginAsUser === 'function' ? window.canShowLoginAsUser(b) : !!(window.__CMS_MIRROR_CAN_IMPERSONATE__ && b.sellerId),
         onLoginAsUser: () => requestLoginAsUser.call(this, {
-          targetUserId: b.sellerId,
+          targetUserId: (typeof window.resolveProfileAccountUid === 'function' ? window.resolveProfileAccountUid(b) : b.sellerId) || b.sellerId || '',
           displayName: b.name,
           roleLabel: 'Seller',
           choosifyUserId: (typeof window.resolveProfileChoosifyUserId === 'function' ? window.resolveProfileChoosifyUserId(b.sellerId, b.choosifyUserId) : b.choosifyUserId) || '',
@@ -15401,11 +16152,26 @@ class Component extends DCLogic {
           || (b.catalogId && row.catalogEntityId === b.catalogId)
           || (b.sellerId && row.provisionedUserId === b.sellerId)
         ) || null;
+        const pendingClaim = this.findPendingClaimForEntity('brand', b);
         const role = window.__CMS_MIRROR_ROLE__ || '';
         const isAdminReviewer = role === 'admin' || role === 'super_admin';
         selectedBrand.underReview = !!(app && app.status === 'pending')
+          || !!pendingClaim
           || (window.__CMS_MIRROR_PARTNER_APPLICATION_STATUS__ === 'pending' && role === 'seller');
-        selectedBrand.showVerifiedOwner = !!b.verified && !selectedBrand.underReview;
+        selectedBrand.showVerifiedOwner = b.claimStatus === 'verified' && !pendingClaim && !selectedBrand.underReview;
+        selectedBrand.profileStatus = (typeof window.cmsProfileStatusView === 'function'
+          ? window.cmsProfileStatusView('seller', {
+              partnerApplicationStatus: app ? app.status : null,
+              resubmissionRequested: !!(app && app.resubmissionRequested),
+              marketplaceStatus: b.marketplaceStatus,
+              marketplaceAccess: b.marketplaceAccess,
+              verified: !!b.verified,
+              verifiedStatus: !!b.verified,
+              claimStatus: pendingClaim ? 'pending' : b.claimStatus,
+              ownershipClaimPending: !!pendingClaim,
+              localSuspended: !!(this.state.marketplaceOverrides && this.state.marketplaceOverrides[b.name] && this.state.marketplaceOverrides[b.name].suspended),
+            }, role === 'seller')
+          : { showPills: false, pills: [], showHint: false, hint: '' });
         selectedBrand.showPartnerReviewActions = !!(isAdminReviewer && app && (app.status === 'pending' || app.status === 'rejected' || app.status === 'approved'));
         selectedBrand.partnerApplicantName = app ? (app.displayName || '') : '';
         selectedBrand.partnerApplicantEmail = app ? (app.email || '') : '';
@@ -15466,7 +16232,7 @@ class Component extends DCLogic {
             await window.CmsStudioProfileApi.reviewPartnerApplication(app.id, 'approve', this.state.partnerAdminNotesDraft || '');
             this.showToast('Identity verified');
             await refreshApps();
-            Component.BRANDS = Component.BRANDS.map((row) => row.name !== b.name ? row : Object.assign({}, row, { verified: true, claimStatus: 'verified', status: 'Active' }));
+            Component.BRANDS = Component.BRANDS.map((row) => row.name !== b.name ? row : Object.assign({}, row, { verified: true, status: 'Active' }));
             this.setState({ _partnerAppsTick: Date.now() });
           } catch (err) {
             this.showToast('Approve failed: ' + (err && err.message ? err.message : err));
@@ -15490,6 +16256,7 @@ class Component extends DCLogic {
             this.showToast('Marketplace Access failed: ' + (err && err.message ? err.message : err));
           }
         };
+        this.applyClaimReviewToProfile(selectedBrand, 'brand', b, app);
       }
       selectedBrand.onEditIdentity = () => this.openOwnerIdentityEdit('seller');
       selectedBrand.onEnterAdminEdit = () => this.requestAdminEditMode('seller');
@@ -15688,12 +16455,6 @@ class Component extends DCLogic {
               ? 'PENDING VERIFICATION'
               : (b.verified ? 'FULLY VERIFIED' : 'PENDING VERIFICATION');
       }
-      const activeClaim = this.state.viewingClaimId ? Component.BRAND_CLAIMS.find(c => c.id === this.state.viewingClaimId && c.brand === b.name) : null;
-      selectedBrand.hasActiveClaim = !!activeClaim;
-      selectedBrand.activeClaim = activeClaim || {};
-      selectedBrand.onApproveClaim = this.resolveActiveClaim('approved');
-      selectedBrand.onRejectClaim = this.resolveActiveClaim('rejected');
-      selectedBrand.onRequestClaimInfo = () => { const claim = Component.BRAND_CLAIMS.find(c => c.id === this.state.viewingClaimId); if (claim) this.showToast(`Requested more info for ${claim.brand} claim`); };
       selectedBrand.verificationHistory = b.verified ? [
         {title:'COMPLIANCE claim APPROVED', desc:'Trade registry credentials matching complete database records. KYC clearance confirmed lock status verified.', time:'June 12, 2026 · 11:38 AM'},
         {title:'TIN Document Upgrade requested', desc:'Request uploaded updated digital proof for TIN ledger as signature was legacy. Document successfully re-uploaded by seller.', time:'June 08, 2026 · 02:15 PM'},
@@ -15774,7 +16535,60 @@ class Component extends DCLogic {
 
     const platformColor = {YouTube:'#FF0000',TikTok:'#000',Instagram:'#DB2777'};
     const creatorSearch = (this.state.creatorSearch||'').toLowerCase();
-    const creatorStatusFilter = this.state.creatorStatusFilter || 'all';
+    let creatorStatusFilter = this.state.creatorStatusFilter || 'requests';
+    if (creatorStatusFilter === 'Pending') creatorStatusFilter = 'requests';
+    const pendingCreatorApps = partnerApps.filter((a) => a && window.creatorAppNeedsAdminAttention && window.creatorAppNeedsAdminAttention(a, Component.CREATORS));
+    const creatorRequestsEmptyMessage = this.state.partnerAppsLoading
+      ? 'Loading creator requests…'
+      : (this.state.partnerAppsError
+        ? String(this.state.partnerAppsError)
+        : (window.__CMS_MIRROR_AUTH_TOKEN__
+          ? 'No new creator registration requests.'
+          : 'Sign in as Super Admin (admin@choosify.com.bd) to load creator requests. TEMP ROLES Admin has no API token.'));
+    const creatorRequests = pendingCreatorApps.map((a) => ({
+      id: a.id,
+      name: a.displayName || a.businessOrChannelName,
+      businessName: a.businessOrChannelName,
+      email: a.email,
+      appDate: (a.createdAt || '').slice(0, 10),
+      businessCategory: a.category,
+      status: a.resubmissionRequested ? 'Resubmission requested' : 'Under Review',
+      onClick: () => {
+        const creatorName = a.businessOrChannelName || a.displayName;
+        const hasCreator = Component.CREATORS.some((c) =>
+          c.name === creatorName || c.catalogId === a.catalogEntityId || c.userId === a.provisionedUserId || c.partnerApplicationId === a.id);
+        if (!hasCreator) {
+          Component.CREATORS = Component.CREATORS.concat([{
+            catalogId: a.catalogEntityId || null,
+            name: creatorName,
+            platform: a.platform || 'YouTube',
+            followers: 0,
+            videos: 0,
+            status: 'Pending',
+            joined: (a.createdAt || '').slice(0, 4),
+            verified: false,
+            trustScore: 0,
+            email: a.email,
+            contactEmail: a.email,
+            handle: '@' + String(creatorName || 'creator').toLowerCase().replace(/\s+/g, ''),
+            location: a.city || 'Bangladesh',
+            bestFor: a.category || 'General',
+            userId: a.provisionedUserId || null,
+            choosifyUserId: a.choosifyUserId || null,
+            marketplaceAccess: false,
+            marketplaceStatus: 'not_granted',
+            partnerApplicationId: a.id,
+          }]);
+        }
+        const match = Component.CREATORS.find((c) =>
+          c.catalogId === a.catalogEntityId || c.userId === a.provisionedUserId || c.partnerApplicationId === a.id || c.name === creatorName);
+        this.setState({
+          selectedCreatorName: match ? match.name : creatorName,
+          creatorProfileTab: 'verification',
+          creatorStatusFilter: 'requests',
+        });
+      },
+    }));
     const creators = Component.CREATORS.map(c => ({
       ...c,
       followersLabel: c.followers.toLocaleString('en-US'),
@@ -15792,13 +16606,14 @@ class Component extends DCLogic {
     }));
     const creatorTabDefs = [
       {key:'all', label:'All Creators', count: creators.length},
-      {key:'Active', label:'Active', count: creators.filter(c=>c.status==='Active').length},
-      {key:'Pending', label:'Pending', count: creators.filter(c=>c.status==='Pending').length},
+      {key:'requests', label:'Requests', count: pendingCreatorApps.length},
+      {key:'claims', label:'Ownership Claims', count: pendingCreatorClaimRows.length},
+      {key:'Active', label:'Active', count: creators.filter(c=>c.status==='Active' || c.status==='live').length},
       {key:'Suspended', label:'Suspended', count: creators.filter(c=>c.status==='Suspended').length},
-    ].map(t => ({...t, onClick: () => this.setState({creatorStatusFilter: t.key}),
+    ].map(t => ({...t, onClick: () => this.setCreatorTab(t.key),
       tabStyle: t.key===creatorStatusFilter ? 'background:linear-gradient(90deg,#C8321A,#EF3C23);color:#fff' : 'background:#F9FAFB;color:#374151'}));
     const creatorsFiltered = creators.filter(c =>
-      (creatorStatusFilter==='all' || c.status===creatorStatusFilter) &&
+      (creatorStatusFilter==='all' || creatorStatusFilter==='requests' || creatorStatusFilter==='claims' || c.status===creatorStatusFilter) &&
       (!creatorSearch || c.name.toLowerCase().includes(creatorSearch)
         || (c.platform||'').toLowerCase().includes(creatorSearch)
         || (c.bestFor||'').toLowerCase().includes(creatorSearch)
@@ -15825,7 +16640,7 @@ class Component extends DCLogic {
     const creatorStudioStats = [
       {label:'TOTAL CREATORS', value: creators.length, color:'#EF3C23', sub:'Across all platforms'},
       {label:'ACTIVE PARTNERS', value: creators.filter(c=>c.status==='Active').length, color:'#16A34A', sub:'Publishing content'},
-      {label:'PENDING REVIEW', value: creators.filter(c=>c.status==='Pending').length, color:'#F59E0B', sub:'Awaiting verification'},
+      {label:'PENDING REVIEW', value: pendingCreatorApps.length, color:'#F59E0B', sub:'Awaiting verification'},
       {label:'FLAGGED / SUSPENDED', value: creators.filter(c=>c.status==='Suspended').length, color:'#DC2626', sub:'Needs action'},
     ];
 
@@ -15838,6 +16653,15 @@ class Component extends DCLogic {
     const isCreatorStudioPage = isCreatorMirror && page === 'creators' && !!selCreatorRaw;
     const isCreatorDetail = (page === 'creators' || page === 'creatorProfile') && !!selCreatorRaw;
     const isCreatorList = page === 'creators' && !isCreatorDetail;
+    const isCreatorRequestsTab = !isCreatorMirror && creatorStatusFilter === 'requests';
+    const isCreatorClaimsTab = !isCreatorMirror && creatorStatusFilter === 'claims';
+    const isCreatorRequestsList = isCreatorList && isCreatorRequestsTab;
+    const isCreatorClaimsList = isCreatorList && isCreatorClaimsTab;
+    const showCreatorTable = isCreatorList && !isCreatorRequestsTab && !isCreatorClaimsTab;
+    const creatorClaims = pendingCreatorClaimRows.map((row) => this.mapVerificationToQueueItem(row, 'creator'));
+    const creatorClaimsEmptyMessage = this.state.verificationsError
+      ? this.state.verificationsError
+      : (this.state.verificationsLoading ? 'Loading ownership claims…' : 'No pending creator ownership claims.');
     if (isCreatorDetail && selCreatorRaw) {
       topBarTitle = selCreatorRaw.name || pageTitle || 'Creator';
       topBarSubtitle = page === 'creatorProfile' ? 'Creator Profile' : 'Creator Studio';
@@ -15935,9 +16759,9 @@ class Component extends DCLogic {
         creatorMirrorView: ((window.__CMS_MIRROR_ROLE__||'')==='creator') ? (page==='creators' ? 'studio' : page==='creatorProfile' ? 'profile' : (this.state.creatorMirrorView || null)) : null,
         hideAllCreatorsBack: (window.__CMS_MIRROR_ROLE__ === 'creator'),
         showContactActions: (window.__CMS_MIRROR_ROLE__ !== 'creator'),
-        showLoginAsUser: !!(window.__CMS_MIRROR_CAN_IMPERSONATE__ && c.userId && c.userId !== (window.__CMS_MIRROR_USER_ID__ || window.__CMS_MIRROR_UID__ || '')),
+        showLoginAsUser: typeof window.canShowLoginAsUser === 'function' ? window.canShowLoginAsUser(c) : !!(window.__CMS_MIRROR_CAN_IMPERSONATE__ && c.userId),
         onLoginAsUser: () => requestLoginAsUser.call(this, {
-          targetUserId: c.userId || '',
+          targetUserId: (typeof window.resolveProfileAccountUid === 'function' ? window.resolveProfileAccountUid(c) : c.userId) || c.userId || '',
           displayName: c.name,
           roleLabel: 'Creator',
           choosifyUserId: (typeof window.resolveProfileChoosifyUserId === 'function' ? window.resolveProfileChoosifyUserId(c.userId, c.choosifyUserId) : c.choosifyUserId) || '',
@@ -15959,17 +16783,64 @@ class Component extends DCLogic {
           : '—') || '—',
         underReview: (function(){
           var apps = Array.isArray(window.__CMS_MIRROR_PARTNER_APPS__) ? window.__CMS_MIRROR_PARTNER_APPS__ : [];
-          var app = apps.find(function(row){ return row.applicantType === 'creator' && (row.catalogEntityId === c.catalogId || row.provisionedUserId === c.userId); });
+          var app = apps.find(function(row){
+            return row.applicantType === 'creator' && (
+              (c.partnerApplicationId && row.id === c.partnerApplicationId)
+              || (c.catalogId && row.catalogEntityId === c.catalogId)
+              || (c.userId && row.provisionedUserId === c.userId)
+              || (c.name && row.businessOrChannelName && c.name === row.businessOrChannelName)
+            );
+          });
           if (app) return app.status === 'pending';
           return window.__CMS_MIRROR_PARTNER_APPLICATION_STATUS__ === 'pending' && (window.__CMS_MIRROR_ROLE__ || '') === 'creator';
         })(),
         showVerifiedBadge: (function(){
           var apps = Array.isArray(window.__CMS_MIRROR_PARTNER_APPS__) ? window.__CMS_MIRROR_PARTNER_APPS__ : [];
-          var app = apps.find(function(row){ return row.applicantType === 'creator' && (row.catalogEntityId === c.catalogId || row.provisionedUserId === c.userId); });
+          var app = apps.find(function(row){
+            return row.applicantType === 'creator' && (
+              (c.partnerApplicationId && row.id === c.partnerApplicationId)
+              || (c.catalogId && row.catalogEntityId === c.catalogId)
+              || (c.userId && row.provisionedUserId === c.userId)
+              || (c.name && row.businessOrChannelName && c.name === row.businessOrChannelName)
+            );
+          });
           var pending = app ? app.status === 'pending' : (window.__CMS_MIRROR_PARTNER_APPLICATION_STATUS__ === 'pending' && (window.__CMS_MIRROR_ROLE__ || '') === 'creator');
           return !pending && !!(c.verified || c.status === 'Active');
         })(),
+        profileStatus: (function(){
+          var apps = Array.isArray(window.__CMS_MIRROR_PARTNER_APPS__) ? window.__CMS_MIRROR_PARTNER_APPS__ : [];
+          var app = apps.find(function(row){
+            return row.applicantType === 'creator' && (
+              (c.partnerApplicationId && row.id === c.partnerApplicationId)
+              || (c.catalogId && row.catalogEntityId === c.catalogId)
+              || (c.userId && row.provisionedUserId === c.userId)
+              || (c.name && row.businessOrChannelName && c.name === row.businessOrChannelName)
+            );
+          });
+          var role = window.__CMS_MIRROR_ROLE__ || '';
+          return typeof window.cmsProfileStatusView === 'function'
+            ? window.cmsProfileStatusView('creator', {
+                partnerApplicationStatus: app ? app.status : null,
+                resubmissionRequested: !!(app && app.resubmissionRequested),
+                marketplaceAccess: c.marketplaceAccess,
+                marketplaceStatus: c.marketplaceStatus,
+                verified: !!c.verified,
+                verifiedStatus: !!c.verified,
+                creatorCatalogStatus: (c.status === 'live' || c.status === 'draft' || c.status === 'archived') ? c.status : (c.marketplaceAccess ? 'live' : 'draft'),
+              }, role === 'creator')
+            : { showPills: false, pills: [], showHint: false, hint: '' };
+        })(),
         showPartnerReviewActions: false,
+        showClaimReviewActions: false,
+        showClaimantClaimNotice: false,
+        activeClaim: {},
+        hasClaimHistory: false,
+        claimReviewHistory: [],
+        claimAdminNotesValue: '',
+        onClaimNotesChange: function(){},
+        onApproveClaim: function(){},
+        onRejectClaim: function(){},
+        onRequestClaimInfo: function(){},
         partnerApplicantName: '',
         partnerApplicantEmail: '',
         partnerBusinessSummary: '',
@@ -16019,7 +16890,10 @@ class Component extends DCLogic {
         const apps = Array.isArray(window.__CMS_MIRROR_PARTNER_APPS__) ? window.__CMS_MIRROR_PARTNER_APPS__ : [];
         const app = apps.find((row) =>
           row.applicantType === 'creator'
-          && ((c.catalogId && row.catalogEntityId === c.catalogId) || (c.userId && row.provisionedUserId === c.userId))
+          && ((c.partnerApplicationId && row.id === c.partnerApplicationId)
+            || (c.catalogId && row.catalogEntityId === c.catalogId)
+            || (c.userId && row.provisionedUserId === c.userId)
+            || (c.name && row.businessOrChannelName && c.name === row.businessOrChannelName))
         ) || null;
         const role = window.__CMS_MIRROR_ROLE__ || '';
         const isAdminReviewer = role === 'admin' || role === 'super_admin';
@@ -16104,6 +16978,26 @@ class Component extends DCLogic {
             this.showToast('Marketplace Access failed: ' + (err && err.message ? err.message : err));
           }
         };
+        this.applyClaimReviewToProfile(selectedCreator, 'creator', c, app);
+        const pendingCreatorClaim = this.findPendingClaimForEntity('creator', c);
+        const approvedCreatorClaim = this.listCachedVerifications().find((r) =>
+          this.claimMatchesEntity(r, 'creator', c) && r.status === 'Approved'
+        );
+        selectedCreator.underReview = !!(app && app.status === 'pending') || !!pendingCreatorClaim || selectedCreator.underReview;
+        selectedCreator.showVerifiedBadge = !pendingCreatorClaim && !!(c.claimStatus === 'verified' || approvedCreatorClaim);
+        if (typeof window.cmsProfileStatusView === 'function') {
+          selectedCreator.profileStatus = window.cmsProfileStatusView('creator', {
+            partnerApplicationStatus: app ? app.status : null,
+            resubmissionRequested: !!(app && app.resubmissionRequested),
+            marketplaceAccess: c.marketplaceAccess,
+            marketplaceStatus: c.marketplaceStatus,
+            verified: !!c.verified,
+            verifiedStatus: !!c.verified,
+            claimStatus: pendingCreatorClaim ? 'pending' : ((c.claimStatus === 'verified' || approvedCreatorClaim) ? 'verified' : c.claimStatus),
+            ownershipClaimPending: !!pendingCreatorClaim,
+            creatorCatalogStatus: (c.status === 'live' || c.status === 'draft' || c.status === 'archived') ? c.status : (c.marketplaceAccess ? 'live' : 'draft'),
+          }, role === 'creator');
+        }
       }
       selectedCreator.hasKycDocs = selectedCreator.kyc.docs.length > 0;
       const creatorMonthlyBase = ((c.followers||10000) / 1000) * 40;
@@ -16270,9 +17164,9 @@ class Component extends DCLogic {
           onBack: this.backToCustomers,
           onCall: () => this.showToast(`Calling ${raw.name}...`),
           onMessage: () => this.showToast(`Opening message thread with ${raw.name}`),
-          showLoginAsUser: !!(window.__CMS_MIRROR_CAN_IMPERSONATE__ && (raw.userId || raw.id) && String(raw.userId || raw.id) !== String(window.__CMS_MIRROR_USER_ID__ || window.__CMS_MIRROR_UID__ || '')),
+          showLoginAsUser: typeof window.canShowLoginAsUser === 'function' ? window.canShowLoginAsUser(raw) : !!(window.__CMS_MIRROR_CAN_IMPERSONATE__ && (raw.userId || raw.id)),
           onLoginAsUser: () => requestLoginAsUser.call(this, {
-            targetUserId: raw.userId || raw.id || '',
+            targetUserId: (typeof window.resolveProfileAccountUid === 'function' ? window.resolveProfileAccountUid(raw) : (raw.userId || raw.id)) || raw.userId || raw.id || '',
             displayName: raw.name,
             roleLabel: 'Consumer',
             choosifyUserId: (typeof window.resolveProfileChoosifyUserId === 'function' ? window.resolveProfileChoosifyUserId(raw.userId || raw.id, raw.choosifyUserId, raw.email) : raw.choosifyUserId) || '',
@@ -16282,6 +17176,9 @@ class Component extends DCLogic {
           geography: raw.geography || raw.city || raw.location || '—',
           phone: raw.phone || raw.primaryPhone || '—',
           connectionStanding: raw.connectionStanding || raw.status || 'Active',
+          profileStatus: typeof window.cmsProfileStatusView === 'function'
+            ? window.cmsProfileStatusView('consumer', {}, (window.__CMS_MIRROR_ROLE__ || '') === 'consumer')
+            : { showPills: true, pills: [], showHint: false, hint: '' },
           tabs: [
             {key:'account', label:'Account Information', icon:'⚙'},
             {key:'orders', label:'Order History', icon:'▤'},
@@ -16299,6 +17196,10 @@ class Component extends DCLogic {
             alt: (raw.addresses && raw.addresses.alt) || raw.altAddress || 'No alternative shipping address on file',
             billing: (raw.addresses && raw.addresses.billing) || raw.billingAddress || 'No billing address on file',
           },
+          hasDefaultAddress: !!(raw.addresses && raw.addresses.default) || !!raw.defaultAddress,
+          hasAltAddress: !!(raw.addresses && raw.addresses.alt) || !!raw.altAddress,
+          hasBillingAddress: !!(raw.addresses && raw.addresses.billing) || !!raw.billingAddress,
+          spentLabel: this.fmtMoney(raw.spent),
           hasAddresses: true,
           connectedAccounts: raw.connectedAccounts || [], hasConnectedAccounts: !!(raw.connectedAccounts||[]).length,
           activeSessions: raw.activeSessions || [], hasActiveSessions: !!(raw.activeSessions||[]).length,
@@ -16572,7 +17473,7 @@ class Component extends DCLogic {
       contentSearchValue: this.state.contentSearch, setContentSearch: this.setContentSearch,
       bulkApproveContent: this.bulkApproveContent, bulkBlockContent: this.bulkBlockContent, bulkDeleteContent: this.bulkDeleteContent,
       isMessagesStudio, messageThreads, threadMessages, selectedThreadDetail, unreadThreadCount,
-      markAllThreadsRead: this.markAllThreadsRead,
+      markAllThreadsRead: this.markAllThreadsRead, contactSupport: this.contactSupport, resolveSupportThread: this.resolveSupportThread,
       threadReplyValue: this.state.threadReplyText, setThreadReply: this.setThreadReply, sendThreadReply: this.sendThreadReply,
       saveThreadTracking: this.saveThreadTracking,
       threadInternalNoteValue: this.state.threadInternalNote, setThreadInternalNote: this.setThreadInternalNote, addThreadInternalNote: this.addThreadInternalNote,
@@ -16669,10 +17570,10 @@ class Component extends DCLogic {
       suspendModalConfirmOpacity: this.state.suspendModal.reason ? '1' : '0.5',
       stopClick: this.stopClick,
       brandTabDefs, brandStudioStats, brandsFiltered,
-      isBrandRequestsTab, isBrandClaimsTab, showBrandTable, isRequestsList, isRequestDetail, brandRequests, selectedRequest,
-      brandClaims, claimsStats, claimsAuditTrail,
+      isBrandRequestsTab, isBrandClaimsTab, showBrandTable, isRequestsList, isRequestDetail, brandRequests, requestsEmptyMessage, selectedRequest,
+      brandClaims, claimsStats, claimsEmptyMessage,
       orderStatusPillsGeneric: ['All','Pending','Confirmed','Processing','Dispatched','In Transit','Delivered','Cancelled','Returned'].map((l,i)=>({label:l, active:i===0})),
-      isCreatorList, isCreatorDetail, isCreatorStudioPage, showCreatorStudioPane: false, showCreatorPortfolio: !!(selectedCreator && (isCreatorStudioPage || selectedCreator.isPortfolioTab)), showCreatorProfileChrome: !!(selectedCreator && !isCreatorStudioPage), creatorDetailGridCols: isCreatorStudioPage ? '1fr' : '260px 1fr', creatorStudioEditing: !!this.state.creatorStudioEditing, startCreatorStudioEdit: this.startCreatorStudioEdit, stopCreatorStudioEdit: this.stopCreatorStudioEdit, selectedCreator, creatorsFiltered, creatorTabDefs, creatorStudioStats,
+      isCreatorList, isCreatorDetail, isCreatorStudioPage, isCreatorRequestsList, isCreatorClaimsList, showCreatorTable, creatorRequests, creatorRequestsEmptyMessage, creatorClaims, creatorClaimsEmptyMessage, showCreatorStudioPane: false, showCreatorPortfolio: !!(selectedCreator && (isCreatorStudioPage || selectedCreator.isPortfolioTab)), showCreatorProfileChrome: !!(selectedCreator && !isCreatorStudioPage), creatorDetailGridCols: isCreatorStudioPage ? '1fr' : '260px 1fr', creatorStudioEditing: !!this.state.creatorStudioEditing, startCreatorStudioEdit: this.startCreatorStudioEdit, stopCreatorStudioEdit: this.stopCreatorStudioEdit, selectedCreator, creatorsFiltered, creatorTabDefs, creatorStudioStats,
       creatorSort, creatorSortOptions, setCreatorSort: this.setCreatorSort,
       creatorsSorted, creatorSelectedCount, creatorAllSelected, clearCreatorSelection: this.clearCreatorSelection,
       toggleCreatorSelectAllHandler: this.toggleCreatorSelectAll(creatorsSorted.map(c=>c.name)),
@@ -16995,9 +17896,16 @@ class Component extends DCLogic {
   function requestLoginAsUser(payload) {
     try {
       if (!window.__CMS_MIRROR_CAN_IMPERSONATE__) return;
-      var targetUserId = payload && payload.targetUserId ? String(payload.targetUserId) : '';
+      var targetUserId = '';
+      if (typeof window.resolveProfileAccountUid === 'function') {
+        targetUserId = window.resolveProfileAccountUid(payload || {}) || '';
+      }
+      if (!targetUserId && payload && payload.targetUserId) targetUserId = String(payload.targetUserId);
+      if (targetUserId && (/^[0-9]+$/.test(targetUserId) || targetUserId.length < 8)) targetUserId = '';
       if (!targetUserId) {
-        if (typeof this.showToast === 'function') this.showToast('No account UID available for Login As User');
+        if (typeof this.showToast === 'function') {
+          this.showToast('No live Choosify account is linked to this profile yet. Login As works for registered consumers, sellers, and creators.');
+        }
         return;
       }
       var selfUid = window.__CMS_MIRROR_USER_ID__ || window.__CMS_MIRROR_UID__ || '';
@@ -17220,6 +18128,7 @@ class Component extends DCLogic {
       }
       var rows = await apiLocal.listUserDirectory();
       if (!Array.isArray(rows) || !rows.length) return;
+      if (typeof window.indexUserDirectory === 'function') window.indexUserDirectory(rows);
       var byUid = (typeof window.ensureCfIdCache === 'function' ? window.ensureCfIdCache() : ensureCfIdCache());
       if (!window.__CMS_MIRROR_CF_ID_BY_EMAIL__) window.__CMS_MIRROR_CF_ID_BY_EMAIL__ = {};
       var byEmail = window.__CMS_MIRROR_CF_ID_BY_EMAIL__;
@@ -17300,6 +18209,87 @@ class Component extends DCLogic {
           bestFor: 'General',
           trustScore: 4.0,
         });
+      });
+
+      var uidByEmail = window.__CMS_MIRROR_UID_BY_EMAIL__ || {};
+      var apps = Array.isArray(window.__CMS_MIRROR_PARTNER_APPS__) ? window.__CMS_MIRROR_PARTNER_APPS__ : [];
+      apps.forEach(function(a) {
+        if (!a || !a.provisionedUserId) return;
+        if (a.applicantType === 'seller') {
+          var brand = (Component.BRANDS || []).find(function(b) {
+            return (a.catalogEntityId && b.catalogId === a.catalogEntityId)
+              || (b.sellerId && b.sellerId === a.provisionedUserId)
+              || (b.name && a.businessOrChannelName && b.name === a.businessOrChannelName);
+          });
+          if (brand) {
+            brand.sellerId = brand.sellerId || a.provisionedUserId;
+            brand.email = brand.email || a.email || '';
+            brand.choosifyUserId = brand.choosifyUserId || a.choosifyUserId || null;
+          }
+        }
+        if (a.applicantType === 'creator') {
+          var creator = (Component.CREATORS || []).find(function(c) {
+            return (a.catalogEntityId && c.catalogId === a.catalogEntityId)
+              || (c.userId && c.userId === a.provisionedUserId)
+              || (c.name && a.businessOrChannelName && c.name === a.businessOrChannelName);
+          });
+          if (creator) {
+            creator.userId = creator.userId || a.provisionedUserId;
+            creator.email = creator.email || a.email || '';
+            creator.contactEmail = creator.contactEmail || a.email || '';
+            creator.choosifyUserId = creator.choosifyUserId || a.choosifyUserId || null;
+          }
+        }
+      });
+
+      var sellerDirRows = rows.filter(function(r) {
+        var role = String((r && r.role) || '').toLowerCase();
+        return role === 'seller' || role === 'verified_seller';
+      });
+      sellerDirRows.forEach(function(r) {
+        if (!r || !r.uid) return;
+        var emailKey = String(r.email || '').toLowerCase();
+        var nameKey = String(r.displayName || '').trim().toLowerCase();
+        var existing = (Component.BRANDS || []).find(function(b) {
+          return (b.sellerId && b.sellerId === r.uid)
+            || (emailKey && String(b.email || b.contactEmail || '').toLowerCase() === emailKey)
+            || (nameKey && String(b.name || '').trim().toLowerCase() === nameKey);
+        });
+        if (existing) {
+          existing.sellerId = r.uid;
+          existing.choosifyUserId = r.choosifyUserId || existing.choosifyUserId;
+          if (r.email) existing.email = existing.email || r.email;
+          return;
+        }
+        Component.BRANDS.push({
+          name: r.displayName || r.email || 'Seller',
+          category: 'General',
+          productsCount: 0,
+          status: 'Active',
+          verified: false,
+          sellerId: r.uid,
+          email: r.email || '',
+          choosifyUserId: r.choosifyUserId || null,
+          tagline: '',
+          loves: 0,
+          followers: 0,
+        });
+      });
+
+      (Component.BRANDS || []).forEach(function(b) {
+        if (b.sellerId) return;
+        var emailKey = String(b.email || b.contactEmail || '').toLowerCase();
+        if (emailKey && uidByEmail[emailKey]) b.sellerId = uidByEmail[emailKey];
+      });
+      (Component.CREATORS || []).forEach(function(c) {
+        if (c.userId) return;
+        var emailKey = String(c.email || c.contactEmail || '').toLowerCase();
+        if (emailKey && uidByEmail[emailKey]) c.userId = uidByEmail[emailKey];
+      });
+      (Component.USERS || []).forEach(function(u) {
+        if (u.userId) return;
+        var emailKey = String(u.email || '').toLowerCase();
+        if (emailKey && uidByEmail[emailKey]) u.userId = uidByEmail[emailKey];
       });
 
       try { this.forceUpdate && this.forceUpdate(); } catch (_) {}
@@ -17767,19 +18757,20 @@ window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
         var brands = (typeof Component !== 'undefined' && Component.BRANDS) ? Component.BRANDS : [];
         if (!pickName && pickId && brands.length) {
           var found = brands.find(function(b) {
-            return b.id === pickId || b.catalogId === pickId || String(b.id) === String(pickId);
+            return b.id === pickId || b.catalogId === pickId || b.sellerId === pickId || b.userId === pickId
+              || String(b.id) === String(pickId);
           });
           if (found) pickName = found.name;
         }
         if (!pickName && pickId && brands.length) {
-          // Fallback: slugify match against catalog-hydrated rows
           var found2 = brands.find(function(b) {
             return (b.slug && b.slug === pickId) || (b.name && b.name.toLowerCase() === String(pickId).toLowerCase());
           });
           if (found2) pickName = found2.name;
         }
         if (!pickName) return false;
-        if (typeof inst.setPage === 'function') inst.setPage('brands');
+        if (typeof inst.setPage === 'function') inst.setPage('brands', { silent: true });
+        if (typeof inst.setState === 'function') inst.setState({ brandTab: 'all' });
         inst.selectBrand(pickName);
         return true;
       }
@@ -17788,6 +18779,65 @@ window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
         var timer = setInterval(function() {
           tries++;
           if (applySelect() || tries > 40) clearInterval(timer);
+        }, 200);
+      }
+      return;
+    }
+    if (e.data.type === 'cms-mirror-select-customer') {
+      var custId = e.data.id || null;
+      var custName = e.data.name || null;
+      function applyCustomer() {
+        var inst = window.__CMS_MIRROR_INSTANCE__;
+        if (!inst || typeof inst.selectCustomer !== 'function') return false;
+        var users = (typeof Component !== 'undefined' && Component.USERS) ? Component.USERS : [];
+        var found = users.find(function(u) {
+          if (custName && u.name === custName) return true;
+          if (!custId) return false;
+          var id = String(custId);
+          return u.userId === id || String(u.id || '') === id
+            || String(u.choosifyUserId || '').toUpperCase() === id.toUpperCase()
+            || String(u.email || '').toLowerCase() === id.toLowerCase();
+        });
+        if (!found || !found.name) return false;
+        if (typeof inst.setPage === 'function') inst.setPage('customers', { silent: true });
+        inst.selectCustomer(found.name);
+        return true;
+      }
+      if (!applyCustomer()) {
+        var cTries = 0;
+        var cTimer = setInterval(function() {
+          cTries++;
+          if (applyCustomer() || cTries > 40) clearInterval(cTimer);
+        }, 200);
+      }
+      return;
+    }
+    if (e.data.type === 'cms-mirror-select-creator') {
+      var crId = e.data.id || null;
+      var crName = e.data.name || null;
+      function applyCreator() {
+        var inst = window.__CMS_MIRROR_INSTANCE__;
+        if (!inst || typeof inst.selectCreator !== 'function') return false;
+        var creators = (typeof Component !== 'undefined' && Component.CREATORS) ? Component.CREATORS : [];
+        var found = creators.find(function(c) {
+          if (crName && c.name === crName) return true;
+          if (!crId) return false;
+          var id = String(crId);
+          return c.userId === id || c.catalogId === id
+            || String(c.choosifyUserId || '').toUpperCase() === id.toUpperCase()
+            || String(c.email || c.contactEmail || '').toLowerCase() === id.toLowerCase()
+            || (c.name && c.name.toLowerCase() === id.toLowerCase());
+        });
+        if (!found || !found.name) return false;
+        if (typeof inst.setPage === 'function') inst.setPage('creators', { silent: true });
+        inst.selectCreator(found.name);
+        return true;
+      }
+      if (!applyCreator()) {
+        var crTries = 0;
+        var crTimer = setInterval(function() {
+          crTries++;
+          if (applyCreator() || crTries > 40) clearInterval(crTimer);
         }, 200);
       }
       return;

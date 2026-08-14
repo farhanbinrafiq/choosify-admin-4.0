@@ -117,12 +117,33 @@ export type SocialInboxConnection = {
   metadata?: Record<string, unknown>;
 };
 
+export const SUPPORT_TICKET_STATUSES = {
+  OPEN: 'open',
+  IN_PROGRESS: 'in_progress',
+  RESOLVED: 'resolved',
+  CLOSED: 'closed',
+} as const;
+
+export type SupportTicketStatus =
+  (typeof SUPPORT_TICKET_STATUSES)[keyof typeof SUPPORT_TICKET_STATUSES];
+
+/** Authoritative "active" support states — do not invent waiting_user / pending / cancelled. */
+export const ACTIVE_SUPPORT_TICKET_STATUSES: ReadonlySet<SupportTicketStatus> = new Set([
+  SUPPORT_TICKET_STATUSES.OPEN,
+  SUPPORT_TICKET_STATUSES.IN_PROGRESS,
+]);
+
+export const CLOSED_SUPPORT_TICKET_STATUSES: ReadonlySet<SupportTicketStatus> = new Set([
+  SUPPORT_TICKET_STATUSES.RESOLVED,
+  SUPPORT_TICKET_STATUSES.CLOSED,
+]);
+
 export type SupportTicket = {
   id: string;
   conversationId: string;
   openerId: string;
   subject: string;
-  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  status: SupportTicketStatus;
   createdAt: string;
   updatedAt: string;
 };

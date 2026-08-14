@@ -1,5 +1,12 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
+import { LoginAsConfirmModal } from '../components/account/LoginAsConfirmModal';
+import {
+  IMPERSONATION_DASHBOARD_PATH,
+  canonicalImpersonationReturnPath,
+  safeImpersonationReturnPath,
+  type LoginAsConfirmTarget,
+} from '../lib/impersonationRouting';
 
 type ImpersonationState = {
   active: boolean;
@@ -15,7 +22,10 @@ type ImpersonationState = {
 
 type ImpersonationContextType = {
   state: ImpersonationState;
+  confirmTarget: LoginAsConfirmTarget | null;
   refresh: () => Promise<void>;
+  openLoginAsConfirm: (target: LoginAsConfirmTarget) => void;
+  closeLoginAsConfirm: () => void;
   startImpersonation: (args: { targetUserId: string; reason: string }) => Promise<void>;
   exitImpersonation: () => Promise<void>;
 };
@@ -25,6 +35,7 @@ const ImpersonationContext = createContext<ImpersonationContextType | undefined>
 const AUTH_TOKEN_KEY = 'choosify_auth_token';
 const ORIGINAL_TOKEN_KEY = 'choosify_impersonation_original_token';
 const RETURN_PATH_KEY = 'choosify_impersonation_return_path';
+const DEFAULT_REASON = 'Customer support / diagnostics';
 
 function safeLocalStorageGet(key: string): string | null {
   try {
@@ -50,9 +61,18 @@ function safeLocalStorageRemove(key: string): void {
   }
 }
 
+function snapshotCurrentReturnPath(): string {
+  return canonicalImpersonationReturnPath(window.location.pathname, window.location.search);
+}
+
 export function ImpersonationProvider({ children }: { children: React.ReactNode }) {
   const { profile } = useAuth();
   const [state, setState] = useState<ImpersonationState>({ active: false });
+  const [confirmTarget, setConfirmTarget] = useState<LoginAsConfirmTarget | null>(null);
+  const [loginAsReason, setLoginAsReason] = useState(DEFAULT_REASON);
+  const [loginAsError, setLoginAsError] = useState<string | null>(null);
+  const [loginAsBusy, setLoginAsBusy] = useState(false);
+  const returnPathSnapshotRef = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     const token = safeLocalStorageGet(AUTH_TOKEN_KEY);
@@ -94,6 +114,35 @@ export function ImpersonationProvider({ children }: { children: React.ReactNode 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile?.id, profile?.role]);
 
+  const closeLoginAsConfirm = useCallback(() => {
+    if (loginAsBusy) return;
+    setConfirmTarget(null);
+    setLoginAsError(null);
+    setLoginAsBusy(false);
+    setLoginAsReason(DEFAULT_REASON);
+    returnPathSnapshotRef.current = null;
+  }, [loginAsBusy]);
+
+  const openLoginAsConfirm = useCallback(
+    (target: LoginAsConfirmTarget) => {
+      const targetUserId = String(target.targetUserId || '').trim();
+      if (!targetUserId) return;
+      if (state.active) return;
+      if (profile?.id && targetUserId === profile.id) return;
+      returnPathSnapshotRef.current = snapshotCurrentReturnPath();
+      setLoginAsError(null);
+      setLoginAsBusy(false);
+      setLoginAsReason(DEFAULT_REASON);
+      setConfirmTarget({
+        ...target,
+        targetUserId,
+        displayName: target.displayName || 'User',
+        roleLabel: target.roleLabel || 'User',
+      });
+    },
+    [profile?.id, state.active],
+  );
+
   const startImpersonation = useCallback(
     async (args: { targetUserId: string; reason: string }) => {
       const token = safeLocalStorageGet(AUTH_TOKEN_KEY);
@@ -118,14 +167,32 @@ export function ImpersonationProvider({ children }: { children: React.ReactNode 
       if (currentToken && !safeLocalStorageGet(ORIGINAL_TOKEN_KEY)) {
         safeLocalStorageSet(ORIGINAL_TOKEN_KEY, currentToken);
       }
-      safeLocalStorageSet(RETURN_PATH_KEY, window.location.pathname + window.location.search);
+      const returnPath = safeImpersonationReturnPath(
+        returnPathSnapshotRef.current || snapshotCurrentReturnPath(),
+      );
+      safeLocalStorageSet(RETURN_PATH_KEY, returnPath);
+      returnPathSnapshotRef.current = returnPath;
 
       safeLocalStorageSet(AUTH_TOKEN_KEY, body.accessToken);
-      await refresh();
-      window.location.reload();
+      window.location.assign(IMPERSONATION_DASHBOARD_PATH);
     },
     [refresh],
   );
+
+  const confirmLoginAs = useCallback(async () => {
+    if (!confirmTarget) return;
+    setLoginAsBusy(true);
+    setLoginAsError(null);
+    try {
+      await startImpersonation({
+        targetUserId: confirmTarget.targetUserId,
+        reason: loginAsReason.trim() || DEFAULT_REASON,
+      });
+    } catch (e) {
+      setLoginAsError(e instanceof Error ? e.message : String(e));
+      setLoginAsBusy(false);
+    }
+  }, [confirmTarget, loginAsReason, startImpersonation]);
 
   const exitImpersonation = useCallback(async () => {
     const token = safeLocalStorageGet(AUTH_TOKEN_KEY);
@@ -142,7 +209,7 @@ export function ImpersonationProvider({ children }: { children: React.ReactNode 
         safeLocalStorageSet(AUTH_TOKEN_KEY, original);
       }
       safeLocalStorageRemove(ORIGINAL_TOKEN_KEY);
-      const returnPath = safeLocalStorageGet(RETURN_PATH_KEY) || '/admin/dashboard';
+      const returnPath = safeImpersonationReturnPath(safeLocalStorageGet(RETURN_PATH_KEY));
       safeLocalStorageRemove(RETURN_PATH_KEY);
       // Single navigation restores Admin session (do not reload then mutate pathname).
       window.location.assign(returnPath);
@@ -152,14 +219,40 @@ export function ImpersonationProvider({ children }: { children: React.ReactNode 
   const value = useMemo<ImpersonationContextType>(
     () => ({
       state,
+      confirmTarget,
       refresh,
+      openLoginAsConfirm,
+      closeLoginAsConfirm,
       startImpersonation,
       exitImpersonation,
     }),
-    [exitImpersonation, refresh, startImpersonation, state],
+    [
+      closeLoginAsConfirm,
+      confirmTarget,
+      exitImpersonation,
+      openLoginAsConfirm,
+      refresh,
+      startImpersonation,
+      state,
+    ],
   );
 
-  return <ImpersonationContext.Provider value={value}>{children}</ImpersonationContext.Provider>;
+  return (
+    <ImpersonationContext.Provider value={value}>
+      {children}
+      {confirmTarget ? (
+        <LoginAsConfirmModal
+          target={confirmTarget}
+          reason={loginAsReason}
+          error={loginAsError}
+          busy={loginAsBusy}
+          onReasonChange={setLoginAsReason}
+          onCancel={closeLoginAsConfirm}
+          onContinue={() => void confirmLoginAs()}
+        />
+      ) : null}
+    </ImpersonationContext.Provider>
+  );
 }
 
 export function useImpersonation() {
@@ -168,3 +261,4 @@ export function useImpersonation() {
   return ctx;
 }
 
+export type { LoginAsConfirmTarget };
