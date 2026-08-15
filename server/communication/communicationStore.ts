@@ -1,4 +1,7 @@
 import { randomUUID } from 'crypto';
+import { and, desc, eq } from 'drizzle-orm';
+import { db } from '../db/client';
+import { notifications as notificationsTable } from '../db/schema';
 import type {
   Broadcast,
   CommunicationNotification,
@@ -12,16 +15,41 @@ import {
 } from './communicationTypes';
 
 type CommunicationState = {
-  notifications: CommunicationNotification[];
   broadcasts: Broadcast[];
   preferences: Map<string, CommunicationPreferences>;
 };
 
 const state: CommunicationState = {
-  notifications: [],
   broadcasts: [],
   preferences: new Map(),
 };
+
+type NotificationRow = typeof notificationsTable.$inferSelect;
+
+function rowToNotification(row: NotificationRow): CommunicationNotification {
+  return {
+    id: row.id,
+    userId: row.userId,
+    type: row.type as CommunicationNotification['type'],
+    category: row.category as CommunicationNotification['category'],
+    priority: row.priority as CommunicationNotification['priority'],
+    title: row.title,
+    summary: row.summary || undefined,
+    actionUrl: row.actionUrl || undefined,
+    channels: (row.channels as CommunicationNotification['channels']) || [],
+    read: row.read,
+    dismissed: row.dismissed,
+    archived: row.archived,
+    pinned: row.pinned,
+    metadata: (row.metadata as Record<string, unknown>) || undefined,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    readAt: row.readAt ? row.readAt.toISOString() : undefined,
+    dismissedAt: row.dismissedAt ? row.dismissedAt.toISOString() : undefined,
+    archivedAt: row.archivedAt ? row.archivedAt.toISOString() : undefined,
+    expiresAt: row.expiresAt ? row.expiresAt.toISOString() : undefined,
+  };
+}
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -47,76 +75,93 @@ function defaultPreferences(userId: string): CommunicationPreferences {
 }
 
 export const communicationStore = {
-  listNotifications(filter: NotificationCenterFilter): CommunicationNotification[] {
-    let rows = filter.userId
-      ? state.notifications.filter((n) => n.userId === filter.userId)
-      : [...state.notifications];
+  // Sprint 10 durability migration: notifications are read/written directly against
+  // PostgreSQL on every call (no per-process cache) — a bare in-memory Map with no
+  // disk snapshot at all previously meant every restart silently discarded history.
+  async listNotifications(filter: NotificationCenterFilter): Promise<CommunicationNotification[]> {
+    const conditions = [];
+    if (filter.userId) conditions.push(eq(notificationsTable.userId, filter.userId));
+    if (filter.read !== undefined) conditions.push(eq(notificationsTable.read, filter.read));
+    if (filter.archived !== undefined) conditions.push(eq(notificationsTable.archived, filter.archived));
+    if (filter.dismissed !== undefined) conditions.push(eq(notificationsTable.dismissed, filter.dismissed));
+    if (filter.pinned !== undefined) conditions.push(eq(notificationsTable.pinned, filter.pinned));
+    if (filter.priority) conditions.push(eq(notificationsTable.priority, filter.priority));
+    if (filter.category) conditions.push(eq(notificationsTable.category, filter.category));
+    if (filter.type) conditions.push(eq(notificationsTable.type, filter.type));
 
-    if (filter.read !== undefined) rows = rows.filter((n) => n.read === filter.read);
-    if (filter.archived !== undefined) rows = rows.filter((n) => n.archived === filter.archived);
-    if (filter.dismissed !== undefined) rows = rows.filter((n) => n.dismissed === filter.dismissed);
-    if (filter.pinned !== undefined) rows = rows.filter((n) => n.pinned === filter.pinned);
-    if (filter.priority) rows = rows.filter((n) => n.priority === filter.priority);
-    if (filter.category) rows = rows.filter((n) => n.category === filter.category);
-    if (filter.type) rows = rows.filter((n) => n.type === filter.type);
+    const query = conditions.length
+      ? db.select().from(notificationsTable).where(and(...conditions))
+      : db.select().from(notificationsTable);
+    let rows = (await query.orderBy(desc(notificationsTable.pinned), desc(notificationsTable.createdAt))).map(rowToNotification);
+
     if (filter.q) {
       const q = filter.q.toLowerCase();
-      rows = rows.filter(
-        (n) =>
-          n.title.toLowerCase().includes(q) ||
-          (n.summary || '').toLowerCase().includes(q),
-      );
+      rows = rows.filter((n) => n.title.toLowerCase().includes(q) || (n.summary || '').toLowerCase().includes(q));
     }
-
-    rows.sort((a, b) => {
-      if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
-      return b.createdAt.localeCompare(a.createdAt);
-    });
 
     const offset = filter.offset ?? 0;
     const limit = filter.limit ?? rows.length;
     return rows.slice(offset, offset + limit);
   },
 
-  countNotifications(userId?: string): CommunicationNotification[] {
-    return userId
-      ? state.notifications.filter((n) => n.userId === userId)
-      : [...state.notifications];
+  async countNotifications(userId?: string): Promise<CommunicationNotification[]> {
+    const rows = userId
+      ? await db.select().from(notificationsTable).where(eq(notificationsTable.userId, userId))
+      : await db.select().from(notificationsTable);
+    return rows.map(rowToNotification);
   },
 
-  getNotification(id: string): CommunicationNotification | null {
-    return state.notifications.find((n) => n.id === id) ?? null;
+  async getNotification(id: string): Promise<CommunicationNotification | null> {
+    const rows = await db.select().from(notificationsTable).where(eq(notificationsTable.id, id)).limit(1);
+    return rows[0] ? rowToNotification(rows[0]) : null;
   },
 
-  createNotification(
+  async createNotification(
     input: Omit<CommunicationNotification, 'id' | 'createdAt' | 'updatedAt' | 'read' | 'dismissed' | 'archived'>,
-  ): CommunicationNotification {
-    const notification: CommunicationNotification = {
-      ...input,
-      id: `ntf-${randomUUID()}`,
-      read: false,
-      dismissed: false,
-      archived: false,
-      priority: input.priority ?? NOTIFICATION_PRIORITIES.NORMAL,
-      channels: input.channels?.length ? input.channels : [DELIVERY_CHANNELS.IN_APP],
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-    };
-    state.notifications.unshift(notification);
-    return notification;
+  ): Promise<CommunicationNotification> {
+    const rows = await db
+      .insert(notificationsTable)
+      .values({
+        id: `ntf-${randomUUID()}`,
+        userId: input.userId,
+        type: input.type,
+        category: input.category,
+        priority: input.priority ?? NOTIFICATION_PRIORITIES.NORMAL,
+        title: input.title,
+        summary: input.summary,
+        actionUrl: input.actionUrl,
+        channels: input.channels?.length ? input.channels : [DELIVERY_CHANNELS.IN_APP],
+        pinned: input.pinned ?? false,
+        metadata: input.metadata,
+        expiresAt: input.expiresAt ? new Date(input.expiresAt) : undefined,
+      })
+      .returning();
+    return rowToNotification(rows[0]);
   },
 
-  updateNotification(id: string, patch: Partial<CommunicationNotification>): CommunicationNotification | null {
-    const idx = state.notifications.findIndex((n) => n.id === id);
-    if (idx < 0) return null;
-    state.notifications[idx] = { ...state.notifications[idx], ...patch, updatedAt: nowIso() };
-    return state.notifications[idx];
+  async updateNotification(id: string, patch: Partial<CommunicationNotification>): Promise<CommunicationNotification | null> {
+    const {
+      id: _ignoreId,
+      createdAt: _ignoreCreatedAt,
+      updatedAt: _ignoreUpdatedAt,
+      readAt: _ignoreReadAt,
+      dismissedAt: _ignoreDismissedAt,
+      archivedAt: _ignoreArchivedAt,
+      expiresAt: _ignoreExpiresAt,
+      ...rest
+    } = patch;
+    const values: Partial<typeof notificationsTable.$inferInsert> = { ...rest, updatedAt: new Date() };
+    if (patch.readAt !== undefined) values.readAt = patch.readAt ? new Date(patch.readAt) : null;
+    if (patch.dismissedAt !== undefined) values.dismissedAt = patch.dismissedAt ? new Date(patch.dismissedAt) : null;
+    if (patch.archivedAt !== undefined) values.archivedAt = patch.archivedAt ? new Date(patch.archivedAt) : null;
+    if (patch.expiresAt !== undefined) values.expiresAt = patch.expiresAt ? new Date(patch.expiresAt) : null;
+    const rows = await db.update(notificationsTable).set(values).where(eq(notificationsTable.id, id)).returning();
+    return rows[0] ? rowToNotification(rows[0]) : null;
   },
 
-  deleteNotification(id: string): boolean {
-    const before = state.notifications.length;
-    state.notifications = state.notifications.filter((n) => n.id !== id);
-    return state.notifications.length < before;
+  async deleteNotification(id: string): Promise<boolean> {
+    const rows = await db.delete(notificationsTable).where(eq(notificationsTable.id, id)).returning();
+    return rows.length > 0;
   },
 
   listBroadcasts(): Broadcast[] {

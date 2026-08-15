@@ -102,7 +102,7 @@ export async function batchAccountPrimaryLabels(
   } catch {
     /* optional */
   }
-  const apps = partnerApplicationStore.list();
+  const apps = await partnerApplicationStore.list();
   for (const user of users) {
     const kind = kindFromRole(user.role);
     const app =

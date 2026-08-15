@@ -73,7 +73,7 @@ async function buildDiscoveryContext(): Promise<string> {
 }
 
 async function buildCommunicationContext(): Promise<string> {
-  return truncateJson(getCommunicationSummary());
+  return truncateJson(await getCommunicationSummary());
 }
 
 async function buildSearchContext(query?: string, ids?: Record<string, string>): Promise<string> {

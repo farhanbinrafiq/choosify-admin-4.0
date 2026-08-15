@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto';
+import { and, desc, eq, or } from 'drizzle-orm';
+import { db } from '../db/client';
+import { partnerApplications } from '../db/schema';
 
 export type PartnerApplicantType = 'seller' | 'creator';
 export type PartnerApplicationStatus = 'pending' | 'approved' | 'rejected';
@@ -42,75 +45,121 @@ export type PartnerApplication = {
   reviewHistory?: Array<{ at: string; by: string; action: string; note?: string }>;
 };
 
-let applications: PartnerApplication[] = [];
-let persistHook: (() => void) | null = null;
-const touch = () => persistHook?.();
+type Row = typeof partnerApplications.$inferSelect;
 
+function rowToApplication(row: Row): PartnerApplication {
+  return {
+    id: row.id,
+    applicantType: row.applicantType as PartnerApplicantType,
+    status: row.status as PartnerApplicationStatus,
+    email: row.email,
+    passwordHash: row.passwordHash || '',
+    displayName: row.displayName,
+    phone: row.phone,
+    businessOrChannelName: row.businessOrChannelName,
+    category: row.category,
+    city: row.city,
+    website: row.website || undefined,
+    niche: row.niche || undefined,
+    contentFocus: row.contentFocus || undefined,
+    socialPrimary: row.socialPrimary || undefined,
+    audienceSize: row.audienceSize || undefined,
+    notes: row.notes || undefined,
+    existingUserId: row.existingUserId || undefined,
+    provisionedUserId: row.provisionedUserId || undefined,
+    catalogEntityId: row.catalogEntityId || undefined,
+    adminNotes: row.adminNotes || undefined,
+    resubmissionRequested: row.resubmissionRequested,
+    reviewedAt: row.reviewedAt ? row.reviewedAt.toISOString() : undefined,
+    reviewedByUserId: row.reviewedByUserId || undefined,
+    reviewNote: row.reviewNote || undefined,
+    reviewHistory: (row.reviewHistory as PartnerApplication['reviewHistory']) || [],
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+/**
+ * Sprint 10 durability migration — authoritative PostgreSQL persistence.
+ * Same public API as before (list/getById/findForActor/create/update); every
+ * caller keeps working unchanged apart from adding `await`, since these were
+ * already synchronous in-memory operations wrapped by async service functions.
+ */
 export const partnerApplicationStore = {
-  setPersistHook: (hook: (() => void) | null) => {
-    persistHook = hook;
+  list: async (status?: PartnerApplicationStatus): Promise<PartnerApplication[]> => {
+    const rows = status
+      ? await db.select().from(partnerApplications).where(eq(partnerApplications.status, status)).orderBy(desc(partnerApplications.createdAt))
+      : await db.select().from(partnerApplications).orderBy(desc(partnerApplications.createdAt));
+    return rows.map(rowToApplication);
   },
 
-  hydrate: (rows: PartnerApplication[] | null | undefined) => {
-    if (Array.isArray(rows)) applications = rows;
+  getById: async (id: string): Promise<PartnerApplication | null> => {
+    const rows = await db.select().from(partnerApplications).where(eq(partnerApplications.id, id)).limit(1);
+    return rows[0] ? rowToApplication(rows[0]) : null;
   },
 
-  snapshot: () => structuredClone(applications),
-
-  list: (status?: PartnerApplicationStatus) => {
-    const rows = structuredClone(applications);
-    if (!status) return rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-    return rows.filter((r) => r.status === status).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  },
-
-  getById: (id: string) => applications.find((a) => a.id === id) || null,
-
-  findPendingByEmail: (email: string) => {
+  findPendingByEmail: async (email: string): Promise<PartnerApplication | null> => {
     const normalized = email.trim().toLowerCase();
-    return (
-      applications.find((a) => a.email === normalized && a.status === 'pending') || null
-    );
+    const rows = await db
+      .select()
+      .from(partnerApplications)
+      .where(and(eq(partnerApplications.email, normalized), eq(partnerApplications.status, 'pending')))
+      .limit(1);
+    return rows[0] ? rowToApplication(rows[0]) : null;
   },
 
-  findForActor: (params: { userId?: string; email?: string }) => {
+  findForActor: async (params: { userId?: string; email?: string }): Promise<PartnerApplication | null> => {
     const uid = params.userId?.trim();
     const email = params.email?.trim().toLowerCase();
-    const matches = applications.filter((a) => {
-      if (uid && (a.provisionedUserId === uid || a.existingUserId === uid)) return true;
-      if (email && a.email === email) return true;
-      return false;
-    });
-    if (!matches.length) return null;
-    const pending = matches.find((a) => a.status === 'pending');
+    const conditions = [];
+    if (uid) conditions.push(eq(partnerApplications.provisionedUserId, uid), eq(partnerApplications.existingUserId, uid));
+    if (email) conditions.push(eq(partnerApplications.email, email));
+    if (conditions.length === 0) return null;
+    const rows = await db.select().from(partnerApplications).where(or(...conditions));
+    if (!rows.length) return null;
+    const mapped = rows.map(rowToApplication);
+    const pending = mapped.find((a) => a.status === 'pending');
     if (pending) return pending;
-    return [...matches].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] || null;
+    return [...mapped].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] || null;
   },
 
-  create: (input: Omit<PartnerApplication, 'id' | 'status' | 'createdAt' | 'updatedAt'>) => {
-    const now = new Date().toISOString();
-    const row: PartnerApplication = {
-      ...input,
-      id: `papp_${randomUUID()}`,
-      status: 'pending',
-      email: input.email.trim().toLowerCase(),
-      createdAt: now,
-      updatedAt: now,
-    };
-    applications.unshift(row);
-    touch();
-    return structuredClone(row);
+  create: async (input: Omit<PartnerApplication, 'id' | 'status' | 'createdAt' | 'updatedAt'>): Promise<PartnerApplication> => {
+    const id = `papp_${randomUUID()}`;
+    const rows = await db
+      .insert(partnerApplications)
+      .values({
+        id,
+        applicantType: input.applicantType,
+        status: 'pending',
+        email: input.email.trim().toLowerCase(),
+        passwordHash: input.passwordHash,
+        displayName: input.displayName,
+        phone: input.phone,
+        businessOrChannelName: input.businessOrChannelName,
+        category: input.category,
+        city: input.city,
+        website: input.website,
+        niche: input.niche,
+        contentFocus: input.contentFocus,
+        socialPrimary: input.socialPrimary,
+        audienceSize: input.audienceSize,
+        notes: input.notes,
+        existingUserId: input.existingUserId,
+        provisionedUserId: input.provisionedUserId,
+        catalogEntityId: input.catalogEntityId,
+        adminNotes: input.adminNotes,
+        resubmissionRequested: input.resubmissionRequested ?? false,
+        reviewHistory: input.reviewHistory ?? [],
+      })
+      .returning();
+    return rowToApplication(rows[0]);
   },
 
-  update: (id: string, patch: Partial<PartnerApplication>) => {
-    const idx = applications.findIndex((a) => a.id === id);
-    if (idx < 0) return null;
-    applications[idx] = {
-      ...applications[idx],
-      ...patch,
-      id: applications[idx].id,
-      updatedAt: new Date().toISOString(),
-    };
-    touch();
-    return structuredClone(applications[idx]);
+  update: async (id: string, patch: Partial<PartnerApplication>): Promise<PartnerApplication | null> => {
+    const { id: _ignoreId, createdAt: _ignoreCreatedAt, updatedAt: _ignoreUpdatedAt, reviewedAt: _ignoreReviewedAt, ...rest } = patch;
+    const values: Partial<typeof partnerApplications.$inferInsert> = { ...rest, updatedAt: new Date() };
+    if (patch.reviewedAt !== undefined) values.reviewedAt = patch.reviewedAt ? new Date(patch.reviewedAt) : null;
+    const rows = await db.update(partnerApplications).set(values).where(eq(partnerApplications.id, id)).returning();
+    return rows[0] ? rowToApplication(rows[0]) : null;
   },
 };

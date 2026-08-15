@@ -76,17 +76,17 @@ function buildFilter(req: Request, userId?: string): NotificationCenterFilter {
 }
 
 // User APIs
-communicationRouter.get('/notifications', ...requireAuth, (req, res) => {
+communicationRouter.get('/notifications', ...requireAuth, async (req, res) => {
   const userId = resolveUserId(req);
   if (!userId) {
     return res.status(401).json({ success: false, error: 'Authentication required' });
   }
 
   const filter = buildFilter(req, userId);
-  const items = listNotifications(filter);
+  const items = await listNotifications(filter);
   return success(res, {
     items,
-    summary: getNotificationCenterSummary(userId),
+    summary: await getNotificationCenterSummary(userId),
     filter,
   });
 });
@@ -103,73 +103,76 @@ communicationRouter.put('/notifications/preferences', ...requireAuth, (req, res)
   return success(res, updatePreferences(userId, req.body || {}, req));
 });
 
-communicationRouter.post('/notifications/read', ...requireAuth, (req, res) => {
+communicationRouter.post('/notifications/read', ...requireAuth, async (req, res) => {
   const userId = resolveUserId(req);
   if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
   const ids = Array.isArray(req.body?.ids) ? (req.body.ids as string[]) : [];
   if (ids.length === 0) return res.status(400).json({ success: false, error: 'ids array is required' });
-  const owned = ids.filter((id) => {
-    const row = getNotification(id);
-    return !!row && row.userId === userId;
-  });
-  return success(res, bulkRead(owned, req));
+  const ownedChecks = await Promise.all(
+    ids.map(async (id) => {
+      const row = await getNotification(id);
+      return row && row.userId === userId ? id : null;
+    }),
+  );
+  const owned = ownedChecks.filter((id): id is string => !!id);
+  return success(res, await bulkRead(owned, req));
 });
 
-communicationRouter.post('/notifications/archive', ...requireAuth, (req, res) => {
+communicationRouter.post('/notifications/archive', ...requireAuth, async (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? (req.body.ids as string[]) : [];
   if (ids.length === 0) return res.status(400).json({ success: false, error: 'ids array is required' });
-  return success(res, bulkArchive(ids));
+  return success(res, await bulkArchive(ids));
 });
 
-communicationRouter.patch('/notifications/:id/read', ...requireAuth, (req, res) => {
+communicationRouter.patch('/notifications/:id/read', ...requireAuth, async (req, res) => {
   const userId = resolveUserId(req);
-  const existing = getNotification(req.params.id);
+  const existing = await getNotification(req.params.id);
   if (!existing) return res.status(404).json({ success: false, error: 'Notification not found' });
   if (!userId || existing.userId !== userId) {
     return res.status(403).json({ success: false, error: 'Forbidden' });
   }
-  const updated = markRead(req.params.id, req);
+  const updated = await markRead(req.params.id, req);
   if (!updated) return res.status(404).json({ success: false, error: 'Notification not found' });
   return success(res, updated);
 });
 
-communicationRouter.patch('/notifications/:id/unread', ...requireAuth, (req, res) => {
+communicationRouter.patch('/notifications/:id/unread', ...requireAuth, async (req, res) => {
   const userId = resolveUserId(req);
-  const existing = getNotification(req.params.id);
+  const existing = await getNotification(req.params.id);
   if (!existing) return res.status(404).json({ success: false, error: 'Notification not found' });
   if (!userId || existing.userId !== userId) {
     return res.status(403).json({ success: false, error: 'Forbidden' });
   }
-  const updated = markUnread(req.params.id);
+  const updated = await markUnread(req.params.id);
   if (!updated) return res.status(404).json({ success: false, error: 'Notification not found' });
   return success(res, updated);
 });
 
-communicationRouter.patch('/notifications/:id/dismiss', ...requireAuth, (req, res) => {
-  const updated = dismissNotification(req.params.id, req);
+communicationRouter.patch('/notifications/:id/dismiss', ...requireAuth, async (req, res) => {
+  const updated = await dismissNotification(req.params.id, req);
   if (!updated) return res.status(404).json({ success: false, error: 'Notification not found' });
   return success(res, updated);
 });
 
-communicationRouter.patch('/notifications/:id/archive', ...requireAuth, (req, res) => {
-  const updated = archiveNotification(req.params.id);
+communicationRouter.patch('/notifications/:id/archive', ...requireAuth, async (req, res) => {
+  const updated = await archiveNotification(req.params.id);
   if (!updated) return res.status(404).json({ success: false, error: 'Notification not found' });
   return success(res, updated);
 });
 
-communicationRouter.delete('/notifications/:id', ...requireAuth, (req, res) => {
-  const deleted = deleteNotification(req.params.id, req);
+communicationRouter.delete('/notifications/:id', ...requireAuth, async (req, res) => {
+  const deleted = await deleteNotification(req.params.id, req);
   if (!deleted) return res.status(404).json({ success: false, error: 'Notification not found' });
   return success(res, { deleted: true });
 });
 
 // Admin APIs
-communicationRouter.get('/admin/notifications', ...requireAdmin, (req, res) => {
+communicationRouter.get('/admin/notifications', ...requireAdmin, async (req, res) => {
   const userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
   const filter = buildFilter(req, userId);
   if (!filter.limit) filter.limit = 50;
   if (filter.offset === undefined) filter.offset = 0;
-  return success(res, { items: listNotifications(filter), filter });
+  return success(res, { items: await listNotifications(filter), filter });
 });
 
 communicationRouter.post('/admin/notifications', ...requireAdmin, async (req, res) => {
@@ -218,6 +221,6 @@ communicationRouter.get('/admin/broadcasts/:id', ...requireAdmin, (req, res) => 
   return success(res, broadcast);
 });
 
-communicationRouter.get('/admin/communication', ...requireAdmin, (_req, res) => {
-  return success(res, getCommunicationPlatformStatus());
+communicationRouter.get('/admin/communication', ...requireAdmin, async (_req, res) => {
+  return success(res, await getCommunicationPlatformStatus());
 });

@@ -35,7 +35,7 @@ export async function requirePartnerEntitlement(
       // Fall through to entitlement check.
     }
   }
-  const check = isApiPathEntitled({ role, userId, path, method: req.method });
+  const check = await isApiPathEntitled({ role, userId, path, method: req.method });
   if (check.ok) {
     next();
     return;

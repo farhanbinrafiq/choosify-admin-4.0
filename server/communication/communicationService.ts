@@ -3,8 +3,8 @@ import { listChannelStatus } from './deliveryChannels';
 import type { CommunicationSummary } from './communicationTypes';
 import { BROADCAST_STATUSES } from './communicationTypes';
 
-export function getCommunicationSummary(): CommunicationSummary {
-  const notifications = communicationStore.countNotifications();
+export async function getCommunicationSummary(): Promise<CommunicationSummary> {
+  const notifications = await communicationStore.countNotifications();
   const broadcasts = communicationStore.listBroadcasts();
 
   return {
@@ -29,9 +29,9 @@ export function getCommunicationSummary(): CommunicationSummary {
   };
 }
 
-export function getCommunicationPlatformStatus() {
+export async function getCommunicationPlatformStatus() {
   return {
-    summary: getCommunicationSummary(),
+    summary: await getCommunicationSummary(),
     channels: listChannelStatus(),
   };
 }

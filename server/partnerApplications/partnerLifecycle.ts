@@ -31,7 +31,7 @@ export async function resolvePartnerLifecycle(params: {
     };
   }
 
-  const application = partnerApplicationStore.findForActor({
+  const application = await partnerApplicationStore.findForActor({
     userId: params.userId,
     email: params.email,
   });

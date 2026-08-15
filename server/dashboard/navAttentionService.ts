@@ -90,7 +90,7 @@ export async function buildNavAttention(actor: {
   const role = actor.role;
   const userId = actor.userId;
 
-  const pendingApps = partnerApplicationStore.list('pending');
+  const pendingApps = await partnerApplicationStore.list('pending');
 
   if (isPlatformAdmin(role)) {
     const sellerApps = pendingApps.filter((a) => a.applicantType === 'seller').length;
@@ -217,7 +217,7 @@ export async function buildNavAttention(actor: {
       qty(unreadConvos, 'unread conversation', 'unread conversations'),
     );
 
-    const unreadNotes = getNotificationCenterSummary(userId).unread;
+    const unreadNotes = (await getNotificationCenterSummary(userId)).unread;
     setCount(
       out,
       'notifications',
@@ -237,7 +237,7 @@ export async function buildNavAttention(actor: {
       qty(oos, 'product is out of stock', 'products are out of stock'),
     );
 
-    const ownApp = partnerApplicationStore.findForActor({ userId });
+    const ownApp = await partnerApplicationStore.findForActor({ userId });
     if (ownApp && (ownApp.status === 'pending' || ownApp.status === 'rejected')) {
       setCount(
         out,
@@ -269,7 +269,7 @@ export async function buildNavAttention(actor: {
       qty(unreadConvos, 'unread conversation', 'unread conversations'),
     );
 
-    const unreadNotes = getNotificationCenterSummary(userId).unread;
+    const unreadNotes = (await getNotificationCenterSummary(userId)).unread;
     setCount(
       out,
       'notifications',
@@ -277,7 +277,7 @@ export async function buildNavAttention(actor: {
       qty(unreadNotes, 'unread notification', 'unread notifications'),
     );
 
-    const ownApp = partnerApplicationStore.findForActor({ userId });
+    const ownApp = await partnerApplicationStore.findForActor({ userId });
     if (ownApp && (ownApp.status === 'pending' || ownApp.status === 'rejected')) {
       setCount(
         out,
@@ -316,7 +316,7 @@ export async function buildNavAttention(actor: {
       qty(unreadConvos, 'unread conversation', 'unread conversations'),
     );
 
-    const unreadNotes = getNotificationCenterSummary(userId).unread;
+    const unreadNotes = (await getNotificationCenterSummary(userId)).unread;
     setCount(
       out,
       'notifications',

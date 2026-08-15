@@ -282,7 +282,7 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
     }
   }
 
-  if (partnerApplicationStore.findPendingByEmail(email)) {
+  if (await partnerApplicationStore.findPendingByEmail(email)) {
     const err = new Error('A pending partner application already exists for this email.');
     (err as Error & { status?: number; code?: string }).status = 409;
     (err as Error & { code?: string }).code = 'APPLICATION_PENDING';
@@ -299,7 +299,7 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
     throw err;
   }
 
-  const row = partnerApplicationStore.create({
+  const row = await partnerApplicationStore.create({
     applicantType: input.applicantType,
     email,
     passwordHash,
@@ -323,7 +323,7 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
     existingUserId,
   });
 
-  partnerApplicationStore.update(row.id, {
+  await partnerApplicationStore.update(row.id, {
     provisionedUserId: provisioned.userId,
     catalogEntityId: provisioned.catalogEntityId,
     passwordHash: '[provisioned]',
@@ -367,7 +367,7 @@ export async function approvePartnerApplication(params: {
   adminUserId: string;
   reviewNote?: string;
 }): Promise<PartnerApplication> {
-  const app = partnerApplicationStore.getById(params.applicationId);
+  const app = await partnerApplicationStore.getById(params.applicationId);
   if (!app) {
     const err = new Error('Application not found');
     (err as Error & { status?: number }).status = 404;
@@ -404,7 +404,7 @@ export async function approvePartnerApplication(params: {
   };
   await markIdentityVerified(verifiedApp);
 
-  const updated = partnerApplicationStore.update(params.applicationId, {
+  const updated = await partnerApplicationStore.update(params.applicationId, {
     status: 'approved',
     reviewedAt: new Date().toISOString(),
     reviewedByUserId: params.adminUserId,
@@ -428,7 +428,7 @@ export async function rejectPartnerApplication(params: {
   adminUserId: string;
   reviewNote?: string;
 }): Promise<PartnerApplication> {
-  const app = partnerApplicationStore.getById(params.applicationId);
+  const app = await partnerApplicationStore.getById(params.applicationId);
   if (!app) {
     const err = new Error('Application not found');
     (err as Error & { status?: number }).status = 404;
@@ -439,7 +439,7 @@ export async function rejectPartnerApplication(params: {
     (err as Error & { status?: number }).status = 409;
     throw err;
   }
-  const updated = partnerApplicationStore.update(params.applicationId, {
+  const updated = await partnerApplicationStore.update(params.applicationId, {
     status: 'rejected',
     reviewedAt: new Date().toISOString(),
     reviewedByUserId: params.adminUserId,
@@ -460,7 +460,7 @@ export async function requestPartnerResubmission(params: {
   adminUserId: string;
   reviewNote?: string;
 }): Promise<PartnerApplication> {
-  const app = partnerApplicationStore.getById(params.applicationId);
+  const app = await partnerApplicationStore.getById(params.applicationId);
   if (!app) {
     const err = new Error('Application not found');
     (err as Error & { status?: number }).status = 404;
@@ -471,7 +471,7 @@ export async function requestPartnerResubmission(params: {
     (err as Error & { status?: number }).status = 409;
     throw err;
   }
-  const updated = partnerApplicationStore.update(params.applicationId, {
+  const updated = await partnerApplicationStore.update(params.applicationId, {
     status: 'pending',
     resubmissionRequested: true,
     reviewedAt: new Date().toISOString(),
@@ -492,13 +492,13 @@ export async function savePartnerAdminNotes(params: {
   adminUserId: string;
   adminNotes: string;
 }): Promise<PartnerApplication> {
-  const app = partnerApplicationStore.getById(params.applicationId);
+  const app = await partnerApplicationStore.getById(params.applicationId);
   if (!app) {
     const err = new Error('Application not found');
     (err as Error & { status?: number }).status = 404;
     throw err;
   }
-  const updated = partnerApplicationStore.update(params.applicationId, {
+  const updated = await partnerApplicationStore.update(params.applicationId, {
     adminNotes: params.adminNotes,
     reviewHistory: appendHistory(app, {
       by: params.adminUserId,
@@ -515,7 +515,7 @@ export async function acknowledgePartnerResubmission(params: {
   email?: string;
   note?: string;
 }): Promise<PartnerApplication> {
-  const app = partnerApplicationStore.findForActor({
+  const app = await partnerApplicationStore.findForActor({
     userId: params.userId,
     email: params.email,
   });
@@ -530,7 +530,7 @@ export async function acknowledgePartnerResubmission(params: {
     (err as Error & { code?: string }).code = 'RESUBMISSION_NOT_REQUESTED';
     throw err;
   }
-  const updated = partnerApplicationStore.update(app.id, {
+  const updated = await partnerApplicationStore.update(app.id, {
     resubmissionRequested: false,
     reviewHistory: appendHistory(app, {
       by: params.userId,
@@ -554,7 +554,7 @@ export async function ensureLegacyPendingApplicationsProvisioned(): Promise<{
   errors: string[];
 }> {
   const result = { linked: 0, provisioned: 0, skipped: 0, errors: [] as string[] };
-  const pending = partnerApplicationStore.list('pending');
+  const pending = await partnerApplicationStore.list('pending');
   for (const app of pending) {
     if (app.provisionedUserId) continue;
     try {
@@ -572,7 +572,7 @@ export async function ensureLegacyPendingApplicationsProvisioned(): Promise<{
           passwordHash: '[provisioned]',
           existingUserId: existing.uid,
         });
-        partnerApplicationStore.update(app.id, {
+        await partnerApplicationStore.update(app.id, {
           provisionedUserId: provisioned.userId,
           catalogEntityId: provisioned.catalogEntityId,
           existingUserId: app.existingUserId || existing.uid,
@@ -592,7 +592,7 @@ export async function ensureLegacyPendingApplicationsProvisioned(): Promise<{
         passwordHash: app.passwordHash,
         existingUserId: app.existingUserId,
       });
-      partnerApplicationStore.update(app.id, {
+      await partnerApplicationStore.update(app.id, {
         provisionedUserId: provisioned.userId,
         catalogEntityId: provisioned.catalogEntityId,
         passwordHash: '[provisioned]',

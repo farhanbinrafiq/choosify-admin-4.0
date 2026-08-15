@@ -16,10 +16,10 @@ const requireAuth = [authenticateRequest];
 const requireAdmin = [authenticateRequest, requireRole(ROLES.ADMIN)];
 
 /** Current actor's resolved entitlements (for nav/route gating). */
-entitlementsRouter.get('/entitlements/me', ...requireAuth, (req, res) => {
+entitlementsRouter.get('/entitlements/me', ...requireAuth, async (req, res) => {
   const role = req.userRole || req.user?.role;
   const userId = req.userId || req.user?.uid;
-  const enabled = getEnabledMapForActor({ role, userId });
+  const enabled = await getEnabledMapForActor({ role, userId });
   res.json({
     success: true,
     role,
@@ -34,19 +34,20 @@ entitlementsRouter.get('/entitlements/me', ...requireAuth, (req, res) => {
 });
 
 /** Admin: full catalog + role defaults (+ empty plan/account stubs for future UI). */
-entitlementsRouter.get('/entitlements/admin', ...requireAdmin, (_req, res) => {
+entitlementsRouter.get('/entitlements/admin', ...requireAdmin, async (_req, res) => {
+  const snapshot = await entitlementStore.snapshot();
   res.json({
     success: true,
     catalog: entitlementStore.catalog(),
-    roleDefaults: entitlementStore.getRoleDefaults(),
-    planDefaults: entitlementStore.snapshot().planDefaults,
-    accountOverrides: entitlementStore.snapshot().accountOverrides,
+    roleDefaults: snapshot.roleDefaults,
+    planDefaults: snapshot.planDefaults,
+    accountOverrides: snapshot.accountOverrides,
     precedence: ['accountOverride', 'planDefault', 'roleDefault'],
     note: 'Disabling a feature blocks access only. Feature-owned business data is never deleted.',
   });
 });
 
-entitlementsRouter.put('/entitlements/admin/role-defaults', ...requireAdmin, (req, res) => {
+entitlementsRouter.put('/entitlements/admin/role-defaults', ...requireAdmin, async (req, res) => {
   const role = String((req.body as { role?: string })?.role || '').toLowerCase() as PartnerRole;
   if (role !== 'seller' && role !== 'creator') {
     res.status(400).json({ success: false, error: 'role must be seller or creator' });
@@ -58,7 +59,7 @@ entitlementsRouter.put('/entitlements/admin/role-defaults', ...requireAdmin, (re
     return;
   }
   try {
-    const saved = entitlementStore.setRoleDefaultsBulk(role, features);
+    const saved = await entitlementStore.setRoleDefaultsBulk(role, features);
     res.json({ success: true, roleDefaults: saved });
   } catch (error) {
     res.status(400).json({
@@ -68,7 +69,7 @@ entitlementsRouter.put('/entitlements/admin/role-defaults', ...requireAdmin, (re
   }
 });
 
-entitlementsRouter.patch('/entitlements/admin/role-defaults/:role/:featureKey', ...requireAdmin, (req, res) => {
+entitlementsRouter.patch('/entitlements/admin/role-defaults/:role/:featureKey', ...requireAdmin, async (req, res) => {
   const role = String(req.params.role || '').toLowerCase() as PartnerRole;
   const featureKey = String(req.params.featureKey || '') as PartnerFeatureKey;
   if (role !== 'seller' && role !== 'creator') {
@@ -81,7 +82,7 @@ entitlementsRouter.patch('/entitlements/admin/role-defaults/:role/:featureKey', 
   }
   const enabled = Boolean((req.body as { enabled?: boolean })?.enabled);
   try {
-    const saved = entitlementStore.setRoleDefault(role, featureKey, enabled);
+    const saved = await entitlementStore.setRoleDefault(role, featureKey, enabled);
     res.json({
       success: true,
       roleDefaults: saved,

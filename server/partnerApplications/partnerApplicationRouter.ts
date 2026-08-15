@@ -103,8 +103,8 @@ partnerApplicationRouter.post('/auth/partner-apply', async (req, res) => {
   }
 });
 
-partnerApplicationRouter.get('/auth/partner-applications/me', authenticateRequest, (req, res) => {
-  const app = partnerApplicationStore.findForActor({
+partnerApplicationRouter.get('/auth/partner-applications/me', authenticateRequest, async (req, res) => {
+  const app = await partnerApplicationStore.findForActor({
     userId: req.userId || req.user?.uid,
     email: req.user?.email,
   });
@@ -141,9 +141,9 @@ partnerApplicationRouter.post(
   },
 );
 
-partnerApplicationRouter.get('/operations/partner-applications', ...requireAdmin, (req, res) => {
+partnerApplicationRouter.get('/operations/partner-applications', ...requireAdmin, async (req, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-  const rows = partnerApplicationStore.list(
+  const rows = await partnerApplicationStore.list(
     status === 'pending' || status === 'approved' || status === 'rejected' ? status : undefined,
   );
   res.json({

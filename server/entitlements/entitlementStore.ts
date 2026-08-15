@@ -1,4 +1,6 @@
-import { randomUUID } from 'node:crypto';
+import { and, eq, inArray } from 'drizzle-orm';
+import { db } from '../db/client';
+import { featureEntitlements } from '../db/schema';
 import {
   defaultRoleEntitlements,
   featureByKey,
@@ -10,38 +12,13 @@ import {
 } from '../../shared/entitlements/registry';
 
 export type EntitlementState = {
-  /** Role-level defaults (commercial partners only). */
   roleDefaults: {
     seller: Record<string, boolean>;
     creator: Record<string, boolean>;
   };
-  /**
-   * Future: subscription/plan defaults keyed by planId.
-   * Present now so the model does not need replacement when billing ships.
-   */
   planDefaults: Record<string, Partial<Record<string, boolean>>>;
-  /**
-   * Future: per-account overrides (true/false) keyed by userId.
-   * Precedence: account override → plan → role default.
-   */
   accountOverrides: Record<string, Partial<Record<string, boolean>>>;
 };
-
-function buildDefaults(): EntitlementState {
-  return {
-    roleDefaults: {
-      seller: { ...defaultRoleEntitlements('seller') },
-      creator: { ...defaultRoleEntitlements('creator') },
-    },
-    planDefaults: {},
-    accountOverrides: {},
-  };
-}
-
-let state: EntitlementState = buildDefaults();
-let persistHook: (() => void) | null = null;
-
-const touch = () => persistHook?.();
 
 function normalizePartnerRole(role: string | undefined | null): PartnerRole | null {
   const r = String(role || '').toLowerCase();
@@ -50,44 +27,73 @@ function normalizePartnerRole(role: string | undefined | null): PartnerRole | nu
   return null;
 }
 
+/** Row lookup helper — 'role' scope keys are seeded with catalog defaults on first read of a role. */
+async function getScopeRows(scope: 'role' | 'plan' | 'account', scopeKeys: string[]) {
+  if (scopeKeys.length === 0) return [];
+  return db
+    .select()
+    .from(featureEntitlements)
+    .where(and(eq(featureEntitlements.scope, scope), inArray(featureEntitlements.scopeKey, scopeKeys)));
+}
+
+/** Ensures a role's catalog defaults exist as rows (idempotent — only inserts missing keys). */
+async function ensureRoleDefaultsSeeded(role: PartnerRole): Promise<void> {
+  const existing = await getScopeRows('role', [role]);
+  const existingKeys = new Set(existing.map((r) => r.featureKey));
+  const defaults = defaultRoleEntitlements(role);
+  const missing = Object.entries(defaults).filter(([key]) => !existingKeys.has(key));
+  if (missing.length === 0) return;
+  await db
+    .insert(featureEntitlements)
+    .values(missing.map(([featureKey, enabled]) => ({ scope: 'role' as const, scopeKey: role, featureKey, enabled: Boolean(enabled) })))
+    .onConflictDoNothing();
+}
+
 /**
- * Precedence: account override → plan entitlement → role default.
+ * Precedence: account override -> plan entitlement -> role default.
  * Known partner features without an explicit role-default record are DENIED (fail-closed).
- * Hydration always merges catalog defaults first so role maps stay complete.
+ * Sprint 10 durability migration: reads directly from PostgreSQL on every call (no
+ * per-process cache), so a second backend instance always sees the same state.
  */
-export function resolveFeatureEnabled(params: {
+export async function resolveFeatureEnabled(params: {
   role: string | undefined | null;
   featureKey: string;
   userId?: string | null;
   planId?: string | null;
-}): boolean {
+}): Promise<boolean> {
   const partnerRole = normalizePartnerRole(params.role);
   if (!partnerRole) return true; // Admin / staff / consumer — not gated by partner entitlements
 
   const feature = featureByKey(params.featureKey);
   if (!feature || !feature.roles.includes(partnerRole)) return true;
 
+  await ensureRoleDefaultsSeeded(partnerRole);
+
   const uid = params.userId?.trim();
-  if (uid && state.accountOverrides[uid] && params.featureKey in state.accountOverrides[uid]) {
-    return Boolean(state.accountOverrides[uid][params.featureKey]);
+  if (uid) {
+    const rows = await getScopeRows('account', [uid]);
+    const hit = rows.find((r) => r.featureKey === params.featureKey);
+    if (hit) return hit.enabled;
   }
 
   const planId = params.planId?.trim();
-  if (planId && state.planDefaults[planId] && params.featureKey in state.planDefaults[planId]) {
-    return Boolean(state.planDefaults[planId][params.featureKey]);
+  if (planId) {
+    const rows = await getScopeRows('plan', [planId]);
+    const hit = rows.find((r) => r.featureKey === params.featureKey);
+    if (hit) return hit.enabled;
   }
 
-  const roleMap = state.roleDefaults[partnerRole];
-  if (params.featureKey in roleMap) return Boolean(roleMap[params.featureKey]);
-  return false;
+  const roleRows = await getScopeRows('role', [partnerRole]);
+  const roleHit = roleRows.find((r) => r.featureKey === params.featureKey);
+  return roleHit ? roleHit.enabled : false;
 }
 
-export function isApiPathEntitled(params: {
+export async function isApiPathEntitled(params: {
   role: string | undefined | null;
   userId?: string | null;
   path: string;
   method?: string;
-}): { ok: boolean; featureKey?: string } {
+}): Promise<{ ok: boolean; featureKey?: string }> {
   const partnerRole = normalizePartnerRole(params.role);
   if (!partnerRole) return { ok: true };
 
@@ -103,7 +109,7 @@ export function isApiPathEntitled(params: {
       (prefix) => path === prefix || path.startsWith(prefix + '/') || path.startsWith(prefix),
     );
     if (!hit) continue;
-    const enabled = resolveFeatureEnabled({
+    const enabled = await resolveFeatureEnabled({
       role: partnerRole,
       featureKey: feature.key,
       userId: params.userId,
@@ -113,16 +119,16 @@ export function isApiPathEntitled(params: {
   return { ok: true };
 }
 
-export function getEnabledMapForActor(params: {
+export async function getEnabledMapForActor(params: {
   role: string | undefined | null;
   userId?: string | null;
   planId?: string | null;
-}): Record<string, boolean> {
+}): Promise<Record<string, boolean>> {
   const partnerRole = normalizePartnerRole(params.role);
   if (!partnerRole) return {};
   const out: Record<string, boolean> = {};
   for (const key of featureKeysForRole(partnerRole)) {
-    out[key] = resolveFeatureEnabled({
+    out[key] = await resolveFeatureEnabled({
       role: partnerRole,
       featureKey: key,
       userId: params.userId,
@@ -132,61 +138,78 @@ export function getEnabledMapForActor(params: {
   return out;
 }
 
-export function filterPageKeysForEntitlements(
+export async function filterPageKeysForEntitlements(
   role: string | undefined | null,
   pageKeys: string[] | null,
   userId?: string | null,
-): string[] | null {
+): Promise<string[] | null> {
   if (!pageKeys) return pageKeys;
   const partnerRole = normalizePartnerRole(role);
   if (!partnerRole) return pageKeys;
-  const enabled = getEnabledMapForActor({ role: partnerRole, userId });
+  const enabled = await getEnabledMapForActor({ role: partnerRole, userId });
   const disabledPages = pageKeysDisabledByFeatures(partnerRole, enabled);
   if (!disabledPages.size) return pageKeys;
   return pageKeys.filter((k) => !disabledPages.has(k));
 }
 
 export const entitlementStore = {
-  setPersistHook: (hook: (() => void) | null) => {
-    persistHook = hook;
+  getRoleDefaults: async (): Promise<EntitlementState['roleDefaults']> => {
+    await ensureRoleDefaultsSeeded('seller');
+    await ensureRoleDefaultsSeeded('creator');
+    const rows = await getScopeRows('role', ['seller', 'creator']);
+    const out: EntitlementState['roleDefaults'] = { seller: {}, creator: {} };
+    for (const row of rows) {
+      if (row.scopeKey === 'seller' || row.scopeKey === 'creator') {
+        out[row.scopeKey][row.featureKey] = row.enabled;
+      }
+    }
+    return out;
   },
 
-  hydrate: (snapshot: Partial<EntitlementState> | null | undefined) => {
-    if (!snapshot) return;
-    const next = buildDefaults();
-    if (snapshot.roleDefaults?.seller) {
-      next.roleDefaults.seller = { ...next.roleDefaults.seller, ...snapshot.roleDefaults.seller };
-    }
-    if (snapshot.roleDefaults?.creator) {
-      next.roleDefaults.creator = { ...next.roleDefaults.creator, ...snapshot.roleDefaults.creator };
-    }
-    if (snapshot.planDefaults) next.planDefaults = { ...snapshot.planDefaults };
-    if (snapshot.accountOverrides) next.accountOverrides = { ...snapshot.accountOverrides };
-    state = next;
-  },
-
-  snapshot: (): EntitlementState => structuredClone(state),
-
-  getRoleDefaults: () => structuredClone(state.roleDefaults),
-
-  setRoleDefault: (role: PartnerRole, featureKey: PartnerFeatureKey, enabled: boolean) => {
+  setRoleDefault: async (role: PartnerRole, featureKey: PartnerFeatureKey, enabled: boolean): Promise<EntitlementState['roleDefaults']> => {
     if (!featureKeysForRole(role).includes(featureKey)) {
       throw new Error(`Feature ${featureKey} is not available for role ${role}`);
     }
-    state.roleDefaults[role] = { ...state.roleDefaults[role], [featureKey]: enabled };
-    touch();
-    return structuredClone(state.roleDefaults);
+    await ensureRoleDefaultsSeeded(role);
+    await db
+      .insert(featureEntitlements)
+      .values({ scope: 'role', scopeKey: role, featureKey, enabled })
+      .onConflictDoUpdate({
+        target: [featureEntitlements.scope, featureEntitlements.scopeKey, featureEntitlements.featureKey],
+        set: { enabled, updatedAt: new Date() },
+      });
+    return entitlementStore.getRoleDefaults();
   },
 
-  setRoleDefaultsBulk: (role: PartnerRole, map: Record<string, boolean>) => {
+  setRoleDefaultsBulk: async (role: PartnerRole, map: Record<string, boolean>): Promise<EntitlementState['roleDefaults']> => {
     const allowed = new Set(featureKeysForRole(role));
-    const next = { ...state.roleDefaults[role] };
+    await ensureRoleDefaultsSeeded(role);
     for (const [k, v] of Object.entries(map)) {
-      if (allowed.has(k as PartnerFeatureKey)) next[k] = Boolean(v);
+      if (!allowed.has(k as PartnerFeatureKey)) continue;
+      await db
+        .insert(featureEntitlements)
+        .values({ scope: 'role', scopeKey: role, featureKey: k, enabled: Boolean(v) })
+        .onConflictDoUpdate({
+          target: [featureEntitlements.scope, featureEntitlements.scopeKey, featureEntitlements.featureKey],
+          set: { enabled: Boolean(v), updatedAt: new Date() },
+        });
     }
-    state.roleDefaults[role] = next;
-    touch();
-    return structuredClone(state.roleDefaults);
+    return entitlementStore.getRoleDefaults();
+  },
+
+  snapshot: async (): Promise<EntitlementState> => {
+    const roleDefaults = await entitlementStore.getRoleDefaults();
+    const allRows = await db.select().from(featureEntitlements);
+    const planDefaults: EntitlementState['planDefaults'] = {};
+    const accountOverrides: EntitlementState['accountOverrides'] = {};
+    for (const row of allRows) {
+      if (row.scope === 'plan') {
+        planDefaults[row.scopeKey] = { ...planDefaults[row.scopeKey], [row.featureKey]: row.enabled };
+      } else if (row.scope === 'account') {
+        accountOverrides[row.scopeKey] = { ...accountOverrides[row.scopeKey], [row.featureKey]: row.enabled };
+      }
+    }
+    return { roleDefaults, planDefaults, accountOverrides };
   },
 
   /** Non-destructive: toggles access only — never mutates cashbook/orders/etc. */

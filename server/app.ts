@@ -52,13 +52,13 @@ import { dashboardSearchRouter } from "./dashboardSearch/dashboardSearchRouter";
 import { entitlementsRouter } from "./entitlements/entitlementsRouter";
 import { partnerApplicationRouter } from "./partnerApplications/partnerApplicationRouter";
 import { navAttentionRouter } from "./dashboard/navAttentionRouter";
-import { hydratePartnerEntitlementsPersistence } from "./entitlements/entitlementPersistence";
+import { backfillLegacyPartnerEntitlementsSnapshot } from "./entitlements/entitlementPersistence";
 
 dotenv.config();
 validateEnvironment();
 ensureConversationMemoryHydrated();
 bootstrapConversationEventSubscribers();
-hydratePartnerEntitlementsPersistence();
+void backfillLegacyPartnerEntitlementsSnapshot();
 
 void import('./partnerApplications/partnerApplicationService')
   .then(async ({ ensureLegacyPendingApplicationsProvisioned }) => {

@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, boolean, timestamp, pgEnum, integer, bigint } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, boolean, timestamp, pgEnum, integer, bigint, jsonb, text, index, uniqueIndex } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('user_role', [
   'user',
@@ -58,3 +58,86 @@ export const refreshTokens = pgTable('refresh_tokens', {
   revokedAt: timestamp('revoked_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+/** Sprint 10 durability migration — Partner Applications (was in-memory + JSON snapshot). */
+export const partnerApplications = pgTable('partner_applications', {
+  id: varchar('id', { length: 64 }).primaryKey(),
+  applicantType: varchar('applicant_type', { length: 16 }).notNull(),
+  status: varchar('status', { length: 16 }).notNull().default('pending'),
+  email: varchar('email', { length: 320 }).notNull(),
+  passwordHash: varchar('password_hash', { length: 255 }),
+  displayName: varchar('display_name', { length: 120 }).notNull(),
+  phone: varchar('phone', { length: 24 }).notNull(),
+  businessOrChannelName: varchar('business_or_channel_name', { length: 160 }).notNull(),
+  category: varchar('category', { length: 120 }).notNull(),
+  city: varchar('city', { length: 80 }).notNull(),
+  website: varchar('website', { length: 320 }),
+  niche: varchar('niche', { length: 160 }),
+  contentFocus: varchar('content_focus', { length: 160 }),
+  socialPrimary: varchar('social_primary', { length: 320 }),
+  audienceSize: varchar('audience_size', { length: 64 }),
+  notes: text('notes'),
+  existingUserId: uuid('existing_user_id').references(() => users.id, { onDelete: 'set null' }),
+  provisionedUserId: uuid('provisioned_user_id').references(() => users.id, { onDelete: 'set null' }),
+  catalogEntityId: varchar('catalog_entity_id', { length: 120 }),
+  adminNotes: text('admin_notes'),
+  resubmissionRequested: boolean('resubmission_requested').notNull().default(false),
+  reviewedAt: timestamp('reviewed_at'),
+  reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  reviewNote: text('review_note'),
+  /** Array of {at, by, action, note}. */
+  reviewHistory: jsonb('review_history').notNull().default([]),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  statusIdx: index('partner_applications_status_idx').on(table.status),
+  emailIdx: index('partner_applications_email_idx').on(table.email),
+  provisionedUserIdx: index('partner_applications_provisioned_user_idx').on(table.provisionedUserId),
+}));
+
+/**
+ * Sprint 10 durability migration — Feature Entitlements (was in-memory + JSON snapshot).
+ * Normalized so role defaults / plan defaults / per-account overrides share one table,
+ * matching the existing precedence logic (account override -> plan -> role default).
+ * Completely separate from Marketplace Access, which remains its own authorization system.
+ */
+export const featureEntitlementScopeEnum = pgEnum('feature_entitlement_scope', ['role', 'plan', 'account']);
+
+export const featureEntitlements = pgTable('feature_entitlements', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  scope: featureEntitlementScopeEnum('scope').notNull(),
+  /** role name ('seller'|'creator'), planId, or userId depending on scope. */
+  scopeKey: varchar('scope_key', { length: 120 }).notNull(),
+  featureKey: varchar('feature_key', { length: 80 }).notNull(),
+  enabled: boolean('enabled').notNull().default(false),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  scopeKeyFeatureUnique: uniqueIndex('feature_entitlements_scope_key_feature_unique').on(table.scope, table.scopeKey, table.featureKey),
+}));
+
+/** Sprint 10 durability migration — Notifications (was a bare in-memory Map, no disk snapshot at all). */
+export const notifications = pgTable('notifications', {
+  id: varchar('id', { length: 64 }).primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: varchar('type', { length: 64 }).notNull(),
+  category: varchar('category', { length: 64 }).notNull(),
+  priority: varchar('priority', { length: 32 }).notNull().default('normal'),
+  title: varchar('title', { length: 320 }).notNull(),
+  summary: text('summary'),
+  actionUrl: varchar('action_url', { length: 500 }),
+  channels: jsonb('channels').notNull().default([]),
+  read: boolean('read').notNull().default(false),
+  dismissed: boolean('dismissed').notNull().default(false),
+  archived: boolean('archived').notNull().default(false),
+  pinned: boolean('pinned').notNull().default(false),
+  metadata: jsonb('metadata'),
+  readAt: timestamp('read_at'),
+  dismissedAt: timestamp('dismissed_at'),
+  archivedAt: timestamp('archived_at'),
+  expiresAt: timestamp('expires_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  userIdIdx: index('notifications_user_id_idx').on(table.userId),
+  userReadIdx: index('notifications_user_read_idx').on(table.userId, table.read),
+}));

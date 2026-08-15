@@ -1,9 +1,22 @@
 import type { Request } from 'express';
+import { inArray } from 'drizzle-orm';
 import { communicationStore } from './communicationStore';
 import { createNotification } from './notificationService';
 import { logBroadcastAudit, recordBroadcastSent } from './eventHooks';
 import type { Broadcast, BroadcastInput } from './communicationTypes';
 import { BROADCAST_STATUSES, DELIVERY_CHANNELS } from './communicationTypes';
+import { db } from '../db/client';
+import { users, roleEnum } from '../db/schema';
+
+const VALID_ROLES = new Set<string>(roleEnum.enumValues);
+
+/** Sprint 10: resolve targetRoles to actual current users belonging to those roles. */
+async function resolveRoleRecipients(targetRoles: string[] | undefined): Promise<string[]> {
+  const roles = (targetRoles || []).filter((r) => VALID_ROLES.has(r)) as (typeof roleEnum.enumValues)[number][];
+  if (roles.length === 0) return [];
+  const rows = await db.select({ id: users.id }).from(users).where(inArray(users.role, roles));
+  return rows.map((r) => r.id);
+}
 
 export function listBroadcasts(): Broadcast[] {
   return communicationStore.listBroadcasts();
@@ -49,8 +62,11 @@ export async function sendBroadcast(id: string, req?: Request): Promise<Broadcas
   });
   if (!updated) return null;
 
-  // Framework: create in-app notifications for targeted users when segment includes user IDs.
-  const targetUserIds = (updated.metadata?.targetUserIds as string[] | undefined) ?? [];
+  // Sprint 10: fan out to both explicit targetUserIds and actual current members of
+  // targetRoles, deduped so a user matching both never gets notified twice.
+  const explicitUserIds = (updated.metadata?.targetUserIds as string[] | undefined) ?? [];
+  const roleUserIds = await resolveRoleRecipients(updated.targetRoles);
+  const targetUserIds = Array.from(new Set([...explicitUserIds, ...roleUserIds]));
   for (const userId of targetUserIds) {
     await createNotification(
       {
