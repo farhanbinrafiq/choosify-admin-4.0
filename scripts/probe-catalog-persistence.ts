@@ -47,31 +47,58 @@ async function login(email: string, password: string) {
   return { token: body.accessToken as string, uid: body.uid as string };
 }
 
+/**
+ * Sprint 10: /auth/upgrade-to-seller is intentionally disabled (403
+ * PARTNER_APPLICATION_REQUIRED). Canonical onboarding is now:
+ * partner-apply -> Admin identity approval -> login as the provisioned Seller.
+ */
 async function registerSeller() {
   const email = `probe.persist.${RUN_ID}@choosify.test`;
-  const reg = await fetch(`${base}/auth/register`, {
+  const password = 'Probe!2026xx';
+  const apply = await fetch(`${base}/auth/partner-apply`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, password: 'Probe!2026xx', fullName: 'Persist Probe' }),
-  });
-  const regBody = (await json(reg)) as { customToken?: string };
-  if (!reg.ok || !regBody.customToken) throw new Error(`register failed: ${reg.status}`);
-  const up = await fetch(`${base}/auth/upgrade-to-seller`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${regBody.customToken}`,
-    },
     body: JSON.stringify({
-      storeName: `Persist Store ${RUN_ID}`,
+      applicantType: 'seller',
+      email,
+      password,
+      displayName: 'Persist Probe',
+      businessOrChannelName: `Persist Store ${RUN_ID}`,
       phone: '+8801711999888',
       category: 'General',
       city: 'Dhaka',
     }),
   });
-  const upBody = (await json(up)) as { accessToken?: string };
-  if (!up.ok || !upBody.accessToken) throw new Error(`upgrade failed: ${up.status}`);
-  return upBody.accessToken as string;
+  if (!apply.ok) throw new Error(`partner-apply failed: ${apply.status}`);
+
+  const admin = await login(ADMIN_EMAIL, DEV_PASSWORD);
+  const listRes = await fetch(`${base}/operations/partner-applications?status=pending`, {
+    headers: { Authorization: `Bearer ${admin.token}` },
+  });
+  const listBody = (await json(listRes)) as { applications?: Array<{ id: string; email?: string }> };
+  const app = (listBody.applications || []).find((a) => a.email === email);
+  if (!app) throw new Error(`pending partner application missing for ${email}`);
+  const approve = await fetch(`${base}/operations/partner-applications/${app.id}/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin.token}` },
+    body: JSON.stringify({ note: 'catalog persistence probe' }),
+  });
+  if (!approve.ok) throw new Error(`approve failed: ${approve.status}`);
+
+  const seller = await login(email, password);
+  // Legacy upgrade-to-seller self-granted Marketplace Access instantly; the real
+  // lifecycle needs this Admin action explicitly before the seller can create brands.
+  const ownBrands = await fetch(`${base}/catalog/brands`, { headers: { Authorization: `Bearer ${seller.token}` } });
+  const ownBrandsBody = (await json(ownBrands)) as { data?: Array<{ id: string }> };
+  const ownBrandId = ownBrandsBody.data?.[0]?.id;
+  if (ownBrandId) {
+    await fetch(`${base}/catalog/brands/${encodeURIComponent(ownBrandId)}/marketplace-access`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin.token}` },
+      body: JSON.stringify({ status: 'granted' }),
+    });
+  }
+  return seller.token;
 }
 
 function killPort(port: number): Promise<void> {

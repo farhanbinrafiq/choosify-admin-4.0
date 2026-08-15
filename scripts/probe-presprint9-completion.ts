@@ -53,6 +53,72 @@ async function login(email: string, password: string) {
   return body as { accessToken: string; uid: string; changeNextLogin?: boolean; role?: string };
 }
 
+/**
+ * Sprint 10: direct /auth/seller-register self-registration is intentionally and
+ * permanently disabled (403 PARTNER_APPLICATION_REQUIRED — see server/authRouter.ts).
+ * Canonical seller onboarding is now: partner-apply -> Admin identity approval ->
+ * login as the provisioned Seller. This mirrors the pattern already used by
+ * probe-catalog-persistence.ts / probe-category-schema.ts / probe-commerce.ts /
+ * probe-escrow.ts / probe-payments.ts / probe-product-inventory.ts.
+ */
+async function provisionSeller(
+  adminToken: string,
+  email: string,
+  password: string,
+  displayName: string,
+  grantMarketplaceAccess = false,
+): Promise<{ accessToken: string; uid: string }> {
+  const apply = await req('POST', '/auth/partner-apply', {
+    body: {
+      applicantType: 'seller',
+      email,
+      password,
+      displayName,
+      businessOrChannelName: `${displayName} Store`,
+      phone: '01700000000',
+      category: 'Fashion',
+      city: 'Dhaka',
+    },
+    expect: [200, 201],
+  });
+  void apply;
+
+  const list = await req('GET', '/operations/partner-applications?status=pending', {
+    token: adminToken,
+    expect: [200],
+  });
+  const applications = (list.body.applications as Array<{ id: string; email?: string }>) || [];
+  const application = applications.find((a) => a.email === email);
+  assert(!!application, `pending partner application missing for ${email}`);
+
+  await req('POST', `/operations/partner-applications/${encodeURIComponent(application!.id)}/approve`, {
+    token: adminToken,
+    body: { note: 'presprint9 completion probe' },
+    expect: [200],
+  });
+
+  const seller = await login(email, password);
+
+  if (grantMarketplaceAccess) {
+    // Legacy seller-register self-granted Marketplace Access instantly; the real
+    // lifecycle needs this explicit Admin action before operational APIs unlock.
+    const ownBrands = await req('GET', '/catalog/brands', {
+      token: seller.accessToken,
+      expect: [200],
+    });
+    const ownBrandId = ((ownBrands.body.data as Array<{ id: string }>) || [])[0]?.id;
+    if (ownBrandId) {
+      await req('PATCH', `/catalog/brands/${encodeURIComponent(ownBrandId)}/marketplace-access`, {
+        token: adminToken,
+        body: { status: 'granted' },
+        expect: [200],
+      });
+    }
+  }
+
+  return { accessToken: seller.accessToken, uid: seller.uid };
+}
+
 async function main() {
   const results: Array<{ id: string; ok: boolean; detail?: string }> = [];
   const mark = (id: string, ok: boolean, detail?: string) => {
@@ -70,26 +136,41 @@ async function main() {
       mark('analytics-unauth', status === 401 || status === 403, `status=${status}`);
     }
 
-    // Create a seller-like user via seller-register with unique email
+    // Legacy direct seller self-registration must remain permanently closed.
+    {
+      const closed = await req('POST', '/auth/seller-register', {
+        body: {
+          email: `probe.closed.${randomBytes(4).toString('hex')}@example.com`,
+          password: 'ProbeClosed1_x',
+          displayName: 'Probe Closed Seller',
+          storeName: 'Probe Closed Store',
+          phone: '01700000000',
+          category: 'Fashion',
+          city: 'Dhaka',
+        },
+      });
+      mark(
+        'seller-register-closed',
+        closed.status === 403 && String(closed.body.code || '') === 'PARTNER_APPLICATION_REQUIRED',
+        `status=${closed.status} code=${closed.body.code}`,
+      );
+    }
+
+    // Create a seller-like user via the canonical partner-apply -> admin approve flow.
     const suffix = randomBytes(4).toString('hex');
     const sellerEmail = `probe.seller.${suffix}@example.com`;
     const sellerPass = `ProbePass1_${suffix}`;
-    const reg = await req('POST', '/auth/seller-register', {
-      body: {
-        email: sellerEmail,
-        password: sellerPass,
-        displayName: `Probe Seller ${suffix}`,
-        storeName: `Probe Store ${suffix}`,
-        phone: '01700000000',
-        category: 'Fashion',
-        city: 'Dhaka',
-      },
-      expect: [200, 201],
-    });
-    const sellerToken = String(reg.body.customToken || reg.body.accessToken || '');
-    const sellerId = String(reg.body.uid || '');
-    assert(sellerToken && sellerId, 'seller register token/uid');
-    mark('seller-register', true);
+    const provisioned = await provisionSeller(
+      admin.accessToken,
+      sellerEmail,
+      sellerPass,
+      `Probe Seller ${suffix}`,
+      true,
+    );
+    const sellerToken = provisioned.accessToken;
+    const sellerId = provisioned.uid;
+    assert(sellerToken && sellerId, 'seller partner-apply provisioning token/uid');
+    mark('seller-provisioned-via-partner-apply', true);
 
     // Admin password reset assist
     const assist = await req('POST', '/auth/admin/password-reset-assist', {
@@ -297,19 +378,13 @@ async function main() {
       // Create second seller and deny access
       const suffix2 = randomBytes(3).toString('hex');
       const otherEmail = `probe.other.${suffix2}@example.com`;
-      const otherReg = await req('POST', '/auth/seller-register', {
-        body: {
-          email: otherEmail,
-          password: `OtherPass1_${suffix2}`,
-          displayName: `Other ${suffix2}`,
-          storeName: `Other Store ${suffix2}`,
-          phone: '01800000000',
-          category: 'Fashion',
-          city: 'Dhaka',
-        },
-        expect: [200, 201],
-      });
-      const otherToken = String(otherReg.body.customToken || otherReg.body.accessToken || '');
+      const otherProvisioned = await provisionSeller(
+        admin.accessToken,
+        otherEmail,
+        `OtherPass1_${suffix2}`,
+        `Other ${suffix2}`,
+      );
+      const otherToken = otherProvisioned.accessToken;
       const crossMut = await req(
         'PUT',
         `/operations/verifications/${encodeURIComponent(verId)}/document/${encodeURIComponent(docId)}/replace`,

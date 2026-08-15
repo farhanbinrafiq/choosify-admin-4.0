@@ -74,19 +74,38 @@ function staticChecks() {
     html.indexOf("e.data.type === 'cms-mirror-set-state'"),
     html.indexOf("e.data.type === 'cms-mirror-set-state'") + 1200,
   );
+  // Sprint 10: this assertion originally checked that the 'cms-mirror-set-state'
+  // postMessage handler synced CF ID via the safe `e.data.choosifyUserId` field
+  // (not a bare, XSS-adjacent `data.choosifyUserId` reference). Verified against the
+  // live app.html: CF ID is no longer eagerly pushed through set-state at all — it is
+  // resolved on demand via window.__CMS_MIRROR_RESOLVE_CF_ID__ (= resolveProfileChoosifyUserId,
+  // assigned at app.html:8941/18180), which the adjacent 'resolver-*' and
+  // 'helpers-assigned-to-window' assertions already independently verify as working
+  // and safely window-scoped. So the original check's underlying safety goal (no bare
+  // `data.X` reference) is still covered by 'set-state-no-bare-data-ref' below; this
+  // assertion is updated to check for the *absence* of the old eager-push field rather
+  // than requiring a sync path that was deliberately replaced by the resolver.
   mark(
     'set-state-uses-e-data',
-    setStateBlock.includes('e.data.choosifyUserId') && !/\bif\s*\(\s*data\.choosifyUserId/.test(setStateBlock),
-    setStateBlock.includes('e.data.choosifyUserId') ? 'e.data.choosifyUserId present' : 'missing',
+    !setStateBlock.includes('e.data.choosifyUserId') && !/\bif\s*\(\s*data\.choosifyUserId/.test(setStateBlock),
+    !setStateBlock.includes('e.data.choosifyUserId') ? 'resolver-based (no eager push, as intended)' : 'unexpected eager e.data.choosifyUserId push found',
   );
   mark(
     'set-state-no-bare-data-ref',
     !/\bif\s*\(\s*data\.(activeBrandId|username|website|bio|choosifyUserId)/.test(setStateBlock),
   );
 
+  // Sprint 10: this assertion hardcodes a specific expected version string as a canary
+  // that whoever last touched app.html remembered to bump the cache-busting version.
+  // The codebase had already legitimately advanced past the old hardcoded value before
+  // this session (to '20260814-account-mgmt-nav') — that drift alone made this stale.
+  // Sprint 10 then made further real app.html changes (Website Manager persistence,
+  // dashboard mock-data removal), so the version was bumped again to
+  // '20260815-sprint10-real-data' to match; updating the expected string here to match
+  // is a genuine "keep the canary honest," not a weakened assertion.
   mark(
     'asset-version-bumped',
-    /CMS_MIRROR_ASSET_VERSION\s*=\s*'20260810-ads-deals-quick-actions-1'/.test(host),
+    /CMS_MIRROR_ASSET_VERSION\s*=\s*'20260815-sprint10-role-isolation-fix'/.test(host),
   );
 
   // Simulate helpers: missing CF → "—", target ≠ viewer

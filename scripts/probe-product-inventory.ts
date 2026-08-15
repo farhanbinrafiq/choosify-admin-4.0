@@ -56,19 +56,69 @@ async function registerConsumer(email: string) {
   return { token: body.customToken as string, uid: body.uid as string };
 }
 
-async function upgradeToSeller(token: string) {
-  const res = await fetch(`${base}/auth/upgrade-to-seller`, {
+/**
+ * Sprint 10: /auth/upgrade-to-seller is intentionally disabled (403
+ * PARTNER_APPLICATION_REQUIRED). Canonical onboarding is now:
+ * partner-apply -> Admin identity approval -> login as the provisioned Seller.
+ * This mirrors the pattern already proven in probe-brand-ownership.ts.
+ */
+async function partnerApplySeller(email: string, password: string, storeName: string) {
+  const res = await fetch(`${base}/auth/partner-apply`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      storeName: `Probe Store ${RUN_ID}`,
+      applicantType: 'seller',
+      email,
+      password,
+      displayName: 'Probe Seller',
+      businessOrChannelName: storeName,
       phone: '+8801711000099',
       category: 'General',
       city: 'Dhaka',
     }),
   });
-  const body = (await json(res)) as { accessToken?: string; uid?: string };
+  const body = await json(res);
   return { status: res.status, body };
+}
+
+async function approvePendingByEmail(adminToken: string, email: string) {
+  const listRes = await fetch(`${base}/operations/partner-applications?status=pending`, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
+  const listBody = (await json(listRes)) as { applications?: Array<{ id: string; email?: string }> };
+  const app = (listBody.applications || []).find((a) => a.email === email);
+  if (!app) throw new Error(`pending partner application missing for ${email}`);
+  const approveRes = await fetch(`${base}/operations/partner-applications/${app.id}/approve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+    body: JSON.stringify({ note: 'product inventory probe' }),
+  });
+  return { status: approveRes.status, body: await json(approveRes) };
+}
+
+/**
+ * apply -> admin-approve -> login -> grant Marketplace Access on the seller's
+ * auto-provisioned brand, returning the same {token, uid} shape upgradeToSeller used
+ * to. The legacy endpoint self-granted Marketplace Access instantly; the real
+ * lifecycle requires this as an explicit Admin action, so the fixture does it here.
+ */
+async function upgradeToSeller(adminToken: string, email: string, password: string, storeName: string) {
+  const apply = await partnerApplySeller(email, password, storeName);
+  if (apply.status !== 201) return { status: apply.status, body: apply.body as { accessToken?: string; uid?: string } };
+  const approve = await approvePendingByEmail(adminToken, email);
+  if (approve.status !== 200) return { status: approve.status, body: {} as { accessToken?: string; uid?: string } };
+  const loggedIn = await login(email, password);
+  const ownBrands = await fetch(`${base}/catalog/brands`, { headers: { Authorization: `Bearer ${loggedIn.token}` } });
+  const ownBrandsBody = (await json(ownBrands)) as { data?: Array<{ id: string }> };
+  const ownBrandId = ownBrandsBody.data?.[0]?.id;
+  if (ownBrandId) {
+    await fetch(`${base}/catalog/brands/${encodeURIComponent(ownBrandId)}/marketplace-access`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${adminToken}` },
+      body: JSON.stringify({ status: 'granted' }),
+    });
+  }
+  return { status: 200, body: { accessToken: loggedIn.token, uid: loggedIn.uid } };
 }
 
 async function createBrand(token: string, name: string) {
@@ -114,17 +164,20 @@ function productPayload(overrides: Record<string, unknown>) {
 }
 
 async function main() {
-  const consumerA = await registerConsumer(`probe.prod.a.${RUN_ID}@choosify.test`);
-  const upgradeA = await upgradeToSeller(consumerA.token);
-  assert(upgradeA.status === 200, 'Seller A upgraded', upgradeA.status);
+  const admin = await login(ADMIN_EMAIL, DEV_PASSWORD);
+
+  const sellerAEmail = `probe.prod.a.${RUN_ID}@choosify.test`;
+  const sellerAPassword = 'Probe!2026xx';
+  const upgradeA = await upgradeToSeller(admin.token, sellerAEmail, sellerAPassword, `Probe Store A ${RUN_ID}`);
+  assert(upgradeA.status === 200, 'Seller A provisioned via Partner Application + Admin approval', upgradeA.status);
   const sellerAToken = upgradeA.body.accessToken as string;
   const sellerAUid = upgradeA.body.uid as string;
 
-  const consumerB = await registerConsumer(`probe.prod.b.${RUN_ID}@choosify.test`);
-  const upgradeB = await upgradeToSeller(consumerB.token);
+  const sellerBEmail = `probe.prod.b.${RUN_ID}@choosify.test`;
+  const sellerBPassword = 'Probe!2026xx';
+  const upgradeB = await upgradeToSeller(admin.token, sellerBEmail, sellerBPassword, `Probe Store B ${RUN_ID}`);
   const sellerBToken = upgradeB.body.accessToken as string;
 
-  const admin = await login(ADMIN_EMAIL, DEV_PASSWORD);
   const categoryId = await firstCategoryId(admin.token);
 
   const brandA1 = await createBrand(sellerAToken, `Probe Prod Brand A1 ${RUN_ID}`);

@@ -2,19 +2,34 @@
  * STRICT pre-commit gate (rate-limit aware: auth max≈20/15m).
  * Restart API before running. Do not weaken rate limits.
  */
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import {
-  entitlementStore,
-  resolveFeatureEnabled,
-} from '../server/entitlements/entitlementStore';
+import { and, eq } from 'drizzle-orm';
+import { db } from '../server/db/client';
+import { featureEntitlements, partnerApplications } from '../server/db/schema';
+import { resolveFeatureEnabled } from '../server/entitlements/entitlementStore';
 import { PARTNER_FEATURES } from '../shared/entitlements/registry';
 
 const API = process.env.API_BASE || 'http://127.0.0.1:3001/api/v1';
 const ADMIN_EMAIL = process.env.PROBE_ADMIN_EMAIL || 'admin@choosify.com.bd';
 const ADMIN_PASS =
   process.env.DEV_SEED_PASSWORD || process.env.PROBE_ADMIN_PASSWORD || 'ChoosifyDev!2026';
-const SNAP_PATH = join(process.cwd(), '.data', 'partner-entitlements-snapshot.json');
+
+/** Sprint 10: entitlements/applications are now authoritative in PostgreSQL — this
+ * probe seeds/reads rows directly instead of the removed in-memory hydrate()/JSON
+ * snapshot file. */
+async function setEntitlementRow(scope: 'role' | 'plan' | 'account', scopeKey: string, featureKey: string, enabled: boolean) {
+  await db
+    .insert(featureEntitlements)
+    .values({ scope, scopeKey, featureKey, enabled })
+    .onConflictDoUpdate({
+      target: [featureEntitlements.scope, featureEntitlements.scopeKey, featureEntitlements.featureKey],
+      set: { enabled, updatedAt: new Date() },
+    });
+}
+async function clearEntitlementRow(scope: 'role' | 'plan' | 'account', scopeKey: string, featureKey: string) {
+  await db
+    .delete(featureEntitlements)
+    .where(and(eq(featureEntitlements.scope, scope), eq(featureEntitlements.scopeKey, scopeKey), eq(featureEntitlements.featureKey, featureKey)));
+}
 
 type Json = Record<string, unknown>;
 const fails: string[] = [];
@@ -60,8 +75,9 @@ async function login(email: string, password: string) {
   return token;
 }
 
-function snap() {
-  return existsSync(SNAP_PATH) ? readFileSync(SNAP_PATH, 'utf8') : '';
+async function snap() {
+  const applications = await db.select().from(partnerApplications);
+  return { applications };
 }
 
 async function main() {
@@ -71,38 +87,39 @@ async function main() {
   console.log('=== A0 precedence unit ===');
   {
     const uid = `u_${stamp}`;
-    entitlementStore.hydrate({
-      roleDefaults: { seller: { cashbooks: true }, creator: {} },
-      planDefaults: { plan_basic: { cashbooks: false }, plan_pro: { cashbooks: true } },
-      accountOverrides: { [uid]: { cashbooks: false } },
-    });
+    await setEntitlementRow('role', 'seller', 'cashbooks', true);
+    await setEntitlementRow('plan', 'plan_basic', 'cashbooks', false);
+    await setEntitlementRow('plan', 'plan_pro', 'cashbooks', true);
+    await setEntitlementRow('account', uid, 'cashbooks', false);
     soft(
-      resolveFeatureEnabled({ role: 'seller', featureKey: 'cashbooks', planId: 'plan_basic' }) === false,
+      (await resolveFeatureEnabled({ role: 'seller', featureKey: 'cashbooks', planId: 'plan_basic' })) === false,
       'role=true plan=false → false',
     );
-    entitlementStore.hydrate({
-      roleDefaults: { seller: { cashbooks: false }, creator: {} },
-      planDefaults: { plan_pro: { cashbooks: true } },
-      accountOverrides: {},
-    });
+
+    await setEntitlementRow('role', 'seller', 'cashbooks', false);
+    await clearEntitlementRow('account', uid, 'cashbooks');
     soft(
-      resolveFeatureEnabled({ role: 'seller', featureKey: 'cashbooks', planId: 'plan_pro' }) === true,
+      (await resolveFeatureEnabled({ role: 'seller', featureKey: 'cashbooks', planId: 'plan_pro' })) === true,
       'role=false plan=true → true',
     );
-    entitlementStore.hydrate({
-      roleDefaults: { seller: { cashbooks: true }, creator: {} },
-      planDefaults: { plan_pro: { cashbooks: true } },
-      accountOverrides: { [uid]: { cashbooks: false } },
-    });
+
+    await setEntitlementRow('role', 'seller', 'cashbooks', true);
+    await setEntitlementRow('account', uid, 'cashbooks', false);
     soft(
-      resolveFeatureEnabled({
+      (await resolveFeatureEnabled({
         role: 'seller',
         featureKey: 'cashbooks',
         planId: 'plan_pro',
         userId: uid,
-      }) === false,
+      })) === false,
       'account=false wins',
     );
+
+    // Reset back to catalog default (true) so this probe's writes don't linger for other roles/tests.
+    await setEntitlementRow('role', 'seller', 'cashbooks', true);
+    await clearEntitlementRow('account', uid, 'cashbooks');
+    await clearEntitlementRow('plan', 'plan_basic', 'cashbooks');
+    await clearEntitlementRow('plan', 'plan_pro', 'cashbooks');
   }
 
   // Auth-strict budget (~12): 1 privilege apply + 1 pwd apply + 1 dup apply + 1 dup2 + 1 seller + 1 creator
@@ -149,11 +166,13 @@ async function main() {
     soft(!apply.raw.includes(password), 'apply leaked plaintext');
     soft(!('passwordHash' in apply.body), 'apply leaked hash');
     await new Promise((r) => setTimeout(r, 600));
-    const s = snap();
-    soft(!s.includes(password), 'SNAPSHOT PLAINTEXT PASSWORD BLOCKER');
-    // Provision-at-apply clears the application hash; argon2 must not linger in the snapshot.
-    soft(!s.includes('$argon2'), 'snapshot retained argon2 after account provision');
-    notes.push(`snapshot plaintext=${s.includes(password)} argon2=${s.includes('$argon2')}`);
+    // Sprint 10: check the authoritative PostgreSQL row directly instead of a JSON snapshot file.
+    const { applications } = await snap();
+    const rawRow = JSON.stringify(applications.find((a) => (a as { email?: string }).email === sellerEmail) || {});
+    soft(!rawRow.includes(password), 'DATABASE PLAINTEXT PASSWORD BLOCKER');
+    // Provision-at-apply clears the application hash; argon2 must not linger on the row.
+    soft(!rawRow.includes('$argon2'), 'application row retained argon2 after account provision');
+    notes.push(`db-row plaintext=${rawRow.includes(password)} argon2=${rawRow.includes('$argon2')}`);
   }
 
   console.log('=== D duplicates ===');
@@ -398,8 +417,14 @@ async function main() {
       token: adminToken,
       body: { enabled: false },
     });
-    await new Promise((r) => setTimeout(r, 500));
-    soft(snap().includes('"promoCodes": false') || snap().includes('"promoCodes":false'), 'persist');
+    // Sprint 10: verify the write landed in the authoritative PostgreSQL row directly —
+    // a stronger check than the old JSON-snapshot text match, since this proves the
+    // real durable store, not just a periodic disk mirror.
+    const rows = await db
+      .select()
+      .from(featureEntitlements)
+      .where(and(eq(featureEntitlements.scope, 'role'), eq(featureEntitlements.scopeKey, 'seller'), eq(featureEntitlements.featureKey, 'promoCodes')));
+    soft(rows.length === 1 && rows[0].enabled === false, 'persist');
     await req('/entitlements/admin/role-defaults/seller/promoCodes', {
       method: 'PATCH',
       token: adminToken,
