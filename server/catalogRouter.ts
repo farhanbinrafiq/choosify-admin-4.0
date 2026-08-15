@@ -1762,7 +1762,7 @@ catalogRouter.post('/catalog/brands', ...requireBrandStudioBrandWrite, async (re
             // New Seller brands start without Marketplace Access — Admin grants later.
             marketplaceAccess: false,
             marketplaceStatus: 'not_granted',
-            claimStatus: req.body?.claimStatus || 'pending',
+            claimStatus: 'pending',
             verifiedStatus: false,
           }
         : req.body;

@@ -12332,7 +12332,52 @@ class Component extends DCLogic {
   deleteCmsSection = (id) => this.setState(s => ({cmsSections: s.cmsSections.filter(sec => sec.id !== id)}));
 
   toggleCmsLivePreview = () => this.setState(s => ({cmsLivePreviewOpen: !s.cmsLivePreviewOpen}));
-  publishCmsChanges = () => this.showToast('All changes published to choosify.bd');
+  publishCmsChanges = () => {
+    const api = window.CmsStudioProfileApi;
+    if (!api) { this.showToast('Publish failed: API unavailable'); return; }
+    const s = this.state;
+    // Sprint 10: real persistence. dealsBanners/seoEntries are intentionally omitted
+    // from the payloads below so the backend's merge-with-existing fallback preserves
+    // them untouched (this editor has no real controls for either field yet).
+    const heroBanners = s.cmsHeroBanners.map((b, i) => ({
+      id: b.id, headline: b.headline || '', subtitle: b.subtitle || '',
+      ctaText: b.ctaLabel || '', ctaUrl: b.ctaUrl || '/products',
+      backgroundImage: b.backgroundImage || '', isActive: !!b.active, order: i,
+    }));
+    const sections = s.cmsSections.map((sec, i) => ({
+      id: sec.id, label: sec.name, isVisible: !!sec.visible, order: i, itemIds: sec.itemIds || [],
+    }));
+    const footer = {
+      description: s.footerData.disclaimer || '', copyrightText: s.footerData.copyright || '',
+      columns: s.footerData.columns || [], newsletterEnabled: !!s.footerData.newsletterEnabled,
+    };
+    const socialLinks = s.cmsSocialLinks.map((l, i) => ({
+      id: l.id, platform: l.label, url: l.url || '', isVisible: true, order: i,
+    }));
+    const popularSearches = s.cmsSearchTerms.map((t, i) => ({
+      id: 'search-' + i, term: t.text, order: i, isActive: true,
+    }));
+    const productBadges = s.cmsBadges.map((b, i) => ({
+      id: b.id, label: b.label, color: b.color, icon: b.icon || '', priority: Number(b.priority) || i + 1, isActive: true,
+    }));
+    const assetKeyByRowId = {navlogo:'navbarLogo', footerlogo:'footerLogo', favicon:'favicon', pwa:'pwaIcon', placeholder:'defaultProductImage'};
+    const websiteAssets = {};
+    s.cmsWebsiteAssets.forEach(a => { const key = assetKeyByRowId[a.id]; if (key) websiteAssets[key] = a.url || ''; });
+    const navigation = s.navMenuItems.map((n, i) => ({ id: n.id, label: n.label, path: n.path, order: i }));
+    this.showToast('Publishing…');
+    Promise.all([
+      api.updateHomepageConfig({ heroBanners, sections }),
+      api.updateSiteConfig({
+        footer, socialLinks, popularSearches, productBadges, websiteAssets, navigation,
+        announcementBarText: s.cmsGlobalSettings.announcementText || '',
+        announcementBarEnabled: !!s.cmsGlobalSettings.announcementActive,
+      }),
+    ]).then(() => {
+      this.showToast('All changes published to choosify.bd');
+    }).catch((err) => {
+      this.showToast('Publish failed: ' + (err && err.message ? err.message : 'unknown error'));
+    });
+  };
   stopClickPropagation = (e) => e.stopPropagation();
 
   setNavLabel = (id) => (e) => this.setState(s => ({navMenuItems: s.navMenuItems.map(n => n.id===id ? {...n, label: e.target.value} : n)}));
@@ -13491,10 +13536,21 @@ class Component extends DCLogic {
       onClick: () => this.setRange(r),
       style: `padding:6px 16px;font-size:10px;font-weight:800;border-radius:8px;cursor:pointer;background:${this.state.range===r?'#EF3C23':'transparent'};color:${this.state.range===r?'#fff':'#374151'}`,
     }));
-    const mirrorRole = (window.__CMS_MIRROR_ROLE__ || 'super_admin');
-    const isSellerMirrorRole = mirrorRole === 'seller';
+    // Sprint 10 security fix: explicit, fail-closed role classification.
+    // Canonical role source: server/permissions/roles.ts ROLES (10 values).
+    // Never treat "not seller and not creator" as admin — every role is
+    // matched explicitly, and anything unrecognized falls CLOSED, not to admin.
+    const mirrorRole = window.__CMS_MIRROR_ROLE__ || '';
+    const isSellerMirrorRole = mirrorRole === 'seller' || mirrorRole === 'verified_seller';
     const isCreatorMirrorRole = mirrorRole === 'creator';
-    const isAdminMirrorRole = !isSellerMirrorRole && !isCreatorMirrorRole;
+    const isAdminMirrorRole = mirrorRole === 'admin' || mirrorRole === 'super_admin';
+    const isConsumerMirrorRole = mirrorRole === 'user' || mirrorRole === 'consumer';
+    const isModeratorMirrorRole = mirrorRole === 'moderator';
+    const isFinanceMirrorRole = mirrorRole === 'finance_manager';
+    const isSupportMirrorRole = mirrorRole === 'support_agent';
+    const isMarketingMirrorRole = mirrorRole === 'marketing_manager';
+    const isKnownStaffMirrorRole = isModeratorMirrorRole || isFinanceMirrorRole || isSupportMirrorRole || isMarketingMirrorRole;
+    const isUnknownMirrorRole = !isSellerMirrorRole && !isCreatorMirrorRole && !isAdminMirrorRole && !isConsumerMirrorRole && !isKnownStaffMirrorRole;
     const sellerOwnedBrands = (Component.BRANDS || []).filter(b => b && (b.sellerId === (window.__CMS_MIRROR_UID__ || '') || b._ownedBySeller));
     const sellerBrandNames = new Set(sellerOwnedBrands.map(b => b.name));
     const sellerOrders = (Component.ORDERS || []).filter(o => {
@@ -13507,10 +13563,6 @@ class Component extends DCLogic {
       if (!isSellerMirrorRole) return true;
       return sellerBrandNames.has(pr.brand) || pr.sellerId === (window.__CMS_MIRROR_UID__ || '');
     });
-    const sellerDeals = (Component.DEALS || []).filter(d => {
-      if (!isSellerMirrorRole) return true;
-      return sellerBrandNames.has(d.brand);
-    });
     const creatorGuides = (this.state.contentItems || []).filter(c => {
       if (!isCreatorMirrorRole) return true;
       return true;
@@ -13521,15 +13573,21 @@ class Component extends DCLogic {
     const periodSellerRevenue = periodSellerOrders.reduce((s, o) => s + (o.total || 0), 0);
     const periodPlatformRevenue = periodPlatformOrders.reduce((s, o) => s + (o.total || 0), 0);
     const totalRevenue = (isSellerMirrorRole ? sellerOrders : Component.ORDERS).reduce((s, o) => s + (o.total || 0), 0);
-    const liveDeals = (isSellerMirrorRole ? sellerDeals : Component.DEALS).filter(d => d.status === 'Active').length;
-    let pendingDeals = (isSellerMirrorRole ? sellerDeals : Component.DEALS).filter(d => d.status === 'Pending' || d.status === 'Pending Review').length;
+    // Sprint 10: real deal counts from GET /catalog/deals (hydrated on mount into
+    // this.state.dashboardDeals), scoped to the seller's own brands where relevant.
+    const sellerOwnedBrandIds = new Set(sellerOwnedBrands.map(b => b.id));
+    const dashboardDeals = this.state.dashboardDeals || [];
+    const scopedDeals = isSellerMirrorRole ? dashboardDeals.filter(d => sellerOwnedBrandIds.has(d.brandId)) : dashboardDeals;
+    const liveDeals = scopedDeals.filter(d => d.status === 'live').length;
+    let pendingDeals = scopedDeals.filter(d => d.status === 'pending').length;
     let creatorLiveDeals = liveDeals;
     let creatorPendingDeals = pendingDeals;
     if (isCreatorMirrorRole) {
-      const creatorAds = (Component.SPONSORED_ADS || []).filter(a => String(a.type || '').includes('Creator') || String(a.requestedBy || '').includes('Creator'));
-      const creatorPlacements = (Component.SPONSORED_PLACEMENTS || []).filter(p => p.itemType === 'Creator' || String(p.requestedBy || '').includes('Creator'));
-      creatorLiveDeals = creatorAds.filter(a => a.status === 'Active').length + creatorPlacements.filter(p => p.status === 'Active').length;
-      creatorPendingDeals = creatorAds.filter(a => a.status === 'Pending Review' || a.status === 'Pending').length + creatorPlacements.filter(p => p.status === 'Pending').length;
+      // Sprint 10: Component.SPONSORED_ADS/SPONSORED_PLACEMENTS are static seed
+      // fixtures, never hydrated from a live API — showing an honest 0 rather than
+      // a fabricated count until this is wired to a real per-creator ads/deals source.
+      creatorLiveDeals = 0;
+      creatorPendingDeals = 0;
     }
     const fsDash = this.state.financeSummaryCache || {};
     const dashFinanceAvailable = Math.round(Number(fsDash.availableBalance || 0)).toLocaleString('en-US');
@@ -13624,7 +13682,7 @@ class Component extends DCLogic {
         this.mkDashboardPanel('Deals & Ads Snapshot', [
           {label:'Active Deals', value: String(liveDeals), onClick: () => this.setPage('adsDealsStudio')},
           {label:'Pending Ad Approval', value: String(pendingDeals), onClick: () => this.setPage('adsDealsStudio')},
-          {label:'Total Deal Records', value: String(sellerDeals.length), onClick: () => this.setPage('adsDealsStudio')},
+          {label:'Total Deal Records', value: String(scopedDeals.length), onClick: () => this.setPage('adsDealsStudio')},
         ], {label:'Open Ads & Deals Studio →', onClick: () => this.setPage('adsDealsStudio')}),
       ];
     } else if (isCreatorMirrorRole) {
@@ -13688,15 +13746,18 @@ class Component extends DCLogic {
         this.mkDashboardPanel('Deals & Collaboration', [
           {label:'Active Deals', value: String(creatorLiveDeals), onClick: () => this.setPage('adsDealsStudio')},
           {label:'Pending Ads', value: String(creatorPendingDeals), onClick: () => this.setPage('adsDealsStudio')},
-          {label:'Brand Campaigns', value: String((Component.CREATOR_CAMPAIGNS || []).length), onClick: () => this.setPage('creatorEconomy')},
+          {label:'Brand Campaigns', value: '—', onClick: () => this.setPage('creatorEconomy')},
         ], {label:'Open Ads & Deals Studio →', onClick: () => this.setPage('adsDealsStudio')}),
       ];
-    } else {
+    } else if (isAdminMirrorRole) {
       dashboardTrendTitle = 'Platform GMV & Orders Trend';
       dashboardTrendSubtitle = `${rangeLabels[rangeKey]} · all storefront checkout`;
       dashboardActionCenterTitle = 'Platform Action Center';
       const activeSellers = (Component.BRANDS || []).filter(b => b.status !== 'Suspended').length;
-      const activeConsumers = (Component.USERS || []).filter(u => u.role === 'consumer' || u.type === 'consumer').length || Component.USERS.length;
+      // Sprint 10 security fix: was checking role === 'consumer', but the canonical
+      // backend role value is 'user' (server/permissions/roles.ts ROLES.USER) — this
+      // was silently under/over-counting even before the admin-fallback bug.
+      const activeConsumers = (Component.USERS || []).filter(u => u.role === 'user' || u.role === 'consumer' || u.type === 'consumer').length || Component.USERS.length;
       statCards = [
         {label:'GMV / REVENUE', value: this.fmtMoney(periodPlatformRevenue), sub: `${rangeLabels[rangeKey]} · ${periodPlatformOrders.length} orders`, onClick: () => this.setPage('orders')},
         {label:'ORDERS', value: String(periodPlatformOrders.length), sub: `${Component.ORDERS.length} lifetime`, onClick: () => this.setPage('orders')},
@@ -13707,36 +13768,102 @@ class Component extends DCLogic {
       revenueBars = trend.bars;
       dashboardChartEmpty = !trend.hasData;
       dashboardChartEmptyMessage = 'No platform orders in selected period.';
+      // Sprint 10: Payouts/Returns/Moderation/Disputes/Inventory-Alerts have no live
+      // backend wired into this dashboard yet — showing '—' (unavailable) instead of
+      // fabricated seed-array counts. Seller/Brand Verification has a real API
+      // (GET /operations/verifications) not yet hydrated into dashboard state; flagged
+      // as a fast follow-up rather than wired here to avoid a rushed partial fetch.
       actionQueues = [
-        {label:'Seller / Brand Verification', count: Component.GENERIC_PAGES.verificationCenter.rows.filter(r => r.status === 'Pending').length, onClick: () => this.setPage('verificationCenter')},
-        {label:'Return / Refund Cases', count: Component.RETURNS.filter(r => r.status !== 'Refunded').length, onClick: () => this.setPage('returns')},
-        {label:'Payment / Payout Issues', count: Component.PAYOUTS.filter(p => p.status === 'Pending' || p.status === 'Rejected').length, onClick: () => this.setPage('finance')},
-        {label:'Moderation Queue', count: Component.GENERIC_PAGES.moderationCenter.rows.filter(r => r.status === 'Open').length, onClick: () => this.setPage('moderationCenter')},
-        {label:'Open Disputes', count: Component.GENERIC_PAGES.disputes.rows.filter(r => r.status === 'Open').length, onClick: () => this.setPage('disputes')},
+        {label:'Seller / Brand Verification', count: (this.state.dashboardVerifications || []).filter(v => v.status === 'Submitted' || v.status === 'Under Review').length, onClick: () => this.setPage('verificationCenter')},
+        {label:'Return / Refund Cases', count: '—', onClick: () => this.setPage('returns')},
+        {label:'Payment / Payout Issues', count: '—', onClick: () => this.setPage('finance')},
+        {label:'Moderation Queue', count: '—', onClick: () => this.setPage('moderationCenter')},
+        {label:'Open Disputes', count: '—', onClick: () => this.setPage('disputes')},
       ];
       dashboardLeftPanels = [
         this.mkDashboardPanel('Financial Operations', [
-          {label:'Pending Payouts', value: String(Component.PAYOUTS.filter(p => p.status === 'Pending').length), onClick: () => this.setPage('finance')},
-          {label:'Processing Payouts', value: String(Component.PAYOUTS.filter(p => p.status === 'Processing').length), onClick: () => this.setPage('finance')},
-          {label:'Refund Requests', value: String(Component.RETURNS.filter(r => r.status === 'Initiated' || r.status === 'Approved').length), onClick: () => this.setPage('returns')},
-          {label:'Rejected Payouts', value: String(Component.PAYOUTS.filter(p => p.status === 'Rejected').length), onClick: () => this.setPage('finance')},
+          {label:'Pending Payouts', value: '—', onClick: () => this.setPage('finance')},
+          {label:'Processing Payouts', value: '—', onClick: () => this.setPage('finance')},
+          {label:'Refund Requests', value: '—', onClick: () => this.setPage('returns')},
+          {label:'Rejected Payouts', value: '—', onClick: () => this.setPage('finance')},
         ], {label:'View Finance →', onClick: () => this.setPage('finance')}),
         this.mkDashboardPanel('Marketplace Health', [
           {label:'Catalog Products', value: String(this.state.products.length), onClick: () => this.setPage('products')},
           {label:'Active Deals', value: String(liveDeals), onClick: () => this.setPage('adsDealsStudio')},
-          {label:'Inventory Alerts', value: String(Component.INVENTORY_ALERTS.length), onClick: () => this.setPage('inventoryStock')},
+          {label:'Inventory Alerts', value: '—', onClick: () => this.setPage('inventoryStock')},
           {label:'CMS Live Sections', value: String(this.state.cmsSections.filter(s => s.visible).length), onClick: () => this.setPage('websiteCmsStudio')},
         ]),
       ];
       dashboardRightPanels = [];
+    } else if (isConsumerMirrorRole) {
+      // Sprint 10 security fix: dedicated Consumer dashboard branch. Personal-scoped
+      // only — Component.ORDERS is already server-side scoped to the authenticated
+      // consumer's own orders (server/commerce/orderService.ts listOrdersGroupedByCheckout
+      // filters by actor.userId for non-staff roles), so it is safe to use directly here.
+      // No platform-wide computation (Component.BRANDS/Component.USERS counts, GMV,
+      // Action Center, Financial Operations, Marketplace Health, CMS health) is
+      // referenced in this branch at all — not merely hidden in the UI.
+      dashboardTitle = 'My Dashboard';
+      dashboardSubtitle = 'Your personal orders and account — never platform-wide data.';
+      dashboardTrendTitle = 'My Order Activity';
+      dashboardTrendSubtitle = `${rangeLabels[rangeKey]} · your own orders only`;
+      dashboardActionCenterTitle = 'My Account';
+      const myOrders = Component.ORDERS || [];
+      const myPeriodOrders = this.filterOrdersByRange(myOrders, rangeKey);
+      const mySpend = myOrders.reduce((s, o) => s + (o.total || 0), 0);
+      statCards = [
+        {label:'MY ORDERS', value: String(myOrders.length), sub: `${myPeriodOrders.length} in ${rangeLabels[rangeKey]}`, onClick: () => this.setPage('orders')},
+        {label:'TOTAL SPENT', value: this.fmtMoney(mySpend), sub: 'Lifetime, your account only', onClick: () => this.setPage('orders')},
+      ];
+      const trend = this.buildDashboardTrendBars(myPeriodOrders, rangeKey, 'total');
+      revenueBars = trend.bars;
+      dashboardChartEmpty = !trend.hasData;
+      dashboardChartEmptyMessage = 'No orders yet — this chart shows your own order activity only.';
+      actionQueues = [];
+      dashboardLeftPanels = [];
+      dashboardRightPanels = [];
+      showWebsiteManagerButton = false;
+      showDashboardCmsHealth = false;
+      showDashboardTrust = false;
+    } else {
+      // Known staff roles without a dedicated built dashboard (moderator, finance,
+      // support, marketing) and any genuinely unrecognized role land here — fail
+      // CLOSED, never admin. No platform metrics are computed or shown; the sidebar
+      // nav is already independently restricted via window.__CMS_MIRROR_ROLE_NAV__.
+      dashboardTitle = isKnownStaffMirrorRole ? 'My Workspace' : 'Unsupported Role';
+      dashboardSubtitle = isKnownStaffMirrorRole
+        ? 'Use the sidebar for the tools available to your role.'
+        : 'This account role is not recognized by the dashboard. Contact an administrator.';
+      dashboardTrendTitle = '';
+      dashboardTrendSubtitle = '';
+      dashboardActionCenterTitle = '';
+      statCards = [];
+      actionQueues = [];
+      dashboardLeftPanels = [];
+      dashboardRightPanels = [];
+      revenueBars = [];
+      dashboardChartEmpty = true;
+      dashboardChartEmptyMessage = '';
+      showWebsiteManagerButton = false;
+      showDashboardCmsHealth = false;
+      showDashboardTrust = false;
     }
-    const trustDashboardMetrics = Component.GENERIC_PAGES.trustCenter.rows.slice(0, 3);
-    const trustAlertCount = Component.GENERIC_PAGES.trustCenter.rows.filter(r => r.status !== 'Healthy').length;
+    // Sprint 10: Component.GENERIC_PAGES.trustCenter is static seed data with no live
+    // backend wired in — showing an honest empty/zero state rather than fabricated rows.
+    const trustDashboardMetrics = [];
+    const trustAlertCount = 0;
     const trustAlertCountPlural = trustAlertCount === 1 ? '' : 'S';
     const goToTrustCenter = () => this.setPage('trustCenter');
+    // Sprint 10: dates now come from the real homepage/site config updatedAt fields
+    // (populated by hydrateWebsiteCms on mount) instead of a hardcoded literal date.
+    const fmtCmsDate = (iso) => {
+      if (!iso) return '—';
+      try { return new Date(iso).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}); }
+      catch (e) { return '—'; }
+    };
     const cmsHealth = [
-      {label:'Site config updated', value:'Jul 16, 2026'},
-      {label:'Homepage updated', value:'Jul 16, 2026'},
+      {label:'Site config updated', value: fmtCmsDate(this.state.cmsSiteUpdatedAt)},
+      {label:'Homepage updated', value: fmtCmsDate(this.state.cmsHomepageUpdatedAt)},
       {label:'Active placements', value: String(liveDeals)},
       {label:'Product badges configured', value: String(Math.min(5, this.state.products.length))},
     ];
@@ -13763,7 +13890,7 @@ class Component extends DCLogic {
       ].filter(function(ql) {
         return typeof window.__CMS_MIRROR_PAGE_ALLOWED__ !== 'function' || window.__CMS_MIRROR_PAGE_ALLOWED__(ql.key);
       });
-    } else {
+    } else if (isAdminMirrorRole) {
       quickLinks = [
         {label:'Seller Management Studio', sub:'Verified merchants & listings', onClick: () => this.setPage('brands')},
         {label:'Products & Inventory', sub:'Platform catalog & stock', onClick: () => this.setPage('products')},
@@ -13772,6 +13899,10 @@ class Component extends DCLogic {
         {label:'Ads & Deals Studio', sub:'Sponsored placements', onClick: () => this.setPage('adsDealsStudio')},
         {label:'Trust Center', sub:'Moderation & safety signals', onClick: () => this.setPage('trustCenter')},
       ];
+    } else {
+      // Sprint 10 security fix: Consumer / staff-without-dashboard / unknown roles
+      // get no admin quick links — fail closed, not admin.
+      quickLinks = [];
     }
 
     const cmsSubPage = this.state.cmsSubPage;
@@ -13988,7 +14119,10 @@ class Component extends DCLogic {
       }
       const statusStyle = p.status==='active' ? 'background:#F0FDF4;color:#16A34A' : p.status==='scheduled' ? 'background:#EFF6FF;color:#1D4ED8' : 'background:#FFF7ED;color:#C2410C';
       return {...p, endLabel: p.endDate, countdownLabel, countdownStyle, hasCountdown: !!countdownLabel, statusLabel: p.status.toUpperCase(), statusStyle,
-        onEdit: () => this.showToast(`Editing ${p.name}`), onPush: () => this.showToast(`${p.name} pushed to live ads`)};
+        // Sprint 10: Promotional Sections has no backend persistence yet — do not
+        // claim a save/publish that never happens. See dashboard/CMS audit findings.
+        onEdit: () => this.showToast('Promotional Sections editing is not yet available'),
+        onPush: () => this.showToast('Promotional Sections publishing is not yet available')};
     });
 
     const cmsSocialLinksView = this.state.cmsSocialLinks.map((l,i) => ({
@@ -14000,7 +14134,8 @@ class Component extends DCLogic {
       ...a, onUrlChange: this.setAssetUrl(a.id), onClear: () => this.clearAsset(a.id),
     }));
 
-    const cmsSeoPagesView = Component.CMS_SEO_PAGES.map(p => ({...p, onEdit: () => this.showToast(`Editing SEO meta for ${p.title}`)}));
+    // Sprint 10: SEO Manager has no real edit form yet (list view only) — honest no-op label.
+    const cmsSeoPagesView = Component.CMS_SEO_PAGES.map(p => ({...p, onEdit: () => this.showToast('SEO meta editing is not yet available')}));
 
     const cmsGlobal = {
       ...this.state.cmsGlobalSettings,
@@ -14955,11 +15090,18 @@ class Component extends DCLogic {
     const isFeeScopePlatform = feeRuleDraft.scope==='platform';
     const feeValueUnitLabel = feeRuleDraft.rateType==='percentage' ? '%' : '৳ flat';
 
+    // Sprint 10 security fix: was `mirrorRole === 'consumer' ? 'consumer' : 'admin'` —
+    // the real backend role value is 'user', not 'consumer', so this always fell
+    // through to 'admin' for actual consumers. Now explicit and fail-closed: any role
+    // that isn't seller/creator/admin (including staff and unknown roles) gets the
+    // minimal 'consumer' tab set, never 'admin'.
     const settingsRoleKey = isSellerMirrorRole
       ? 'seller'
       : isCreatorMirrorRole
         ? 'creator'
-        : (mirrorRole === 'consumer' ? 'consumer' : 'admin');
+        : isAdminMirrorRole
+          ? 'admin'
+          : 'consumer';
     const SETTINGS_TABS_BY_ROLE = {
       admin: [
         {key:'platform', label:'PLATFORM CONFIG'},
@@ -14995,7 +15137,8 @@ class Component extends DCLogic {
         {key:'communication', label:'COMMUNICATION'},
       ],
     };
-    const settingsTabsForRole = SETTINGS_TABS_BY_ROLE[settingsRoleKey] || SETTINGS_TABS_BY_ROLE.admin;
+    // Sprint 10 security fix: fail-closed fallback is the minimal consumer tab set, not admin.
+    const settingsTabsForRole = SETTINGS_TABS_BY_ROLE[settingsRoleKey] || SETTINGS_TABS_BY_ROLE.consumer;
     let settingsTab = this.state.settingsTab || settingsTabsForRole[0].key;
     if (!settingsTabsForRole.some(t => t.key === settingsTab)) settingsTab = settingsTabsForRole[0].key;
     const settingsTabDefs = settingsTabsForRole.map(t => ({
@@ -15085,16 +15228,11 @@ class Component extends DCLogic {
       rowStyle: `padding:14px 16px;border-left:3px solid ${t.id===this.state.selectedThreadId?'#EF3C23':'transparent'};background:${t.id===this.state.selectedThreadId?'#FFF7ED':'#fff'};cursor:pointer;border-bottom:1px solid #F1F3F5`,
       onClick: () => this.selectThread(t.id),
     }));
-    const mockMessageThreads = Component.MESSAGE_THREADS.map(t => ({
-      ...t,
-      isSupport: false,
-      isRead: !!this.state.threadReadStates[t.id],
-      isActive: t.id === this.state.selectedThreadId,
-      rowStyle: `padding:14px 16px;border-left:3px solid ${t.id===this.state.selectedThreadId?'#EF3C23':'transparent'};background:${t.id===this.state.selectedThreadId?'#FFF7ED':'#fff'};cursor:pointer;border-bottom:1px solid #F1F3F5`,
-      onClick: () => this.selectThread(t.id),
-    }));
-    const messageThreads = liveSupportThreads.concat(mockMessageThreads);
-    const selThread = messageThreads.find(t => t.id === this.state.selectedThreadId) || messageThreads[0] || Component.MESSAGE_THREADS[0];
+    // Sprint 10: fake fixture threads (Component.MESSAGE_THREADS) no longer mixed into
+    // the real inbox — this surface must only show live, backend-sourced conversations.
+    const messageThreads = liveSupportThreads;
+    const EMPTY_THREAD_PLACEHOLDER = { id: null, messages: [], order: null, isSupport: false, supportClosed: false };
+    const selThread = messageThreads.find(t => t.id === this.state.selectedThreadId) || messageThreads[0] || EMPTY_THREAD_PLACEHOLDER;
     const threadMessages = (selThread.messages || []).map(m => ({
       ...m, isCustomer: m.role === 'CUSTOMER',
       roleStyle: m.role === 'CUSTOMER' ? 'color:#EF3C23;font-size:9.5px;font-weight:800;letter-spacing:0.04em' : 'color:#2563EB;font-size:9.5px;font-weight:800;letter-spacing:0.04em',
@@ -18585,6 +18723,98 @@ class Component extends DCLogic {
     }
   };
 
+  // Sprint 10: Website Manager real persistence — load the authoritative
+  // homepage/site config on mount instead of leaving the editor on static seed data.
+  // Sprint 10: wire the real GET /catalog/deals and GET /operations/verifications
+  // endpoints into dashboard hydration (both already existed server-side, just weren't
+  // called from the dashboard). Runs for every authenticated role that lands on the
+  // dashboard; role-scoping of the resulting counts happens in the render logic.
+  Component.prototype.hydrateDashboardCounts = async function() {
+    var api = window.CmsStudioProfileApi;
+    if (!api) return;
+    var self = this;
+    try {
+      var deals = (typeof api.listDeals === 'function') ? await api.listDeals() : [];
+      self.setState({ dashboardDeals: deals });
+    } catch (e) { /* leave dashboardDeals empty on failure */ }
+    var role = window.__CMS_MIRROR_ROLE__ || '';
+    if (role === 'admin' || role === 'super_admin' || role === 'moderator') {
+      try {
+        var verifications = (typeof api.listVerifications === 'function') ? await api.listVerifications({}) : [];
+        self.setState({ dashboardVerifications: verifications });
+      } catch (e) { /* leave dashboardVerifications empty on failure */ }
+    }
+  };
+
+  Component.prototype.hydrateWebsiteCms = async function() {
+    var api = window.CmsStudioProfileApi;
+    if (!api) return;
+    var role = window.__CMS_MIRROR_ROLE__ || '';
+    if (role !== 'admin' && role !== 'super_admin' && role !== 'marketing_manager') return;
+    var self = this;
+    try {
+      var homepage = await api.getHomepageConfig();
+      var site = await api.getSiteConfig();
+      self.setState(function(s) {
+        var next = {};
+        if (homepage) {
+          next.cmsHomepageUpdatedAt = homepage.updatedAt || null;
+          if (Array.isArray(homepage.heroBanners) && homepage.heroBanners.length) {
+            next.cmsHeroBanners = homepage.heroBanners.map(function(b) {
+              return {id: b.id, headline: b.headline, subtitle: b.subtitle, ctaLabel: b.ctaText, ctaUrl: b.ctaUrl, backgroundImage: b.backgroundImage, active: !!b.isActive};
+            });
+          }
+          if (Array.isArray(homepage.sections) && homepage.sections.length) {
+            var byId = {};
+            s.cmsSections.forEach(function(sec) { byId[sec.id] = sec; });
+            next.cmsSections = homepage.sections.map(function(sec) {
+              var seed = byId[sec.id] || {};
+              return Object.assign({}, seed, {id: sec.id, name: seed.name || sec.label, visible: !!sec.isVisible, itemIds: sec.itemIds});
+            });
+          }
+        }
+        if (site) {
+          next.cmsSiteUpdatedAt = site.updatedAt || null;
+          if (site.footer) {
+            next.footerData = Object.assign({}, s.footerData, {
+              disclaimer: site.footer.description || s.footerData.disclaimer,
+              copyright: site.footer.copyrightText || s.footerData.copyright,
+              columns: (site.footer.columns && site.footer.columns.length) ? site.footer.columns : s.footerData.columns,
+              newsletterEnabled: site.footer.newsletterEnabled,
+            });
+          }
+          if (Array.isArray(site.socialLinks) && site.socialLinks.length) {
+            next.cmsSocialLinks = site.socialLinks.map(function(l, i) {
+              var seed = s.cmsSocialLinks[i] || {};
+              return {id: l.id, icon: seed.icon || '', label: l.platform, url: l.url};
+            });
+          }
+          if (Array.isArray(site.popularSearches) && site.popularSearches.length) {
+            next.cmsSearchTerms = site.popularSearches.map(function(t) { return {text: t.term}; });
+          }
+          if (Array.isArray(site.productBadges) && site.productBadges.length) {
+            next.cmsBadges = site.productBadges.map(function(b) { return {id: b.id, label: b.label, color: b.color, priority: b.priority}; });
+          }
+          if (site.websiteAssets) {
+            var assetRowIdByKey = {navbarLogo:'navlogo', footerLogo:'footerlogo', favicon:'favicon', pwaIcon:'pwa', defaultProductImage:'placeholder'};
+            next.cmsWebsiteAssets = s.cmsWebsiteAssets.map(function(a) {
+              var srcKey = Object.keys(assetRowIdByKey).find(function(k) { return assetRowIdByKey[k] === a.id; });
+              return srcKey && site.websiteAssets[srcKey] ? Object.assign({}, a, {url: site.websiteAssets[srcKey]}) : a;
+            });
+          }
+          next.cmsGlobalSettings = Object.assign({}, s.cmsGlobalSettings, {
+            announcementText: site.announcementBarText || s.cmsGlobalSettings.announcementText,
+            announcementActive: !!site.announcementBarEnabled,
+          });
+          if (Array.isArray(site.navigation) && site.navigation.length) {
+            next.navMenuItems = site.navigation.map(function(n) { return {id: n.id, label: n.label, path: n.path, locked: false}; });
+          }
+        }
+        return next;
+      });
+    } catch (e) { /* leave editor on seed defaults if hydrate fails */ }
+  };
+
   try {
     var prev = Component.prototype.componentDidMount;
     Component.prototype.componentDidMount = function(){
@@ -18598,6 +18828,8 @@ class Component extends DCLogic {
       var self = this;
       setTimeout(function() {
         if (typeof self.hydrateTenantWorkspace === 'function') self.hydrateTenantWorkspace();
+        if (typeof self.hydrateWebsiteCms === 'function') self.hydrateWebsiteCms();
+        if (typeof self.hydrateDashboardCounts === 'function') self.hydrateDashboardCounts();
         if (typeof self.refreshNotifInbox === 'function') self.refreshNotifInbox();
       }, 50);
       if (!window.__CMS_MIRROR_NOTIF_OUTSIDE__) {
@@ -18628,13 +18860,25 @@ window.__CMS_MIRROR_ROLE_NAV__ = {
   moderator: ['dashboard','moderationCenter','reviews','messages'],
   finance_manager: ['dashboard','payouts','feeCharges','finance'],
   support_agent: ['dashboard','messages','reviews'],
-  marketing_manager: ['dashboard','adsDealsStudio','promoCodes','websiteCmsStudio']
+  marketing_manager: ['dashboard','adsDealsStudio','promoCodes','websiteCmsStudio'],
+  // Sprint 10 security fix: Consumer's real backend role value is 'user' — this key
+  // was previously entirely absent, which combined with the old fail-open
+  // __CMS_MIRROR_PAGE_ALLOWED__ meant consumers were treated as unrestricted (admin).
+  user: ['dashboard', 'consumerProfile', 'orders', 'settings'],
+  consumer: ['dashboard', 'consumerProfile', 'orders', 'settings'],
 };
 window.__CMS_MIRROR_PAGE_ALLOWED__ = function(key) {
-  var role = window.__CMS_MIRROR_ROLE__ || 'super_admin';
+  // Sprint 10 security fix: fail-closed. Only 'super_admin'/'admin' (explicit null =
+  // intentionally unrestricted) bypass the allow-list. Every other role — including
+  // any role string not present in __CMS_MIRROR_ROLE_NAV__ at all — must match an
+  // explicit allow-list entry; no role defaults to unrestricted access.
+  var role = window.__CMS_MIRROR_ROLE__ || '';
   var allowed = window.__CMS_MIRROR_ALLOWED_KEYS__;
-  if (!allowed) allowed = window.__CMS_MIRROR_ROLE_NAV__[role];
-  if (!allowed) return true;
+  if (!allowed) {
+    if (role === 'super_admin' || role === 'admin') return true;
+    allowed = window.__CMS_MIRROR_ROLE_NAV__[role];
+    if (!allowed) return false;
+  }
   return allowed.indexOf(key) >= 0;
 };
 window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {

@@ -249,6 +249,14 @@ export async function backfillAllReferenceIds(): Promise<ReferenceBackfillReport
     }),
   );
 
+  // escrow/refund/return rows above are read from the on-disk snapshot at the top of
+  // this function, but writes to that snapshot are debounced (250ms) by
+  // escrowPersistence.ts. Without an explicit flush here, a second call to
+  // backfillAllReferenceIds() run immediately after this one (e.g. an idempotency
+  // check) would read a stale pre-write snapshot and re-assign reference ids that
+  // were already assigned. Force the debounced write to complete before returning.
+  escrowStore.flushMemory();
+
   const ads = await adsStore.listAds();
   domains.push(
     await backfillEntityList({

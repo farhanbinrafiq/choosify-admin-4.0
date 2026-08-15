@@ -872,5 +872,20 @@
     resolveSupportConversation: function (conversationId) {
       return request('/support/conversations/' + encodeURIComponent(conversationId) + '/resolve', 'POST', { status: 'resolved' });
     },
+    getHomepageConfig: function () {
+      return request('/catalog/home', 'GET').then(function (r) { return (r && r.homepage) || null; });
+    },
+    updateHomepageConfig: function (payload) {
+      return request('/catalog/home', 'PUT', payload || {}).then(function (r) { return (r && r.homepage) || null; });
+    },
+    getSiteConfig: function () {
+      return request('/catalog/site', 'GET').then(function (r) { return (r && r.site) || r || null; });
+    },
+    updateSiteConfig: function (payload) {
+      return request('/catalog/site', 'PUT', payload || {}).then(function (r) { return (r && r.site) || r || null; });
+    },
+    listDeals: function () {
+      return request('/catalog/deals', 'GET').then(function (r) { return (r && r.data) || []; });
+    },
   };
 })(typeof window !== 'undefined' ? window : globalThis);
