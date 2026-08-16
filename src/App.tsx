@@ -32,14 +32,10 @@ const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ForcePasswordChangePage = lazy(() => import('./pages/ForcePasswordChangePage'));
 const SellerSignupPage = lazy(() => import('./pages/SellerSignupPage'));
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
-const DashboardRouter = lazy(() => import('./pages/dashboards/DashboardRouter'));
-const Consumers = lazy(() => import('./pages/admin/Consumers'));
-
 // Profile & Detail Pages
 const UnifiedProfileShell = lazy(() => import('./pages/admin/profiles/UnifiedProfileShell'));
 const SellerDashboardPreview = lazy(() => import('./pages/admin/previews/SellerDashboardPreview'));
 const RecommendationPreview = lazy(() => import('./pages/admin/previews/RecommendationPreview'));
-const Sellers = lazy(() => import('./pages/admin/Sellers'));
 const Products = lazy(() => import('./pages/admin/Products'));
 const FeeChargesEngine = lazy(() => import('./pages/admin/FeeChargesEngine'));
 const AdsDealsStudio = lazy(() => import('./pages/admin/AdsDealsStudio'));
@@ -56,12 +52,10 @@ const Reviews = lazy(() => import('./pages/admin/Reviews'));
 const CommunitySubmissions = lazy(() => import('./pages/admin/CommunitySubmissions'));
 const Payouts = lazy(() => import('./pages/admin/Payouts'));
 const Analytics = lazy(() => import('./pages/admin/Analytics'));
-const NotificationsPage = lazy(() => import('./pages/admin/Notifications'));
 const Moderation = lazy(() => import('./pages/admin/Moderation'));
 const Messages = lazy(() => import('./pages/admin/Messages'));
 const ProductStudio = lazy(() => import('./pages/admin/ProductStudio'));
 const BrandDetails = lazy(() => import('./pages/admin/BrandDetails'));
-const SellerReview = lazy(() => import('./pages/admin/SellerReview'));
 const DealsBannersStudio = lazy(() => import('./pages/admin/DealsBannersStudio'));
 const BrandPostsPage = lazy(() => import('./pages/admin/BrandPosts'));
 const LeadsInboxPage = lazy(() => import('./pages/admin/LeadsInbox'));
@@ -96,19 +90,6 @@ const CreatorEditStudio = lazy(() => import('./pages/admin/CreatorEditStudio'));
 
 const GuidesStudioList = lazy(() => import('./pages/admin/GuidesStudioList'));
 const GuideEditStudio = lazy(() => import('./pages/admin/GuideEditStudio'));
-
-const ViewModeWrapper: React.FC<{ mode: 'consumers' | 'creators' | 'admins' }> = ({ mode }) => {
-  const [searchParams, setSearchParams] = useSearchParams();
-  React.useEffect(() => {
-    if (searchParams.get('viewMode') !== mode) {
-      const newParams = new URLSearchParams(searchParams);
-      newParams.set('viewMode', mode);
-      setSearchParams(newParams, { replace: true });
-    }
-  }, [mode, searchParams, setSearchParams]);
-
-  return <Consumers />;
-};
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { profile, loading, mustChangePassword } = useAuth();
