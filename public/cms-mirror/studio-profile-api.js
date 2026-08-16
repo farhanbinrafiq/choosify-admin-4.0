@@ -887,5 +887,33 @@
     listDeals: function () {
       return request('/catalog/deals', 'GET').then(function (r) { return (r && r.data) || []; });
     },
+    listPlacements: function () {
+      return request('/catalog/placements', 'GET').then(function (r) { return (r && r.data) || []; });
+    },
+    patchPlacement: function (id, patch) {
+      return request('/catalog/placements/' + encodeURIComponent(id), 'PATCH', patch || {}).then(function (r) { return (r && r.data) || null; });
+    },
+    getFeatureFlags: function () {
+      return request('/operations/feature-flags', 'GET').then(function (r) { return (r && r.flags) || {}; });
+    },
+    setFeatureFlags: function (flags) {
+      return request('/operations/feature-flags', 'PUT', { flags: flags || {} }).then(function (r) { return (r && r.flags) || {}; });
+    },
+    getNavAttention: function () {
+      return ensureAuthToken().then(function () {
+        return request('/dashboard/nav-attention', 'GET');
+      }).then(function (r) { return (r && r.counts) || {}; }).catch(function () { return {}; });
+    },
+    // moderationRouter is mounted at /api (not /api/v1) — see server/app.ts.
+    listModerationQueue: function () {
+      return ensureAuthToken().then(function (token) {
+        if (!token) return [];
+        return fetch('/api/admin/moderation/queue', {
+          headers: { Authorization: 'Bearer ' + token },
+          credentials: 'include',
+        }).then(function (res) { return res.ok ? res.json() : { data: { items: [] } }; })
+          .then(function (r) { return (r && r.data && r.data.items) || []; });
+      }).catch(function () { return []; });
+    },
   };
 })(typeof window !== 'undefined' ? window : globalThis);

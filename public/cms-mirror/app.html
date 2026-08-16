@@ -5453,16 +5453,45 @@ window.addEventListener('message', function(ev) {
             <!-- SEO MANAGER -->
             <sc-if value="{{ isSeoManagerCms }}" hint-placeholder-val="{{ false }}">
               <div style="font-size:16px;font-weight:800;margin-bottom:2px">SEO Metadata Manager</div>
-              <div style="font-size:12.5px;color:#6B7280;font-weight:600;margin-bottom:18px">Govern page titles, meta snippets, keywords, and og images for search index bots.</div>
+              <div style="font-size:12.5px;color:#6B7280;font-weight:600;margin-bottom:18px">Govern page titles, meta snippets, keywords, and og images for search index bots. Persisted through Publish, live on choosify.bd.</div>
               <div style="display:flex;flex-direction:column;gap:10px">
                 <sc-for list="{{ cmsSeoPagesView }}" as="p" hint-placeholder-count="3">
-                  <div style="display:flex;justify-content:space-between;align-items:center;background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:14px 16px">
-                    <div style="min-width:0">
-                      <span style="background:#EDE9FE;color:#6D28D9;font-size:9px;font-weight:800;padding:3px 9px;border-radius:5px">{{ p.tag }}</span>
-                      <div style="font-size:13px;font-weight:800;margin-top:6px">{{ p.title }}</div>
-                      <div style="font-size:10.5px;color:#9CA3AF;font-weight:600;margin-top:2px">URL: {{ p.url }}</div>
+                  <div style="background:#fff;border:1px solid #E8EDF2;border-radius:10px;padding:14px 16px">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                      <div style="min-width:0">
+                        <span style="background:#EDE9FE;color:#6D28D9;font-size:9px;font-weight:800;padding:3px 9px;border-radius:5px">{{ p.tag }}</span>
+                        <div style="font-size:13px;font-weight:800;margin-top:6px">{{ p.title }}</div>
+                        <div style="font-size:10.5px;color:#9CA3AF;font-weight:600;margin-top:2px">URL: {{ p.url }}</div>
+                      </div>
+                      <button sc-camel-on-click="{{ p.onEdit }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:9px 14px;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0">{{ p.isEditing ? '✕ CLOSE' : '✎ EDIT SEO META' }}</button>
                     </div>
-                    <button sc-camel-on-click="{{ p.onEdit }}" style="background:#fff;border:1px solid #E8EDF2;border-radius:7px;padding:9px 14px;font-size:11px;font-weight:800;cursor:pointer;flex-shrink:0">✎ EDIT SEO META</button>
+                    <sc-if value="{{ p.isEditing }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin-top:14px;padding-top:14px;border-top:1px solid #F1F3F5;display:flex;flex-direction:column;gap:10px">
+                        <div>
+                          <div style="font-size:9.5px;font-weight:800;color:#9CA3AF;margin-bottom:4px">PAGE TITLE</div>
+                          <input value="{{ p.title }}" sc-camel-on-change="{{ p.onTitleChange }}" style="width:100%;box-sizing:border-box;height:34px;border-radius:7px;border:1px solid #E8EDF2;padding:0 10px;font-size:12.5px">
+                        </div>
+                        <div>
+                          <div style="font-size:9.5px;font-weight:800;color:#9CA3AF;margin-bottom:4px">META DESCRIPTION</div>
+                          <textarea value="{{ p.metaDescription }}" sc-camel-on-change="{{ p.onMetaDescriptionChange }}" style="width:100%;box-sizing:border-box;min-height:60px;border-radius:7px;border:1px solid #E8EDF2;padding:8px 10px;font-size:12.5px;font-family:inherit;resize:vertical"></textarea>
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                          <div>
+                            <div style="font-size:9.5px;font-weight:800;color:#9CA3AF;margin-bottom:4px">KEYWORDS (COMMA-SEPARATED)</div>
+                            <input value="{{ p.keywords }}" sc-camel-on-change="{{ p.onKeywordsChange }}" style="width:100%;box-sizing:border-box;height:34px;border-radius:7px;border:1px solid #E8EDF2;padding:0 10px;font-size:12.5px">
+                          </div>
+                          <div>
+                            <div style="font-size:9.5px;font-weight:800;color:#9CA3AF;margin-bottom:4px">CANONICAL URL</div>
+                            <input value="{{ p.canonicalUrl }}" sc-camel-on-change="{{ p.onCanonicalUrlChange }}" style="width:100%;box-sizing:border-box;height:34px;border-radius:7px;border:1px solid #E8EDF2;padding:0 10px;font-size:12.5px">
+                          </div>
+                        </div>
+                        <div>
+                          <div style="font-size:9.5px;font-weight:800;color:#9CA3AF;margin-bottom:4px">OPENGRAPH IMAGE URL</div>
+                          <input value="{{ p.ogImage }}" sc-camel-on-change="{{ p.onOgImageChange }}" style="width:100%;box-sizing:border-box;height:34px;border-radius:7px;border:1px solid #E8EDF2;padding:0 10px;font-size:12.5px">
+                        </div>
+                        <div style="font-size:10px;color:#9CA3AF;font-weight:600">Changes apply when you click Publish for this Website Manager section.</div>
+                      </div>
+                    </sc-if>
                   </div>
                 </sc-for>
               </div>
@@ -5621,27 +5650,31 @@ window.addEventListener('message', function(ev) {
 
         <!-- SPONSORED PLACEMENTS TAB -->
         <sc-if value="{{ isPlacementsTab }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:10.5px;color:#9CA3AF;font-weight:600;margin-bottom:10px">Live catalog placements (choosify.bd Homepage Spotlight / Deal-of-the-Day slots). Separate from seller/creator Ads &amp; Deals submissions.</div>
           <div style="background:#fff;border:1px solid #E8EDF2;border-radius:5px;overflow:hidden">
             <sc-raw-table style="width:100%;border-collapse:collapse">
-              <sc-raw-thead><sc-raw-tr style="background:#F9FAFB"><sc-raw-th style="{{ thStyle }}">Placement Slot</sc-raw-th><sc-raw-th style="{{ thStyle }}">Item Type</sc-raw-th><sc-raw-th style="{{ thStyle }}">Featured Item</sc-raw-th><sc-raw-th style="{{ thStyle }}">Status</sc-raw-th><sc-raw-th style="{{ thStyle }}">Actions</sc-raw-th></sc-raw-tr></sc-raw-thead>
+              <sc-raw-thead><sc-raw-tr style="background:#F9FAFB"><sc-raw-th style="{{ thStyle }}">Placement Slot</sc-raw-th><sc-raw-th style="{{ thStyle }}">Item Type</sc-raw-th><sc-raw-th style="{{ thStyle }}">Featured Item</sc-raw-th><sc-raw-th style="{{ thStyle }}">Priority</sc-raw-th><sc-raw-th style="{{ thStyle }}">Status</sc-raw-th><sc-raw-th style="{{ thStyle }}">Actions</sc-raw-th></sc-raw-tr></sc-raw-thead>
               <sc-raw-tbody>
                 <sc-for list="{{ placementsMapped }}" as="pl" hint-placeholder-count="5">
                   <sc-raw-tr style="border-top:1px solid #F1F3F5">
-                    <sc-raw-td style="{{ tdStyle }}"><span style="font-weight:700">{{ pl.slot }}</span><sc-if value="{{ pl.requestedBy }}" hint-placeholder-val="{{ false }}"><div style="font-size:9.5px;color:#B45309;font-weight:700;margin-top:2px">⚑ {{ pl.requestedBy }}</div></sc-if></sc-raw-td>
+                    <sc-raw-td style="{{ tdStyle }}"><span style="font-weight:700">{{ pl.slot }}</span></sc-raw-td>
                     <sc-raw-td style="{{ tdStyleMuted }}">{{ pl.itemType }}</sc-raw-td>
                     <sc-raw-td style="{{ tdStyle }}">{{ pl.itemName }}</sc-raw-td>
-                    <sc-raw-td style="{{ tdStyle }}"><span style="{{ pl.badgeStyle }}">{{ pl.status }}</span></sc-raw-td>
+                    <sc-raw-td style="{{ tdStyleMuted }}">{{ pl.priority }}</sc-raw-td>
+                    <sc-raw-td style="{{ tdStyle }}"><span style="{{ pl.badgeStyle }}">{{ pl.statusLabel }}</span></sc-raw-td>
                     <sc-raw-td style="{{ tdStyle }}">
-                      <div style="display:flex;gap:6px">
-                        <sc-if value="{{ pl.canApprove }}" hint-placeholder-val="{{ false }}"><button sc-camel-on-click="{{ pl.onApprove }}" style="background:#16A34A;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:10px;font-weight:800;cursor:pointer">APPROVE</button></sc-if>
-                        <sc-if value="{{ pl.canApprove }}" hint-placeholder-val="{{ false }}"><button sc-camel-on-click="{{ pl.onReject }}" style="background:#fff;border:1px solid #E8EDF2;color:#DC2626;border-radius:6px;padding:6px 10px;font-size:10px;font-weight:800;cursor:pointer">REJECT</button></sc-if>
-                        <sc-if value="{{ pl.canActivate }}" hint-placeholder-val="{{ false }}"><button sc-camel-on-click="{{ pl.onActivate }}" style="background:#16A34A;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:10px;font-weight:800;cursor:pointer">ACTIVATE</button></sc-if>
-                        <button sc-camel-on-click="{{ pl.onPause }}" style="background:#fff;border:1px solid #E8EDF2;color:#374151;border-radius:6px;padding:6px 10px;font-size:10px;font-weight:800;cursor:pointer">PAUSE</button>
-                        <button sc-camel-on-click="{{ pl.onDelete }}" style="background:#fff;border:1px solid #E8EDF2;color:#DC2626;border-radius:6px;padding:6px 8px;font-size:10px;font-weight:800;cursor:pointer">✕</button>
-                      </div>
+                      <sc-if value="{{ pl.canWrite }}" hint-placeholder-val="{{ false }}">
+                        <div style="display:flex;gap:6px">
+                          <sc-if value="{{ pl.canActivate }}" hint-placeholder-val="{{ false }}"><button sc-camel-on-click="{{ pl.onActivate }}" style="background:#16A34A;color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:10px;font-weight:800;cursor:pointer">ACTIVATE</button></sc-if>
+                          <sc-if value="{{ pl.canPause }}" hint-placeholder-val="{{ false }}"><button sc-camel-on-click="{{ pl.onPause }}" style="background:#fff;border:1px solid #E8EDF2;color:#374151;border-radius:6px;padding:6px 10px;font-size:10px;font-weight:800;cursor:pointer">PAUSE</button></sc-if>
+                        </div>
+                      </sc-if>
                     </sc-raw-td>
                   </sc-raw-tr>
                 </sc-for>
+                <sc-if value="{{ placementsMapped.length === 0 }}" hint-placeholder-val="{{ false }}">
+                  <sc-raw-tr><sc-raw-td colspan="6" style="{{ tdStyleMuted }};text-align:center;padding:24px">No live catalog placements yet.</sc-raw-td></sc-raw-tr>
+                </sc-if>
               </sc-raw-tbody>
             </sc-raw-table>
           </div>
@@ -7028,6 +7061,7 @@ window.addEventListener('message', function(ev) {
 
       <!-- ===== PAYOUTS ===== -->
       <sc-if value="{{ isPayoutsPage }}" hint-placeholder-val="{{ false }}">
+        <div style="background:#FFF7ED;border:1px solid #FDBA74;border-radius:8px;padding:10px 14px;font-size:11px;font-weight:700;color:#9A3412;margin-bottom:14px">⚠ Preview only — Payouts has no live external payout/settlement backend yet. Actions below do not transfer funds or persist.</div>
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;flex-wrap:wrap;gap:12px">
           <div>
             <div style="font-size:17px;font-weight:800">Payouts</div>
@@ -9759,6 +9793,8 @@ class Component extends DCLogic {
     cmsSocialLinks: Component.CMS_SOCIAL_LINKS.map(s=>({...s})),
     cmsWebsiteAssets: Component.CMS_WEBSITE_ASSETS.map(a=>({...a})),
     cmsPromoSections: Component.CMS_PROMO_SECTIONS.map(p=>({...p})),
+    cmsSeoEntries: Component.CMS_SEO_PAGES.map(p=>({...p, metaDescription:'', keywords:'', ogImage:'', canonicalUrl:p.url})),
+    seoEditingId: null,
     cmsGlobalSettings: {websiteName:'Choosify Bangladesh', currency:'BDT (৳)', timezone:'Asia/Dhaka (GMT+6)', email:'hello@choosify.bd', phone:'+880 1800-CHOOSIFY', announcementText:'🎉 Welcome to Choosify Bangladesh — Discover trusted brands', announcementActive:true, maintenanceMode:false},
     selectedBrandName: null,
     brandTab: 'requests',
@@ -9814,7 +9850,10 @@ class Component extends DCLogic {
     adsDealsTab: 'ads',
     platformAnalyticsSubTab: 'realtime',
     sponsoredAds: Component.SPONSORED_ADS.map(a => ({...a})),
-    placements: Component.SPONSORED_PLACEMENTS.map(p => ({...p})),
+    placements: [],
+    placementsHydrated: false,
+    dashboardNavAttention: {},
+    dashboardModerationItems: [],
     dealsState: Component.DEALS.map(d => ({...d})),
     adsDealsSearch: '',
     adsSelectedIds: new Set(),
@@ -11815,13 +11854,16 @@ class Component extends DCLogic {
   setPayoutNoteText = (e) => this.setState({payoutNoteText: e.target.value});
   updatePayoutStatus = (status, requireNote) => () => this.setState(s => {
     if (requireNote && !s.payoutNoteText.trim()) { this.showToast('A rejection reason is required'); return {}; }
-    this.showToast(`Payout ${status.toLowerCase()}`);
+    // Sprint 11 audit: no real payout/settlement-transfer backend exists yet (see
+    // server/escrow — settlements are internal commission-split ledger math, not
+    // an external payout workflow). Preview-only; do not claim a real transfer.
+    this.showToast(`Preview only — Payouts has no live backend yet. "${status}" was not actually processed.`);
     return {
       payoutsList: s.payoutsList.map(p => p.id===s.selectedPayoutId ? {...p, status, note: s.payoutNoteText || p.note} : p),
       selectedPayoutId: null, payoutNoteText: '',
     };
   });
-  exportPayoutsCSV = () => this.showToast('Payout statement CSV exported');
+  exportPayoutsCSV = () => this.showToast('Preview only — Payouts has no live backend yet. No file was generated.');
 
   setNotifAudience = (e) => this.setState({notifAudience: e.target.value});
   setNotifType = (e) => this.setState({notifType: e.target.value});
@@ -12154,8 +12196,19 @@ class Component extends DCLogic {
   bulkRejectAds = () => { this.setState(s => ({sponsoredAds: s.sponsoredAds.map(a => s.adsSelectedIds.has(a.id) ? {...a, status:'Rejected'} : a), adsSelectedIds:new Set()})); this.showToast('Selected ads rejected'); };
   setDealStatus = (title, status) => this.setState(s => ({dealsState: s.dealsState.map(d => d.title === title ? {...d, status} : d)}));
   deleteDeal = (title) => this.setState(s => ({dealsState: s.dealsState.filter(d => d.title !== title)}));
-  setPlacementStatus = (id, status) => this.setState(s => ({placements: s.placements.map(p => p.id === id ? {...p, status} : p)}));
-  deletePlacement = (id) => this.setState(s => ({placements: s.placements.filter(p => p.id !== id)}));
+  togglePlacementActive = (id, nextActive) => {
+    var api = window.CmsStudioProfileApi;
+    if (!api || typeof api.patchPlacement !== 'function') { this.showToast('Placements API unavailable'); return; }
+    var self = this;
+    this.setState(s => ({placements: s.placements.map(p => p.id === id ? {...p, isActive: nextActive, _saving: true} : p)}));
+    api.patchPlacement(id, { isActive: nextActive }).then(function(saved) {
+      self.setState(s => ({placements: s.placements.map(p => p.id === id ? Object.assign({}, p, saved || {}, {_saving: false}) : p)}));
+      self.showToast(nextActive ? 'Placement activated' : 'Placement paused');
+    }).catch(function(err) {
+      self.setState(s => ({placements: s.placements.map(p => p.id === id ? {...p, isActive: !nextActive, _saving: false} : p)}));
+      self.showToast('Failed to update placement: ' + (err && err.message ? err.message : 'unknown error'));
+    });
+  };
   setAdsDealsSearch = (e) => this.setState({adsDealsSearch: e.target.value});
 
   setContentTab = (t) => this.setState({contentTab: t});
@@ -12336,9 +12389,10 @@ class Component extends DCLogic {
     const api = window.CmsStudioProfileApi;
     if (!api) { this.showToast('Publish failed: API unavailable'); return; }
     const s = this.state;
-    // Sprint 10: real persistence. dealsBanners/seoEntries are intentionally omitted
-    // from the payloads below so the backend's merge-with-existing fallback preserves
-    // them untouched (this editor has no real controls for either field yet).
+    // Sprint 10: real persistence. dealsBanners is intentionally omitted from the
+    // payload below so the backend's merge-with-existing fallback preserves it
+    // untouched (this editor has no real controls for that field yet).
+    // Sprint 11: seoEntries now has a real editor (SEO Manager) and is included below.
     const heroBanners = s.cmsHeroBanners.map((b, i) => ({
       id: b.id, headline: b.headline || '', subtitle: b.subtitle || '',
       ctaText: b.ctaLabel || '', ctaUrl: b.ctaUrl || '/products',
@@ -12364,13 +12418,21 @@ class Component extends DCLogic {
     const websiteAssets = {};
     s.cmsWebsiteAssets.forEach(a => { const key = assetKeyByRowId[a.id]; if (key) websiteAssets[key] = a.url || ''; });
     const navigation = s.navMenuItems.map((n, i) => ({ id: n.id, label: n.label, path: n.path, order: i }));
+    const seoEntries = s.cmsSeoEntries.map((p) => ({
+      pageId: p.id, pageLabel: p.tag, title: p.title || '',
+      metaDescription: p.metaDescription || '', keywords: p.keywords || '',
+      ogImage: p.ogImage || '', canonicalUrl: p.canonicalUrl || p.url || '',
+    }));
     this.showToast('Publishing…');
     Promise.all([
       api.updateHomepageConfig({ heroBanners, sections }),
       api.updateSiteConfig({
-        footer, socialLinks, popularSearches, productBadges, websiteAssets, navigation,
+        footer, socialLinks, popularSearches, productBadges, websiteAssets, navigation, seoEntries,
         announcementBarText: s.cmsGlobalSettings.announcementText || '',
         announcementBarEnabled: !!s.cmsGlobalSettings.announcementActive,
+        websiteName: s.cmsGlobalSettings.websiteName || '',
+        supportEmail: s.cmsGlobalSettings.email || '',
+        supportPhone: s.cmsGlobalSettings.phone || '',
       }),
     ]).then(() => {
       this.showToast('All changes published to choosify.bd');
@@ -12409,6 +12471,9 @@ class Component extends DCLogic {
   addBadge = () => this.setState(s => ({cmsBadges: [...s.cmsBadges, {id:'badge'+Date.now(), label:'New Badge', color:'#6B7280', priority: s.cmsBadges.length+1}]}));
   removeBadge = (id) => this.setState(s => ({cmsBadges: s.cmsBadges.filter(b=>b.id!==id)}));
   setBadgeField = (id, field) => (e) => this.setState(s => ({cmsBadges: s.cmsBadges.map(b=>b.id===id?{...b,[field]:e.target.value}:b)}));
+
+  toggleSeoEdit = (id) => this.setState(s => ({seoEditingId: s.seoEditingId === id ? null : id}));
+  setSeoField = (id, field) => (e) => this.setState(s => ({cmsSeoEntries: s.cmsSeoEntries.map(p=>p.id===id?{...p,[field]:e.target.value}:p)}));
 
   addHeroBanner = () => this.setState(s => ({cmsHeroBanners: [...s.cmsHeroBanners, {id:'hero'+Date.now(), headline:'New Banner Headline', subtitle:'Banner subtitle text', ctaLabel:'Shop Now', active:false}]}));
   toggleHeroActive = (id) => this.setState(s => ({cmsHeroBanners: s.cmsHeroBanners.map(b=>b.id===id?{...b,active:!b.active}:b)}));
@@ -12488,6 +12553,26 @@ class Component extends DCLogic {
 
   setGlobalField = (field) => (e) => this.setState(s => ({cmsGlobalSettings: {...s.cmsGlobalSettings, [field]: e.target.value}}));
   toggleGlobalFlag = (field) => this.setState(s => ({cmsGlobalSettings: {...s.cmsGlobalSettings, [field]: !s.cmsGlobalSettings[field]}}));
+  /**
+   * Sprint 11: maintenance mode is the REAL operations feature flag
+   * (GET/PUT /operations/feature-flags, key "maintenance_mode") already enforced
+   * by the storefront's MaintenanceGate — not a second, decorative source of truth.
+   * This toggle writes straight through instead of waiting for the batch "Publish"
+   * action, since a maintenance flag flipping late/never would be actively unsafe.
+   */
+  toggleMaintenanceMode = () => {
+    var api = window.CmsStudioProfileApi;
+    if (!api || typeof api.setFeatureFlags !== 'function') { this.showToast('Feature flags API unavailable'); return; }
+    var next = !this.state.cmsGlobalSettings.maintenanceMode;
+    var self = this;
+    this.setState(s => ({cmsGlobalSettings: {...s.cmsGlobalSettings, maintenanceMode: next}}));
+    api.setFeatureFlags({ maintenance_mode: next }).then(function() {
+      self.showToast(next ? 'Maintenance mode ENABLED — storefront now shows the maintenance screen to non-staff visitors.' : 'Maintenance mode disabled — storefront restored.');
+    }).catch(function(err) {
+      self.setState(s => ({cmsGlobalSettings: {...s.cmsGlobalSettings, maintenanceMode: !next}}));
+      self.showToast('Failed to update maintenance mode: ' + (err && err.message ? err.message : 'unknown error'));
+    });
+  };
 
   showToast = (msg) => { this.setState({toast: msg}); setTimeout(() => this.setState({toast: null}), 2500); };
   setRange = (r) => this.setState({range: r});
@@ -13507,7 +13592,37 @@ class Component extends DCLogic {
 
     const LOGISTICS_PAGES = ['courierProviders','shipmentOperations','courierAnalytics'];
     const CUSTOM_PAGES = [...LOGISTICS_PAGES, 'trustCenter'];
-    const genericPage = CUSTOM_PAGES.includes(page) ? null : Component.GENERIC_PAGES[page];
+    let genericPage = CUSTOM_PAGES.includes(page) ? null : Component.GENERIC_PAGES[page];
+    // Sprint 11: verificationCenter's Admin Action Center count is already real
+    // (dashboardVerifications, hydrated via GET /operations/verifications) — the
+    // destination table used to stay on the static mock rows regardless. Swap in
+    // the real rows here, same column shape, so the count and the list agree.
+    if (page === 'verificationCenter' && Array.isArray(this.state.dashboardVerifications)) {
+      genericPage = Object.assign({}, Component.GENERIC_PAGES.verificationCenter, {
+        rows: this.state.dashboardVerifications.map(v => ({
+          name: v.entityName || v.entityId || v.id,
+          type: v.entityType === 'creator' ? 'Creator' : 'Brand',
+          submitted: (v.created_at || '').slice(0, 10) || '—',
+          status: v.status || 'Submitted',
+        })),
+      });
+    }
+    // Sprint 11 pre-commit audit: same gap as verificationCenter above — the
+    // Moderation Queue Action Center count was already real, but this destination
+    // table stayed on static mock rows. moderationStore now has real (if
+    // currently empty, since nothing queues items into it yet) persistence —
+    // swap in the real rows so the count and the list agree.
+    if (page === 'moderationCenter' && Array.isArray(this.state.dashboardModerationItems)) {
+      genericPage = Object.assign({}, Component.GENERIC_PAGES.moderationCenter, {
+        rows: this.state.dashboardModerationItems.map(m => ({
+          type: m.resourceType || m.queue || '—',
+          content: m.resourceLabel || m.resourceId || '—',
+          reportedBy: m.assignedModeratorName || '—',
+          reason: m.reason || '—',
+          status: m.status || 'pending',
+        })),
+      });
+    }
     const [pageTitle, pageSubtitle] = pageMeta[page] || (genericPage ? [genericPage.title, genericPage.subtitle] : pageMeta.dashboard);
     // Always keep page name beside Global Search (even when the page also has an in-content header).
     let topBarTitle = pageTitle;
@@ -13643,7 +13758,7 @@ class Component extends DCLogic {
       actionQueues = [
         {label:'Orders Awaiting Confirmation', count: sellerOrders.filter(o => o.fulfillment === 'Processing' || o.fulfillment === 'Pending').length, onClick: () => this.setPage('orders')},
         {label:'Pending Dispatch', count: sellerOrders.filter(o => o.fulfillment === 'Processing' || o.fulfillment === 'Confirmed').length, onClick: () => this.setPage('orders')},
-        {label:'Returns / Refunds', count: sellerOrders.filter(o => o.fulfillment === 'Refunded' || o.payment === 'Refunded').length, onClick: () => this.setPage('returns')},
+        {label:'Returns / Refunds', count: sellerOrders.filter(o => o.fulfillment === 'Refunded' || o.payment === 'Refunded').length, onClick: () => this.setPage('returnsRefunds')},
         {label:'Low Stock Products', count: lowStockCount, onClick: () => this.setPage('products')},
         {label:'Out of Stock', count: outOfStockCount, onClick: () => this.setPage('products')},
       ];
@@ -13768,29 +13883,30 @@ class Component extends DCLogic {
       revenueBars = trend.bars;
       dashboardChartEmpty = !trend.hasData;
       dashboardChartEmptyMessage = 'No platform orders in selected period.';
-      // Sprint 10: Payouts/Returns/Moderation/Disputes/Inventory-Alerts have no live
-      // backend wired into this dashboard yet — showing '—' (unavailable) instead of
-      // fabricated seed-array counts. Seller/Brand Verification has a real API
-      // (GET /operations/verifications) not yet hydrated into dashboard state; flagged
-      // as a fast follow-up rather than wired here to avoid a rushed partial fetch.
+      // Sprint 11: Return/Refund Cases and Moderation Queue now reuse the real,
+      // role-scoped navAttentionService counts (server/dashboard/navAttentionService.ts)
+      // instead of an honest '—'. Payment/Payout Issues and Open Disputes have no
+      // backend aggregate to query yet (see Sprint 11 discovery audit) — they stay
+      // honest '—' rather than a fabricated count.
+      const navAttn = this.state.dashboardNavAttention || {};
       actionQueues = [
         {label:'Seller / Brand Verification', count: (this.state.dashboardVerifications || []).filter(v => v.status === 'Submitted' || v.status === 'Under Review').length, onClick: () => this.setPage('verificationCenter')},
-        {label:'Return / Refund Cases', count: '—', onClick: () => this.setPage('returns')},
+        {label:'Return / Refund Cases', count: navAttn.returnsRefunds ? navAttn.returnsRefunds.count : 0, onClick: () => this.setPage('returnsRefunds')},
         {label:'Payment / Payout Issues', count: '—', onClick: () => this.setPage('finance')},
-        {label:'Moderation Queue', count: '—', onClick: () => this.setPage('moderationCenter')},
+        {label:'Moderation Queue', count: navAttn.moderationCenter ? navAttn.moderationCenter.count : 0, onClick: () => this.setPage('moderationCenter')},
         {label:'Open Disputes', count: '—', onClick: () => this.setPage('disputes')},
       ];
       dashboardLeftPanels = [
         this.mkDashboardPanel('Financial Operations', [
           {label:'Pending Payouts', value: '—', onClick: () => this.setPage('finance')},
           {label:'Processing Payouts', value: '—', onClick: () => this.setPage('finance')},
-          {label:'Refund Requests', value: '—', onClick: () => this.setPage('returns')},
+          {label:'Refund Requests', value: '—', onClick: () => this.setPage('returnsRefunds')},
           {label:'Rejected Payouts', value: '—', onClick: () => this.setPage('finance')},
         ], {label:'View Finance →', onClick: () => this.setPage('finance')}),
         this.mkDashboardPanel('Marketplace Health', [
           {label:'Catalog Products', value: String(this.state.products.length), onClick: () => this.setPage('products')},
           {label:'Active Deals', value: String(liveDeals), onClick: () => this.setPage('adsDealsStudio')},
-          {label:'Inventory Alerts', value: '—', onClick: () => this.setPage('inventoryStock')},
+          {label:'Inventory Alerts', value: '—', onClick: () => { this.setPage('products'); this.goToInventoryStock(); }},
           {label:'CMS Live Sections', value: String(this.state.cmsSections.filter(s => s.visible).length), onClick: () => this.setPage('websiteCmsStudio')},
         ]),
       ];
@@ -13819,7 +13935,15 @@ class Component extends DCLogic {
       revenueBars = trend.bars;
       dashboardChartEmpty = !trend.hasData;
       dashboardChartEmptyMessage = 'No orders yet — this chart shows your own order activity only.';
-      actionQueues = [];
+      // Sprint 11: personal action items, sourced from navAttentionService's
+      // consumer branch (server/dashboard/navAttentionService.ts) which is already
+      // scoped to this authenticated user's own orders/messages/notifications only.
+      const myNavAttn = this.state.dashboardNavAttention || {};
+      actionQueues = [
+        myNavAttn.orders ? {label: 'Orders Awaiting Payment', count: myNavAttn.orders.count, onClick: () => this.setPage('orders')} : null,
+        myNavAttn.messages ? {label: 'Unread Messages', count: myNavAttn.messages.count, onClick: () => this.setPage('messages')} : null,
+        myNavAttn.notifications ? {label: 'Unread Notifications', count: myNavAttn.notifications.count, onClick: () => this.setPage('notifications')} : null,
+      ].filter(Boolean);
       dashboardLeftPanels = [];
       dashboardRightPanels = [];
       showWebsiteManagerButton = false;
@@ -14135,7 +14259,16 @@ class Component extends DCLogic {
     }));
 
     // Sprint 10: SEO Manager has no real edit form yet (list view only) — honest no-op label.
-    const cmsSeoPagesView = Component.CMS_SEO_PAGES.map(p => ({...p, onEdit: () => this.showToast('SEO meta editing is not yet available')}));
+    const cmsSeoPagesView = this.state.cmsSeoEntries.map(p => ({
+      ...p,
+      isEditing: this.state.seoEditingId === p.id,
+      onEdit: () => this.toggleSeoEdit(p.id),
+      onTitleChange: this.setSeoField(p.id, 'title'),
+      onMetaDescriptionChange: this.setSeoField(p.id, 'metaDescription'),
+      onKeywordsChange: this.setSeoField(p.id, 'keywords'),
+      onCanonicalUrlChange: this.setSeoField(p.id, 'canonicalUrl'),
+      onOgImageChange: this.setSeoField(p.id, 'ogImage'),
+    }));
 
     const cmsGlobal = {
       ...this.state.cmsGlobalSettings,
@@ -14145,7 +14278,7 @@ class Component extends DCLogic {
       announceKnobStyle: `width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:3px;${this.state.cmsGlobalSettings.announcementActive?'right:3px':'left:3px'}`,
       maintenanceToggleStyle: `width:38px;height:22px;border-radius:11px;position:relative;cursor:pointer;flex-shrink:0;background:${this.state.cmsGlobalSettings.maintenanceMode?'#DC2626':'#D1D5DB'}`,
       maintenanceKnobStyle: `width:16px;height:16px;border-radius:50%;background:#fff;position:absolute;top:3px;${this.state.cmsGlobalSettings.maintenanceMode?'right:3px':'left:3px'}`,
-      onToggleAnnounce: () => this.toggleGlobalFlag('announcementActive'), onToggleMaintenance: () => this.toggleGlobalFlag('maintenanceMode'),
+      onToggleAnnounce: () => this.toggleGlobalFlag('announcementActive'), onToggleMaintenance: this.toggleMaintenanceMode,
     };
 
     const maxCat = Math.max(...Component.CATEGORIES.slice(0,6).map(c=>c.count));
@@ -15403,10 +15536,13 @@ class Component extends DCLogic {
         onExpire: () => this.setDealStatus(d.title, 'Expired'), onDelete: () => this.deleteDeal(d.title),
       }));
     const placementsMapped = this.state.placements.map(p => ({
-      ...p, badgeStyle: this.statusStyle(p.status),
-      canActivate: p.status === 'Paused', onActivate: () => this.setPlacementStatus(p.id, 'Active'),
-      canApprove: (['admin','super_admin','moderator'].indexOf(window.__CMS_MIRROR_ROLE__||'')>=0) && p.status === 'Pending', onApprove: () => this.setPlacementStatus(p.id, 'Active'), onReject: () => this.setPlacementStatus(p.id, 'Rejected'),
-      onPause: () => this.setPlacementStatus(p.id, 'Paused'), onDelete: () => this.deletePlacement(p.id),
+      ...p,
+      slot: p.placement, itemType: p.entityType, itemName: p.title,
+      statusLabel: p.isActive ? 'Active' : 'Inactive',
+      badgeStyle: this.statusStyle(p.isActive ? 'Active' : 'Paused'),
+      canActivate: !p.isActive, onActivate: () => this.togglePlacementActive(p.id, true),
+      canPause: p.isActive, onPause: () => this.togglePlacementActive(p.id, false),
+      canWrite: ['admin','super_admin','marketing_manager'].indexOf(window.__CMS_MIRROR_ROLE__||'') >= 0,
     }));
     const adsSelectedCount = this.state.adsSelectedIds.size;
     const mirrorAdsRole = window.__CMS_MIRROR_ROLE__ || '';
@@ -15422,7 +15558,6 @@ class Component extends DCLogic {
       {label:'PENDING APPROVAL', value: String(
         this.state.sponsoredAds.filter(a=>a.status==='Pending Review').length +
         this.state.dealsState.filter(d=>d.status==='Pending Review').length +
-        this.state.placements.filter(p=>p.status==='Pending').length +
         Object.values(this.state.featuredRequests).reduce((sum,arr)=>sum+arr.length,0)
       )},
       {label:'AD IMPRESSIONS', value: this.state.sponsoredAds.reduce((s,a)=>s+a.impressions,0).toLocaleString('en-US')},
@@ -18743,7 +18878,35 @@ class Component extends DCLogic {
         var verifications = (typeof api.listVerifications === 'function') ? await api.listVerifications({}) : [];
         self.setState({ dashboardVerifications: verifications });
       } catch (e) { /* leave dashboardVerifications empty on failure */ }
+      try {
+        var modItems = (typeof api.listModerationQueue === 'function') ? await api.listModerationQueue() : [];
+        self.setState({ dashboardModerationItems: modItems });
+      } catch (e) { /* leave dashboardModerationItems empty on failure */ }
     }
+    // Sprint 11: reuse the already-real, role-scoped navAttentionService counts
+    // (returnsRefunds, moderationCenter, etc.) for the Action Center instead of
+    // duplicating server-side count logic or leaving an honest '—' where real
+    // data already exists.
+    try {
+      var navCounts = (typeof api.getNavAttention === 'function') ? await api.getNavAttention() : {};
+      self.setState({ dashboardNavAttention: navCounts || {} });
+    } catch (e) { /* leave dashboardNavAttention empty on failure */ }
+  };
+
+  /**
+   * Sprint 11: Sponsored Placements tab now reads the real CatalogPlacement backend
+   * (GET /catalog/placements) instead of the static Component.SPONSORED_PLACEMENTS
+   * fixture. Runs for every role — the endpoint is publicly readable; write actions
+   * remain gated by requireCmsWrite server-side.
+   */
+  Component.prototype.hydratePlacements = async function() {
+    var api = window.CmsStudioProfileApi;
+    if (!api || typeof api.listPlacements !== 'function') return;
+    var self = this;
+    try {
+      var placements = await api.listPlacements();
+      self.setState({ placements: Array.isArray(placements) ? placements : [], placementsHydrated: true });
+    } catch (e) { /* leave placements empty on failure, do not fabricate rows */ }
   };
 
   Component.prototype.hydrateWebsiteCms = async function() {
@@ -18755,6 +18918,7 @@ class Component extends DCLogic {
     try {
       var homepage = await api.getHomepageConfig();
       var site = await api.getSiteConfig();
+      var flags = (typeof api.getFeatureFlags === 'function') ? await api.getFeatureFlags().catch(function() { return null; }) : null;
       self.setState(function(s) {
         var next = {};
         if (homepage) {
@@ -18805,9 +18969,34 @@ class Component extends DCLogic {
           next.cmsGlobalSettings = Object.assign({}, s.cmsGlobalSettings, {
             announcementText: site.announcementBarText || s.cmsGlobalSettings.announcementText,
             announcementActive: !!site.announcementBarEnabled,
+            websiteName: site.websiteName || s.cmsGlobalSettings.websiteName,
+            email: site.supportEmail || s.cmsGlobalSettings.email,
+            phone: site.supportPhone || s.cmsGlobalSettings.phone,
           });
           if (Array.isArray(site.navigation) && site.navigation.length) {
             next.navMenuItems = site.navigation.map(function(n) { return {id: n.id, label: n.label, path: n.path, locked: false}; });
+          }
+        }
+        if (flags && typeof flags.maintenance_mode === 'boolean') {
+          next.cmsGlobalSettings = Object.assign({}, next.cmsGlobalSettings || s.cmsGlobalSettings, {
+            maintenanceMode: flags.maintenance_mode,
+          });
+        }
+        if (site) {
+          if (Array.isArray(site.seoEntries) && site.seoEntries.length) {
+            var seoById = {};
+            site.seoEntries.forEach(function(e) { seoById[e.pageId] = e; });
+            next.cmsSeoEntries = s.cmsSeoEntries.map(function(p) {
+              var real = seoById[p.id];
+              if (!real) return p;
+              return Object.assign({}, p, {
+                title: real.title || p.title,
+                metaDescription: real.metaDescription || p.metaDescription,
+                keywords: real.keywords || p.keywords,
+                ogImage: real.ogImage || p.ogImage,
+                canonicalUrl: real.canonicalUrl || p.canonicalUrl,
+              });
+            });
           }
         }
         return next;
@@ -18830,6 +19019,7 @@ class Component extends DCLogic {
         if (typeof self.hydrateTenantWorkspace === 'function') self.hydrateTenantWorkspace();
         if (typeof self.hydrateWebsiteCms === 'function') self.hydrateWebsiteCms();
         if (typeof self.hydrateDashboardCounts === 'function') self.hydrateDashboardCounts();
+        if (typeof self.hydratePlacements === 'function') self.hydratePlacements();
         if (typeof self.refreshNotifInbox === 'function') self.refreshNotifInbox();
       }, 50);
       if (!window.__CMS_MIRROR_NOTIF_OUTSIDE__) {

@@ -105,7 +105,7 @@ function staticChecks() {
   // is a genuine "keep the canary honest," not a weakened assertion.
   mark(
     'asset-version-bumped',
-    /CMS_MIRROR_ASSET_VERSION\s*=\s*'20260815-sprint10-role-isolation-fix'/.test(host),
+    /CMS_MIRROR_ASSET_VERSION\s*=\s*'20260816-sprint11-nav-fixes'/.test(host),
   );
 
   // Simulate helpers: missing CF → "—", target ≠ viewer
