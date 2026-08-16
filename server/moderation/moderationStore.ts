@@ -11,6 +11,11 @@ import type {
   VerificationStatus,
 } from './moderationTypes';
 import { MODERATION_STATUSES } from './moderationTypes';
+import {
+  loadModerationMemorySnapshot,
+  scheduleModerationMemoryPersist,
+  type ModerationMemorySnapshot,
+} from './moderationPersistence';
 
 type ModerationState = {
   items: ModerationItem[];
@@ -26,6 +31,37 @@ const state: ModerationState = {
   fraudSignals: [],
 };
 
+let hydrated = false;
+
+function ensureModerationHydrated(): void {
+  if (hydrated) return;
+  hydrated = true;
+  const snapshot = loadModerationMemorySnapshot();
+  if (!snapshot) return;
+  state.items = snapshot.items || [];
+  state.reports = snapshot.reports || [];
+  state.verifications = snapshot.verifications || [];
+  state.fraudSignals = snapshot.fraudSignals || [];
+  console.log(
+    `[ModerationMemoryPersist] Hydrated (${state.items.length} items, ${state.reports.length} reports, ${state.verifications.length} verifications, ${state.fraudSignals.length} fraud signals).`,
+  );
+}
+
+function buildSnapshot(): ModerationMemorySnapshot {
+  return {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    items: state.items,
+    reports: state.reports,
+    verifications: state.verifications,
+    fraudSignals: state.fraudSignals,
+  };
+}
+
+function schedulePersist(): void {
+  scheduleModerationMemoryPersist(buildSnapshot);
+}
+
 function nowIso(): string {
   return new Date().toISOString();
 }
@@ -34,6 +70,8 @@ function matchesStatusFilter(item: ModerationItem, status?: ModerationStatus): b
   if (!status) return true;
   return item.status === status;
 }
+
+ensureModerationHydrated();
 
 export const moderationStore = {
   listItems(filter: ModerationQueueFilter = {}): ModerationItem[] {
@@ -78,6 +116,7 @@ export const moderationStore = {
       updatedAt: nowIso(),
     };
     state.items.unshift(item);
+    schedulePersist();
     return item;
   },
 
@@ -85,6 +124,7 @@ export const moderationStore = {
     const idx = state.items.findIndex((item) => item.id === id);
     if (idx < 0) return null;
     state.items[idx] = { ...state.items[idx], ...patch, updatedAt: nowIso() };
+    schedulePersist();
     return state.items[idx];
   },
 
@@ -119,6 +159,7 @@ export const moderationStore = {
       updatedAt: nowIso(),
     };
     state.reports.unshift(report);
+    schedulePersist();
     return report;
   },
 
@@ -126,6 +167,7 @@ export const moderationStore = {
     const idx = state.reports.findIndex((report) => report.id === id);
     if (idx < 0) return null;
     state.reports[idx] = { ...state.reports[idx], ...patch, updatedAt: nowIso() };
+    schedulePersist();
     return state.reports[idx];
   },
 
@@ -165,6 +207,7 @@ export const moderationStore = {
       existing.metadata = patch.metadata ?? existing.metadata;
       existing.updatedAt = nowIso();
       existing.history.unshift(entry);
+      schedulePersist();
       return existing;
     }
 
@@ -183,6 +226,7 @@ export const moderationStore = {
       updatedAt: nowIso(),
     };
     state.verifications.unshift(created);
+    schedulePersist();
     return created;
   },
 
@@ -194,6 +238,7 @@ export const moderationStore = {
       reviewed: false,
     };
     state.fraudSignals.unshift(signal);
+    schedulePersist();
     return signal;
   },
 
