@@ -407,6 +407,9 @@ export const defaultSiteConfig = (): import('./catalogTypes').SiteConfig => {
     ],
     announcementBarText: '',
     announcementBarEnabled: false,
+    websiteName: 'Choosify Bangladesh',
+    supportEmail: 'hello@choosify.bd',
+    supportPhone: '+880 1800-CHOOSIFY',
     updatedAt: ts,
   };
 };

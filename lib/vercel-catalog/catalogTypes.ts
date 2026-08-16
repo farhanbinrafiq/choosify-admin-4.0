@@ -363,6 +363,10 @@ export type SiteConfig = {
   announcementBarEnabled: boolean;
   productBadges?: SiteProductBadge[];
   websiteAssets?: SiteWebsiteAssets;
+  /** Sprint 11: genuinely editable global settings (site name, support contacts). */
+  websiteName?: string;
+  supportEmail?: string;
+  supportPhone?: string;
   updatedAt: string;
 };
 

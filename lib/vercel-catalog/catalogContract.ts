@@ -666,6 +666,9 @@ export const normalizeSiteInput = (payload: unknown, existing?: SiteConfig): Sit
       (raw.websiteAssets ?? existing?.websiteAssets) as Record<string, unknown> | undefined,
       existing?.websiteAssets,
     ),
+    websiteName: toString(raw.websiteName, existing?.websiteName ?? ''),
+    supportEmail: toString(raw.supportEmail, existing?.supportEmail ?? ''),
+    supportPhone: toString(raw.supportPhone, existing?.supportPhone ?? ''),
     updatedAt: nowIso(),
   };
 };
