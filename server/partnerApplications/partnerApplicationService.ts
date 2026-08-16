@@ -8,6 +8,7 @@ import { allocateNextChoosifyUserId } from '../auth/choosifyUserId';
 import { hashPassword, verifyPassword } from '../auth/jwtTokens';
 import { normalizeBrandInput } from '../catalogContract';
 import { loadAdminUserByEmail } from '../operations/operationsDb';
+import { notifyRoles, notifyUser } from '../communication/systemNotify';
 import { ROLES, toUserRole } from '../permissions/roles';
 import { stampReferenceId } from '../referenceIds/stampReferenceId';
 import {
@@ -330,6 +331,19 @@ export async function submitPartnerApplication(input: PartnerApplyInput): Promis
     reviewHistory: appendHistory(row, { by: 'system', action: 'submitted' }),
   });
 
+  try {
+    await notifyRoles(['admin', 'super_admin'], {
+      type: 'system_alert',
+      category: 'admin',
+      title: input.applicantType === 'seller' ? 'New Seller Application' : 'New Creator Application',
+      summary: `${row.displayName} (${row.businessOrChannelName}) submitted a ${input.applicantType} application.`,
+      actionUrl: input.applicantType === 'seller' ? '/admin/brand-studio' : '/admin/creator-studio',
+      metadata: { applicationId: row.id, applicantType: input.applicantType },
+    });
+  } catch (error) {
+    console.error('[PartnerApplications] Failed to notify admins of new application:', error);
+  }
+
   return {
     applicationId: row.id,
     status: 'pending',
@@ -420,6 +434,20 @@ export async function approvePartnerApplication(params: {
     }),
   });
   if (!updated) throw new Error('Failed to update application');
+
+  try {
+    await notifyUser(provisionedUserId, {
+      type: app.applicantType === 'seller' ? 'seller_update' : 'buyer_update',
+      category: app.applicantType === 'seller' ? 'seller' : 'buyer',
+      title: 'Marketplace Access Approved',
+      summary: 'Your identity was verified. Marketplace features are now unlocked.',
+      actionUrl: app.applicantType === 'seller' ? '/admin/brand-profile' : '/admin/creator-profile',
+      metadata: { applicationId: app.id },
+    });
+  } catch (error) {
+    console.error('[PartnerApplications] Failed to notify applicant of approval:', error);
+  }
+
   return updated;
 }
 
@@ -452,6 +480,22 @@ export async function rejectPartnerApplication(params: {
     }),
   });
   if (!updated) throw new Error('Failed to update application');
+
+  if (app.provisionedUserId) {
+    try {
+      await notifyUser(app.provisionedUserId, {
+        type: app.applicantType === 'seller' ? 'seller_update' : 'buyer_update',
+        category: app.applicantType === 'seller' ? 'seller' : 'buyer',
+        title: 'Application Rejected',
+        summary: params.reviewNote || 'Your partner application was not approved.',
+        actionUrl: app.applicantType === 'seller' ? '/admin/brand-profile' : '/admin/creator-profile',
+        metadata: { applicationId: app.id },
+      });
+    } catch (error) {
+      console.error('[PartnerApplications] Failed to notify applicant of rejection:', error);
+    }
+  }
+
   return updated;
 }
 

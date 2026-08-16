@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import { pgTable, uuid, varchar, boolean, timestamp, pgEnum, integer, bigint, jsonb, text, index, uniqueIndex } from 'drizzle-orm/pg-core';
 
 export const roleEnum = pgEnum('user_role', [
@@ -140,4 +141,64 @@ export const notifications = pgTable('notifications', {
 }, (table) => ({
   userIdIdx: index('notifications_user_id_idx').on(table.userId),
   userReadIdx: index('notifications_user_read_idx').on(table.userId, table.read),
+}));
+
+/**
+ * Sprint 11 — minimal Plan / Account Plan foundation. Deliberately NOT a billing
+ * system: no price/invoice/payment-gateway fields, no recurring-charge logic.
+ * Gives the existing featureEntitlements `scope: 'plan'` mechanism (Sprint 10,
+ * previously unreachable — resolveFeatureEnabled accepted a planId param that no
+ * caller ever populated) a real catalog and a real per-account assignment, so
+ * "PLAN LOCKED" UI can be backed by real plan metadata instead of staying inert.
+ */
+export const plans = pgTable('plans', {
+  id: varchar('id', { length: 64 }).primaryKey(),
+  role: varchar('role', { length: 16 }).notNull(),
+  name: varchar('name', { length: 120 }).notNull(),
+  priceLabel: varchar('price_label', { length: 64 }),
+  active: boolean('active').notNull().default(true),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  roleIdx: index('plans_role_idx').on(table.role),
+}));
+
+export const accountPlans = pgTable('account_plans', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  planId: varchar('plan_id', { length: 64 }).notNull().references(() => plans.id),
+  status: varchar('status', { length: 16 }).notNull().default('active'),
+  assignedAt: timestamp('assigned_at').notNull().defaultNow(),
+  assignedByUserId: uuid('assigned_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  expiresAt: timestamp('expires_at'),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * Sprint 11 — canonical Feature Request workflow. Seller/Creator requests
+ * access to a feature/plan; Admin reviews (approve/decline/contact). Never
+ * self-enables anything — approval only records a decision + optional note,
+ * the actual entitlement/plan grant remains a separate explicit Admin action
+ * (feature_entitlements / account_plans), matching how Marketplace Access and
+ * Partner Applications already keep "request" and "grant" as distinct steps.
+ */
+export const featureRequestStatusEnum = pgEnum('feature_request_status', ['pending', 'approved', 'declined', 'contacted']);
+
+export const featureRequests = pgTable('feature_requests', {
+  id: varchar('id', { length: 64 }).primaryKey(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: varchar('role', { length: 16 }).notNull(),
+  featureKey: varchar('feature_key', { length: 80 }).notNull(),
+  message: text('message'),
+  status: featureRequestStatusEnum('status').notNull().default('pending'),
+  reviewedAt: timestamp('reviewed_at'),
+  reviewedByUserId: uuid('reviewed_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  reviewNote: text('review_note'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  userFeatureActiveUnique: uniqueIndex('feature_requests_user_feature_pending_unique')
+    .on(table.userId, table.featureKey)
+    .where(sql`status = 'pending'`),
+  statusIdx: index('feature_requests_status_idx').on(table.status),
 }));

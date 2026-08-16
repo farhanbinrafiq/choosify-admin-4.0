@@ -1,6 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/client';
 import { featureEntitlements } from '../db/schema';
+import { planStore } from './planStore';
 import {
   defaultRoleEntitlements,
   featureByKey,
@@ -76,7 +77,15 @@ export async function resolveFeatureEnabled(params: {
     if (hit) return hit.enabled;
   }
 
-  const planId = params.planId?.trim();
+  // Sprint 11: resolve the actor's real assigned plan (account_plans) when the
+  // caller didn't already pass one explicitly. Previously this branch was dead
+  // code — no caller ever populated planId, because no plan-assignment system
+  // existed yet.
+  let planId = params.planId?.trim();
+  if (!planId && uid) {
+    const accountPlan = await planStore.getAccountPlan(uid);
+    planId = accountPlan?.planId;
+  }
   if (planId) {
     const rows = await getScopeRows('plan', [planId]);
     const hit = rows.find((r) => r.featureKey === params.featureKey);
@@ -195,6 +204,17 @@ export const entitlementStore = {
         });
     }
     return entitlementStore.getRoleDefaults();
+  },
+
+  /** Sprint 11: toggle a feature for a plan — mirrors setRoleDefault exactly. */
+  setPlanFeature: async (planId: string, featureKey: PartnerFeatureKey, enabled: boolean): Promise<void> => {
+    await db
+      .insert(featureEntitlements)
+      .values({ scope: 'plan', scopeKey: planId, featureKey, enabled })
+      .onConflictDoUpdate({
+        target: [featureEntitlements.scope, featureEntitlements.scopeKey, featureEntitlements.featureKey],
+        set: { enabled, updatedAt: new Date() },
+      });
   },
 
   snapshot: async (): Promise<EntitlementState> => {

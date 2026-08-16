@@ -10,6 +10,7 @@ import { moderationStore } from '../moderation/moderationStore';
 import { MODERATION_STATUSES } from '../moderation/moderationTypes';
 import { operationsStore } from '../operations/operationsStore';
 import { partnerApplicationStore } from '../partnerApplications/partnerApplicationStore';
+import { featureRequestStore } from '../entitlements/featureRequestStore';
 import { hasRole } from '../permissions/authorization';
 import { ROLES, type UserRole } from '../permissions/roles';
 import type { NavAttentionCounts, NavAttentionPayload } from './navAttentionTypes';
@@ -161,6 +162,14 @@ export async function buildNavAttention(actor: {
       'products',
       draftProducts,
       qty(draftProducts, 'product listing awaiting review', 'product listings awaiting review'),
+    );
+
+    const pendingFeatureRequests = (await featureRequestStore.list({ status: 'pending' })).length;
+    setCount(
+      out,
+      'featureRequests',
+      pendingFeatureRequests,
+      qty(pendingFeatureRequests, 'feature request awaiting review', 'feature requests awaiting review'),
     );
   }
 

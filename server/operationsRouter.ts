@@ -41,6 +41,7 @@ import { recordSuspiciousRequest, recordClaimConfirmAttempt } from './lib/abuseP
 import { batchAccountPrimaryLabels } from './profileStatusFacts';
 import { Logger } from './lib/logger';
 import { createNotification } from './communication/notificationService';
+import { notifyRoles } from './communication/systemNotify';
 import { COMMUNICATION_TYPES, DELIVERY_CHANNELS } from './communication/communicationTypes';
 import { publishEvent } from './events/eventBus';
 
@@ -2254,6 +2255,19 @@ operationsRouter.post('/operations/verifications', ...requireAuth, async (req, r
         actor: req.userId!,
         payload: { verificationId: saved.id, entityId, entityName },
       });
+    }
+
+    try {
+      await notifyRoles(['admin', 'super_admin', 'moderator'], {
+        type: 'system_alert',
+        category: 'admin',
+        title: entityType === 'brand' ? 'Ownership Claim Submitted' : 'Creator Verification Submitted',
+        summary: `${actorName} submitted a ${entityType} verification for "${entityName}".`,
+        actionUrl: `/upe/${entityType}/${encodeURIComponent(entityId)}`,
+        metadata: { verificationId: saved.id, entityType, entityId },
+      });
+    } catch (err) {
+      console.error('[Verification] Failed to notify admins of claim submission:', err);
     }
   }
 
