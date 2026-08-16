@@ -38,7 +38,8 @@ import {
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
-import { useOrders, MessageThread, ThreadMessage, Order } from "../../contexts/OrdersContext";
+import { useOrders, MessageThread, ThreadMessage, Order, OrderProduct } from "../../contexts/OrdersContext";
+import { catalogApi } from "../../services/catalogApi";
 import { UnifiedMessage, Conversation, Agent, Customer as TypesCustomer } from "../../types";
 import { collection, onSnapshot, orderBy, query, where } from "firebase/firestore";
 import { db } from "../../lib/firebase";
@@ -190,10 +191,47 @@ export default function MessagesPage() {
   const [manualCustomerAddress, setManualCustomerAddress] = useState("");
   const [manualPlatformSource, setManualPlatformSource] = useState<'WhatsApp' | 'Facebook' | 'Instagram' | 'Offline'>("WhatsApp");
   const [manualChatRefId, setManualChatRefId] = useState("");
-  const [manualProductSelection, setManualProductSelection] = useState("101"); // default Aarong Silk Panjabi
+  const [manualProductSelection, setManualProductSelection] = useState("");
   const [manualQuantity, setManualQuantity] = useState(1);
   const [manualPriceOverride, setManualPriceOverride] = useState("");
   const [manualNotes, setManualNotes] = useState("");
+  // Sprint 11: real catalog products for the manual-order picker, replacing the
+  // hardcoded 4-SKU fixture that made every manual order create against fictional
+  // products regardless of what was actually discussed with the customer.
+  const [manualCatalogProducts, setManualCatalogProducts] = useState<OrderProduct[]>([]);
+  const [manualCatalogLoading, setManualCatalogLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isManualModalOpen || manualCatalogProducts.length > 0) return;
+    let cancelled = false;
+    setManualCatalogLoading(true);
+    catalogApi
+      .listProducts({ status: 'active' })
+      .then((products) => {
+        if (cancelled) return;
+        const mapped: OrderProduct[] = products
+          .filter((p) => !!p.sellerId)
+          .map((p) => ({
+            id: p.id,
+            name: p.title,
+            brand: p.brandName,
+            price: p.price,
+            image: p.image,
+            sellerId: p.sellerId as string,
+            sellerName: p.brandName,
+            productType: p.productType,
+          }));
+        setManualCatalogProducts(mapped);
+        if (mapped.length > 0) setManualProductSelection((prev) => prev || mapped[0].id);
+      })
+      .catch((err) => console.error('Failed to load catalog for manual order picker', err))
+      .finally(() => {
+        if (!cancelled) setManualCatalogLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [isManualModalOpen, manualCatalogProducts.length]);
 
   const [showDispatchForm, setShowDispatchForm] = useState(false);
   const [tempDeliveryPartner, setTempDeliveryPartner] = useState("Pathao Courier");
@@ -273,15 +311,12 @@ export default function MessagesPage() {
       alert("Please fill in Customer Name, Customer Phone, and Customer Address!");
       return;
     }
+    if (manualCatalogProducts.length === 0) {
+      alert("No catalog products loaded yet. Please wait for the product list to load and try again.");
+      return;
+    }
 
-    const catalog = [
-      { id: '101', name: 'Aarong Silk Panjabi', brand: 'Aarong', price: 4200, image: 'https://images.unsplash.com/photo-1594938298603-c8148c4dae35?w=400&q=80', sellerId: 'seller_001', sellerName: 'Aarong Digital' },
-      { id: '102', name: 'Apex Mens Formal Leather', brand: 'Apex', price: 3500, image: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400&q=80', sellerId: 'seller_001', sellerName: 'Apex Shoes' },
-      { id: '103', name: 'Samsung S25 Ultra', brand: 'Samsung BD', price: 139999, image: 'https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400&q=80', sellerId: 'seller_002', sellerName: 'TechZone BD' },
-      { id: '104', name: 'Walton 2-Door Fridge', brand: 'Walton', price: 29990, image: 'https://images.unsplash.com/photo-1571175432247-fe0320b5da22?w=400&q=80', sellerId: 'seller_002', sellerName: 'ElectroBD' },
-    ];
-
-    const selectedProd = catalog.find(p => p.id === manualProductSelection) || catalog[0];
+    const selectedProd = manualCatalogProducts.find(p => p.id === manualProductSelection) || manualCatalogProducts[0];
     const rawOverrideValue = manualPriceOverride ? parseFloat(manualPriceOverride) : undefined;
 
     const created = await createManualOrder({
@@ -312,7 +347,7 @@ export default function MessagesPage() {
     setManualCustomerAddress("");
     setManualPlatformSource("WhatsApp");
     setManualChatRefId("");
-    setManualProductSelection("101");
+    setManualProductSelection(manualCatalogProducts[0]?.id || "");
     setManualQuantity(1);
     setManualPriceOverride("");
     setManualNotes("");
@@ -995,7 +1030,9 @@ export default function MessagesPage() {
                 <div className="p-10 text-center space-y-2">
                   <div className="text-slate-600 text-[10px] uppercase tracking-widest font-black">No Active Leads</div>
                   <p className="text-[10px] text-slate-500 leading-relaxed">
-                    Fire our Meta Simulator in the right sidebar to construct a new webhook client!
+                    {import.meta.env.DEV
+                      ? "Fire our Meta Simulator in the right sidebar to construct a new webhook client!"
+                      : "Conversations appear here once a customer messages in via a connected Meta channel."}
                   </p>
                 </div>
               ) : (
@@ -1652,11 +1689,14 @@ export default function MessagesPage() {
                 </div>
               )}
 
-              {/* Webhook simulator block */}
+              {/* Webhook simulator block — dev/local only. Firing synthetic Meta webhook
+                  payloads must never be reachable in a production build (Sprint 11
+                  pre-commit audit). */}
+              {import.meta.env.DEV && (
               <div className="pt-4 border-t border-app-border space-y-3.5">
                 <div className="flex items-center gap-1.5 text-app-accent">
                   <Radio className="w-4 h-4 animate-pulse" />
-                  <span className="text-[9px] font-black uppercase tracking-widest">Meta Channels Simulator</span>
+                  <span className="text-[9px] font-black uppercase tracking-widest">Meta Channels Simulator (DEV ONLY)</span>
                 </div>
 
                 <div className="bg-app-bg/10 p-3.5 border border-app-border rounded-xl space-y-3">
@@ -1750,6 +1790,7 @@ export default function MessagesPage() {
                   </div>
                 )}
               </div>
+              )}
 
             </div>
 
@@ -2369,13 +2410,8 @@ export default function MessagesPage() {
                     type="button"
                     onClick={() => {
                       if (setSelectedOrderDetails) {
-                        const productsMock = [
-                          { id: "101", name: "Aarong Jamdani Saree", brand: "Aarong", sellerId: "sel_v3", sellerName: "Aarong Digital", price: 4200, image: "https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=400&q=80" },
-                          { id: "102", name: "Vision Smart TV 55\"", brand: "Vision", sellerId: "sel_v2", sellerName: "ElectroBD", price: 68500, image: "https://images.unsplash.com/photo-1593359678770-2c4db4417ea3?w=400&q=80" },
-                          { id: "103", name: "Samsung S25 Ultra", brand: "Samsung", sellerId: "sel_v1", sellerName: "Samsung Co", price: 139999, image: "https://images.unsplash.com/photo-1610945265064-0e34e5519bbf?w=400&q=80" },
-                          { id: "104", name: "Walton 2-Door Fridge", brand: "Walton", sellerId: "sel_v1", sellerName: "Walton Corp", price: 29990, image: "https://images.unsplash.com/photo-1571175432247-5c86c5a4c0c4?w=400&q=80" }
-                        ];
-                        const matchedProd = productsMock.find(p => p.id === manualProductSelection) || productsMock[0];
+                        const matchedProd = manualCatalogProducts.find(p => p.id === manualProductSelection) || manualCatalogProducts[0];
+                        if (!matchedProd) { setIsManualModalOpen(false); return; }
                         setSelectedOrderDetails({
                           id: manualSuccessOrderInfo.orderId,
                           invoice_id: manualSuccessOrderInfo.invoiceId,
@@ -2528,12 +2564,16 @@ export default function MessagesPage() {
                         <select
                           value={manualProductSelection}
                           onChange={(e) => setManualProductSelection(e.target.value)}
+                          disabled={manualCatalogLoading || manualCatalogProducts.length === 0}
                           className="w-full bg-app-card border border-app-border rounded-xl px-3 py-2 text-xs text-app-text-primary outline-none focus:border-[#F4631E]/40 cursor-pointer font-sans"
                         >
-                          <option value="101">Aarong Silk Panjabi — ৳ 4,200</option>
-                          <option value="102">Apex Mens Formal Leather — ৳ 3,500</option>
-                          <option value="103">Samsung S25 Ultra — ৳ 139,999</option>
-                          <option value="104">Walton 2-Door Fridge — ৳ 29,990</option>
+                          {manualCatalogLoading && <option value="">Loading catalog…</option>}
+                          {!manualCatalogLoading && manualCatalogProducts.length === 0 && (
+                            <option value="">No active products found</option>
+                          )}
+                          {manualCatalogProducts.map((p) => (
+                            <option key={p.id} value={p.id}>{p.name} — ৳ {p.price.toLocaleString('en-US')}</option>
+                          ))}
                         </select>
                       </div>
 
@@ -2577,24 +2617,26 @@ export default function MessagesPage() {
                   </div>
 
                   {/* Operational Dynamic Subtotal Calculator block */}
-                  <div className="mt-4 bg-app-bg/10 border border-app-border p-5 rounded-2xl flex justify-between items-center flex-wrap gap-4 select-none font-sans">
-                    <div className="space-y-0.5">
-                      <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block">Live Calculated Sourced Bill Quote</span>
-                      <div className="text-xs text-app-text-secondary font-mono">
-                        Base: ৳ {
-                          (manualPriceOverride ? parseFloat(manualPriceOverride) || 0 : (manualProductSelection === '101' ? 4200 : manualProductSelection === '102' ? 3500 : manualProductSelection === '103' ? 139999 : 29990))
-                        } · Qty: {manualQuantity} · Courier Base Carriage: ৳ 120
+                  {(() => {
+                    const selectedForQuote = manualCatalogProducts.find(p => p.id === manualProductSelection);
+                    const basePrice = manualPriceOverride ? parseFloat(manualPriceOverride) || 0 : (selectedForQuote?.price ?? 0);
+                    return (
+                      <div className="mt-4 bg-app-bg/10 border border-app-border p-5 rounded-2xl flex justify-between items-center flex-wrap gap-4 select-none font-sans">
+                        <div className="space-y-0.5">
+                          <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block">Live Calculated Sourced Bill Quote</span>
+                          <div className="text-xs text-app-text-secondary font-mono">
+                            Base: ৳ {basePrice.toLocaleString('en-US')} · Qty: {manualQuantity} · Courier Base Carriage: ৳ 120
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block">GRAND TOTAL EST. PAYABLE</span>
+                          <div className="text-sm font-black text-emerald-400 font-mono">
+                            ৳ {((basePrice * manualQuantity) + 120).toLocaleString('en-US')} BDT
+                          </div>
+                        </div>
                       </div>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-[8px] font-black text-slate-500 uppercase tracking-widest block">GRAND TOTAL EST. PAYABLE</span>
-                      <div className="text-sm font-black text-emerald-400 font-mono">
-                        ৳ {
-                          (((manualPriceOverride ? parseFloat(manualPriceOverride) || 0 : (manualProductSelection === '101' ? 4200 : manualProductSelection === '102' ? 3500 : manualProductSelection === '103' ? 139999 : 29990)) * manualQuantity) + 120).toLocaleString()
-                        } BDT
-                      </div>
-                    </div>
-                  </div>
+                    );
+                  })()}
 
                 </div>
 

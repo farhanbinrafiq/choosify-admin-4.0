@@ -626,6 +626,36 @@ export async function createManualOrder(input: {
     manual: true,
   });
 
+  // Sprint 11: the OrderCreated event subscriber (conversationEvents.ts) also
+  // calls ensureOrderConversation, but eventBus.publishEvent fires handlers via
+  // `void handler(event)` — fire-and-forget, not awaited. That left a real race:
+  // a client polling for the order's conversation immediately after this request
+  // returns could find nothing yet. ensureOrderConversation is idempotent (keyed
+  // by orderReconcileKey), so calling it synchronously here as well is safe and
+  // guarantees the conversation exists by the time this response is sent.
+  try {
+    const { ensureOrderConversation, mapOrderSourceChannel } = await import(
+      '../messaging/conversations/conversationService'
+    );
+    const { CONVERSATION_CONTEXT_TYPES } = await import('../messaging/conversations/types');
+    await ensureOrderConversation({
+      orderId: order.id,
+      consumerId: order.consumerId,
+      sellerId: order.sellerId,
+      brandId: order.brandId,
+      checkoutId: order.checkoutId,
+      sourceChannel: mapOrderSourceChannel(order.source),
+      contextType:
+        order.source !== 'checkout'
+          ? CONVERSATION_CONTEXT_TYPES.MANUAL_ORDER
+          : CONVERSATION_CONTEXT_TYPES.ORDER,
+      metadata: { orderNumber: order.orderNumber, orderSource: order.source },
+      actor: input.actorId,
+    });
+  } catch (error) {
+    console.error('[Commerce] Failed to synchronously ensure manual order conversation:', error);
+  }
+
   return { order, claimToken };
 }
 
