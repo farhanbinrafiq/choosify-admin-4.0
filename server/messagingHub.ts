@@ -1,4 +1,4 @@
-import { Request, Response, Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 import type { UnifiedMessage } from '../src/types';
 import { getChannelAdapter } from './messaging/adapters';
 import type { SendMessageResult } from './messaging/adapters/channelAdapter';
@@ -19,6 +19,7 @@ import { upsertOmniStaff } from './messaging/omniStaff';
 import { seedOmnichannelData } from './messaging/seedData';
 import { drainPendingWebhookJobs, enqueueMetaWebhookJob } from './messaging/webhookJobs';
 import { verifyMetaWebhookSignature } from './messaging/webhookVerify';
+import { AUTH_ERROR_CODES, sendAuthError } from './auth/authErrors';
 import { authenticateRequest } from './middleware/auth';
 import { validate } from './middleware/validate';
 import { ROLES, type UserRole } from './permissions/roles';
@@ -36,6 +37,39 @@ const MESSAGING_LISTENER_ROLES = new Set<UserRole>([
   ROLES.FINANCE_MANAGER,
   ROLES.MARKETING_MANAGER,
 ]);
+
+/**
+ * Sprint 11 pre-commit audit: read/write access to raw customer conversation
+ * content (list, read messages, send as the platform, reassign, change status)
+ * is a narrower privilege than "may register for Firestore realtime listener
+ * updates." Finance Manager and Marketing Manager have no operational need to
+ * see or act on customer conversations, so they're excluded here even though
+ * they remain in MESSAGING_LISTENER_ROLES for the lower-risk listener-registration
+ * endpoint. Least-privilege, not a blanket reuse of that set.
+ */
+const OMNI_MESSAGING_ACCESS_ROLES = new Set<UserRole>([
+  ROLES.SUPER_ADMIN,
+  ROLES.ADMIN,
+  ROLES.MODERATOR,
+  ROLES.SUPPORT_AGENT,
+]);
+
+/**
+ * Sprint 11: this legacy Omni/Meta provider inbox mirrors real conversation data
+ * (dual-written from canonical commerce messaging + real inbound Meta webhooks).
+ * It previously had NO authentication on any read/write route. Unknown/missing
+ * role fails closed (403), not open.
+ */
+function requireMessagingStaffAccess(req: Request, res: Response, next: NextFunction) {
+  const role = req.userRole;
+  if (!role || !OMNI_MESSAGING_ACCESS_ROLES.has(role)) {
+    sendAuthError(res, 403, AUTH_ERROR_CODES.FORBIDDEN, 'Messaging provider access requires staff role.');
+    return;
+  }
+  next();
+}
+
+const requireOmniMessagingAccess = [authenticateRequest, requireMessagingStaffAccess];
 
 async function handleNormalizedMetaMessage(webhookData: Record<string, unknown>) {
   const normalized = normalizeMetaWebhookPayload(webhookData);
@@ -139,7 +173,7 @@ export async function handleMetaWebhookPost(req: Request, res: Response) {
   return res.status(200).json({ status: 'EVENT_RECEIVED', object: body.object });
 }
 
-messagingRouter.get('/conversations', async (_req: Request, res: Response) => {
+messagingRouter.get('/conversations', ...requireOmniMessagingAccess, async (_req: Request, res: Response) => {
   try {
     return res.status(200).json(await listConversations());
   } catch (err: unknown) {
@@ -148,7 +182,7 @@ messagingRouter.get('/conversations', async (_req: Request, res: Response) => {
   }
 });
 
-messagingRouter.get('/conversations/:id', async (req: Request, res: Response) => {
+messagingRouter.get('/conversations/:id', ...requireOmniMessagingAccess, async (req: Request, res: Response) => {
   try {
     const conversation = await getConversation(req.params.id);
     if (!conversation) {
@@ -161,7 +195,7 @@ messagingRouter.get('/conversations/:id', async (req: Request, res: Response) =>
   }
 });
 
-messagingRouter.get('/messages/:conversationId', async (req: Request, res: Response) => {
+messagingRouter.get('/messages/:conversationId', ...requireOmniMessagingAccess, async (req: Request, res: Response) => {
   try {
     return res.status(200).json(await listMessages(req.params.conversationId));
   } catch (err: unknown) {
@@ -172,6 +206,7 @@ messagingRouter.get('/messages/:conversationId', async (req: Request, res: Respo
 
 messagingRouter.post(
   '/messages/send',
+  ...requireOmniMessagingAccess,
   validate({ body: SendMessageBodySchema }),
   async (req: Request, res: Response) => {
   try {
@@ -260,7 +295,7 @@ messagingRouter.post(
   },
 );
 
-messagingRouter.patch('/conversation/status', async (req: Request, res: Response) => {
+messagingRouter.patch('/conversation/status', ...requireOmniMessagingAccess, async (req: Request, res: Response) => {
   try {
     const { conversationId, status } = req.body;
     if (!conversationId || !status) {
@@ -279,7 +314,7 @@ messagingRouter.patch('/conversation/status', async (req: Request, res: Response
   }
 });
 
-messagingRouter.patch('/conversation/assign-agent', async (req: Request, res: Response) => {
+messagingRouter.patch('/conversation/assign-agent', ...requireOmniMessagingAccess, async (req: Request, res: Response) => {
   try {
     const { conversationId, agentId } = req.body;
     if (!conversationId || !agentId) {
@@ -298,7 +333,7 @@ messagingRouter.patch('/conversation/assign-agent', async (req: Request, res: Re
   }
 });
 
-messagingRouter.get('/agents', async (_req: Request, res: Response) => {
+messagingRouter.get('/agents', ...requireOmniMessagingAccess, async (_req: Request, res: Response) => {
   try {
     return res.status(200).json(await listAgents());
   } catch (err: unknown) {

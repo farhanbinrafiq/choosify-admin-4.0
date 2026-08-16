@@ -365,8 +365,14 @@ main();
   await delay(400);
   assert(existsSync(SNAPSHOT), 'snapshot file written');
 
-  const legacy = await fetch(`http://localhost:${PORT}/api/conversations`);
-  assert(legacy.ok, '13. ADR-004 legacy /api/conversations shim');
+  // Sprint 11: the legacy Omni provider shim (/api/conversations) is no longer
+  // unauthenticated — see scripts/probe-omni-messaging-security.ts for the full
+  // unauthenticated/staff/non-staff matrix. This just keeps this probe's "shim
+  // still reachable" assertion honest for an authenticated staff caller.
+  const legacyUnauth = await fetch(`http://localhost:${PORT}/api/conversations`);
+  assert(legacyUnauth.status === 401, '13a. ADR-004 legacy shim denies unauthenticated access');
+  const legacy = await fetch(`http://localhost:${PORT}/api/conversations`, { headers: authHeaders(admin.token) });
+  assert(legacy.ok, '13b. ADR-004 legacy /api/conversations shim reachable for authenticated staff');
 
   const beforeMsgs = await fetch(`${BASE}/conversations/${encodeURIComponent(convId)}/messages`, {
     headers: authHeaders(consumerToken),

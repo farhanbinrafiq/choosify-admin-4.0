@@ -799,8 +799,15 @@ async function main() {
     'Seller support list is own-thread scoped',
   );
 
-  const legacy = await fetch(`${root}/api/conversations`);
-  assert(legacy.ok, '24. legacy API compatibility (GET /api/conversations)');
+  // Sprint 11: legacy Omni provider API (/api/conversations) is no longer
+  // unauthenticated — it now requires an authenticated staff role, same as every
+  // other operational endpoint. See scripts/probe-omni-messaging-security.ts for
+  // the full unauthenticated/staff/non-staff matrix; this just keeps this probe's
+  // "legacy API still reachable" assertion honest for an authenticated staff caller.
+  const legacyUnauth = await fetch(`${root}/api/conversations`);
+  assert(legacyUnauth.status === 401, '24a. legacy API (GET /api/conversations) denies unauthenticated access');
+  const legacy = await fetch(`${root}/api/conversations`, { headers: authHeaders(admin.token) });
+  assert(legacy.ok, '24b. legacy API compatibility for authenticated staff (GET /api/conversations)');
 
   const persistMode = await fetch(`${base}/messaging/persistence-mode`);
   const persistBody = (await json(persistMode)) as {
