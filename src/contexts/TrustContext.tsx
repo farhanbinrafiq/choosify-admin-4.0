@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
 import { toast } from 'react-hot-toast';
 import { operationsApi } from '../services/operationsApi';
+import { useAuth } from './AuthContext';
 
 // ============================================================================
 // PHASE 1: TRUST ENGINE ENTITIES
@@ -399,7 +400,8 @@ export const useTrust = () => {
 // ============================================================================
 
 export const TrustProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  
+  const { loading: authLoading, profile } = useAuth();
+
   // 1. REPUTATION LEDGER CODES
   const [reputationLedger, setReputationLedger] = useState<ReputationLedgerEntry[]>(() => {
     const saved = localStorage.getItem('choosify_reputation_ledger');
@@ -480,9 +482,13 @@ export const TrustProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       });
   }, []);
 
+  // Pre-commit audit follow-up: fired unconditionally on every mount, racing
+  // AuthContext's async session bootstrap and producing a spurious first-paint
+  // 401 for every role including admin. Wait for a resolved session.
   useEffect(() => {
+    if (authLoading || !profile) return;
     refreshVerifications();
-  }, [refreshVerifications]);
+  }, [authLoading, profile, refreshVerifications]);
   // 6. RECOMMENDATION ATTRIBUTION DATA
   const [recommendationMetrics, setRecommendationMetrics] = useState<RecommendationMetric[]>(() => {
     const saved = localStorage.getItem('choosify_recommendations');

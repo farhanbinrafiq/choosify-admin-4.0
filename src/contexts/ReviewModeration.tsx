@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Review } from './OrdersContext';
 import { useTrust, TrustEntityType } from './TrustContext';
+import { useAuth } from './AuthContext';
 import { operationsApi, type OpsReview } from '../services/operationsApi';
 
 interface Toast {
@@ -127,6 +128,7 @@ const getStoreEntityDetails = (storeName: string): { type: TrustEntityType; id: 
 
 export const ReviewModerationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { addTrustEvent } = useTrust();
+  const { loading: authLoading, profile } = useAuth();
   const [reviews, setReviews] = useState<Review[]>(() => {
     const saved = localStorage.getItem('choosify_moderation_reviews');
     return saved ? JSON.parse(saved) : initialMockReviews;
@@ -179,7 +181,11 @@ export const ReviewModerationProvider: React.FC<{ children: React.ReactNode }> =
     timestamp: row.createdAt,
   });
 
+  // Pre-commit audit follow-up: fired unconditionally on every mount, racing
+  // AuthContext's async session bootstrap and producing a spurious first-paint
+  // 401 for every role including admin. Wait for a resolved session.
   useEffect(() => {
+    if (authLoading || !profile) return;
     operationsApi
       .listReviews()
       .then((apiReviews) => {
@@ -192,7 +198,7 @@ export const ReviewModerationProvider: React.FC<{ children: React.ReactNode }> =
         });
       })
       .catch(() => {});
-  }, []);
+  }, [authLoading, profile]);
 
   // Approve review (move from pending/flagged to Published)
   const approveReview = (id: string) => {

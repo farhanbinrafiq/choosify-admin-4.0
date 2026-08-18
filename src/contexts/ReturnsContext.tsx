@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { useOrders } from './OrdersContext';
+import { useAuth } from './AuthContext';
 import { operationsApi } from '../services/operationsApi';
 
 export interface ReturnRequest {
@@ -59,6 +60,7 @@ function upsertLocal(prev: ReturnRequest[], row: ReturnRequest): ReturnRequest[]
 
 export const ReturnsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { updateOrderStatus, addAdminNote } = useOrders();
+  const { loading: authLoading, profile } = useAuth();
   const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
 
   const refresh = useCallback(() => {
@@ -68,9 +70,15 @@ export const ReturnsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       .catch(() => {});
   }, []);
 
+  // Pre-commit audit follow-up: this used to fire on every mount regardless of
+  // whether the session had finished restoring, racing AuthContext's async
+  // token bootstrap and producing a spurious first-paint 401 for every role
+  // (including admin). Wait for auth to resolve, and only fetch once a real
+  // session exists — there's nothing to return-list for a logged-out visitor.
   useEffect(() => {
+    if (authLoading || !profile) return;
     refresh();
-  }, [refresh]);
+  }, [authLoading, profile, refresh]);
 
   const createReturnRequest = (
     params: Omit<ReturnRequest, 'id' | 'createdAt' | 'updatedAt' | 'notes'>,
