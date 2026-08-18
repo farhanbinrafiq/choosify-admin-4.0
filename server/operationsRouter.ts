@@ -35,6 +35,7 @@ import {
   type OrderLikeForExpiry,
 } from '../shared/messaging/conversationExpiry';
 import { catalogStore } from '../lib/vercel-catalog/catalogStore';
+import { getService } from './catalog/serviceStore';
 import { normalizeBrandInput } from './catalogContract';
 import { normalizeCreatorInput } from '../lib/vercel-catalog/catalogEditorialContract';
 import { recordSuspiciousRequest, recordClaimConfirmAttempt } from './lib/abuseProtection';
@@ -154,6 +155,112 @@ function userCanCreateManualOrder(req: {
   return Boolean(role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER)));
 }
 
+/**
+ * Sprint 12 pre-beta audit — P0 fix: POST /operations/orders previously trusted
+ * body.overallTotal/body.subtotal and every subOrder item's client-supplied
+ * `price` verbatim (`Number(body.overallTotal || 0)`, `body.subOrders || []`),
+ * with zero server-side recomputation. Verified live: a real ৳9999 product
+ * could be checked out for ৳1. This mirrors the price re-resolution already
+ * done correctly by the newer engine (server/commerce/checkoutService.ts
+ * `revalidateCartItem` — `item.unitPrice = product.price`), applied here for
+ * the storefront's actual live checkout path (Choosify-Web CheckoutPage.tsx
+ * -> operationsApi.createOrder -> this endpoint).
+ *
+ * Only applied to buyer-initiated (non-manual) orders — manual orders remain
+ * staff-only (userCanCreateManualOrder) and deliberately support a staff
+ * price override (Sprint 11 Messages.tsx "Price Overwrite" field, via the
+ * separate checkoutService.createManualOrder path), a different, already
+ * trust-appropriate flow.
+ */
+/** Mirrors Choosify-Web CheckoutPage.tsx's DELIVERY_FEE_PER_SELLER flat rate. */
+const FLAT_DELIVERY_FEE_PER_SELLER = 120;
+
+async function recomputeOrderPricingServerSide(
+  body: Partial<OpsStorefrontOrder>,
+): Promise<{ subOrders: unknown[]; subtotal: number; deliveryTotal: number; overallTotal: number; promoDiscount: number }> {
+  const rawSubOrders = Array.isArray(body.subOrders) ? body.subOrders : [];
+  let subtotal = 0;
+  let deliveryTotal = 0;
+
+  const recomputedSubOrders = await Promise.all(
+    rawSubOrders.map(async (rawSub) => {
+      const sub = (rawSub && typeof rawSub === 'object' ? rawSub : {}) as Record<string, unknown>;
+      const rawItems = Array.isArray(sub.items) ? sub.items : [];
+      const items = await Promise.all(
+        rawItems.map(async (rawItem) => {
+          const item = (rawItem && typeof rawItem === 'object' ? rawItem : {}) as Record<string, unknown>;
+          // Pre-commit audit follow-up: live UAT found a real product whose
+          // catalog id is numeric (e.g. 24, not "24") — a strict `typeof ===
+          // 'string'` check silently discarded it as empty, turning a genuine
+          // checkout into a hard 400 "missing productId/serviceId" regression.
+          // Accept any non-empty string/number id and normalize to a string.
+          const toIdString = (value: unknown): string =>
+            typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '';
+          const productId = toIdString(item.productId);
+          const serviceId = toIdString(item.serviceId);
+          const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+
+          let realPrice = 0;
+          let realTitle = typeof item.productTitle === 'string' ? item.productTitle : '';
+          if (productId) {
+            const product = await catalogStore.getProduct(productId);
+            if (!product) throw new Error(`Product ${productId} no longer exists`);
+            realPrice = product.price;
+            realTitle = product.title;
+          } else if (serviceId) {
+            const service = await getService(serviceId);
+            if (!service) throw new Error(`Service ${serviceId} no longer exists`);
+            realPrice = service.price;
+            realTitle = service.title;
+          } else {
+            throw new Error('Order item is missing productId/serviceId');
+          }
+
+          subtotal += realPrice * quantity;
+          return { ...item, price: realPrice, productTitle: realTitle, quantity };
+        }),
+      );
+
+      // Pre-commit audit follow-up: deliveryFee was still client-supplied (only
+      // floored at >=0) — the one monetary field the original P0 fix missed.
+      // Storefront charges a flat per-seller parcel fee for any sub-order that
+      // contains a physical product; pure service/booking sub-orders (and the
+      // booking-payment flow generally) are deliveryFee:0. Recompute the same
+      // way server-side instead of trusting the client's number.
+      const hasProduct = (items as Array<{ productId?: unknown }>).some(
+        (it) => (typeof it.productId === 'string' || typeof it.productId === 'number') && String(it.productId).trim(),
+      );
+      const deliveryFee = hasProduct ? FLAT_DELIVERY_FEE_PER_SELLER : 0;
+      deliveryTotal += deliveryFee;
+      return { ...sub, items, deliveryFee };
+    }),
+  );
+
+  // Coupon existence/validity is real, but the discount computation engine
+  // doesn't exist server-side yet (client just sends a number) — rather than
+  // fully trust it (the same vulnerability class as price), clamp it to a
+  // bounded fraction of the real subtotal so a forged discount can never
+  // zero out an order the way the forged price could.
+  let promoDiscount = 0;
+  if (body.promoCode && body.promoDiscount) {
+    const coupon = operationsStore.getCouponByCode(String(body.promoCode));
+    if (coupon && coupon.active) {
+      const now = new Date();
+      const validFrom = coupon.validFrom ? new Date(coupon.validFrom) : null;
+      const validUntil = coupon.validUntil ? new Date(coupon.validUntil) : null;
+      const withinWindow = (!validFrom || now >= validFrom) && (!validUntil || now <= validUntil);
+      if (withinWindow) {
+        const claimed = Math.max(0, Number(body.promoDiscount) || 0);
+        const safeCap = subtotal * 0.9;
+        promoDiscount = Math.min(claimed, safeCap, coupon.rules?.maxDiscountAmount ?? Infinity);
+      }
+    }
+  }
+
+  const overallTotal = Math.max(0, subtotal + deliveryTotal - promoDiscount);
+  return { subOrders: recomputedSubOrders, subtotal, deliveryTotal, overallTotal, promoDiscount };
+}
+
 const CLAIM_TOKEN_TTL_MS = Number(process.env.ORDER_CLAIM_TOKEN_TTL_MS || 7 * 24 * 60 * 60 * 1000);
 
 function generateOrderClaimToken(): string {
@@ -219,6 +326,24 @@ function userCanUpdateShipment(
   if (!order) return false;
   const subs = (order.subOrders || []) as Array<{ sellerId?: string }>;
   return subs.some((sub) => sub.sellerId === req.userId);
+}
+
+/**
+ * Sprint 12 pre-beta audit: GET /operations/shipments and /operations/shipments/:id
+ * had NO authentication at all — any unauthenticated caller could dump every
+ * shipment's recipientName/recipientPhone/deliveryAddress/codAmount/buyerId
+ * across the whole platform. A buyer may view their own shipment; a seller may
+ * view a shipment for an order containing one of their own sub-orders; staff
+ * may view any.
+ */
+function userCanViewShipment(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  shipment: { orderId: string; buyerId: string },
+): boolean {
+  if (userIsStaff(req)) return true;
+  if (!req.userId) return false;
+  if (shipment.buyerId === req.userId) return true;
+  return userCanUpdateShipment(req, shipment.orderId);
 }
 
 /**
@@ -539,17 +664,40 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
       claimTokenExpiresAt = new Date(Date.now() + CLAIM_TOKEN_TTL_MS).toISOString();
     }
 
+    // P0 fix: recompute pricing server-side for buyer-initiated orders. Manual
+    // (staff-created) orders keep the client-supplied price — that's the
+    // deliberate staff price-override feature, a different trust boundary.
+    let pricing: { subOrders: unknown[]; subtotal: number; deliveryTotal: number; overallTotal: number; promoDiscount: number };
+    if (wantsManual) {
+      pricing = {
+        subOrders: body.subOrders || [],
+        subtotal: Number(body.subtotal || 0),
+        deliveryTotal: Number(body.deliveryTotal || 0),
+        overallTotal: Number(body.overallTotal || 0),
+        promoDiscount: Number(body.promoDiscount || 0),
+      };
+    } else {
+      try {
+        pricing = await recomputeOrderPricingServerSide(body);
+      } catch (err) {
+        res.status(400).json({
+          error: err instanceof Error ? err.message : 'Unable to validate order items',
+        });
+        return;
+      }
+    }
+
     const saved = operationsStore.createOrder({
       orderId: body.orderId,
       buyerId,
       isCOD: Boolean(body.isCOD),
       isSplit: Boolean(body.isSplit),
-      overallTotal: Number(body.overallTotal || 0),
-      subtotal: body.subtotal,
-      deliveryTotal: body.deliveryTotal,
-      subOrders: body.subOrders || [],
+      overallTotal: pricing.overallTotal,
+      subtotal: pricing.subtotal,
+      deliveryTotal: pricing.deliveryTotal,
+      subOrders: pricing.subOrders,
       promoCode: body.promoCode,
-      promoDiscount: body.promoDiscount,
+      promoDiscount: pricing.promoDiscount,
       promoType: body.promoType,
       sourceMode: body.sourceMode,
       paymentMethod: body.paymentMethod,
@@ -582,7 +730,7 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
       paymentValidatedAt: body.paymentValidatedAt,
     });
 
-    if (body.promoCode && body.promoDiscount) {
+    if (body.promoCode && pricing.promoDiscount) {
       const coupon = operationsStore.getCouponByCode(body.promoCode);
       if (coupon) {
         operationsStore.recordCouponUsage({
@@ -590,9 +738,9 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
           couponCode: coupon.code,
           orderId: saved.orderId,
           userId: saved.buyerId,
-          discountAmount: Number(body.promoDiscount || 0),
-          originalAmount: Number(body.subtotal || body.overallTotal || 0),
-          finalAmount: Number(body.overallTotal || 0),
+          discountAmount: pricing.promoDiscount,
+          originalAmount: pricing.subtotal,
+          finalAmount: pricing.overallTotal,
           status: 'redeemed',
         });
       }
@@ -1788,14 +1936,20 @@ operationsRouter.get('/operations/seller-dashboard', ...requireAuth, async (req,
   }
 });
 
-operationsRouter.get('/operations/shipments', (_req, res) => {
-  res.json({ data: shipmentStore.listShipments() });
+operationsRouter.get('/operations/shipments', ...requireAuth, (req, res) => {
+  const all = shipmentStore.listShipments();
+  const scoped = userIsStaff(req) ? all : all.filter((s) => userCanViewShipment(req, s));
+  res.json({ data: scoped });
 });
 
-operationsRouter.get('/operations/shipments/:id', (req, res) => {
+operationsRouter.get('/operations/shipments/:id', ...requireAuth, (req, res) => {
   const shipment = shipmentStore.getShipment(req.params.id);
   if (!shipment) {
     res.status(404).json({ error: 'Shipment not found' });
+    return;
+  }
+  if (!userCanViewShipment(req, shipment)) {
+    res.status(403).json({ error: 'Not authorized to view this shipment' });
     return;
   }
   res.json({ data: shipment });
@@ -1984,10 +2138,14 @@ operationsRouter.get('/operations/conversation-expiry', (req, res) => {
   res.json({ data: { ...expiry, enforced: true } });
 });
 
-operationsRouter.get('/operations/shipments/track/:orderId', (req, res) => {
+operationsRouter.get('/operations/shipments/track/:orderId', ...requireAuth, (req, res) => {
   const shipment = shipmentStore.getShipmentByOrderId(req.params.orderId);
   if (!shipment) {
     res.status(404).json({ error: 'Shipment not found for this order' });
+    return;
+  }
+  if (!userCanViewShipment(req, shipment)) {
+    res.status(403).json({ error: 'Not authorized to view this shipment' });
     return;
   }
   res.json({ data: shipment });

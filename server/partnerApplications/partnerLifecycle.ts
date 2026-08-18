@@ -16,6 +16,30 @@ function isPartnerRole(role: string | undefined | null): boolean {
   return r === 'seller' || r === 'verified_seller' || r === 'creator';
 }
 
+/**
+ * Sprint 12 pre-beta audit — P1 fix: grandfathered accounts (no partner-application
+ * record, or a legacy-approved application never stamped with catalogEntityId) used
+ * to get marketplaceAccess:true unconditionally, so an admin hiding/unpublishing
+ * their brand or creator profile had no effect. If the actor already has a real
+ * catalog entity, gate on its actual visibility like every other account; only
+ * default open when there is no entity yet to revoke.
+ */
+async function resolveGrandfatheredMarketplaceAccess(
+  role: string | undefined | null,
+  userId: string | undefined,
+): Promise<boolean> {
+  if (!userId) return true;
+  const r = String(role || '').toLowerCase();
+  if (r === 'creator') {
+    const creators = await catalogStore.listCreators();
+    const mine = creators.find((c) => c.userId === userId);
+    return mine ? mine.status === 'live' : true;
+  }
+  const brands = await catalogStore.listBrands();
+  const mine = brands.find((b) => b.sellerId === userId);
+  return mine ? brandIsMarketplaceVisible(mine) : true;
+}
+
 export async function resolvePartnerLifecycle(params: {
   userId?: string;
   email?: string;
@@ -41,7 +65,7 @@ export async function resolvePartnerLifecycle(params: {
       application: null,
       applicationStatus: null,
       identityVerified: true,
-      marketplaceAccess: true,
+      marketplaceAccess: await resolveGrandfatheredMarketplaceAccess(params.role, params.userId),
       grandfathered: true,
     };
   }
@@ -56,13 +80,14 @@ export async function resolvePartnerLifecycle(params: {
     };
   }
 
-  // Legacy approve did not stamp catalogEntityId — keep those accounts unlocked.
+  // Legacy approve did not stamp catalogEntityId — identity stays unlocked, but
+  // marketplace visibility still reflects the real catalog entity if one exists.
   if (!application.catalogEntityId) {
     return {
       application,
       applicationStatus: application.status,
       identityVerified: true,
-      marketplaceAccess: true,
+      marketplaceAccess: await resolveGrandfatheredMarketplaceAccess(params.role, params.userId),
       grandfathered: true,
     };
   }

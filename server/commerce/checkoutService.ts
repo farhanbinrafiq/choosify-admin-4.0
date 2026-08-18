@@ -491,7 +491,7 @@ export async function createManualOrder(input: {
 
   const brand = (await catalogStore.listBrands()).find((b) => b.id === input.brandId);
   if (!brand) throw new CommerceError('Brand not found', 404);
-  if (brand.sellerId && brand.sellerId !== input.sellerId && !isAdmin) {
+  if (!isAdmin && brand.sellerId !== input.sellerId) {
     throw new CommerceError('Brand does not belong to seller', 403);
   }
 
