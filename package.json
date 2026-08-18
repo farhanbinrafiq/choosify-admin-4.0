@@ -41,6 +41,8 @@
     "test:feature-request-workflow": "tsx scripts/probe-feature-request-workflow.ts",
     "test:event-notifications": "tsx scripts/probe-event-notifications.ts",
     "test:sprint11-uat": "tsx scripts/probe-sprint11-uat.ts",
+    "test:sprint12-order-payment-security": "tsx scripts/probe-sprint12-order-payment-security.ts",
+    "test:sprint12-operations-persistence": "tsx scripts/probe-sprint12-operations-persistence.ts",
     "verify:payments": "tsx scripts/verify-payment-flow.ts",
     "check:prod-env": "tsx scripts/check-production-env.ts",
     "seed:catalog": "tsx scripts/seedCatalog.ts",
