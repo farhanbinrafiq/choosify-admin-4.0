@@ -28,7 +28,6 @@ import {
 import { operationsApi, type AnalyticsSummary } from '../../services/operationsApi';
 import { catalogApi } from '../../services/catalogApi';
 import type { HomepageConfig, SiteConfig } from '../../types/catalog';
-import { useTrust } from '../../contexts/TrustContext';
 
 type RangeKey = '7d' | '30d' | '90d';
 
@@ -78,7 +77,6 @@ export default function Dashboard() {
   const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
   const [catalog, setCatalog] = useState<CatalogSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  const { trustScores, trustAlerts } = useTrust();
 
   const load = async () => {
     setLoading(true);
@@ -136,18 +134,6 @@ export default function Dashboard() {
     catalog?.site?.announcementBarEnabled && catalog?.site?.announcementBarText?.trim(),
   );
 
-  const trustStats = useMemo(() => {
-    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
-    const verifiedSellers = trustScores.filter((s) => s.entity_type === 'seller' && s.current_score >= 70).length;
-    const fraudReports = trustAlerts.filter(
-      (a) =>
-        (a.alert_type === 'Suspicious Seller Activity' || a.alert_type === 'Complaint Spike') &&
-        new Date(a.created_at).getTime() >= thirtyDaysAgo,
-    ).length;
-    const fakeReviewFlags = trustAlerts.filter((a) => a.alert_type === 'Fake Review Detection').length;
-    const criticalAlerts = trustAlerts.filter((a) => a.status === 'unresolved' && a.severity === 'Critical').length;
-    return { verifiedSellers, fraudReports, fakeReviewFlags, criticalAlerts };
-  }, [trustScores, trustAlerts]);
 
   const actionQueues = [
     {
@@ -363,32 +349,17 @@ export default function Dashboard() {
           <div className="bg-app-card border border-app-border rounded-2xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider">Trust & Safety</h3>
-              {trustStats.criticalAlerts > 0 && (
-                <span className="flex items-center gap-1 bg-rose-50 text-rose-600 border border-rose-200 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
-                  <ShieldAlert className="w-3 h-3" /> {trustStats.criticalAlerts} Alert{trustStats.criticalAlerts > 1 ? 's' : ''}
-                </span>
-              )}
+              <span className="flex items-center gap-1 bg-amber-50 text-amber-600 border border-amber-200 text-[9px] font-black uppercase px-2 py-0.5 rounded-full">
+                <ShieldAlert className="w-3 h-3" /> Coming Soon
+              </span>
             </div>
-            <div className="space-y-3 text-[11px]">
-              <div className="flex justify-between">
-                <span className="text-app-text-secondary">Verified Sellers</span>
-                <span className="font-bold text-app-text-primary">{trustStats.verifiedSellers.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-app-text-secondary">Fraud Reports (30d)</span>
-                <span className="font-bold text-app-text-primary">{trustStats.fraudReports}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-app-text-secondary">Fake Review Flags</span>
-                <span className="font-bold text-app-text-primary">{trustStats.fakeReviewFlags}</span>
-              </div>
-            </div>
-            <Link
-              to="/admin/trust-center"
-              className="mt-4 inline-flex items-center gap-1 text-[11px] font-bold text-app-accent hover:underline"
-            >
-              View Trust Center <ChevronRight className="w-3.5 h-3.5" />
-            </Link>
+            <p className="text-[11px] text-app-text-secondary leading-relaxed">
+              Automated fraud detection, trust scoring, and abuse alerts are not yet live. Use{' '}
+              <Link to="/admin/reviews" className="font-bold text-app-accent hover:underline">
+                Review Moderation
+              </Link>{' '}
+              for real, currently-enforced moderation actions.
+            </p>
           </div>
         </div>
       </div>

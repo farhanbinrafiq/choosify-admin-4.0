@@ -223,8 +223,6 @@ export default function OrdersOverview() {
     const sellerOrders = orders.filter(o => o.product.sellerName === sellerName);
     const completed = sellerOrders.filter(o => o.status === 'Delivered').length;
     const cancelled = sellerOrders.filter(o => o.status === 'Cancelled' || o.status === 'Rejected').length;
-    const returned = Math.min(sellerOrders.length, 1); // Mock return proportion
-    const exchange = Math.min(sellerOrders.length, 0); // Mock exchange proportion
     const revenue = sellerOrders
       .filter(o => o.status === 'Delivered')
       .reduce((sum, o) => sum + (o.product.price * (o.quantity || 1)), 0);
@@ -236,12 +234,6 @@ export default function OrdersOverview() {
     const fRate = sellerOrders.length > 0 ? (completed / sellerOrders.length) * 100 : 0;
     const cRate = sellerOrders.length > 0 ? (cancelled / sellerOrders.length) * 100 : 0;
 
-    // Rich mock attributes
-    const ratingSum = 4.0 + (sellerOrders.length % 10) * 0.1;
-    const avgRating = Math.min(5.0, Number(ratingSum.toFixed(1)));
-    const trustScore = Math.min(100, 75 + (sellerOrders.length * 3));
-    const riskGrade = trustScore > 90 ? 'A (Excellent)' : trustScore > 80 ? 'B (Stable)' : 'C (Caution)';
-    
     return {
       name: sellerName,
       brand: sellerOrders[0]?.product.brand || 'Choosify Retail',
@@ -249,13 +241,6 @@ export default function OrdersOverview() {
       revenue,
       fulfillmentRate: fRate,
       cancellationRate: cRate,
-      returnRate: (returned / (sellerOrders.length || 1)) * 100,
-      exchangeRate: (exchange / (sellerOrders.length || 1)) * 100,
-      avgDeliveryTime: '32 Hours',
-      avgRating,
-      trustScore,
-      riskGrade,
-      settlementStatus: 'Settled',
       platformCommission: commission
     };
   }).sort((a, b) => b.revenue - a.revenue);
@@ -747,6 +732,9 @@ export default function OrdersOverview() {
               <BarChart3 className="w-5 h-5 text-emerald-400" /> SECTION 3 — Revenue Analytics & Dynamic Forecast Progression
             </h3>
             <p className="text-xs text-app-text-secondary">Detailed transaction analysis split between Gross revenue, Platform commissions, and Seller settlements over selected period.</p>
+            <p className="text-[10px] font-bold text-amber-500 uppercase tracking-wide mt-1">
+              Chart below is illustrative sample data, not a live time-series — the summary figures above are real.
+            </p>
           </div>
 
           {/* Toggle buttons for chart styles */}
@@ -843,12 +831,13 @@ export default function OrdersOverview() {
           <div className="space-y-1">
             <h3 className="text-base font-black text-app-text-primary flex items-center gap-2">
               <Landmark className="w-5 h-5 text-[#EF3C23]" /> SECTION 4 — Commission Split & Settlement Dispatch Center
+              <span className="text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-50 text-amber-600 border border-amber-200">Preview</span>
             </h3>
             <p className="text-xs text-app-text-secondary">
-              Manage default platform commission, view upcoming dispatch schedule, override frozen payouts, and authorize direct clearances.
+              Automated payout dispatch and settlement clearance are not live yet — the figures below are illustrative, not real disbursement records. Use the real Commission &amp; Fees admin tools for the currently-enforced platform fee configuration.
             </p>
           </div>
-          
+
           <button
             onClick={() => handleTriggerExport('Financial Payout Outward Ledger')}
             className="px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-colors shrink-0"
@@ -939,13 +928,6 @@ export default function OrdersOverview() {
                 <th className="p-4 text-right">Revenue Generated</th>
                 <th className="p-4 text-center">Fulfill Rate</th>
                 <th className="p-4 text-center">Cancel Rate</th>
-                <th className="p-4 text-center">Return Rate</th>
-                <th className="p-4 text-center">Exchange Rate</th>
-                <th className="p-4 text-center">Avg Dispatch Speed</th>
-                <th className="p-4 text-center">Quality Rating</th>
-                <th className="p-4 text-center">Trust Index</th>
-                <th className="p-4 text-center">Risk Grade</th>
-                <th className="p-4 text-center">Ledger Status</th>
                 <th className="p-4 text-right">Commission Split</th>
               </tr>
             </thead>
@@ -954,7 +936,6 @@ export default function OrdersOverview() {
                 <tr key={idx} className="hover:bg-app-bg">
                   <td className="p-4">
                     <span className="font-extrabold text-app-text-primary text-[11px] block">{s.name}</span>
-                    <span className="text-[8.5px] text-slate-500 uppercase tracking-widest font-mono">UID: SEL-{1024 + idx}</span>
                   </td>
                   <td className="p-4">
                     <Link
@@ -974,23 +955,6 @@ export default function OrdersOverview() {
                     </span>
                   </td>
                   <td className="p-4 text-center font-semibold text-rose-500">{s.cancellationRate.toFixed(0)}%</td>
-                  <td className="p-4 text-center font-semibold text-purple-400">{s.returnRate.toFixed(0)}%</td>
-                  <td className="p-4 text-center text-app-text-secondary">{s.exchangeRate.toFixed(0)}%</td>
-                  <td className="p-4 text-center text-app-text-secondary font-medium">{s.avgDeliveryTime}</td>
-                  <td className="p-4 text-center text-amber-400 font-bold">⭐ {s.avgRating}</td>
-                  <td className="p-4 text-center font-mono text-app-text-primary font-bold">{s.trustScore}%</td>
-                  <td className="p-4 text-center">
-                    <span className={`text-[9.5px] font-extrabold px-2 py-0.5 rounded${
-                      s.trustScore > 90 ? 'text-emerald-400 bg-emerald-500/10' : 'text-amber-400 bg-amber-500/10'
-                    }`}>
-                      {s.riskGrade}
-                    </span>
-                  </td>
-                  <td className="p-4 text-center">
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 text-[8px] font-black tracking-wider uppercase">
-                      Payout Ready
-                    </span>
-                  </td>
                   <td className="p-4 text-right font-black text-emerald-400">৳ {s.platformCommission.toLocaleString()}</td>
                 </tr>
               ))}
