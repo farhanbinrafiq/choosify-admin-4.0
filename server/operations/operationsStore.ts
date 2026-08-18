@@ -401,12 +401,17 @@ export const operationsStore = {
   },
 
   hydrate: (snapshot: Partial<typeof state>) => {
+    // Pre-commit audit follow-up: coupons/jobPostings/feeCharges default to
+    // non-empty seed data, so a `?.length` truthy guard here would silently
+    // discard a real, legitimately-empty snapshot (e.g. an admin deleted every
+    // coupon) and resurrect the demo seed rows on next restart. Trust presence
+    // of the field, not its length, exactly like every other array below.
     if (snapshot.orders) state.orders = snapshot.orders;
-    if (snapshot.coupons?.length) state.coupons = snapshot.coupons;
+    if (snapshot.coupons) state.coupons = snapshot.coupons;
     if (snapshot.couponUsage) state.couponUsage = snapshot.couponUsage;
     if (snapshot.reviews) state.reviews = snapshot.reviews;
     if (snapshot.leads) state.leads = snapshot.leads;
-    if (snapshot.jobPostings?.length) state.jobPostings = snapshot.jobPostings;
+    if (snapshot.jobPostings) state.jobPostings = snapshot.jobPostings;
     if (snapshot.jobApplications) state.jobApplications = snapshot.jobApplications;
     if (snapshot.permissions) {
       // Merge so legacy snapshots cannot strip seller/creator CMS-mirror access
@@ -419,7 +424,7 @@ export const operationsStore = {
     }
     if (snapshot.featureFlags) state.featureFlags = snapshot.featureFlags;
     if (snapshot.sellerOffers) state.sellerOffers = snapshot.sellerOffers;
-    if (snapshot.feeCharges?.length) state.feeCharges = snapshot.feeCharges;
+    if (snapshot.feeCharges) state.feeCharges = snapshot.feeCharges;
     if (snapshot.paymentOptionsConfig) state.paymentOptionsConfig = snapshot.paymentOptionsConfig;
     if (snapshot.sellerBookingSettings) state.sellerBookingSettings = snapshot.sellerBookingSettings;
     if (snapshot.returns) state.returns = snapshot.returns;

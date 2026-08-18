@@ -32,7 +32,6 @@ export function buildOperationsSnapshot(): OperationsSnapshot {
 }
 
 export function scheduleOperationsPersist() {
-  if (!useOperationsFirestore) return;
   if (persistTimer) clearTimeout(persistTimer);
   persistTimer = setTimeout(() => {
     saveOperationsSnapshot(buildOperationsSnapshot()).catch((err) => {
@@ -44,7 +43,6 @@ export function scheduleOperationsPersist() {
 export async function ensureOperationsHydrated(): Promise<void> {
   if (hydrated) return;
   hydrated = true;
-  if (!useOperationsFirestore) return;
 
   try {
     const snapshot = await loadOperationsSnapshot();
@@ -53,10 +51,10 @@ export async function ensureOperationsHydrated(): Promise<void> {
       if (snapshot.shipments?.length) {
         shipmentStore.hydrate(snapshot.shipments);
       }
-      console.log('[OperationsPersist] Hydrated from Firestore.');
+      console.log(`[OperationsPersist] Hydrated from ${useOperationsFirestore ? 'Firestore' : 'disk snapshot'}.`);
     } else {
       await saveOperationsSnapshot(buildOperationsSnapshot());
-      console.log('[OperationsPersist] Seeded initial Firestore snapshot.');
+      console.log(`[OperationsPersist] Seeded initial ${useOperationsFirestore ? 'Firestore' : 'disk'} snapshot.`);
     }
   } catch (err) {
     console.error('[OperationsPersist] Hydration failed, using in-memory defaults.', err);

@@ -1,4 +1,6 @@
 import { randomUUID } from 'crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { notifications as notificationsTable } from '../db/schema';
@@ -23,6 +25,57 @@ const state: CommunicationState = {
   broadcasts: [],
   preferences: new Map(),
 };
+
+/**
+ * Sprint 12 pre-beta audit — P0 fix: notifications themselves were migrated to
+ * Postgres in Sprint 10 (see comment below), but admin broadcast messages and
+ * per-user notification preferences (channel opt-in, quiet hours, marketing
+ * opt-in) were left behind in this bare in-memory state with zero persistence
+ * — both silently wiped on every restart. Adds the same disk-snapshot pattern
+ * used everywhere else in the codebase.
+ */
+const DISK_SNAPSHOT_PATH =
+  process.env.COMMUNICATION_MEMORY_SNAPSHOT_PATH?.trim() ||
+  join(process.cwd(), '.data', 'communication-memory-snapshot.json');
+
+let hydrated = false;
+function ensureCommunicationHydrated(): void {
+  if (hydrated) return;
+  hydrated = true;
+  if (!existsSync(DISK_SNAPSHOT_PATH)) return;
+  try {
+    const snap = JSON.parse(readFileSync(DISK_SNAPSHOT_PATH, 'utf8')) as {
+      broadcasts?: Broadcast[];
+      preferences?: Array<[string, CommunicationPreferences]>;
+    };
+    if (snap.broadcasts) state.broadcasts = snap.broadcasts;
+    if (snap.preferences) state.preferences = new Map(snap.preferences);
+    console.log(
+      `[CommunicationMemoryPersist] Hydrated (${state.broadcasts.length} broadcasts, ${state.preferences.size} preference rows).`,
+    );
+  } catch (error) {
+    console.warn('[CommunicationMemoryPersist] Failed to load snapshot:', error);
+  }
+}
+
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+function schedulePersist(): void {
+  if (persistTimer) clearTimeout(persistTimer);
+  persistTimer = setTimeout(() => {
+    try {
+      mkdirSync(dirname(DISK_SNAPSHOT_PATH), { recursive: true });
+      writeFileSync(
+        DISK_SNAPSHOT_PATH,
+        JSON.stringify({ broadcasts: state.broadcasts, preferences: [...state.preferences.entries()] }),
+        'utf8',
+      );
+    } catch (error) {
+      console.error('[CommunicationMemoryPersist] Failed to save snapshot:', error);
+    }
+  }, 300);
+}
+
+ensureCommunicationHydrated();
 
 type NotificationRow = typeof notificationsTable.$inferSelect;
 
@@ -180,6 +233,7 @@ export const communicationStore = {
       updatedAt: nowIso(),
     };
     state.broadcasts.unshift(broadcast);
+    schedulePersist();
     return broadcast;
   },
 
@@ -187,6 +241,7 @@ export const communicationStore = {
     const idx = state.broadcasts.findIndex((b) => b.id === id);
     if (idx < 0) return null;
     state.broadcasts[idx] = { ...state.broadcasts[idx], ...patch, updatedAt: nowIso() };
+    schedulePersist();
     return state.broadcasts[idx];
   },
 
@@ -208,6 +263,7 @@ export const communicationStore = {
       updatedAt: nowIso(),
     };
     state.preferences.set(userId, updated);
+    schedulePersist();
     return updated;
   },
 

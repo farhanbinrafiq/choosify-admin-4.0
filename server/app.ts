@@ -53,12 +53,19 @@ import { entitlementsRouter } from "./entitlements/entitlementsRouter";
 import { partnerApplicationRouter } from "./partnerApplications/partnerApplicationRouter";
 import { navAttentionRouter } from "./dashboard/navAttentionRouter";
 import { backfillLegacyPartnerEntitlementsSnapshot } from "./entitlements/entitlementPersistence";
+import { attachOperationsPersistence, ensureOperationsHydrated } from "./operations/operationsPersistence";
 
 dotenv.config();
 validateEnvironment();
 ensureConversationMemoryHydrated();
 bootstrapConversationEventSubscribers();
 void backfillLegacyPartnerEntitlementsSnapshot();
+
+// Sprint 12 pre-beta audit — P0 fix: this hydrate/persist wiring existed but was
+// never called anywhere, so returns/verifications/reviews/coupons/leads/job
+// postings/seller offers/fee charges were silently wiped on every restart.
+attachOperationsPersistence();
+void ensureOperationsHydrated();
 
 void import('./partnerApplications/partnerApplicationService')
   .then(async ({ ensureLegacyPendingApplicationsProvisioned }) => {

@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client';
 import { sellerProfiles, users } from '../db/schema';
@@ -66,15 +68,52 @@ async function firestoreOrThrow() {
   return firestore;
 }
 
+/**
+ * Sprint 12 pre-beta audit — P0 fix: this snapshot previously ONLY persisted
+ * when OPERATIONS_USE_FIRESTORE=true (loadOperationsSnapshot/saveOperationsSnapshot
+ * both no-op'd otherwise). Unlike every sibling domain (escrow, catalog,
+ * commerce, messaging, payments, ads, moderation — all of which fall back to a
+ * `.data/<domain>-memory-snapshot.json` disk snapshot when Firestore isn't
+ * configured), operationsStore had NO fallback at all — returns, verifications,
+ * reviews, coupons, leads, job postings, seller offers, and fee charges were
+ * silently wiped on every server restart in local/dev/non-Firestore deploys.
+ * This adds the same established disk-snapshot pattern as the fallback.
+ */
+const DISK_SNAPSHOT_PATH =
+  process.env.OPERATIONS_MEMORY_SNAPSHOT_PATH?.trim() ||
+  join(process.cwd(), '.data', 'operations-memory-snapshot.json');
+
+function loadDiskSnapshot(): OperationsSnapshot | null {
+  if (!existsSync(DISK_SNAPSHOT_PATH)) return null;
+  try {
+    return JSON.parse(readFileSync(DISK_SNAPSHOT_PATH, 'utf8')) as OperationsSnapshot;
+  } catch (error) {
+    console.warn('[OperationsPersist] Failed to load disk snapshot:', error);
+    return null;
+  }
+}
+
+function saveDiskSnapshot(snapshot: OperationsSnapshot): void {
+  try {
+    mkdirSync(dirname(DISK_SNAPSHOT_PATH), { recursive: true });
+    writeFileSync(DISK_SNAPSHOT_PATH, JSON.stringify(snapshot), 'utf8');
+  } catch (error) {
+    console.error('[OperationsPersist] Failed to save disk snapshot:', error);
+  }
+}
+
 export async function loadOperationsSnapshot(): Promise<OperationsSnapshot | null> {
-  if (!useOperationsFirestore) return null;
-  return getDocumentById<OperationsSnapshot>('ops_state', DOC_ID);
+  if (useOperationsFirestore) return getDocumentById<OperationsSnapshot>('ops_state', DOC_ID);
+  return loadDiskSnapshot();
 }
 
 export async function saveOperationsSnapshot(snapshot: OperationsSnapshot): Promise<void> {
-  if (!useOperationsFirestore) return;
-  const firestore = await firestoreOrThrow();
-  await firestore.collection('ops_state').doc(DOC_ID).set(snapshot, { merge: true });
+  if (useOperationsFirestore) {
+    const firestore = await firestoreOrThrow();
+    await firestore.collection('ops_state').doc(DOC_ID).set(snapshot, { merge: true });
+    return;
+  }
+  saveDiskSnapshot(snapshot);
 }
 
 export async function loadAdminUser(
