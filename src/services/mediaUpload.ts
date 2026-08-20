@@ -49,7 +49,13 @@ async function uploadViaCloudinaryPreset(file: File, folder = 'choosify/products
   return payload.secure_url;
 }
 
-async function uploadViaCatalogApi(file: File): Promise<string> {
+/** Maps the legacy Cloudinary-style folder ("choosify/products") to a media category. */
+function categoryFromFolder(folder: string): string {
+  const last = folder.split('/').pop() || 'products';
+  return last;
+}
+
+async function uploadViaCatalogApi(file: File, folder: string): Promise<string> {
   const base64Data = await fileToBase64(file);
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   const token = localStorage.getItem('choosify_auth_token');
@@ -64,6 +70,7 @@ async function uploadViaCatalogApi(file: File): Promise<string> {
       fileName: file.name,
       mimeType: file.type || 'image/jpeg',
       data: base64Data,
+      category: categoryFromFolder(folder),
     }),
   });
 
@@ -102,7 +109,7 @@ async function uploadImage(file: File, folder = 'choosify/products'): Promise<st
     }
   }
 
-  return uploadViaCatalogApi(file);
+  return uploadViaCatalogApi(file, folder);
 }
 
 export async function uploadProductImage(file: File): Promise<string> {
