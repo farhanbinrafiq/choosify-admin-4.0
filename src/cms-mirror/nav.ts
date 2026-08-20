@@ -33,6 +33,7 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   orders: '/admin/orders',
   sellerCustomers: '/admin/customers',
   returnsRefunds: '/admin/returns',
+  warrantyClaims: '/admin/warranty-claims',
   adsDealsStudio: '/admin/ads-deals-studio',
   contentStudio: '/admin/guides',
   courierProviders: '/admin/logistics/couriers',
@@ -86,6 +87,7 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/creators-hub') || pathname.startsWith('/admin/creators')) return 'creators';
   if (pathname.startsWith('/admin/creator-hub') || pathname.startsWith('/admin/creator-earnings')) return 'creatorEconomy';
   if (pathname.startsWith('/admin/returns')) return 'returnsRefunds';
+  if (pathname.startsWith('/admin/warranty-claims')) return 'warrantyClaims';
   if (pathname.startsWith('/admin/customers')) return 'sellerCustomers';
   if (pathname.startsWith('/admin/coupons')) return 'promoCodes';
   if (pathname.startsWith('/admin/reviews')) return 'reviews';
@@ -147,6 +149,7 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
     'orders',
     'sellerCustomers',
     'returnsRefunds',
+    'warrantyClaims',
     'promoCodes',
     'messages',
     'notifications',
@@ -218,6 +221,7 @@ export const NAV_DEFS: CmsNavGroup[] = [
     items: [
       { key: 'orders', label: 'Orders Hub', path: PAGE_KEY_TO_PATH.orders },
       { key: 'returnsRefunds', label: 'Returns & Refunds', path: PAGE_KEY_TO_PATH.returnsRefunds },
+      { key: 'warrantyClaims', label: 'Warranty Claims', path: PAGE_KEY_TO_PATH.warrantyClaims },
     ],
   },
   {
@@ -307,6 +311,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   contentStudio: ['Guide Management', 'Manage videos, reels, blogs, and live sessions'],
   messages: ['Messages', 'Unified channels routing hub'],
   returnsRefunds: ['Returns & Refunds', 'Audit customer return complaints and process refunds'],
+  warrantyClaims: ['Warranty Claims', 'Review and resolve customer warranty claims'],
   inventoryStock: ['Inventory & Stock', 'Real-time multi-channel inventory control'],
   reviews: [
     'Platform Admin Review Console',
@@ -384,6 +389,7 @@ export const SELLER_NAV_GROUPS: CmsNavGroup[] = [
       navItem('orders', 'Orders Hub'),
       navItem('sellerCustomers', 'My Customers'),
       navItem('returnsRefunds', 'Returns & Refunds'),
+      navItem('warrantyClaims', 'Warranty Claims'),
       navItem('promoCodes', 'Promo Codes & Vouchers'),
     ],
   },

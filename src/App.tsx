@@ -45,6 +45,7 @@ const FeatureAccessEntitlements = lazy(() => import('./pages/admin/FeatureAccess
 const CreatorsHub = lazy(() => import('./pages/admin/CreatorsHub'));
 const Categories = lazy(() => import('./pages/admin/Categories'));
 const Returns = lazy(() => import('./pages/admin/Returns'));
+const WarrantyClaims = lazy(() => import('./pages/admin/WarrantyClaims'));
 const Brands = lazy(() => import('./pages/admin/Brands'));
 const Recommendations = lazy(() => import('./pages/admin/Recommendations'));
 const Deals = lazy(() => import('./pages/admin/Deals'));
@@ -606,6 +607,19 @@ export default function App() {
                       </MarketplaceAccessGate>
                     </AdminWorkspaceLayout>
                   </ProductVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/warranty-claims"
+              element={
+                <ProtectedRoute>
+                  <AdminWorkspaceLayout>
+                    <Suspense fallback={routeSuspenseFallback}>
+                      <WarrantyClaims />
+                    </Suspense>
+                  </AdminWorkspaceLayout>
                 </ProtectedRoute>
               }
             />
