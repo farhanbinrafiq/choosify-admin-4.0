@@ -15,8 +15,6 @@ export type UserProfileExtras = {
   bio?: string;
   /** Official website for roles without seller_profiles.website. */
   website?: string;
-  passwordResetToken?: string;
-  passwordResetTokenExpiresAt?: string;
   updatedAt: string;
 };
 

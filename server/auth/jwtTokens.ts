@@ -173,6 +173,14 @@ export async function revokeRefreshToken(rawToken: string): Promise<void> {
     .where(and(eq(refreshTokens.tokenHash, tokenHash), isNull(refreshTokens.revokedAt)));
 }
 
+/** Kills every active session for a user — used after a password reset/change so a leaked old session can't survive it. */
+export async function revokeAllRefreshTokensForUser(userId: string): Promise<void> {
+  await db
+    .update(refreshTokens)
+    .set({ revokedAt: new Date() })
+    .where(and(eq(refreshTokens.userId, userId), isNull(refreshTokens.revokedAt)));
+}
+
 export async function hashPassword(password: string): Promise<string> {
   return argon2.hash(password);
 }

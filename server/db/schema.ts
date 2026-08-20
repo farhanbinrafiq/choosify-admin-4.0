@@ -23,6 +23,7 @@ export const users = pgTable('users', {
   emailVerified: boolean('email_verified').notNull().default(false),
   /** Permanent human-readable Choosify User ID (CF-00001…). Never reuse. */
   choosifyUserId: varchar('choosify_user_id', { length: 32 }),
+  avatarUrl: varchar('avatar_url', { length: 700 }),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });
@@ -51,6 +52,47 @@ export const sellerProfiles = pgTable('seller_profiles', {
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
 
+/**
+ * Pre-VPS self-hosting pass — records every file the app-owned media storage
+ * (server/lib/mediaStorage.ts) has ever accepted, whether the bytes live on
+ * local disk or (optionally, legacy) at a Cloudinary URL. Never stores image
+ * binaries — only metadata + a public URL, matching every other durable
+ * table in this schema.
+ */
+export const mediaEnum = pgEnum('media_provider', ['local', 'cloudinary']);
+export const mediaVisibilityEnum = pgEnum('media_visibility', ['public', 'private']);
+export const mediaTypeEnum = pgEnum('media_type', ['image', 'video', 'document']);
+
+export const media = pgTable('media', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  uploadedByUserId: uuid('uploaded_by_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** users | sellers | creators | brands | products | services | reviews | guides | cms | ads | careers | videos | verification | identity-documents | seller-documents | creator-documents | warranty-claims | temporary */
+  category: varchar('category', { length: 32 }).notNull(),
+  /** public: served as a static URL under MEDIA_PUBLIC_BASE_URL. private: never has a static URL — fetched only via the authenticated GET /catalog/media/private/:id route. */
+  visibility: mediaVisibilityEnum('visibility').notNull().default('public'),
+  mediaType: mediaTypeEnum('media_type').notNull().default('image'),
+  /** Loose polymorphic association (e.g. entityType:'product', entityId:'<catalog product id>') — set by the caller after upload when the media gets attached; null right after upload. */
+  relatedEntityType: varchar('related_entity_type', { length: 32 }),
+  relatedEntityId: varchar('related_entity_id', { length: 128 }),
+  provider: mediaEnum('provider').notNull().default('local'),
+  /** Set only when provider = 'local'. Relative to MEDIA_STORAGE_ROOT or PRIVATE_STORAGE_ROOT — never a client-controlled path. */
+  relativePath: varchar('relative_path', { length: 500 }),
+  /** Null for private media — there is deliberately no static URL to leak. */
+  publicUrl: varchar('public_url', { length: 700 }),
+  mimeType: varchar('mime_type', { length: 100 }).notNull(),
+  sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  durationSeconds: integer('duration_seconds'),
+  originalFilename: varchar('original_filename', { length: 255 }),
+  status: varchar('status', { length: 16 }).notNull().default('active'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  uploaderIdx: index('media_uploader_idx').on(table.uploadedByUserId),
+  categoryIdx: index('media_category_idx').on(table.category),
+  entityIdx: index('media_entity_idx').on(table.relatedEntityType, table.relatedEntityId),
+}));
+
 export const refreshTokens = pgTable('refresh_tokens', {
   id: uuid('id').primaryKey().defaultRandom(),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
@@ -59,6 +101,29 @@ export const refreshTokens = pgTable('refresh_tokens', {
   revokedAt: timestamp('revoked_at'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 });
+
+/**
+ * Pre-VPS self-hosting pass — self-service email verification + password
+ * reset tokens. Same shape/convention as refreshTokens (hash-only storage,
+ * one-time-use via consumedAt, real expiry) — deliberately NOT the
+ * userProfileExtras disk-snapshot sidecar, because that sidecar previously
+ * stored the raw reset token in plaintext, and these are genuine bearer
+ * secrets that deserve the same real-table treatment as refresh tokens.
+ */
+export const authTokenTypeEnum = pgEnum('auth_token_type', ['email_verification', 'password_reset']);
+
+export const authTokens = pgTable('auth_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  type: authTokenTypeEnum('type').notNull(),
+  tokenHash: varchar('token_hash', { length: 255 }).notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  consumedAt: timestamp('consumed_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+}, (table) => ({
+  userTypeIdx: index('auth_tokens_user_type_idx').on(table.userId, table.type),
+  tokenHashIdx: index('auth_tokens_token_hash_idx').on(table.tokenHash),
+}));
 
 /** Sprint 10 durability migration — Partner Applications (was in-memory + JSON snapshot). */
 export const partnerApplications = pgTable('partner_applications', {

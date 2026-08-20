@@ -69,6 +69,58 @@ export function validateImageUploadInput(input: UploadValidationInput): {
   return { ok: true, mimeType, fileName, estimatedBytes };
 }
 
+const ALLOWED_VIDEO_MIME_TYPES = new Set(['video/mp4', 'video/webm']);
+const ALLOWED_VIDEO_EXTENSIONS = new Set(['.mp4', '.webm']);
+const DEFAULT_VIDEO_MAX_BYTES = 50 * 1024 * 1024; // 50MB — a deliberate beta-scale ceiling, not a streaming platform
+
+function readMaxVideoUploadBytes(): number {
+  const raw = process.env.VIDEO_UPLOAD_MAX_BYTES;
+  if (!raw?.trim()) return DEFAULT_VIDEO_MAX_BYTES;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_VIDEO_MAX_BYTES;
+  return Math.floor(parsed);
+}
+
+/**
+ * No live upload surface accepts video today (product "video" is a pasted
+ * embed URL — see Phase 9 of the pre-VPS audit). This validator exists so
+ * the storage/validation pipeline is ready the moment a real video-upload
+ * feature is built, without inventing UI that doesn't exist yet.
+ */
+export function validateVideoUploadInput(input: UploadValidationInput): {
+  ok: true;
+  mimeType: string;
+  fileName: string;
+  estimatedBytes: number;
+} | {
+  ok: false;
+  error: string;
+} {
+  const base64Data = input.base64Data?.trim();
+  if (!base64Data) {
+    return { ok: false, error: 'Missing video data' };
+  }
+
+  const mimeType = (input.mimeType || 'video/mp4').trim().toLowerCase();
+  if (!ALLOWED_VIDEO_MIME_TYPES.has(mimeType)) {
+    return { ok: false, error: 'Unsupported video type. Upload MP4 or WebM.' };
+  }
+
+  const fileName = (input.fileName || 'video.mp4').trim();
+  const extension = extensionFromFileName(fileName);
+  if (!extension || !ALLOWED_VIDEO_EXTENSIONS.has(extension)) {
+    return { ok: false, error: 'Unsupported video file extension. Use .mp4 or .webm.' };
+  }
+
+  const estimatedBytes = estimateBase64Bytes(base64Data);
+  const maxBytes = readMaxVideoUploadBytes();
+  if (estimatedBytes > maxBytes) {
+    return { ok: false, error: `Video exceeds the maximum upload size of ${Math.round(maxBytes / (1024 * 1024))}MB` };
+  }
+
+  return { ok: true, mimeType, fileName, estimatedBytes };
+}
+
 const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
   'application/pdf',
   'application/msword',

@@ -54,6 +54,7 @@ import { partnerApplicationRouter } from "./partnerApplications/partnerApplicati
 import { navAttentionRouter } from "./dashboard/navAttentionRouter";
 import { backfillLegacyPartnerEntitlementsSnapshot } from "./entitlements/entitlementPersistence";
 import { attachOperationsPersistence, ensureOperationsHydrated } from "./operations/operationsPersistence";
+import { getMediaStaticMount } from "./lib/mediaStorage";
 
 dotenv.config();
 validateEnvironment();
@@ -115,6 +116,15 @@ export function createApp(): Express {
   app.use(healthRouter);
   app.use(diagnosticsRouter);
 
+  // Pre-VPS self-hosting pass — serves app-owned media locally for dev/small
+  // deployments. On a real VPS, point Nginx at MEDIA_STORAGE_ROOT directly
+  // and this becomes a harmless fallback rather than the hot path.
+  // fallthrough:false is deliberate — without it, a missing/deleted file
+  // under this prefix silently falls through to the SPA catch-all below and
+  // returns 200 + index.html instead of a real 404.
+  const mediaMount = getMediaStaticMount();
+  app.use(mediaMount.urlPrefix, express.static(mediaMount.root, { fallthrough: false, maxAge: "7d" }));
+
   // Meta webhooks need the raw body for signature verification (before JSON parser)
   app.post(
     "/api/webhooks/meta",
@@ -132,7 +142,7 @@ export function createApp(): Express {
   // Authenticated reads (/auth/me, impersonation status/history, directory) use
   // the admin policy so a valid session is not flushed by login-tier limits.
   const AUTH_STRICT_PATH =
-    /^\/api\/v1\/auth\/(login|register|seller-register|partner-apply|upgrade-to-seller|refresh|logout|dev-login|password-reset-request|change-password)(\/|$)/i;
+    /^\/api\/v1\/auth\/(login|register|seller-register|partner-apply|upgrade-to-seller|refresh|logout|dev-login|password-reset-request|reset-password|verify-email|resend-verification|change-password)(\/|$)/i;
   app.use("/api/v1/auth", (req, res, next) => {
     if (AUTH_STRICT_PATH.test(req.originalUrl.split("?")[0] || "")) {
       return authRateLimit(req, res, next);

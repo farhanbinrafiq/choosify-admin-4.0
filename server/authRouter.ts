@@ -12,12 +12,15 @@ import {
   issueRefreshToken,
   isExpiredJwtError,
   readRefreshTokenCookie,
+  revokeAllRefreshTokensForUser,
   revokeRefreshToken,
   rotateRefreshToken,
   setRefreshTokenCookie,
   signAccessToken,
   verifyPassword,
 } from './auth/jwtTokens';
+import { consumeAuthToken, issueAuthToken } from './auth/authTokens';
+import { sendPasswordChangedEmail, sendPasswordResetEmail, sendVerificationEmail } from './email/emailService';
 import {
   allocateNextChoosifyUserId,
   backfillChoosifyUserIds,
@@ -277,6 +280,19 @@ authRouter.post(
       choosifyUserId,
     });
 
+    // Email verification is informational only — never blocks registration
+    // or login. A slow/unconfigured SMTP send must not fail account creation.
+    try {
+      const { rawToken } = await issueAuthToken(uid, 'email_verification');
+      await sendVerificationEmail(normalizedEmail, rawToken);
+    } catch (error) {
+      Logger.warn('verification email failed to send', {
+        requestId: req.requestId,
+        uid,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     res.status(201).json({
       uid,
       email: normalizedEmail,
@@ -292,6 +308,54 @@ authRouter.post(
       error: error instanceof Error ? error.message : String(error),
     });
     res.status(500).json({ error: 'Unable to create account' });
+  }
+});
+
+/**
+ * Self-service email verification. The token is one-time-use and only
+ * valid for the email_verification type (a password-reset token cannot be
+ * replayed here) — see server/auth/authTokens.ts.
+ */
+authRouter.post('/auth/verify-email', async (req, res) => {
+  const token = String(req.body?.token || '').trim();
+  if (!token) {
+    res.status(400).json({ success: false, error: 'token is required' });
+    return;
+  }
+  try {
+    const userId = await consumeAuthToken(token, 'email_verification');
+    if (!userId) {
+      res.status(400).json({ success: false, error: 'Invalid or expired verification link.' });
+      return;
+    }
+    await db.update(users).set({ emailVerified: true, updatedAt: new Date() }).where(eq(users.id, userId));
+    Logger.audit('auth.email_verified', { userId, ip: req.ip });
+    res.json({ success: true });
+  } catch (error) {
+    Logger.warn('verify-email failed', { requestId: req.requestId, error: error instanceof Error ? error.message : String(error) });
+    res.status(500).json({ success: false, error: 'Unable to verify email' });
+  }
+});
+
+/** Re-sends a fresh verification link for the currently authenticated account. Generic response either way — no account-existence signal beyond "you're logged in." */
+authRouter.post('/auth/resend-verification', authenticateRequest, async (req, res) => {
+  try {
+    const rows = await db.select().from(users).where(eq(users.id, req.userId!)).limit(1);
+    const user = rows[0];
+    if (!user) {
+      res.status(404).json({ success: false, error: 'Account not found' });
+      return;
+    }
+    if (user.emailVerified) {
+      res.json({ success: true, message: 'Email is already verified.' });
+      return;
+    }
+    const { rawToken } = await issueAuthToken(user.id, 'email_verification');
+    await sendVerificationEmail(user.email, rawToken);
+    res.json({ success: true, message: 'Verification email sent.' });
+  } catch (error) {
+    Logger.warn('resend-verification failed', { requestId: req.requestId, error: error instanceof Error ? error.message : String(error) });
+    res.status(500).json({ success: false, error: 'Unable to resend verification email' });
   }
 });
 
@@ -434,6 +498,13 @@ authRouter.get('/auth/me', async (req, res) => {
       email: user.email,
       role: user.role,
     });
+    let avatarUrl: string | undefined;
+    try {
+      const userRows = await db.select({ avatarUrl: users.avatarUrl }).from(users).where(eq(users.id, user.uid)).limit(1);
+      avatarUrl = userRows[0]?.avatarUrl || undefined;
+    } catch {
+      /* avatarUrl is optional */
+    }
     res.json({
       uid: user.uid,
       email: user.email,
@@ -446,6 +517,7 @@ authRouter.get('/auth/me', async (req, res) => {
       ...(extras?.username && { username: extras.username }),
       ...(website && { website }),
       ...(extras?.bio && { bio: extras.bio }),
+      ...(avatarUrl && { avatarUrl }),
     });
   } catch (error) {
     const abuse = recordFailedAuthAttempt(req.ip, req.originalUrl);
@@ -802,17 +874,29 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
         .trim()
         .slice(0, 2000)
     : undefined;
+  const hasAvatarUrl = Object.prototype.hasOwnProperty.call(req.body || {}, 'avatarUrl');
+  const avatarUrl = hasAvatarUrl
+    ? String(req.body?.avatarUrl || '')
+        .trim()
+        .slice(0, 700)
+    : undefined;
 
   if (
     displayName === undefined &&
     username === undefined &&
     website === undefined &&
-    bio === undefined
+    bio === undefined &&
+    avatarUrl === undefined
   ) {
     res.status(400).json({
       success: false,
-      error: 'Provide at least one of displayName, username, website, bio',
+      error: 'Provide at least one of displayName, username, website, bio, avatarUrl',
     });
+    return;
+  }
+
+  if (avatarUrl !== undefined && avatarUrl && !/^\/media\/|^https?:\/\//i.test(avatarUrl)) {
+    res.status(400).json({ success: false, error: 'avatarUrl must be a Choosify media URL' });
     return;
   }
 
@@ -899,6 +983,14 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
       }
     }
 
+    if (avatarUrl !== undefined) {
+      await db
+        .update(users)
+        .set({ avatarUrl: avatarUrl || null, updatedAt: now })
+        .where(eq(users.id, targetUserId));
+      Logger.audit('auth.profile_avatar_update', { actorId, targetUserId, cleared: !avatarUrl });
+    }
+
     if (username !== undefined || website !== undefined || bio !== undefined) {
       nextExtras = upsertUserProfileExtras({
         userId: targetUserId,
@@ -948,6 +1040,7 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
         username: fresh?.username || '',
         website: fresh?.website || website || '',
         bio: fresh?.bio || '',
+        avatarUrl: avatarUrl !== undefined ? avatarUrl : undefined,
         lastNameChangedAt: fresh?.lastNameChangedAt,
         changeNextLogin: fresh?.changeNextLogin === true,
       },
@@ -962,14 +1055,22 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
 });
 
 /**
- * Public password reset request endpoint.
- * User provides email; system looks up user and creates a support/reset request record.
- * Never reveals whether email exists (always returns success message).
+ * Public self-service password reset request. Always returns the same
+ * generic response regardless of whether the email exists — no account-
+ * enumeration signal. Real, secure, one-time, hash-only-stored token (see
+ * server/auth/authTokens.ts) — never returned in the response, only ever
+ * emailed. Rate-limited alongside the other credential-mutation auth routes
+ * (see AUTH_STRICT_PATH in server/app.ts).
  */
 authRouter.post('/auth/password-reset-request', async (req, res) => {
   const email = String(req.body?.email || '')
     .trim()
     .toLowerCase();
+
+  const genericResponse = {
+    success: true,
+    message: 'If an account exists with this email, a password reset link has been sent.',
+  };
 
   if (!email || !email.includes('@')) {
     res.status(400).json({ success: false, error: 'Valid email is required' });
@@ -981,17 +1082,7 @@ authRouter.post('/auth/password-reset-request', async (req, res) => {
     const user = rows[0];
 
     if (user) {
-      const resetToken = randomBytes(32).toString('hex');
-      const resetTokenExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-      const extras = getUserProfileExtras(user.id);
-      upsertUserProfileExtras({
-        userId: user.id,
-        lastNameChangedAt: extras?.lastNameChangedAt,
-        changeNextLogin: extras?.changeNextLogin,
-        passwordResetToken: resetToken,
-        passwordResetTokenExpiresAt: resetTokenExpiresAt,
-      });
+      const { rawToken } = await issueAuthToken(user.id, 'password_reset');
 
       Logger.audit('auth.password_reset_requested', {
         userId: user.id,
@@ -1006,23 +1097,61 @@ authRouter.post('/auth/password-reset-request', async (req, res) => {
         producer: 'authRouter',
         aggregateId: user.id,
         actor: user.id,
-        payload: { email: user.email, resetToken },
+        payload: { email: user.email },
       });
+
+      await sendPasswordResetEmail(user.email, rawToken);
     }
 
-    res.json({
-      success: true,
-      message: 'If an account exists with this email, password reset assistance has been requested. Choosify Support/Admin will assist.',
-    });
+    res.json(genericResponse);
   } catch (error) {
     Logger.warn('password-reset-request failed', {
       requestId: req.requestId,
       error: error instanceof Error ? error.message : String(error),
     });
-    res.json({
-      success: true,
-      message: 'If an account exists with this email, password reset assistance has been requested. Choosify Support/Admin will assist.',
-    });
+    res.json(genericResponse);
+  }
+});
+
+/**
+ * Consumes a password-reset token: validates hash/type/expiry/one-time-use
+ * (server/auth/authTokens.ts), sets the new password, revokes every active
+ * session for the account (a reset is exactly the moment an old, possibly-
+ * compromised session must not survive), and emails a security notification.
+ */
+authRouter.post('/auth/reset-password', async (req, res) => {
+  const token = String(req.body?.token || '').trim();
+  const newPassword = String(req.body?.newPassword || '');
+
+  if (!token) {
+    res.status(400).json({ success: false, error: 'token is required' });
+    return;
+  }
+  if (newPassword.length < 8) {
+    res.status(400).json({ success: false, error: 'New password must be at least 8 characters' });
+    return;
+  }
+
+  try {
+    const userId = await consumeAuthToken(token, 'password_reset');
+    if (!userId) {
+      res.status(400).json({ success: false, error: 'This reset link is invalid or has expired. Request a new one.' });
+      return;
+    }
+
+    const passwordHash = await hashPassword(newPassword);
+    await db.update(users).set({ passwordHash, updatedAt: new Date() }).where(eq(users.id, userId));
+    await revokeAllRefreshTokensForUser(userId);
+    clearRefreshTokenCookie(res);
+
+    const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    Logger.audit('auth.password_reset_completed', { userId, ip: req.ip });
+    if (rows[0]) await sendPasswordChangedEmail(rows[0].email);
+
+    res.json({ success: true, message: 'Password reset. Sign in with your new password.' });
+  } catch (error) {
+    Logger.warn('reset-password failed', { requestId: req.requestId, error: error instanceof Error ? error.message : String(error) });
+    res.status(500).json({ success: false, error: 'Unable to reset password' });
   }
 });
 
