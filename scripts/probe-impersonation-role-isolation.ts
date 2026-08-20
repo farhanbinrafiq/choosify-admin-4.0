@@ -106,8 +106,15 @@ async function main() {
     localStorage.removeItem('choosify_impersonation_original_token');
   });
   await page.goto(`${BASE}/admin/dashboard`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(2200);
-  const restoredText = await dashText();
+  // Poll instead of a fixed wait: the CMS-mirror dashboard's own client-side
+  // fetches (nav-attention counts, platform stats) can take a few seconds,
+  // and a too-tight fixed timeout here samples the page mid-render.
+  let restoredText = '';
+  for (let i = 0; i < 8; i++) {
+    await page.waitForTimeout(750);
+    restoredText = await dashText();
+    if (/Platform Command Center/i.test(restoredText)) break;
+  }
   assert(/Platform Command Center/i.test(restoredText), 'Exit impersonation restores Platform Command Center for Admin');
   assert(/GMV/i.test(restoredText), 'Exit impersonation restores GMV visibility for Admin');
 
