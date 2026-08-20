@@ -115,6 +115,10 @@ export interface CatalogBrand {
   claimStatus: 'community' | 'pending' | 'verified';
   followers: number;
   ratings: number;
+  /** Optional rating sub-scores shown on brand comparison. Falls back to `ratings` when absent. */
+  qualityScore?: number;
+  valueScore?: number;
+  supportScore?: number;
   featuredFlag: boolean;
   sponsoredFlag: boolean;
   /** Owning seller user id when brand is seller-managed; omitted for platform/legacy rows. */
@@ -195,6 +199,11 @@ export interface CatalogProduct {
   /** Optional seller/catalog SKU — coexists with productReferenceId; not a substitute for it. */
   sku?: string;
   status: CatalogPublishStatus;
+  /** Warranty configuration set by the seller. Orders snapshot these at purchase time. */
+  warrantyMonths?: number;
+  warrantyType?: string;
+  warrantyProvider?: string;
+  warrantyTerms?: string;
   tags: string[];
   isDeal: boolean;
   dealType?: 'flash' | 'seasonal' | 'brand' | 'promo' | 'clearance';

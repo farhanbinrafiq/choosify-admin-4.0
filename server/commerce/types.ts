@@ -55,6 +55,20 @@ export type CommerceOrderItemSnapshot = {
   selectedOptions?: Record<string, string>;
   taxAmount?: number;
   deliveryShare?: number;
+  /**
+   * Warranty terms snapshotted from the product AT THE MOMENT OF PURCHASE.
+   * Immutable afterward — a seller later editing the product's warranty
+   * config must never change what a past buyer is entitled to. Absent when
+   * the product had no warranty configured at purchase time.
+   */
+  warrantyMonthsAtPurchase?: number;
+  warrantyTypeAtPurchase?: string;
+  warrantyProviderAtPurchase?: string;
+  warrantyTermsSnapshot?: string;
+  /** Set once, at delivery (see order fulfillment); ISO date. */
+  warrantyStartsAt?: string;
+  /** Derived from warrantyStartsAt + warrantyMonthsAtPurchase; ISO date. */
+  warrantyExpiresAt?: string;
 };
 
 /** Product Order lifecycle (ES-005 §27) + cancelled branch (ES-005 §33). */

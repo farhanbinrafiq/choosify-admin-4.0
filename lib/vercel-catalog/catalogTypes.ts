@@ -120,6 +120,10 @@ export interface CatalogBrand {
   claimStatus: 'community' | 'pending' | 'verified';
   followers: number;
   ratings: number;
+  /** Optional rating sub-scores shown on brand comparison. Falls back to `ratings` when absent. */
+  qualityScore?: number;
+  valueScore?: number;
+  supportScore?: number;
   featuredFlag: boolean;
   sponsoredFlag: boolean;
   /** Owning seller user id when brand is seller-managed; omitted for platform/legacy rows. */
@@ -178,6 +182,11 @@ export interface CatalogProduct {
   originalPrice?: number;
   stock: number;
   status: CatalogPublishStatus;
+  /** Warranty configuration set by the seller. Orders snapshot these at purchase time — see CommerceOrderItemSnapshot. */
+  warrantyMonths?: number;
+  warrantyType?: string;
+  warrantyProvider?: string;
+  warrantyTerms?: string;
   tags: string[];
   isDeal: boolean;
   dealType?: 'flash' | 'seasonal' | 'brand' | 'promo' | 'clearance';

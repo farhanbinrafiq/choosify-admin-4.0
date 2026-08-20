@@ -234,6 +234,93 @@ export async function ensureOrderConversation(
   return { conversation: saved, created: true };
 }
 
+export function claimReconcileKey(claimId: string): string {
+  return `claim:${claimId}`;
+}
+
+type EnsureClaimInput = {
+  claimId: string;
+  orderId: string;
+  consumerId: string;
+  sellerId: string;
+  brandId: string;
+  actor?: string;
+};
+
+/**
+ * Idempotent Warranty Claim → Conversation creation. Mirrors
+ * ensureOrderConversation exactly — one Conversation per claim, race-safe
+ * double-check-then-create, system message + event-emit tail.
+ */
+export async function ensureClaimConversation(
+  input: EnsureClaimInput,
+): Promise<{ conversation: CommerceConversation; created: boolean }> {
+  const key = claimReconcileKey(input.claimId);
+  const existing = await getConversationByReconcileKey(key);
+  if (existing) {
+    return { conversation: existing, created: false };
+  }
+
+  const now = nowIso();
+  const conversation: CommerceConversation = {
+    id: newId('conv'),
+    contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
+    status: CONVERSATION_STATUSES.ACTIVE,
+    consumerId: input.consumerId,
+    sellerId: input.sellerId,
+    brandId: input.brandId,
+    orderId: input.orderId,
+    sourceChannel: 'platform',
+    participants: [
+      { userId: input.consumerId, role: 'consumer' },
+      { userId: input.sellerId, role: 'seller' },
+    ],
+    createdAt: now,
+    updatedAt: now,
+    reconcileKey: key,
+    metadata: { consumerInitiated: false, warrantyClaimId: input.claimId },
+  };
+
+  // Race-safe: re-check after build
+  const raced = await getConversationByReconcileKey(key);
+  if (raced) return { conversation: raced, created: false };
+
+  try {
+    const { ensureEntityReferenceId } = await import('../../referenceIds/referenceIdService');
+    conversation.conversationReferenceId = await ensureEntityReferenceId({
+      entityType: 'conversation',
+      internalId: conversation.id,
+    });
+  } catch {
+    /* backfill can repair */
+  }
+
+  const saved = await saveConversation(conversation);
+  await mirrorConversationToOmni(saved);
+
+  const systemMsg = await persistMessageInternal({
+    conversation: saved,
+    senderId: 'system',
+    senderRole: 'system',
+    body: `Warranty claim opened for order ${input.orderId}.`,
+    messageType: MESSAGE_TYPES.SYSTEM,
+    metadata: { orderId: input.orderId, warrantyClaimId: input.claimId },
+  });
+
+  emitMessaging('ConversationCreated', saved.id, input.actor || input.consumerId, {
+    conversationId: saved.id,
+    orderId: input.orderId,
+    brandId: input.brandId,
+    sellerId: input.sellerId,
+    consumerId: input.consumerId,
+    contextType: saved.contextType,
+    warrantyClaimId: input.claimId,
+    systemMessageId: systemMsg.id,
+  });
+
+  return { conversation: saved, created: true };
+}
+
 export async function ensureBookingConversation(input: {
   bookingRequestId: string;
   orderId?: string;

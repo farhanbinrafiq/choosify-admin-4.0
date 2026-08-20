@@ -43,6 +43,7 @@ export interface OperationsSnapshot {
   sellerBookingSettings?: Record<string, OpsSellerBookingSettings>;
   returns?: OpsReturnRequest[];
   verifications?: OpsVerificationRequest[];
+  warrantyClaims?: import('./types').OpsWarrantyClaim[];
 }
 
 export interface OpsSellerOfferRow {

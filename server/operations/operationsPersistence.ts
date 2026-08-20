@@ -28,6 +28,7 @@ export function buildOperationsSnapshot(): OperationsSnapshot {
     sellerBookingSettings: operationsStore.getAllSellerBookingSettings(),
     returns: operationsStore.listReturns(),
     verifications: operationsStore.listVerifications(),
+    warrantyClaims: operationsStore.listWarrantyClaims(),
   };
 }
 

@@ -138,6 +138,7 @@ export interface OpsReview {
   storeName: string;
   rating: number;
   comment: string;
+  photos?: string[];
   status: OpsReviewStatus;
   reports: number;
   flags?: string[];
@@ -302,6 +303,67 @@ export interface OpsReturnRequest {
   buyerId: string;
   /** Set when linked via dispute escalation */
   disputeId?: string;
+}
+
+/** Warranty claims — mirrors the OpsReturnRequest shape/workflow. */
+export type OpsWarrantyClaimStatus =
+  | 'submitted'
+  | 'acknowledged'
+  | 'more_info_required'
+  | 'approved'
+  | 'rejected'
+  | 'service_in_progress'
+  | 'resolved'
+  | 'cancelled';
+
+export const OPEN_WARRANTY_CLAIM_STATUSES = new Set<OpsWarrantyClaimStatus>([
+  'submitted',
+  'acknowledged',
+  'more_info_required',
+  'approved',
+  'service_in_progress',
+]);
+
+export type OpsWarrantyClaimIssueType =
+  | 'not_powering_on'
+  | 'manufacturing_defect'
+  | 'physical_damage'
+  | 'battery_charging'
+  | 'performance_software'
+  | 'missing_damaged_accessory'
+  | 'other';
+
+export interface OpsWarrantyClaim {
+  id: string;
+  /** Permanent Choosify Warranty Claim Reference ID (WC-#####). */
+  referenceId?: string;
+  orderId: string;
+  orderItemId: string;
+  consumerId: string;
+  sellerId: string;
+  brandId: string;
+  productId: string;
+  /** Warranty snapshot copied from the order item at claim-open time — never re-derived from the live product. */
+  warrantyMonthsAtPurchase?: number;
+  warrantyTypeAtPurchase?: string;
+  warrantyProviderAtPurchase?: string;
+  warrantyTermsSnapshot?: string;
+  warrantyStartsAt?: string;
+  warrantyExpiresAt?: string;
+  issueType: OpsWarrantyClaimIssueType;
+  description: string;
+  /** media ids from the canonical media service, category `warranty-claims` */
+  attachmentMediaIds: string[];
+  status: OpsWarrantyClaimStatus;
+  sellerResponse?: string;
+  resolutionNotes?: string;
+  conversationId?: string;
+  submittedAt: string;
+  acknowledgedAt?: string;
+  resolvedAt?: string;
+  cancelledAt?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** Mirrors admin TrustContext VerificationRequest (+ entityType for brand|creator). */

@@ -156,6 +156,9 @@ const brandSchema = z.object({
   claimStatus: z.enum(['community', 'pending', 'verified']),
   followers: z.number().nonnegative(),
   ratings: z.number().min(0).max(5),
+  qualityScore: z.number().min(0).max(5).optional(),
+  valueScore: z.number().min(0).max(5).optional(),
+  supportScore: z.number().min(0).max(5).optional(),
   featuredFlag: z.boolean(),
   sponsoredFlag: z.boolean(),
   /** Owning seller user id when brand is seller-managed; omitted for platform/legacy rows. */
@@ -214,6 +217,10 @@ const productSchema = z.object({
   stock: z.number().int(),
   /** `live` = legacy Active; also accepts ES-005 states. */
   status: z.enum(['draft', 'live', 'active', 'out_of_stock', 'suspended', 'archived']),
+  warrantyMonths: z.number().int().nonnegative().optional(),
+  warrantyType: z.string().optional(),
+  warrantyProvider: z.string().optional(),
+  warrantyTerms: z.string().optional(),
   tags: z.array(z.string()),
   isDeal: z.boolean(),
   dealType: z.enum(['flash', 'seasonal', 'brand', 'promo', 'clearance']).optional(),
@@ -394,6 +401,18 @@ export const normalizeBrandInput = (
     claimStatus: claimStatusRaw === 'verified' || claimStatusRaw === 'pending' ? claimStatusRaw : 'community',
     followers: toNumber(raw.followers, existing?.followers ?? 0),
     ratings: Math.max(0, Math.min(5, toNumber(raw.ratings, existing?.ratings ?? 0))),
+    qualityScore:
+      raw.qualityScore !== undefined
+        ? Math.max(0, Math.min(5, toNumber(raw.qualityScore, existing?.qualityScore ?? 0)))
+        : existing?.qualityScore,
+    valueScore:
+      raw.valueScore !== undefined
+        ? Math.max(0, Math.min(5, toNumber(raw.valueScore, existing?.valueScore ?? 0)))
+        : existing?.valueScore,
+    supportScore:
+      raw.supportScore !== undefined
+        ? Math.max(0, Math.min(5, toNumber(raw.supportScore, existing?.supportScore ?? 0)))
+        : existing?.supportScore,
     featuredFlag: toBoolean(raw.featuredFlag, existing?.featuredFlag ?? false),
     sponsoredFlag: toBoolean(raw.sponsoredFlag, existing?.sponsoredFlag ?? false),
     sellerId: toString(raw.sellerId, existing?.sellerId ?? '') || undefined,
@@ -545,6 +564,11 @@ export const normalizeProductInput = (
         : existing?.originalPrice,
     stock,
     status,
+    warrantyMonths:
+      raw.warrantyMonths !== undefined ? toNumber(raw.warrantyMonths) : existing?.warrantyMonths,
+    warrantyType: toString(raw.warrantyType, existing?.warrantyType) || undefined,
+    warrantyProvider: toString(raw.warrantyProvider, existing?.warrantyProvider) || undefined,
+    warrantyTerms: toString(raw.warrantyTerms, existing?.warrantyTerms) || undefined,
     tags: toStringArray(raw.tags).length > 0 ? toStringArray(raw.tags) : existing?.tags ?? [],
     isDeal: toBoolean(raw.isDeal, existing?.isDeal ?? false),
     dealType: (() => {

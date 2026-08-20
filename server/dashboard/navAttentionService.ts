@@ -9,6 +9,7 @@ import {
 import { moderationStore } from '../moderation/moderationStore';
 import { MODERATION_STATUSES } from '../moderation/moderationTypes';
 import { operationsStore } from '../operations/operationsStore';
+import { OPEN_WARRANTY_CLAIM_STATUSES } from '../operations/types';
 import { partnerApplicationStore } from '../partnerApplications/partnerApplicationStore';
 import { featureRequestStore } from '../entitlements/featureRequestStore';
 import { hasRole } from '../permissions/authorization';
@@ -216,6 +217,16 @@ export async function buildNavAttention(actor: {
       'returnsRefunds',
       sellerReturns,
       qty(sellerReturns, 'return/refund request needs action', 'return/refund requests need action'),
+    );
+
+    const sellerWarrantyClaims = operationsStore
+      .listWarrantyClaims({ sellerId: userId })
+      .filter((c) => OPEN_WARRANTY_CLAIM_STATUSES.has(c.status)).length;
+    setCount(
+      out,
+      'warrantyClaims',
+      sellerWarrantyClaims,
+      qty(sellerWarrantyClaims, 'warranty claim needs action', 'warranty claims need action'),
     );
 
     const unreadConvos = await countUnreadConversations(userId, role);

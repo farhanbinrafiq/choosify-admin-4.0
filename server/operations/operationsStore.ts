@@ -7,6 +7,7 @@ import type {
   OpsLead,
   OpsPaymentOptionsConfig,
   OpsReturnRequest,
+  OpsWarrantyClaim,
   OpsReview,
   OpsSellerBookingSettings,
   OpsStorefrontOrder,
@@ -15,6 +16,7 @@ import type {
   OpsVerificationReview,
   RolePermissionsMap,
 } from './types';
+import { OPEN_WARRANTY_CLAIM_STATUSES } from './types';
 
 const nowIso = () => new Date().toISOString();
 
@@ -359,6 +361,7 @@ const state: {
   sellerBookingSettings: Record<string, OpsSellerBookingSettings>;
   returns: OpsReturnRequest[];
   verifications: OpsVerificationRequest[];
+  warrantyClaims: OpsWarrantyClaim[];
 } = {
   orders: [],
   coupons: defaultCoupons(),
@@ -373,6 +376,7 @@ const state: {
   sellerBookingSettings: {},
   returns: [],
   verifications: [],
+  warrantyClaims: [],
   featureFlags: {
     creator_hub: true,
     compare_tool: true,
@@ -429,6 +433,7 @@ export const operationsStore = {
     if (snapshot.sellerBookingSettings) state.sellerBookingSettings = snapshot.sellerBookingSettings;
     if (snapshot.returns) state.returns = snapshot.returns;
     if (snapshot.verifications) state.verifications = snapshot.verifications as OpsVerificationRequest[];
+    if (snapshot.warrantyClaims) state.warrantyClaims = snapshot.warrantyClaims;
   },
 
   listCouponUsage: () => [...state.couponUsage],
@@ -894,6 +899,48 @@ export const operationsStore = {
     state.returns[idx] = { ...state.returns[idx], ...patch, updatedAt: nowIso() };
     touch();
     return state.returns[idx];
+  },
+
+  listWarrantyClaims: (filter?: { consumerId?: string; sellerId?: string; orderItemId?: string; status?: string }) => {
+    let rows = [...state.warrantyClaims].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    if (filter?.consumerId) rows = rows.filter((row) => row.consumerId === filter.consumerId);
+    if (filter?.sellerId) rows = rows.filter((row) => row.sellerId === filter.sellerId);
+    if (filter?.orderItemId) rows = rows.filter((row) => row.orderItemId === filter.orderItemId);
+    if (filter?.status) rows = rows.filter((row) => row.status.toLowerCase() === filter.status!.toLowerCase());
+    return rows;
+  },
+  getWarrantyClaim: (id: string) => state.warrantyClaims.find((row) => row.id === id) ?? null,
+  /** Only one ACTIVE (open) claim may exist per order item at a time. */
+  getActiveWarrantyClaimForItem: (orderItemId: string) =>
+    state.warrantyClaims.find(
+      (row) => row.orderItemId === orderItemId && OPEN_WARRANTY_CLAIM_STATUSES.has(row.status),
+    ) ?? null,
+  createWarrantyClaim: (
+    payload: Omit<OpsWarrantyClaim, 'id' | 'createdAt' | 'updatedAt' | 'submittedAt'> & {
+      id?: string;
+      createdAt?: string;
+      updatedAt?: string;
+      submittedAt?: string;
+    },
+  ) => {
+    const ts = nowIso();
+    const row: OpsWarrantyClaim = {
+      ...payload,
+      id: payload.id || `WC-${Date.now()}`,
+      submittedAt: payload.submittedAt || ts,
+      createdAt: payload.createdAt || ts,
+      updatedAt: payload.updatedAt || ts,
+    };
+    state.warrantyClaims.unshift(row);
+    touch();
+    return row;
+  },
+  updateWarrantyClaim: (id: string, patch: Partial<OpsWarrantyClaim>) => {
+    const idx = state.warrantyClaims.findIndex((row) => row.id === id);
+    if (idx < 0) return null;
+    state.warrantyClaims[idx] = { ...state.warrantyClaims[idx], ...patch, updatedAt: nowIso() };
+    touch();
+    return state.warrantyClaims[idx];
   },
 
   listVerifications: (filter?: {

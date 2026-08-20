@@ -19,6 +19,7 @@ import type {
   OpsStorefrontOrder,
   OpsVerificationDocument,
   OpsVerificationRequest,
+  OpsWarrantyClaim,
   PermissionKey,
 } from './operations/types';
 import { validate } from './middleware/validate';
@@ -187,8 +188,12 @@ async function recomputeOrderPricingServerSide(
       const sub = (rawSub && typeof rawSub === 'object' ? rawSub : {}) as Record<string, unknown>;
       const rawItems = Array.isArray(sub.items) ? sub.items : [];
       const items = await Promise.all(
-        rawItems.map(async (rawItem) => {
+        rawItems.map(async (rawItem, itemIndex) => {
           const item = (rawItem && typeof rawItem === 'object' ? rawItem : {}) as Record<string, unknown>;
+          const itemId =
+            typeof item.itemId === 'string' && item.itemId
+              ? item.itemId
+              : `item-${Date.now().toString(36)}-${itemIndex}`;
           // Pre-commit audit follow-up: live UAT found a real product whose
           // catalog id is numeric (e.g. 24, not "24") — a strict `typeof ===
           // 'string'` check silently discarded it as empty, turning a genuine
@@ -202,11 +207,39 @@ async function recomputeOrderPricingServerSide(
 
           let realPrice = 0;
           let realTitle = typeof item.productTitle === 'string' ? item.productTitle : '';
+          // Warranty terms are snapshotted from the product AT THE MOMENT OF
+          // PURCHASE (server-side, never client-supplied) — a seller later
+          // editing the product's warranty config must never change what a
+          // past buyer is entitled to. warrantyStartsAt defaults to the order
+          // date here as the "purchase date" fallback; it is overwritten with
+          // the real delivery date by POST .../mark-delivered once shipped.
+          let warrantySnapshot: {
+            warrantyMonthsAtPurchase?: number;
+            warrantyTypeAtPurchase?: string;
+            warrantyProviderAtPurchase?: string;
+            warrantyTermsSnapshot?: string;
+            warrantyStartsAt?: string;
+            warrantyExpiresAt?: string;
+          } = {};
           if (productId) {
             const product = await catalogStore.getProduct(productId);
             if (!product) throw new Error(`Product ${productId} no longer exists`);
             realPrice = product.price;
             realTitle = product.title;
+            if (product.warrantyMonths && product.warrantyMonths > 0) {
+              const startsAt = new Date().toISOString();
+              const expiresAt = new Date(
+                Date.now() + product.warrantyMonths * 30 * 24 * 60 * 60 * 1000,
+              ).toISOString();
+              warrantySnapshot = {
+                warrantyMonthsAtPurchase: product.warrantyMonths,
+                warrantyTypeAtPurchase: product.warrantyType,
+                warrantyProviderAtPurchase: product.warrantyProvider,
+                warrantyTermsSnapshot: product.warrantyTerms,
+                warrantyStartsAt: startsAt,
+                warrantyExpiresAt: expiresAt,
+              };
+            }
           } else if (serviceId) {
             const service = await getService(serviceId);
             if (!service) throw new Error(`Service ${serviceId} no longer exists`);
@@ -217,7 +250,7 @@ async function recomputeOrderPricingServerSide(
           }
 
           subtotal += realPrice * quantity;
-          return { ...item, price: realPrice, productTitle: realTitle, quantity };
+          return { ...item, itemId, ...warrantySnapshot, price: realPrice, productTitle: realTitle, quantity };
         }),
       );
 
@@ -955,6 +988,74 @@ operationsRouter.post('/operations/orders/:id/cancel', ...requireAuth, (req, res
   res.json({ success: true, data: saved });
 });
 
+/**
+ * Marks a single order item delivered — seller (owning the item's sub-order)
+ * or staff only. This is the authoritative warranty-start trigger: prefers
+ * deliveredAt, recomputing warrantyStartsAt/warrantyExpiresAt from it and
+ * overwriting the order-creation-time fallback. Additive/scoped: does not
+ * touch the broader shipment/tracking architecture — see server/operations/
+ * shipmentStore.ts, which is a separate, pre-existing system this endpoint
+ * intentionally does not reach into.
+ */
+operationsRouter.post('/operations/orders/:id/items/:itemId/mark-delivered', ...requireAuth, async (req, res) => {
+  const existing = operationsStore.getOrder(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+  const subs = (existing.subOrders || []) as Array<{
+    sellerId?: string;
+    trackingStatus?: string;
+    items?: Array<Record<string, unknown>>;
+  }>;
+  const located = findOrderItem(existing, req.params.itemId);
+  if (!located) {
+    res.status(404).json({ error: 'Order item not found' });
+    return;
+  }
+
+  // Authorization: staff, the sub-order's own sellerId (when trustworthy), or
+  // — since sub.sellerId isn't always populated by every order-creation path —
+  // the REAL current owner of the product, resolved fresh from the catalog.
+  let authorized = userIsStaff(req);
+  if (!authorized && req.userId && located.sub.sellerId === req.userId) authorized = true;
+  if (!authorized && req.userId) {
+    const productId = String(located.item.productId || '').trim();
+    if (productId) {
+      const product = await catalogStore.getProduct(productId);
+      if (product?.sellerId === req.userId) authorized = true;
+    }
+  }
+  if (!authorized) {
+    res.status(403).json({ error: 'Not authorized to update this order item' });
+    return;
+  }
+
+  const deliveredAt = new Date().toISOString();
+  const nextSubs = subs.map((sub) => {
+    const items = sub.items || [];
+    const hasItem = items.some((it) => it.itemId === req.params.itemId);
+    if (!hasItem) return sub;
+    return {
+      ...sub,
+      trackingStatus: 'delivered',
+      items: items.map((it) => {
+        if (it.itemId !== req.params.itemId) return it;
+        const warrantyMonths = Number(it.warrantyMonthsAtPurchase) || 0;
+        if (!warrantyMonths) return { ...it, deliveredAt };
+        const expiresAt = new Date(
+          Date.now() + warrantyMonths * 30 * 24 * 60 * 60 * 1000,
+        ).toISOString();
+        return { ...it, deliveredAt, warrantyStartsAt: deliveredAt, warrantyExpiresAt: expiresAt };
+      }),
+    };
+  });
+
+  const saved = operationsStore.updateOrder(req.params.id, { subOrders: nextSubs });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
 // ─── Returns ─────────────────────────────────────────────────────────────────
 
 operationsRouter.get('/operations/returns', ...requireAuth, (req, res) => {
@@ -1259,6 +1360,418 @@ operationsRouter.patch('/operations/returns/:id/dispute', ...requireAuth, (req, 
   res.json({ success: true, data: saved });
 });
 
+// ─── Warranty Claims ───────────────────────────────────────────────────────
+
+function userIsWarrantyClaimSeller(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  row: OpsWarrantyClaim,
+): boolean {
+  if (!req.userId || row.sellerId !== req.userId) return false;
+  const role = req.userRole;
+  return Boolean(role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER)));
+}
+
+function userCanManageWarrantyClaim(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  row: OpsWarrantyClaim,
+): boolean {
+  if (userIsStaff(req)) return true;
+  return userIsWarrantyClaimSeller(req, row);
+}
+
+/** Locate an order item + its owning sub-order, purely server-side (never trust client-supplied item data). */
+function findOrderItem(
+  order: OpsStorefrontOrder,
+  orderItemId: string,
+): { sub: Record<string, unknown>; item: Record<string, unknown> } | null {
+  const subs = (order.subOrders || []) as Array<Record<string, unknown>>;
+  for (const sub of subs) {
+    const items = (sub.items || []) as Array<Record<string, unknown>>;
+    const item = items.find((it) => it.itemId === orderItemId);
+    if (item) return { sub, item };
+  }
+  return null;
+}
+
+operationsRouter.get('/operations/warranty-claims', ...requireAuth, (req, res) => {
+  let consumerId = typeof req.query.consumerId === 'string' ? req.query.consumerId : undefined;
+  let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
+  const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const orderItemId = typeof req.query.orderItemId === 'string' ? req.query.orderItemId : undefined;
+
+  if (!userIsStaff(req)) {
+    if (req.userRole && (hasRole(req.userRole, ROLES.SELLER) || hasRole(req.userRole, ROLES.VERIFIED_SELLER))) {
+      // Sellers see ONLY claims against their own seller/brand — never client-supplied sellerId.
+      sellerId = req.userId;
+      consumerId = undefined;
+    } else {
+      // Everyone else (consumer) sees only their own claims.
+      consumerId = req.userId;
+      sellerId = undefined;
+    }
+  }
+
+  const rows = operationsStore.listWarrantyClaims({ consumerId, sellerId, orderItemId, status });
+  res.json({ data: rows });
+});
+
+operationsRouter.get('/operations/warranty-claims/:id', ...requireAuth, (req, res) => {
+  const row = operationsStore.getWarrantyClaim(req.params.id);
+  if (!row) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  const isConsumer = Boolean(req.userId && row.consumerId === req.userId);
+  if (!isConsumer && !userCanManageWarrantyClaim(req, row)) {
+    res.status(403).json({ error: 'Not authorized to view this warranty claim' });
+    return;
+  }
+  res.json({ data: row });
+});
+
+const WARRANTY_ISSUE_TYPES = new Set([
+  'not_powering_on',
+  'manufacturing_defect',
+  'physical_damage',
+  'battery_charging',
+  'performance_software',
+  'missing_damaged_accessory',
+  'other',
+]);
+
+/**
+ * Submit a warranty claim. Every trust-sensitive field — purchase date,
+ * warranty months, expiry, seller id, product ownership — is derived
+ * server-side from the real order/order-item, never from the client body.
+ * At most ONE active claim per order item; a resolved claim may allow
+ * another later claim if the warranty snapshot is still active.
+ */
+operationsRouter.post('/operations/warranty-claims', ...requireAuth, async (req, res) => {
+  try {
+    const orderId = String(req.body?.orderId || '').trim();
+    const orderItemId = String(req.body?.orderItemId || '').trim();
+    const issueType = String(req.body?.issueType || '').trim();
+    const description = String(req.body?.description || '').trim();
+    const attachmentMediaIds = Array.isArray(req.body?.attachmentMediaIds)
+      ? (req.body.attachmentMediaIds as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, 12)
+      : [];
+
+    if (!orderId || !orderItemId || !issueType || !description) {
+      res.status(400).json({ error: 'orderId, orderItemId, issueType, and description are required' });
+      return;
+    }
+    if (!WARRANTY_ISSUE_TYPES.has(issueType)) {
+      res.status(400).json({ error: 'Invalid issueType' });
+      return;
+    }
+    if (!req.userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    const order = operationsStore.getOrder(orderId);
+    if (!order) {
+      res.status(404).json({ error: 'Order not found' });
+      return;
+    }
+    // Ownership: current user must own the order. Never trust a client-supplied consumerId.
+    if (order.buyerId !== req.userId) {
+      res.status(403).json({ error: 'Not authorized to claim warranty on this order' });
+      return;
+    }
+
+    const located = findOrderItem(order, orderItemId);
+    if (!located) {
+      res.status(404).json({ error: 'Order item not found' });
+      return;
+    }
+    const { sub, item } = located;
+
+    const warrantyMonths = Number(item.warrantyMonthsAtPurchase) || 0;
+    const warrantyExpiresAt = typeof item.warrantyExpiresAt === 'string' ? item.warrantyExpiresAt : undefined;
+    if (!warrantyMonths || !warrantyExpiresAt) {
+      res.status(400).json({ error: 'This order item has no warranty on record' });
+      return;
+    }
+    if (new Date(warrantyExpiresAt).getTime() <= Date.now()) {
+      res.status(400).json({ error: 'Warranty has expired for this item — a claim can no longer be opened' });
+      return;
+    }
+
+    const activeExisting = operationsStore.getActiveWarrantyClaimForItem(orderItemId);
+    if (activeExisting) {
+      // Policy: at most one ACTIVE claim per order item — return the existing one rather than erroring hard.
+      res.status(200).json({ success: true, data: activeExisting, reused: true });
+      return;
+    }
+
+    // Seller/brand/product identity — re-resolved server-side from the real
+    // product record, never trusted from the order item or client body.
+    const productId = String(item.productId || '').trim();
+    let sellerId = String(sub.sellerId || '').trim();
+    let brandId = '';
+    if (productId) {
+      const product = await catalogStore.getProduct(productId);
+      if (product) {
+        brandId = product.brandId;
+        sellerId = product.sellerId || sellerId;
+      }
+    }
+    if (!sellerId) {
+      res.status(400).json({ error: 'Could not resolve the seller for this order item' });
+      return;
+    }
+
+    const saved = operationsStore.createWarrantyClaim({
+      orderId,
+      orderItemId,
+      consumerId: req.userId,
+      sellerId,
+      brandId,
+      productId,
+      warrantyMonthsAtPurchase: warrantyMonths,
+      warrantyTypeAtPurchase: typeof item.warrantyTypeAtPurchase === 'string' ? item.warrantyTypeAtPurchase : undefined,
+      warrantyProviderAtPurchase:
+        typeof item.warrantyProviderAtPurchase === 'string' ? item.warrantyProviderAtPurchase : undefined,
+      warrantyTermsSnapshot: typeof item.warrantyTermsSnapshot === 'string' ? item.warrantyTermsSnapshot : undefined,
+      warrantyStartsAt: typeof item.warrantyStartsAt === 'string' ? item.warrantyStartsAt : undefined,
+      warrantyExpiresAt,
+      issueType: issueType as OpsWarrantyClaim['issueType'],
+      description,
+      attachmentMediaIds,
+      status: 'submitted',
+    });
+    scheduleOperationsPersist();
+
+    // Link attachments to this claim via the canonical media polymorphic association.
+    if (attachmentMediaIds.length) {
+      try {
+        const { linkMediaToEntity } = await import('./media/mediaRepository');
+        await Promise.all(
+          attachmentMediaIds.map((id) =>
+            linkMediaToEntity(id, 'warranty_claim', saved.id).catch(() => undefined),
+          ),
+        );
+      } catch {
+        /* linking is best-effort; the claim itself is already saved */
+      }
+    }
+
+    // Idempotent claim/support conversation — never duplicated for the same claim.
+    try {
+      const { ensureClaimConversation } = await import('./messaging/conversations/conversationService');
+      const { conversation } = await ensureClaimConversation({
+        claimId: saved.id,
+        orderId,
+        consumerId: req.userId,
+        sellerId,
+        brandId,
+        actor: req.userId,
+      });
+      operationsStore.updateWarrantyClaim(saved.id, { conversationId: conversation.id });
+      scheduleOperationsPersist();
+    } catch (err) {
+      Logger.warn('warranty claim: failed to ensure conversation', {
+        claimId: saved.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
+    res.status(201).json({ success: true, data: operationsStore.getWarrantyClaim(saved.id) || saved });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to submit warranty claim' });
+  }
+});
+
+/** Seller/staff: acknowledge receipt of the claim. */
+operationsRouter.patch('/operations/warranty-claims/:id/acknowledge', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!userCanManageWarrantyClaim(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to acknowledge this warranty claim' });
+    return;
+  }
+  if (existing.status !== 'submitted') {
+    res.status(400).json({ error: `Cannot acknowledge a claim in status "${existing.status}"` });
+    return;
+  }
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    status: 'acknowledged',
+    acknowledgedAt: new Date().toISOString(),
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+/** Seller/staff: request more info from the consumer. */
+operationsRouter.patch('/operations/warranty-claims/:id/request-info', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!userCanManageWarrantyClaim(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to update this warranty claim' });
+    return;
+  }
+  const sellerResponse = String(req.body?.sellerResponse || '').trim();
+  if (!sellerResponse) {
+    res.status(400).json({ error: 'sellerResponse is required' });
+    return;
+  }
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    status: 'more_info_required',
+    sellerResponse,
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+/** Consumer: provide the requested info (does not change status by itself — seller/staff moves it forward). */
+operationsRouter.patch('/operations/warranty-claims/:id/provide-info', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!req.userId || existing.consumerId !== req.userId) {
+    res.status(403).json({ error: 'Only the claim owner may provide additional info' });
+    return;
+  }
+  if (existing.status !== 'more_info_required') {
+    res.status(400).json({ error: `Cannot provide info on a claim in status "${existing.status}"` });
+    return;
+  }
+  const additionalDescription = String(req.body?.description || '').trim();
+  const additionalMediaIds = Array.isArray(req.body?.attachmentMediaIds)
+    ? (req.body.attachmentMediaIds as unknown[]).filter((v): v is string => typeof v === 'string').slice(0, 12)
+    : [];
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    status: 'submitted',
+    description: additionalDescription ? `${existing.description}\n\n[Update] ${additionalDescription}` : existing.description,
+    attachmentMediaIds: [...existing.attachmentMediaIds, ...additionalMediaIds],
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+/** Seller/staff: approve the claim. */
+operationsRouter.patch('/operations/warranty-claims/:id/approve', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!userCanManageWarrantyClaim(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to approve this warranty claim' });
+    return;
+  }
+  const sellerResponse = typeof req.body?.sellerResponse === 'string' ? req.body.sellerResponse.trim() : undefined;
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    status: 'approved',
+    ...(sellerResponse ? { sellerResponse } : {}),
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+/** Seller/staff: reject the claim. */
+operationsRouter.patch('/operations/warranty-claims/:id/reject', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!userCanManageWarrantyClaim(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to reject this warranty claim' });
+    return;
+  }
+  const sellerResponse = String(req.body?.sellerResponse || '').trim();
+  if (!sellerResponse) {
+    res.status(400).json({ error: 'sellerResponse (rejection reason) is required' });
+    return;
+  }
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    status: 'rejected',
+    sellerResponse,
+    resolvedAt: new Date().toISOString(),
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+/** Seller/staff: mark service in progress. */
+operationsRouter.patch('/operations/warranty-claims/:id/service-status', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!userCanManageWarrantyClaim(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to update this warranty claim' });
+    return;
+  }
+  if (existing.status !== 'approved' && existing.status !== 'service_in_progress') {
+    res.status(400).json({ error: `Cannot start service on a claim in status "${existing.status}"` });
+    return;
+  }
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, { status: 'service_in_progress' });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+/** Seller/staff: resolve the claim. */
+operationsRouter.patch('/operations/warranty-claims/:id/resolve', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!userCanManageWarrantyClaim(req, existing)) {
+    res.status(403).json({ error: 'Not authorized to resolve this warranty claim' });
+    return;
+  }
+  const resolutionNotes = String(req.body?.resolutionNotes || '').trim();
+  if (!resolutionNotes) {
+    res.status(400).json({ error: 'resolutionNotes is required' });
+    return;
+  }
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    status: 'resolved',
+    resolutionNotes,
+    resolvedAt: new Date().toISOString(),
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
+/** Consumer: cancel own claim (only while it hasn't reached a terminal/service state). */
+operationsRouter.patch('/operations/warranty-claims/:id/cancel', ...requireAuth, (req, res) => {
+  const existing = operationsStore.getWarrantyClaim(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Warranty claim not found' });
+    return;
+  }
+  if (!req.userId || existing.consumerId !== req.userId) {
+    res.status(403).json({ error: 'Only the claim owner may cancel this claim' });
+    return;
+  }
+  const CANCELLABLE = new Set(['submitted', 'acknowledged', 'more_info_required']);
+  if (!CANCELLABLE.has(existing.status)) {
+    res.status(400).json({ error: `Cannot cancel a claim in status "${existing.status}"` });
+    return;
+  }
+  const saved = operationsStore.updateWarrantyClaim(req.params.id, {
+    status: 'cancelled',
+    cancelledAt: new Date().toISOString(),
+  });
+  scheduleOperationsPersist();
+  res.json({ success: true, data: saved });
+});
+
 operationsRouter.get('/operations/coupons', (_req, res) => {
   res.json({ data: operationsStore.listCoupons() });
 });
@@ -1459,6 +1972,7 @@ operationsRouter.get('/operations/reviews/public', (req, res) => {
       userName: review.userName,
       rating: review.rating,
       comment: review.comment,
+      photos: review.photos || [],
       createdAt: review.createdAt,
       productId: review.productId,
       productTitle: review.productTitle,
@@ -1492,6 +2006,7 @@ operationsRouter.post('/operations/reviews', ...requireAuth, (req, res) => {
     storeName: body.storeName || '',
     rating: Math.min(5, Math.max(1, Number(body.rating))),
     comment: body.comment.trim(),
+    photos: Array.isArray(body.photos) ? body.photos.filter((p): p is string => typeof p === 'string').slice(0, 6) : [],
   });
   scheduleOperationsPersist();
   res.status(201).json({ success: true, data: saved });
@@ -1716,7 +2231,7 @@ operationsRouter.patch('/operations/job-applications/:id', ...requireAdmin, (req
 operationsRouter.post('/operations/media/upload-resume', ...requireAuth, async (req, res) => {
   try {
     const { validateDocumentUploadInput } = await import('./lib/uploadValidation');
-    const { uploadDocumentToCloudinary } = await import('../lib/vercel-catalog/mediaUpload');
+    const { storeUploadedDocument } = await import('./media/mediaUploadService');
     const body = req.body as { data?: string; mimeType?: string; fileName?: string };
     const validation = validateDocumentUploadInput({
       base64Data: body.data || '',
@@ -1727,12 +2242,19 @@ operationsRouter.post('/operations/media/upload-resume', ...requireAuth, async (
       res.status(400).json({ error: validation.error });
       return;
     }
-    const url = await uploadDocumentToCloudinary({
+    const uploaderId = req.userId || req.user?.uid;
+    if (!uploaderId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    const uploaded = await storeUploadedDocument({
+      category: 'careers',
       base64Data: body.data!,
       mimeType: validation.mimeType,
       fileName: validation.fileName,
+      uploaderId,
     });
-    res.status(201).json({ success: true, url, fileName: validation.fileName });
+    res.status(201).json({ success: true, url: uploaded.url, fileName: validation.fileName, mediaId: uploaded.mediaId });
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Resume upload failed',
@@ -2282,7 +2804,7 @@ operationsRouter.patch('/operations/seller-offers/:id', ...requireAdmin, (req, r
 operationsRouter.post('/operations/media/upload-verification', ...requireAuth, async (req, res) => {
   try {
     const { validateVerificationUploadInput } = await import('./lib/uploadValidation');
-    const { uploadVerificationAssetToCloudinary } = await import('../lib/vercel-catalog/mediaUpload');
+    const { storeUploadedVerificationAsset } = await import('./media/mediaUploadService');
     const body = req.body as { data?: string; mimeType?: string; fileName?: string };
     const validation = validateVerificationUploadInput({
       base64Data: body.data || '',
@@ -2293,13 +2815,25 @@ operationsRouter.post('/operations/media/upload-verification', ...requireAuth, a
       res.status(400).json({ error: validation.error });
       return;
     }
-    const url = await uploadVerificationAssetToCloudinary({
+    const uploaderId = req.userId || req.user?.uid;
+    if (!uploaderId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    const uploaded = await storeUploadedVerificationAsset({
       base64Data: body.data!,
       mimeType: validation.mimeType,
       fileName: validation.fileName,
       kind: validation.kind,
+      uploaderId,
     });
-    res.status(201).json({ success: true, url, fileName: validation.fileName, kind: validation.kind });
+    res.status(201).json({
+      success: true,
+      url: uploaded.url,
+      fileName: validation.fileName,
+      kind: validation.kind,
+      mediaId: uploaded.mediaId,
+    });
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Verification upload failed',
