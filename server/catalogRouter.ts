@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { Logger } from './lib/logger';
 import { catalogStore, defaultHomepage } from '../lib/vercel-catalog/catalogStore';
 import {
   normalizeBrandInput,
@@ -17,10 +18,12 @@ import {
 } from '../lib/vercel-catalog/catalogEditorialContract';
 import { normalizeSiteInput } from '../lib/vercel-catalog/catalogContract';
 import { resolveDealsBannerHref } from '../lib/vercel-catalog/dealsBannerUtils';
-import { uploadImageToCloudinary } from '../lib/vercel-catalog/mediaUpload';
+import { storeUploadedImage, storeUploadedDocument } from './media/mediaUploadService';
+import { isMediaCategory, type MediaCategory } from './lib/mediaStorage';
 import { recordProductView, recordSearch } from './analytics/eventHooks';
-import { validateImageUploadInput } from './lib/uploadValidation';
+import { validateImageUploadInput, validateVideoUploadInput } from './lib/uploadValidation';
 import { validate } from './middleware/validate';
+import { getProductComparison, getBrandComparison } from './comparison/compareService';
 import { CatalogProductParamsSchema } from './validation/catalog/productSchemas';
 import {
   EntityDraftBodySchema,
@@ -130,8 +133,7 @@ const requireProductDelete = [
   requireMarketplaceAccess,
   requireAnyPermission([PERMISSIONS.PRODUCT_DELETE]),
 ];
-const requireCatalogMedia = [
-  authenticateRequest,
+const requireCatalogMediaPartner = [
   requirePartnerEntitlement,
   requireMarketplaceAccess,
   requireAnyPermission([
@@ -139,6 +141,59 @@ const requireCatalogMedia = [
     PERMISSIONS.PRODUCT_EDIT,
     PERMISSIONS.CMS_EDIT,
   ]),
+];
+
+/**
+ * A subset of media categories any authenticated user may upload to for
+ * their own account — avatar + review-evidence photos — without holding
+ * partner entitlement/marketplace-access (those gate seller/creator/admin
+ * catalog content, not a consumer's own profile/review media). Ownership is
+ * still enforced at write time via `uploaderId = req.userId`, matching every
+ * other category's authorization boundary.
+ */
+const CONSUMER_UPLOAD_CATEGORIES = new Set(['users', 'reviews', 'warranty-claims']);
+
+/**
+ * Routes an authenticated request through the partner-gated chain for every
+ * category except the consumer-safe ones above, which only need a valid
+ * session. Both branches funnel into the same `storeUploadedImage()` —
+ * there is no second upload architecture, only a narrower auth gate.
+ */
+function runMiddleware(
+  middleware: (req: Request, res: Response, next: (err?: unknown) => void) => unknown,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = () => {
+      if (!settled) {
+        settled = true;
+        resolve();
+      }
+    };
+    const maybePromise = middleware(req, res, done);
+    if (maybePromise && typeof (maybePromise as Promise<unknown>).then === 'function') {
+      (maybePromise as Promise<unknown>).then(done).catch(done);
+    }
+  });
+}
+
+const requireCatalogMedia = [
+  authenticateRequest,
+  async (req: Request, res: Response, next: (err?: unknown) => void) => {
+    const category = typeof req.body?.category === 'string' ? req.body.category : '';
+    if (CONSUMER_UPLOAD_CATEGORIES.has(category)) {
+      next();
+      return;
+    }
+    for (const middleware of requireCatalogMediaPartner) {
+      // eslint-disable-next-line no-await-in-loop
+      await runMiddleware(middleware, req, res);
+      if (res.headersSent) break;
+    }
+    if (!res.headersSent) next();
+  },
 ];
 /** Drafts/versions: sellers editing own listings or CMS editors. */
 const requireCatalogDraftWrite = [
@@ -623,6 +678,27 @@ catalogRouter.get(
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get product' });
   }
+  },
+);
+
+/**
+ * Product Quick Comparison — server-computed candidates (ranked + tiered
+ * fallback). The client never fetches the full catalog to filter it.
+ */
+catalogRouter.get(
+  '/catalog/products/:id/comparison',
+  validate({ params: CatalogProductParamsSchema }),
+  async (req, res) => {
+    try {
+      const result = await getProductComparison(req.params.id);
+      if (!result) {
+        res.status(404).json({ error: 'Product not found' });
+        return;
+      }
+      res.json({ data: result });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to build product comparison' });
+    }
   },
 );
 
@@ -1512,6 +1588,23 @@ catalogRouter.get('/catalog/brands', softAuthenticateRequest, async (req, res) =
   }
 });
 
+/**
+ * Brand Quick Comparison — server-computed candidates (ranked + tiered
+ * fallback). The client never fetches the full catalog to filter it.
+ */
+catalogRouter.get('/catalog/brands/:id/comparison', async (req, res) => {
+  try {
+    const result = await getBrandComparison(req.params.id);
+    if (!result) {
+      res.status(404).json({ error: 'Brand not found' });
+      return;
+    }
+    res.json({ data: result });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to build brand comparison' });
+  }
+});
+
 /** Seller Brand Studio boot: return owned brands only (never auto-create, never seeded Walton/etc.). */
 catalogRouter.post('/catalog/workspace/seller/ensure', ...requireAuth, async (req, res) => {
   try {
@@ -2393,7 +2486,41 @@ catalogRouter.patch('/catalog/placements/:id', ...requireCmsWrite, async (req, r
 
 catalogRouter.post('/catalog/media/upload', ...requireCatalogMedia, async (req, res) => {
   try {
-    const { data, mimeType, fileName } = req.body as { data?: string; mimeType?: string; fileName?: string };
+    const { data, mimeType, fileName, category } = req.body as {
+      data?: string;
+      mimeType?: string;
+      fileName?: string;
+      category?: string;
+    };
+    const resolvedCategory: MediaCategory = isMediaCategory(category) ? category : 'products';
+    const uploaderId = req.userId || req.user?.uid;
+    if (!uploaderId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    // Warranty-claim evidence is the first category to accept video, using the
+    // validator that was already built for this (previously unwired — no live
+    // upload surface accepted video before). Image evidence still goes through
+    // the normal image pipeline (WebP re-encode + thumbnail).
+    const isVideoAttempt = typeof mimeType === 'string' && mimeType.toLowerCase().startsWith('video/');
+    if (resolvedCategory === 'warranty-claims' && isVideoAttempt) {
+      const videoValidation = validateVideoUploadInput({ base64Data: data || '', mimeType, fileName });
+      if (videoValidation.ok === false) {
+        res.status(400).json({ error: videoValidation.error });
+        return;
+      }
+      const uploaded = await storeUploadedDocument({
+        category: resolvedCategory,
+        base64Data: data!,
+        mimeType: videoValidation.mimeType,
+        fileName: videoValidation.fileName,
+        uploaderId,
+      });
+      res.json({ success: true, url: uploaded.url, mediaId: uploaded.mediaId });
+      return;
+    }
+
     const validation = validateImageUploadInput({
       base64Data: data || '',
       mimeType,
@@ -2405,15 +2532,101 @@ catalogRouter.post('/catalog/media/upload', ...requireCatalogMedia, async (req, 
       return;
     }
 
-    const url = await uploadImageToCloudinary({
+    const uploaded = await storeUploadedImage({
+      category: resolvedCategory,
       base64Data: data!,
       mimeType: validation.mimeType,
       fileName: validation.fileName,
+      uploaderId,
     });
 
-    res.json({ success: true, url });
+    res.json({ success: true, url: uploaded.url, thumbnailUrl: uploaded.thumbnailUrl, mediaId: uploaded.mediaId });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to upload image' });
+  }
+});
+
+/**
+ * Deletes an uploaded media record + (for locally-stored files) the physical
+ * file. Ownership rule: the original uploader, or a platform admin. Media
+ * isn't tracked against the specific brand/product/etc. it ends up attached
+ * to, so uploader identity is the authorization boundary — this matches the
+ * upload-time check (any authenticated actor with catalog-media permission
+ * can upload; only they, or an admin, can later delete what they uploaded).
+ */
+catalogRouter.delete('/catalog/media/:id', ...requireCatalogMedia, async (req, res) => {
+  try {
+    const { getMediaRecord, deleteMediaRecord } = await import('./media/mediaRepository');
+    const { deleteMediaFile } = await import('./lib/mediaStorage');
+    const record = await getMediaRecord(req.params.id);
+    if (!record) {
+      res.status(404).json({ error: 'Media not found' });
+      return;
+    }
+    const actorId = req.userId || req.user?.uid;
+    if (!userIsPlatformAdmin(req) && record.uploadedByUserId !== actorId) {
+      res.status(403).json({ error: 'Not authorized to delete this media' });
+      return;
+    }
+    if (record.provider === 'local' && record.relativePath) {
+      await deleteMediaFile(record.relativePath, record.category as MediaCategory);
+    }
+    await deleteMediaRecord(record.id);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to delete media' });
+  }
+});
+
+/**
+ * Authenticated-only access to private documents (verification/identity/
+ * seller/creator documents) — the sole way these are ever reachable. Never
+ * static-mounted, never a public URL. Ownership rule matches upload/delete:
+ * the original uploader, or a platform admin (who legitimately needs to
+ * review claim-verification documents). Every access is audit-logged since
+ * these are sensitive documents (NID, trade license, etc.).
+ */
+catalogRouter.get('/catalog/media/private/:id', ...requireAuth, async (req, res) => {
+  try {
+    const { getMediaRecord } = await import('./media/mediaRepository');
+    const { resolvePrivateFilePath } = await import('./lib/mediaStorage');
+    const record = await getMediaRecord(req.params.id);
+    if (!record || record.visibility !== 'private') {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+    const actorId = req.userId || req.user?.uid;
+    let authorized = userIsPlatformAdmin(req) || record.uploadedByUserId === actorId;
+    // Warranty claim evidence: the claim's seller may also view it (buyer/seller/admin
+    // only, per the claim's own authorization — never a public/anonymous URL).
+    if (!authorized && record.relatedEntityType === 'warranty_claim' && record.relatedEntityId && actorId) {
+      const { operationsStore } = await import('./operations/operationsStore');
+      const claim = operationsStore.getWarrantyClaim(record.relatedEntityId);
+      if (claim && claim.sellerId === actorId) authorized = true;
+    }
+    if (!authorized) {
+      Logger.security('private_media_access_denied', {
+        requestId: req.requestId,
+        mediaId: record.id,
+        actorId,
+      });
+      res.status(403).json({ error: 'Not authorized to view this document' });
+      return;
+    }
+    if (record.provider !== 'local' || !record.relativePath) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+    Logger.audit('private_media_accessed', {
+      requestId: req.requestId,
+      mediaId: record.id,
+      actorId,
+      isAdminAccess: userIsPlatformAdmin(req) && record.uploadedByUserId !== actorId,
+    });
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.sendFile(resolvePrivateFilePath(record.relativePath), { headers: { 'Content-Type': record.mimeType } });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to load document' });
   }
 });
 
