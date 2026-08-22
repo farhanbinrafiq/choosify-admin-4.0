@@ -29,6 +29,13 @@
       "when": 1787243400000,
       "tag": "0003_self_hosted_media_and_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1787319163716,
+      "tag": "0004_durability_tables",
+      "breakpoints": true
     }
   ]
 }

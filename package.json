@@ -9,6 +9,7 @@
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "db:migrate": "drizzle-kit migrate",
     "smoke": "tsx scripts/smoke-test.ts",
     "test:auth": "tsx scripts/probe-dev-login-isolation.ts && tsx scripts/probe-tier1-roles.ts && tsx scripts/probe-auth-regression.ts",
     "test:brands": "tsx scripts/probe-brand-ownership.ts",
