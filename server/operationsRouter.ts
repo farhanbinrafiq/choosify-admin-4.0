@@ -2185,7 +2185,11 @@ operationsRouter.get('/operations/job-applications', ...requireAdmin, (req, res)
   res.json({ data: operationsStore.listJobApplications(jobId) });
 });
 
-operationsRouter.post('/operations/job-applications', ...requireAuth, (req, res) => {
+// Public/anonymous: a job applicant has no Choosify account. Validation
+// below (jobId/name/email/resumeUrl presence, open-job lookup) is the
+// actual authorization boundary for this write -- there is no
+// partner/marketplace concept applicable to a job application.
+operationsRouter.post('/operations/job-applications', (req, res) => {
   const body = req.body as {
     jobId?: string;
     name?: string;
@@ -2228,10 +2232,17 @@ operationsRouter.patch('/operations/job-applications/:id', ...requireAdmin, (req
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.post('/operations/media/upload-resume', ...requireAuth, async (req, res) => {
+// Public/anonymous: a job applicant has no Choosify account, so this
+// cannot go through storeUploadedDocument() -- its media table row
+// requires a real, FK-constrained uploadedByUserId (uuid references
+// users.id). saveMediaFile() writes straight to the existing public
+// 'careers' storage root with no database record; the file remains
+// reachable via the job-application record's resumeUrl, matching how
+// hiring staff actually find it (GET /operations/job-applications).
+operationsRouter.post('/operations/media/upload-resume', async (req, res) => {
   try {
     const { validateDocumentUploadInput } = await import('./lib/uploadValidation');
-    const { storeUploadedDocument } = await import('./media/mediaUploadService');
+    const { saveMediaFile } = await import('./lib/mediaStorage');
     const body = req.body as { data?: string; mimeType?: string; fileName?: string };
     const validation = validateDocumentUploadInput({
       base64Data: body.data || '',
@@ -2242,19 +2253,12 @@ operationsRouter.post('/operations/media/upload-resume', ...requireAuth, async (
       res.status(400).json({ error: validation.error });
       return;
     }
-    const uploaderId = req.userId || req.user?.uid;
-    if (!uploaderId) {
-      res.status(401).json({ error: 'Authentication required' });
-      return;
-    }
-    const uploaded = await storeUploadedDocument({
+    const saved = await saveMediaFile({
       category: 'careers',
-      base64Data: body.data!,
+      buffer: Buffer.from(body.data!, 'base64'),
       mimeType: validation.mimeType,
-      fileName: validation.fileName,
-      uploaderId,
     });
-    res.status(201).json({ success: true, url: uploaded.url, fileName: validation.fileName, mediaId: uploaded.mediaId });
+    res.status(201).json({ success: true, url: saved.publicUrl, fileName: validation.fileName });
   } catch (error) {
     res.status(500).json({
       error: error instanceof Error ? error.message : 'Resume upload failed',
