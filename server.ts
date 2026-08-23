@@ -33,6 +33,7 @@ const LOADED_MODULES = [
 async function startServer() {
   const app = createApp();
   const PORT = Number(process.env.PORT) || 3001;
+  const HOST = process.env.HOST || "127.0.0.1";
 
   // Never let browsers keep a stale cms-mirror shell (Brand/Creator Studio blank pane).
   app.use("/cms-mirror/app.html", (_req, res, next) => {
@@ -72,7 +73,7 @@ async function startServer() {
   const httpServer = createServer(app);
   setupGracefulShutdown(httpServer);
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
+  httpServer.listen(PORT, HOST, () => {
     logStartupDiagnostics({
       port: PORT,
       allowedOrigins: getAllowedOrigins(),
