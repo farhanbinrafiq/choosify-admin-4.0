@@ -108,6 +108,11 @@ void import('./auth/choosifyUserId')
 export function createApp(): Express {
   const app = express();
 
+  // Exactly one reverse proxy hop in this architecture (Nginx on 127.0.0.1),
+  // and Express only ever binds to 127.0.0.1 -- verify the immediate peer is
+  // actually loopback rather than blindly trusting positional hop count.
+  app.set("trust proxy", "loopback");
+
   app.disable("x-powered-by");
   app.use(requestIdMiddleware);
   app.use(requestTimingMiddleware);
