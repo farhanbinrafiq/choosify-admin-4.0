@@ -1,10 +1,10 @@
 # Choosify VPS Operations Tooling
 
-Reference copies of the production deployment and backup scripts that run on
-the Choosify Hostinger VPS (`choosify.bd`, `www.choosify.bd`,
-`dashboard.choosify.bd`). This directory is the version-controlled
-source-of-truth for these scripts; it is not automatically deployed or
-executed from here.
+Reference copies of the production deployment, backup, and monitoring
+scripts that run on the Choosify Hostinger VPS (`choosify.bd`,
+`www.choosify.bd`, `dashboard.choosify.bd`). This directory is the
+version-controlled source-of-truth for these scripts; it is not
+automatically deployed or executed from here.
 
 ## Production host model
 
@@ -23,6 +23,7 @@ repositories, owned by `choosify:choosify`, mode `750`:
 - `/var/www/choosify/deploy/deploy-web.sh`
 - `/var/www/choosify/deploy/deploy-admin.sh`
 - `/var/www/choosify/backup/backup-postgres.sh`
+- `/var/www/choosify/monitor/monitor-production.sh`
 
 The copies in this directory (`scripts/ops/`) are reference/source copies
 only. They are not symlinked to the runtime paths and are not executed
@@ -70,6 +71,66 @@ either repository.** They exist only on the VPS.
 - Never runs migrations, never restarts services, never modifies the live
   database
 
+## Monitoring behavior (summary)
+
+`monitor-production.sh` is a lightweight, read-only monitor. It never
+restarts/repairs services, never mutates the database, and never deploys
+or modifies application code. It runs on a schedule (see below) via cron,
+independent of the deploy/backup jobs.
+
+Checks performed each run:
+
+- Web local (`127.0.0.1:3000`), public apex, public www — expect HTTP 200
+- Admin local `/health` and public Dashboard `/health` — expect HTTP 200
+  and `"readiness":"ready"` in the body
+- Public Dashboard root — expect HTTP 200
+- PostgreSQL, Nginx, and `pm2-choosify.service` — expect `active`
+- `choosify-web` / `choosify-admin` PM2 process status — expect `online`
+- Disk usage on the filesystem backing `/var/www/choosify` — warn at
+  >= 80%, critical at >= 90%
+- Freshness/integrity of the newest `choosify_daily_*.dump` backup
+  (checksum verified, archive validated via `pg_restore --list`) — warn
+  if no valid backup within 30 hours, critical within 48 hours
+- Booking-expiry cron observability, on a best-effort basis (see gap
+  below) — warn if the log hasn't updated in 26 hours, critical at 50
+- TLS certificate expiry for all three hostnames — warn at <= 21 days,
+  critical at <= 7 days
+- `certbot.timer` — expect active and enabled
+
+HTTP checks retry up to 3 times (with a short delay) before being
+reported as failed, so a single transient blip does not trigger an
+alert.
+
+**Known observability gap:** `booking-expire-cron.sh` and its crontab
+invocation are intentionally left unmodified (they are already-validated
+production behavior). Its log contains only the raw endpoint response
+with no timestamp or explicit success/failure marker of its own, so the
+monitor infers freshness from the log file's mtime and does a best-effort
+scan of the last line for `"success":true`. This cannot distinguish every
+possible silent failure. A minimal future enhancement (not applied) would
+be to prepend a timestamped run marker to that log without touching the
+underlying script's request logic.
+
+### Exit codes
+
+- `0` — all checks healthy
+- `1` — one or more warning-level conditions
+- `2` — one or more critical/failure conditions
+
+### Notification
+
+The monitor only pages out on a critical (exit 2) condition, to avoid
+alert noise. Delivery is controlled by an optional, uncommitted config
+file at `/var/www/choosify/monitor/monitor.env` (mode `600`), which may
+set `ALERT_WEBHOOK_URL` to an outbound webhook (e.g. Slack/Discord
+incoming webhook). If that file or variable is absent, the monitor logs
+that external delivery isn't configured and continues normally — nothing
+fails or blocks on its absence.
+
+As of this writing, no such file exists in production and **external
+alert delivery is not yet configured**; monitoring output is local-log-only
+until an operator supplies a dedicated webhook URL.
+
 ## Installation / update rule
 
 Changes to these scripts are never auto-deployed from this repository.
@@ -94,3 +155,7 @@ runtime paths.
   committed).
 - `.env`, `.env.bak.*`, deploy markers, backup archives, backup logs, and
   lock files are runtime/generated artifacts and are not tracked here.
+- `monitor.env` (optional webhook config for the monitor) follows the same
+  rule: it is runtime configuration, lives only at
+  `/var/www/choosify/monitor/monitor.env`, mode `600`, and is never
+  committed.
