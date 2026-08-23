@@ -67,6 +67,36 @@ console.log(a ? ((a.pm2_env && a.pm2_env.status) || "unknown") : "MISSING");
 '
 }
 
+# PM2 must never carry frozen copies of secrets/app-config as process-level
+# env vars -- .env (read directly by the app via dotenv) is the sole
+# authority. If PM2's own environment for this process already contains any
+# of these keys, a prior `pm2 start`/`--update-env` captured a full shell
+# snapshot (including .env-sourced values already exported into that
+# shell), and every subsequent plain `pm2 restart` -- including this
+# script's own -- reuses that frozen copy forever, silently ignoring any
+# later .env change (this is exactly how a rotated DATABASE_URL and a
+# changed JSON_BODY_LIMIT both failed to take effect in production).
+check_pm2_env_hygiene() {
+  local offenders
+  offenders=$(pm2 jlist | node -e '
+const fs = require("fs");
+const SENSITIVE = ["DATABASE_URL","JWT_ACCESS_SECRET","JWT_REFRESH_SECRET","CRON_SECRET"];
+const apps = JSON.parse(fs.readFileSync(0, "utf8"));
+const app = apps.find(a => a.name === "'"$APP_NAME"'");
+if (!app) { process.exit(0); }
+const env = (app.pm2_env && app.pm2_env.env) || {};
+SENSITIVE.filter(k => Object.prototype.hasOwnProperty.call(env, k)).forEach(k => console.log(k));
+')
+  if [ -n "$offenders" ]; then
+    log ERROR "[CHECK] PM2 is carrying frozen application secret(s) for '$APP_NAME': $offenders"
+    log ERROR "[CHECK] .env changes (including any future secret rotation) will silently NOT take effect on restart while this persists."
+    log ERROR "[CHECK] Fix: pm2 delete '$APP_NAME' && (cd $REPO_DIR && pm2 start $ARTIFACT_ENTRY --name $APP_NAME) && pm2 save"
+    log ERROR "[CHECK] Refusing to deploy on top of a stale PM2 environment. Fix this first, then re-run."
+    exit 1
+  fi
+  log CHECK "PM2 environment for '$APP_NAME' carries no frozen application secrets."
+}
+
 check_listener() {
   ss -lntp 2>/dev/null | grep -qE "127\.0\.0\.1:${APP_PORT}[[:space:]]"
 }
@@ -265,6 +295,8 @@ log CHECK "Current production artifact present: $ARTIFACT_ENTRY"
 PM2_STATUS=$(get_pm2_status)
 [ "$PM2_STATUS" = "online" ] || { log ERROR "[CHECK] PM2 process '$APP_NAME' is not online (status=$PM2_STATUS)."; exit 1; }
 log CHECK "PM2 process '$APP_NAME' is online."
+
+check_pm2_env_hygiene
 
 log INFO "LOCAL_HEAD=$LOCAL_HEAD"
 log INFO "TARGET_COMMIT=$TARGET_COMMIT"
