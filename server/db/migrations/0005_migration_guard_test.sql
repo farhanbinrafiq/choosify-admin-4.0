@@ -1,0 +1,6 @@
+-- Deployment migration-guard test only.
+-- Intentionally contains no executable SQL.
+-- This file exists solely to prove that deploy-admin.sh refuses to
+-- fast-forward, build, or restart when an incoming commit touches
+-- server/db/migrations/. It will be removed in a follow-up cleanup
+-- commit once the guard test has been verified.
