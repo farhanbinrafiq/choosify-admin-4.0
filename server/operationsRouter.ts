@@ -4,7 +4,7 @@ import { operationsStore, DEFAULT_ROLE_PERMISSIONS } from './operations/operatio
 import { validateCoupon } from './operations/couponValidator';
 import { getAnalyticsSummary, getRoleAnalytics } from './operations/analyticsService';
 import { getSellerDashboardIntelligence } from './operations/sellerIntelligenceService';
-import { shipmentStore } from './operations/shipmentStore';
+import { shipmentStore, type OpsShipment } from './operations/shipmentStore';
 import {
   ensurePlatformOrderConversation,
   submitPlatformMessage,
@@ -2639,6 +2639,17 @@ operationsRouter.get('/operations/shipments/:id', ...requireAuth, (req, res) => 
   res.json({ data: shipment });
 });
 
+// QA3-003: previously passed req.body straight into a raw object-spread
+// update with no field allowlist -- an authorized seller (userCanUpdateShipment
+// allows staff OR the order's owning seller) could set id/orderId/buyerId/
+// codAmount/deliveryCharge/status/trackingEvents/timestamps arbitrarily on
+// their own order's shipment. Confirmed via a fresh grep across both repos
+// that this endpoint has zero frontend callers today, so a strict allowlist
+// carries no risk of breaking an existing flow. Limited to the two fields
+// that match its evident purpose: the seller/staff recording courier
+// booking details.
+const SHIPMENT_PATCH_ALLOWED_KEYS = ['courier', 'trackingNumber'] as const;
+
 operationsRouter.patch('/operations/shipments/:id', ...requireAuth, (req, res) => {
   const existing = shipmentStore.getShipment(req.params.id);
   if (!existing) {
@@ -2649,7 +2660,34 @@ operationsRouter.patch('/operations/shipments/:id', ...requireAuth, (req, res) =
     res.status(403).json({ error: 'Not authorized to update this shipment' });
     return;
   }
-  const saved = shipmentStore.updateShipment(req.params.id, req.body);
+
+  const rawBody = (req.body && typeof req.body === 'object' ? req.body : {}) as Record<string, unknown>;
+  const rejected = Object.keys(rawBody).filter(
+    (key) => !(SHIPMENT_PATCH_ALLOWED_KEYS as readonly string[]).includes(key),
+  );
+  if (rejected.length > 0) {
+    res.status(400).json({
+      error: 'One or more fields are not allowed on this endpoint',
+      rejected,
+      allowed: [...SHIPMENT_PATCH_ALLOWED_KEYS],
+    });
+    return;
+  }
+  const patch: Partial<Pick<OpsShipment, (typeof SHIPMENT_PATCH_ALLOWED_KEYS)[number]>> = {};
+  for (const key of SHIPMENT_PATCH_ALLOWED_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(rawBody, key)) {
+      (patch as Record<string, unknown>)[key] = rawBody[key];
+    }
+  }
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({
+      error: 'No updatable fields provided',
+      allowed: [...SHIPMENT_PATCH_ALLOWED_KEYS],
+    });
+    return;
+  }
+
+  const saved = shipmentStore.updateShipment(req.params.id, patch);
   if (!saved) {
     res.status(404).json({ error: 'Shipment not found' });
     return;
