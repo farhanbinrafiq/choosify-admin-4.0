@@ -681,6 +681,18 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
       buyerId = req.userId!;
     }
 
+    // QA2-001: orderId is client-supplied and previously had no uniqueness
+    // check here, so a duplicate submission (double-click, retry, replay)
+    // silently produced a second order row indistinguishable from an
+    // overwrite via getOrder(). Checked after the buyer/manual authorization
+    // above so an unauthorized caller gets 403 rather than a 409 that would
+    // confirm someone else's orderId exists. operationsStore.createOrder()
+    // is also now idempotent by orderId as a second layer of defense.
+    if (operationsStore.getOrder(body.orderId)) {
+      res.status(409).json({ error: 'Order already exists' });
+      return;
+    }
+
     const status =
       body.status === 'pending_payment' ||
       body.status === 'confirmed' ||

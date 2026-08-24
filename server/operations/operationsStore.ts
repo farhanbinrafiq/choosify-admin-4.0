@@ -456,7 +456,23 @@ export const operationsStore = {
     return rows;
   },
   getOrder: (id: string) => state.orders.find((order) => order.id === id || order.orderId === id) ?? null,
+  /**
+   * QA2-001 fix: this used to unconditionally unshift(), so a duplicate
+   * orderId never overwrote the original in place -- it inserted a SECOND
+   * row with the same id/orderId. getOrder()'s find() always resolved to
+   * the newest (unshift prepends), which is what made it look like an
+   * in-place overwrite from the outside; listOrders() would have shown
+   * both rows. Now idempotent by orderId: an existing order is returned
+   * unchanged rather than duplicated. Protects every caller of this shared
+   * function (the client-facing POST /operations/orders route, plus
+   * bookingService.ts and checkoutService.ts, which generate their own
+   * orderId server-side and shouldn't collide, but are covered either way).
+   */
   createOrder: (payload: Omit<OpsStorefrontOrder, 'id' | 'updatedAt'>) => {
+    const existing = state.orders.find(
+      (order) => order.id === payload.orderId || order.orderId === payload.orderId,
+    );
+    if (existing) return existing;
     const order: OpsStorefrontOrder = {
       ...payload,
       id: payload.orderId,
