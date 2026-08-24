@@ -20,12 +20,15 @@ LOG_MAX_BYTES=$((5 * 1024 * 1024))
 LOG_KEEP_LINES=5000
 
 BACKUP_DIR="/var/www/choosify/backups/postgres"
+CATALOG_BACKUP_DIR="/var/www/choosify/backups/catalog"
 BOOKING_LOG="/data/choosify/runtime/booking-expire-cron.log"
 
 DISK_WARN_PCT=80
 DISK_CRIT_PCT=90
 BACKUP_WARN_HOURS=30
 BACKUP_CRIT_HOURS=48
+CATALOG_BACKUP_WARN_HOURS=30
+CATALOG_BACKUP_CRIT_HOURS=48
 BOOKING_WARN_HOURS=26
 BOOKING_CRIT_HOURS=50
 TLS_WARN_DAYS=21
@@ -192,6 +195,49 @@ backup_check() {
   fi
 }
 backup_check
+
+catalog_backup_check() {
+  local newest mtime now age_h sumfile
+  newest=$(ls -1t "$CATALOG_BACKUP_DIR"/catalog_daily_*.json 2>/dev/null | head -n1) || true
+  if [ -z "$newest" ]; then
+    log ALERT "Catalog backup: no catalog_daily_*.json found in $CATALOG_BACKUP_DIR"
+    bump 2
+    return
+  fi
+  mtime=$(stat -c '%Y' "$newest")
+  now=$(date +%s)
+  age_h=$(( (now - mtime) / 3600 ))
+  sumfile="${newest}.sha256"
+  if [ ! -f "$sumfile" ]; then
+    log ALERT "Catalog backup: $(basename "$newest") missing .sha256"
+    bump 2
+    return
+  fi
+  if ! sha256sum -c "$sumfile" >/dev/null 2>&1; then
+    log ALERT "Catalog backup: checksum verification FAILED for $(basename "$newest")"
+    bump 2
+    return
+  fi
+  if ! node -e '
+    const fs = require("fs");
+    try { JSON.parse(fs.readFileSync(process.argv[1], "utf8")); process.exit(0); }
+    catch (e) { process.exit(1); }
+  ' "$newest" >/dev/null 2>&1; then
+    log ALERT "Catalog backup: JSON parse FAILED for $(basename "$newest")"
+    bump 2
+    return
+  fi
+  if [ "$age_h" -ge "$CATALOG_BACKUP_CRIT_HOURS" ]; then
+    log ALERT "Catalog backup: newest valid backup is ${age_h}h old (CRITICAL, $(basename "$newest"))"
+    bump 2
+  elif [ "$age_h" -ge "$CATALOG_BACKUP_WARN_HOURS" ]; then
+    log WARN "Catalog backup: newest valid backup is ${age_h}h old ($(basename "$newest"))"
+    bump 1
+  else
+    log CHECK "Catalog backup: valid, ${age_h}h old ($(basename "$newest"))"
+  fi
+}
+catalog_backup_check
 
 booking_check() {
   local mtime now age_h last_line
