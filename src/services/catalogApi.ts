@@ -352,6 +352,23 @@ export const catalogApi = {
     const result = await request<{ data: CatalogCreator }>(`/catalog/creators/${id}`, 'PUT', payload);
     return result.data;
   },
+  /**
+   * Creators have no dedicated marketplace-access endpoint or reason/duration
+   * tracking like brands — `status` itself is the marketplace gate
+   * (resolvePartnerLifecycle() treats 'live' as granted). Uses PATCH so the
+   * server merges over the existing record instead of replacing it.
+   */
+  setCreatorPublishStatus: async (
+    id: string,
+    status: NonNullable<CatalogCreator['status']>,
+  ): Promise<CatalogCreator> => {
+    const result = await request<{ success: boolean; data: CatalogCreator }>(
+      `/catalog/creators/${id}`,
+      'PATCH',
+      { status },
+    );
+    return result.data;
+  },
 
   listGuides: async (params?: { status?: string; slug?: string }): Promise<CatalogGuide[]> => {
     const query = new URLSearchParams();

@@ -25294,7 +25294,7 @@ operationsRouter.get("/operations/job-applications", ...requireAdmin, (req, res)
   const jobId = typeof req.query.jobId === "string" ? req.query.jobId : void 0;
   res.json({ data: operationsStore.listJobApplications(jobId) });
 });
-operationsRouter.post("/operations/job-applications", ...requireAuth2, (req, res) => {
+operationsRouter.post("/operations/job-applications", (req, res) => {
   const body = req.body;
   if (!body.jobId?.trim() || !body.name?.trim() || !body.email?.trim() || !body.resumeUrl?.trim()) {
     res.status(400).json({ error: "jobId, name, email, and resumeUrl are required" });
@@ -25327,10 +25327,10 @@ operationsRouter.patch("/operations/job-applications/:id", ...requireAdmin, (req
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
-operationsRouter.post("/operations/media/upload-resume", ...requireAuth2, async (req, res) => {
+operationsRouter.post("/operations/media/upload-resume", async (req, res) => {
   try {
     const { validateDocumentUploadInput: validateDocumentUploadInput2 } = await Promise.resolve().then(() => (init_uploadValidation(), uploadValidation_exports));
-    const { storeUploadedDocument: storeUploadedDocument2 } = await Promise.resolve().then(() => (init_mediaUploadService(), mediaUploadService_exports));
+    const { saveMediaFile: saveMediaFile2 } = await Promise.resolve().then(() => (init_mediaStorage(), mediaStorage_exports));
     const body = req.body;
     const validation = validateDocumentUploadInput2({
       base64Data: body.data || "",
@@ -25341,19 +25341,12 @@ operationsRouter.post("/operations/media/upload-resume", ...requireAuth2, async 
       res.status(400).json({ error: validation.error });
       return;
     }
-    const uploaderId = req.userId || req.user?.uid;
-    if (!uploaderId) {
-      res.status(401).json({ error: "Authentication required" });
-      return;
-    }
-    const uploaded = await storeUploadedDocument2({
+    const saved = await saveMediaFile2({
       category: "careers",
-      base64Data: body.data,
-      mimeType: validation.mimeType,
-      fileName: validation.fileName,
-      uploaderId
+      buffer: Buffer.from(body.data, "base64"),
+      mimeType: validation.mimeType
     });
-    res.status(201).json({ success: true, url: uploaded.url, fileName: validation.fileName, mediaId: uploaded.mediaId });
+    res.status(201).json({ success: true, url: saved.publicUrl, fileName: validation.fileName });
   } catch (error2) {
     res.status(500).json({
       error: error2 instanceof Error ? error2.message : "Resume upload failed"
@@ -26630,8 +26623,10 @@ authRouter.get("/auth/seller-status", async (req, res) => {
     const devRole = DEV_ROLE_MAP[email];
     const role = mappedRole || devRole;
     const hasSellerAccount = role === ROLES.SELLER || role === ROLES.VERIFIED_SELLER;
+    const hasCreatorAccount = role === ROLES.CREATOR;
     res.json({
       hasSellerAccount,
+      hasCreatorAccount,
       dashboardPath: "/seller/products"
     });
   } catch (error2) {

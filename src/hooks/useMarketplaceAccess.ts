@@ -1,100 +1,131 @@
 import { useState } from 'react';
+import { catalogApi } from '../services/catalogApi';
+import type { CatalogBrand, CatalogCreator, CatalogMarketplaceStatus } from '../types/catalog';
 
 export type MarketplaceEntityType = 'brand' | 'seller' | 'creator' | 'consumer';
 
+/** Creator publish-status lifecycle (server/catalogRouter.ts PATCH /catalog/creators/:id). Creators
+ * have no dedicated marketplace-access endpoint, reason/duration tracking, or active-order guard
+ * like brands do — resolvePartnerLifecycle() treats status === 'live' as the sole grant condition. */
+export type CreatorPublishStatus = NonNullable<CatalogCreator['status']>;
+
+export type MarketplaceLifecycleStatus = CatalogMarketplaceStatus | CreatorPublishStatus;
+
 export interface MarketplaceAccessState {
-  suspended: boolean;
-  suspendedAt?: string;
+  /** Canonical backend status. Undefined for entity types with no backend marketplace concept (e.g. consumer). */
+  status?: MarketplaceLifecycleStatus;
+  /** Authoritative access boolean mirrored from the server (marketplaceAccess for brands, status==='live' for creators). */
+  access: boolean;
+  /** Operator-entered note from the current session only — the backend does not persist a suspend reason, so this clears on refresh/reload. */
   suspensionReason?: string;
-  suspensionDurationDays?: number;
-  autoReinstateAt?: string;
+  suspendedAt?: string;
   notifyOnSuspend?: boolean;
 }
 
 export interface SuspendInput {
   reason: string;
-  durationDays: number | null; // null = indefinite, no auto-reinstate
+  /** Collected for operator context only — the backend endpoint does not accept or store duration. */
+  durationDays: number | null;
   notify: boolean;
 }
 
 interface UseMarketplaceAccessOptions {
   entityType: MarketplaceEntityType;
+  /** Catalog brand id (brand/seller) or catalog creator id (creator). Unused/no-op for 'consumer'. */
   entityId: string;
   entityName: string;
-  /** Called with the access-state patch to persist (e.g. context updateProfile / local setState). */
-  onPersist: (patch: MarketplaceAccessState) => void;
-  /** Called for both suspend and reinstate actions, mirroring the existing brand audit log pattern. */
+  /** Called with the freshly-saved server record after any successful transition, so the caller can refresh from authoritative state. */
+  onSaved: (updated: CatalogBrand | CatalogCreator) => void;
+  /** Called on a failed transition; state is left untouched (no optimistic mutation). */
+  onError: (message: string) => void;
   onAudit: (action: string, description: string) => void;
-  /** Optional: notify the account holder (email/in-app) — no-op if omitted. */
   onNotify?: (message: string) => void;
 }
 
 /**
- * Shared suspend/reinstate logic for marketplace-access control, usable from any entity's
- * profile "Account Info" tab (Brand, Creator, Consumer, Seller). Generalizes the
- * handleSuspend/handleRestore pattern already used in Sellers.tsx, adding duration,
- * auto-reinstate scheduling, and an admin-notify-user toggle per the design spec.
+ * Marketplace Access control for Brand/Seller/Creator profile tabs. Talks to the real backend
+ * (catalogApi.setBrandMarketplaceAccess / setCreatorPublishStatus) instead of local-only state —
+ * grant/suspend/reinstate all round-trip through the server and refresh from its response.
  */
-export function useMarketplaceAccess({ entityType, entityId, entityName, onPersist, onAudit, onNotify }: UseMarketplaceAccessOptions) {
+export function useMarketplaceAccess({
+  entityType,
+  entityId,
+  entityName,
+  onSaved,
+  onError,
+  onAudit,
+  onNotify,
+}: UseMarketplaceAccessOptions) {
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const suspend = ({ reason, durationDays, notify }: SuspendInput) => {
+  const isCreator = entityType === 'creator';
+  const isBrandLike = entityType === 'brand' || entityType === 'seller';
+
+  async function run(action: () => Promise<CatalogBrand | CatalogCreator>, auditAction: string, auditDescription: string, notifyMessage?: string) {
+    if (isProcessing || !entityId || (!isCreator && !isBrandLike)) return;
     setIsProcessing(true);
-    const suspendedAt = new Date().toISOString();
-    const autoReinstateAt =
-      durationDays && durationDays > 0 ? new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toISOString() : undefined;
+    try {
+      const saved = await action();
+      onSaved(saved);
+      onAudit(auditAction, auditDescription);
+      if (notifyMessage && onNotify) onNotify(notifyMessage);
+    } catch (err) {
+      onError(err instanceof Error ? err.message : 'Marketplace Access update failed.');
+    } finally {
+      setIsProcessing(false);
+    }
+  }
 
-    onPersist({
-      suspended: true,
-      suspendedAt,
-      suspensionReason: reason,
-      suspensionDurationDays: durationDays ?? undefined,
-      autoReinstateAt,
-      notifyOnSuspend: notify,
-    });
-
-    onAudit(
-      'Marketplace Access Suspended',
-      `${entityType} "${entityName}" suspended${durationDays ? ` for ${durationDays} day(s) (auto-reinstate ${new Date(autoReinstateAt!).toLocaleDateString()})` : ' indefinitely'}. Reason: ${reason}`
-    );
-
-    if (notify && onNotify) {
-      onNotify(
-        `Your ${entityType} account has been suspended${durationDays ? ` for ${durationDays} day(s)` : ''}. Reason: ${reason}`
+  const grant = () => {
+    if (isCreator) {
+      return run(
+        () => catalogApi.setCreatorPublishStatus(entityId, 'live'),
+        'Marketplace Access Granted',
+        `${entityType} "${entityName}" granted Marketplace Access (status set to live).`,
+        'Your account has been activated. Marketplace Access is now on.',
       );
     }
-
-    setIsProcessing(false);
+    return run(
+      () => catalogApi.setBrandMarketplaceAccess(entityId, 'granted').then((r) => r.data),
+      'Marketplace Access Granted',
+      `${entityType} "${entityName}" granted Marketplace Access.`,
+      'Your account has been activated. Marketplace Access is now on.',
+    );
   };
 
-  const reinstate = (note?: string) => {
-    setIsProcessing(true);
-
-    onPersist({
-      suspended: false,
-      suspendedAt: undefined,
-      suspensionReason: undefined,
-      suspensionDurationDays: undefined,
-      autoReinstateAt: undefined,
-      notifyOnSuspend: undefined,
-    });
-
-    onAudit('Marketplace Access Reinstated', note || `${entityType} "${entityName}" reinstated; suspension lifted.`);
-
-    if (onNotify) {
-      onNotify(`Your ${entityType} account access has been reinstated.`);
+  const suspend = ({ reason, durationDays, notify }: SuspendInput) => {
+    if (isCreator) {
+      return run(
+        () => catalogApi.setCreatorPublishStatus(entityId, 'archived'),
+        'Marketplace Access Suspended',
+        `${entityType} "${entityName}" archived (creators have no separate suspend-with-reason state). Operator note: ${reason}`,
+        notify ? `Your ${entityType} account has been deactivated. Reason: ${reason}` : undefined,
+      );
     }
-
-    setIsProcessing(false);
+    return run(
+      () => catalogApi.setBrandMarketplaceAccess(entityId, 'suspended').then((r) => r.data),
+      'Marketplace Access Suspended',
+      `${entityType} "${entityName}" suspended${durationDays ? ` for ${durationDays} day(s)` : ' indefinitely'}. Reason: ${reason} (duration/reason are operator notes only — not persisted server-side).`,
+      notify ? `Your ${entityType} account has been suspended${durationDays ? ` for ${durationDays} day(s)` : ''}. Reason: ${reason}` : undefined,
+    );
   };
 
-  /** Auto-reinstate check — call on profile load to lazily clear an expired suspension. */
-  const checkAutoReinstate = (state: MarketplaceAccessState): boolean => {
-    if (!state.suspended || !state.autoReinstateAt) return false;
-    if (new Date(state.autoReinstateAt).getTime() > Date.now()) return false;
-    reinstate(`Auto-reinstated: scheduled suspension window for "${entityName}" elapsed.`);
-    return true;
+  const reinstate = () => {
+    if (isCreator) {
+      return run(
+        () => catalogApi.setCreatorPublishStatus(entityId, 'live'),
+        'Marketplace Access Reinstated',
+        `${entityType} "${entityName}" reinstated (status set back to live).`,
+        `Your ${entityType} account access has been reinstated.`,
+      );
+    }
+    return run(
+      () => catalogApi.setBrandMarketplaceAccess(entityId, 'restored').then((r) => r.data),
+      'Marketplace Access Reinstated',
+      `${entityType} "${entityName}" reinstated; suspension lifted.`,
+      `Your ${entityType} account access has been reinstated.`,
+    );
   };
 
-  return { suspend, reinstate, checkAutoReinstate, isProcessing, entityId };
+  return { grant, suspend, reinstate, isProcessing, entityId };
 }

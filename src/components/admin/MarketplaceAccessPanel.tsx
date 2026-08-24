@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ShieldAlert, ShieldCheck, Clock, Bell } from 'lucide-react';
+import { ShieldAlert, ShieldCheck, ShieldQuestion, Clock, Bell } from 'lucide-react';
 import { GlassCard } from '../ui/GlassCard';
 import { Badge } from '../ui/Badge';
 import { Modal } from '../ui/Modal';
@@ -9,6 +9,7 @@ interface MarketplaceAccessPanelProps {
   entityType: MarketplaceEntityType;
   entityName: string;
   state: MarketplaceAccessState;
+  onGrant: () => void;
   onSuspend: (input: SuspendInput) => void;
   onReinstate: () => void;
   isProcessing?: boolean;
@@ -17,8 +18,34 @@ interface MarketplaceAccessPanelProps {
    * Seller/Creator (and other non-cms:edit roles) see status only.
    */
   canManageMarketplaceAccess?: boolean;
-  /** Optional authoritative status label (e.g. Active / Suspended / Inactive). */
+  /** Optional authoritative status label (e.g. Active / Suspended / Inactive / Revoked). */
   statusLabel?: string;
+}
+
+type AccessBucket = 'not_granted' | 'active' | 'suspended_like' | 'revoked' | 'unmanaged';
+
+/** Maps the canonical brand (not_granted/granted/restricted/suspended/restored/revoked) and
+ * creator (draft/live/archived) status enums onto the four UI buckets Phase 1 requires. */
+function classify(status: MarketplaceAccessState['status'], entityType: MarketplaceEntityType): AccessBucket {
+  if (entityType === 'consumer') return 'unmanaged';
+  if (!status) return 'unmanaged';
+  switch (status) {
+    case 'granted':
+    case 'restored':
+    case 'live':
+      return 'active';
+    case 'not_granted':
+    case 'draft':
+      return 'not_granted';
+    case 'suspended':
+    case 'restricted':
+    case 'archived':
+      return 'suspended_like';
+    case 'revoked':
+      return 'revoked';
+    default:
+      return 'unmanaged';
+  }
 }
 
 const CUSTOM_DATE_VALUE = -1;
@@ -35,6 +62,7 @@ export const MarketplaceAccessPanel: React.FC<MarketplaceAccessPanelProps> = ({
   entityType,
   entityName,
   state,
+  onGrant,
   onSuspend,
   onReinstate,
   isProcessing,
@@ -47,10 +75,8 @@ export const MarketplaceAccessPanel: React.FC<MarketplaceAccessPanelProps> = ({
   const [customDate, setCustomDate] = useState('');
   const [notify, setNotify] = useState(true);
 
-  const resolvedLabel = statusLabel || (state.suspended ? 'Suspended' : 'Active');
-  const isNegative =
-    state.suspended ||
-    /suspended|inactive|restricted|revoked|not.?granted/i.test(resolvedLabel);
+  const bucket = classify(state.status, entityType);
+  const resolvedLabel = statusLabel || (bucket === 'active' ? 'Active' : bucket === 'not_granted' ? 'Inactive' : bucket === 'revoked' ? 'Revoked' : bucket === 'suspended_like' ? 'Suspended' : 'Unmanaged');
 
   const handleConfirmSuspend = () => {
     if (!reason.trim()) return;
@@ -74,36 +100,65 @@ export const MarketplaceAccessPanel: React.FC<MarketplaceAccessPanelProps> = ({
     <GlassCard hoverLift={false} className="p-5 space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-[13px] font-bold text-app-text-primary flex items-center gap-2">
-          {isNegative ? <ShieldAlert className="w-4 h-4 text-rose-600" /> : <ShieldCheck className="w-4 h-4 text-emerald-600" />}
+          {bucket === 'active' ? (
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+          ) : bucket === 'unmanaged' ? (
+            <ShieldQuestion className="w-4 h-4 text-app-text-secondary" />
+          ) : (
+            <ShieldAlert className="w-4 h-4 text-rose-600" />
+          )}
           Marketplace Access
         </h3>
-        <Badge variant={isNegative ? 'danger' : 'success'}>{resolvedLabel}</Badge>
+        <Badge variant={bucket === 'active' ? 'success' : bucket === 'unmanaged' ? 'neutral' : 'danger'}>{resolvedLabel}</Badge>
       </div>
 
-      {!canManageMarketplaceAccess ? (
+      {bucket === 'unmanaged' ? (
+        <p className="text-[11px] text-app-text-secondary font-semibold m-0">
+          Marketplace Access does not apply to this account type.
+        </p>
+      ) : !canManageMarketplaceAccess ? (
         <p className="text-[11px] text-app-text-secondary font-semibold m-0">
           Platform-administered status. Contact Choosify Admin to change Marketplace Access.
         </p>
-      ) : state.suspended ? (
+      ) : bucket === 'not_granted' ? (
+        <div className="space-y-2">
+          <p className="text-[11px] text-app-text-secondary font-semibold m-0">
+            This {entityType} has been identity-approved but has not yet been granted Marketplace Access.
+          </p>
+          <button
+            onClick={onGrant}
+            disabled={isProcessing}
+            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all disabled:opacity-50"
+          >
+            {isProcessing ? 'Granting…' : 'Grant Marketplace Access'}
+          </button>
+        </div>
+      ) : bucket === 'revoked' ? (
+        <div className="space-y-3">
+          <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-[11px] text-rose-800">
+            Marketplace Access was previously <span className="font-bold">revoked</span> for this {entityType}. Re-granting will
+            restore full marketplace visibility.
+          </div>
+          <button
+            onClick={onGrant}
+            disabled={isProcessing}
+            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all disabled:opacity-50"
+          >
+            {isProcessing ? 'Granting…' : 'Grant Marketplace Access'}
+          </button>
+        </div>
+      ) : bucket === 'suspended_like' ? (
         <div className="space-y-3">
           <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 space-y-1.5 text-[11px] text-rose-800">
             <div>
               <span className="font-bold uppercase tracking-wider text-[9px] text-rose-500">Reason</span>
-              <p className="mt-0.5">{state.suspensionReason || 'No reason recorded'}</p>
+              <p className="mt-0.5">{state.suspensionReason || 'No reason recorded for this session — not persisted server-side.'}</p>
             </div>
             {state.suspendedAt && (
               <div className="flex items-center gap-1.5 text-rose-600">
                 <Clock className="w-3 h-3" />
                 Suspended on {new Date(state.suspendedAt).toLocaleDateString()}
               </div>
-            )}
-            {state.autoReinstateAt ? (
-              <div className="flex items-center gap-1.5 text-rose-600">
-                <Clock className="w-3 h-3" />
-                Auto-reinstates on {new Date(state.autoReinstateAt).toLocaleDateString()}
-              </div>
-            ) : (
-              <div className="text-rose-600">Indefinite — requires manual reinstatement</div>
             )}
             {state.notifyOnSuspend && (
               <div className="flex items-center gap-1.5 text-rose-600">
@@ -116,13 +171,14 @@ export const MarketplaceAccessPanel: React.FC<MarketplaceAccessPanelProps> = ({
             disabled={isProcessing}
             className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all disabled:opacity-50"
           >
-            Reinstate Now
+            {isProcessing ? 'Reinstating…' : 'Reinstate Access'}
           </button>
         </div>
       ) : (
         <button
           onClick={() => setModalOpen(true)}
-          className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all"
+          disabled={isProcessing}
+          className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all disabled:opacity-50"
         >
           Suspend Access
         </button>
@@ -139,40 +195,40 @@ export const MarketplaceAccessPanel: React.FC<MarketplaceAccessPanelProps> = ({
                 placeholder="e.g. Repeated policy violations, fraud investigation..."
                 className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary h-20 focus:border-app-accent focus:outline-none transition"
               />
+              <p className="text-[10px] text-app-text-secondary">
+                {entityType === 'creator'
+                  ? 'Creators have no separate suspend state — this archives the profile. Reason is kept in the on-page activity log only.'
+                  : 'Reason is kept in the on-page activity log only; the backend does not currently store a suspend reason.'}
+              </p>
             </div>
-            <div className="space-y-1">
-              <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Duration</label>
-              <select
-                value={durationDays}
-                onChange={(e) => setDurationDays(Number(e.target.value))}
-                className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:border-app-accent focus:outline-none transition"
-              >
-                {DURATION_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              {durationDays === CUSTOM_DATE_VALUE && (
-                <input
-                  type="date"
-                  value={customDate}
-                  min={new Date().toISOString().slice(0, 10)}
-                  onChange={(e) => setCustomDate(e.target.value)}
-                  className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:border-app-accent focus:outline-none transition mt-1.5"
-                />
-              )}
-              {durationDays > 0 && (
+            {entityType !== 'creator' && (
+              <div className="space-y-1">
+                <label className="text-[10px] uppercase font-bold tracking-wider text-app-text-secondary">Duration (for operator reference only)</label>
+                <select
+                  value={durationDays}
+                  onChange={(e) => setDurationDays(Number(e.target.value))}
+                  className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:border-app-accent focus:outline-none transition"
+                >
+                  {DURATION_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                {durationDays === CUSTOM_DATE_VALUE && (
+                  <input
+                    type="date"
+                    value={customDate}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setCustomDate(e.target.value)}
+                    className="w-full bg-white border border-app-border rounded-lg p-2.5 text-xs text-app-text-primary focus:border-app-accent focus:outline-none transition mt-1.5"
+                  />
+                )}
                 <p className="text-[10px] text-app-text-secondary">
-                  Auto-reinstates on {new Date(Date.now() + durationDays * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                  Not enforced automatically — the backend has no scheduled auto-reinstate. Reinstate manually when the window ends.
                 </p>
-              )}
-              {durationDays === CUSTOM_DATE_VALUE && customDate && (
-                <p className="text-[10px] text-app-text-secondary">
-                  Auto-reinstates on {new Date(customDate).toLocaleDateString()}
-                </p>
-              )}
-            </div>
+              </div>
+            )}
             <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -184,10 +240,10 @@ export const MarketplaceAccessPanel: React.FC<MarketplaceAccessPanelProps> = ({
             </label>
             <button
               onClick={handleConfirmSuspend}
-              disabled={!reason.trim() || (durationDays === CUSTOM_DATE_VALUE && !customDate)}
+              disabled={!reason.trim() || (durationDays === CUSTOM_DATE_VALUE && !customDate) || isProcessing}
               className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg uppercase tracking-wider transition-all disabled:opacity-50"
             >
-              Confirm Suspension
+              {isProcessing ? 'Submitting…' : 'Confirm Suspension'}
             </button>
           </div>
         </Modal>

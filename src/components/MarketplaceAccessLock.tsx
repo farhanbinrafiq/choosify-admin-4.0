@@ -31,11 +31,20 @@ export const MarketplaceAccessLockPanel: React.FC<{ profilePath: string }> = ({ 
   const { profile } = useAuth();
   const status = profile?.partnerApplicationStatus;
   const resubmit = profile?.resubmissionRequested === true;
+  /** Identity approval (status) and Marketplace Access (marketplaceAccess) are two independent
+   * gates — an approved partner reaching this gate has cleared identity review and is only
+   * waiting on the separate activation step, which reads as a different state to the copy below. */
+  const isApprovedButNotActivated = status === 'approved' && !resubmit;
   const stateLabel = resubmit
     ? 'Verification Required'
     : status === 'rejected'
       ? 'Application Declined'
-      : 'Under Review';
+      : isApprovedButNotActivated
+        ? 'Awaiting Activation'
+        : 'Under Review';
+  const bodyCopy = isApprovedButNotActivated
+    ? "Your account has been verified. Marketplace Access is awaiting activation by Choosify."
+    : 'Your account is currently under review. This feature will become available after Choosify verifies your account and enables Marketplace Access.';
   return (
   <div className="min-h-[60vh] flex items-center justify-center px-6 py-16">
     <div className="max-w-lg w-full rounded-2xl border border-[#E8EDF2] bg-white p-8 text-center shadow-sm">
@@ -47,8 +56,7 @@ export const MarketplaceAccessLockPanel: React.FC<{ profilePath: string }> = ({ 
       </div>
       <h2 className="text-[18px] font-extrabold text-[#111827] mb-3">Marketplace Access Pending</h2>
       <p className="text-[13px] font-semibold text-[#6B7280] leading-relaxed mb-6">
-        Your account is currently under review. This feature will become available after Choosify
-        verifies your account and enables Marketplace Access.
+        {bodyCopy}
       </p>
       <Link
         to={profilePath}

@@ -7,6 +7,7 @@ import { useContact } from '../../../contexts/ContactInteractionContext';
 import { useRbac } from '../../../contexts/RbacContext';
 import { useImpersonation } from '../../../contexts/ImpersonationContext';
 import { MarketplaceAccessPanel } from '../../../components/admin/MarketplaceAccessPanel';
+import { useMarketplaceAccess } from '../../../hooks/useMarketplaceAccess';
 import type { MarketplaceAccessState, MarketplaceEntityType, SuspendInput } from '../../../hooks/useMarketplaceAccess';
 import { 
   Building2, 
@@ -883,80 +884,93 @@ export default function UnifiedProfileShell() {
     return null;
   }, [typeKey, idKey, orders, customers, brandProfiles, catalogBrand, loggedInProfile]);
 
-  // ----- Marketplace Access (suspend/reinstate) — shared across Brand/Seller/Creator/Consumer Account Info tabs -----
-  const [marketplaceAccessByEntity, setMarketplaceAccessByEntity] = useState<Record<string, MarketplaceAccessState>>({});
+  // ----- Marketplace Access (grant/suspend/reinstate) — shared across Brand/Seller/Creator Account Info tabs -----
+  // Backed by the real backend (PATCH /catalog/brands/:id/marketplace-access for Brand/Seller,
+  // PATCH /catalog/creators/:id for Creator) via useMarketplaceAccess() — no local-only simulated
+  // state; every transition round-trips through the server and refreshes from its response.
   const marketplaceAccessKey = `${typeKey}_${idKey}`;
-  const marketplaceAccessState: MarketplaceAccessState = marketplaceAccessByEntity[marketplaceAccessKey] || { suspended: false };
   const marketplaceEntityName =
     (entityData as any)?.name || (entityData as any)?.storeName || (entityData as any)?.displayName || 'Account';
+  const marketplaceEntityType: MarketplaceEntityType =
+    typeKey === 'brand' || typeKey === 'seller' || typeKey === 'creator' ? typeKey : 'consumer';
+  const marketplaceEntityId = typeKey === 'creator' ? (catalogCreator?.id || '') : (catalogBrand?.id || '');
 
-  /** Prefer catalog brand Marketplace Access lifecycle when viewing a Brand profile. */
-  const marketplaceStatusLabel = useMemo(() => {
-    if (marketplaceAccessState.suspended) return 'Suspended';
-    if (typeKey === 'brand' && catalogBrand) {
-      const status = catalogBrand.marketplaceStatus
-        || (catalogBrand.marketplaceAccess ? 'granted' : 'not_granted');
-      switch (status) {
-        case 'granted':
-        case 'restored':
-          return 'Active';
-        case 'suspended':
-          return 'Suspended';
-        case 'restricted':
-          return 'Restricted';
-        case 'revoked':
-          return 'Revoked';
-        case 'not_granted':
-        default:
-          return 'Inactive';
-      }
+  const marketplaceAccessState: MarketplaceAccessState = useMemo(() => {
+    if (typeKey === 'creator') {
+      if (!catalogCreator) return { access: false };
+      return { status: catalogCreator.status, access: catalogCreator.status === 'live' };
     }
-    return marketplaceAccessState.suspended ? 'Suspended' : 'Active';
-  }, [marketplaceAccessState.suspended, typeKey, catalogBrand]);
+    if ((typeKey === 'brand' || typeKey === 'seller') && catalogBrand) {
+      const status = catalogBrand.marketplaceStatus || (catalogBrand.marketplaceAccess ? 'granted' : 'not_granted');
+      return { status, access: status === 'granted' || status === 'restored' };
+    }
+    return { access: false };
+  }, [typeKey, catalogBrand, catalogCreator]);
+
+  const marketplaceStatusLabel = useMemo(() => {
+    switch (marketplaceAccessState.status) {
+      case 'granted':
+      case 'restored':
+      case 'live':
+        return 'Active';
+      case 'suspended':
+      case 'archived':
+        return 'Suspended';
+      case 'restricted':
+        return 'Restricted';
+      case 'revoked':
+        return 'Revoked';
+      case 'not_granted':
+      case 'draft':
+        return 'Inactive';
+      default:
+        return undefined;
+    }
+  }, [marketplaceAccessState.status]);
+
+  // Suspend reason/notify are not persisted by the backend (PATCH /catalog/brands/:id/marketplace-access
+  // only accepts {status}) — kept here purely as session-local display metadata for the operator.
+  const [suspendMetaByEntity, setSuspendMetaByEntity] = useState<
+    Record<string, { reason: string; suspendedAt: string; notify: boolean }>
+  >({});
+
+  const {
+    grant: handleMarketplaceGrant,
+    suspend: handleMarketplaceSuspendAction,
+    reinstate: handleMarketplaceReinstate,
+    isProcessing: marketplaceActionProcessing,
+  } = useMarketplaceAccess({
+    entityType: marketplaceEntityType,
+    entityId: marketplaceEntityId,
+    entityName: marketplaceEntityName,
+    onSaved: (updated) => {
+      if (typeKey === 'creator') setCatalogCreator(updated as CatalogCreator);
+      else setCatalogBrand(updated as CatalogBrand);
+      showToast(`✓ Marketplace Access updated for ${marketplaceEntityName}.`, 'success');
+    },
+    onError: (message) => showToast(`⚠ ${message}`, 'error'),
+    onAudit: (action, description) =>
+      addLog(marketplaceAccessKey, marketplaceEntityName, loggedInProfile?.displayName || 'Admin', action, description),
+  });
 
   const handleMarketplaceSuspend = (input: SuspendInput) => {
-    if (!canManageMarketplaceAccess) return;
-    const suspendedAt = new Date().toISOString();
-    const autoReinstateAt = input.durationDays && input.durationDays > 0
-      ? new Date(Date.now() + input.durationDays * 24 * 60 * 60 * 1000).toISOString()
-      : undefined;
-    setMarketplaceAccessByEntity(prev => ({
+    setSuspendMetaByEntity((prev) => ({
       ...prev,
-      [marketplaceAccessKey]: {
-        suspended: true,
-        suspendedAt,
-        suspensionReason: input.reason,
-        suspensionDurationDays: input.durationDays ?? undefined,
-        autoReinstateAt,
-        notifyOnSuspend: input.notify,
-      },
+      [marketplaceAccessKey]: { reason: input.reason, suspendedAt: new Date().toISOString(), notify: input.notify },
     }));
-    addLog(
-      marketplaceAccessKey,
-      marketplaceEntityName,
-      loggedInProfile?.displayName || 'Admin',
-      'Marketplace Access Suspended',
-      `${input.durationDays ? `Suspended for ${input.durationDays} day(s), auto-reinstates ${new Date(autoReinstateAt!).toLocaleDateString()}` : 'Suspended indefinitely'}. Reason: ${input.reason}`
-    );
-    showToast(`🔒 Suspended marketplace access for ${marketplaceEntityName}.`, 'success');
+    return handleMarketplaceSuspendAction(input);
   };
 
-  const handleMarketplaceReinstate = () => {
-    if (!canManageMarketplaceAccess) return;
-    setMarketplaceAccessByEntity(prev => ({ ...prev, [marketplaceAccessKey]: { suspended: false } }));
-    addLog(marketplaceAccessKey, marketplaceEntityName, loggedInProfile?.displayName || 'Admin', 'Marketplace Access Reinstated', 'Suspension lifted; marketplace access restored.');
-    showToast(`✓ Reinstated marketplace access for ${marketplaceEntityName}.`, 'success');
+  const marketplaceAccessStateForPanel: MarketplaceAccessState = {
+    ...marketplaceAccessState,
+    ...(suspendMetaByEntity[marketplaceAccessKey]
+      ? {
+          suspensionReason: suspendMetaByEntity[marketplaceAccessKey].reason,
+          suspendedAt: suspendMetaByEntity[marketplaceAccessKey].suspendedAt,
+          notifyOnSuspend: suspendMetaByEntity[marketplaceAccessKey].notify,
+        }
+      : {}),
   };
-
-  // Auto-reinstate sweep: lazily clear an expired suspension for the entity currently in view
-  useEffect(() => {
-    const state = marketplaceAccessByEntity[marketplaceAccessKey];
-    if (!state?.suspended || !state.autoReinstateAt) return;
-    if (new Date(state.autoReinstateAt).getTime() > Date.now()) return;
-    setMarketplaceAccessByEntity(prev => ({ ...prev, [marketplaceAccessKey]: { suspended: false } }));
-    addLog(marketplaceAccessKey, marketplaceEntityName, 'System (Auto-Reinstate)', 'Marketplace Access Reinstated', 'Scheduled suspension window elapsed; access auto-restored.');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [marketplaceAccessKey]);
 
   // Action overrides
   const handleUserBanStatusToggle = () => {
@@ -1224,21 +1238,17 @@ export default function UnifiedProfileShell() {
       ?? (isSelfProfile ? loggedInProfile?.identityVerified === true : undefined)
       ?? catalogBrand?.verifiedStatus
       ?? catalogCreator?.verifiedStatus,
-    marketplaceAccess: marketplaceAccessState.suspended
-      ? false
-      : inspectedAccount?.marketplaceAccess
-        ?? (isSelfProfile ? loggedInProfile?.marketplaceAccess !== false : undefined)
-        ?? catalogBrand?.marketplaceAccess
-        ?? (catalogCreator ? catalogCreator.status === 'live' : undefined),
+    marketplaceAccess: inspectedAccount?.marketplaceAccess
+      ?? (isSelfProfile ? loggedInProfile?.marketplaceAccess !== false : undefined)
+      ?? catalogBrand?.marketplaceAccess
+      ?? (catalogCreator ? catalogCreator.status === 'live' : undefined),
     resubmissionRequested: inspectedAccount?.resubmissionRequested
       ?? (isSelfProfile ? loggedInProfile?.resubmissionRequested === true : undefined),
-    marketplaceStatus: marketplaceAccessState.suspended
-      ? 'suspended'
-      : inspectedAccount?.marketplaceStatus
-        ?? catalogBrand?.marketplaceStatus
-        ?? (catalogBrand
-          ? (catalogBrand.marketplaceAccess ? 'granted' : 'not_granted')
-          : null),
+    marketplaceStatus: inspectedAccount?.marketplaceStatus
+      ?? catalogBrand?.marketplaceStatus
+      ?? (catalogBrand
+        ? (catalogBrand.marketplaceAccess ? 'granted' : 'not_granted')
+        : null),
     creatorCatalogStatus: inspectedAccount?.creatorCatalogStatus
       ?? catalogCreator?.status
       ?? null,
@@ -1248,7 +1258,10 @@ export default function UnifiedProfileShell() {
     claimStatus: inspectedAccount?.claimStatus ?? catalogBrand?.claimStatus ?? null,
     ownershipClaimPending: inspectedAccount?.ownershipClaimPending
       ?? catalogBrand?.claimStatus === 'pending',
-    localSuspended: marketplaceAccessState.suspended,
+    localSuspended:
+      marketplaceAccessState.status === 'suspended' ||
+      marketplaceAccessState.status === 'restricted' ||
+      marketplaceAccessState.status === 'archived',
   });
 
   const identityBadges = typeKey === 'order' && orderEnt ? [
@@ -1823,9 +1836,11 @@ export default function UnifiedProfileShell() {
             <MarketplaceAccessPanel
               entityType="consumer"
               entityName={marketplaceEntityName}
-              state={marketplaceAccessState}
+              state={marketplaceAccessStateForPanel}
+              onGrant={handleMarketplaceGrant}
               onSuspend={handleMarketplaceSuspend}
               onReinstate={handleMarketplaceReinstate}
+              isProcessing={marketplaceActionProcessing}
               canManageMarketplaceAccess={canManageMarketplaceAccess}
               statusLabel={marketplaceStatusLabel}
             />
@@ -2753,9 +2768,11 @@ export default function UnifiedProfileShell() {
             <MarketplaceAccessPanel
               entityType={typeKey as MarketplaceEntityType}
               entityName={marketplaceEntityName}
-              state={marketplaceAccessState}
+              state={marketplaceAccessStateForPanel}
+              onGrant={handleMarketplaceGrant}
               onSuspend={handleMarketplaceSuspend}
               onReinstate={handleMarketplaceReinstate}
+              isProcessing={marketplaceActionProcessing}
               canManageMarketplaceAccess={canManageMarketplaceAccess}
               statusLabel={marketplaceStatusLabel}
             />
@@ -3490,9 +3507,11 @@ export default function UnifiedProfileShell() {
             <MarketplaceAccessPanel
               entityType="creator"
               entityName={marketplaceEntityName}
-              state={marketplaceAccessState}
+              state={marketplaceAccessStateForPanel}
+              onGrant={handleMarketplaceGrant}
               onSuspend={handleMarketplaceSuspend}
               onReinstate={handleMarketplaceReinstate}
+              isProcessing={marketplaceActionProcessing}
               canManageMarketplaceAccess={canManageMarketplaceAccess}
               statusLabel={marketplaceStatusLabel}
             />

@@ -71,8 +71,8 @@ const requireAuth = [authenticateRequest];
 const requireAdmin = [authenticateRequest, requireRole(ROLES.ADMIN)];
 
 /**
- * Public seller-account lookup for the storefront Dashboard dual-account UI.
- * Returns only a boolean — no profile details — to limit email enumeration risk.
+ * Public seller/creator-account lookup for the storefront Dashboard partner-account UI.
+ * Returns only booleans — no profile details — to limit email enumeration risk.
  */
 authRouter.get('/auth/seller-status', async (req, res) => {
   const email = String(req.query.email || '')
@@ -90,9 +90,11 @@ authRouter.get('/auth/seller-status', async (req, res) => {
     const devRole = DEV_ROLE_MAP[email];
     const role = mappedRole || devRole;
     const hasSellerAccount = role === ROLES.SELLER || role === ROLES.VERIFIED_SELLER;
+    const hasCreatorAccount = role === ROLES.CREATOR;
 
     res.json({
       hasSellerAccount,
+      hasCreatorAccount,
       dashboardPath: '/seller/products',
     });
   } catch (error) {

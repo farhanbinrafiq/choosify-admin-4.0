@@ -507,6 +507,14 @@ export default function App() {
             <Route path="/brand/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={routeSuspenseFallback}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
             <Route path="/order/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={routeSuspenseFallback}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
             <Route path="/creator/:id" element={<ProtectedRoute><OwnProfileRedirect role="creator" /></ProtectedRoute>} />
+            {/*
+              inspectionUniversalPath() (lib/impersonationRouting.ts) and OwnProfileRedirect
+              have targeted /admin/creators/:id for Admin-viewing-another-creator since that
+              helper was introduced, but no route ever matched it — every such redirect landed
+              on the catch-all. Mirrors /brand/:id; UnifiedProfileShell's own typeKey derivation
+              already handles the /creators/ path segment.
+            */}
+            <Route path="/admin/creators/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={routeSuspenseFallback}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
 
             {/*
               Admin / account self-profile: CmsMirrorHost (adminProfile page) — NOT UnifiedProfileShell.

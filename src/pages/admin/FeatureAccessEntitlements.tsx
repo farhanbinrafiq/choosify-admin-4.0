@@ -545,7 +545,10 @@ export default function FeatureAccessEntitlementsPage() {
   const [catalog, setCatalog] = useState<PartnerFeatureDef[]>([]);
   const [roleDefaults, setRoleDefaults] = useState<RoleDefaults | null>(null);
   const [applications, setApplications] = useState<PartnerApplicationRow[]>([]);
-  const [showApplications, setShowApplications] = useState(false);
+  const [applicationsLoading, setApplicationsLoading] = useState(true);
+  const [applicationsError, setApplicationsError] = useState<string | null>(null);
+  const [rowFeedback, setRowFeedback] = useState<Record<string, { type: 'success' | 'error'; message: string }>>({});
+  const [justApproved, setJustApproved] = useState<{ id: string; name: string; grantHref: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -558,6 +561,7 @@ export default function FeatureAccessEntitlementsPage() {
 
   const load = useCallback(async () => {
     setLoading(true);
+    setApplicationsLoading(true);
     setError(null);
     try {
       const [entRes, appRes] = await Promise.all([
@@ -600,7 +604,12 @@ export default function FeatureAccessEntitlementsPage() {
         setCatalog(PARTNER_FEATURES);
         setRoleDefaults(entBody.roleDefaults || null);
       }
-      if (appRes.ok) setApplications(appBody.applications || []);
+      if (appRes.ok) {
+        setApplications(appBody.applications || []);
+        setApplicationsError(null);
+      } else {
+        setApplicationsError(appBody.error || `Failed to load partner applications (${appRes.status}).`);
+      }
     } catch (e) {
       setCatalog(PARTNER_FEATURES);
       setRoleDefaults({
@@ -612,8 +621,10 @@ export default function FeatureAccessEntitlementsPage() {
         ),
       });
       setError(e instanceof Error ? e.message : 'Load failed');
+      setApplicationsError(e instanceof Error ? e.message : 'Failed to load partner applications.');
     } finally {
       setLoading(false);
+      setApplicationsLoading(false);
     }
   }, []);
 
@@ -676,7 +687,13 @@ export default function FeatureAccessEntitlementsPage() {
   };
 
   const reviewApplication = async (id: string, action: 'approve' | 'reject') => {
-    setBusyKey(`app:${id}`);
+    const app = applications.find((a) => a.id === id);
+    setBusyKey(`app:${id}:${action}`);
+    setRowFeedback((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
     try {
       const res = await fetch(`${API_BASE}/operations/partner-applications/${id}/${action}`, {
         method: 'POST',
@@ -687,10 +704,21 @@ export default function FeatureAccessEntitlementsPage() {
       });
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(body.error || `${action} failed`);
-      showToast(action === 'approve' ? 'Partner provisioned.' : 'Application rejected.');
+      if (action === 'approve' && app) {
+        const grantHref = app.applicantType === 'creator'
+          ? `/admin/creators/${encodeURIComponent(app.provisionedUserId || '')}`
+          : `/brand/${encodeURIComponent(app.provisionedUserId || '')}`;
+        setJustApproved({ id, name: app.businessOrChannelName, grantHref });
+        showToast('Partner provisioned. Marketplace Access still needs to be granted separately.');
+      } else {
+        setRowFeedback((prev) => ({ ...prev, [id]: { type: 'success', message: 'Application rejected.' } }));
+        showToast('Application rejected.');
+      }
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Review failed');
+      const msg = e instanceof Error ? e.message : 'Review failed';
+      setRowFeedback((prev) => ({ ...prev, [id]: { type: 'error', message: msg } }));
+      setError(msg);
     } finally {
       setBusyKey(null);
     }
@@ -746,6 +774,199 @@ export default function FeatureAccessEntitlementsPage() {
             {error}
           </div>
         )}
+
+        {/*
+          Partner Applications — deliberately placed at the top of the page, always visible.
+          Previously lived inside a collapsed <details> at the bottom of this (unrelated) Feature
+          Access page; a live approval attempt during QA went unnoticed by the operator as a
+          result. Kept on this page (not moved elsewhere) to avoid adding a second review surface.
+        */}
+        <div
+          style={{
+            background: '#fff',
+            border: applications.length > 0 ? '1px solid #FED7AA' : '1px solid #E8EDF2',
+            borderRadius: 10,
+            marginBottom: 16,
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              padding: '14px 20px',
+              background: applications.length > 0 ? '#FFF7ED' : '#F9FAFB',
+              borderBottom: '1px solid #F1F3F5',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 12,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', display: 'flex', alignItems: 'center' }}>
+              Partner Applications
+              {applications.length > 0 && (
+                <span
+                  style={{
+                    marginLeft: 8,
+                    minWidth: 20,
+                    padding: '2px 7px',
+                    borderRadius: 999,
+                    background: '#FF5B00',
+                    color: '#fff',
+                    fontSize: 11,
+                    fontWeight: 800,
+                    textAlign: 'center',
+                  }}
+                >
+                  {applications.length} pending
+                </span>
+              )}
+            </div>
+            {applicationsLoading && <span style={{ fontSize: 11, fontWeight: 700, color: '#9CA3AF' }}>Loading…</span>}
+          </div>
+
+          {justApproved && (
+            <div
+              style={{
+                margin: 16,
+                padding: 16,
+                borderRadius: 10,
+                border: '1px solid #A7F3D0',
+                background: '#ECFDF5',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#065F46' }}>
+                ✓ {justApproved.name} approved. Identity is verified — Marketplace Access is still off until it's granted
+                separately.
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <a
+                  href={justApproved.grantHref}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    background: '#059669',
+                    color: '#fff',
+                    fontSize: 12,
+                    fontWeight: 800,
+                    textDecoration: 'none',
+                  }}
+                >
+                  Grant Marketplace Access →
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setJustApproved(null)}
+                  style={{ border: 'none', background: 'transparent', color: '#065F46', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
+
+          {applicationsError && (
+            <div
+              style={{
+                margin: 16,
+                padding: '10px 14px',
+                borderRadius: 8,
+                border: '1px solid #FECACA',
+                background: '#FEF2F2',
+                fontSize: 12,
+                fontWeight: 700,
+                color: '#B91C1C',
+              }}
+            >
+              {applicationsError}
+            </div>
+          )}
+
+          {!applicationsLoading && !applicationsError && applications.length === 0 ? (
+            <div style={{ padding: 24, fontSize: 13, fontWeight: 600, color: '#6B7280' }}>No pending partner applications.</div>
+          ) : (
+            applications.map((app) => {
+              const feedback = rowFeedback[app.id];
+              const busy = busyKey === `app:${app.id}:approve` || busyKey === `app:${app.id}:reject`;
+              return (
+                <div key={app.id} style={{ padding: '16px 20px', borderBottom: '1px solid #F1F3F5' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                    <div>
+                      <div style={{ fontSize: 13, fontWeight: 800 }}>
+                        {app.businessOrChannelName}{' '}
+                        <span style={{ fontSize: 11, fontWeight: 800, color: '#FF5B00' }}>{app.applicantType.toUpperCase()}</span>
+                      </div>
+                      <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginTop: 2 }}>
+                        {app.displayName} · {app.email} · {app.category} · {app.city}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void reviewApplication(app.id, 'approve')}
+                        style={{
+                          height: 36,
+                          padding: '0 14px',
+                          borderRadius: 8,
+                          border: 'none',
+                          background: '#059669',
+                          color: '#fff',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          opacity: busy ? 0.6 : 1,
+                        }}
+                      >
+                        {busyKey === `app:${app.id}:approve` ? 'Approving…' : 'Approve'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void reviewApplication(app.id, 'reject')}
+                        style={{
+                          height: 36,
+                          padding: '0 14px',
+                          borderRadius: 8,
+                          border: '1px solid #FECACA',
+                          background: '#FEF2F2',
+                          color: '#B91C1C',
+                          fontSize: 12,
+                          fontWeight: 800,
+                          cursor: 'pointer',
+                          opacity: busy ? 0.6 : 1,
+                        }}
+                      >
+                        {busyKey === `app:${app.id}:reject` ? 'Rejecting…' : 'Reject'}
+                      </button>
+                    </div>
+                  </div>
+                  {feedback && (
+                    <div
+                      style={{
+                        marginTop: 10,
+                        padding: '8px 12px',
+                        borderRadius: 8,
+                        fontSize: 11.5,
+                        fontWeight: 700,
+                        background: feedback.type === 'success' ? '#ECFDF5' : '#FEF2F2',
+                        color: feedback.type === 'success' ? '#065F46' : '#B91C1C',
+                        border: `1px solid ${feedback.type === 'success' ? '#A7F3D0' : '#FECACA'}`,
+                      }}
+                    >
+                      {feedback.message}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
 
         {/* Role intro card — design: pad 24, radius 10, title 16/800, sub 12/#6B7280/600 */}
         <div
@@ -900,108 +1121,6 @@ export default function FeatureAccessEntitlementsPage() {
           ))
         )}
 
-        {/* Secondary ops panel — not in design file; keep collapsed */}
-        <details
-          open={showApplications}
-          onToggle={(e) => setShowApplications((e.target as HTMLDetailsElement).open)}
-          style={{ marginTop: 8 }}
-        >
-          <summary
-            style={{
-              cursor: 'pointer',
-              fontSize: 11,
-              fontWeight: 800,
-              color: '#9CA3AF',
-              letterSpacing: '0.04em',
-              textTransform: 'uppercase',
-              padding: '8px 0',
-              listStyle: 'none',
-            }}
-          >
-            Partner applications ({applications.length})
-          </summary>
-          <div
-            style={{
-              background: '#fff',
-              border: '1px solid #E8EDF2',
-              borderRadius: 10,
-              overflow: 'hidden',
-            }}
-          >
-            {applications.length === 0 ? (
-              <div style={{ padding: 24, fontSize: 13, fontWeight: 600, color: '#6B7280' }}>
-                No pending partner applications.
-              </div>
-            ) : (
-              applications.map((app) => (
-                <div
-                  key={app.id}
-                  style={{
-                    padding: '16px 24px',
-                    borderBottom: '1px solid #F1F3F5',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 16,
-                    flexWrap: 'wrap',
-                  }}
-                >
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 800 }}>
-                      {app.businessOrChannelName}{' '}
-                      <span style={{ fontSize: 11, fontWeight: 800, color: '#FF5B00' }}>
-                        {app.applicantType.toUpperCase()}
-                      </span>
-                    </div>
-                    <div style={{ fontSize: 11, color: '#9CA3AF', fontWeight: 600, marginTop: 2 }}>
-                      {app.displayName} · {app.email} · {app.category} · {app.city}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button
-                      type="button"
-                      disabled={busyKey === `app:${app.id}`}
-                      onClick={() => void reviewApplication(app.id, 'approve')}
-                      style={{
-                        height: 36,
-                        padding: '0 14px',
-                        borderRadius: 8,
-                        border: 'none',
-                        background: '#059669',
-                        color: '#fff',
-                        fontSize: 12,
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        opacity: busyKey === `app:${app.id}` ? 0.6 : 1,
-                      }}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busyKey === `app:${app.id}`}
-                      onClick={() => void reviewApplication(app.id, 'reject')}
-                      style={{
-                        height: 36,
-                        padding: '0 14px',
-                        borderRadius: 8,
-                        border: '1px solid #FECACA',
-                        background: '#FEF2F2',
-                        color: '#B91C1C',
-                        fontSize: 12,
-                        fontWeight: 800,
-                        cursor: 'pointer',
-                        opacity: busyKey === `app:${app.id}` ? 0.6 : 1,
-                      }}
-                    >
-                      Reject
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </details>
       </div>
     </AdminWorkspaceLayout>
   );
