@@ -24,6 +24,7 @@ repositories, owned by `choosify:choosify`, mode `750`:
 - `/var/www/choosify/deploy/deploy-admin.sh`
 - `/var/www/choosify/backup/backup-postgres.sh`
 - `/var/www/choosify/backup/backup-catalog.sh`
+- `/var/www/choosify/backup/backup-operations.sh`
 - `/var/www/choosify/monitor/monitor-production.sh`
 
 The copies in this directory (`scripts/ops/`) are reference/source copies
@@ -101,6 +102,45 @@ restore semantics.
   `CATALOG_USE_FIRESTORE`, never interacts with PostgreSQL, never
   restores automatically
 
+## Operations backup behavior (summary)
+
+`backup-operations.sh` is a standalone, independently-runnable backup for
+the production operations memory-adapter snapshot
+(`/data/choosify/runtime/operations-memory-snapshot.json`, path set via
+`OPERATIONS_MEMORY_SNAPSHOT_PATH`) -- the sole durability copy of orders,
+shipments, coupons, coupon usage, reviews, leads, job postings/applications,
+permissions, feature flags, seller offers, fee charges, payment options
+config, seller booking settings, returns, verifications, and warranty
+claims while `OPERATIONS_USE_FIRESTORE=false`. Same fragile write pattern
+as the catalog snapshot (direct overwrite, no fsync, debounced writes,
+silent fallback-to-defaults on a corrupt/missing file) -- see QA3-002.
+Kept deliberately separate from `backup-postgres.sh` and
+`backup-catalog.sh`: different source, different schema, independently
+runnable/debuggable.
+
+**This is temporary protection only.** It backs up the existing fragile
+store; it does not fix the underlying persistence model. The durable fix
+is moving operations data to PostgreSQL, which has not been done.
+
+- Source JSON is validated (parses, is an object, has all expected
+  `OperationsSnapshot` top-level keys) *before* it is copied
+- Copied to a temp file first, with a bounded 3-attempt retry if the
+  source changes mid-copy (source hash compared before/after `cp`);
+  the temp copy's JSON is validated again before it becomes final
+- Finalized via atomic rename (`mv`), never a direct overwrite of the
+  destination
+- A SHA256 checksum is generated alongside each backup
+- Local retention: latest 7 daily backups only (matched by a dedicated
+  `operations_daily_` filename prefix, so it never touches manually
+  created reference copies, Postgres backups, or catalog backups)
+- Never mutates or deletes the live snapshot (read-only `cp` of the
+  source), never restarts services, never changes
+  `OPERATIONS_MEMORY_SNAPSHOT_PATH`, never interacts with PostgreSQL,
+  never restores automatically -- restoring from a backup is a manual,
+  operator-performed action only
+- Never logs order/buyer/coupon/shipment contents -- only paths, sizes,
+  filenames, and checksums
+
 ## Monitoring behavior (summary)
 
 `monitor-production.sh` is a lightweight, read-only monitor. It never
@@ -125,6 +165,10 @@ Checks performed each run:
   (checksum verified, JSON parse validated) — reported as its own,
   separate check from the PostgreSQL backup check above — warn if no
   valid backup within 30 hours, critical within 48 hours
+- Freshness/integrity of the newest `operations_daily_*.json` backup
+  (checksum verified, JSON parse validated) — reported as its own check,
+  separate from both the PostgreSQL and catalog backup checks — warn if
+  no valid backup within 30 hours, critical within 48 hours
 - Booking-expiry cron observability, on a best-effort basis (see gap
   below) — warn if the log hasn't updated in 26 hours, critical at 50
 - TLS certificate expiry for all three hostnames — warn at <= 21 days,
