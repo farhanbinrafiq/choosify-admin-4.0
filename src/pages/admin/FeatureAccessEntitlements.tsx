@@ -706,7 +706,7 @@ export default function FeatureAccessEntitlementsPage() {
       if (!res.ok) throw new Error(body.error || `${action} failed`);
       if (action === 'approve' && app) {
         const grantHref = app.applicantType === 'creator'
-          ? `/admin/creators/${encodeURIComponent(app.provisionedUserId || '')}`
+          ? `/admin/creators/${encodeURIComponent(app.provisionedUserId || '')}/marketplace-access`
           : `/brand/${encodeURIComponent(app.provisionedUserId || '')}`;
         setJustApproved({ id, name: app.businessOrChannelName, grantHref });
         showToast('Partner provisioned. Marketplace Access still needs to be granted separately.');

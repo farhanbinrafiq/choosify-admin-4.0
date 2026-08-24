@@ -508,13 +508,26 @@ export default function App() {
             <Route path="/order/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={routeSuspenseFallback}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
             <Route path="/creator/:id" element={<ProtectedRoute><OwnProfileRedirect role="creator" /></ProtectedRoute>} />
             {/*
-              inspectionUniversalPath() (lib/impersonationRouting.ts) and OwnProfileRedirect
-              have targeted /admin/creators/:id for Admin-viewing-another-creator since that
-              helper was introduced, but no route ever matched it — every such redirect landed
-              on the catch-all. Mirrors /brand/:id; UnifiedProfileShell's own typeKey derivation
-              already handles the /creators/ path segment.
+              CORRECTION (post-sprint regression fix): a prior fix here registered a bare
+              /admin/creators/:id route pointing at the legacy UnifiedProfileShell, reasoning
+              that inspectionUniversalPath()/OwnProfileRedirect targeted it and "no route ever
+              matched it." That was incomplete -- /admin/* below already catches it and hands
+              it to CmsMirrorHost, whose parseMirrorDeepLink() posts a 'cms-mirror-select-creator'
+              message into the modern CMS-mirror iframe (public/cms-mirror/app.html) for exactly
+              this path. The added route was MORE specific than the /admin/* wildcard, so it won
+              routing priority and silently shadowed that working modern-experience handoff for
+              every caller of the general path (impersonation, search, notifications), not just
+              onboarding. Removed here so /admin/creators/:id (general) falls back through to
+              /admin/* -> CmsMirrorHost as originally intended.
+
+              The narrower path below is deliberately kept: the CMS-mirror prototype has status
+              LABELS for Marketplace Access but no Grant/Suspend/Reinstate controls wired to any
+              button (verified: zero matches for those action strings across every file in
+              public/cms-mirror/). Until that's built there, this is the only place the feature
+              built this sprint actually works, so the onboarding "Grant Marketplace Access"
+              link targets this specific sub-path rather than the general one.
             */}
-            <Route path="/admin/creators/:id" element={<ProtectedRoute><AdminLayout><Suspense fallback={routeSuspenseFallback}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
+            <Route path="/admin/creators/:id/marketplace-access" element={<ProtectedRoute><AdminLayout><Suspense fallback={routeSuspenseFallback}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
 
             {/*
               Admin / account self-profile: CmsMirrorHost (adminProfile page) — NOT UnifiedProfileShell.
