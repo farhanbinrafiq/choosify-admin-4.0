@@ -193,6 +193,124 @@ export async function syncProductStockFromInventory(
   return saved;
 }
 
+/**
+ * Sprint 5 (QA3-001): getInventoryRecord()/adjustInventory() are each a
+ * separate `await`, so a read-check-write sequence built from them has a
+ * TOCTOU gap -- Node yields control at every await boundary regardless of
+ * whether the underlying memory-disk work is itself synchronous, so two
+ * concurrent requests for the same product can both read the same
+ * "available" value before either writes back. The Commerce engine's own
+ * reserveProductInventory() has this same gap today (unmodified this
+ * sprint -- out of scope; see the audit report). There is no real
+ * cross-process transaction available in the current memory-disk/JSON-
+ * snapshot architecture, but Choosify runs as a single Node process (no
+ * clustering), so a per-key in-process mutex is a complete fix for the
+ * concurrency that can actually occur in production today. Empirically
+ * verified in Sprint 5's concurrency test (concurrent last-unit requests).
+ */
+const inventoryLocks = new Map<string, Promise<unknown>>();
+
+async function withInventoryLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prior = inventoryLocks.get(key) ?? Promise.resolve();
+  let release: () => void = () => {};
+  const next = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  inventoryLocks.set(key, prior.then(() => next));
+  await prior;
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (inventoryLocks.get(key) === next) inventoryLocks.delete(key);
+  }
+}
+
+export type ReserveInventoryResult =
+  | { ok: true; record: CatalogInventoryRecord }
+  | { ok: false; available: number };
+
+/**
+ * Atomically (within this process) reserves `quantity` against a product's
+ * availableQuantity, lazily seeding the inventory record from product.stock
+ * on first-ever reservation -- the same seeding behavior
+ * checkoutService.ts's reserveProductInventory() already uses, reused here
+ * rather than a separate backfill script. Returns { ok: false } instead of
+ * throwing so callers can build a clean 409 without a try/catch per call.
+ */
+export async function reserveInventoryQuantity(input: {
+  productId: string;
+  variantId?: string;
+  quantity: number;
+}): Promise<ReserveInventoryResult> {
+  const key = inventoryRecordId(input.productId, input.variantId);
+  return withInventoryLock<ReserveInventoryResult>(key, async () => {
+    const existing = await getInventoryRecord(input.productId, input.variantId);
+    if (!existing) {
+      const product = await catalogStore.getProduct(input.productId);
+      const seedQty = Math.max(0, Math.floor(product?.stock ?? 0));
+      if (input.quantity > seedQty) {
+        return { ok: false, available: seedQty };
+      }
+      const record = await ensureInventoryRecord({
+        productId: input.productId,
+        variantId: input.variantId,
+        quantity: seedQty,
+        reservedQuantity: input.quantity,
+      });
+      return { ok: true, record };
+    }
+    if (input.quantity > existing.availableQuantity) {
+      return { ok: false, available: existing.availableQuantity };
+    }
+    const record = await adjustInventory({
+      productId: input.productId,
+      variantId: input.variantId,
+      reservedQuantity: existing.reservedQuantity + input.quantity,
+    });
+    return { ok: true, record };
+  });
+}
+
+/** Releases a previously-reserved quantity (cancel / creation-failure compensation). quantity unchanged, reservedQuantity only. */
+export async function releaseInventoryQuantity(input: {
+  productId: string;
+  variantId?: string;
+  quantity: number;
+}): Promise<CatalogInventoryRecord | null> {
+  const key = inventoryRecordId(input.productId, input.variantId);
+  return withInventoryLock(key, async () => {
+    const existing = await getInventoryRecord(input.productId, input.variantId);
+    if (!existing) return null;
+    return adjustInventory({
+      productId: input.productId,
+      variantId: input.variantId,
+      reservedQuantity: Math.max(0, existing.reservedQuantity - input.quantity),
+    });
+  });
+}
+
+/** Converts a reservation into sold stock: quantity -= n AND reservedQuantity -= n. */
+export async function consumeInventoryQuantity(input: {
+  productId: string;
+  variantId?: string;
+  quantity: number;
+}): Promise<CatalogInventoryRecord | null> {
+  const key = inventoryRecordId(input.productId, input.variantId);
+  return withInventoryLock(key, async () => {
+    const existing = await getInventoryRecord(input.productId, input.variantId);
+    if (!existing) return null;
+    const nextQuantity = Math.max(0, existing.quantity - input.quantity);
+    const nextReserved = Math.max(0, existing.reservedQuantity - input.quantity);
+    return adjustInventory({
+      productId: input.productId,
+      variantId: input.variantId,
+      quantity: nextQuantity,
+      reservedQuantity: Math.min(nextReserved, nextQuantity),
+    });
+  });
+}
+
 /** Test helper — clears inventory collection (memory-disk / firestore). */
 export async function __resetInventoryStoreForTests(): Promise<void> {
   const all = await catalogStore.listInventory();

@@ -36,6 +36,11 @@ import {
   type OrderLikeForExpiry,
 } from '../shared/messaging/conversationExpiry';
 import { catalogStore } from '../lib/vercel-catalog/catalogStore';
+import {
+  reserveInventoryQuantity,
+  releaseInventoryQuantity,
+  consumeInventoryQuantity,
+} from './catalog/inventoryStore';
 import { getService } from './catalog/serviceStore';
 import { normalizeBrandInput } from './catalogContract';
 import { normalizeCreatorInput } from '../lib/vercel-catalog/catalogEditorialContract';
@@ -656,6 +661,9 @@ operationsRouter.get('/operations/orders/:id', ...requireAuth, (req, res) => {
 });
 
 operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => {
+  // QA3-001: lines successfully reserved this request, for rollback if a
+  // later step (createOrder, coupon usage, shipment) throws.
+  let reservedInventoryLines: Array<{ productId: string; variantId?: string; quantity: number }> = [];
   try {
     const body = req.body as Partial<OpsStorefrontOrder>;
     if (!body.orderId) {
@@ -732,6 +740,70 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
       }
     }
 
+    // QA3-001: manual (staff-created) orders keep the same trust boundary as
+    // pricing above -- not enforced here. Buyer orders reuse pricing's
+    // already-validated subOrders (product existence already confirmed by
+    // recomputeOrderPricingServerSide's own throw above), never the raw
+    // client body. Aggregate quantity per product+variant across every line
+    // FIRST (a product can appear twice, or split across sub-orders) so
+    // availability is checked against the true total, not line-by-line.
+    if (!wantsManual) {
+      // Defense-in-depth: the 409 check above and this reservation step are
+      // separated by the pricing-recomputation await, so re-check
+      // synchronously right before reserving to narrow (not fully close --
+      // see the audit report's atomicity section) the duplicate-orderId
+      // race window.
+      if (operationsStore.getOrder(body.orderId)) {
+        res.status(409).json({ error: 'Order already exists' });
+        return;
+      }
+
+      const required = new Map<string, { productId: string; variantId?: string; quantity: number }>();
+      for (const sub of pricing.subOrders as Array<{ items?: Array<Record<string, unknown>> }>) {
+        for (const item of sub.items || []) {
+          const productId =
+            typeof item.productId === 'string' || typeof item.productId === 'number'
+              ? String(item.productId).trim()
+              : '';
+          if (!productId) continue; // service line -- never consumes physical inventory
+          const variantId = typeof item.variantId === 'string' ? item.variantId : undefined;
+          const key = `${productId}::${variantId || ''}`;
+          const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+          const existing = required.get(key);
+          required.set(key, { productId, variantId, quantity: (existing?.quantity || 0) + quantity });
+        }
+      }
+
+      for (const line of required.values()) {
+        const result = await reserveInventoryQuantity(line);
+        if (result.ok === true) {
+          reservedInventoryLines.push(line);
+          continue;
+        }
+        const insufficientResult: { ok: false; available: number } = result;
+        for (const r of reservedInventoryLines) {
+          await releaseInventoryQuantity(r).catch((err) => {
+            console.error('[Order] Failed to release inventory after a later line failed reservation:', err);
+          });
+        }
+        reservedInventoryLines = [];
+        res.status(409).json({
+          error: `Insufficient stock for one or more items`,
+          code: 'INSUFFICIENT_STOCK',
+          productId: line.productId,
+          requestedQuantity: line.quantity,
+          availableQuantity: insufficientResult.available,
+        });
+        return;
+      }
+    }
+
+    // Stable reference used below to detect whether createOrder() actually
+    // created this row or returned a pre-existing one (its own idempotency
+    // guard) -- which can happen despite the checks above if a genuinely
+    // concurrent duplicate submission raced through both of them.
+    const createdAtValue = body.createdAt || new Date().toISOString();
+
     const saved = operationsStore.createOrder({
       orderId: body.orderId,
       buyerId,
@@ -741,6 +813,7 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
       subtotal: pricing.subtotal,
       deliveryTotal: pricing.deliveryTotal,
       subOrders: pricing.subOrders,
+      inventoryReserved: reservedInventoryLines.length > 0 ? true : undefined,
       promoCode: body.promoCode,
       promoDiscount: pricing.promoDiscount,
       promoType: body.promoType,
@@ -755,7 +828,7 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
       paymentDueAt: body.paymentDueAt,
       paidAt: body.paidAt,
       invoiceGeneratedAt: body.invoiceGeneratedAt,
-      createdAt: body.createdAt || new Date().toISOString(),
+      createdAt: createdAtValue,
       isManual: wantsManual || undefined,
       platformSource: body.platformSource,
       claimToken,
@@ -774,6 +847,20 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
       paidAmount: body.paidAmount,
       paymentValidatedAt: body.paymentValidatedAt,
     });
+
+    // QA3-001: createOrder() is idempotent -- if a genuinely concurrent
+    // duplicate submission raced past both checks above, `saved` here is
+    // the OTHER request's already-persisted row (different createdAt),
+    // not a new order backed by the reservation this request just made.
+    // Release it so the same order's stock isn't reserved twice.
+    if (reservedInventoryLines.length > 0 && saved.createdAt !== createdAtValue) {
+      for (const r of reservedInventoryLines) {
+        await releaseInventoryQuantity(r).catch((err) => {
+          console.error('[Order] Failed to release inventory after losing a duplicate-orderId race:', err);
+        });
+      }
+      reservedInventoryLines = [];
+    }
 
     if (body.promoCode && pricing.promoDiscount) {
       const coupon = operationsStore.getCouponByCode(body.promoCode);
@@ -831,6 +918,17 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
       confirmOrderUrl,
     });
   } catch (error) {
+    // QA3-001: compensate any reservation made above if anything later in
+    // this same request threw (createOrder is not expected to throw, but
+    // this is the same rollback discipline checkoutService.ts's
+    // executeCheckout() uses).
+    if (reservedInventoryLines.length > 0) {
+      for (const r of reservedInventoryLines) {
+        await releaseInventoryQuantity(r).catch((err) => {
+          console.error('[Order] Failed to release inventory after order creation failed:', err);
+        });
+      }
+    }
     res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid order payload' });
   }
 });
@@ -934,7 +1032,7 @@ operationsRouter.patch('/operations/orders/:id', ...requireAuth, (req, res) => {
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.post('/operations/orders/:id/cancel', ...requireAuth, (req, res) => {
+operationsRouter.post('/operations/orders/:id/cancel', ...requireAuth, async (req, res) => {
   const reason = String(req.body?.reason || req.body?.cancelReason || '').trim();
   if (!reason) {
     res.status(400).json({ error: 'reason is required' });
@@ -973,7 +1071,10 @@ operationsRouter.post('/operations/orders/:id/cancel', ...requireAuth, (req, res
     'in_transit',
     'cancelled',
   ]);
-  const subs = (existing.subOrders || []) as Array<{ trackingStatus?: string }>;
+  const subs = (existing.subOrders || []) as Array<{
+    trackingStatus?: string;
+    items?: Array<Record<string, unknown>>;
+  }>;
   const alreadyMoving = subs.some((sub) => {
     const tracking = String(sub.trackingStatus || 'pending').toLowerCase();
     return BLOCKED_TRACKING.has(tracking);
@@ -985,12 +1086,38 @@ operationsRouter.post('/operations/orders/:id/cancel', ...requireAuth, (req, res
     return;
   }
 
+  // QA3-001: release each product line's reservation before persisting the
+  // cancellation. Gated on existing.inventoryReserved (idempotent -- this
+  // handler is already unreachable a second time once status is
+  // 'cancelled', per the check above, but this flag is the same explicit
+  // guard the Commerce engine's releaseOrderReservations() uses). Mark-
+  // delivered already converts reserved->consumed per item and marks the
+  // order "alreadyMoving" above, which blocks cancel entirely once any
+  // item has been delivered -- so cancel can only ever reach here while
+  // every product line is still purely reserved, never consumed.
+  if (existing.inventoryReserved) {
+    const items = subs.flatMap((sub) => sub.items || []);
+    for (const item of items) {
+      const productId =
+        typeof item.productId === 'string' || typeof item.productId === 'number'
+          ? String(item.productId).trim()
+          : '';
+      if (!productId) continue;
+      const variantId = typeof item.variantId === 'string' ? item.variantId : undefined;
+      const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+      await releaseInventoryQuantity({ productId, variantId, quantity }).catch((err) => {
+        console.error('[Order] Failed to release inventory on cancel:', err);
+      });
+    }
+  }
+
   const ts = new Date().toISOString();
   const saved = operationsStore.updateOrder(req.params.id, {
     status: 'cancelled',
     cancelledAt: ts,
     cancelReason: reason,
     cancelledBy: 'buyer',
+    inventoryReserved: false,
   });
   if (!saved) {
     res.status(404).json({ error: 'Order not found' });
@@ -1043,6 +1170,24 @@ operationsRouter.post('/operations/orders/:id/items/:itemId/mark-delivered', ...
     return;
   }
 
+  // QA3-001: convert this item's reservation into consumed stock (the legacy
+  // path has no separate "packed"/"dispatched" step -- Sprint 3 confirmed
+  // trackingStatus is set to 'delivered' in exactly one place in the whole
+  // server, this endpoint -- so this is the only fulfillment-progressed
+  // signal available; mirrors the Commerce engine's reserved->consumed
+  // conversion at Packed). Idempotent via the item's own inventoryConsumed
+  // flag so repeated mark-delivered calls never double-decrement. Service
+  // lines (no productId) never touch inventory.
+  const productId = String(located.item.productId || '').trim();
+  const alreadyConsumed = Boolean(located.item.inventoryConsumed);
+  if (productId && !alreadyConsumed) {
+    const variantId = typeof located.item.variantId === 'string' ? located.item.variantId : undefined;
+    const quantity = Math.max(1, Math.floor(Number(located.item.quantity) || 1));
+    await consumeInventoryQuantity({ productId, variantId, quantity }).catch((err) => {
+      console.error('[Order] Failed to consume inventory on mark-delivered:', err);
+    });
+  }
+
   const deliveredAt = new Date().toISOString();
   const nextSubs = subs.map((sub) => {
     const items = sub.items || [];
@@ -1053,12 +1198,13 @@ operationsRouter.post('/operations/orders/:id/items/:itemId/mark-delivered', ...
       trackingStatus: 'delivered',
       items: items.map((it) => {
         if (it.itemId !== req.params.itemId) return it;
+        const consumedFlag = productId ? { inventoryConsumed: true } : {};
         const warrantyMonths = Number(it.warrantyMonthsAtPurchase) || 0;
-        if (!warrantyMonths) return { ...it, deliveredAt };
+        if (!warrantyMonths) return { ...it, ...consumedFlag, deliveredAt };
         const expiresAt = new Date(
           Date.now() + warrantyMonths * 30 * 24 * 60 * 60 * 1000,
         ).toISOString();
-        return { ...it, deliveredAt, warrantyStartsAt: deliveredAt, warrantyExpiresAt: expiresAt };
+        return { ...it, ...consumedFlag, deliveredAt, warrantyStartsAt: deliveredAt, warrantyExpiresAt: expiresAt };
       }),
     };
   });

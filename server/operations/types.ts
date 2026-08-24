@@ -83,6 +83,14 @@ export interface OpsStorefrontOrder {
   cancelReason?: string;
   cancelledBy?: 'buyer' | 'seller' | 'admin';
   /**
+   * QA3-001 (Sprint 5): set true once inventory has been reserved for this
+   * order's product lines at creation. Gates cancel-time release so a
+   * second cancel attempt (already blocked by status==='cancelled' at the
+   * router level, but checked again here defensively) can never release
+   * twice. Mirrors CommerceOrder.inventoryReserved/inventoryConsumed.
+   */
+  inventoryReserved?: boolean;
+  /**
    * COD orders only: buyer prepays the delivery fee online at checkout so the order
    * confirms immediately; the product amount (`codRemainingAmount`) stays payable at
    * the doorstep. Not set for online/`credit` orders, which are paid in full upfront.
