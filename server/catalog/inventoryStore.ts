@@ -258,6 +258,7 @@ export async function reserveInventoryQuantity(input: {
         quantity: seedQty,
         reservedQuantity: input.quantity,
       });
+      await syncProductStockFromInventory(input.productId);
       return { ok: true, record };
     }
     if (input.quantity > existing.availableQuantity) {
@@ -268,6 +269,7 @@ export async function reserveInventoryQuantity(input: {
       variantId: input.variantId,
       reservedQuantity: existing.reservedQuantity + input.quantity,
     });
+    await syncProductStockFromInventory(input.productId);
     return { ok: true, record };
   });
 }
@@ -282,11 +284,13 @@ export async function releaseInventoryQuantity(input: {
   return withInventoryLock(key, async () => {
     const existing = await getInventoryRecord(input.productId, input.variantId);
     if (!existing) return null;
-    return adjustInventory({
+    const record = await adjustInventory({
       productId: input.productId,
       variantId: input.variantId,
       reservedQuantity: Math.max(0, existing.reservedQuantity - input.quantity),
     });
+    await syncProductStockFromInventory(input.productId);
+    return record;
   });
 }
 
@@ -302,12 +306,14 @@ export async function consumeInventoryQuantity(input: {
     if (!existing) return null;
     const nextQuantity = Math.max(0, existing.quantity - input.quantity);
     const nextReserved = Math.max(0, existing.reservedQuantity - input.quantity);
-    return adjustInventory({
+    const record = await adjustInventory({
       productId: input.productId,
       variantId: input.variantId,
       quantity: nextQuantity,
       reservedQuantity: Math.min(nextReserved, nextQuantity),
     });
+    await syncProductStockFromInventory(input.productId);
+    return record;
   });
 }
 
