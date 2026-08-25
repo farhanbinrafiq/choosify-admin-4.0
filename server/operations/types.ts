@@ -140,6 +140,9 @@ export interface OpsReview {
   id: string;
   userId: string;
   userName: string;
+  /** Sprint 9 — the specific delivered order/order-item this review is attached to. Required for new reviews; may be absent on reviews created before this field existed. */
+  orderId?: string;
+  orderItemId?: string;
   productId: string;
   productTitle: string;
   brandName: string;

@@ -388,30 +388,6 @@ function userCanViewShipment(
  * Buyer may review a product only after a delivered/completed purchase of that product.
  * Mirrors storefront ProductDetailPage `reviewableOrders` (delivered sub-order item).
  */
-function userHasPurchasedProductForReview(userId: string, productId: string): boolean {
-  if (!userId || !productId || productId === 'unknown') return false;
-  return operationsStore.listOrders().some((order) => {
-    if (order.buyerId !== userId) return false;
-    if (order.status === 'cancelled') return false;
-    const subs = (order.subOrders || []) as Array<{
-      trackingStatus?: string;
-      items?: Array<{ productId?: string }>;
-    }>;
-    const deliveredItem = subs.some(
-      (sub) =>
-        (sub.trackingStatus === 'delivered' || order.status === 'completed') &&
-        (sub.items || []).some((item) => String(item.productId) === String(productId)),
-    );
-    if (deliveredItem) return true;
-    // Flat item lists on some order shapes
-    const flatItems = (order as { items?: Array<{ productId?: string }> }).items || [];
-    return (
-      order.status === 'completed' &&
-      flatItems.some((item) => String(item.productId) === String(productId))
-    );
-  });
-}
-
 function userCanModerateOrEditReview(
   req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
   review: OpsReview,
@@ -1378,8 +1354,8 @@ operationsRouter.get('/operations/returns/:id', ...requireAuth, (req, res) => {
  * self-create an already-"approved" return with an arbitrary refund
  * amount for a fabricated order. Every trust-sensitive field is now
  * derived server-side from the real, owned, delivered order/order-item,
- * mirroring the pattern already used for review eligibility
- * (userHasPurchasedProductForReview) and mark-delivered authorization.
+ * mirroring the pattern also used for review eligibility (Sprint 9) and
+ * mark-delivered authorization.
  * Approval/refund fields can only ever be set via the dedicated
  * /approve, /reject etc. endpoints, which already have real
  * authorization checks.
@@ -2370,24 +2346,71 @@ operationsRouter.get('/operations/reviews/public', (req, res) => {
   res.json({ data: reviews });
 });
 
+/**
+ * Sprint 9 — review integrity fix. Previously this only checked "does the
+ * user own ANY delivered order containing this productId" (via the now-
+ * removed userHasPurchasedProductForReview), never recorded which order/
+ * item the review was actually for, and had no duplicate check at all --
+ * a buyer could submit unlimited reviews for the same delivered purchase.
+ * The frontend already collected a specific orderId (reviewableOrders /
+ * selectedReviewOrderId in ProductDetailPage.tsx) and even had a client-
+ * side "already reviewed" filter, but it silently never worked because
+ * the field it filtered on (review.orderId) was never sent to or stored
+ * by the server. Now mirrors the same real-order-lookup pattern already
+ * used for returns/warranty claims: orderId+orderItemId are required,
+ * verified against the real order (ownership + delivered), and the
+ * uniqueness key is buyerId+orderId+orderItemId -- not productId alone,
+ * since a buyer legitimately reviews a later re-purchase separately.
+ */
 operationsRouter.post('/operations/reviews', ...requireAuth, (req, res) => {
   const body = req.body as Partial<OpsReview>;
   if (!body.productTitle?.trim() || !body.comment?.trim() || !body.rating) {
     res.status(400).json({ error: 'productTitle, rating, and comment are required' });
     return;
   }
-  const productId = body.productId || 'unknown';
-  // Always bind reviewer to authenticated uid — never trust body.userId.
-  const userId = req.userId!;
-  if (!userHasPurchasedProductForReview(userId, productId)) {
-    res.status(403).json({
-      error: 'A completed/delivered purchase of this product is required to leave a review',
-    });
+  const orderId = String(body.orderId || '').trim();
+  const orderItemId = String(body.orderItemId || '').trim();
+  if (!orderId || !orderItemId) {
+    res.status(400).json({ error: 'orderId and orderItemId are required' });
     return;
   }
+  // Always bind reviewer to authenticated uid — never trust body.userId.
+  const userId = req.userId!;
+
+  const order = operationsStore.getOrder(orderId);
+  if (!order) {
+    res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+  if (order.buyerId !== userId) {
+    res.status(403).json({ error: 'Not authorized to review this order' });
+    return;
+  }
+  const located = findOrderItem(order, orderItemId);
+  if (!located) {
+    res.status(404).json({ error: 'Order item not found' });
+    return;
+  }
+  const delivered = located.sub.trackingStatus === 'delivered' || order.status === 'completed';
+  if (!delivered) {
+    res.status(400).json({ error: 'This item has not been delivered yet' });
+    return;
+  }
+  const productId = String(located.item.productId || body.productId || 'unknown');
+
+  const existingReview = operationsStore
+    .listReviews({ userId })
+    .find((r) => r.orderId === orderId && r.orderItemId === orderItemId);
+  if (existingReview) {
+    res.status(200).json({ success: true, data: existingReview, reused: true });
+    return;
+  }
+
   const saved = operationsStore.createReview({
     userId,
     userName: body.userName || 'Anonymous',
+    orderId,
+    orderItemId,
     productId,
     productTitle: body.productTitle,
     brandName: body.brandName || '',
