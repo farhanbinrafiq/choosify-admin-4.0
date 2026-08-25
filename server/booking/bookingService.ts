@@ -15,6 +15,12 @@ import {
   saveBookingRequest,
 } from './bookingStore';
 import { submitPlatformMessage } from '../operations/platformMessagingBridge';
+import { notifyUser } from '../communication/systemNotify';
+
+/** Every booking-related in-app notification deep-links into the shared platform conversation. */
+function conversationActionUrl(buyerId: string): string {
+  return `/messages/conv_platform_${buyerId}`;
+}
 
 const nowIso = () => new Date().toISOString();
 
@@ -222,6 +228,18 @@ export async function createBookingRequest(
 
   if (!input.autoApprove) {
     await saveBookingRequest(base);
+    try {
+      await notifyUser(base.sellerId, {
+        type: 'buyer_update',
+        category: 'seller',
+        title: 'New booking request',
+        summary: `${base.buyerName || 'A buyer'} requested "${base.listingTitle}" for ৳${price.toLocaleString()}.`,
+        actionUrl: conversationActionUrl(base.buyerId),
+        metadata: { bookingRequestId: base.id },
+      });
+    } catch (err) {
+      console.warn('[Booking] Notify seller (new request) failed:', err);
+    }
     return { request: base, offer: toBookingOfferCard(base) };
   }
 
@@ -260,6 +278,18 @@ export async function createBookingRequest(
     `${accepted.sellerName} has pre-approved instant booking for "${accepted.listingTitle}" — your request is already accepted. Complete payment within ${BOOKING_PAYMENT_WINDOW_HOURS} hours to confirm (order ${orderId}).`,
     orderId,
   );
+  try {
+    await notifyUser(accepted.buyerId, {
+      type: 'order_update',
+      category: 'buyer',
+      title: 'Booking accepted instantly',
+      summary: `${accepted.sellerName} pre-approved "${accepted.listingTitle}". Pay within ${BOOKING_PAYMENT_WINDOW_HOURS} hours to confirm.`,
+      actionUrl: conversationActionUrl(accepted.buyerId),
+      metadata: { bookingRequestId: accepted.id, orderId },
+    });
+  } catch (err) {
+    console.warn('[Booking] Notify buyer (auto-approved) failed:', err);
+  }
 
   return { request: accepted, offer: toBookingOfferCard(accepted), order };
 }
@@ -311,6 +341,18 @@ export async function acceptBookingRequest(
     `${actor.sellerName || existing.sellerName} accepted your booking request for "${existing.listingTitle}". Complete payment within ${BOOKING_PAYMENT_WINDOW_HOURS} hours (order ${orderId}).`,
     orderId,
   );
+  try {
+    await notifyUser(existing.buyerId, {
+      type: 'order_update',
+      category: 'buyer',
+      title: 'Booking request accepted',
+      summary: `${actor.sellerName || existing.sellerName} accepted "${existing.listingTitle}". Pay within ${BOOKING_PAYMENT_WINDOW_HOURS} hours.`,
+      actionUrl: conversationActionUrl(existing.buyerId),
+      metadata: { bookingRequestId: existing.id, orderId },
+    });
+  } catch (err) {
+    console.warn('[Booking] Notify buyer (accepted) failed:', err);
+  }
 
   return { request: updated, offer: toBookingOfferCard(updated), order };
 }
@@ -359,6 +401,18 @@ export async function declineBookingRequest(
     existing.buyerName,
     `${actor.sellerName || existing.sellerName} declined your booking request for "${existing.listingTitle}": ${reason}`,
   );
+  try {
+    await notifyUser(existing.buyerId, {
+      type: 'order_update',
+      category: 'buyer',
+      title: 'Booking request declined',
+      summary: `${actor.sellerName || existing.sellerName} declined "${existing.listingTitle}": ${reason}`,
+      actionUrl: conversationActionUrl(existing.buyerId),
+      metadata: { bookingRequestId: existing.id },
+    });
+  } catch (err) {
+    console.warn('[Booking] Notify buyer (declined) failed:', err);
+  }
 
   return { request: updated, offer: toBookingOfferCard(updated) };
 }
@@ -413,6 +467,18 @@ export async function buyerDeclineBookingRequest(
     }.`,
     existing.orderId,
   );
+  try {
+    await notifyUser(existing.sellerId, {
+      type: 'buyer_update',
+      category: 'seller',
+      title: existing.status === 'countered' ? 'Counter-offer rejected' : 'Booking offer declined',
+      summary: `${existing.buyerName || 'The buyer'} declined "${existing.listingTitle}"${reason ? `: ${reason}` : '.'}`,
+      actionUrl: conversationActionUrl(existing.buyerId),
+      metadata: { bookingRequestId: existing.id },
+    });
+  } catch (err) {
+    console.warn('[Booking] Notify seller (buyer declined) failed:', err);
+  }
 
   return { request: updated, offer: toBookingOfferCard(updated) };
 }
@@ -471,6 +537,18 @@ export async function counterBookingRequest(
     existing.buyerName,
     `${actor.sellerName || existing.sellerName} sent a counter-offer of BDT ${price.toLocaleString()} for "${existing.listingTitle}". Respond within ${BOOKING_SELLER_RESPONSE_HOURS} hours.`,
   );
+  try {
+    await notifyUser(existing.buyerId, {
+      type: 'order_update',
+      category: 'buyer',
+      title: 'New counter-offer',
+      summary: `${actor.sellerName || existing.sellerName} countered "${existing.listingTitle}" at ৳${price.toLocaleString()}.`,
+      actionUrl: conversationActionUrl(existing.buyerId),
+      metadata: { bookingRequestId: existing.id, price },
+    });
+  } catch (err) {
+    console.warn('[Booking] Notify buyer (countered) failed:', err);
+  }
 
   return { request: updated, offer: toBookingOfferCard(updated) };
 }
@@ -510,6 +588,18 @@ export async function buyerAcceptCounter(
         ],
       };
       await saveBookingRequest(updated);
+      try {
+        await notifyUser(existing.sellerId, {
+          type: 'buyer_update',
+          category: 'seller',
+          title: 'Buyer accepted your offer',
+          summary: `${existing.buyerName || 'The buyer'} accepted "${existing.listingTitle}" at ৳${existing.price.toLocaleString()}.`,
+          actionUrl: conversationActionUrl(existing.buyerId),
+          metadata: { bookingRequestId: existing.id, orderId: existing.orderId },
+        });
+      } catch (err) {
+        console.warn('[Booking] Notify seller (buyer accepted, reuse) failed:', err);
+      }
       return { request: updated, offer: toBookingOfferCard(updated), order };
     }
   }
@@ -544,6 +634,18 @@ export async function buyerAcceptCounter(
   };
 
   await saveBookingRequest(updated);
+  try {
+    await notifyUser(existing.sellerId, {
+      type: 'buyer_update',
+      category: 'seller',
+      title: 'Buyer accepted your counter-offer',
+      summary: `${existing.buyerName || 'The buyer'} accepted "${existing.listingTitle}" at ৳${existing.price.toLocaleString()}.`,
+      actionUrl: conversationActionUrl(existing.buyerId),
+      metadata: { bookingRequestId: existing.id, orderId },
+    });
+  } catch (err) {
+    console.warn('[Booking] Notify seller (buyer accepted counter) failed:', err);
+  }
   return { request: updated, offer: toBookingOfferCard(updated), order };
 }
 
@@ -620,6 +722,18 @@ export async function markBookingPaid(
   };
 
   await saveBookingRequest(updated);
+  try {
+    await notifyUser(existing.sellerId, {
+      type: 'order_update',
+      category: 'seller',
+      title: 'Payment confirmed',
+      summary: `${existing.buyerName || 'The buyer'} confirmed payment for "${existing.listingTitle}" (order ${resolvedOrderId}).`,
+      actionUrl: '/dashboard?tab=seller-orders',
+      metadata: { bookingRequestId: existing.id, orderId: resolvedOrderId },
+    });
+  } catch (err) {
+    console.warn('[Booking] Notify seller (paid) failed:', err);
+  }
   return { request: updated, offer: toBookingOfferCard(updated) };
 }
 

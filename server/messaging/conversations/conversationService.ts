@@ -8,6 +8,8 @@ import { commerceStore } from '../../commerce/commerceStore';
 import { catalogStore } from '../../catalogStore';
 import { publishEvent } from '../../events/eventBus';
 import { Logger } from '../../lib/logger';
+import { notifyUser } from '../../communication/systemNotify';
+import { COMMUNICATION_TYPES } from '../../communication/communicationTypes';
 import {
   getConversationByReconcileKey,
   getConversation,
@@ -577,6 +579,32 @@ export async function sendMessage(input: {
         attachmentId: att.id,
         conversationId: conv.id,
         messageId: message.id,
+      });
+    }
+  }
+
+  const recipientIds = Array.from(
+    new Set(
+      (conv.participants || [])
+        .map((p) => p.userId)
+        .filter((uid): uid is string => Boolean(uid) && uid !== input.actor.userId),
+    ),
+  );
+  for (const recipientId of recipientIds) {
+    try {
+      await notifyUser(recipientId, {
+        type: COMMUNICATION_TYPES.NOTIFICATION,
+        category: senderRole === 'seller' ? 'buyer' : 'seller',
+        title: 'New message',
+        summary: body ? body.slice(0, 140) : 'Sent an attachment.',
+        actionUrl: '/messages',
+        metadata: { conversationId: conv.id, messageId: message.id },
+      });
+    } catch (err) {
+      Logger.warn('sendMessage: notify recipient failed', {
+        conversationId: conv.id,
+        recipientId,
+        error: err instanceof Error ? err.message : String(err),
       });
     }
   }

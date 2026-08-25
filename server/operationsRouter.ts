@@ -48,7 +48,7 @@ import { recordSuspiciousRequest, recordClaimConfirmAttempt } from './lib/abuseP
 import { batchAccountPrimaryLabels } from './profileStatusFacts';
 import { Logger } from './lib/logger';
 import { createNotification } from './communication/notificationService';
-import { notifyRoles } from './communication/systemNotify';
+import { notifyRoles, notifyUser } from './communication/systemNotify';
 import { COMMUNICATION_TYPES, DELIVERY_CHANNELS } from './communication/communicationTypes';
 import { publishEvent } from './events/eventBus';
 
@@ -889,6 +889,30 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
       console.warn('[Order] Platform conversation bridge failed:', err);
     }
 
+    if (saved.status !== 'pending_payment') {
+      const sellerIds = Array.from(
+        new Set(
+          ((saved.subOrders || []) as Array<{ sellerId?: string }>)
+            .map((sub) => sub.sellerId)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      );
+      for (const sellerId of sellerIds) {
+        try {
+          await notifyUser(sellerId, {
+            type: COMMUNICATION_TYPES.ORDER_UPDATE,
+            category: 'seller',
+            title: 'New order received',
+            summary: `Order ${saved.orderId} placed — ৳${Number(saved.overallTotal || 0).toLocaleString()}.`,
+            actionUrl: '/dashboard?tab=seller-orders',
+            metadata: { orderId: saved.orderId },
+          });
+        } catch (err) {
+          console.warn('[Order] Notify seller (new order) failed:', err);
+        }
+      }
+    }
+
     let confirmOrderUrl: string | undefined;
     if (saved.claimToken && req.userId) {
       confirmOrderUrl = buildClaimConfirmUrl(saved.claimToken);
@@ -1124,6 +1148,29 @@ operationsRouter.post('/operations/orders/:id/cancel', ...requireAuth, async (re
     return;
   }
   scheduleOperationsPersist();
+
+  const cancelSellerIds = Array.from(
+    new Set(
+      ((saved.subOrders || []) as Array<{ sellerId?: string }>)
+        .map((sub) => sub.sellerId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  for (const sellerId of cancelSellerIds) {
+    try {
+      await notifyUser(sellerId, {
+        type: COMMUNICATION_TYPES.ORDER_UPDATE,
+        category: 'seller',
+        title: 'Order cancelled',
+        summary: `Order ${saved.orderId} was cancelled by the buyer: ${reason}`,
+        actionUrl: '/dashboard?tab=seller-orders',
+        metadata: { orderId: saved.orderId },
+      });
+    } catch (err) {
+      console.warn('[Order] Notify seller (cancelled) failed:', err);
+    }
+  }
+
   res.json({ success: true, data: saved });
 });
 
@@ -1259,6 +1306,21 @@ operationsRouter.post('/operations/orders/:id/items/:itemId/mark-delivered', ...
     console.error('[Order] Failed to sync shipment status on mark-delivered:', err);
   }
 
+  if (existing.buyerId) {
+    try {
+      await notifyUser(existing.buyerId, {
+        type: COMMUNICATION_TYPES.ORDER_UPDATE,
+        category: 'buyer',
+        title: 'Order delivered',
+        summary: `${String(located.item.productTitle || 'Your item')} from order ${existing.orderId} was marked delivered.`,
+        actionUrl: '/profile/orders',
+        metadata: { orderId: existing.orderId, itemId: req.params.itemId },
+      });
+    } catch (err) {
+      console.warn('[Order] Notify buyer (delivered) failed:', err);
+    }
+  }
+
   res.json({ success: true, data: saved });
 });
 
@@ -1322,7 +1384,7 @@ operationsRouter.get('/operations/returns/:id', ...requireAuth, (req, res) => {
  * /approve, /reject etc. endpoints, which already have real
  * authorization checks.
  */
-operationsRouter.post('/operations/returns', ...requireAuth, (req, res) => {
+operationsRouter.post('/operations/returns', ...requireAuth, async (req, res) => {
   const body = req.body as Partial<OpsReturnRequest>;
   const orderId = String(body.orderId || '').trim();
   const itemId = String(body.itemId || '').trim();
@@ -1376,10 +1438,26 @@ operationsRouter.post('/operations/returns', ...requireAuth, (req, res) => {
     buyerId: req.userId,
   });
   scheduleOperationsPersist();
+
+  if (sellerId) {
+    try {
+      await notifyUser(sellerId, {
+        type: COMMUNICATION_TYPES.ORDER_UPDATE,
+        category: 'seller',
+        title: 'New return request',
+        summary: `${String(located.item.productTitle || 'An item')} from order ${orderId} — reason: ${reason}.`,
+        actionUrl: '/dashboard?tab=seller-orders',
+        metadata: { orderId, returnId: saved.id },
+      });
+    } catch (err) {
+      console.warn('[Returns] Notify seller (new return) failed:', err);
+    }
+  }
+
   res.status(201).json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/returns/:id/approve', ...requireAuth, (req, res) => {
+operationsRouter.patch('/operations/returns/:id/approve', ...requireAuth, async (req, res) => {
   const existing = operationsStore.getReturn(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Return not found' });
@@ -1413,10 +1491,24 @@ operationsRouter.patch('/operations/returns/:id/approve', ...requireAuth, (req, 
     notes: adminNotes,
   });
   scheduleOperationsPersist();
+
+  try {
+    await notifyUser(existing.buyerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: 'buyer',
+      title: 'Return approved',
+      summary: `Your return for order ${existing.orderId} was approved — refund of ৳${refundAmount.toLocaleString()}.`,
+      actionUrl: '/dashboard?tab=my-returns',
+      metadata: { orderId: existing.orderId, returnId: existing.id },
+    });
+  } catch (err) {
+    console.warn('[Returns] Notify buyer (approved) failed:', err);
+  }
+
   res.json({ success: true, data: saved });
 });
 
-operationsRouter.patch('/operations/returns/:id/reject', ...requireAuth, (req, res) => {
+operationsRouter.patch('/operations/returns/:id/reject', ...requireAuth, async (req, res) => {
   const existing = operationsStore.getReturn(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Return not found' });
@@ -1448,6 +1540,20 @@ operationsRouter.patch('/operations/returns/:id/reject', ...requireAuth, (req, r
     notes: adminNotes,
   });
   scheduleOperationsPersist();
+
+  try {
+    await notifyUser(existing.buyerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: 'buyer',
+      title: 'Return rejected',
+      summary: `Your return for order ${existing.orderId} was rejected: ${reason}`,
+      actionUrl: '/dashboard?tab=my-returns',
+      metadata: { orderId: existing.orderId, returnId: existing.id },
+    });
+  } catch (err) {
+    console.warn('[Returns] Notify buyer (rejected) failed:', err);
+  }
+
   res.json({ success: true, data: saved });
 });
 
@@ -1789,6 +1895,7 @@ operationsRouter.post('/operations/warranty-claims', ...requireAuth, async (req,
     }
 
     // Idempotent claim/support conversation — never duplicated for the same claim.
+    let claimConversationId: string | undefined;
     try {
       const { ensureClaimConversation } = await import('./messaging/conversations/conversationService');
       const { conversation } = await ensureClaimConversation({
@@ -1799,6 +1906,7 @@ operationsRouter.post('/operations/warranty-claims', ...requireAuth, async (req,
         brandId,
         actor: req.userId,
       });
+      claimConversationId = conversation.id;
       operationsStore.updateWarrantyClaim(saved.id, { conversationId: conversation.id });
       scheduleOperationsPersist();
     } catch (err) {
@@ -1806,6 +1914,19 @@ operationsRouter.post('/operations/warranty-claims', ...requireAuth, async (req,
         claimId: saved.id,
         error: err instanceof Error ? err.message : String(err),
       });
+    }
+
+    try {
+      await notifyUser(sellerId, {
+        type: COMMUNICATION_TYPES.ORDER_UPDATE,
+        category: 'seller',
+        title: 'New warranty claim',
+        summary: `${String(item.productTitle || 'An item')} from order ${orderId} — ${issueType.replace(/_/g, ' ')}.`,
+        actionUrl: claimConversationId ? `/messages/${claimConversationId}` : '/dashboard?tab=seller-orders',
+        metadata: { orderId, claimId: saved.id },
+      });
+    } catch (err) {
+      console.warn('[Warranty] Notify seller (new claim) failed:', err);
     }
 
     res.status(201).json({ success: true, data: operationsStore.getWarrantyClaim(saved.id) || saved });
@@ -1890,7 +2011,7 @@ operationsRouter.patch('/operations/warranty-claims/:id/provide-info', ...requir
 });
 
 /** Seller/staff: approve the claim. */
-operationsRouter.patch('/operations/warranty-claims/:id/approve', ...requireAuth, (req, res) => {
+operationsRouter.patch('/operations/warranty-claims/:id/approve', ...requireAuth, async (req, res) => {
   const existing = operationsStore.getWarrantyClaim(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Warranty claim not found' });
@@ -1906,11 +2027,23 @@ operationsRouter.patch('/operations/warranty-claims/:id/approve', ...requireAuth
     ...(sellerResponse ? { sellerResponse } : {}),
   });
   scheduleOperationsPersist();
+  try {
+    await notifyUser(existing.consumerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: 'buyer',
+      title: 'Warranty claim approved',
+      summary: `Your warranty claim for order ${existing.orderId} was approved.`,
+      actionUrl: existing.conversationId ? `/messages/${existing.conversationId}` : '/dashboard?tab=my-warranty',
+      metadata: { orderId: existing.orderId, claimId: existing.id },
+    });
+  } catch (err) {
+    console.warn('[Warranty] Notify buyer (approved) failed:', err);
+  }
   res.json({ success: true, data: saved });
 });
 
 /** Seller/staff: reject the claim. */
-operationsRouter.patch('/operations/warranty-claims/:id/reject', ...requireAuth, (req, res) => {
+operationsRouter.patch('/operations/warranty-claims/:id/reject', ...requireAuth, async (req, res) => {
   const existing = operationsStore.getWarrantyClaim(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Warranty claim not found' });
@@ -1931,6 +2064,18 @@ operationsRouter.patch('/operations/warranty-claims/:id/reject', ...requireAuth,
     resolvedAt: new Date().toISOString(),
   });
   scheduleOperationsPersist();
+  try {
+    await notifyUser(existing.consumerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: 'buyer',
+      title: 'Warranty claim rejected',
+      summary: `Your warranty claim for order ${existing.orderId} was rejected: ${sellerResponse}`,
+      actionUrl: existing.conversationId ? `/messages/${existing.conversationId}` : '/dashboard?tab=my-warranty',
+      metadata: { orderId: existing.orderId, claimId: existing.id },
+    });
+  } catch (err) {
+    console.warn('[Warranty] Notify buyer (rejected) failed:', err);
+  }
   res.json({ success: true, data: saved });
 });
 
@@ -1955,7 +2100,7 @@ operationsRouter.patch('/operations/warranty-claims/:id/service-status', ...requ
 });
 
 /** Seller/staff: resolve the claim. */
-operationsRouter.patch('/operations/warranty-claims/:id/resolve', ...requireAuth, (req, res) => {
+operationsRouter.patch('/operations/warranty-claims/:id/resolve', ...requireAuth, async (req, res) => {
   const existing = operationsStore.getWarrantyClaim(req.params.id);
   if (!existing) {
     res.status(404).json({ error: 'Warranty claim not found' });
@@ -1976,6 +2121,18 @@ operationsRouter.patch('/operations/warranty-claims/:id/resolve', ...requireAuth
     resolvedAt: new Date().toISOString(),
   });
   scheduleOperationsPersist();
+  try {
+    await notifyUser(existing.consumerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: 'buyer',
+      title: 'Warranty claim resolved',
+      summary: `Your warranty claim for order ${existing.orderId} was resolved: ${resolutionNotes}`,
+      actionUrl: existing.conversationId ? `/messages/${existing.conversationId}` : '/dashboard?tab=my-warranty',
+      metadata: { orderId: existing.orderId, claimId: existing.id },
+    });
+  } catch (err) {
+    console.warn('[Warranty] Notify buyer (resolved) failed:', err);
+  }
   res.json({ success: true, data: saved });
 });
 
