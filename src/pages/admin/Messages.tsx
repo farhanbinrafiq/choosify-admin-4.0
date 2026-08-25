@@ -884,11 +884,25 @@ export default function MessagesPage() {
         </div>
 
         <div className="flex items-center gap-3 shrink-0 flex-wrap">
+          {/*
+            Sprint 10 containment: this button creates orders via
+            useOrders()/createManualOrder, which writes into the Commerce
+            engine (commerceStore) -- Sprint 9 confirmed the real
+            buyer-facing Web app only ever reads orders from the
+            Operations engine, so an order created here is invisible to
+            the buyer's own account. Disabled with an explanation rather
+            than silently left live. The canonical replacement --
+            server-authoritative, inventory-reserving, buyer-visible in
+            My Orders -- is "+ Send Order Offer" inside a seller's real
+            conversation in the Web app (src/pages/MessagesPage.tsx).
+          */}
           <button
-            onClick={() => setIsManualModalOpen(true)}
-            className="px-4 py-2 bg-[#ef3c23] hover:bg-orange-600 text-app-text-primary font-extrabold uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-lg flex items-center gap-1.5 cursor-pointer"
+            type="button"
+            disabled
+            title="Disabled: this created orders the buyer could never see in their account (writes to a different, disconnected order system). Use “Send Order Offer” from the seller conversation in the Web app instead — it creates a real order the buyer sees immediately."
+            className="px-4 py-2 bg-app-bg text-app-text-secondary font-extrabold uppercase text-[10px] tracking-widest rounded-xl flex items-center gap-1.5 cursor-not-allowed opacity-60 border border-app-border"
           >
-            <span>➕ Create Manual Order</span>
+            <span>➕ Create Manual Order (disabled — see tooltip)</span>
           </button>
 
           <div className="flex bg-app-bg border border-app-border rounded-xl p-1 shrink-0">

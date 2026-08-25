@@ -46,6 +46,7 @@ export async function submitPlatformMessage(payload: {
   body: string;
   orderId?: string;
   bookingOffer?: Record<string, unknown>;
+  orderOffer?: Record<string, unknown>;
 }): Promise<{ conversation: Conversation; message: UnifiedMessage }> {
   const conversationId = `conv_platform_${payload.buyerId}`;
   const existing = await getConversation(conversationId);
@@ -75,6 +76,7 @@ export async function submitPlatformMessage(payload: {
     conversationStatus: conversation.status,
     timestamp: nowIso(),
     bookingOffer: payload.bookingOffer,
+    orderOffer: payload.orderOffer,
   };
 
   await saveConversation(conversation);

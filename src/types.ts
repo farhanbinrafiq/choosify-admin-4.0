@@ -18,6 +18,8 @@ export interface UnifiedMessage {
   timestamp: string; // ISO String format
   /** Embedded booking-request card snapshot (platform inbox) */
   bookingOffer?: Record<string, unknown>;
+  /** Embedded manual product-order offer card snapshot (Sprint 10) — deliberately separate from bookingOffer. */
+  orderOffer?: Record<string, unknown>;
 }
 
 export interface Conversation {

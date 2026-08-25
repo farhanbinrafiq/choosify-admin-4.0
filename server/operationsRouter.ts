@@ -51,6 +51,15 @@ import { createNotification } from './communication/notificationService';
 import { notifyRoles, notifyUser } from './communication/systemNotify';
 import { COMMUNICATION_TYPES, DELIVERY_CHANNELS } from './communication/communicationTypes';
 import { publishEvent } from './events/eventBus';
+import {
+  saveManualOrderOffer,
+  getManualOrderOffer,
+} from './operations/manualOrderOfferStore';
+import {
+  type ManualOrderOffer,
+  type ManualOrderOfferItem,
+  toManualOrderOfferCard,
+} from '../shared/manualOrder/manualOrderTypes';
 
 export const operationsRouter = Router();
 
@@ -1298,6 +1307,345 @@ operationsRouter.post('/operations/orders/:id/items/:itemId/mark-delivered', ...
   }
 
   res.json({ success: true, data: saved });
+});
+
+// ─── Manual order offers (Sprint 10) ───────────────────────────────────────────
+/**
+ * Canonical "seller creates an order from a chat conversation" journey.
+ * Deliberately NOT the Commerce-engine createManualOrder path (Sprint 9
+ * found that writes orders the real buyer-facing app never reads) and
+ * deliberately NOT the isManual/claim-token branch of POST /operations/orders
+ * (Sprint 10 investigation found it skips inventory reservation entirely and
+ * has no seller-product-ownership check — sound for the "buyer has no
+ * Choosify account yet" case it was built for, wrong trust boundary for a
+ * seller creating a normal in-conversation offer for an existing buyer).
+ * This mints a single ManualOrderOffer (accept/reject only, no counter --
+ * product decision, Sprint 10), and acceptance runs through the exact same
+ * server-authoritative inventory-reservation + shipment-creation path a
+ * normal checkout uses, via operationsStore.createOrder with a
+ * deterministic orderId (idempotent by design -- see createOrder) so a
+ * concurrent duplicate accept can never create a second order.
+ */
+function makeManualOfferInvoiceId(): string {
+  return `INV-${Math.floor(100000 + Math.random() * 900000)}`;
+}
+
+operationsRouter.post('/operations/manual-offers', ...requireAuth, async (req, res) => {
+  try {
+    if (!userCanCreateManualOrder(req)) {
+      res.status(403).json({ error: 'Not authorized to create manual order offers' });
+      return;
+    }
+    const body = req.body || {};
+    const buyerId = String(body.buyerId || '').trim();
+    const rawItems = Array.isArray(body.items) ? body.items : [];
+    if (!buyerId || rawItems.length === 0) {
+      res.status(400).json({ error: 'buyerId and at least one item are required' });
+      return;
+    }
+    if (!req.userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    const staff = userIsStaff(req);
+    // Non-staff sellers may only offer as themselves — never another seller's identity.
+    const sellerId = staff && body.sellerId ? String(body.sellerId).trim() : req.userId;
+
+    const validatedItems: ManualOrderOfferItem[] = [];
+    let subtotal = 0;
+    for (const raw of rawItems as Array<Record<string, unknown>>) {
+      const productId = String(raw.productId || '').trim();
+      if (!productId) {
+        res.status(400).json({ error: 'Each item requires a productId' });
+        return;
+      }
+      const quantity = Math.max(1, Math.floor(Number(raw.quantity) || 1));
+      const price = Number(raw.price);
+      if (!Number.isFinite(price) || price <= 0) {
+        res.status(400).json({ error: `Invalid price for product ${productId}` });
+        return;
+      }
+
+      let productType: 'physical' | 'service' = 'physical';
+      let productTitle = '';
+      let image: string | undefined;
+      let ownerId: string | undefined;
+      const product = await catalogStore.getProduct(productId);
+      if (product) {
+        productTitle = product.title;
+        image = product.image;
+        ownerId = product.sellerId;
+      } else {
+        const service = await getService(productId);
+        if (!service) {
+          res.status(404).json({ error: `Product or service ${productId} not found` });
+          return;
+        }
+        productType = 'service';
+        productTitle = service.title;
+        image = service.image;
+        ownerId = service.sellerId;
+      }
+      if (!staff && ownerId !== sellerId) {
+        res.status(403).json({ error: `Not authorized to offer ${productId} — you do not own it` });
+        return;
+      }
+
+      validatedItems.push({
+        productId,
+        productTitle,
+        variantId: typeof raw.variantId === 'string' ? raw.variantId : undefined,
+        quantity,
+        price,
+        productType,
+        image,
+      });
+      subtotal += price * quantity;
+    }
+
+    const deliveryTotal = Math.max(0, Number(body.deliveryTotal) || 0);
+    const overallTotal = subtotal + deliveryTotal;
+    const ts = new Date().toISOString();
+    const offer: ManualOrderOffer = {
+      id: `MOF-${Date.now()}`,
+      kind: 'manual_order_offer',
+      conversationId: `conv_platform_${buyerId}`,
+      sellerId,
+      sellerName: typeof body.sellerName === 'string' ? body.sellerName : req.user?.displayName,
+      buyerId,
+      buyerName: typeof body.buyerName === 'string' ? body.buyerName : undefined,
+      items: validatedItems,
+      notes: typeof body.notes === 'string' ? body.notes : undefined,
+      subtotal,
+      deliveryTotal,
+      overallTotal,
+      currency: 'BDT',
+      status: 'pending',
+      createdAt: ts,
+      updatedAt: ts,
+    };
+    await saveManualOrderOffer(offer);
+
+    const itemSummary = validatedItems.map((it) => `${it.productTitle} x${it.quantity}`).join(', ');
+    try {
+      await submitPlatformMessage({
+        buyerId,
+        userName: offer.sellerName || 'Seller',
+        body: `New order offer: ${itemSummary} — ৳${overallTotal.toLocaleString()}`,
+        orderOffer: toManualOrderOfferCard(offer) as unknown as Record<string, unknown>,
+      });
+    } catch (err) {
+      console.warn('[ManualOrderOffer] Failed to post offer message:', err);
+    }
+    try {
+      await notifyUser(buyerId, {
+        type: COMMUNICATION_TYPES.SELLER_UPDATE,
+        category: 'buyer',
+        title: 'New order offer',
+        summary: `${offer.sellerName || 'A seller'} sent you an offer: ${itemSummary} — ৳${overallTotal.toLocaleString()}.`,
+        actionUrl: `/messages/conv_platform_${buyerId}`,
+        metadata: { offerId: offer.id },
+      });
+    } catch (err) {
+      console.warn('[ManualOrderOffer] Notify buyer (new offer) failed:', err);
+    }
+
+    res.status(201).json({ success: true, data: toManualOrderOfferCard(offer) });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to create offer' });
+  }
+});
+
+operationsRouter.get('/operations/manual-offers/:id', ...requireAuth, async (req, res) => {
+  const existing = await getManualOrderOffer(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Offer not found' });
+    return;
+  }
+  if (!userIsStaff(req) && req.userId !== existing.sellerId && req.userId !== existing.buyerId) {
+    res.status(403).json({ error: 'Not authorized to view this offer' });
+    return;
+  }
+  res.json({ success: true, data: toManualOrderOfferCard(existing) });
+});
+
+operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, async (req, res) => {
+  const existing = await getManualOrderOffer(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Offer not found' });
+    return;
+  }
+  if (!req.userId || existing.buyerId !== req.userId) {
+    res.status(403).json({ error: 'Only the buyer can accept this offer' });
+    return;
+  }
+  if (existing.status !== 'pending') {
+    res.status(400).json({ error: `Cannot accept offer in status ${existing.status}` });
+    return;
+  }
+
+  const orderId = `MOF-ORDER-${existing.id}`;
+  const alreadyCreated = operationsStore.getOrder(orderId);
+  if (alreadyCreated) {
+    res.json({
+      success: true,
+      data: toManualOrderOfferCard({ ...existing, status: 'accepted', orderId }),
+      order: alreadyCreated,
+    });
+    return;
+  }
+
+  const required = new Map<string, { productId: string; variantId?: string; quantity: number }>();
+  for (const item of existing.items) {
+    if (item.productType === 'service') continue;
+    const key = `${item.productId}::${item.variantId || ''}`;
+    const prior = required.get(key);
+    required.set(key, {
+      productId: item.productId,
+      variantId: item.variantId,
+      quantity: (prior?.quantity || 0) + item.quantity,
+    });
+  }
+
+  let reservedInventoryLines: Array<{ productId: string; variantId?: string; quantity: number }> = [];
+  for (const line of required.values()) {
+    const result = await reserveInventoryQuantity(line);
+    if (result.ok === true) {
+      reservedInventoryLines.push(line);
+      continue;
+    }
+    for (const r of reservedInventoryLines) {
+      await releaseInventoryQuantity(r).catch((err) => {
+        console.error('[ManualOrderOffer] Failed to release inventory after a later line failed reservation:', err);
+      });
+    }
+    const insufficientResult: { ok: false; available: number } = result;
+    res.status(409).json({
+      error: 'Insufficient stock for one or more items',
+      code: 'INSUFFICIENT_STOCK',
+      productId: line.productId,
+      requestedQuantity: line.quantity,
+      availableQuantity: insufficientResult.available,
+    });
+    return;
+  }
+
+  // Re-check right before creating — narrows (does not fully close, same
+  // residual window already accepted elsewhere in this file, e.g. QA3-001)
+  // the race between the reservation awaits above and this write.
+  if (operationsStore.getOrder(orderId)) {
+    for (const r of reservedInventoryLines) {
+      await releaseInventoryQuantity(r).catch(() => undefined);
+    }
+    const raced = operationsStore.getOrder(orderId)!;
+    res.json({
+      success: true,
+      data: toManualOrderOfferCard({ ...existing, status: 'accepted', orderId }),
+      order: raced,
+    });
+    return;
+  }
+
+  const ts = new Date().toISOString();
+  const order = operationsStore.createOrder({
+    orderId,
+    buyerId: req.userId,
+    isCOD: true,
+    isSplit: false,
+    overallTotal: existing.overallTotal,
+    subtotal: existing.subtotal,
+    deliveryTotal: existing.deliveryTotal,
+    subOrders: [
+      {
+        sellerId: existing.sellerId,
+        sellerBusinessName: existing.sellerName || '',
+        items: existing.items.map((it, idx) => ({
+          itemId: `item-${Date.now().toString(36)}-${idx}`,
+          productId: it.productId,
+          productTitle: it.productTitle,
+          variantId: it.variantId,
+          quantity: it.quantity,
+          price: it.price,
+          productType: it.productType,
+        })),
+        deliveryFee: existing.deliveryTotal,
+        invoiceId: makeManualOfferInvoiceId(),
+        trackingStatus: 'pending',
+      },
+    ],
+    inventoryReserved: reservedInventoryLines.length > 0 ? true : undefined,
+    paymentMethod: 'cod',
+    status: 'confirmed',
+    createdAt: ts,
+  });
+
+  if (order.status !== 'pending_payment') {
+    shipmentStore.createFromOrder(order);
+  }
+  scheduleOperationsPersist();
+  try {
+    await ensurePlatformOrderConversation(order);
+  } catch (err) {
+    console.warn('[ManualOrderOffer] Platform conversation bridge failed:', err);
+  }
+
+  const updated: ManualOrderOffer = { ...existing, status: 'accepted', orderId, updatedAt: ts };
+  await saveManualOrderOffer(updated);
+
+  try {
+    await notifyUser(existing.sellerId, {
+      type: COMMUNICATION_TYPES.BUYER_UPDATE,
+      category: 'seller',
+      title: 'Order offer accepted',
+      summary: `${existing.buyerName || 'The buyer'} accepted your offer — order ${orderId} created.`,
+      actionUrl: '/dashboard?tab=seller-orders',
+      metadata: { offerId: existing.id, orderId },
+    });
+  } catch (err) {
+    console.warn('[ManualOrderOffer] Notify seller (accepted) failed:', err);
+  }
+
+  res.json({ success: true, data: toManualOrderOfferCard(updated), order });
+});
+
+operationsRouter.post('/operations/manual-offers/:id/reject', ...requireAuth, async (req, res) => {
+  const existing = await getManualOrderOffer(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Offer not found' });
+    return;
+  }
+  if (!req.userId || existing.buyerId !== req.userId) {
+    res.status(403).json({ error: 'Only the buyer can reject this offer' });
+    return;
+  }
+  if (existing.status !== 'pending') {
+    res.status(400).json({ error: `Cannot reject offer in status ${existing.status}` });
+    return;
+  }
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+  const ts = new Date().toISOString();
+  const updated: ManualOrderOffer = {
+    ...existing,
+    status: 'rejected',
+    rejectReason: reason || undefined,
+    updatedAt: ts,
+  };
+  await saveManualOrderOffer(updated);
+
+  try {
+    await notifyUser(existing.sellerId, {
+      type: COMMUNICATION_TYPES.BUYER_UPDATE,
+      category: 'seller',
+      title: 'Order offer rejected',
+      summary: `${existing.buyerName || 'The buyer'} rejected your offer${reason ? `: ${reason}` : '.'}`,
+      actionUrl: `/messages/conv_platform_${existing.buyerId}`,
+      metadata: { offerId: existing.id },
+    });
+  } catch (err) {
+    console.warn('[ManualOrderOffer] Notify seller (rejected) failed:', err);
+  }
+
+  res.json({ success: true, data: toManualOrderOfferCard(updated) });
 });
 
 // ─── Returns ─────────────────────────────────────────────────────────────────
