@@ -227,11 +227,21 @@ export type PermissionKey =
   | 'taxonomy'
   | 'impersonate';
 
+// Mirrors server/operations/shipmentStore.ts OpsShipmentStatus exactly.
+export type OpsShipmentStatus =
+  | 'pending_pickup'
+  | 'picked_up'
+  | 'in_transit'
+  | 'delivered'
+  | 'failed_delivery'
+  | 'returned'
+  | 'cancelled';
+
 export interface OpsShipment {
   id: string;
   orderId: string;
   buyerId: string;
-  status: string;
+  status: OpsShipmentStatus;
   courier: string;
   trackingNumber: string;
   recipientName: string;
@@ -249,6 +259,16 @@ export interface OpsShipment {
     location: string;
     description: string;
   }[];
+}
+
+/**
+ * Fields PATCH /operations/shipments/:id accepts. Server enforces a strict
+ * allowlist (see SHIPMENT_PATCH_ALLOWED_KEYS in server/operationsRouter.ts) —
+ * status/tracking history are webhook-driven only and cannot be set here.
+ */
+export interface OpsShipmentPatch {
+  courier?: string;
+  trackingNumber?: string;
 }
 
 export interface AnalyticsSummary {
@@ -439,6 +459,22 @@ export const operationsApi = {
 
   listShipments: async (): Promise<OpsShipment[]> => {
     const result = await request<{ data: OpsShipment[] }>('/operations/shipments');
+    return result.data;
+  },
+  /** Matches by shipment id, orderId, or trackingNumber — server-side lookup (shipmentStore.getShipment). */
+  getShipment: async (idOrOrderIdOrTrackingNumber: string): Promise<OpsShipment> => {
+    const result = await request<{ data: OpsShipment }>(
+      `/operations/shipments/${encodeURIComponent(idOrOrderIdOrTrackingNumber)}`,
+    );
+    return result.data;
+  },
+  /** Only courier/trackingNumber are updatable — see OpsShipmentPatch. */
+  updateShipment: async (id: string, patch: OpsShipmentPatch): Promise<OpsShipment> => {
+    const result = await request<{ data: OpsShipment }>(
+      `/operations/shipments/${encodeURIComponent(id)}`,
+      'PATCH',
+      patch,
+    );
     return result.data;
   },
 

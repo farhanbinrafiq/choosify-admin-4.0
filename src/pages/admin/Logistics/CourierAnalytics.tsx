@@ -1,19 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { LogisticsService } from '../../../services/logistics/LogisticsService';
-import { Shipment } from '../../../types/shipment';
-import { 
-  BarChart3, 
-  TrendingUp, 
-  Clock, 
-  Percent, 
-  ShieldAlert, 
-  Calendar, 
-  Truck, 
-  RefreshCw, 
+import { operationsApi, type OpsShipment } from '../../../services/operationsApi';
+import {
+  BarChart3,
+  TrendingUp,
+  Percent,
+  ShieldAlert,
+  Truck,
   DollarSign,
-  Compass
+  Compass,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
-import { motion } from 'motion/react';
 import { StatTile } from '../../../components/ui/StatTile';
 
 interface CarrierStat {
@@ -21,104 +18,115 @@ interface CarrierStat {
   name: string;
   volume: number;
   successRate: number;
-  avgDays: number;
+  avgDays: number | null;
   avgCost: number;
   logo?: string;
 }
 
+const COURIER_DISPLAY: Record<string, { name: string; logo?: string }> = {
+  steadfast: { name: 'Steadfast', logo: 'https://steadfast.com.bd/assets/logo.png' },
+  pathao: { name: 'Pathao', logo: 'https://pathao.com/wp-content/uploads/2018/12/Pathao_logo_red.png' },
+  redx: { name: 'REDX', logo: 'https://redx.com.bd/assets/images/redx-logo.svg' },
+  paperfly: { name: 'Paperfly' },
+  ecourier: { name: 'eCourier' },
+  sundarban: { name: 'Sundarban' },
+};
+
+/**
+ * Sprint 11 remediation: this screen previously derived every metric from
+ * LogisticsService's fabricated in-browser shipment list (Firestore/
+ * localStorage fallback), and even faked "average delivery days" with
+ * Math.random() when a shipment had no estimatedDeliveryAt field — a field
+ * the real backend doesn't track at all. It now aggregates real shipment
+ * records from GET /operations/shipments. Average delivery time is derived
+ * honestly from each shipment's real webhook-driven tracking history
+ * (createdAt -> the timestamp of its most recent "delivered" checkpoint);
+ * where that can't be computed for a given carrier, it shows "—" instead of
+ * a placeholder number.
+ */
 export default function CourierAnalytics() {
-  const logisticsService = LogisticsService.getInstance();
-  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [shipments, setShipments] = useState<OpsShipment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [timeframe, setTimeframe] = useState('30days');
+  const [error, setError] = useState<string | null>(null);
+
+  const loadData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await operationsApi.listShipments();
+      setShipments(data);
+    } catch (err: any) {
+      setError(err?.message || 'Failed to load shipment data for analytics.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    async function loadData() {
-      try {
-        const data = await logisticsService.getShipments();
-        setShipments(data);
-      } catch (err) {
-        console.error('Failed to load shipments for analytics:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
     loadData();
   }, []);
 
   // Compute metrics
   const totalShipments = shipments.length;
   const delivered = shipments.filter(s => s.status === 'delivered');
-  const failed = shipments.filter(s => s.status === 'failed_delivery' || s.status === 'delivery_failed' || s.status === 'failed');
+  const lost = shipments.filter(s => s.status === 'failed_delivery' || s.status === 'returned');
   const successRate = totalShipments > 0 ? (delivered.length / totalShipments) * 100 : 0;
-  const failRate = totalShipments > 0 ? (failed.length / totalShipments) * 100 : 0;
+  const lossRate = totalShipments > 0 ? (lost.length / totalShipments) * 100 : 0;
 
-  // Average cost
-  const totalCost = shipments.reduce((sum, s) => sum + (s.totalCharge || 120), 0);
+  const totalCost = shipments.reduce((sum, s) => sum + (s.deliveryCharge || 0), 0);
   const avgCost = totalShipments > 0 ? totalCost / totalShipments : 0;
 
-  // Aggregate stats per carrier
-  const carrierStats: Record<string, { volume: number; delivered: number; failed: number; days: number[]; cost: number }> = {
-    steadfast: { volume: 0, delivered: 0, failed: 0, days: [], cost: 0 },
-    pathao: { volume: 0, delivered: 0, failed: 0, days: [], cost: 0 },
-    redx: { volume: 0, delivered: 0, failed: 0, days: [], cost: 0 }
-  };
-
-  shipments.forEach(s => {
-    const code = s.courier.code;
-    if (carrierStats[code]) {
-      carrierStats[code].volume += 1;
-      if (s.status === 'delivered') {
-        carrierStats[code].delivered += 1;
-        // Mocking average days derived from actual events or defaults
-        const daysDiff = s.estimatedDeliveryAt 
-          ? Math.max(1, Math.round((new Date(s.estimatedDeliveryAt).getTime() - new Date(s.createdAt).getTime()) / 86400000))
-          : Math.floor(Math.random() * 2) + 1;
-        carrierStats[code].days.push(daysDiff);
-      }
-      if (s.status === 'failed_delivery' || s.status === 'delivery_failed' || s.status === 'failed') {
-        carrierStats[code].failed += 1;
-      }
-      carrierStats[code].cost += (s.totalCharge || 120);
-    }
+  // Aggregate stats per carrier — built dynamically from whatever courier
+  // codes actually appear in real shipment data, not a fixed fabricated list.
+  const byCourier = new Map<string, OpsShipment[]>();
+  shipments.forEach((s) => {
+    const code = s.courier || 'unknown';
+    if (!byCourier.has(code)) byCourier.set(code, []);
+    byCourier.get(code)!.push(s);
   });
 
-  const aggregateCarrierStats: CarrierStat[] = [
-    {
-      code: 'steadfast',
-      name: 'Steadfast',
-      volume: carrierStats.steadfast.volume,
-      successRate: carrierStats.steadfast.volume > 0 ? (carrierStats.steadfast.delivered / carrierStats.steadfast.volume) * 100 : 100,
-      avgDays: carrierStats.steadfast.days.length > 0 ? carrierStats.steadfast.days.reduce((a, b) => a + b, 0) / carrierStats.steadfast.days.length : 1.5,
-      avgCost: carrierStats.steadfast.volume > 0 ? carrierStats.steadfast.cost / carrierStats.steadfast.volume : 120,
-      logo: 'https://steadfast.com.bd/assets/logo.png'
-    },
-    {
-      code: 'pathao',
-      name: 'Pathao',
-      volume: carrierStats.pathao.volume,
-      successRate: carrierStats.pathao.volume > 0 ? (carrierStats.pathao.delivered / carrierStats.pathao.volume) * 100 : 100,
-      avgDays: carrierStats.pathao.days.length > 0 ? carrierStats.pathao.days.reduce((a, b) => a + b, 0) / carrierStats.pathao.days.length : 1.2,
-      avgCost: carrierStats.pathao.volume > 0 ? carrierStats.pathao.cost / carrierStats.pathao.volume : 125,
-      logo: 'https://pathao.com/wp-content/uploads/2018/12/Pathao_logo_red.png'
-    },
-    {
-      code: 'redx',
-      name: 'REDX',
-      volume: carrierStats.redx.volume,
-      successRate: carrierStats.redx.volume > 0 ? (carrierStats.redx.delivered / carrierStats.redx.volume) * 100 : 75,
-      avgDays: carrierStats.redx.days.length > 0 ? carrierStats.redx.days.reduce((a, b) => a + b, 0) / carrierStats.redx.days.length : 2.1,
-      avgCost: carrierStats.redx.volume > 0 ? carrierStats.redx.cost / carrierStats.redx.volume : 135,
-      logo: 'https://redx.com.bd/assets/images/redx-logo.svg'
-    }
-  ];
+  const aggregateCarrierStats: CarrierStat[] = Array.from(byCourier.entries())
+    .map(([code, rows]) => {
+      const volume = rows.length;
+      const deliveredRows = rows.filter((r) => r.status === 'delivered');
+      const successRateForCourier = volume > 0 ? (deliveredRows.length / volume) * 100 : 0;
+      const costForCourier = rows.reduce((sum, r) => sum + (r.deliveryCharge || 0), 0);
+      const avgCostForCourier = volume > 0 ? costForCourier / volume : 0;
 
-  // District distribution
+      // Real delivery duration: createdAt -> the most recent "delivered" checkpoint
+      // timestamp (webhook updates prepend the newest event, so index 0 on a
+      // currently-delivered shipment is that checkpoint).
+      const deliveryDurations = deliveredRows
+        .map((r) => {
+          const deliveredEvent = r.trackingEvents.find((evt) => evt.status === 'delivered') || r.trackingEvents[0];
+          if (!deliveredEvent) return null;
+          const days = (new Date(deliveredEvent.timestamp).getTime() - new Date(r.createdAt).getTime()) / 86400000;
+          return Number.isFinite(days) && days >= 0 ? days : null;
+        })
+        .filter((d): d is number => d !== null);
+      const avgDays = deliveryDurations.length > 0
+        ? deliveryDurations.reduce((a, b) => a + b, 0) / deliveryDurations.length
+        : null;
+
+      return {
+        code,
+        name: COURIER_DISPLAY[code]?.name || code,
+        volume,
+        successRate: successRateForCourier,
+        avgDays,
+        avgCost: avgCostForCourier,
+        logo: COURIER_DISPLAY[code]?.logo,
+      };
+    })
+    .sort((a, b) => b.volume - a.volume);
+
+  // District distribution (real `region` field)
   const districtVolume: Record<string, number> = {};
   shipments.forEach(s => {
-    const dist = s.deliveryAddress.district || 'Other';
+    const dist = s.region || 'Other';
     districtVolume[dist] = (districtVolume[dist] || 0) + 1;
   });
+  const totalDistrictVolume = Object.values(districtVolume).reduce((a, b) => a + b, 0);
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -130,29 +138,35 @@ export default function CourierAnalytics() {
             Courier Analytics
           </h1>
           <p className="text-sm text-app-text-secondary mt-1">
-            Audit logistics performance metrics, delivery speed efficiency, cost per package, and volume trends.
+            Real delivery performance derived from webhook-recorded shipment status and checkpoint history.
           </p>
         </div>
 
-        {/* Time Filter */}
-        <div className="flex bg-white rounded-xl border border-app-border p-1 shadow-sm text-xs font-bold text-app-text-secondary">
-          {[
-            { id: '7days', lbl: '7D' },
-            { id: '30days', lbl: '30D' },
-            { id: '6months', lbl: '6M' }
-          ].map(t => (
-            <button
-              key={t.id}
-              onClick={() => setTimeframe(t.id)}
-              className={`px-3.5 py-1.5 rounded-lg transition-all ${
-                timeframe === t.id ? 'bg-app-accent text-white shadow-sm' : 'hover:bg-slate-50'
-              }`}
-            >
-              {t.lbl}
-            </button>
-          ))}
-        </div>
+        <button
+          onClick={loadData}
+          disabled={loading}
+          className="text-xs font-semibold text-gray-700 hover:text-gray-900 border border-app-border bg-white hover:bg-gray-50 px-3 py-2 rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
       </div>
+
+      {error && (
+        <div className="bg-rose-50 border border-rose-200 p-4 rounded-xl flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h4 className="font-semibold text-rose-900 text-sm">Failed to load analytics</h4>
+            <p className="text-xs text-rose-700 mt-1">{error}</p>
+          </div>
+          <button
+            onClick={loadData}
+            className="text-xs font-semibold text-rose-700 hover:text-rose-900 border border-rose-200 bg-white px-2.5 py-1.5 rounded-lg"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 animate-pulse">
@@ -160,18 +174,19 @@ export default function CourierAnalytics() {
             <div key={n} className="h-24 bg-gray-100 rounded-xl border border-app-border" />
           ))}
         </div>
+      ) : totalShipments === 0 ? (
+        <div className="bg-white rounded-xl border border-dashed border-app-border p-12 text-center">
+          <Truck className="h-10 w-10 text-app-text-secondary mx-auto mb-3" />
+          <p className="text-app-text-primary font-medium">No shipments recorded yet.</p>
+          <p className="text-sm text-app-text-secondary mt-1">Analytics will populate as real orders generate shipments.</p>
+        </div>
       ) : (
         <>
           {/* Top Scorecard Metrics */}
-          {/* NOTE: StatTile has no secondary-caption slot, so each card's descriptive
-              sub-text (e.g. "Optimal zone", "Fulfillment leakage") is dropped except where it
-              maps cleanly onto the trend prop. StatTile also has no violet/blue/red border-left
-              accent variant per the full design spec's stat-card treatment; using the closest
-              supported accent tokens instead. */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            <StatTile label="Overall Volumetric Flow" value={`${totalShipments} Parcels`} icon={TrendingUp} accent="orange" trend={{ value: '12% vs last month', direction: 'up' }} />
+            <StatTile label="Overall Volumetric Flow" value={`${totalShipments} Parcels`} icon={TrendingUp} accent="orange" />
             <StatTile label="Delivery Success Rate" value={`${successRate.toFixed(1)}%`} icon={Percent} accent="emerald" />
-            <StatTile label="Carrier Loss / Return Rate" value={`${failRate.toFixed(1)}%`} icon={ShieldAlert} accent="rose" />
+            <StatTile label="Carrier Loss / Return Rate" value={`${lossRate.toFixed(1)}%`} icon={ShieldAlert} accent="rose" />
             <StatTile label="Avg Consignment Charge" value={`BDT ${Math.round(avgCost)}`} icon={DollarSign} accent="indigo" />
           </div>
 
@@ -191,7 +206,7 @@ export default function CourierAnalytics() {
 
                   return (
                     <div key={stat.code} className="space-y-2">
-                      <div className="flex justify-between items-center text-sm">
+                      <div className="flex justify-between items-center text-sm flex-wrap gap-2">
                         <div className="flex items-center gap-2">
                           {stat.logo && (
                             <img
@@ -205,7 +220,9 @@ export default function CourierAnalytics() {
                           <span className="text-xs text-app-text-muted font-mono">({stat.volume} parcels)</span>
                         </div>
                         <div className="flex items-center gap-4 text-xs font-mono font-bold">
-                          <span className="text-app-text-secondary">Speed: {stat.avgDays.toFixed(1)}d</span>
+                          <span className="text-app-text-secondary">
+                            Speed: {stat.avgDays !== null ? `${stat.avgDays.toFixed(1)}d` : '—'}
+                          </span>
                           <span className="text-app-text-secondary">Rate: BDT {Math.round(stat.avgCost)}</span>
                           <span className={isHealthy ? 'text-app-success' : 'text-app-warning'}>
                             {stat.successRate.toFixed(1)}% Success
@@ -233,34 +250,31 @@ export default function CourierAnalytics() {
               <div>
                 <h3 className="font-extrabold text-app-text-primary text-sm flex items-center gap-1.5 border-b border-app-border pb-3">
                   <Compass className="h-4 w-4 text-app-accent" />
-                  Top Delivery Hubs
+                  Delivery Regions
                 </h3>
 
                 <div className="space-y-4 mt-4">
-                  {Object.entries(districtVolume).map(([district, volume], i) => {
-                    const total = Object.values(districtVolume).reduce((a, b) => a + b, 0);
-                    const pct = total > 0 ? (volume / total) * 100 : 0;
+                  {Object.entries(districtVolume)
+                    .sort(([, a], [, b]) => b - a)
+                    .map(([district, volume], i) => {
+                      const pct = totalDistrictVolume > 0 ? (volume / totalDistrictVolume) * 100 : 0;
 
-                    return (
-                      <div key={i} className="space-y-1.5">
-                        <div className="flex justify-between items-center text-xs">
-                          <span className="font-bold text-app-text-primary">{district} Hub</span>
-                          <span className="font-mono font-bold text-app-text-secondary">{volume} ({pct.toFixed(0)}%)</span>
+                      return (
+                        <div key={i} className="space-y-1.5">
+                          <div className="flex justify-between items-center text-xs">
+                            <span className="font-bold text-app-text-primary">{district}</span>
+                            <span className="font-mono font-bold text-app-text-secondary">{volume} ({pct.toFixed(0)}%)</span>
+                          </div>
+                          <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-app-accent rounded-full"
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
                         </div>
-                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-app-accent rounded-full"
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
                 </div>
-              </div>
-
-              <div className="bg-app-bg p-3 rounded-lg border border-app-border text-[11px] text-app-text-secondary font-semibold leading-relaxed mt-4">
-                Dhaka and Chittagong zones handle 80%+ of platform volumetric flow, exhibiting delivery speeds 15% faster than outlying districts.
               </div>
             </div>
           </div>

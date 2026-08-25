@@ -1,25 +1,31 @@
 import React, { useState } from 'react';
-import { LogisticsService } from '../../../services/logistics/LogisticsService';
+import { operationsApi } from '../../../services/operationsApi';
 import { Shipment } from '../../../types/shipment';
-import { 
-  MapPin, 
-  Search, 
-  Compass, 
-  Truck, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
-  ChevronRight, 
-  AlertTriangle,
-  User,
+import { mapOpsShipmentToShipment } from './mapOpsShipment';
+import {
+  MapPin,
+  Search,
+  Compass,
+  Truck,
+  CheckCircle,
+  XCircle,
   Phone,
   ShieldAlert,
   ArrowRight
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
+/**
+ * Sprint 11 remediation: this screen previously searched a fabricated
+ * in-browser shipment store (LogisticsService, Firestore/localStorage
+ * fallback) that had no relationship to real orders. It now looks up the
+ * real backend record via GET /operations/shipments/:id, which matches by
+ * shipment id, order id, or tracking number — exactly the three identifiers
+ * the search box already promised to accept. Status and tracking history
+ * shown here reflect real courier webhook updates recorded server-side
+ * (server/operations/shipmentStore.ts).
+ */
 export default function TrackingCenter() {
-  const logisticsService = LogisticsService.getInstance();
   const [searchTerm, setSearchTerm] = useState('');
   const [shipment, setShipment] = useState<Shipment | null>(null);
   const [loading, setLoading] = useState(false);
@@ -34,10 +40,10 @@ export default function TrackingCenter() {
     setShipment(null);
 
     try {
-      const result = await logisticsService.searchShipment(searchTerm.trim());
-      setShipment(result);
+      const result = await operationsApi.getShipment(searchTerm.trim());
+      setShipment(mapOpsShipmentToShipment(result));
     } catch (err: any) {
-      setError(err.message || 'Tracking number not found in our logs.');
+      setError(err?.message || 'Tracking number, order ID, or waybill not found.');
     } finally {
       setLoading(false);
     }
@@ -48,11 +54,11 @@ export default function TrackingCenter() {
       {/* Header */}
       <div className="text-center max-w-xl mx-auto space-y-2 py-4">
         <div className="mx-auto w-12 h-12 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 mb-2">
-          <Compass className="h-6 w-6 animate-spin-slow" />
+          <Compass className="h-6 w-6" />
         </div>
         <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Live Tracking Center</h1>
         <p className="text-sm text-gray-500">
-          Trace logistics consignments, retrieve route status checkpoints, and view estimated deliveries instantly.
+          Look up a shipment's real courier status and checkpoint history by tracking number, order ID, or waybill reference.
         </p>
       </div>
 
@@ -82,7 +88,7 @@ export default function TrackingCenter() {
       {/* Main Panel */}
       <div className="space-y-6">
         {error && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             className="max-w-xl mx-auto bg-rose-50 border border-rose-200 p-4 rounded-xl flex items-start gap-3"
@@ -102,8 +108,15 @@ export default function TrackingCenter() {
           </div>
         )}
 
+        {loading && (
+          <div className="text-center py-12 border border-dashed border-gray-200 rounded-xl max-w-xl mx-auto bg-gray-50/50">
+            <Compass className="h-8 w-8 text-gray-300 mx-auto mb-2 animate-spin" />
+            <p className="text-xs text-gray-400 font-mono uppercase tracking-wider">Looking up shipment...</p>
+          </div>
+        )}
+
         {shipment && (
-          <motion.div 
+          <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden"
@@ -173,18 +186,16 @@ export default function TrackingCenter() {
 
               {/* Contacts */}
               <div className="space-y-4">
-                <h3 className="font-semibold text-gray-900 text-sm border-b border-gray-100 pb-2">Parties Involved</h3>
+                <h3 className="font-semibold text-gray-900 text-sm border-b border-gray-100 pb-2">Consignee</h3>
                 <div className="space-y-3">
                   <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100 space-y-1">
-                    <span className="text-[10px] text-gray-400 block uppercase font-semibold">Shipper / Brand</span>
-                    <p className="text-sm font-bold text-gray-900">{shipment.sellerContact.name}</p>
-                    <p className="text-xs text-gray-500 flex items-center gap-1"><Phone className="h-3 w-3" /> {shipment.sellerContact.phone}</p>
-                  </div>
-
-                  <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100 space-y-1">
-                    <span className="text-[10px] text-gray-400 block uppercase font-semibold">Consignee Customer</span>
+                    <span className="text-[10px] text-gray-400 block uppercase font-semibold">Recipient</span>
                     <p className="text-sm font-bold text-gray-900">{shipment.customerContact.name}</p>
                     <p className="text-xs text-gray-500 flex items-center gap-1"><Phone className="h-3 w-3" /> {shipment.customerContact.phone}</p>
+                  </div>
+                  <div className="bg-gray-50 p-3.5 rounded-xl border border-gray-100 space-y-1">
+                    <span className="text-[10px] text-gray-400 block uppercase font-semibold">COD Amount</span>
+                    <p className="text-sm font-bold text-gray-900 font-mono">BDT {shipment.codAmount}</p>
                   </div>
                 </div>
               </div>
@@ -193,64 +204,63 @@ export default function TrackingCenter() {
             {/* Bottom Timeline */}
             <div className="p-6 bg-white space-y-4">
               <h3 className="font-semibold text-gray-900 text-sm border-b border-gray-100 pb-2">Consignment Travel History</h3>
-              <div className="space-y-6 relative pl-6">
-                <div className="absolute left-2.5 top-2 bottom-2 w-0.5 bg-gray-100" />
+              {shipment.trackingEvents.length === 0 ? (
+                <p className="text-xs text-app-text-secondary">No checkpoint events recorded yet.</p>
+              ) : (
+                <div className="space-y-6 relative pl-6">
+                  <div className="absolute left-2.5 top-2 bottom-2 w-0.5 bg-gray-100" />
 
-                {shipment.trackingEvents.map((evt, idx) => {
-                  const isDelivered = evt.status === 'delivered';
-                  const isFailed = evt.status === 'failed_delivery' || evt.status === 'delivery_failed';
-                  const isFirst = idx === 0;
+                  {shipment.trackingEvents.map((evt, idx) => {
+                    const isDelivered = evt.status === 'delivered';
+                    const isFailed = evt.status === 'failed_delivery' || evt.status === 'delivery_failed';
+                    const isFirst = idx === 0;
 
-                  return (
-                    <div key={evt.id || idx} className="relative flex gap-4">
-                      {/* Timeline Dot */}
-                      <div className={`absolute -left-6 top-1.5 w-5 h-5 rounded-full flex items-center justify-center border-2 ${
-                        isFirst 
-                          ? 'bg-indigo-600 border-indigo-600 ring-4 ring-indigo-50' 
-                          : isDelivered 
-                          ? 'bg-emerald-500 border-emerald-500' 
-                          : isFailed
-                          ? 'bg-rose-500 border-rose-500'
-                          : 'bg-white border-gray-300'
-                      }`}>
-                        {isFirst ? (
-                          <div className="w-1.5 h-1.5 bg-white rounded-full" />
-                        ) : isDelivered ? (
-                          <CheckCircle className="h-3.5 w-3.5 text-white" />
-                        ) : isFailed ? (
-                          <XCircle className="h-3.5 w-3.5 text-white" />
-                        ) : (
-                          <div className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
-                        )}
-                      </div>
-
-                      {/* Content */}
-                      <div className="flex-1">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1">
-                          <span className="text-sm font-semibold text-gray-900">
-                            {evt.status.toUpperCase().replace('_', ' ')}
-                          </span>
-                          <span className="text-xs text-gray-400 font-mono">
-                            {new Date(evt.timestamp).toLocaleString()}
-                          </span>
+                    return (
+                      <div key={evt.id || idx} className="relative flex gap-4">
+                        {/* Timeline Dot */}
+                        <div className={`absolute -left-6 top-1.5 w-5 h-5 rounded-full flex items-center justify-center border-2 ${
+                          isFirst
+                            ? 'bg-indigo-600 border-indigo-600 ring-4 ring-indigo-50'
+                            : isDelivered
+                            ? 'bg-emerald-500 border-emerald-500'
+                            : isFailed
+                            ? 'bg-rose-500 border-rose-500'
+                            : 'bg-white border-gray-300'
+                        }`}>
+                          {isFirst ? (
+                            <div className="w-1.5 h-1.5 bg-white rounded-full" />
+                          ) : isDelivered ? (
+                            <CheckCircle className="h-3.5 w-3.5 text-white" />
+                          ) : isFailed ? (
+                            <XCircle className="h-3.5 w-3.5 text-white" />
+                          ) : (
+                            <div className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
+                          )}
                         </div>
-                        <p className="text-xs text-gray-600 mt-1">{evt.description}</p>
-                        {evt.location && (
-                          <span className="inline-flex items-center gap-1 text-[10px] text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded font-medium mt-1">
-                            <MapPin className="h-2.5 w-2.5 text-gray-400" />
-                            {evt.location}
-                          </span>
-                        )}
-                        {evt.remarks && (
-                          <p className="text-xs text-amber-700 font-semibold bg-amber-50 border border-amber-100 rounded p-2 mt-2">
-                            Remark: {evt.remarks}
-                          </p>
-                        )}
+
+                        {/* Content */}
+                        <div className="flex-1">
+                          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1">
+                            <span className="text-sm font-semibold text-gray-900">
+                              {evt.status.toUpperCase().replace('_', ' ')}
+                            </span>
+                            <span className="text-xs text-gray-400 font-mono">
+                              {new Date(evt.timestamp).toLocaleString()}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-1">{evt.description}</p>
+                          {evt.location && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-gray-500 bg-gray-100 border border-gray-200 px-2 py-0.5 rounded font-medium mt-1">
+                              <MapPin className="h-2.5 w-2.5 text-gray-400" />
+                              {evt.location}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </motion.div>
         )}
