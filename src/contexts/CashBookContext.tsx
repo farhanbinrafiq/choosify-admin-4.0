@@ -1,56 +1,54 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useCallback } from 'react';
 import { useAuth } from './AuthContext';
+import {
+  cashbookApi,
+  type CashbookListItem,
+  type CashbookDetail,
+  type CashbookBook,
+  type CashbookImportResult,
+  type FinanceSummary,
+} from '../services/cashbookApi';
 
-export interface AuditLog {
-  id: string;
-  userId: string;
-  userName: string;
-  role: string;
-  timestamp: string;
-  actionType: 'entry_created' | 'entry_edited' | 'entry_deleted' | 'attachment_added' | 'cashbook_accessed' | 'report_generated' | 'lock_status_changed';
-  details: string;
-  beforeState?: string;
-  afterState?: string;
-}
-
-export interface CashBookEntry {
-  id: string;
-  type: 'Cash In' | 'Cash Out';
-  amount: number;
-  date: string; // YYYY-MM-DD
-  time: string; // HH:MM AM/PM
-  category: string;
-  contactName: string;
-  remarks: string;
-  paymentMode: 'bKash' | 'Nagad' | 'Cash' | 'Bank Transfer';
-  attachments: string[]; // Mock file names or Google Drive urls
-  createdBy: { id: string; name: string; role: string };
-  lastEditedBy?: { id: string; name: string; role: string };
-  deleted?: boolean; // Soft delete
-}
-
-export interface CashBook {
-  userId: string;
-  userName: string;
-  role: 'seller' | 'creator' | 'admin' | 'super_admin';
-  businessName: string;
-  currency: 'BDT';
-  isLocked: boolean;
-}
+/**
+ * CashBookContext — real API-backed cashbook + finance data.
+ *
+ * The backend (server/cashbook/cashbookRouter.ts) is strictly seller/creator
+ * payout-oriented: a cashbook only ever contains entries imported from
+ * authoritative Order lines. There is NO endpoint to create an arbitrary
+ * manual entry, edit an entry, lock a book, or delete a whole book — so this
+ * context does not expose those actions. Anything it exposes maps 1:1 to a
+ * real endpoint; nothing here is computed/estimated on the client.
+ */
 
 interface CashBookContextType {
-  cashbooks: Record<string, CashBook>;
-  entries: Record<string, CashBookEntry[]>;
-  auditLogs: AuditLog[];
-  addEntry: (cashbookId: string, entry: Omit<CashBookEntry, 'id' | 'createdBy' | 'deleted'>) => void;
-  editEntry: (cashbookId: string, entryId: string, entry: Partial<Omit<CashBookEntry, 'id' | 'createdBy'>>) => void;
-  deleteEntry: (cashbookId: string, entryId: string) => void;
-  toggleLock: (cashbookId: string) => void;
-  createCashBook: (userId: string, userName: string, role: string, businessName: string) => void;
-  deleteBook: (cashbookId: string) => void;
-  exportOrdersToCashBook: (orders: Array<{id: string; total: number; buyerName: string; createdAt: string; paymentMethod: string}>) => string;
-  logAudit: (actionType: AuditLog['actionType'], details: string, beforeState?: string, afterState?: string) => void;
-  exportReport: (cashbookId: string, format: 'PDF' | 'CSV', reportRange: string) => void;
+  // My cashbooks (owned by the authenticated actor — no cross-user listing exists)
+  cashbooks: CashbookListItem[];
+  cashbooksLoading: boolean;
+  cashbooksError: string | null;
+  refreshCashbooks: () => Promise<void>;
+
+  // Detail of one book, loaded on demand
+  bookDetail: CashbookDetail | null;
+  bookDetailLoading: boolean;
+  bookDetailError: string | null;
+  loadCashbookDetail: (bookId: string, ownerUserId?: string) => Promise<void>;
+  clearCashbookDetail: () => void;
+
+  // Mutations — all throw on failure; callers must catch and report.
+  createCashbook: (name: string, icon?: string, color?: string) => Promise<CashbookBook>;
+  importOrders: (params: {
+    bookId?: string;
+    newBookName?: string;
+    newBookIcon?: string;
+    items: Array<{ orderId: string; orderItemKey?: string }>;
+  }) => Promise<CashbookImportResult>;
+  deleteEntry: (entryId: string) => Promise<void>;
+
+  // Finance summary (admin may pass sellerId to inspect a specific seller/creator)
+  financeSummary: FinanceSummary | null;
+  financeSummaryLoading: boolean;
+  financeSummaryError: string | null;
+  loadFinanceSummary: (sellerId?: string) => Promise<void>;
 }
 
 const CashBookContext = createContext<CashBookContextType | undefined>(undefined);
@@ -61,431 +59,141 @@ export const useCashBook = () => {
   return context;
 };
 
-// Initial data seeds for a beautiful realistic experience
-const seedCashbooks: Record<string, CashBook> = {
-  'seller_001': {
-    userId: 'seller_001',
-    userName: 'Rahim Uddin',
-    role: 'seller',
-    businessName: 'Aarong Premium Outlet',
-    currency: 'BDT',
-    isLocked: false
-  },
-  'creator_001': {
-    userId: 'creator_001',
-    userName: 'Sumaiya Akter',
-    role: 'creator',
-    businessName: 'Sumaiya Lifestyle Vlogs',
-    currency: 'BDT',
-    isLocked: false
-  },
-  'admin_002': {
-    userId: 'admin_002',
-    userName: 'Tanvir Hossain',
-    role: 'admin',
-    businessName: 'Choosify Platform Admin',
-    currency: 'BDT',
-    isLocked: false
-  }
-};
-
-const seedEntries: Record<string, CashBookEntry[]> = {
-  'seller_001': [
-    {
-      id: 'tx_s1',
-      type: 'Cash In',
-      amount: 45000,
-      date: '2026-06-16',
-      time: '11:30 AM',
-      category: 'Sales',
-      contactName: 'Sumaiya Akter',
-      remarks: 'Bulk purchase of Jamdani Sarees',
-      paymentMode: 'Bank Transfer',
-      attachments: ['https://drive.google.com/open?id=jamdani_invoice_09a'],
-      createdBy: { id: 'seller_001', name: 'Rahim Uddin', role: 'seller' }
-    },
-    {
-      id: 'tx_s2',
-      type: 'Cash Out',
-      amount: 15000,
-      date: '2026-06-16',
-      time: '02:15 PM',
-      category: 'Inventory',
-      contactName: 'Karika Weaving Hub',
-      remarks: 'Advanced payment for handloom fabrics thread supply',
-      paymentMode: 'bKash',
-      attachments: ['https://drive.google.com/open?id=bkash_receipt_tx152'],
-      createdBy: { id: 'seller_001', name: 'Rahim Uddin', role: 'seller' }
-    },
-    {
-      id: 'tx_s3',
-      type: 'Cash In',
-      amount: 28000,
-      date: '2026-06-17',
-      time: '10:05 AM',
-      category: 'Sales',
-      contactName: 'Kabir Ahmed',
-      remarks: 'Wholesale retail consignment clearance',
-      paymentMode: 'Nagad',
-      attachments: [],
-      createdBy: { id: 'seller_001', name: 'Rahim Uddin', role: 'seller' }
-    },
-    {
-      id: 'tx_s4',
-      type: 'Cash Out',
-      amount: 8500,
-      date: '2026-06-17',
-      time: '04:50 PM',
-      category: 'Marketing',
-      contactName: 'Choosify Promos',
-      remarks: 'Paid for sponsored promotion of Summer Edition',
-      paymentMode: 'Cash',
-      attachments: ['https://drive.google.com/open?id=payment_cash_voucher_0991'],
-      createdBy: { id: 'seller_001', name: 'Rahim Uddin', role: 'seller' }
-    },
-    {
-      id: 'tx_s5',
-      type: 'Cash Out',
-      amount: 12000,
-      date: '2026-06-18',
-      time: '09:15 AM',
-      category: 'Utilities',
-      contactName: 'DESCO Electricity',
-      remarks: 'Office & Showroom electricity bill June 2026',
-      paymentMode: 'Bank Transfer',
-      attachments: ['https://drive.google.com/open?id=electricity_bill_desco_011'],
-      createdBy: { id: 'seller_001', name: 'Rahim Uddin', role: 'seller' }
-    }
-  ],
-  'creator_001': [
-    {
-      id: 'tx_c1',
-      type: 'Cash In',
-      amount: 60000,
-      date: '2026-06-15',
-      time: '03:10 PM',
-      category: 'Sponsorship',
-      contactName: 'Apex Footwear BD',
-      remarks: 'Sponsorship payout for Eid Collection Vlog Integration',
-      paymentMode: 'Bank Transfer',
-      attachments: ['https://drive.google.com/open?id=apex_sponsorship_agreement'],
-      createdBy: { id: 'creator_001', name: 'Sumaiya Akter', role: 'creator' }
-    },
-    {
-      id: 'tx_c2',
-      type: 'Cash Out',
-      amount: 5000,
-      date: '2026-06-16',
-      time: '12:00 PM',
-      category: 'Travel',
-      contactName: 'Pathao Ride Services',
-      remarks: 'Shoot transport for outfit travel vlogs around Dhaka',
-      paymentMode: 'bKash',
-      attachments: [],
-      createdBy: { id: 'creator_001', name: 'Sumaiya Akter', role: 'creator' }
-    },
-    {
-      id: 'tx_c3',
-      type: 'Cash In',
-      amount: 15300,
-      date: '2026-06-17',
-      time: '06:30 PM',
-      category: 'Commission',
-      contactName: 'Choosify Affiliate',
-      remarks: 'Affiliate link referrals commission payout for June week 2',
-      paymentMode: 'Nagad',
-      attachments: ['https://drive.google.com/open?id=choosify_affiliate_report_02'],
-      createdBy: { id: 'creator_001', name: 'Sumaiya Akter', role: 'creator' }
-    },
-    {
-      id: 'tx_c4',
-      type: 'Cash Out',
-      amount: 18000,
-      date: '2026-06-18',
-      time: '11:00 AM',
-      category: 'Marketing',
-      contactName: 'Facebook Ad Desk',
-      remarks: 'Boosting Sumaiya Vlog page posts to regional target segments',
-      paymentMode: 'Bank Transfer',
-      attachments: ['https://drive.google.com/open?id=invoice_fb_6615b'],
-      createdBy: { id: 'creator_001', name: 'Sumaiya Akter', role: 'creator' }
-    }
-  ],
-  'admin_002': [
-    {
-      id: 'tx_a1',
-      type: 'Cash In',
-      amount: 120000,
-      date: '2026-06-15',
-      time: '09:00 AM',
-      category: 'Commission',
-      contactName: 'System Sales',
-      remarks: 'Compiled weekly sales commission platform cuts',
-      paymentMode: 'Bank Transfer',
-      attachments: [],
-      createdBy: { id: 'admin_002', name: 'Tanvir Hossain', role: 'admin' }
-    },
-    {
-      id: 'tx_a2',
-      type: 'Cash Out',
-      amount: 30000,
-      date: '2026-06-16',
-      time: '05:00 PM',
-      category: 'Salary',
-      contactName: 'Kazi Farhan',
-      remarks: 'Partial support agent incentive payouts',
-      paymentMode: 'bKash',
-      attachments: [],
-      createdBy: { id: 'admin_002', name: 'Tanvir Hossain', role: 'admin' }
-    }
-  ]
-};
-
-const seedAudit: AuditLog[] = [
-  {
-    id: 'log_01',
-    userId: 'system',
-    userName: 'Choosify System Engine',
-    role: 'system',
-    timestamp: '2026-06-15T09:00:00Z',
-    actionType: 'entry_created',
-    details: 'System initialized seeds and accounts structure across Multi-Role Ledger platform assets successfully.'
-  }
-];
-
 export const CashBookProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { profile } = useAuth();
-  
-  const [cashbooks, setCashbooks] = useState<Record<string, CashBook>>(() => {
-    const saved = localStorage.getItem('choosify_cashbooks');
-    return saved ? JSON.parse(saved) : seedCashbooks;
-  });
+  useAuth(); // kept for parity with other providers / future actor-aware calls
 
-  const [entries, setEntries] = useState<Record<string, CashBookEntry[]>>(() => {
-    const saved = localStorage.getItem('choosify_cashbook_entries');
-    return saved ? JSON.parse(saved) : seedEntries;
-  });
+  const [cashbooks, setCashbooks] = useState<CashbookListItem[]>([]);
+  const [cashbooksLoading, setCashbooksLoading] = useState(false);
+  const [cashbooksError, setCashbooksError] = useState<string | null>(null);
 
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const saved = localStorage.getItem('choosify_cashbook_audit');
-    return saved ? JSON.parse(saved) : seedAudit;
-  });
+  const [bookDetail, setBookDetail] = useState<CashbookDetail | null>(null);
+  const [bookDetailLoading, setBookDetailLoading] = useState(false);
+  const [bookDetailError, setBookDetailError] = useState<string | null>(null);
 
-  useEffect(() => {
-    localStorage.setItem('choosify_cashbooks', JSON.stringify(cashbooks));
-  }, [cashbooks]);
+  const [financeSummary, setFinanceSummary] = useState<FinanceSummary | null>(null);
+  const [financeSummaryLoading, setFinanceSummaryLoading] = useState(false);
+  const [financeSummaryError, setFinanceSummaryError] = useState<string | null>(null);
 
-  useEffect(() => {
-    localStorage.setItem('choosify_cashbook_entries', JSON.stringify(entries));
-  }, [entries]);
-
-  useEffect(() => {
-    localStorage.setItem('choosify_cashbook_audit', JSON.stringify(auditLogs));
-  }, [auditLogs]);
-
-  const logAudit = (actionType: AuditLog['actionType'], details: string, beforeState?: string, afterState?: string) => {
-    const actorId = profile?.id || 'guest';
-    const actorName = profile?.displayName || 'Anonymous Guest';
-    const actorRole = profile?.role || 'visitor';
-
-    const newLog: AuditLog = {
-      id: 'log_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-      userId: actorId,
-      userName: actorName,
-      role: actorRole,
-      timestamp: new Date().toISOString(),
-      actionType,
-      details,
-      beforeState,
-      afterState
-    };
-
-    setAuditLogs(prev => [newLog, ...prev]);
-  };
-
-  const createCashBook = (userId: string, userName: string, role: string, businessName: string) => {
-    if (cashbooks[userId]) return;
-
-    const newCB: CashBook = {
-      userId,
-      userName,
-      role: role as CashBook['role'],
-      businessName: businessName || `${userName}'s Workspace`,
-      currency: 'BDT',
-      isLocked: false
-    };
-
-    setCashbooks(prev => ({ ...prev, [userId]: newCB }));
-    setEntries(prev => ({ ...prev, [userId]: [] }));
-    logAudit('entry_created', `Created a new CashBook ledger for ${userName} (${role}) - Business: ${newCB.businessName}`);
-  };
-
-  const addEntry = (cashbookId: string, entry: Omit<CashBookEntry, 'id' | 'createdBy' | 'deleted'>) => {
-    const cb = cashbooks[cashbookId];
-    if (cb?.isLocked) {
-      throw new Error("This CashBook is locked by system administrators and cannot accept any modifications.");
+  const refreshCashbooks = useCallback(async () => {
+    setCashbooksLoading(true);
+    setCashbooksError(null);
+    try {
+      const rows = await cashbookApi.listCashbooks();
+      setCashbooks(rows);
+    } catch (error) {
+      setCashbooksError(error instanceof Error ? error.message : 'Failed to load cashbooks');
+    } finally {
+      setCashbooksLoading(false);
     }
+  }, []);
 
-    const actorId = profile?.id || 'guest';
-    const actorName = profile?.displayName || 'Anonymous Guest';
-    const actorRole = profile?.role || 'visitor';
-
-    const newEntry: CashBookEntry = {
-      ...entry,
-      id: 'tx_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
-      createdBy: { id: actorId, name: actorName, role: actorRole }
-    };
-
-    setEntries(prev => {
-      const list = prev[cashbookId] || [];
-      return {
-        ...prev,
-        [cashbookId]: [newEntry, ...list]
-      };
-    });
-
-    logAudit('entry_created', `Added ${newEntry.type} entry of ৳${newEntry.amount.toLocaleString('en-US')} to CashBook ${cb?.userName || cashbookId} - Category: ${newEntry.category}`);
-  };
-
-  const editEntry = (cashbookId: string, entryId: string, updatedData: Partial<Omit<CashBookEntry, 'id' | 'createdBy'>>) => {
-    const cb = cashbooks[cashbookId];
-    if (cb?.isLocked) {
-      throw new Error("This CashBook is locked by system administrators and cannot accept edits.");
+  const loadCashbookDetail = useCallback(async (bookId: string, ownerUserId?: string) => {
+    setBookDetailLoading(true);
+    setBookDetailError(null);
+    try {
+      const detail = await cashbookApi.getCashbookDetail(bookId, ownerUserId);
+      setBookDetail(detail);
+    } catch (error) {
+      setBookDetail(null);
+      setBookDetailError(error instanceof Error ? error.message : 'Failed to load cashbook');
+    } finally {
+      setBookDetailLoading(false);
     }
+  }, []);
 
-    const actorId = profile?.id || 'guest';
-    const actorName = profile?.displayName || 'Anonymous Guest';
-    const actorRole = profile?.role || 'visitor';
+  const clearCashbookDetail = useCallback(() => {
+    setBookDetail(null);
+    setBookDetailError(null);
+  }, []);
 
-    let original: CashBookEntry | undefined;
+  const createCashbook = useCallback(async (name: string, icon?: string, color?: string) => {
+    const book = await cashbookApi.createCashbook({ name, icon, color });
+    setCashbooks((prev) => [{ ...book, summary: { totalSales: 0, totalRevenue: 0, netRevenue: 0, totalItems: 0, averageOrderValue: 0, entryCount: 0 } }, ...prev]);
+    return book;
+  }, []);
 
-    setEntries(prev => {
-      const list = prev[cashbookId] || [];
-      const updatedList = list.map(item => {
-        if (item.id === entryId) {
-          original = { ...item };
-          return {
-            ...item,
-            ...updatedData,
-            lastEditedBy: { id: actorId, name: actorName, role: actorRole }
-          };
-        }
-        return item;
+  const importOrders = useCallback(
+    async (params: {
+      bookId?: string;
+      newBookName?: string;
+      newBookIcon?: string;
+      items: Array<{ orderId: string; orderItemKey?: string }>;
+    }) => {
+      const result = await cashbookApi.importOrdersToCashbook(params);
+      // Refresh the list so summaries reflect the newly imported lines.
+      await refreshCashbooks();
+      if (bookDetail && bookDetail.book.id === result.book.id) {
+        await loadCashbookDetail(result.book.id);
+      }
+      return result;
+    },
+    [refreshCashbooks, loadCashbookDetail, bookDetail],
+  );
+
+  const deleteEntry = useCallback(
+    async (entryId: string) => {
+      await cashbookApi.deleteCashbookEntry(entryId);
+      setBookDetail((prev) => {
+        if (!prev) return prev;
+        const entries = prev.entries.filter((e) => e.entryId !== entryId);
+        const sales = entries.filter((e) => e.amount > 0);
+        const totalRevenue = sales.reduce((a, e) => a + e.amount, 0);
+        const totalItems = sales.reduce((a, e) => a + (e.quantity || 1), 0);
+        const orderIds = new Set(sales.map((e) => e.orderId).filter(Boolean));
+        return {
+          ...prev,
+          entries,
+          summary: {
+            totalSales: orderIds.size,
+            totalRevenue,
+            netRevenue: totalRevenue,
+            totalItems,
+            averageOrderValue: orderIds.size ? Math.round(totalRevenue / orderIds.size) : 0,
+            entryCount: entries.length,
+          },
+        };
       });
-      return {
-        ...prev,
-        [cashbookId]: updatedList
-      };
-    });
+      // Book-level totals in the dashboard list are also stale now.
+      refreshCashbooks().catch(() => {});
+    },
+    [refreshCashbooks],
+  );
 
-    if (original) {
-      logAudit(
-        'entry_edited',
-        `Edited entry ID ${entryId} inside CashBook ${cb?.userName || cashbookId} - Amount updated from ৳${original.amount.toLocaleString()} to ৳${(updatedData.amount ?? original.amount).toLocaleString()}`,
-        JSON.stringify(original),
-        JSON.stringify({ ...original, ...updatedData })
-      );
+  const loadFinanceSummary = useCallback(async (sellerId?: string) => {
+    setFinanceSummaryLoading(true);
+    setFinanceSummaryError(null);
+    try {
+      const summary = await cashbookApi.getFinanceSummary(sellerId);
+      setFinanceSummary(summary);
+    } catch (error) {
+      setFinanceSummary(null);
+      setFinanceSummaryError(error instanceof Error ? error.message : 'Failed to load finance summary');
+    } finally {
+      setFinanceSummaryLoading(false);
     }
-  };
-
-  const deleteEntry = (cashbookId: string, entryId: string) => {
-    const cb = cashbooks[cashbookId];
-    if (cb?.isLocked) {
-      throw new Error("This CashBook is locked by system administrators and cannot accept deletions.");
-    }
-
-    let target: CashBookEntry | undefined;
-
-    setEntries(prev => {
-      const list = prev[cashbookId] || [];
-      const updatedList = list.map(item => {
-        if (item.id === entryId) {
-          target = { ...item };
-          return { ...item, deleted: true }; // Soft deletion
-        }
-        return item;
-      });
-      return {
-        ...prev,
-        [cashbookId]: updatedList
-      };
-    });
-
-    if (target) {
-      logAudit('entry_deleted', `Deleted entry ID ${entryId} (৳${target.amount.toLocaleString()} ${target.type}) in CashBook ${cb?.userName || cashbookId}`, JSON.stringify(target));
-    }
-  };
-
-  const toggleLock = (cashbookId: string) => {
-    const cb = cashbooks[cashbookId];
-    if (!cb) return;
-
-    const newLockStatus = !cb.isLocked;
-
-    setCashbooks(prev => ({
-      ...prev,
-      [cashbookId]: { ...prev[cashbookId], isLocked: newLockStatus }
-    }));
-
-    logAudit('lock_status_changed', `Changed CashBook lock status for ${cb.userName} to ${newLockStatus ? 'LOCKED' : 'UNLOCKED'}`);
-  };
-
-  const exportReport = (cashbookId: string, format: 'PDF' | 'CSV', reportRange: string) => {
-    const cb = cashbooks[cashbookId];
-    logAudit('report_generated', `Generated and downloaded daily/monthly consolidated financial CashBook report in ${format} format for user ${cb?.userName || cashbookId} (Period: ${reportRange})`);
-  };
-
-  const deleteBook = (cashbookId: string) => {
-    setCashbooks(prev => { const next = {...prev}; delete next[cashbookId]; return next; });
-    setEntries(prev => { const next = {...prev}; delete next[cashbookId]; return next; });
-    logAudit('cashbook_accessed', `Deleted CashBook ID: ${cashbookId}`);
-  };
-
-  const exportOrdersToCashBook = (orders: Array<{id: string; total: number; buyerName: string; createdAt: string; paymentMethod: string}>): string => {
-    const newBookId = `book_orders_${Date.now()}`;
-    const newBook: CashBook = {
-      userId: profile?.id || 'unknown',
-      userName: profile?.displayName || 'User',
-      role: (profile?.role as CashBook['role']) || 'seller',
-      businessName: `Order Export — ${new Date().toLocaleDateString('en-BD', { month: 'long', year: 'numeric' })}`,
-      currency: 'BDT',
-      isLocked: false,
-    };
-    setCashbooks(prev => ({ ...prev, [newBookId]: newBook }));
-    const newEntries: CashBookEntry[] = orders.map((order, i) => ({
-      id: `oe_${newBookId}_${i}`,
-      type: 'Cash In',
-      amount: order.total,
-      date: order.createdAt.split('T')[0],
-      time: new Date(order.createdAt).toLocaleTimeString('en-BD', { hour: '2-digit', minute: '2-digit', hour12: true }),
-      category: 'Sales',
-      contactName: order.buyerName,
-      remarks: `Order #${order.id}`,
-      paymentMode: order.paymentMethod === 'COD' ? 'Cash' : 'Bank Transfer',
-      attachments: [],
-      createdBy: { id: profile?.id || 'system', name: profile?.displayName || 'System', role: profile?.role || 'seller' },
-      deleted: false,
-    }));
-    setEntries(prev => ({ ...prev, [newBookId]: newEntries }));
-    logAudit('entry_created', `Exported ${orders.length} orders to new CashBook: ${newBook.businessName}`);
-    return newBookId;
-  };
+  }, []);
 
   return (
-    <CashBookContext.Provider value={{
-      cashbooks,
-      entries,
-      auditLogs,
-      addEntry,
-      editEntry,
-      deleteEntry,
-      toggleLock,
-      createCashBook,
-      deleteBook,
-      exportOrdersToCashBook,
-      logAudit,
-      exportReport
-    }}>
+    <CashBookContext.Provider
+      value={{
+        cashbooks,
+        cashbooksLoading,
+        cashbooksError,
+        refreshCashbooks,
+        bookDetail,
+        bookDetailLoading,
+        bookDetailError,
+        loadCashbookDetail,
+        clearCashbookDetail,
+        createCashbook,
+        importOrders,
+        deleteEntry,
+        financeSummary,
+        financeSummaryLoading,
+        financeSummaryError,
+        loadFinanceSummary,
+      }}
+    >
       {children}
     </CashBookContext.Provider>
   );
