@@ -27,6 +27,7 @@ import { AdminPageSkeleton } from './components/common/skeletons';
 const routeSuspenseFallback = <AdminPageSkeleton variant="generic" />;
 
 // Lazy load pages
+const Dashboard = lazy(() => import('./pages/admin/Dashboard'));
 const CashBookHub = lazy(() => import('./pages/admin/CashBookHub'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ForcePasswordChangePage = lazy(() => import('./pages/ForcePasswordChangePage'));
@@ -844,6 +845,72 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            {/*
+              Sprint 11 remediation: these screens previously fell through to
+              /admin/* -> CmsMirrorHost (a static prototype iframe with almost no
+              real backend calls). Real, working React components + real backend
+              endpoints already existed for each but were never routed. Registered
+              here, before the /admin/* catch-all, per the same surgical-cutover
+              pattern as Products/Brands/Creators/Guides above.
+              Rollback: remove these four routes; each path falls back to CmsMirrorHost.
+            */}
+            <Route
+              path="/admin/dashboard"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <Dashboard />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/reviews"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <Reviews />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/coupons"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <Coupons />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/fee-charges"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <FeeChargesEngine />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+
             <Route path="/admin/*" element={<ProtectedRoute><RoleGuard><AdminAreaEntry /></RoleGuard></ProtectedRoute>} />
             <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
 
