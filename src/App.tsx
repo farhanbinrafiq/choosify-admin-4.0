@@ -28,6 +28,8 @@ const routeSuspenseFallback = <AdminPageSkeleton variant="generic" />;
 
 // Lazy load pages
 const Dashboard = lazy(() => import('./pages/admin/Dashboard'));
+const CMS = lazy(() => import('./pages/admin/CMS'));
+const Consumers = lazy(() => import('./pages/admin/Consumers'));
 const CashBookHub = lazy(() => import('./pages/admin/CashBookHub'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ForcePasswordChangePage = lazy(() => import('./pages/ForcePasswordChangePage'));
@@ -904,6 +906,125 @@ export default function App() {
                     <AdminWorkspaceLayout>
                       <Suspense fallback={routeSuspenseFallback}>
                         <FeeChargesEngine />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+
+            {/*
+              Sprint 11 remediation, tier 2: same pattern as the tier-1 block
+              above. Real components + real backend endpoints existed but were
+              never routed. Registered before the /admin/* catch-all.
+              Rollback: remove these eight routes; each path falls back to CmsMirrorHost.
+            */}
+            <Route
+              path="/admin/deals"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <Deals />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/categories"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <Categories />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/website-cms"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <CMS />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/cashbook"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <CashBookHub />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/payouts"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <Payouts />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/returns"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <Returns />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/brand-verification"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <BrandVerification />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/consumers"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <Consumers />
                       </Suspense>
                     </AdminWorkspaceLayout>
                   </RoleGuard>
