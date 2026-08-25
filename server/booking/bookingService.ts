@@ -547,19 +547,36 @@ export async function buyerAcceptCounter(
   return { request: updated, offer: toBookingOfferCard(updated), order };
 }
 
+/**
+ * Sprint 8 QA — P0 fix: this had no status guard at all (every sibling
+ * transition — accept/decline/counter/buyer-accept/buyer-decline —
+ * checks existing.status; this didn't), so a booking could be marked
+ * paid straight from 'pending', before the seller ever accepted it and
+ * before any order existed. Worse, it preferred a client-supplied
+ * `orderId` over the booking's own `existing.orderId` -- confirmed live:
+ * an unrelated, unaccepted, ৳1 test booking's mark-paid call successfully
+ * forged paidAt/invoiceGeneratedAt onto a real, unrelated order just by
+ * passing its id in the request body. Fix: only 'accepted' or
+ * 'buyer_accepted' (the two states that create/carry a real orderId) may
+ * be marked paid, and the order to update is always the booking's own
+ * orderId -- the caller-supplied orderId is no longer trusted.
+ */
 export async function markBookingPaid(
   id: string,
-  orderId?: string,
+  _orderId?: string,
   paymentType: 'full' | 'partial' = 'full',
 ): Promise<{ request: BookingRequest; offer: BookingOfferCard }> {
   const existing = await getBookingRequest(id);
   if (!existing) throw new Error('Booking request not found');
+  if (existing.status !== 'accepted' && existing.status !== 'buyer_accepted') {
+    throw new Error(`Cannot confirm payment for booking in status ${existing.status}`);
+  }
   if (paymentType === 'partial' && !existing.partialPaymentEnabled) {
     throw new Error('This listing does not offer partial payment');
   }
 
   const ts = nowIso();
-  const resolvedOrderId = orderId || existing.orderId;
+  const resolvedOrderId = existing.orderId;
   if (resolvedOrderId) {
     if (paymentType === 'partial' && existing.depositPercent) {
       const depositAmount = Math.round((existing.price * existing.depositPercent) / 100);
