@@ -37,6 +37,9 @@ const REFUND_STATUS_VARIANT: Record<string, BadgeVariant> = {
 export default function ReturnsPage() {
   const {
     returnRequests,
+    loading: returnsLoading,
+    error: returnsError,
+    refresh: refreshReturns,
     approveReturn,
     rejectReturn,
     processRefund,
@@ -68,6 +71,10 @@ export default function ReturnsPage() {
   const [trackingIdInput, setTrackingIdInput] = useState('');
   const [isRejecting, setIsRejecting] = useState(false);
   const [zoomImg, setZoomImg] = useState<string | null>(null);
+
+  // Tracks which async action is currently in flight so buttons can disable
+  // themselves and we never show a success toast before the API resolves.
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
 
   // Toast status
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -161,16 +168,23 @@ export default function ReturnsPage() {
   ];
 
   // Handle Note Submission
-  const handleAddNoteSubmit = (e: React.FormEvent) => {
+  const handleAddNoteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedReturnId || !noteInput.trim()) return;
-    addReturnNote(selectedReturnId, noteInput.trim());
-    setNoteInput('');
-    showToast('Internal note recorded', 'success');
+    setActionBusy('note');
+    try {
+      await addReturnNote(selectedReturnId, noteInput.trim());
+      setNoteInput('');
+      showToast('Internal note recorded', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to record note', 'error');
+    } finally {
+      setActionBusy(null);
+    }
   };
 
   // Handle Return Approval
-  const handleApprove = () => {
+  const handleApprove = async () => {
     if (!selectedReturnId) return;
     const order = orders.find(o => o.id === selectedReturn?.orderId);
     const limit = order?.total_payable || order?.product.price || 99999;
@@ -184,34 +198,62 @@ export default function ReturnsPage() {
       return;
     }
 
-    approveReturn(selectedReturnId, refundInput, 'Approved by Administrator Panel.');
-    showToast('Return Request Approved', 'success');
+    setActionBusy('approve');
+    try {
+      await approveReturn(selectedReturnId, refundInput, 'Approved by Administrator Panel.');
+      showToast('Return Request Approved', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to approve return', 'error');
+    } finally {
+      setActionBusy(null);
+    }
   };
 
   // Handle Return Rejection
-  const handleReject = () => {
+  const handleReject = async () => {
     if (!selectedReturnId) return;
     if (!rejectReasonInput.trim()) {
       showToast('A reason is required to reject a return.', 'error');
       return;
     }
-    rejectReturn(selectedReturnId, rejectReasonInput.trim());
-    showToast('Return Request Rejected', 'info');
-    setIsRejecting(false);
+    setActionBusy('reject');
+    try {
+      await rejectReturn(selectedReturnId, rejectReasonInput.trim());
+      showToast('Return Request Rejected', 'info');
+      setIsRejecting(false);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to reject return', 'error');
+    } finally {
+      setActionBusy(null);
+    }
   };
 
   // Handle Process Refund Channel
-  const handleProcessRefund = () => {
+  const handleProcessRefund = async () => {
     if (!selectedReturnId) return;
-    processRefund(selectedReturnId);
-    showToast('Refund marked as successfully processed!', 'success');
+    setActionBusy('refund');
+    try {
+      await processRefund(selectedReturnId);
+      showToast('Refund marked as successfully processed!', 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to process refund', 'error');
+    } finally {
+      setActionBusy(null);
+    }
   };
 
   // Handle Prepaid Return Label Generation
-  const handlePrintLabel = () => {
+  const handlePrintLabel = async () => {
     if (!selectedReturnId) return;
-    const info = generateReturnLabel(selectedReturnId);
-    showToast(`Printable label generated: ${info.trackingId}`, 'success');
+    setActionBusy('label');
+    try {
+      const info = await generateReturnLabel(selectedReturnId);
+      showToast(`Printable label generated: ${info.trackingId}`, 'success');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Failed to generate return label', 'error');
+    } finally {
+      setActionBusy(null);
+    }
   };
 
   // Export Refund batch as accountant-friendly format
@@ -260,29 +302,18 @@ export default function ReturnsPage() {
     return Object.keys(reasons).map(k => ({ name: k, value: reasons[k] }));
   };
 
-  const getSellerPerformanceData = () => {
-    const sellersMap: Record<string, { name: string; total: number; returned: number }> = {
-      'seller_001': { name: 'Aarong Stores Ltd.', total: 18, returned: 2 },
-      'seller_002': { name: 'TechZone BD', total: 12, returned: 1 },
-      'seller_003': { name: 'Apex Shoes Bangladesh', total: 24, returned: 0 }
-    };
-
-    // Aggregate return totals
+  // Real counts only — the Returns API has no endpoint for a seller's total
+  // fulfillment count, so a genuine "return rate %" can't be computed here.
+  // Showing a fabricated denominator would misrepresent seller performance.
+  const getSellerReturnCounts = () => {
+    const sellersMap: Record<string, { sellerId: string; returned: number }> = {};
     returnRequests.forEach(r => {
-      if (sellersMap[r.sellerId]) {
-        sellersMap[r.sellerId].returned++;
-      } else {
-        sellersMap[r.sellerId] = { name: `Seller ID: ${r.sellerId}`, total: 5, returned: 1 };
+      if (!sellersMap[r.sellerId]) {
+        sellersMap[r.sellerId] = { sellerId: r.sellerId, returned: 0 };
       }
+      sellersMap[r.sellerId].returned++;
     });
-
-    return Object.values(sellersMap).map(s => {
-      const rate = s.total > 0 ? (s.returned / s.total) * 100 : 0;
-      return {
-        ...s,
-        rate: parseFloat(rate.toFixed(1))
-      };
-    });
+    return Object.values(sellersMap).sort((a, b) => b.returned - a.returned);
   };
 
   const get7DayTrendData = () => {
@@ -356,6 +387,28 @@ export default function ReturnsPage() {
           </div>
         </div>
       </div>
+
+      {/* List load state — never leave a failed fetch silently showing an empty table */}
+      {returnsError && (
+        <div className="mb-6 flex items-center justify-between gap-2 text-xs text-[#DC2626] bg-[#FEF2F2] border border-[#FCA5A5] rounded-md p-4">
+          <span className="flex items-center gap-2 font-semibold">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            Failed to load returns: {returnsError}
+          </span>
+          <button
+            onClick={refreshReturns}
+            className="font-extrabold underline cursor-pointer border-0 bg-transparent text-[#DC2626]"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {returnsLoading && returnRequests.length === 0 && !returnsError && (
+        <div className="mb-6 flex items-center gap-2 text-xs text-app-text-muted bg-white border border-app-border rounded-md p-4">
+          <RefreshCw className="w-4 h-4 animate-spin" />
+          Loading return requests…
+        </div>
+      )}
 
       {/* STATS COUNT GRID SECTION */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
@@ -722,50 +775,68 @@ export default function ReturnsPage() {
               {/* Merchant return rates */}
               <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg lg:col-span-2">
                 <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-app-text-disabled mb-4">
-                  Returns Rate Breakdown by Seller Store
+                  Returns Logged by Seller
                 </h3>
+                <p className="text-[10px] font-semibold text-app-text-muted mb-3">
+                  A return-rate percentage would require each seller&apos;s total fulfillment count, which this API doesn&apos;t
+                  expose — showing counts only rather than guessing a denominator.
+                </p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs border-collapse">
                     <thead>
                       <tr className="border-b border-app-border font-extrabold uppercase text-[10px] text-app-text-disabled">
-                        <th className="pb-2">Merchant Partner Name</th>
-                        <th className="pb-2 text-center">Fulfillments</th>
-                        <th className="pb-2 text-center">Returns Checked</th>
-                        <th className="pb-2 text-right">Returns Rate %</th>
+                        <th className="pb-2">Seller ID</th>
+                        <th className="pb-2 text-right">Returns Logged</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#F1F3F5] text-app-text-secondary">
-                      {getSellerPerformanceData().map((s, idx) => (
-                        <tr key={idx} className="hover:bg-white">
-                          <td className="py-2.5 font-bold text-app-text-primary">{s.name}</td>
-                          <td className="py-2.5 text-center font-mono font-semibold">{s.total}</td>
-                          <td className="py-2.5 text-center font-mono font-semibold text-app-accent">{s.returned}</td>
-                          <td className="py-2.5 text-right font-mono font-extrabold text-[#DC2626]">
-                            {s.rate}%
+                      {getSellerReturnCounts().length === 0 ? (
+                        <tr>
+                          <td colSpan={2} className="py-6 text-center text-app-text-disabled italic">
+                            No returns logged for this period.
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        getSellerReturnCounts().map((s) => (
+                          <tr key={s.sellerId} className="hover:bg-white">
+                            <td className="py-2.5 font-bold text-app-text-primary font-mono">{s.sellerId}</td>
+                            <td className="py-2.5 text-right font-mono font-extrabold text-app-accent">{s.returned}</td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              {/* Quick advice/audit center info */}
+              {/* Quick advice/audit center info — derived from real fetched reason breakdown only */}
               <div className="bg-[#F9FAFB] border border-app-border p-4 rounded-lg flex flex-col justify-between">
                 <div>
                   <h4 className="text-xs font-extrabold uppercase text-app-accent tracking-wider mb-2">
                     Logistics Health Summary
                   </h4>
-                  <p className="text-[11px] font-semibold text-app-text-secondary leading-relaxed mb-3">
-                    Defective merchandise represents <strong>42% of total logged returns</strong> this period. Sizing miscalculations account for the rest.
-                  </p>
+                  {(() => {
+                    const reasons = getReasonChartData();
+                    const total = reasons.reduce((sum, r) => sum + r.value, 0);
+                    const top = reasons.reduce((best, r) => (r.value > best.value ? r : best), reasons[0]);
+                    if (!total || !top) {
+                      return (
+                        <p className="text-[11px] font-semibold text-app-text-muted leading-relaxed">
+                          Not enough return data in this period to summarize a leading reason.
+                        </p>
+                      );
+                    }
+                    const pct = ((top.value / total) * 100).toFixed(0);
+                    return (
+                      <p className="text-[11px] font-semibold text-app-text-secondary leading-relaxed mb-3">
+                        <strong>{top.name}</strong> is the leading reason, at {pct}% of the {total} return{total === 1 ? '' : 's'}{' '}
+                        logged in this period.
+                      </p>
+                    );
+                  })()}
                   <p className="text-[11px] font-semibold text-app-text-muted leading-relaxed">
-                    Check size charts on sellers catalogs. Flag merchant profiles experiencing return rates above 15% immediately to prevent bad customer satisfaction.
+                    Flag merchant profiles with a rising count of logged returns for follow-up.
                   </p>
-                </div>
-                <div className="border-t border-app-border pt-3 mt-4 text-[10px] font-extrabold font-mono text-app-text-disabled flex items-center justify-between">
-                  <span>Audit Desk Checked:</span>
-                  <span className="text-app-accent">2026-06-27</span>
                 </div>
               </div>
 
@@ -879,10 +950,11 @@ export default function ReturnsPage() {
                   <div className="pt-2">
                     <button
                       onClick={handlePrintLabel}
-                      className="w-full flex items-center justify-center space-x-1.5 px-4 py-2.5 bg-white hover:border-app-accent hover:text-app-accent text-app-text-secondary border border-app-border rounded-md text-xs font-extrabold transition-all"
+                      disabled={actionBusy === 'label'}
+                      className="w-full flex items-center justify-center space-x-1.5 px-4 py-2.5 bg-white hover:border-app-accent hover:text-app-accent text-app-text-secondary border border-app-border rounded-md text-xs font-extrabold transition-all disabled:opacity-60"
                     >
                       <Printer className="w-4 h-4 text-app-accent" />
-                      <span>Print Prepaid Shipping Return Label</span>
+                      <span>{actionBusy === 'label' ? 'Generating…' : 'Print Prepaid Shipping Return Label'}</span>
                     </button>
                   </div>
 
@@ -968,15 +1040,17 @@ export default function ReturnsPage() {
                             <div className="grid grid-cols-2 gap-2">
                               <button
                                 onClick={() => setIsRejecting(true)}
-                                className="px-3 py-2 bg-white text-[#DC2626] border border-app-border hover:bg-[#FEF2F2] text-xs font-extrabold rounded-md transition-all"
+                                disabled={actionBusy === 'approve'}
+                                className="px-3 py-2 bg-white text-[#DC2626] border border-app-border hover:bg-[#FEF2F2] text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
                               >
                                 Reject Return
                               </button>
                               <button
                                 onClick={handleApprove}
-                                className="px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold uppercase tracking-wider rounded-md transition-all shadow-sm"
+                                disabled={actionBusy === 'approve'}
+                                className="px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold uppercase tracking-wider rounded-md transition-all shadow-sm disabled:opacity-60"
                               >
-                                Approve Return
+                                {actionBusy === 'approve' ? 'Approving…' : 'Approve Return'}
                               </button>
                             </div>
                           </>
@@ -997,15 +1071,17 @@ export default function ReturnsPage() {
                             <div className="flex justify-end space-x-2">
                               <button
                                 onClick={() => setIsRejecting(false)}
-                                className="px-3 py-1.5 text-xs font-bold text-app-text-secondary hover:text-app-text-primary transition-colors"
+                                disabled={actionBusy === 'reject'}
+                                className="px-3 py-1.5 text-xs font-bold text-app-text-secondary hover:text-app-text-primary transition-colors disabled:opacity-60"
                               >
                                 Cancel
                               </button>
                               <button
                                 onClick={handleReject}
-                                className="px-4 py-1.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-extrabold rounded-md transition-all"
+                                disabled={actionBusy === 'reject'}
+                                className="px-4 py-1.5 bg-[#DC2626] hover:bg-[#B91C1C] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
                               >
-                                Confirm Rejection
+                                {actionBusy === 'reject' ? 'Rejecting…' : 'Confirm Rejection'}
                               </button>
                             </div>
                           </div>
@@ -1054,17 +1130,25 @@ export default function ReturnsPage() {
                         </div>
 
                         <button
-                          onClick={() => {
+                          onClick={async () => {
                             if (!trackingIdInput.trim()) {
                               showToast('Please specify a valid tracking identifier.', 'error');
                               return;
                             }
-                            updateReturnStatus(selectedReturn.id, 'returned_in_transit');
-                            showToast('Logistics configured & transit started', 'success');
+                            setActionBusy('transit');
+                            try {
+                              await updateReturnStatus(selectedReturn.id, 'returned_in_transit');
+                              showToast('Logistics configured & transit started', 'success');
+                            } catch (err) {
+                              showToast(err instanceof Error ? err.message : 'Failed to update status', 'error');
+                            } finally {
+                              setActionBusy(null);
+                            }
                           }}
-                          className="w-full py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold rounded-md transition-all"
+                          disabled={actionBusy === 'transit'}
+                          className="w-full py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
                         >
-                          Mark as Shipped/In Transit
+                          {actionBusy === 'transit' ? 'Updating…' : 'Mark as Shipped/In Transit'}
                         </button>
                       </div>
                     )}
@@ -1079,13 +1163,21 @@ export default function ReturnsPage() {
                           Once the return package lands in the seller warehouse, mark as received to trigger final refund ledger step.
                         </p>
                         <button
-                          onClick={() => {
-                            updateReturnStatus(selectedReturn.id, 'received');
-                            showToast('Item received and logged into ERP ledger.', 'success');
+                          onClick={async () => {
+                            setActionBusy('received');
+                            try {
+                              await updateReturnStatus(selectedReturn.id, 'received');
+                              showToast('Item received and logged into ERP ledger.', 'success');
+                            } catch (err) {
+                              showToast(err instanceof Error ? err.message : 'Failed to update status', 'error');
+                            } finally {
+                              setActionBusy(null);
+                            }
                           }}
-                          className="w-full py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold rounded-md transition-all"
+                          disabled={actionBusy === 'received'}
+                          className="w-full py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
                         >
-                          Mark as Received at Warehouse
+                          {actionBusy === 'received' ? 'Updating…' : 'Mark as Received at Warehouse'}
                         </button>
                       </div>
                     )}
@@ -1101,9 +1193,10 @@ export default function ReturnsPage() {
                         </p>
                         <button
                           onClick={handleProcessRefund}
-                          className="w-full py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold rounded-md transition-all"
+                          disabled={actionBusy === 'refund'}
+                          className="w-full py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
                         >
-                          Process & Issue Refund Payment
+                          {actionBusy === 'refund' ? 'Processing…' : 'Process & Issue Refund Payment'}
                         </button>
                       </div>
                     )}
@@ -1127,13 +1220,21 @@ export default function ReturnsPage() {
                         <span className="text-app-text-muted font-semibold">Logistics conflict?</span>
                         <button
                           type="button"
-                          onClick={() => {
-                            linkReturnToDispute(selectedReturn.id, `DISP-${Math.floor(1000 + Math.random() * 9000)}`);
-                            showToast('Return escalated to Dispute channels', 'info');
+                          onClick={async () => {
+                            setActionBusy('dispute');
+                            try {
+                              await linkReturnToDispute(selectedReturn.id, `DISP-${Math.floor(1000 + Math.random() * 9000)}`);
+                              showToast('Return escalated to Dispute channels', 'info');
+                            } catch (err) {
+                              showToast(err instanceof Error ? err.message : 'Failed to escalate return', 'error');
+                            } finally {
+                              setActionBusy(null);
+                            }
                           }}
-                          className="text-[#DC2626] hover:text-[#B91C1C] font-extrabold hover:underline"
+                          disabled={actionBusy === 'dispute'}
+                          className="text-[#DC2626] hover:text-[#B91C1C] font-extrabold hover:underline disabled:opacity-60"
                         >
-                          Escalate to Dispute Resolution
+                          {actionBusy === 'dispute' ? 'Escalating…' : 'Escalate to Dispute Resolution'}
                         </button>
                       </div>
                     )}
@@ -1165,9 +1266,10 @@ export default function ReturnsPage() {
                       />
                       <button
                         type="submit"
-                        className="px-3 bg-white border border-app-border hover:border-app-accent hover:text-app-accent text-app-text-secondary font-extrabold rounded-md text-xs transition-colors"
+                        disabled={actionBusy === 'note'}
+                        className="px-3 bg-white border border-app-border hover:border-app-accent hover:text-app-accent text-app-text-secondary font-extrabold rounded-md text-xs transition-colors disabled:opacity-60"
                       >
-                        Add
+                        {actionBusy === 'note' ? '…' : 'Add'}
                       </button>
                     </form>
                   </div>

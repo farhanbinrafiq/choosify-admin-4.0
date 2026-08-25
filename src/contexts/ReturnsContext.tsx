@@ -32,14 +32,19 @@ export interface ReturnRequest {
 
 interface ReturnsContextType {
   returnRequests: ReturnRequest[];
-  createReturnRequest: (params: Omit<ReturnRequest, 'id' | 'createdAt' | 'updatedAt' | 'notes'>) => ReturnRequest;
-  approveReturn: (id: string, refundAmount: number, note?: string) => void;
-  rejectReturn: (id: string, reason: string) => void;
-  processRefund: (id: string) => void;
-  addReturnNote: (id: string, note: string) => void;
-  updateReturnStatus: (id: string, newStatus: ReturnRequest['status']) => void;
-  generateReturnLabel: (id: string) => { labelUrl: string; trackingId: string; courier: string };
-  linkReturnToDispute: (returnId: string, disputeId: string) => void;
+  /** True while the initial/refresh list fetch is in flight. */
+  loading: boolean;
+  /** Set when the list fetch fails; the list is not silently left stale with no explanation. */
+  error: string | null;
+  refresh: () => void;
+  createReturnRequest: (params: Omit<ReturnRequest, 'id' | 'createdAt' | 'updatedAt' | 'notes'>) => Promise<ReturnRequest>;
+  approveReturn: (id: string, refundAmount: number, note?: string) => Promise<ReturnRequest>;
+  rejectReturn: (id: string, reason: string) => Promise<ReturnRequest>;
+  processRefund: (id: string) => Promise<ReturnRequest>;
+  addReturnNote: (id: string, note: string) => Promise<ReturnRequest>;
+  updateReturnStatus: (id: string, newStatus: ReturnRequest['status']) => Promise<ReturnRequest>;
+  generateReturnLabel: (id: string) => Promise<{ labelUrl: string; trackingId: string; courier: string }>;
+  linkReturnToDispute: (returnId: string, disputeId: string) => Promise<ReturnRequest>;
 }
 
 const ReturnsContext = createContext<ReturnsContextType | undefined>(undefined);
@@ -62,12 +67,19 @@ export const ReturnsProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const { updateOrderStatus, addAdminNote } = useOrders();
   const { loading: authLoading, profile } = useAuth();
   const [returnRequests, setReturnRequests] = useState<ReturnRequest[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
+    setLoading(true);
+    setError(null);
     operationsApi
       .listReturns()
       .then((rows) => setReturnRequests(rows))
-      .catch(() => {});
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : 'Failed to load returns');
+      })
+      .finally(() => setLoading(false));
   }, []);
 
   // Pre-commit audit follow-up: this used to fire on every mount regardless of
@@ -80,9 +92,9 @@ export const ReturnsProvider: React.FC<{ children: React.ReactNode }> = ({ child
     refresh();
   }, [authLoading, profile, refresh]);
 
-  const createReturnRequest = (
+  const createReturnRequest = async (
     params: Omit<ReturnRequest, 'id' | 'createdAt' | 'updatedAt' | 'notes'>,
-  ): ReturnRequest => {
+  ): Promise<ReturnRequest> => {
     const optimistic: ReturnRequest = {
       ...params,
       id: `RET-${Date.now()}`,
@@ -93,108 +105,87 @@ export const ReturnsProvider: React.FC<{ children: React.ReactNode }> = ({ child
       evidencePhotos: params.evidencePhotos || [],
     };
     setReturnRequests((prev) => [optimistic, ...prev]);
-    addAdminNote(params.orderId, `Return requested (${optimistic.id}) due to reason: ${params.reason}.`);
-    updateOrderStatus(params.orderId, 'Returned');
 
-    operationsApi
-      .createReturn(params)
-      .then((saved) => {
-        setReturnRequests((prev) => {
-          const withoutOptimistic = prev.filter((r) => r.id !== optimistic.id);
-          return upsertLocal(withoutOptimistic, saved);
-        });
-      })
-      .catch(() => {
-        setReturnRequests((prev) => prev.filter((r) => r.id !== optimistic.id));
+    try {
+      const saved = await operationsApi.createReturn(params);
+      setReturnRequests((prev) => {
+        const withoutOptimistic = prev.filter((r) => r.id !== optimistic.id);
+        return upsertLocal(withoutOptimistic, saved);
       });
-
-    return optimistic;
+      addAdminNote(params.orderId, `Return requested (${saved.id}) due to reason: ${params.reason}.`);
+      updateOrderStatus(params.orderId, 'Returned');
+      return saved;
+    } catch (err) {
+      // Roll back the optimistic row — it never actually persisted.
+      setReturnRequests((prev) => prev.filter((r) => r.id !== optimistic.id));
+      throw err;
+    }
   };
 
-  const approveReturn = (id: string, refundAmount: number, note?: string) => {
-    operationsApi
-      .approveReturn(id, refundAmount, note, 'Admin Main')
-      .then((saved) => {
-        setReturnRequests((prev) => upsertLocal(prev, saved));
-        updateOrderStatus(saved.orderId, 'Returned');
-        addAdminNote(saved.orderId, `Return approved. Refund amount locked at ৳${refundAmount}.`);
-      })
-      .catch(() => {});
+  const approveReturn = async (id: string, refundAmount: number, note?: string): Promise<ReturnRequest> => {
+    const saved = await operationsApi.approveReturn(id, refundAmount, note, 'Admin Main');
+    setReturnRequests((prev) => upsertLocal(prev, saved));
+    updateOrderStatus(saved.orderId, 'Returned');
+    addAdminNote(saved.orderId, `Return approved. Refund amount locked at ৳${refundAmount}.`);
+    return saved;
   };
 
-  const rejectReturn = (id: string, reason: string) => {
-    operationsApi
-      .rejectReturn(id, reason, 'Admin Main')
-      .then((saved) => {
-        setReturnRequests((prev) => upsertLocal(prev, saved));
-        addAdminNote(saved.orderId, `Return request ${saved.id} was rejected. Reason: ${reason}`);
-      })
-      .catch(() => {});
+  const rejectReturn = async (id: string, reason: string): Promise<ReturnRequest> => {
+    const saved = await operationsApi.rejectReturn(id, reason, 'Admin Main');
+    setReturnRequests((prev) => upsertLocal(prev, saved));
+    addAdminNote(saved.orderId, `Return request ${saved.id} was rejected. Reason: ${reason}`);
+    return saved;
   };
 
-  const processRefund = (id: string) => {
-    operationsApi
-      .processReturnRefund(id)
-      .then((saved) => {
-        setReturnRequests((prev) => upsertLocal(prev, saved));
-        addAdminNote(saved.orderId, `Refund of ৳${saved.refundAmount || 0} has been processed successfully.`);
-      })
-      .catch(() => {});
+  const processRefund = async (id: string): Promise<ReturnRequest> => {
+    const saved = await operationsApi.processReturnRefund(id);
+    setReturnRequests((prev) => upsertLocal(prev, saved));
+    addAdminNote(saved.orderId, `Refund of ৳${saved.refundAmount || 0} has been processed successfully.`);
+    return saved;
   };
 
-  const addReturnNote = (id: string, note: string) => {
-    operationsApi
-      .addReturnNote(id, note)
-      .then((saved) => setReturnRequests((prev) => upsertLocal(prev, saved)))
-      .catch(() => {});
+  const addReturnNote = async (id: string, note: string): Promise<ReturnRequest> => {
+    const saved = await operationsApi.addReturnNote(id, note);
+    setReturnRequests((prev) => upsertLocal(prev, saved));
+    return saved;
   };
 
-  const updateReturnStatus = (id: string, newStatus: ReturnRequest['status']) => {
-    operationsApi
-      .updateReturnStatus(id, newStatus)
-      .then((saved) => {
-        setReturnRequests((prev) => upsertLocal(prev, saved));
-        if (newStatus === 'returned_in_transit') {
-          addAdminNote(
-            saved.orderId,
-            `Return item is in transit back to seller. Tracking ID: ${saved.returnTrackingId || 'N/A'}`,
-          );
-        } else if (newStatus === 'received') {
-          addAdminNote(
-            saved.orderId,
-            'Return item received by warehouse/seller. Verification of item in progress.',
-          );
-        }
-      })
-      .catch(() => {});
+  const updateReturnStatus = async (id: string, newStatus: ReturnRequest['status']): Promise<ReturnRequest> => {
+    const saved = await operationsApi.updateReturnStatus(id, newStatus);
+    setReturnRequests((prev) => upsertLocal(prev, saved));
+    if (newStatus === 'returned_in_transit') {
+      addAdminNote(
+        saved.orderId,
+        `Return item is in transit back to seller. Tracking ID: ${saved.returnTrackingId || 'N/A'}`,
+      );
+    } else if (newStatus === 'received') {
+      addAdminNote(saved.orderId, 'Return item received by warehouse/seller. Verification of item in progress.');
+    }
+    return saved;
   };
 
-  const generateReturnLabel = (id: string) => {
-    const trackingId = `PATHAO-RET-${Math.floor(100000 + Math.random() * 900000)}`;
-    const courier = 'Pathao Delivery';
-    const labelUrl = `https://api.choosify.bd/logistics/label/${trackingId}`;
-
-    operationsApi
-      .generateReturnLabel(id)
-      .then((result) => {
-        setReturnRequests((prev) => upsertLocal(prev, result.data));
-      })
-      .catch(() => {});
-
-    return { labelUrl, trackingId, courier };
+  const generateReturnLabel = async (id: string): Promise<{ labelUrl: string; trackingId: string; courier: string }> => {
+    // The label, tracking ID and courier are generated server-side — never
+    // fabricate them client-side, since the row saved here must match what
+    // the backend actually persisted.
+    const result = await operationsApi.generateReturnLabel(id);
+    setReturnRequests((prev) => upsertLocal(prev, result.data));
+    return { labelUrl: result.labelUrl, trackingId: result.trackingId, courier: result.courier };
   };
 
-  const linkReturnToDispute = (returnId: string, disputeId: string) => {
-    operationsApi
-      .linkReturnToDispute(returnId, disputeId)
-      .then((saved) => setReturnRequests((prev) => upsertLocal(prev, saved)))
-      .catch(() => {});
+  const linkReturnToDispute = async (returnId: string, disputeId: string): Promise<ReturnRequest> => {
+    const saved = await operationsApi.linkReturnToDispute(returnId, disputeId);
+    setReturnRequests((prev) => upsertLocal(prev, saved));
+    return saved;
   };
 
   return (
     <ReturnsContext.Provider
       value={{
         returnRequests,
+        loading,
+        error,
+        refresh,
         createReturnRequest,
         approveReturn,
         rejectReturn,
