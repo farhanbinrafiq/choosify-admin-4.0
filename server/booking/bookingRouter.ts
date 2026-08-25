@@ -3,6 +3,9 @@ import { getBookingFieldConfigPayload } from '../../shared/booking/bookingFieldC
 import { toBookingOfferCard } from '../../shared/booking/bookingTypes';
 import { operationsStore } from '../operations/operationsStore';
 import { scheduleOperationsPersist } from '../operations/operationsPersistence';
+import { authenticateRequest } from '../middleware/auth';
+import { hasRole } from '../permissions/authorization';
+import { ROLES } from '../permissions/roles';
 import { getBookingRequest, listBookingRequests } from './bookingStore';
 import {
   acceptBookingRequest,
@@ -19,6 +22,30 @@ import {
 
 export const bookingRouter = Router();
 
+/**
+ * P0 fix: every mutating booking-request endpoint below previously trusted a
+ * client-supplied sellerId/buyerId in the request body with no session check
+ * at all (unlike every sibling commerce router — conversations, escrow,
+ * operations mark-delivered all require auth + verify actor identity).
+ * That let an unauthenticated caller accept/decline/counter someone else's
+ * booking, or mark any booking "paid" outright. Fix: require a valid session
+ * (authenticateRequest) and, for non-staff callers, derive the actor's
+ * sellerId/buyerId from the authenticated session rather than the body —
+ * staff may still act on a specific seller/buyer's behalf via the body field,
+ * mirroring the staff-or-owner pattern already used for mark-delivered
+ * (operationsRouter.ts).
+ */
+function userIsStaff(req: { userRole?: (typeof ROLES)[keyof typeof ROLES] }): boolean {
+  const role = req.userRole;
+  if (!role) return false;
+  return (
+    hasRole(role, ROLES.SUPER_ADMIN) ||
+    hasRole(role, ROLES.ADMIN) ||
+    hasRole(role, ROLES.SUPPORT_AGENT) ||
+    hasRole(role, ROLES.MODERATOR)
+  );
+}
+
 /** Public — shared field config for Product Studio + storefront Message Seller */
 bookingRouter.get('/booking/field-config', (_req, res) => {
   res.json({ success: true, data: getBookingFieldConfigPayload() });
@@ -29,8 +56,12 @@ bookingRouter.get('/booking/seller-settings/:sellerId', (req, res) => {
   res.json({ success: true, data: operationsStore.getSellerBookingSettings(req.params.sellerId) });
 });
 
-bookingRouter.patch('/booking/seller-settings/:sellerId', (req, res) => {
+bookingRouter.patch('/booking/seller-settings/:sellerId', authenticateRequest, (req, res) => {
   try {
+    if (!userIsStaff(req) && req.userId !== req.params.sellerId) {
+      res.status(403).json({ error: 'Not authorized to update this seller\'s booking settings' });
+      return;
+    }
     const { autoApproveBookingsDefault } = req.body || {};
     if (typeof autoApproveBookingsDefault !== 'boolean') {
       res.status(400).json({ error: 'autoApproveBookingsDefault (boolean) is required' });
@@ -46,11 +77,26 @@ bookingRouter.patch('/booking/seller-settings/:sellerId', (req, res) => {
   }
 });
 
-bookingRouter.get('/booking/requests', async (req, res) => {
+bookingRouter.get('/booking/requests', authenticateRequest, async (req, res) => {
   try {
+    const staff = userIsStaff(req);
+    const requestedSellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
+    const requestedBuyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
+    if (!staff && !requestedSellerId && !requestedBuyerId) {
+      res.status(400).json({ error: 'sellerId or buyerId is required' });
+      return;
+    }
+    if (!staff && requestedSellerId && requestedSellerId !== req.userId) {
+      res.status(403).json({ error: 'Not authorized to list this seller\'s booking requests' });
+      return;
+    }
+    if (!staff && requestedBuyerId && requestedBuyerId !== req.userId) {
+      res.status(403).json({ error: 'Not authorized to list this buyer\'s booking requests' });
+      return;
+    }
     const rows = await listBookingRequests({
-      sellerId: typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined,
-      buyerId: typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined,
+      sellerId: requestedSellerId,
+      buyerId: requestedBuyerId,
       conversationId:
         typeof req.query.conversationId === 'string' ? req.query.conversationId : undefined,
       status: typeof req.query.status === 'string' ? req.query.status : undefined,
@@ -65,11 +111,15 @@ bookingRouter.get('/booking/requests', async (req, res) => {
   }
 });
 
-bookingRouter.get('/booking/requests/:id', async (req, res) => {
+bookingRouter.get('/booking/requests/:id', authenticateRequest, async (req, res) => {
   try {
     const request = await getBookingRequest(req.params.id);
     if (!request) {
       res.status(404).json({ error: 'Booking request not found' });
+      return;
+    }
+    if (!userIsStaff(req) && req.userId !== request.sellerId && req.userId !== request.buyerId) {
+      res.status(403).json({ error: 'Not authorized to view this booking request' });
       return;
     }
     // Lazy expiry backup when a single request is read
@@ -81,11 +131,15 @@ bookingRouter.get('/booking/requests/:id', async (req, res) => {
   }
 });
 
-bookingRouter.post('/booking/requests', async (req, res) => {
+bookingRouter.post('/booking/requests', authenticateRequest, async (req, res) => {
   try {
     const body = req.body || {};
     if (!body.listingId || !body.buyerId || !body.sellerId) {
       res.status(400).json({ error: 'listingId, buyerId, and sellerId are required' });
+      return;
+    }
+    if (!userIsStaff(req) && req.userId !== String(body.buyerId)) {
+      res.status(403).json({ error: 'Not authorized to create a booking request for another buyer' });
       return;
     }
     const listingId = String(body.listingId);
@@ -122,9 +176,10 @@ bookingRouter.post('/booking/requests', async (req, res) => {
   }
 });
 
-bookingRouter.post('/booking/requests/:id/accept', async (req, res) => {
+bookingRouter.post('/booking/requests/:id/accept', authenticateRequest, async (req, res) => {
   try {
-    const sellerId = String(req.body?.sellerId || '');
+    const staff = userIsStaff(req);
+    const sellerId = String((staff ? req.body?.sellerId : undefined) || req.userId || '');
     if (!sellerId) {
       res.status(400).json({ error: 'sellerId is required' });
       return;
@@ -139,9 +194,10 @@ bookingRouter.post('/booking/requests/:id/accept', async (req, res) => {
   }
 });
 
-bookingRouter.post('/booking/requests/:id/decline', async (req, res) => {
+bookingRouter.post('/booking/requests/:id/decline', authenticateRequest, async (req, res) => {
   try {
-    const sellerId = String(req.body?.sellerId || '');
+    const staff = userIsStaff(req);
+    const sellerId = String((staff ? req.body?.sellerId : undefined) || req.userId || '');
     const declineReason = String(req.body?.declineReason || '');
     if (!sellerId) {
       res.status(400).json({ error: 'sellerId is required' });
@@ -162,9 +218,10 @@ bookingRouter.post('/booking/requests/:id/decline', async (req, res) => {
   }
 });
 
-bookingRouter.post('/booking/requests/:id/counter', async (req, res) => {
+bookingRouter.post('/booking/requests/:id/counter', authenticateRequest, async (req, res) => {
   try {
-    const sellerId = String(req.body?.sellerId || '');
+    const staff = userIsStaff(req);
+    const sellerId = String((staff ? req.body?.sellerId : undefined) || req.userId || '');
     if (!sellerId) {
       res.status(400).json({ error: 'sellerId is required' });
       return;
@@ -184,9 +241,10 @@ bookingRouter.post('/booking/requests/:id/counter', async (req, res) => {
   }
 });
 
-bookingRouter.post('/booking/requests/:id/buyer-accept', async (req, res) => {
+bookingRouter.post('/booking/requests/:id/buyer-accept', authenticateRequest, async (req, res) => {
   try {
-    const buyerId = String(req.body?.buyerId || '');
+    const staff = userIsStaff(req);
+    const buyerId = String((staff ? req.body?.buyerId : undefined) || req.userId || '');
     if (!buyerId) {
       res.status(400).json({ error: 'buyerId is required' });
       return;
@@ -198,9 +256,10 @@ bookingRouter.post('/booking/requests/:id/buyer-accept', async (req, res) => {
   }
 });
 
-bookingRouter.post('/booking/requests/:id/buyer-decline', async (req, res) => {
+bookingRouter.post('/booking/requests/:id/buyer-decline', authenticateRequest, async (req, res) => {
   try {
-    const buyerId = String(req.body?.buyerId || '');
+    const staff = userIsStaff(req);
+    const buyerId = String((staff ? req.body?.buyerId : undefined) || req.userId || '');
     if (!buyerId) {
       res.status(400).json({ error: 'buyerId is required' });
       return;
@@ -214,8 +273,17 @@ bookingRouter.post('/booking/requests/:id/buyer-decline', async (req, res) => {
   }
 });
 
-bookingRouter.post('/booking/requests/:id/mark-paid', async (req, res) => {
+bookingRouter.post('/booking/requests/:id/mark-paid', authenticateRequest, async (req, res) => {
   try {
+    const existing = await getBookingRequest(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: 'Booking request not found' });
+      return;
+    }
+    if (!userIsStaff(req) && req.userId !== existing.buyerId) {
+      res.status(403).json({ error: 'Not authorized to confirm payment for this booking' });
+      return;
+    }
     const paymentType = req.body?.paymentType === 'partial' ? 'partial' : 'full';
     const result = await markBookingPaid(req.params.id, req.body?.orderId, paymentType);
     res.json({ success: true, data: result.offer, request: result.request });
