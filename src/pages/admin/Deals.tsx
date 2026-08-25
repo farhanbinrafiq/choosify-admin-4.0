@@ -1,37 +1,30 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Tag, 
-  Clock, 
-  Search, 
-  Filter, 
-  Download, 
-  ExternalLink, 
-  CheckCircle, 
-  XCircle, 
-  Plus, 
-  Trash2, 
-  Edit3, 
-  Pause, 
-  Check, 
-  X 
+import {
+  Tag,
+  Clock,
+  Search,
+  Filter,
+  Download,
+  ExternalLink,
+  CheckCircle,
+  XCircle,
+  Plus,
+  Trash2,
+  Edit3,
+  Pause,
+  Check,
+  X,
+  Loader2,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSearchParams } from 'react-router-dom';
+import { catalogApi } from '../../services/catalogApi';
+import type { CatalogDeal } from '../../types/catalog';
 
-// Deal Interface Definitions requested
-export interface Deal {
-  id: string;
-  name: string;
-  seller: string;
-  discount: number; // must be a number, not string
-  category: string;
-  expiry: string; // ISO date string
-  clicks: number;
-  status: 'Live' | 'Pending' | 'Expiring' | 'Expired' | 'Rejected';
-  type: 'retail';
-  linkedProductId?: string;
-  promoCode?: string;
-}
+// Deals now use the real catalog contract — the client is the source of truth
+// for shape (see src/types/catalog.ts CatalogDeal / server/catalogRouter.ts).
+export type Deal = CatalogDeal;
 
 export interface PromoCode {
   id: string;
@@ -48,6 +41,8 @@ export interface PromoCode {
   active: boolean;
 }
 
+const capitalize = (value: string) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : value);
+
 export default function DealsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') === 'promocodes' ? 'promo_codes' : 'deals';
@@ -59,43 +54,29 @@ export default function DealsPage() {
     if (urlTab !== 'promocodes' && activeTab !== 'deals') setActiveTab('deals');
   }, [searchParams]);
 
-  // Initialize state with same 3 deals as seed data mapped to the required Deal interface
-  const [deals, setDeals] = useState<Deal[]>([
-    {
-      id: '1',
-      name: 'Eid Mega Tech Sale 2026',
-      seller: 'TechZone BD',
-      discount: 30,
-      category: 'Electronics',
-      expiry: '2026-06-30T23:59:59.000Z',
-      clicks: 8420,
-      status: 'Pending',
-      type: 'retail'
-    },
-    {
-      id: '2',
-      name: 'Walton AC Summer Flash',
-      seller: 'ElectroBD',
-      discount: 40,
-      category: 'Home',
-      expiry: new Date(Date.now() + 18 * 60 * 60 * 1000).toISOString(), // 18 hours left
-      clicks: 12100,
-      status: 'Live',
-      type: 'retail'
-    },
-    {
-      id: '3',
-      name: 'Aarong Jamdani Weekend',
-      seller: 'Aarong Digital',
-      discount: 20,
-      category: 'Fashion',
-      expiry: '2026-07-05T23:59:59.000Z',
-      clicks: 4240,
-      status: 'Live',
-      type: 'retail'
-    }
-  ]);
+  // Deals are loaded from the real catalog API (GET /catalog/deals) — no more local seed data.
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [dealsLoading, setDealsLoading] = useState(true);
+  const [dealsError, setDealsError] = useState<string | null>(null);
 
+  const loadDeals = async () => {
+    setDealsLoading(true);
+    setDealsError(null);
+    try {
+      const data = await catalogApi.listDeals();
+      setDeals(data);
+    } catch (err) {
+      setDealsError(err instanceof Error ? err.message : 'Failed to load deals.');
+    } finally {
+      setDealsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadDeals();
+  }, []);
+
+  // Promo codes remain local/mock — there is no backend for them yet.
   // Seed with 5 promo codes for Bangladeshi brands matching SearchPage codes
   const [promoCodes, setPromoCodes] = useState<PromoCode[]>([
     {
@@ -176,24 +157,29 @@ export default function DealsPage() {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [showBulkDeleteForm, setShowBulkDeleteForm] = useState(false);
+  const [actionPendingId, setActionPendingId] = useState<string | null>(null);
+  const [bulkActionPending, setBulkActionPending] = useState(false);
 
   // Form slide-in state managers (Deals)
   const [isAdding, setIsAdding] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
+  const [savingDeal, setSavingDeal] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   // Form slide-in state managers (Promo Codes)
   const [isAddingPromo, setIsAddingPromo] = useState(false);
   const [editingPromo, setEditingPromo] = useState<PromoCode | null>(null);
 
-  // Form input states (Deals)
+  // Form input states (Deals) — field names follow the real CatalogDeal contract.
   const [formName, setFormName] = useState('');
   const [formSeller, setFormSeller] = useState('');
-  const [formDiscount, setFormDiscount] = useState<number>(0);
+  const [formDiscountType, setFormDiscountType] = useState<'percentage' | 'flat'>('percentage');
+  const [formDiscountValue, setFormDiscountValue] = useState<number>(0);
   const [formCategory, setFormCategory] = useState('Electronics');
-  const [formExpiry, setFormExpiry] = useState('');
+  const [formValidUntil, setFormValidUntil] = useState('');
   const [formPromoCode, setFormPromoCode] = useState('');
 
   // Form input states (Promo Codes)
@@ -207,31 +193,34 @@ export default function DealsPage() {
 
   // Auto-fill form state when editing or adding (Deals)
   useEffect(() => {
+    setFormError(null);
     if (editingDeal) {
       setFormName(editingDeal.name);
       setFormSeller(editingDeal.seller);
-      setFormDiscount(editingDeal.discount);
+      setFormDiscountType(editingDeal.discountType === 'flat' ? 'flat' : 'percentage');
+      setFormDiscountValue(editingDeal.discountValue);
       setFormCategory(editingDeal.category);
-      
-      const parsedDate = new Date(editingDeal.expiry);
+
+      const parsedDate = new Date(editingDeal.validUntil);
       const yyyy = parsedDate.getFullYear();
       const mm = String(parsedDate.getMonth() + 1).padStart(2, '0');
       const dd = String(parsedDate.getDate()).padStart(2, '0');
-      setFormExpiry(`${yyyy}-${mm}-${dd}`);
+      setFormValidUntil(`${yyyy}-${mm}-${dd}`);
       setFormPromoCode(editingDeal.promoCode || '');
       setIsAdding(false);
     } else if (isAdding) {
       setFormName('');
       setFormSeller('');
-      setFormDiscount(0);
+      setFormDiscountType('percentage');
+      setFormDiscountValue(0);
       setFormCategory('Electronics');
-      
+
       // Default to 48 hours tomorrow YYYY-MM-DD
       const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
       const yyyy = tomorrow.getFullYear();
       const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
       const dd = String(tomorrow.getDate()).padStart(2, '0');
-      setFormExpiry(`${yyyy}-${mm}-${dd}`);
+      setFormValidUntil(`${yyyy}-${mm}-${dd}`);
       setFormPromoCode('');
     }
   }, [editingDeal, isAdding]);
@@ -245,7 +234,7 @@ export default function DealsPage() {
       setPromoFormValue(editingPromo.value);
       setPromoFormMinOrder(editingPromo.minOrderValue || 0);
       setPromoFormMaxUsage(editingPromo.maxUsage || 0);
-      
+
       const parsedDate = new Date(editingPromo.validUntil);
       const yyyy = parsedDate.getFullYear();
       const mm = String(parsedDate.getMonth() + 1).padStart(2, '0');
@@ -259,7 +248,7 @@ export default function DealsPage() {
       setPromoFormValue(0);
       setPromoFormMinOrder(0);
       setPromoFormMaxUsage(0);
-      
+
       // Default to 30 days starting from today
       const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       const yyyy = future.getFullYear();
@@ -270,40 +259,40 @@ export default function DealsPage() {
   }, [editingPromo, isAddingPromo]);
 
   // Dynamic helper for toast system
-  const triggerToast = (msg: string) => {
-    setToast(msg);
+  const triggerToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message: msg, type });
     setTimeout(() => setToast(null), 3500);
   };
 
   // Condition check: Expiring status automatically computed if deal expires within 48 hours
-  const isExpiringWithin48h = (expiryStr: string, currentStatus: Deal['status']) => {
-    if (currentStatus === 'Expired' || currentStatus === 'Rejected') return false;
-    const expiry = new Date(expiryStr).getTime();
+  const isExpiringWithin48h = (validUntilStr: string, currentStatus: Deal['status']) => {
+    if (currentStatus === 'expired' || currentStatus === 'rejected') return false;
+    const expiry = new Date(validUntilStr).getTime();
     const now = new Date().getTime();
     const diffHours = (expiry - now) / (1000 * 60 * 60);
     return diffHours > 0 && diffHours <= 48;
   };
 
   // Condition check: Expired status automatically computed if current date is past expiry
-  const isExpiredDeal = (expiryStr: string) => {
-    return new Date(expiryStr).getTime() < new Date().getTime();
+  const isExpiredDeal = (validUntilStr: string) => {
+    return new Date(validUntilStr).getTime() < new Date().getTime();
   };
 
   // Get raw/computed status dynamically
   const getComputedStatus = (deal: Deal): Deal['status'] => {
-    if (deal.status === 'Rejected') return 'Rejected';
-    if (deal.status === 'Expired' || isExpiredDeal(deal.expiry)) return 'Expired';
-    if (isExpiringWithin48h(deal.expiry, deal.status)) return 'Expiring';
+    if (deal.status === 'rejected') return 'rejected';
+    if (deal.status === 'expired' || isExpiredDeal(deal.validUntil)) return 'expired';
+    if (isExpiringWithin48h(deal.validUntil, deal.status)) return 'expiring';
     return deal.status;
   };
 
   // Expiry display string builder helper (dynamic or formatted)
-  const getExpiryDisplay = (expiryStr: string) => {
-    const expiry = new Date(expiryStr).getTime();
+  const getExpiryDisplay = (validUntilStr: string) => {
+    const expiry = new Date(validUntilStr).getTime();
     const now = new Date().getTime();
     const diffMs = expiry - now;
     if (diffMs <= 0) return 'Expired';
-    
+
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     if (diffHours < 48) {
       if (diffHours === 0) {
@@ -312,8 +301,8 @@ export default function DealsPage() {
       }
       return `${diffHours}h left`;
     }
-    
-    return new Date(expiryStr).toLocaleDateString('en-US', {
+
+    return new Date(validUntilStr).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric'
@@ -325,7 +314,7 @@ export default function DealsPage() {
     return new Date(promo.validUntil).getTime() < Date.now();
   };
 
-  // Dynamically compute global catalog stats from the seed state (not cached list)
+  // Dynamically compute global catalog stats from the loaded state (not cached list)
   const computedStats = useMemo(() => {
     const rawDeals = deals.map(d => ({
       ...d,
@@ -334,9 +323,9 @@ export default function DealsPage() {
 
     return {
       total: rawDeals.length,
-      live: rawDeals.filter(d => d.computedStatus === 'Live').length,
-      pending: rawDeals.filter(d => d.computedStatus === 'Pending').length,
-      expiring48h: rawDeals.filter(d => d.computedStatus === 'Expiring').length
+      live: rawDeals.filter(d => d.computedStatus === 'live').length,
+      pending: rawDeals.filter(d => d.computedStatus === 'pending').length,
+      expiring48h: rawDeals.filter(d => d.computedStatus === 'expiring').length
     };
   }, [deals]);
 
@@ -358,19 +347,19 @@ export default function DealsPage() {
   const filteredDeals = useMemo(() => {
     return deals.filter(deal => {
       // 1. Controlled search matches name or seller
-      const matchesSearch = 
+      const matchesSearch =
         deal.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         deal.seller.toLowerCase().includes(searchTerm.toLowerCase());
-      
+
       // 2. Computed status filter match
       const currentComputedStatus = getComputedStatus(deal);
-      const matchesStatus = 
-        statusFilter === 'All' || 
+      const matchesStatus =
+        statusFilter === 'All' ||
         currentComputedStatus.toLowerCase() === statusFilter.toLowerCase();
-      
+
       // 3. Category filter match
-      const matchesCategory = 
-        categoryFilter === 'All' || 
+      const matchesCategory =
+        categoryFilter === 'All' ||
         deal.category.toLowerCase() === categoryFilter.toLowerCase();
 
       return matchesSearch && matchesStatus && matchesCategory;
@@ -380,7 +369,7 @@ export default function DealsPage() {
   // Promo code search filtering
   const filteredPromoCodes = useMemo(() => {
     return promoCodes.filter(promo => {
-      const matchesSearch = 
+      const matchesSearch =
         promo.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
         promo.brandName.toLowerCase().includes(searchTerm.toLowerCase());
       return matchesSearch;
@@ -404,88 +393,157 @@ export default function DealsPage() {
   };
 
   const handleSelectToggle = (id: string) => {
-    setSelectedIds(prev => 
+    setSelectedIds(prev =>
       prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
     );
   };
 
-  // Actions handler implementations (Deals)
-  const handleApprove = (id: string) => {
-    setDeals(prev => prev.map(d => d.id === id ? { ...d, status: 'Live' } : d));
-    triggerToast("Deal successfully approved and made Live!");
+  // Actions handler implementations (Deals) — each now calls the real API and
+  // only updates local state once the request has actually succeeded.
+  const handleApprove = async (id: string) => {
+    setActionPendingId(id);
+    try {
+      const updated = await catalogApi.updateDeal(id, { status: 'live' });
+      setDeals(prev => prev.map(d => d.id === id ? updated : d));
+      triggerToast("Deal successfully approved and made Live!");
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : 'Failed to approve deal.', 'error');
+    } finally {
+      setActionPendingId(null);
+    }
   };
 
-  const handleReject = (id: string) => {
-    setDeals(prev => prev.map(d => d.id === id ? { ...d, status: 'Rejected' as const } : d));
-    triggerToast("Deal request rejected.");
+  const handleReject = async (id: string) => {
+    setActionPendingId(id);
+    try {
+      const updated = await catalogApi.updateDeal(id, { status: 'rejected' });
+      setDeals(prev => prev.map(d => d.id === id ? updated : d));
+      triggerToast("Deal request rejected.");
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : 'Failed to reject deal.', 'error');
+    } finally {
+      setActionPendingId(null);
+    }
   };
 
-  const handlePause = (id: string) => {
-    setDeals(prev => prev.map(d => d.id === id ? { ...d, status: 'Expired' as const } : d));
-    triggerToast("Deal paused (moved to expired state).");
+  const handlePause = async (id: string) => {
+    setActionPendingId(id);
+    try {
+      const updated = await catalogApi.updateDeal(id, { status: 'expired' });
+      setDeals(prev => prev.map(d => d.id === id ? updated : d));
+      triggerToast("Deal paused (moved to expired state).");
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : 'Failed to pause deal.', 'error');
+    } finally {
+      setActionPendingId(null);
+    }
   };
 
-  const handleDelete = (id: string) => {
-    setDeals(prev => prev.filter(d => d.id !== id));
-    setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
-    triggerToast("Deal removed successfully.");
+  const handleDelete = async (id: string) => {
+    setActionPendingId(id);
+    try {
+      await catalogApi.deleteDeal(id);
+      setDeals(prev => prev.filter(d => d.id !== id));
+      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
+      triggerToast("Deal removed successfully.");
+    } catch (err) {
+      triggerToast(err instanceof Error ? err.message : 'Failed to delete deal.', 'error');
+    } finally {
+      setActionPendingId(null);
+    }
   };
 
   // Bulk actions handlers
-  const handleBulkApprove = () => {
-    setDeals(prev => prev.map(d => 
-      selectedIds.includes(d.id) && d.status === 'Pending' ? { ...d, status: 'Live' } : d
-    ));
+  const handleBulkApprove = async () => {
+    const targets = deals.filter(d => selectedIds.includes(d.id) && d.status === 'pending');
+    if (targets.length === 0) {
+      setSelectedIds([]);
+      return;
+    }
+    setBulkActionPending(true);
+    const results = await Promise.allSettled(targets.map(d => catalogApi.updateDeal(d.id, { status: 'live' })));
+    const updatedById = new Map<string, Deal>();
+    let failCount = 0;
+    results.forEach((result, idx) => {
+      if (result.status === 'fulfilled') {
+        updatedById.set(targets[idx].id, result.value);
+      } else {
+        failCount += 1;
+      }
+    });
+    setDeals(prev => prev.map(d => updatedById.get(d.id) ?? d));
     setSelectedIds([]);
-    triggerToast("Approved selected pending deal approvals!");
+    setBulkActionPending(false);
+    if (failCount === 0) {
+      triggerToast("Approved selected pending deal approvals!");
+    } else {
+      triggerToast(`Approved ${updatedById.size} deal(s); ${failCount} failed.`, 'error');
+    }
   };
 
-  const handleBulkDelete = () => {
-    setDeals(prev => prev.filter(d => !selectedIds.includes(d.id)));
-    setSelectedIds([]);
-    triggerToast("Selected deals successfully removed.");
+  const handleBulkDelete = async () => {
+    const targetIds = [...selectedIds];
+    if (targetIds.length === 0) return;
+    setBulkActionPending(true);
+    const results = await Promise.allSettled(targetIds.map(id => catalogApi.deleteDeal(id)));
+    const succeededIds = new Set<string>();
+    let failCount = 0;
+    results.forEach((result, idx) => {
+      if (result.status === 'fulfilled') {
+        succeededIds.add(targetIds[idx]);
+      } else {
+        failCount += 1;
+      }
+    });
+    setDeals(prev => prev.filter(d => !succeededIds.has(d.id)));
+    setSelectedIds(prev => prev.filter(id => !succeededIds.has(id)));
+    setBulkActionPending(false);
+    if (failCount === 0) {
+      triggerToast("Selected deals successfully removed.");
+    } else {
+      triggerToast(`Removed ${succeededIds.size} deal(s); ${failCount} failed.`, 'error');
+    }
   };
 
   // Form submission handler (Deals)
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formName || !formSeller || formDiscount <= 0 || !formExpiry) {
-      alert("Please fill out all fields.");
+    if (!formName || !formSeller || formDiscountValue <= 0 || !formValidUntil) {
+      setFormError("Please fill out all fields.");
       return;
     }
 
     // Capture user expiry input and build a standard valid ISO string
-    const isoExpiry = new Date(formExpiry + 'T23:59:59.000Z').toISOString();
+    const isoValidUntil = new Date(formValidUntil + 'T23:59:59.000Z').toISOString();
 
-    if (editingDeal) {
-      setDeals(prev => prev.map(d => d.id === editingDeal.id ? {
-        ...d,
-        name: formName,
-        seller: formSeller,
-        discount: Number(formDiscount),
-        category: formCategory,
-        type: 'retail',
-        expiry: isoExpiry,
-        promoCode: formPromoCode || undefined
-      } : d));
-      triggerToast("Deal successfully updated!");
-      setEditingDeal(null);
-    } else {
-      const newDeal: Deal = {
-        id: String(Date.now()),
-        name: formName,
-        seller: formSeller,
-        discount: Number(formDiscount),
-        category: formCategory,
-        type: 'retail',
-        expiry: isoExpiry,
-        clicks: 0,
-        status: 'Pending',
-        promoCode: formPromoCode || undefined
-      };
-      setDeals(prev => [newDeal, ...prev]);
-      triggerToast("New deal launched (Pending admin verification).");
-      setIsAdding(false);
+    const payload: Partial<CatalogDeal> = {
+      name: formName,
+      seller: formSeller,
+      category: formCategory,
+      discountType: formDiscountType,
+      discountValue: Number(formDiscountValue),
+      validUntil: isoValidUntil,
+      promoCode: formPromoCode || undefined,
+    };
+
+    setSavingDeal(true);
+    setFormError(null);
+    try {
+      if (editingDeal) {
+        const updated = await catalogApi.updateDeal(editingDeal.id, payload);
+        setDeals(prev => prev.map(d => d.id === editingDeal.id ? updated : d));
+        triggerToast("Deal successfully updated!");
+        setEditingDeal(null);
+      } else {
+        const created = await catalogApi.createDeal({ ...payload, status: 'pending' });
+        setDeals(prev => [created, ...prev]);
+        triggerToast("New deal launched (Pending admin verification).");
+        setIsAdding(false);
+      }
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Failed to save deal.');
+    } finally {
+      setSavingDeal(false);
     }
   };
 
@@ -498,8 +556,8 @@ export default function DealsPage() {
     }
 
     const uppercaseCode = promoFormCode.trim().toUpperCase();
-    const discountStr = promoFormType === 'percentage' 
-      ? `${promoFormValue}% OFF` 
+    const discountStr = promoFormType === 'percentage'
+      ? `${promoFormValue}% OFF`
       : `Flat ৳${promoFormValue} OFF`;
 
     // Calculate standardized ISO Date string
@@ -543,15 +601,15 @@ export default function DealsPage() {
   // Status Badge Styling map
   const getStatusBadgeStyleAndClasses = (status: Deal['status']) => {
     switch (status) {
-      case 'Live':
+      case 'live':
         return 'bg-green-50 text-green-700 border-green-200';
-      case 'Pending':
+      case 'pending':
         return 'bg-orange-50 text-orange-700 border-orange-100';
-      case 'Expiring':
+      case 'expiring':
         return 'bg-red-50 text-red-600 border-red-200';
-      case 'Expired':
+      case 'expired':
         return 'bg-gray-50 text-gray-400 border-gray-200';
-      case 'Rejected':
+      case 'rejected':
         return 'bg-slate-100 text-slate-500 border-slate-200';
       default:
         return 'bg-gray-50 text-gray-400 border-gray-200';
@@ -583,14 +641,14 @@ export default function DealsPage() {
 
   return (
     <div className="space-y-6 text-[#111827]">
-      
+
       {/* Tab Selector Headers */}
       <div className="flex border-b border-gray-200 gap-2 mb-2">
         <button
           onClick={() => switchTab('deals')}
           className={`px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer flex items-center gap-2 outline-none ${
-            activeTab === 'deals' 
-              ? 'border-[#FF5B00] text-[#FF5B00]' 
+            activeTab === 'deals'
+              ? 'border-[#FF5B00] text-[#FF5B00]'
               : 'border-transparent text-gray-500 hover:text-[#FF5B00]'
           }`}
         >
@@ -599,8 +657,8 @@ export default function DealsPage() {
         <button
           onClick={() => switchTab('promo_codes')}
           className={`px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer flex items-center gap-2 outline-none ${
-            activeTab === 'promo_codes' 
-              ? 'border-[#FF5B00] text-[#FF5B00]' 
+            activeTab === 'promo_codes'
+              ? 'border-[#FF5B00] text-[#FF5B00]'
               : 'border-transparent text-gray-500 hover:text-[#FF5B00]'
           }`}
         >
@@ -622,20 +680,20 @@ export default function DealsPage() {
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex-1 bg-white border border-gray-200 rounded-lg flex items-center px-3 py-2 gap-2">
           <Search className="w-4 h-4 text-gray-400" />
-          <input 
+          <input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={activeTab === 'deals' ? "Search deals by name or seller..." : "Search promotions by code or brand name..."} 
-            className="flex-1 bg-transparent text-[12px] outline-none text-[#111827]" 
+            placeholder={activeTab === 'deals' ? "Search deals by name or seller..." : "Search promotions by code or brand name..."}
+            className="flex-1 bg-transparent text-[12px] outline-none text-[#111827]"
           />
         </div>
-        
+
         {/* Actions panel alignment */}
         <div className="flex gap-2 relative">
-          
+
           {activeTab === 'deals' && (
             <div className="relative">
-              <button 
+              <button
                 onClick={() => setShowFilterDropdown(!showFilterDropdown)}
                 className="bg-[#FF5B00] hover:bg-orange-600 text-white px-4 py-2 h-full rounded-lg text-xs font-bold shadow-lg shadow-orange-500/10 flex items-center gap-1.5 transition cursor-pointer border-none"
               >
@@ -647,7 +705,7 @@ export default function DealsPage() {
                 <div className="absolute right-0 mt-2 bg-white border border-gray-200 shadow-xl rounded-xl p-4 w-60 z-50 text-left text-xs space-y-3">
                   <div>
                      <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Status Filter</label>
-                     <select 
+                     <select
                        value={statusFilter}
                        onChange={(e) => setStatusFilter(e.target.value)}
                        className="w-full bg-slate-50 border border-gray-200 rounded-lg p-2 text-xs text-[#111827] outline-none"
@@ -673,13 +731,13 @@ export default function DealsPage() {
                      </select>
                   </div>
                   <div className="flex justify-between pt-2 border-t border-slate-100 items-center">
-                     <button 
+                     <button
                        onClick={() => { setStatusFilter('All'); setCategoryFilter('All'); }}
                        className="text-[10px] text-gray-400 font-bold hover:text-gray-600 bg-transparent border-none cursor-pointer"
                      >
                        Reset Filters
                      </button>
-                     <button 
+                     <button
                        onClick={() => setShowFilterDropdown(false)}
                        className="text-[10px] text-[#FF5B00] font-black uppercase hover:underline bg-transparent border-none cursor-pointer"
                      >
@@ -691,7 +749,7 @@ export default function DealsPage() {
             </div>
           )}
 
-          <button 
+          <button
             onClick={() => {
               if (activeTab === 'deals') {
                 setEditingDeal(null);
@@ -713,19 +771,36 @@ export default function DealsPage() {
 
       {/* Main layout with responsive columns changing dynamically depending on forms panel */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        
+
         {/* Dynamic column sizing */}
         <div className={isFormActive ? "lg:col-span-8 space-y-6 w-full overflow-x-auto" : "lg:col-span-12 space-y-6 w-full"}>
-          
+
           <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
-            
+
             {activeTab === 'deals' ? (
+              dealsLoading ? (
+                <div className="p-10 flex flex-col items-center justify-center gap-2 text-gray-400">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <span className="text-xs font-bold">Loading deals…</span>
+                </div>
+              ) : dealsError ? (
+                <div className="p-10 flex flex-col items-center justify-center gap-3 text-center">
+                  <AlertTriangle className="w-5 h-5 text-red-500" />
+                  <span className="text-xs font-bold text-red-600 max-w-sm">{dealsError}</span>
+                  <button
+                    onClick={loadDeals}
+                    className="px-3 py-1.5 bg-[#FF5B00] hover:bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg cursor-pointer transition-colors border-none"
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : (
               <table className="w-full text-left table-auto">
                 <thead className="bg-[#F7F8FA] border-b border-gray-100">
                    <tr className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
                      <th className="p-4 w-10">
-                       <input 
-                         type="checkbox" 
+                       <input
+                         type="checkbox"
                          checked={allFilteredSelected}
                          onChange={handleSelectAllToggle}
                          className="cursor-pointer font-bold rounded"
@@ -743,12 +818,13 @@ export default function DealsPage() {
                 <tbody className="divide-y divide-gray-50">
                    {filteredDeals.map(deal => {
                      const dynamicStatus = getComputedStatus(deal);
-                     const isExpiring = dynamicStatus === 'Expiring';
+                     const isExpiring = dynamicStatus === 'expiring';
+                     const rowPending = actionPendingId === deal.id;
                      return (
-                       <tr key={deal.id} className="hover:bg-gray-50/50 transition-colors">
+                       <tr key={deal.id} className={`hover:bg-gray-50/50 transition-colors ${rowPending ? 'opacity-60' : ''}`}>
                           <td className="p-4">
-                            <input 
-                              type="checkbox" 
+                            <input
+                              type="checkbox"
                               checked={selectedIds.includes(deal.id)}
                               onChange={() => handleSelectToggle(deal.id)}
                               className="cursor-pointer rounded"
@@ -759,34 +835,38 @@ export default function DealsPage() {
                           </td>
                           <td className="p-4 text-[11px] text-gray-500">{deal.seller}</td>
                           <td className="p-4">
-                            <span className="bg-[#FF5B00] text-white px-2 py-0.5 rounded text-[10px] font-bold">{deal.discount}% OFF</span>
+                            <span className="bg-[#FF5B00] text-white px-2 py-0.5 rounded text-[10px] font-bold">
+                              {deal.discountType === 'flat' ? `৳${deal.discountValue} OFF` : `${deal.discountValue}% OFF`}
+                            </span>
                           </td>
                           <td className={`p-4 text-[10px] flex items-center gap-1.5 mt-2.5 ${isExpiring ? 'text-red-650' : 'text-gray-400'}`}>
-                            {isExpiring && <Clock className="w-3.5 h-3.5" />} {getExpiryDisplay(deal.expiry)}
+                            {isExpiring && <Clock className="w-3.5 h-3.5" />} {getExpiryDisplay(deal.validUntil)}
                           </td>
                           <td className="p-4 text-[11px] font-medium text-gray-700">{deal.clicks.toLocaleString()}</td>
                           <td className="p-4">
                             <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold border uppercase tracking-tighter ${getStatusBadgeStyleAndClasses(dynamicStatus)}`}>
-                              {dynamicStatus}
+                              {capitalize(dynamicStatus)}
                             </span>
                           </td>
                           <td className="p-4 text-right">
                             <div className="flex flex-col items-end gap-1">
                               <div className="flex gap-2 justify-end">
-                                 
+
                                  {/* Condition: Pending deal actions */}
-                                 {dynamicStatus === 'Pending' ? (
+                                 {dynamicStatus === 'pending' ? (
                                    <>
-                                     <button 
-                                       onClick={() => handleApprove(deal.id)} 
-                                       className="p-1 text-green-600 hover:bg-green-50 rounded border border-green-100 cursor-pointer transition"
+                                     <button
+                                       onClick={() => handleApprove(deal.id)}
+                                       disabled={rowPending}
+                                       className="p-1 text-green-600 hover:bg-green-50 rounded border border-green-100 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                                        title="Approve / Publish Live"
                                      >
                                        <CheckCircle className="w-4 h-4" />
                                      </button>
-                                     <button 
-                                       onClick={() => handleReject(deal.id)} 
-                                       className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition"
+                                     <button
+                                       onClick={() => handleReject(deal.id)}
+                                       disabled={rowPending}
+                                       className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                                        title="Reject Request"
                                      >
                                        <XCircle className="w-4 h-4" />
@@ -795,19 +875,21 @@ export default function DealsPage() {
                                  ) : (
                                    <>
                                      {/* Condition: Live / expiring deals have Pause equivalent */}
-                                     {(dynamicStatus === 'Live' || dynamicStatus === 'Expiring') ? (
-                                       <button 
-                                         onClick={() => handlePause(deal.id)} 
-                                         className="p-1 text-amber-600 hover:bg-amber-50 rounded border border-amber-100 cursor-pointer transition"
+                                     {(dynamicStatus === 'live' || dynamicStatus === 'expiring') ? (
+                                       <button
+                                         onClick={() => handlePause(deal.id)}
+                                         disabled={rowPending}
+                                         className="p-1 text-amber-600 hover:bg-amber-50 rounded border border-amber-100 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                                          title="Pause / End Deal"
                                        >
                                          <Pause className="w-4 h-4" />
                                        </button>
                                      ) : null}
-                                     
-                                     <button 
-                                       onClick={() => setConfirmingId(deal.id)} 
-                                       className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition"
+
+                                     <button
+                                       onClick={() => setConfirmingId(deal.id)}
+                                       disabled={rowPending}
+                                       className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                                        title="Remove Deal"
                                      >
                                        <Trash2 className="w-4 h-4" />
@@ -816,9 +898,10 @@ export default function DealsPage() {
                                  )}
 
                                  {/* Edit button populated on all rows */}
-                                 <button 
-                                   onClick={() => setEditingDeal(deal)} 
-                                   className="p-1 text-blue-600 hover:bg-blue-50 rounded border border-blue-100 cursor-pointer transition"
+                                 <button
+                                   onClick={() => setEditingDeal(deal)}
+                                   disabled={rowPending}
+                                   className="p-1 text-blue-600 hover:bg-blue-50 rounded border border-blue-100 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
                                    title="Edit Deal Specifications"
                                  >
                                    <Edit3 className="w-4 h-4" />
@@ -854,6 +937,7 @@ export default function DealsPage() {
                    )}
                 </tbody>
               </table>
+              )
             ) : (
               // Promo Codes Tab Table View
               <table className="w-full text-left table-auto">
@@ -908,8 +992,8 @@ export default function DealsPage() {
                           </td>
                           <td className="p-4">
                             <label className="relative inline-flex items-center cursor-pointer">
-                              <input 
-                                type="checkbox" 
+                              <input
+                                type="checkbox"
                                 checked={promo.active && !expired}
                                 disabled={expired}
                                 onChange={(e) => {
@@ -926,18 +1010,18 @@ export default function DealsPage() {
                           <td className="p-4 text-right">
                             <div className="flex flex-col items-end gap-1">
                               <div className="flex gap-2 justify-end">
-                                <button 
+                                <button
                                   onClick={() => {
                                     setEditingPromo(promo);
                                     setIsAddingPromo(false);
-                                  }} 
+                                  }}
                                   className="p-1 text-blue-600 hover:bg-blue-50 rounded border border-blue-100 cursor-pointer transition"
                                   title="Edit Promo Code"
                                 >
                                   <Edit3 className="w-4 h-4" />
                                 </button>
-                                <button 
-                                  onClick={() => setConfirmingId(promo.id)} 
+                                <button
+                                  onClick={() => setConfirmingId(promo.id)}
                                   className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition"
                                   title="Delete Promo Code"
                                 >
@@ -979,7 +1063,7 @@ export default function DealsPage() {
                 </tbody>
               </table>
             )}
-            
+
           </div>
         </div>
 
@@ -987,7 +1071,7 @@ export default function DealsPage() {
         <AnimatePresence mode="wait">
           {isFormActive && (
             <div className="lg:col-span-4 h-fit sticky top-24">
-              <motion.div 
+              <motion.div
                 key={activeTab === 'deals' ? "form-deal" : "form-promo"}
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
@@ -998,18 +1082,19 @@ export default function DealsPage() {
                   <h3 className="text-xs font-black uppercase tracking-widest text-[#111827] flex items-center gap-1.5">
                     <Tag className="w-4 h-4 text-[#FF5B00]" />
                     <span>
-                      {activeTab === 'deals' 
+                      {activeTab === 'deals'
                         ? (editingDeal ? 'Modify Custom Deal' : 'Publish New Deal')
                         : (editingPromo ? 'Modify Promo Code' : 'Create Promo Code')
                       }
                     </span>
                   </h3>
-                  <button 
-                    onClick={() => { 
-                      setIsAdding(false); 
-                      setEditingDeal(null); 
-                      setIsAddingPromo(false); 
-                      setEditingPromo(null); 
+                  <button
+                    onClick={() => {
+                      setIsAdding(false);
+                      setEditingDeal(null);
+                      setFormError(null);
+                      setIsAddingPromo(false);
+                      setEditingPromo(null);
                     }}
                     className="p-1.5 text-slate-400 hover:text-[#FF5B00] rounded-xl text-xs font-bold transition cursor-pointer bg-transparent border-none"
                   >
@@ -1020,10 +1105,16 @@ export default function DealsPage() {
                 {activeTab === 'deals' ? (
                   // DEALS SECTOR FORM
                   <form onSubmit={handleSubmit} className="space-y-4 text-xs">
+                    {formError && (
+                      <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-[10px] font-bold text-red-600 flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                        <span>{formError}</span>
+                      </div>
+                    )}
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Deal Label Name</label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         required
                         value={formName}
                         onChange={(e) => setFormName(e.target.value)}
@@ -1034,8 +1125,8 @@ export default function DealsPage() {
 
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Seller Business Name</label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         required
                         value={formSeller}
                         onChange={(e) => setFormSeller(e.target.value)}
@@ -1046,50 +1137,62 @@ export default function DealsPage() {
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Discount Percentage</label>
-                        <input 
-                          type="number" 
-                          required
-                          min="1"
-                          max="100"
-                          value={formDiscount || ''}
-                          onChange={(e) => setFormDiscount(Number(e.target.value))}
-                          placeholder="e.g. 15"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                        />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Discount Type</label>
+                        <select
+                          value={formDiscountType}
+                          onChange={(e) => setFormDiscountType(e.target.value as 'percentage' | 'flat')}
+                          className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
+                        >
+                          <option value="percentage">Percentage (%)</option>
+                          <option value="flat">Flat Cash (৳)</option>
+                        </select>
                       </div>
 
                       <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Category</label>
-                        <select
-                          value={formCategory}
-                          onChange={(e) => setFormCategory(e.target.value)}
-                          className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                        >
-                          <option value="Electronics">Electronics</option>
-                          <option value="Home">Home</option>
-                          <option value="Fashion">Fashion</option>
-                          <option value="Beauty">Beauty</option>
-                          <option value="Groceries">Groceries</option>
-                          <option value="Others">Others</option>
-                        </select>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Discount Value</label>
+                        <input
+                          type="number"
+                          required
+                          min="1"
+                          max={formDiscountType === 'percentage' ? 100 : undefined}
+                          value={formDiscountValue || ''}
+                          onChange={(e) => setFormDiscountValue(Number(e.target.value))}
+                          placeholder={formDiscountType === 'percentage' ? 'e.g. 15' : 'e.g. 500'}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
+                        />
                       </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Category</label>
+                      <select
+                        value={formCategory}
+                        onChange={(e) => setFormCategory(e.target.value)}
+                        className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
+                      >
+                        <option value="Electronics">Electronics</option>
+                        <option value="Home">Home</option>
+                        <option value="Fashion">Fashion</option>
+                        <option value="Beauty">Beauty</option>
+                        <option value="Groceries">Groceries</option>
+                        <option value="Others">Others</option>
+                      </select>
                     </div>
 
                       <div>
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Expiry Date</label>
-                        <input 
+                        <input
                           type="date"
                           required
-                          value={formExpiry}
-                          onChange={(e) => setFormExpiry(e.target.value)}
+                          value={formValidUntil}
+                          onChange={(e) => setFormValidUntil(e.target.value)}
                           className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-2 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
                         />
                       </div>
 
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5 text-left">Coupon Code (Optional)</label>
-                      <input 
+                      <input
                         type="text"
                         value={formPromoCode}
                         onChange={(e) => setFormPromoCode(e.target.value)}
@@ -1098,11 +1201,17 @@ export default function DealsPage() {
                       />
                     </div>
 
-                    <button 
+                    <button
                       type="submit"
-                      className="w-full py-3 bg-[#FF5B00] hover:bg-orange-600 text-white font-extrabold uppercase tracking-wide rounded-xl text-xs shadow-lg shadow-orange-500/10 cursor-pointer transition border-none mt-4"
+                      disabled={savingDeal}
+                      className="w-full py-3 bg-[#FF5B00] hover:bg-orange-600 text-white font-extrabold uppercase tracking-wide rounded-xl text-xs shadow-lg shadow-orange-500/10 cursor-pointer transition border-none mt-4 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                     >
-                      {editingDeal ? 'Apply Updates' : 'Publish / Add Deal'}
+                      {savingDeal && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                      <span>
+                        {savingDeal
+                          ? 'Saving…'
+                          : editingDeal ? 'Apply Updates' : 'Publish / Add Deal'}
+                      </span>
                     </button>
                   </form>
                 ) : (
@@ -1110,8 +1219,8 @@ export default function DealsPage() {
                   <form onSubmit={handlePromoSubmit} className="space-y-4 text-xs">
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Promo Code (Uppercase)</label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         required
                         value={promoFormCode}
                         onChange={(e) => setPromoFormCode(e.target.value.toUpperCase())}
@@ -1122,8 +1231,8 @@ export default function DealsPage() {
 
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Brand Name</label>
-                      <input 
-                        type="text" 
+                      <input
+                        type="text"
                         required
                         value={promoFormBrandName}
                         onChange={(e) => setPromoFormBrandName(e.target.value)}
@@ -1147,8 +1256,8 @@ export default function DealsPage() {
 
                       <div>
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Discount Value</label>
-                        <input 
-                          type="number" 
+                        <input
+                          type="number"
                           required
                           min="1"
                           value={promoFormValue || ''}
@@ -1162,8 +1271,8 @@ export default function DealsPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Min Order Value (৳)</label>
-                        <input 
-                          type="number" 
+                        <input
+                          type="number"
                           value={promoFormMinOrder || ''}
                           onChange={(e) => setPromoFormMinOrder(Number(e.target.value))}
                           placeholder="e.g. 2500"
@@ -1173,8 +1282,8 @@ export default function DealsPage() {
 
                       <div>
                         <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Max Usage Count</label>
-                        <input 
-                          type="number" 
+                        <input
+                          type="number"
                           value={promoFormMaxUsage || ''}
                           onChange={(e) => setPromoFormMaxUsage(Number(e.target.value))}
                           placeholder="e.g. 500"
@@ -1185,7 +1294,7 @@ export default function DealsPage() {
 
                     <div>
                       <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Valid Until Date</label>
-                      <input 
+                      <input
                         type="date"
                         required
                         value={promoFormValidUntil}
@@ -1194,7 +1303,7 @@ export default function DealsPage() {
                       />
                     </div>
 
-                    <button 
+                    <button
                       type="submit"
                       className="w-full py-3 bg-[#FF5B00] hover:bg-orange-600 text-white font-extrabold uppercase tracking-wide rounded-xl text-xs shadow-lg shadow-orange-500/10 cursor-pointer transition border-none mt-4"
                     >
@@ -1229,14 +1338,16 @@ export default function DealsPage() {
               <div className="flex gap-2">
                 <button
                   onClick={handleBulkApprove}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 border-none"
+                  disabled={bulkActionPending}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 border-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <Check className="w-3.5 h-3.5" />
+                  {bulkActionPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                   <span>Approve</span>
                 </button>
                 <button
                   onClick={() => setShowBulkDeleteForm(prev => !prev)}
-                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 border-none"
+                  disabled={bulkActionPending}
+                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 border-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                   <span>Delete</span>
@@ -1259,7 +1370,8 @@ export default function DealsPage() {
                       handleBulkDelete();
                       setShowBulkDeleteForm(false);
                     }}
-                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black uppercase tracking-widest rounded-lg cursor-pointer transition-colors"
+                    disabled={bulkActionPending}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black uppercase tracking-widest rounded-lg cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >Confirm Bulk Delete</button>
                   <button
                     onClick={() => setShowBulkDeleteForm(false)}
@@ -1279,10 +1391,12 @@ export default function DealsPage() {
             initial={{ opacity: 0, y: 50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className="fixed bottom-6 right-6 z-[600] bg-[#111827] border border-[#FF5B00]/30 p-4 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold text-white"
+            className={`fixed bottom-6 right-6 z-[600] border p-4 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold text-white ${
+              toast.type === 'error' ? 'bg-red-600 border-red-400/40' : 'bg-[#111827] border-[#FF5B00]/30'
+            }`}
           >
-            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span>{toast}</span>
+            <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${toast.type === 'error' ? 'bg-white' : 'bg-emerald-500'}`} />
+            <span>{toast.message}</span>
           </motion.div>
         )}
       </AnimatePresence>

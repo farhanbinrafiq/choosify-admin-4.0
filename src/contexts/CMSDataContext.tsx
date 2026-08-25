@@ -1,10 +1,22 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
+import { catalogApi } from '../services/catalogApi';
+import type { HomepageConfig, HomepageSectionConfig } from '../types/catalog';
 
 export interface CMSSection {
   id: string;
   title: string;
+  /**
+   * Display-only microcopy. The real /catalog/home HomepageSectionConfig
+   * contract has no subtitle field, so this is sourced from static local
+   * defaults and is not admin-editable or persisted anywhere.
+   */
   subtitle?: string;
   itemIds: string[]; // IDs of products/brands/creators/deals to feature
+  /**
+   * Display-only layout hint. Not part of the real backend contract (and not
+   * actually read by any renderer today) — kept only so existing consumers
+   * of this type keep compiling; sourced from static local defaults.
+   */
   layout?: 'grid' | 'carousel' | 'slider';
   isActive: boolean;
   order: number; // For reordering sections
@@ -25,6 +37,12 @@ export interface CMSData {
 
 export interface CMSDataContextType {
   cmsData: CMSData;
+  /** True while the initial /catalog/home fetch is in flight. */
+  loading: boolean;
+  /** Set when the initial load failed — surfaced by CMS.tsx, never swallowed. */
+  loadError: string | null;
+  /** True while `saveCMSData` has an in-flight PUT /catalog/home request. */
+  saving: boolean;
   updateSection: (sectionId: keyof CMSData | string, itemIds: string[]) => void;
   toggleSectionActive: (sectionId: keyof CMSData | string, isActive: boolean) => void;
   reorderSection: (sectionId: keyof CMSData | string, newOrder: number) => void;
@@ -33,10 +51,13 @@ export interface CMSDataContextType {
     sectionId: keyof CMSData | string,
     meta: { title?: string; subtitle?: string; layout?: 'grid' | 'carousel' | 'slider' }
   ) => void;
+  /** Resets the local edit buffer to the seed defaults — still requires `saveCMSData()` to publish. */
   resetToDefault: () => void;
+  /** Persists the current section title/visibility/order/itemIds to the real PUT /catalog/home endpoint. Throws on failure. */
+  saveCMSData: () => Promise<void>;
+  /** Re-fetches from the server, discarding any unsaved local edits. */
+  reloadCMSData: () => Promise<void>;
 }
-
-const LOCAL_STORAGE_KEY = 'choosify_cms_data';
 
 const defaultCMSData: CMSData = {
   featuredDeals: {
@@ -131,41 +152,61 @@ const defaultCMSData: CMSData = {
   },
 };
 
+const KNOWN_SECTION_KEYS = Object.keys(defaultCMSData) as (keyof CMSData)[];
+const KNOWN_SECTION_IDS: string[] = KNOWN_SECTION_KEYS;
+
 const CMSDataContext = createContext<CMSDataContextType | undefined>(undefined);
 
 export const CMSDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [cmsData, setCmsData] = useState<CMSData>(() => {
-    try {
-      const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        // Ensure all required fields exist
-        const merged = { ...defaultCMSData };
-        Object.keys(defaultCMSData).forEach((key) => {
-          const k = key as keyof CMSData;
-          if (parsed[k]) {
-            merged[k] = {
-              ...defaultCMSData[k],
-              ...parsed[k],
-            };
-          }
-        });
-        return merged;
-      }
-    } catch (e) {
-      console.error('Failed to parse stored CMS data', e);
-    }
-    return defaultCMSData;
-  });
+  const [cmsData, setCmsData] = useState<CMSData>(defaultCMSData);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // Save to localStorage when state changes
-  useEffect(() => {
+  // The full remote homepage document, plus any section entries this editor
+  // doesn't know about — kept so `saveCMSData` can PUT back a complete
+  // `sections` array (and the rest of the homepage doc) instead of silently
+  // dropping data this page never touched (hero banners, featured*Ids, etc).
+  const remoteHomepageRef = useRef<HomepageConfig | null>(null);
+  const otherSectionsRef = useRef<HomepageSectionConfig[]>([]);
+
+  const applyHomepage = (homepage: HomepageConfig) => {
+    remoteHomepageRef.current = homepage;
+    const byId = new Map(homepage.sections.map((s) => [s.id, s]));
+    const next = { ...defaultCMSData };
+    KNOWN_SECTION_KEYS.forEach((key) => {
+      const remote = byId.get(key);
+      if (remote) {
+        next[key] = {
+          ...defaultCMSData[key],
+          title: remote.label,
+          isActive: remote.isVisible,
+          order: remote.order,
+          itemIds: remote.itemIds,
+        };
+      }
+    });
+    otherSectionsRef.current = homepage.sections.filter((s) => !KNOWN_SECTION_IDS.includes(s.id));
+    setCmsData(next);
+  };
+
+  const reloadCMSData = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(cmsData));
-    } catch (e) {
-      console.error('Failed to save CMS data to localStorage', e);
+      const homepage = await catalogApi.getHomepage();
+      applyHomepage(homepage);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Failed to load homepage CMS data.');
+    } finally {
+      setLoading(false);
     }
-  }, [cmsData]);
+  }, []);
+
+  useEffect(() => {
+    reloadCMSData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updateSection = (sectionId: keyof CMSData | string, itemIds: string[]) => {
     setCmsData((prev) => {
@@ -244,16 +285,54 @@ export const CMSDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setCmsData(defaultCMSData);
   };
 
+  const saveCMSData = async () => {
+    // Never fabricate a blank homepage document to PUT — if we've never
+    // successfully loaded the real one, saving would overwrite hero banners,
+    // deals banners, and featured*Ids this page never touched. Force a
+    // reload first instead.
+    const base = remoteHomepageRef.current;
+    if (!base) {
+      throw new Error('Homepage data has not loaded yet — reload before saving.');
+    }
+
+    setSaving(true);
+    try {
+      const managedSections: HomepageSectionConfig[] = KNOWN_SECTION_KEYS.map((key) => {
+        const sec = cmsData[key];
+        return {
+          id: sec.id,
+          label: sec.title,
+          isVisible: sec.isActive,
+          order: sec.order,
+          itemIds: sec.itemIds,
+        };
+      });
+      const mergedSections = [...managedSections, ...otherSectionsRef.current];
+
+      const saved = await catalogApi.updateHomepage({ ...base, sections: mergedSections });
+      applyHomepage(saved);
+    } finally {
+      setSaving(false);
+    }
+    // Errors intentionally propagate to the caller (CMS.tsx) so the Save
+    // button can surface a real failure instead of a fake success toast.
+  };
+
   return (
     <CMSDataContext.Provider
       value={{
         cmsData,
+        loading,
+        loadError,
+        saving,
         updateSection,
         toggleSectionActive,
         reorderSection,
         clearSection,
         updateSectionMeta,
         resetToDefault,
+        saveCMSData,
+        reloadCMSData,
       }}
     >
       {children}

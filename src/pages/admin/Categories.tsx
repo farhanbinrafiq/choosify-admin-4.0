@@ -43,14 +43,15 @@ const getIconComponent = (name: string) => {
  * Includes hierarchical tree, real-time edit form, slug generator, bulk actions, and history states (Undo/Redo).
  */
 export default function CategoriesPage() {
-  const { 
-    categories, 
-    createCategory, 
-    updateCategory, 
-    deleteCategory, 
-    moveCategory, 
+  const {
+    categories,
+    categoriesLoading,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    moveCategory,
     reorderCategory,
-    importCategories 
+    importCategories
   } = useAuth();
 
   // Selected state for category editor
@@ -104,12 +105,35 @@ export default function CategoriesPage() {
   const [attrVariant, setAttrVariant] = useState(false);
   const [attrOptions, setAttrOptions] = useState('');
 
-  // Initialize History state
+  // Skip the next auto-tracked history push — set right before an explicit
+  // Undo/Redo replays a past snapshot, since that snapshot is already in
+  // `history` and shouldn't be re-recorded as a brand-new entry.
+  const skipHistoryTrackRef = useRef(false);
+
+  // Track category tree snapshots for Undo/Redo directly off the live
+  // `categories` state from AuthContext (backed by the real /catalog/categories
+  // API). This replaces re-reading a `choosify_categories` localStorage blob
+  // immediately after firing an async mutation, which raced the actual state
+  // update and could record a stale snapshot.
   useEffect(() => {
-    if (categories && history.length === 0) {
+    if (!categories) return;
+    if (history.length === 0) {
       setHistory([categories]);
       setHistoryPointer(0);
+      return;
     }
+    if (skipHistoryTrackRef.current) {
+      skipHistoryTrackRef.current = false;
+      return;
+    }
+    const current = history[historyPointer];
+    if (current && JSON.stringify(current) === JSON.stringify(categories)) return;
+    setHistory(prev => {
+      const trimmed = prev.slice(0, historyPointer + 1);
+      trimmed.push(categories);
+      return trimmed;
+    });
+    setHistoryPointer(prev => prev + 1);
   }, [categories]);
 
   useEffect(() => {
@@ -213,38 +237,38 @@ export default function CategoriesPage() {
   };
 
   /**
-   * Records the current category state into Undo/Redo history
-   */
-  const recordHistoryState = (newState: CategoryType[]) => {
-    const updatedHistory = history.slice(0, historyPointer + 1);
-    updatedHistory.push(newState);
-    setHistory(updatedHistory);
-    setHistoryPointer(updatedHistory.length - 1);
-  };
-
-  /**
    * Performs an Undo operation returning to the previous state
    */
-  const handleUndo = () => {
-    if (historyPointer > 0) {
-      const prevPointer = historyPointer - 1;
-      const targetState = history[prevPointer];
+  const handleUndo = async () => {
+    if (historyPointer <= 0) return;
+    const prevPointer = historyPointer - 1;
+    const targetState = history[prevPointer];
+    skipHistoryTrackRef.current = true;
+    try {
+      await importCategories(targetState);
       setHistoryPointer(prevPointer);
-      importCategories(targetState);
       showToast('Undid last category change', 'info');
+    } catch (error) {
+      skipHistoryTrackRef.current = false;
+      showToast(error instanceof Error ? error.message : 'Failed to undo category change.', 'error');
     }
   };
 
   /**
    * Performs a Redo operation restoring the forward state
    */
-  const handleRedo = () => {
-    if (historyPointer < history.length - 1) {
-      const nextPointer = historyPointer + 1;
-      const targetState = history[nextPointer];
+  const handleRedo = async () => {
+    if (historyPointer >= history.length - 1) return;
+    const nextPointer = historyPointer + 1;
+    const targetState = history[nextPointer];
+    skipHistoryTrackRef.current = true;
+    try {
+      await importCategories(targetState);
       setHistoryPointer(nextPointer);
-      importCategories(targetState);
       showToast('Redid category change', 'info');
+    } catch (error) {
+      skipHistoryTrackRef.current = false;
+      showToast(error instanceof Error ? error.message : 'Failed to redo category change.', 'error');
     }
   };
 
@@ -291,10 +315,13 @@ export default function CategoriesPage() {
     setFormSlug(generated);
   };
 
+  // Saving state so the submit button can't be double-clicked mid-request.
+  const [savingCategory, setSavingCategory] = useState(false);
+
   /**
    * Save category handler
    */
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) {
       showToast('Category name cannot be empty', 'error');
@@ -304,8 +331,8 @@ export default function CategoriesPage() {
     if (editorMode === 'edit' && selectedId) {
       // Uniqueness within parent check
       const duplicate = categories.some(
-        c => c.parentId === formParentId && 
-             c.name.toLowerCase() === formName.trim().toLowerCase() && 
+        c => c.parentId === formParentId &&
+             c.name.toLowerCase() === formName.trim().toLowerCase() &&
              c.id !== selectedId
       );
       if (duplicate) {
@@ -327,23 +354,26 @@ export default function CategoriesPage() {
         tempParent = categories.find(c => c.id === tempParent)?.parentId || null;
       }
 
-      updateCategory(selectedId, {
-        name: formName.trim(),
-        slug: formSlug.trim(),
-        icon: formIcon,
-        description: formDescription,
-        parentId: formParentId,
-        enabled: formEnabled
-      });
-
-      // Fetch newly updated categories to record in history
-      const savedState = JSON.parse(localStorage.getItem('choosify_categories') || '[]');
-      recordHistoryState(savedState);
-      showToast('Category updated successfully', 'success');
+      setSavingCategory(true);
+      try {
+        await updateCategory(selectedId, {
+          name: formName.trim(),
+          slug: formSlug.trim(),
+          icon: formIcon,
+          description: formDescription,
+          parentId: formParentId,
+          enabled: formEnabled
+        });
+        showToast('Category updated successfully', 'success');
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Failed to update category.', 'error');
+      } finally {
+        setSavingCategory(false);
+      }
     } else {
       // Create mode
       const duplicate = categories.some(
-        c => c.parentId === formParentId && 
+        c => c.parentId === formParentId &&
              c.name.toLowerCase() === formName.trim().toLowerCase()
       );
       if (duplicate) {
@@ -351,14 +381,17 @@ export default function CategoriesPage() {
         return;
       }
 
-      const newCat = createCategory(formParentId, formName.trim(), formIcon, formDescription);
-      
-      const savedState = JSON.parse(localStorage.getItem('choosify_categories') || '[]');
-      recordHistoryState(savedState);
-      
-      setSelectedId(newCat.id);
-      setEditorMode('edit');
-      showToast('Category created successfully', 'success');
+      setSavingCategory(true);
+      try {
+        const newCat = await createCategory(formParentId, formName.trim(), formIcon, formDescription);
+        setSelectedId(newCat.id);
+        setEditorMode('edit');
+        showToast('Category created successfully', 'success');
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Failed to create category.', 'error');
+      } finally {
+        setSavingCategory(false);
+      }
     }
   };
 
@@ -374,28 +407,30 @@ export default function CategoriesPage() {
     setDeleteConfirmId(id);
   };
 
-  const handleConfirmDelete = () => {
-    if (deleteConfirmId) {
-      const success = deleteCategory(deleteConfirmId);
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmId) return;
+    const targetId = deleteConfirmId;
+    setDeleteConfirmId(null);
+    try {
+      const success = await deleteCategory(targetId);
       if (success) {
-        const savedState = JSON.parse(localStorage.getItem('choosify_categories') || '[]');
-        recordHistoryState(savedState);
         showToast('Category deleted successfully', 'success');
-        if (selectedId === deleteConfirmId) {
+        if (selectedId === targetId) {
           setSelectedId(null);
           setEditorMode('create_root');
         }
       } else {
-        showToast('Failed to delete category.', 'error');
+        showToast('Cannot delete category with subcategories. Move children first!', 'error');
       }
-      setDeleteConfirmId(null);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to delete category.', 'error');
     }
   };
 
   /**
    * Moves a category node using standard arrow navigation
    */
-  const handleMoveNode = (id: string, direction: 'up' | 'down') => {
+  const handleMoveNode = async (id: string, direction: 'up' | 'down') => {
     const item = categories.find(c => c.id === id);
     if (!item) return;
 
@@ -405,27 +440,39 @@ export default function CategoriesPage() {
 
     const index = siblings.findIndex(s => s.id === id);
     if (direction === 'up' && index > 0) {
-      reorderCategory(id, index - 1);
-      const savedState = JSON.parse(localStorage.getItem('choosify_categories') || '[]');
-      recordHistoryState(savedState);
-      showToast('Moved category order up', 'success');
+      try {
+        await reorderCategory(id, index - 1);
+        showToast('Moved category order up', 'success');
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Failed to reorder category.', 'error');
+      }
     } else if (direction === 'down' && index < siblings.length - 1) {
-      reorderCategory(id, index + 1);
-      const savedState = JSON.parse(localStorage.getItem('choosify_categories') || '[]');
-      recordHistoryState(savedState);
-      showToast('Moved category order down', 'success');
+      try {
+        await reorderCategory(id, index + 1);
+        showToast('Moved category order down', 'success');
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'Failed to reorder category.', 'error');
+      }
     }
   };
 
   /**
    * Bulk action: Global Toggle
    */
-  const handleToggleAll = () => {
+  const [togglingAll, setTogglingAll] = useState(false);
+
+  const handleToggleAll = async () => {
     const allEnabled = categories.every(c => c.enabled);
     const updated = categories.map(c => ({ ...c, enabled: !allEnabled }));
-    importCategories(updated);
-    recordHistoryState(updated);
-    showToast(`All categories ${!allEnabled ? 'Enabled' : 'Disabled'}`, 'success');
+    setTogglingAll(true);
+    try {
+      await importCategories(updated);
+      showToast(`All categories ${!allEnabled ? 'Enabled' : 'Disabled'}`, 'success');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Failed to toggle categories.', 'error');
+    } finally {
+      setTogglingAll(false);
+    }
   };
 
   /**
@@ -458,18 +505,17 @@ export default function CategoriesPage() {
 
     setImporting(true);
     const reader = new FileReader();
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
         const parsed = JSON.parse(event.target?.result as string);
         if (Array.isArray(parsed) && parsed.length > 0 && 'parentId' in parsed[0] && 'name' in parsed[0]) {
-          importCategories(parsed);
-          recordHistoryState(parsed);
+          await importCategories(parsed);
           showToast(`Successfully imported ${parsed.length} categories!`, 'success');
         } else {
           showToast('Invalid file format. Ensure it contains a Category array.', 'error');
         }
       } catch (err) {
-        showToast('Failed to parse category file. Ensure JSON is correct.', 'error');
+        showToast(err instanceof Error ? err.message : 'Failed to parse category file. Ensure JSON is correct.', 'error');
       } finally {
         setImporting(false);
       }
@@ -732,10 +778,11 @@ export default function CategoriesPage() {
           {/* Toggle All */}
           <button
             onClick={handleToggleAll}
-            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-slate-300 bg-[#121424] border border-slate-800 rounded hover:bg-slate-800 hover:text-white transition-all"
+            disabled={togglingAll}
+            className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold text-slate-300 bg-[#121424] border border-slate-800 rounded hover:bg-slate-800 hover:text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Settings className="w-3.5 h-3.5 text-slate-500" />
-            <span>Toggle Status</span>
+            <span>{togglingAll ? 'Updating…' : 'Toggle Status'}</span>
           </button>
 
           {/* Export Taxonomy */}
@@ -828,7 +875,11 @@ export default function CategoriesPage() {
 
           {/* TREE VIEW PORT CONTAINER */}
           <div className="space-y-1.5 max-h-[550px] overflow-y-auto custom-scrollbar pr-1">
-            {rootNodes.length > 0 ? (
+            {categoriesLoading && categories.length === 0 ? (
+              <div className="py-8 text-center">
+                <p className="text-[11px] text-slate-500 animate-pulse">Loading category taxonomy…</p>
+              </div>
+            ) : rootNodes.length > 0 ? (
               rootNodes.map(node => renderTreeNode(node))
             ) : (
               <div className="py-8 text-center">
@@ -1195,10 +1246,13 @@ export default function CategoriesPage() {
 
                 <button
                   type="submit"
-                  className="px-5 py-2 text-xs font-black uppercase tracking-wider text-white bg-gradient-to-r from-[#FF6A00] to-[#FF9E2C] rounded shadow-lg hover:brightness-110 transition-all flex items-center space-x-1.5"
+                  disabled={savingCategory}
+                  className="px-5 py-2 text-xs font-black uppercase tracking-wider text-white bg-gradient-to-r from-[#FF6A00] to-[#FF9E2C] rounded shadow-lg hover:brightness-110 transition-all flex items-center space-x-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  <span>{editorMode === 'edit' ? 'Save Changes' : 'Create Category'}</span>
+                  <span>
+                    {savingCategory ? 'Saving…' : editorMode === 'edit' ? 'Save Changes' : 'Create Category'}
+                  </span>
                 </button>
               </div>
 

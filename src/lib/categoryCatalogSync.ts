@@ -29,12 +29,14 @@ export async function fetchCategoriesFromApi(): Promise<CategoryType[]> {
   return rows.map(toCategoryType);
 }
 
-export async function persistCategoryCreate(category: CategoryType): Promise<void> {
-  await catalogApi.createCategory(toCatalogPayload(category));
+export async function persistCategoryCreate(category: CategoryType): Promise<CategoryType> {
+  const saved = await catalogApi.createCategory(toCatalogPayload(category));
+  return toCategoryType(saved);
 }
 
-export async function persistCategoryUpdate(category: CategoryType): Promise<void> {
-  await catalogApi.updateCategory(category.id, toCatalogPayload(category));
+export async function persistCategoryUpdate(category: CategoryType): Promise<CategoryType> {
+  const saved = await catalogApi.updateCategory(category.id, toCatalogPayload(category));
+  return toCategoryType(saved);
 }
 
 export async function persistCategoryDelete(id: string): Promise<void> {
