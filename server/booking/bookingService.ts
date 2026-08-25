@@ -55,6 +55,12 @@ function buildOrderFromRequest(
         deliveryFee: 0,
         items: [
           {
+            // Every other order-creation path (recomputeOrderPricingServerSide
+            // in operationsRouter.ts) assigns itemId at creation; this one
+            // didn't, which silently made every booking-derived order
+            // impossible to mark delivered (findOrderItem matches on
+            // itemId). Same generation pattern as that path.
+            itemId: `item-${Date.now().toString(36)}-0`,
             productId: request.listingId,
             productTitle: request.listingTitle,
             quantity: 1,
