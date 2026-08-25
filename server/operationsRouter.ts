@@ -1546,7 +1546,42 @@ operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, as
     return;
   }
 
+  // Warranty terms are snapshotted from the product AT THE MOMENT OF
+  // PURCHASE (acceptance, for this flow), same rule POST /operations/orders
+  // already applies — a seller later editing the product's warranty config
+  // must never change what a past buyer is entitled to.
   const ts = new Date().toISOString();
+  const orderItems = await Promise.all(
+    existing.items.map(async (it, idx) => {
+      let warrantySnapshot: Record<string, unknown> = {};
+      if (it.productType !== 'service') {
+        const product = await catalogStore.getProduct(it.productId).catch(() => null);
+        if (product?.warrantyMonths && product.warrantyMonths > 0) {
+          const expiresAt = new Date(
+            Date.now() + product.warrantyMonths * 30 * 24 * 60 * 60 * 1000,
+          ).toISOString();
+          warrantySnapshot = {
+            warrantyMonthsAtPurchase: product.warrantyMonths,
+            warrantyTypeAtPurchase: product.warrantyType,
+            warrantyProviderAtPurchase: product.warrantyProvider,
+            warrantyTermsSnapshot: product.warrantyTerms,
+            warrantyStartsAt: ts,
+            warrantyExpiresAt: expiresAt,
+          };
+        }
+      }
+      return {
+        itemId: `item-${Date.now().toString(36)}-${idx}`,
+        productId: it.productId,
+        productTitle: it.productTitle,
+        variantId: it.variantId,
+        quantity: it.quantity,
+        price: it.price,
+        productType: it.productType,
+        ...warrantySnapshot,
+      };
+    }),
+  );
   const order = operationsStore.createOrder({
     orderId,
     buyerId: req.userId,
@@ -1559,15 +1594,7 @@ operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, as
       {
         sellerId: existing.sellerId,
         sellerBusinessName: existing.sellerName || '',
-        items: existing.items.map((it, idx) => ({
-          itemId: `item-${Date.now().toString(36)}-${idx}`,
-          productId: it.productId,
-          productTitle: it.productTitle,
-          variantId: it.variantId,
-          quantity: it.quantity,
-          price: it.price,
-          productType: it.productType,
-        })),
+        items: orderItems,
         deliveryFee: existing.deliveryTotal,
         invoiceId: makeManualOfferInvoiceId(),
         trackingStatus: 'pending',
