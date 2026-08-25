@@ -28,7 +28,9 @@ import {
   Share2,
   Bookmark,
   ExternalLink,
-  ChevronLeft
+  ChevronLeft,
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useCMSData, CMSData, CMSSection } from '../../contexts/CMSDataContext';
@@ -138,19 +140,23 @@ const AD_REGISTRY: Record<string, AdItem> = {
 };
 
 export default function CMSPage() {
-  const { 
-    cmsData, 
-    updateSection, 
-    toggleSectionActive, 
-    reorderSection, 
-    clearSection, 
-    updateSectionMeta, 
-    resetToDefault 
+  const {
+    cmsData,
+    loading: cmsLoading,
+    loadError,
+    saving: isSaving,
+    updateSection,
+    toggleSectionActive,
+    reorderSection,
+    clearSection,
+    updateSectionMeta,
+    resetToDefault,
+    saveCMSData,
+    reloadCMSData
   } = useCMSData();
 
   const [selectedSectionId, setSelectedSectionId] = useState<keyof CMSData>('featuredDeals');
-  const [toast, setToast] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -176,23 +182,17 @@ export default function CMSPage() {
   }, [selectedSectionId]);
 
   // Trigger toast helper
-  const showToast = (message: string) => {
-    setToast(message);
+  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  const handleSave = () => {
-    setIsSaving(true);
-    // Explicit trigger of saving to localstorage
+  const handleSave = async () => {
     try {
-      localStorage.setItem('choosify_cms_data', JSON.stringify(cmsData));
-      setTimeout(() => {
-        setIsSaving(false);
-        showToast('CMS changes compiled & persistent locally! 🎉');
-      }, 800);
+      await saveCMSData();
+      showToast('Homepage CMS changes published! 🎉');
     } catch (e) {
-      setIsSaving(false);
-      showToast('Error syncing content state!');
+      showToast(e instanceof Error ? e.message : 'Failed to save homepage CMS changes.', 'error');
     }
   };
 
@@ -323,10 +323,18 @@ export default function CMSPage() {
             initial={{ opacity: 0, y: -20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            className="fixed top-6 right-6 z-50 flex items-center gap-3 bg-app-card text-app-text-primary px-5 py-3.5 rounded-xl shadow-2xl border border-app-border"
+            className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-5 py-3.5 rounded-xl shadow-2xl border ${
+              toast.type === 'error'
+                ? 'bg-red-600 text-white border-red-400/40'
+                : 'bg-app-card text-app-text-primary border-app-border'
+            }`}
           >
-            <Sparkles className="w-4 h-4 text-orange-500 animate-pulse" />
-            <span className="text-xs font-semibold">{toast}</span>
+            {toast.type === 'error' ? (
+              <AlertTriangle className="w-4 h-4 text-white" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-orange-500 animate-pulse" />
+            )}
+            <span className="text-xs font-semibold">{toast.message}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -343,19 +351,20 @@ export default function CMSPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={() => {
               resetToDefault();
-              showToast('CMS restored to seed preloads! 🌀');
+              showToast('CMS reset to seed defaults locally — click Compile & Save to publish.');
             }}
-            className="flex items-center gap-2 px-4 py-2.5 bg-app-bg border border-app-border rounded-xl text-app-text-secondary hover:text-white hover:bg-slate-700/80 transition-all text-xs font-bold"
+            disabled={isSaving}
+            className="flex items-center gap-2 px-4 py-2.5 bg-app-bg border border-app-border rounded-xl text-app-text-secondary hover:text-white hover:bg-slate-700/80 transition-all text-xs font-bold disabled:opacity-50"
           >
             <RotateCcw className="w-3.5 h-3.5" />
             Reset Defaults
           </button>
-          <button 
+          <button
             onClick={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || cmsLoading || !!loadError}
             className="flex items-center gap-2 bg-orange-600 hover:bg-orange-500 text-white px-6 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-orange-600/20 active:scale-95 disabled:opacity-50"
           >
             {isSaving ? (
@@ -368,7 +377,31 @@ export default function CMSPage() {
         </div>
       </div>
 
-      {/* Grid Layout: Left is Editor (50%), Right is live interactive Preview (50%) */}
+      {/* Homepage config load state — the editor below operates on real
+          server data, so it must not render against stale/empty defaults
+          while loading, or silently hide a failed fetch. */}
+      {loadError && (
+        <div className="flex items-center justify-between gap-4 bg-red-50 border border-red-200 text-red-700 px-5 py-3.5 rounded-2xl text-xs font-semibold">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{loadError}</span>
+          </div>
+          <button
+            onClick={() => reloadCMSData()}
+            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest rounded-lg transition-colors shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {cmsLoading ? (
+        <div className="flex flex-col items-center justify-center gap-2 py-24 text-app-text-secondary">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-xs font-bold">Loading homepage CMS data…</span>
+        </div>
+      ) : (
+      /* Grid Layout: Left is Editor (50%), Right is live interactive Preview (50%) */
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
         
         {/* ==============================================
@@ -481,7 +514,7 @@ export default function CMSPage() {
                 {activeSection.title}
               </h2>
               <p className="text-xs text-slate-500 mt-1">
-                Customize content rules, header labels, layout types, and curations for this specific widget block.
+                Customize the header label, visibility, ordering, and curated content for this specific widget block.
               </p>
             </div>
 
@@ -500,35 +533,17 @@ export default function CMSPage() {
                 />
               </div>
 
+              {/*
+                Subtitle and Layout used to be editable here, but the real
+                /catalog/home HomepageSectionConfig contract has no fields for
+                either (only id/label/isVisible/order/itemIds), so there was
+                nowhere to actually persist them. Rather than keep inputs that
+                silently discard what the admin types, those controls were
+                removed — subtitle now comes from fixed local copy and layout
+                isn't rendered anywhere today.
+              */}
+
               <div className="space-y-1.5 col-span-2">
-                <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
-                  Subtitle Description
-                </label>
-                <input 
-                  type="text" 
-                  value={activeSection.subtitle || ''}
-                  onChange={(e) => updateSectionMeta(selectedSectionId, { subtitle: e.target.value })}
-                  placeholder="Enter microcopy tagline..."
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-slate-950 font-medium focus:bg-white focus:border-orange-500 outline-none transition-all"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
-                  Layout Architecture
-                </label>
-                <select 
-                  value={activeSection.layout || 'grid'}
-                  onChange={(e) => updateSectionMeta(selectedSectionId, { layout: e.target.value as any })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs text-slate-950 font-semibold focus:bg-white focus:border-orange-500 outline-none transition-all"
-                >
-                  <option value="grid">Grid (Bento Grid)</option>
-                  <option value="carousel">Carousel (Swipe-left)</option>
-                  <option value="slider">Slider (Full-Width Banner)</option>
-                </select>
-              </div>
-
-              <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-slate-700 uppercase tracking-wider block">
                   Status State
                 </label>
@@ -746,6 +761,7 @@ export default function CMSPage() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }

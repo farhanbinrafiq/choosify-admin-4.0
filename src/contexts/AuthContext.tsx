@@ -104,14 +104,19 @@ interface AuthContextType {
   requestNewBrand: (name: string, category: string) => Promise<{ id: string; name: string; category: string }>;
   brandsLoading: boolean;
   
-  // Categories Management System Integration
+  // Categories Management System Integration — all backed by the real
+  // /catalog/categories API; each call either persists successfully (and the
+  // returned promise resolves with the authoritative server record) or
+  // rejects, leaving `categories` state untouched so the UI can surface the
+  // failure instead of pretending the change went through.
   categories: CategoryType[];
-  createCategory: (parentId: string | null, name: string, icon: string, description: string) => CategoryType;
-  updateCategory: (id: string, updates: Partial<CategoryType>) => void;
-  deleteCategory: (id: string) => boolean;
-  moveCategory: (id: string, newParentId: string | null) => void;
-  reorderCategory: (id: string, newPosition: number) => void;
-  importCategories: (imported: CategoryType[]) => void;
+  categoriesLoading: boolean;
+  createCategory: (parentId: string | null, name: string, icon: string, description: string) => Promise<CategoryType>;
+  updateCategory: (id: string, updates: Partial<CategoryType>) => Promise<CategoryType>;
+  deleteCategory: (id: string) => Promise<boolean>;
+  moveCategory: (id: string, newParentId: string | null) => Promise<void>;
+  reorderCategory: (id: string, newPosition: number) => Promise<void>;
+  importCategories: (imported: CategoryType[]) => Promise<void>;
 }
 
 const mockProfiles: Record<UserRole, UserProfile> = {
@@ -319,12 +324,13 @@ const AuthContext = createContext<AuthContextType>({
   requestNewBrand: async () => ({ id: '', name: '', category: '' }),
   brandsLoading: false,
   categories: [],
-  createCategory: () => ({ id: '', parentId: null, name: '', slug: '', icon: '', description: '', displayOrder: 0, enabled: true }),
-  updateCategory: () => {},
-  deleteCategory: () => false,
-  moveCategory: () => {},
-  reorderCategory: () => {},
-  importCategories: () => {}
+  categoriesLoading: true,
+  createCategory: async () => ({ id: '', parentId: null, name: '', slug: '', icon: '', description: '', displayOrder: 0, enabled: true }),
+  updateCategory: async () => ({ id: '', parentId: null, name: '', slug: '', icon: '', description: '', displayOrder: 0, enabled: true }),
+  deleteCategory: async () => false,
+  moveCategory: async () => {},
+  reorderCategory: async () => {},
+  importCategories: async () => {}
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -822,20 +828,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.setItem('choosify_categories', JSON.stringify(categories));
   }, [categories, categoriesLoaded]);
 
-  const createCategory = (parentId: string | null, name: string, icon: string, description: string) => {
+  // Every mutation below awaits the real /catalog/categories API call before
+  // touching local `categories` state. On failure the promise rejects and
+  // local state is left untouched — callers (Categories.tsx) are expected to
+  // catch and surface the error rather than assume success.
+
+  const createCategory = async (
+    parentId: string | null,
+    name: string,
+    icon: string,
+    description: string,
+  ): Promise<CategoryType> => {
     const slug = name.toLowerCase().trim()
       .replace(/[^\w\s-]/g, '')
       .replace(/[\s_-]+/g, '-')
       .replace(/^-+|-+$/g, '');
-    
+
+    // The backend enforces slug uniqueness globally (not just within a parent),
+    // so dedupe against the full category list to avoid an avoidable 400.
     let uniqueSlug = slug;
     let counter = 1;
-    while (categories.some(c => c.slug === uniqueSlug && c.parentId === parentId)) {
+    while (categories.some(c => c.slug === uniqueSlug)) {
       uniqueSlug = `${slug}-${counter}`;
       counter++;
     }
 
-    const newCategory: CategoryType = {
+    const draftCategory: CategoryType = {
       id: 'cat-' + Date.now(),
       parentId,
       name,
@@ -846,61 +864,51 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       enabled: true
     };
 
-    const updated = [...categories, newCategory];
-    setCategories(updated);
-    persistCategoryCreate(newCategory).catch((error) => {
-      console.error('[AuthContext] Failed to persist new category to catalog API.', error);
-    });
-    return newCategory;
+    const saved = await persistCategoryCreate(draftCategory);
+    setCategories(prev => [...prev, saved]);
+    return saved;
   };
 
-  const updateCategory = (id: string, updates: Partial<CategoryType>) => {
-    const updated = categories.map(c => {
-      if (c.id === id) {
-        const merged = { ...c, ...updates };
-        if (updates.name && updates.name !== c.name) {
-          const slug = updates.name.toLowerCase().trim()
-            .replace(/[^\w\s-]/g, '')
-            .replace(/[\s_-]+/g, '-')
-            .replace(/^-+|-+$/g, '');
-          
-          let uniqueSlug = slug;
-          let counter = 1;
-          while (categories.some(cat => cat.slug === uniqueSlug && cat.parentId === c.parentId && cat.id !== id)) {
-            uniqueSlug = `${slug}-${counter}`;
-            counter++;
-          }
-          merged.slug = uniqueSlug;
-        }
-        return merged;
-      }
-      return c;
-    });
-    setCategories(updated);
-    const changed = updated.find((category) => category.id === id);
-    if (changed) {
-      persistCategoryUpdate(changed).catch((error) => {
-        console.error('[AuthContext] Failed to persist category update to catalog API.', error);
-      });
+  const updateCategory = async (id: string, updates: Partial<CategoryType>): Promise<CategoryType> => {
+    const current = categories.find(c => c.id === id);
+    if (!current) {
+      throw new Error(`Category "${id}" was not found.`);
     }
+
+    const merged = { ...current, ...updates };
+    if (updates.name && updates.name !== current.name) {
+      const slug = updates.name.toLowerCase().trim()
+        .replace(/[^\w\s-]/g, '')
+        .replace(/[\s_-]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+
+      let uniqueSlug = slug;
+      let counter = 1;
+      while (categories.some(cat => cat.slug === uniqueSlug && cat.id !== id)) {
+        uniqueSlug = `${slug}-${counter}`;
+        counter++;
+      }
+      merged.slug = uniqueSlug;
+    }
+
+    const saved = await persistCategoryUpdate(merged);
+    setCategories(prev => prev.map(c => c.id === id ? saved : c));
+    return saved;
   };
 
-  const deleteCategory = (id: string): boolean => {
+  const deleteCategory = async (id: string): Promise<boolean> => {
     const hasChildren = categories.some(c => c.parentId === id);
     if (hasChildren) {
       return false;
     }
-    const updated = categories.filter(c => c.id !== id);
-    setCategories(updated);
-    persistCategoryDelete(id).catch((error) => {
-      console.error('[AuthContext] Failed to delete category from catalog API.', error);
-    });
+    await persistCategoryDelete(id);
+    setCategories(prev => prev.filter(c => c.id !== id));
     return true;
   };
 
-  const moveCategory = (id: string, newParentId: string | null) => {
+  const moveCategory = async (id: string, newParentId: string | null): Promise<void> => {
     if (id === newParentId) return;
-    
+
     let currentParent = newParentId;
     while (currentParent !== null) {
       if (currentParent === id) return;
@@ -908,26 +916,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       currentParent = parentObj ? parentObj.parentId : null;
     }
 
-    const updated = categories.map(c => {
-      if (c.id === id) {
-        return { 
-          ...c, 
-          parentId: newParentId, 
-          displayOrder: categories.filter(cat => cat.parentId === newParentId).length + 1 
-        };
-      }
-      return c;
-    });
-    setCategories(updated);
-    const moved = updated.find((category) => category.id === id);
-    if (moved) {
-      persistCategoryUpdate(moved).catch((error) => {
-        console.error('[AuthContext] Failed to persist category move to catalog API.', error);
-      });
+    const current = categories.find(c => c.id === id);
+    if (!current) {
+      throw new Error(`Category "${id}" was not found.`);
     }
+
+    const moved: CategoryType = {
+      ...current,
+      parentId: newParentId,
+      displayOrder: categories.filter(cat => cat.parentId === newParentId).length + 1,
+    };
+
+    const saved = await persistCategoryUpdate(moved);
+    setCategories(prev => prev.map(c => c.id === id ? saved : c));
   };
 
-  const reorderCategory = (id: string, newPosition: number) => {
+  const reorderCategory = async (id: string, newPosition: number): Promise<void> => {
     const targetCategory = categories.find(c => c.id === id);
     if (!targetCategory) return;
 
@@ -942,24 +946,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const reorderedSameParent = sameParent.map((c, idx) => ({ ...c, displayOrder: idx + 1 }));
 
-    const updated = categories.map(c => {
-      const match = reorderedSameParent.find(r => r.id === c.id);
-      return match ? match : c;
-    });
-
-    setCategories(updated);
-    Promise.all(
+    // Reorder has no dedicated backend endpoint — it's synthesized as one
+    // updateCategory (PATCH) call per affected sibling with a new displayOrder.
+    const savedRows = await Promise.all(
       reorderedSameParent.map((category) => persistCategoryUpdate(category)),
-    ).catch((error) => {
-      console.error('[AuthContext] Failed to persist category reorder to catalog API.', error);
-    });
+    );
+
+    setCategories(prev => prev.map(c => {
+      const match = savedRows.find(r => r.id === c.id);
+      return match ? match : c;
+    }));
   };
 
-  const importCategories = (imported: CategoryType[]) => {
-    setCategories(imported);
-    syncAllCategoriesToApi(imported).catch((error) => {
-      console.error('[AuthContext] Failed to sync imported categories to catalog API.', error);
-    });
+  const importCategories = async (imported: CategoryType[]): Promise<void> => {
+    await syncAllCategoriesToApi(imported);
+    const refreshed = await fetchCategoriesFromApi();
+    setCategories(refreshed);
   };
 
   return (
@@ -983,6 +985,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       requestNewBrand,
       brandsLoading,
       categories,
+      categoriesLoading: !categoriesLoaded,
       createCategory,
       updateCategory,
       deleteCategory,
