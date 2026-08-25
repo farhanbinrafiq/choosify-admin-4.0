@@ -589,7 +589,7 @@ export const operationsApi = {
   },
   reviewVerification: async (
     id: string,
-    payload: { status: 'approved' | 'rejected'; feedback: string; reviewer_name?: string },
+    payload: { status: 'approved' | 'rejected' | 'request_info'; feedback: string; reviewer_name?: string },
   ) => {
     const result = await request<{ data: unknown; catalogSideEffect?: unknown }>(
       `/operations/verifications/${encodeURIComponent(id)}/review`,
