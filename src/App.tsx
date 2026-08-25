@@ -23,6 +23,7 @@ import { getMyProfilePath } from './lib/userDisplay';
 import { inspectionUniversalPath } from './lib/impersonationRouting';
 import { MarketplaceAccessGate } from './components/MarketplaceAccessLock';
 import { AdminPageSkeleton } from './components/common/skeletons';
+import { AdminFeatureNotAvailable } from './components/AdminFeatureNotAvailable';
 
 const routeSuspenseFallback = <AdminPageSkeleton variant="generic" />;
 
@@ -1026,6 +1027,167 @@ export default function App() {
                       <Suspense fallback={routeSuspenseFallback}>
                         <Consumers />
                       </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+
+            {/*
+              Sprint 11 remediation, tier 3: these screens have no real backend
+              behind their core actions at all (confirmed by direct investigation,
+              not assumed) -- building one would be new feature work, out of this
+              sprint's scope. Rather than leave them silently rendering the
+              CmsMirrorHost mock (seeded data, buttons with no effect), each is
+              routed to an explicit "not yet available" state, with a pointer to
+              the real screen that covers the closest real capability where one
+              exists. Rollback: remove these nine routes; each path falls back
+              to CmsMirrorHost.
+            */}
+            <Route
+              path="/admin/moderation"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <AdminFeatureNotAvailable
+                        title="Moderation Center"
+                        description="General content-flagging and moderation-queue tooling is not yet built. Partner application review and review moderation are both real and live today."
+                        alternatives={[
+                          { label: 'Review Partner Applications', to: '/admin/feature-access' },
+                          { label: 'Moderate Reviews', to: '/admin/reviews' },
+                        ]}
+                      />
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/disputes"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <AdminFeatureNotAvailable
+                        title="Disputes"
+                        description="A dedicated dispute case-management system (evidence, resolution workflow) is not yet built. Returns can be flagged as disputed today from the Returns & Refunds screen."
+                        alternatives={[{ label: 'Go to Returns & Refunds', to: '/admin/returns' }]}
+                      />
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/trust-center"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <AdminFeatureNotAvailable
+                        title="Trust & Analytics"
+                        description="Automated fraud detection and trust scoring are not yet live. Brand/Creator verification review and review moderation are both real, currently-enforced actions."
+                        alternatives={[
+                          { label: 'Go to Verification Center', to: '/admin/brand-verification' },
+                          { label: 'Moderate Reviews', to: '/admin/reviews' },
+                        ]}
+                      />
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/creator-hub"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <AdminFeatureNotAvailable
+                        title="Creator Economy"
+                        description="Campaign management and brand-partnership tooling for creators is not yet built. Creator profile editing and cashbook/payout data are both real today."
+                        alternatives={[
+                          { label: 'Go to Creator Studio', to: '/admin/creator-studio' },
+                          { label: 'Go to Cashbook Hub', to: '/admin/cashbook' },
+                        ]}
+                      />
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/admins"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <AdminFeatureNotAvailable
+                        title="Admin Management"
+                        description="Role and permission editing has a real backend endpoint but no frontend has been built for it yet."
+                      />
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/promotions"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <AdminFeatureNotAvailable
+                        title="Subscription Plans"
+                        description="Seller/creator subscription plans and billing are not yet built."
+                      />
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/monetization"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <AdminFeatureNotAvailable
+                        title="Monetization Center"
+                        description="Platform monetization tooling is not yet built."
+                      />
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/audit-logs"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <AdminFeatureNotAvailable
+                        title="Audit Logs"
+                        description="Admin actions are already recorded server-side, but there is no queryable log store or read API yet to display them here."
+                      />
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/settings"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <AdminFeatureNotAvailable
+                        title="Settings"
+                        description="Platform-wide settings management is not yet built. Your own account profile can be edited from the profile menu."
+                        alternatives={[{ label: 'Go to My Profile', to: '/admin/profile' }]}
+                      />
                     </AdminWorkspaceLayout>
                   </RoleGuard>
                 </ProtectedRoute>
