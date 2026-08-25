@@ -10,10 +10,10 @@ import {
   normalizeProductLifecycle,
 } from '../catalog/productLifecycle';
 import {
-  adjustInventory,
   getInventoryRecord,
   listInventoryForProduct,
-  syncProductStockFromInventory,
+  reserveInventoryQuantity,
+  releaseInventoryQuantity,
 } from '../catalog/inventoryStore';
 import { getService } from '../catalog/serviceStore';
 import { operationsStore } from '../operations/operationsStore';
@@ -132,37 +132,31 @@ function groupByBrand(items: CommerceCartItem[]): Map<string, CommerceCartItem[]
   return map;
 }
 
+/**
+ * Sprint 6 (QA3-001 follow-up): previously did its own read-then-write
+ * (getInventoryRecord then a separate adjustInventory), the same TOCTOU gap
+ * closed on the legacy /operations/orders path in Sprint 5 -- two
+ * concurrent checkouts for the same product could both read the same
+ * "available" value before either wrote back. Delegates to
+ * reserveInventoryQuantity(), the canonical mutex-protected primitive, so
+ * there is exactly one reservation implementation instead of two. Preserves
+ * this function's existing external contract (same return shape, same
+ * throw-on-failure -- executeCheckout's catch block already expects a thrown
+ * CommerceError, not a result object).
+ */
 async function reserveProductInventory(item: CommerceCartItem): Promise<{
   productId: string;
   variantId?: string;
   quantity: number;
 }> {
-  let record = await getInventoryRecord(item.listingId, item.variantId);
-  if (!record) {
-    const all = await listInventoryForProduct(item.listingId);
-    record = all.find((r) => !r.variantId) || null;
+  const result = await reserveInventoryQuantity({
+    productId: item.listingId,
+    variantId: item.variantId,
+    quantity: item.quantity,
+  });
+  if (!result.ok) {
+    throw new CommerceError(`Cannot reserve inventory for "${item.title}"`);
   }
-  if (!record) {
-    const product = await catalogStore.getProduct(item.listingId);
-    const qty = product?.stock ?? 0;
-    await adjustInventory({
-      productId: item.listingId,
-      variantId: item.variantId,
-      quantity: qty,
-      reservedQuantity: item.quantity,
-    });
-  } else {
-    const nextReserved = record.reservedQuantity + item.quantity;
-    if (nextReserved > record.quantity) {
-      throw new CommerceError(`Cannot reserve inventory for "${item.title}"`);
-    }
-    await adjustInventory({
-      productId: item.listingId,
-      variantId: item.variantId,
-      reservedQuantity: nextReserved,
-    });
-  }
-  await syncProductStockFromInventory(item.listingId);
   return {
     productId: item.listingId,
     variantId: item.variantId,
@@ -175,14 +169,7 @@ async function releaseReservations(
 ): Promise<void> {
   for (const r of reservations) {
     try {
-      const record = await getInventoryRecord(r.productId, r.variantId);
-      if (!record) continue;
-      await adjustInventory({
-        productId: r.productId,
-        variantId: r.variantId,
-        reservedQuantity: Math.max(0, record.reservedQuantity - r.quantity),
-      });
-      await syncProductStockFromInventory(r.productId);
+      await releaseInventoryQuantity(r);
     } catch (error) {
       console.error('[Commerce] Failed to release inventory reservation after checkout failure:', error);
     }
