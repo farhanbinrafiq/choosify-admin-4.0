@@ -1307,48 +1307,73 @@ operationsRouter.get('/operations/returns/:id', ...requireAuth, (req, res) => {
   res.json({ data: row });
 });
 
+/**
+ * Sprint 8 QA — P0 fix: this endpoint previously trusted orderId/sellerId
+ * from the client with no order lookup at all (a return could be created
+ * against a nonexistent order), and separately spread body.status /
+ * body.approvalDecision / body.refundAmount / body.approvedBy / body.id
+ * straight onto the created row — letting an authenticated buyer
+ * self-create an already-"approved" return with an arbitrary refund
+ * amount for a fabricated order. Every trust-sensitive field is now
+ * derived server-side from the real, owned, delivered order/order-item,
+ * mirroring the pattern already used for review eligibility
+ * (userHasPurchasedProductForReview) and mark-delivered authorization.
+ * Approval/refund fields can only ever be set via the dedicated
+ * /approve, /reject etc. endpoints, which already have real
+ * authorization checks.
+ */
 operationsRouter.post('/operations/returns', ...requireAuth, (req, res) => {
   const body = req.body as Partial<OpsReturnRequest>;
   const orderId = String(body.orderId || '').trim();
-  const buyerId = String(body.buyerId || '').trim();
-  const sellerId = String(body.sellerId || '').trim();
+  const itemId = String(body.itemId || '').trim();
   const reason = body.reason;
   const description = String(body.description || '').trim();
 
-  if (!orderId || !buyerId || !sellerId || !reason || !description) {
+  if (!orderId || !itemId || !reason || !description) {
     res.status(400).json({
-      error: 'orderId, buyerId, sellerId, reason, and description are required',
+      error: 'orderId, itemId, reason, and description are required',
     });
     return;
   }
-  if (!req.userId || buyerId !== req.userId) {
-    res.status(403).json({ error: 'buyerId must match the authenticated user' });
+  if (!req.userId) {
+    res.status(401).json({ error: 'Authentication required' });
     return;
   }
 
+  const order = operationsStore.getOrder(orderId);
+  if (!order) {
+    res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+  if (order.buyerId !== req.userId) {
+    res.status(403).json({ error: 'Not authorized to request a return for this order' });
+    return;
+  }
+  const located = findOrderItem(order, itemId);
+  if (!located) {
+    res.status(404).json({ error: 'Order item not found' });
+    return;
+  }
+  const delivered =
+    located.sub.trackingStatus === 'delivered' || order.status === 'completed';
+  if (!delivered) {
+    res.status(400).json({ error: 'This item has not been delivered yet' });
+    return;
+  }
+  const sellerId = String(located.sub.sellerId || '');
+
   const saved = operationsStore.createReturn({
     orderId,
-    itemId: String(body.itemId || '').trim(),
-    initiatedBy: body.initiatedBy === 'admin' ? 'admin' : 'customer',
+    itemId,
+    initiatedBy: 'customer',
     reason,
     description,
     evidencePhotos: Array.isArray(body.evidencePhotos) ? body.evidencePhotos : [],
-    status: body.status || 'initiated',
-    refundStatus: body.refundStatus || 'pending',
-    notes: Array.isArray(body.notes) ? body.notes : [],
+    status: 'initiated',
+    refundStatus: 'pending',
+    notes: [],
     sellerId,
-    buyerId,
-    ...(body.id ? { id: body.id } : {}),
-    ...(body.approvalDecision ? { approvalDecision: body.approvalDecision } : {}),
-    ...(body.approvalReason ? { approvalReason: body.approvalReason } : {}),
-    ...(body.approvedAt ? { approvedAt: body.approvedAt } : {}),
-    ...(body.approvedBy ? { approvedBy: body.approvedBy } : {}),
-    ...(typeof body.refundAmount === 'number' ? { refundAmount: body.refundAmount } : {}),
-    ...(body.returnTrackingId ? { returnTrackingId: body.returnTrackingId } : {}),
-    ...(body.returnCourier ? { returnCourier: body.returnCourier } : {}),
-    ...(body.pickupDate ? { pickupDate: body.pickupDate } : {}),
-    ...(body.deliveryDate ? { deliveryDate: body.deliveryDate } : {}),
-    ...(body.disputeId ? { disputeId: body.disputeId } : {}),
+    buyerId: req.userId,
   });
   scheduleOperationsPersist();
   res.status(201).json({ success: true, data: saved });
