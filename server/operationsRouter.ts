@@ -1131,10 +1131,26 @@ operationsRouter.post('/operations/orders/:id/cancel', ...requireAuth, async (re
  * Marks a single order item delivered — seller (owning the item's sub-order)
  * or staff only. This is the authoritative warranty-start trigger: prefers
  * deliveredAt, recomputing warrantyStartsAt/warrantyExpiresAt from it and
- * overwriting the order-creation-time fallback. Additive/scoped: does not
- * touch the broader shipment/tracking architecture — see server/operations/
- * shipmentStore.ts, which is a separate, pre-existing system this endpoint
- * intentionally does not reach into.
+ * overwriting the order-creation-time fallback.
+ *
+ * Sprint 7 (state-consistency fix): shipment.status is real-courier
+ * operational state, driven by server/logisticsRouter.ts's webhook handler
+ * -- but no real courier is connected in production (confirmed baseline),
+ * so that path never fires and shipment.status was permanently frozen at
+ * pending_pickup for every order's entire lifetime. Since mark-delivered is
+ * the only signal that ever reflects real-world delivery today, once every
+ * item across every sub-order in this order has been individually
+ * delivered, the order's single shipment (one per order, not per
+ * sub-order/seller) is synced to 'delivered' too, via the existing
+ * validated shipmentStore.updateShipment() helper -- never raw snapshot
+ * mutation. This does not reopen QA3-003: the PATCH endpoint's field
+ * allowlist is untouched and still excludes status for client requests;
+ * this is a server-side transition triggered by mark-delivered's own
+ * existing seller/staff authorization, not a new client-facing capability.
+ * Wrapped so a shipment-sync failure never blocks the order/inventory
+ * mutation above it, which remains authoritative either way -- there is no
+ * cross-store transaction here, only ordering: inventory and order state
+ * are committed first and are correct regardless of what happens next.
  */
 operationsRouter.post('/operations/orders/:id/items/:itemId/mark-delivered', ...requireAuth, async (req, res) => {
   const existing = operationsStore.getOrder(req.params.id);
@@ -1211,6 +1227,38 @@ operationsRouter.post('/operations/orders/:id/items/:itemId/mark-delivered', ...
 
   const saved = operationsStore.updateOrder(req.params.id, { subOrders: nextSubs });
   scheduleOperationsPersist();
+
+  // Sync the order's shipment only once every item in every sub-order has
+  // its own deliveredAt (product AND service lines both get deliveredAt
+  // unconditionally above) -- a multi-seller order shares one shipment, so
+  // marking a single item delivered must not flip it early while other
+  // sellers' items are still outstanding.
+  try {
+    const allItemsDelivered = nextSubs.every((sub) =>
+      (sub.items || []).every((it) => Boolean((it as Record<string, unknown>).deliveredAt)),
+    );
+    if (allItemsDelivered) {
+      const shipment = shipmentStore.getShipmentByOrderId(req.params.id);
+      if (shipment && shipment.status !== 'delivered') {
+        shipmentStore.updateShipment(shipment.id, {
+          status: 'delivered',
+          trackingEvents: [
+            {
+              id: `evt_${Date.now()}`,
+              timestamp: deliveredAt,
+              status: 'delivered',
+              location: shipment.region || 'Dhaka',
+              description: `Marked delivered via order fulfillment (item ${req.params.itemId}).`,
+            },
+            ...shipment.trackingEvents,
+          ],
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[Order] Failed to sync shipment status on mark-delivered:', err);
+  }
+
   res.json({ success: true, data: saved });
 });
 

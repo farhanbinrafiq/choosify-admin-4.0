@@ -5,9 +5,13 @@
  */
 
 import {
-  adjustInventory,
   getInventoryRecord,
+  releaseInventoryQuantity,
+  restockInventoryQuantity,
   syncProductStockFromInventory,
+  withInventoryLock,
+  adjustInventory,
+  inventoryRecordId,
 } from '../catalog/inventoryStore';
 import { publishEvent } from '../events/eventBus';
 import { operationsStore } from '../operations/operationsStore';
@@ -83,19 +87,24 @@ async function assertOrderAccess(
 }
 
 /** Release reserved qty on cancel / payment failure (idempotent via inventoryReserved flag). */
+/**
+ * Sprint 7: per-item body delegates to the canonical mutex-protected
+ * releaseInventoryQuantity() (same TOCTOU close as checkoutService.ts's
+ * reserveProductInventory()/releaseReservations() in Sprint 6) -- this
+ * function's own order.inventoryReserved/inventoryConsumed idempotency
+ * guard above the loop is unchanged, since it's order-level business logic
+ * distinct from the per-record mutation.
+ */
 export async function releaseOrderReservations(order: CommerceOrder): Promise<CommerceOrder> {
   if (!order.inventoryReserved || order.inventoryConsumed) {
     return { ...order, inventoryReserved: false };
   }
   for (const item of order.items.filter((i) => i.listingType === 'product')) {
-    const record = await getInventoryRecord(item.listingId, item.variantId);
-    if (!record) continue;
-    await adjustInventory({
+    await releaseInventoryQuantity({
       productId: item.listingId,
       variantId: item.variantId,
-      reservedQuantity: Math.max(0, record.reservedQuantity - item.quantity),
+      quantity: item.quantity,
     });
-    await syncProductStockFromInventory(item.listingId);
   }
   return { ...order, inventoryReserved: false };
 }
@@ -180,19 +189,18 @@ function assertPaymentAllowsConfirm(order: CommerceOrder): void {
   }
 }
 
-/** Restock after cancel when inventory was already consumed at Packed. */
+/**
+ * Restock after cancel when inventory was already consumed at Packed.
+ * Sprint 7: per-item body delegates to the canonical restockInventoryQuantity().
+ */
 async function restockConsumedInventory(order: CommerceOrder): Promise<CommerceOrder> {
   if (!order.inventoryConsumed) return order;
   for (const item of order.items.filter((i) => i.listingType === 'product')) {
-    const record = await getInventoryRecord(item.listingId, item.variantId);
-    if (!record) continue;
-    await adjustInventory({
+    await restockInventoryQuantity({
       productId: item.listingId,
       variantId: item.variantId,
-      quantity: record.quantity + item.quantity,
-      reservedQuantity: record.reservedQuantity,
+      quantity: item.quantity,
     });
-    await syncProductStockFromInventory(item.listingId);
   }
   return { ...order, inventoryConsumed: false, inventoryReserved: false };
 }
@@ -200,25 +208,38 @@ async function restockConsumedInventory(order: CommerceOrder): Promise<CommerceO
 /**
  * At Packed: convert reservation into sold stock (qty -= n, reserved -= n).
  * Idempotent via inventoryConsumed.
+ *
+ * Sprint 7: the reservedQuantity delta is conditional on order.inventoryReserved
+ * (an order that skipped reservation -- e.g. manual/staff-created -- must not
+ * decrement reservedQuantity it never added, which could belong to a
+ * completely different order's reservation on the same product). That
+ * conditional isn't a clean match for consumeInventoryQuantity()'s
+ * unconditional contract, so rather than force it or leave the race open,
+ * this wraps the existing per-item logic directly in the same canonical
+ * withInventoryLock() mutex reserve/release/consume/restock all share --
+ * one lock, still no second implementation of it.
  */
 async function consumeOrderInventory(order: CommerceOrder): Promise<CommerceOrder> {
   if (order.inventoryConsumed || !orderHasProductLines(order.items)) {
     return { ...order, inventoryConsumed: true, inventoryReserved: false };
   }
   for (const item of order.items.filter((i) => i.listingType === 'product')) {
-    const record = await getInventoryRecord(item.listingId, item.variantId);
-    if (!record) continue;
-    const nextQty = Math.max(0, record.quantity - item.quantity);
-    const nextReserved = order.inventoryReserved
-      ? Math.max(0, record.reservedQuantity - item.quantity)
-      : record.reservedQuantity;
-    await adjustInventory({
-      productId: item.listingId,
-      variantId: item.variantId,
-      quantity: nextQty,
-      reservedQuantity: Math.min(nextReserved, nextQty),
+    const key = inventoryRecordId(item.listingId, item.variantId);
+    await withInventoryLock(key, async () => {
+      const record = await getInventoryRecord(item.listingId, item.variantId);
+      if (!record) return;
+      const nextQty = Math.max(0, record.quantity - item.quantity);
+      const nextReserved = order.inventoryReserved
+        ? Math.max(0, record.reservedQuantity - item.quantity)
+        : record.reservedQuantity;
+      await adjustInventory({
+        productId: item.listingId,
+        variantId: item.variantId,
+        quantity: nextQty,
+        reservedQuantity: Math.min(nextReserved, nextQty),
+      });
+      await syncProductStockFromInventory(item.listingId);
     });
-    await syncProductStockFromInventory(item.listingId);
   }
   return { ...order, inventoryConsumed: true, inventoryReserved: false };
 }

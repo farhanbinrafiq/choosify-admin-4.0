@@ -210,7 +210,17 @@ export async function syncProductStockFromInventory(
  */
 const inventoryLocks = new Map<string, Promise<unknown>>();
 
-async function withInventoryLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+/**
+ * Sprint 7: exported so callers with genuinely different per-item mutation
+ * semantics than reserve/release/consume below (e.g. orderService.ts's
+ * consumeOrderInventory(), whose reservedQuantity delta is conditional on
+ * order.inventoryReserved -- forcing that into consumeInventoryQuantity()'s
+ * unconditional contract would be wrong for orders that skipped
+ * reservation) can still serialize against the SAME lock instead of writing
+ * a second one. The lock is the canonical primitive; reserve/release/
+ * consume/restock below are just the common cases built on it.
+ */
+export async function withInventoryLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
   const prior = inventoryLocks.get(key) ?? Promise.resolve();
   let release: () => void = () => {};
   const next = new Promise<void>((resolve) => {
@@ -311,6 +321,32 @@ export async function consumeInventoryQuantity(input: {
       variantId: input.variantId,
       quantity: nextQuantity,
       reservedQuantity: Math.min(nextReserved, nextQuantity),
+    });
+    await syncProductStockFromInventory(input.productId);
+    return record;
+  });
+}
+
+/**
+ * Sprint 7: reverses a prior consume -- quantity += n, reservedQuantity
+ * untouched (the units go back on the physical shelf; nothing was reserved
+ * against them, since consume already released any reservation). Used when
+ * an order is cancelled after inventory was already consumed (e.g. Packed).
+ */
+export async function restockInventoryQuantity(input: {
+  productId: string;
+  variantId?: string;
+  quantity: number;
+}): Promise<CatalogInventoryRecord | null> {
+  const key = inventoryRecordId(input.productId, input.variantId);
+  return withInventoryLock(key, async () => {
+    const existing = await getInventoryRecord(input.productId, input.variantId);
+    if (!existing) return null;
+    const record = await adjustInventory({
+      productId: input.productId,
+      variantId: input.variantId,
+      quantity: existing.quantity + input.quantity,
+      reservedQuantity: existing.reservedQuantity,
     });
     await syncProductStockFromInventory(input.productId);
     return record;
