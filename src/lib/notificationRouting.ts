@@ -12,6 +12,12 @@ export function resolveNotificationPath(
 ): string | null {
   const action = (notification.actionUrl || '').trim();
   if (action) {
+    // /messages/... only exists as a route in the consumer web app
+    // (choosify.bd), not this admin workspace -- send the viewer there
+    // directly rather than returning a path that 404s inside /admin/*.
+    if (action === '/messages' || action.startsWith('/messages/')) {
+      return `https://choosify.bd${action}`;
+    }
     if (action.startsWith('/')) return action;
     try {
       const url = new URL(action, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');

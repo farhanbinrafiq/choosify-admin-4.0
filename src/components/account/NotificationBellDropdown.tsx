@@ -87,7 +87,11 @@ export function NotificationBellDropdown({ className = '' }: NotificationBellDro
     if (path) {
       setOpen(false);
       setDetailId(null);
-      navigate(path);
+      if (/^https?:\/\//i.test(path)) {
+        window.location.href = path;
+      } else {
+        navigate(path);
+      }
       return;
     }
     setDetailId(notification.id);

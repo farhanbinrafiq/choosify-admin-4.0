@@ -54,6 +54,7 @@ import { publishEvent } from './events/eventBus';
 import {
   saveManualOrderOffer,
   getManualOrderOffer,
+  listManualOrderOffers,
 } from './operations/manualOrderOfferStore';
 import {
   type ManualOrderOffer,
@@ -373,6 +374,31 @@ function userCanUpdateShipment(
   if (!order) return false;
   const subs = (order.subOrders || []) as Array<{ sellerId?: string }>;
   return subs.some((sub) => sub.sellerId === req.userId);
+}
+
+/**
+ * Sprint 11: a seller/creator may reply into a buyer's platform conversation
+ * only if a real transactional relationship already exists between them --
+ * at least one order, booking request, or manual order offer connecting this
+ * sellerId to this buyerId. Prevents cold-messaging a buyer who has never
+ * interacted with this seller. Staff may always reply (existing behavior).
+ */
+async function userCanReplyToBuyerConversation(
+  req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
+  buyerId: string,
+): Promise<boolean> {
+  if (userIsStaff(req)) return true;
+  const role = req.userRole;
+  if (!(role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER) || hasRole(role, ROLES.CREATOR)))) {
+    return false;
+  }
+  if (!req.userId || !buyerId) return false;
+  if (operationsStore.listOrders({ buyerId, sellerId: req.userId }).length > 0) return true;
+  const offers = await listManualOrderOffers({ buyerId, sellerId: req.userId });
+  if (offers.length > 0) return true;
+  const { listBookingRequests } = await import('./booking/bookingStore');
+  const bookings = await listBookingRequests({ buyerId, sellerId: req.userId });
+  return bookings.length > 0;
 }
 
 /**
@@ -1818,6 +1844,10 @@ operationsRouter.patch('/operations/returns/:id/approve', ...requireAuth, async 
     res.status(403).json({ error: 'Not authorized to approve this return' });
     return;
   }
+  if (existing.status !== 'initiated') {
+    res.status(409).json({ error: `Return is already ${existing.status}; cannot approve again.` });
+    return;
+  }
   const refundAmount = Number(req.body?.refundAmount);
   if (!Number.isFinite(refundAmount)) {
     res.status(400).json({ error: 'refundAmount is required' });
@@ -1869,6 +1899,10 @@ operationsRouter.patch('/operations/returns/:id/reject', ...requireAuth, async (
     res.status(403).json({ error: 'Not authorized to reject this return' });
     return;
   }
+  if (existing.status !== 'initiated') {
+    res.status(409).json({ error: `Return is already ${existing.status}; cannot reject again.` });
+    return;
+  }
   const reason = String(req.body?.reason || '').trim();
   if (!reason) {
     res.status(400).json({ error: 'reason is required' });
@@ -1916,6 +1950,10 @@ operationsRouter.patch('/operations/returns/:id/refund', ...requireAuth, (req, r
   }
   if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
     res.status(403).json({ error: 'Not authorized to process this refund' });
+    return;
+  }
+  if (existing.status !== 'approved') {
+    res.status(409).json({ error: `Return is ${existing.status}, not approved; cannot process refund.` });
     return;
   }
   const adminNotes = [...existing.notes];
@@ -2795,6 +2833,15 @@ operationsRouter.post('/operations/reviews', ...requireAuth, (req, res) => {
     photos: Array.isArray(body.photos) ? body.photos.filter((p): p is string => typeof p === 'string').slice(0, 6) : [],
   });
   scheduleOperationsPersist();
+  if (located.sub.sellerId) {
+    notifyUser(String(located.sub.sellerId), {
+      type: COMMUNICATION_TYPES.SELLER_UPDATE,
+      category: 'seller',
+      title: 'New product review',
+      summary: `${saved.userName} left a ${saved.rating}-star review on ${saved.productTitle}.`,
+      actionUrl: '/admin/reviews',
+    }).catch((err) => Logger.error('notifyUser failed (review created)', { error: String(err) }));
+  }
   res.status(201).json({ success: true, data: saved });
 });
 
@@ -2817,12 +2864,22 @@ operationsRouter.patch('/operations/reviews/:id', ...requireAuth, (req, res) => 
   }
   // Prevent authorship takeover via patch.
   delete patch.userId;
+  const statusChanged = Boolean(patch.status) && patch.status !== existing.status;
   const saved = operationsStore.updateReview(req.params.id, patch);
   if (!saved) {
     res.status(404).json({ error: 'Review not found' });
     return;
   }
   scheduleOperationsPersist();
+  if (statusChanged && saved.userId && saved.userId !== req.userId) {
+    notifyUser(saved.userId, {
+      type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+      category: 'buyer',
+      title: 'Your review was updated',
+      summary: `Your review of ${saved.productTitle} is now "${saved.status}".`,
+      actionUrl: '/dashboard?tab=my-reviews',
+    }).catch((err) => Logger.error('notifyUser failed (review moderated)', { error: String(err) }));
+  }
   res.json({ success: true, data: saved });
 });
 
@@ -3349,13 +3406,17 @@ operationsRouter.get('/operations/platform-messages', ...requireAuth, async (req
     const requestedUserId = userId || (conversationId.startsWith('conv_platform_')
       ? conversationId.slice('conv_platform_'.length)
       : '');
-    if (userId && userId !== req.userId && !userIsStaff(req)) {
-      res.status(403).json({ error: 'Not authorized to list these messages' });
-      return;
-    }
-    if (!isOwnInbox && !(requestedUserId && requestedUserId === req.userId) && !userIsStaff(req)) {
-      res.status(403).json({ error: 'Not authorized to list these messages' });
-      return;
+    // Sprint 11: a seller/creator with a real relationship to the requested
+    // buyer (order/booking/manual-offer) may read that buyer's conversation,
+    // same relationship rule as replying (POST, above).
+    const isOwnRequest = requestedUserId && requestedUserId === req.userId;
+    if (!isOwnInbox && !isOwnRequest && !userIsStaff(req)) {
+      const canReadAsRelated =
+        requestedUserId && (await userCanReplyToBuyerConversation(req, requestedUserId));
+      if (!canReadAsRelated) {
+        res.status(403).json({ error: 'Not authorized to list these messages' });
+        return;
+      }
     }
 
     const { listMessages } = await import('./messaging/omniStore');
@@ -3389,16 +3450,29 @@ operationsRouter.post('/operations/platform-messages', ...requireAuth, async (re
       return;
     }
 
-    // Never trust client buyerId for shoppers — staff may post on behalf of a buyer.
-    const effectiveBuyerId = userIsStaff(req)
-      ? (buyerId?.trim() || req.userId || '')
-      : (req.userId || '');
-    if (!effectiveBuyerId) {
-      res.status(400).json({ error: 'buyerId and body are required' });
+    // Never trust client buyerId for shoppers — staff may post on behalf of a
+    // buyer, and (Sprint 11) a seller/creator with a real order/booking/offer
+    // relationship to this buyer may reply into their conversation. Anyone
+    // else posting a buyerId that isn't their own is rejected.
+    const requestedBuyerId = buyerId?.trim();
+    const isSelfPost = !requestedBuyerId || requestedBuyerId === req.userId;
+    let effectiveBuyerId: string;
+    let isReplyFromOther = false;
+
+    if (isSelfPost) {
+      effectiveBuyerId = req.userId || '';
+    } else if (userIsStaff(req)) {
+      effectiveBuyerId = requestedBuyerId;
+      isReplyFromOther = true;
+    } else if (await userCanReplyToBuyerConversation(req, requestedBuyerId)) {
+      effectiveBuyerId = requestedBuyerId;
+      isReplyFromOther = true;
+    } else {
+      res.status(403).json({ error: 'Not authorized to post as another user' });
       return;
     }
-    if (!userIsStaff(req) && buyerId?.trim() && buyerId.trim() !== effectiveBuyerId) {
-      res.status(403).json({ error: 'Not authorized to post as another user' });
+    if (!effectiveBuyerId) {
+      res.status(400).json({ error: 'buyerId and body are required' });
       return;
     }
 
@@ -3460,7 +3534,46 @@ operationsRouter.post('/operations/platform-messages', ...requireAuth, async (re
       body: `${complaintPrefix}${body.trim()}`,
       orderId: orderId?.trim(),
       bookingOffer: attachedOffer,
+      senderId: isReplyFromOther ? req.userId : undefined,
+      direction: isReplyFromOther ? 'outbound' : undefined,
     });
+
+    const conversationActionUrl = `/messages/conv_platform_${effectiveBuyerId}`;
+    if (isReplyFromOther) {
+      // Seller/staff replied — notify the buyer, unless staff is posting as
+      // themselves in their own thread (effectiveBuyerId === req.userId, i.e.
+      // not actually a reply to someone else, already excluded by isSelfPost).
+      notifyUser(effectiveBuyerId, {
+        type: COMMUNICATION_TYPES.BUYER_UPDATE,
+        category: 'buyer',
+        priority: 'normal',
+        title: 'New message',
+        summary: `${userName?.trim() || 'A seller'} sent you a message.`,
+        actionUrl: conversationActionUrl,
+        channels: [DELIVERY_CHANNELS.IN_APP],
+      }).catch((err) => Logger.error('notifyUser failed (new message, buyer)', { error: String(err) }));
+    } else if (!isComplaint && !bookingOffer) {
+      // Buyer sent an ordinary message — notify sellers who have a real
+      // relationship with this buyer (skip booking-offer/system messages,
+      // which already have their own dedicated notifications).
+      const relatedOrderSellerIds = operationsStore
+        .listOrders({ buyerId: effectiveBuyerId })
+        .flatMap((o) => ((o.subOrders || []) as Array<{ sellerId?: string }>).map((s) => s.sellerId))
+        .filter((id): id is string => Boolean(id));
+      const uniqueSellerIds = Array.from(new Set(relatedOrderSellerIds));
+      for (const sellerId of uniqueSellerIds) {
+        notifyUser(sellerId, {
+          type: COMMUNICATION_TYPES.SELLER_UPDATE,
+          category: 'seller',
+          priority: 'normal',
+          title: 'New message',
+          summary: `${userName?.trim() || 'A buyer'} sent you a message.`,
+          actionUrl: conversationActionUrl,
+          channels: [DELIVERY_CHANNELS.IN_APP],
+        }).catch((err) => Logger.error('notifyUser failed (new message, seller)', { error: String(err) }));
+      }
+    }
+
     res.status(201).json({ success: true, data: result });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to submit message' });
@@ -3516,7 +3629,13 @@ operationsRouter.put('/operations/feature-flags', ...requireAdmin, (req, res) =>
   res.json({ success: true, flags: saved });
 });
 
-operationsRouter.get('/operations/users', async (_req, res) => {
+// Sprint 11: this endpoint had zero authentication -- any unauthenticated
+// caller could dump every user's email/displayName/role/id. Staff-only.
+operationsRouter.get('/operations/users', authenticateRequest, async (req, res) => {
+  if (!userIsStaff(req)) {
+    res.status(403).json({ error: 'Not authorized' });
+    return;
+  }
   try {
     const { db } = await import('./db/client');
     const { users } = await import('./db/schema');
@@ -4075,6 +4194,15 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
       actorId: req.userId,
       verificationId: existing.id,
     });
+    if (existing.submitted_by) {
+      notifyUser(existing.submitted_by, {
+        type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+        category: 'seller',
+        title: 'More information needed for your verification',
+        summary: feedback,
+        actionUrl: '/admin/brand-verification',
+      }).catch((err) => Logger.error('notifyUser failed (verification info requested)', { error: String(err) }));
+    }
     res.json({ success: true, data: saved });
     return;
   }
@@ -4150,6 +4278,15 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
     decision: finalStatus,
     submittedBy: existing.submitted_by,
   });
+  if (existing.submitted_by) {
+    notifyUser(existing.submitted_by, {
+      type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+      category: 'seller',
+      title: decision === 'approved' ? 'Verification approved' : 'Verification rejected',
+      summary: feedback,
+      actionUrl: '/admin/brand-verification',
+    }).catch((err) => Logger.error('notifyUser failed (verification reviewed)', { error: String(err) }));
+  }
   res.json({
     success: true,
     data: saved,

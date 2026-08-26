@@ -47,14 +47,32 @@ export async function submitPlatformMessage(payload: {
   orderId?: string;
   bookingOffer?: Record<string, unknown>;
   orderOffer?: Record<string, unknown>;
+  /**
+   * Real author of this message. Defaults to `buyerId` (the buyer speaking as
+   * themselves) for backward compatibility with every existing caller. Pass
+   * this explicitly when someone OTHER than the buyer is posting into the
+   * buyer's conversation (a seller or staff reply) so the stored message
+   * reflects who actually sent it -- see `direction` below.
+   */
+  senderId?: string;
+  /**
+   * 'inbound' = from the buyer into the platform (default, matches every
+   * pre-existing caller). 'outbound' = a reply back to the buyer from a
+   * seller/staff. The web app's message-bubble rendering keys off this field
+   * (`DashboardContext.tsx`'s `applyPlatformRows`), so getting it right here
+   * is what makes a seller's own reply show as theirs instead of the buyer's.
+   */
+  direction?: 'inbound' | 'outbound';
 }): Promise<{ conversation: Conversation; message: UnifiedMessage }> {
   const conversationId = `conv_platform_${payload.buyerId}`;
   const existing = await getConversation(conversationId);
+  const direction = payload.direction || 'inbound';
+  const senderId = payload.senderId || payload.buyerId;
 
   const conversation: Conversation = {
     conversationId,
     platform: 'platform',
-    senderName: payload.userName,
+    senderName: direction === 'inbound' ? payload.userName : existing?.senderName || payload.buyerId,
     lastMessage: payload.body,
     assignedAgent: existing?.assignedAgent || 'agent_farhan',
     status: 'open',
@@ -67,10 +85,10 @@ export async function submitPlatformMessage(payload: {
     platform: 'platform',
     platformMessageId: `plat_${Date.now()}`,
     conversationId,
-    senderId: payload.buyerId,
+    senderId,
     senderName: payload.userName,
     content: { type: 'text', body: `${prefix}${payload.body}`.trim() },
-    direction: 'inbound',
+    direction,
     status: 'delivered',
     assignedAgent: conversation.assignedAgent,
     conversationStatus: conversation.status,

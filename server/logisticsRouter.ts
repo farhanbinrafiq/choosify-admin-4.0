@@ -1,13 +1,41 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import { LogisticsService } from '../src/services/logistics/LogisticsService';
 import { WebhookNormalizer } from '../src/services/logistics/webhook/WebhookNormalizer';
 import { shipmentStore } from './operations/shipmentStore';
 import type { OpsShipmentStatus } from './operations/shipmentStore';
+import { authenticateRequest } from './middleware/auth';
+import { requireAdmin } from './middleware/requireAdmin';
 
 const router = Router();
 
+/**
+ * Sprint 11: this endpoint previously had zero authentication -- any
+ * unauthenticated caller could forge a "delivered" (or any) status onto a
+ * real order's shipment-tracking record, since the tracking number is
+ * deterministically derivable from the public orderId, not a real secret.
+ * No real courier is configured in this environment yet (all courier
+ * integrations are sandboxed with fabricated credentials), so there is no
+ * genuine per-courier signature scheme to verify against today. Fail closed:
+ * require a shared secret via LOGISTICS_WEBHOOK_SECRET until a real courier
+ * integration replaces this with that courier's real signature verification.
+ */
+function verifyWebhookSecret(req: { headers: Record<string, unknown> }): boolean {
+  const expected = process.env.LOGISTICS_WEBHOOK_SECRET;
+  if (!expected) return false;
+  const provided = req.headers['x-webhook-secret'];
+  if (typeof provided !== 'string' || !provided) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 // Ingest webhook events from various courier providers
 router.post('/webhooks/logistics/:courier', async (req, res) => {
+  if (!verifyWebhookSecret(req)) {
+    res.status(401).json({ success: false, message: 'Missing or invalid webhook secret.' });
+    return;
+  }
   const { courier } = req.params;
   const payload = req.body;
 
@@ -64,8 +92,8 @@ router.post('/webhooks/logistics/:courier', async (req, res) => {
   }
 });
 
-// Simulate webhook trigger (used by admin simulation panel)
-router.post('/logistics/simulate-webhook', async (req, res) => {
+// Simulate webhook trigger (used by admin simulation panel) -- admin-only.
+router.post('/logistics/simulate-webhook', authenticateRequest, requireAdmin, async (req, res) => {
   const { courier, payload } = req.body;
 
   console.log(`[LogisticsWebhookSimulation] Simulating webhook for: ${courier}`);
