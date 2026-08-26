@@ -117,6 +117,20 @@ function publicBaseUrl(): string {
   return (configured || '/media').replace(/\/$/, '');
 }
 
+/**
+ * Optional absolute origin (e.g. https://dashboard.choosify.bd) prepended
+ * to publicUrl. Kept separate from MEDIA_PUBLIC_BASE_URL, which doubles as
+ * the Express static-mount path (app.use(mediaMount.urlPrefix, ...)) and
+ * must stay a bare path -- an absolute URL there breaks the mount itself.
+ * choosify-web and choosify-admin are served from different origins, so a
+ * relative publicUrl 404s when the web app renders a file the admin app
+ * stored (nginx on choosify.bd only proxies /api/v1, not /media).
+ */
+function publicOrigin(): string {
+  const configured = process.env.MEDIA_PUBLIC_ORIGIN?.trim();
+  return configured ? configured.replace(/\/$/, '') : '';
+}
+
 /** Local dev / Express-static mount point — see server/app.ts. Public root only; the private root is never static-mounted. */
 export function getMediaStaticMount(): { root: string; urlPrefix: string } {
   return { root: publicStorageRoot(), urlPrefix: publicBaseUrl() };
@@ -164,7 +178,7 @@ export async function saveMediaFile(input: {
 
   return {
     relativePath,
-    publicUrl: visibility === 'public' ? `${publicBaseUrl()}/${relativePath}` : undefined,
+    publicUrl: visibility === 'public' ? `${publicOrigin()}${publicBaseUrl()}/${relativePath}` : undefined,
     sizeBytes: input.buffer.byteLength,
   };
 }
