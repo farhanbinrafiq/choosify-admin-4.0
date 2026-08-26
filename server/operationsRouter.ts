@@ -2765,7 +2765,16 @@ operationsRouter.get('/operations/reviews', ...requireAuth, async (req, res) => 
   const sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
 
   if (!userCanListReviews(req, { userId, sellerId })) {
-    if (!userId && req.userId && !userIsStaff(req) && !(req.userRole && hasRole(req.userRole, ROLES.MODERATOR))) {
+    // Only silently self-scope when the caller asked for nothing specific --
+    // an explicit (even if unauthorized) userId/sellerId must fail cleanly,
+    // never be quietly reinterpreted as "show me my own reviews instead".
+    if (
+      !userId &&
+      !sellerId &&
+      req.userId &&
+      !userIsStaff(req) &&
+      !(req.userRole && hasRole(req.userRole, ROLES.MODERATOR))
+    ) {
       userId = req.userId;
     }
     if (!userCanListReviews(req, { userId, sellerId })) {
