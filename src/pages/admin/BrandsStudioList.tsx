@@ -149,28 +149,39 @@ export default function BrandsStudioList() {
     }
   };
 
-  const handleBulkSetStatus = (status: BrandStudioItem["status"]) => {
+  const handleBulkSetStatus = async (status: BrandStudioItem["status"]) => {
     // Bulk status here reflects Marketplace Access visibility (Live = granted, Draft = not
-    // granted). Archived isn't a real backend state yet — left as a local-only display value.
+    // granted). Archived isn't a real backend state yet — no PATCH is sent for it, so don't
+    // claim it was persisted.
+    if (status !== "Live" && status !== "Draft") {
+      triggerToast(`"${status}" isn't a persisted brand state yet — no change was saved.`);
+      return;
+    }
     const ids = [...selectedIds];
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
-    Promise.all(
-      ids.map((id) =>
-        status === "Live" || status === "Draft"
-          ? fetch(`${API_BASE}/catalog/brands/${id}`, {
-              method: "PATCH",
-              headers: {
-                "Content-Type": "application/json",
-                ...(token ? { Authorization: `Bearer ${token}` } : {}),
-              },
-              body: JSON.stringify({ marketplaceAccess: status === "Live" }),
-            })
-          : Promise.resolve(),
-      ),
-    )
-      .then(() => fetchBrands())
-      .catch((error) => console.warn("[BrandsStudioList] Bulk status update failed", error));
-    triggerToast(`✓ ${ids.length} brand(s) marked as ${status}.`);
+    try {
+      const results = await Promise.all(
+        ids.map((id) =>
+          fetch(`${API_BASE}/catalog/brands/${id}`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ marketplaceAccess: status === "Live" }),
+          }),
+        ),
+      );
+      await fetchBrands();
+      const failed = results.filter((r) => !r.ok).length;
+      if (failed > 0) {
+        triggerToast(`✕ ${failed} of ${ids.length} brand(s) failed to update.`);
+      } else {
+        triggerToast(`✓ ${ids.length} brand(s) marked as ${status}.`);
+      }
+    } catch (error) {
+      triggerToast(`✕ Bulk status update failed: ${error instanceof Error ? error.message : "unknown error"}`);
+    }
     setSelectedIds(new Set());
   };
 
