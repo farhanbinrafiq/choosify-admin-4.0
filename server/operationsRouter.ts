@@ -1,6 +1,7 @@
 import { randomBytes } from 'crypto';
 import { Router } from 'express';
 import { operationsStore, DEFAULT_ROLE_PERMISSIONS } from './operations/operationsStore';
+import { isProductLifecyclePubliclyListable, normalizeProductLifecycle } from './catalog/productLifecycle';
 import { validateCoupon } from './operations/couponValidator';
 import { getAnalyticsSummary, getRoleAnalytics } from './operations/analyticsService';
 import { getSellerDashboardIntelligence } from './operations/sellerIntelligenceService';
@@ -239,6 +240,11 @@ async function recomputeOrderPricingServerSide(
           if (productId) {
             const product = await catalogStore.getProduct(productId);
             if (!product) throw new Error(`Product ${productId} no longer exists`);
+            if (!isProductLifecyclePubliclyListable(product.status)) {
+              throw new Error(
+                `"${product.title}" is no longer available for purchase (status: ${normalizeProductLifecycle(product.status)}).`,
+              );
+            }
             realPrice = product.price;
             realTitle = product.title;
             if (product.warrantyMonths && product.warrantyMonths > 0) {
@@ -258,6 +264,11 @@ async function recomputeOrderPricingServerSide(
           } else if (serviceId) {
             const service = await getService(serviceId);
             if (!service) throw new Error(`Service ${serviceId} no longer exists`);
+            if (!isProductLifecyclePubliclyListable(service.status)) {
+              throw new Error(
+                `"${service.title}" is no longer available for booking (status: ${normalizeProductLifecycle(service.status)}).`,
+              );
+            }
             realPrice = service.price;
             realTitle = service.title;
           } else {
@@ -1398,6 +1409,12 @@ operationsRouter.post('/operations/manual-offers', ...requireAuth, async (req, r
       let ownerId: string | undefined;
       const product = await catalogStore.getProduct(productId);
       if (product) {
+        if (!isProductLifecyclePubliclyListable(product.status)) {
+          res.status(400).json({
+            error: `"${product.title}" is no longer available (status: ${normalizeProductLifecycle(product.status)}) and cannot be offered.`,
+          });
+          return;
+        }
         productTitle = product.title;
         image = product.image;
         ownerId = product.sellerId;
@@ -1405,6 +1422,12 @@ operationsRouter.post('/operations/manual-offers', ...requireAuth, async (req, r
         const service = await getService(productId);
         if (!service) {
           res.status(404).json({ error: `Product or service ${productId} not found` });
+          return;
+        }
+        if (!isProductLifecyclePubliclyListable(service.status)) {
+          res.status(400).json({
+            error: `"${service.title}" is no longer available (status: ${normalizeProductLifecycle(service.status)}) and cannot be offered.`,
+          });
           return;
         }
         productType = 'service';
@@ -1508,6 +1531,26 @@ operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, as
   if (existing.status !== 'pending') {
     res.status(400).json({ error: `Cannot accept offer in status ${existing.status}` });
     return;
+  }
+
+  // Re-verify every item is still purchasable at acceptance time -- the
+  // seller/admin may have archived/suspended it after the offer was sent but
+  // before the buyer accepted.
+  for (const item of existing.items) {
+    const entity =
+      item.productType === 'service'
+        ? await getService(item.productId)
+        : await catalogStore.getProduct(item.productId);
+    if (!entity) {
+      res.status(400).json({ error: `"${item.productTitle}" no longer exists and cannot be purchased.` });
+      return;
+    }
+    if (!isProductLifecyclePubliclyListable(entity.status)) {
+      res.status(400).json({
+        error: `"${item.productTitle}" is no longer available (status: ${normalizeProductLifecycle(entity.status)}) and cannot be purchased.`,
+      });
+      return;
+    }
   }
 
   const orderId = `MOF-ORDER-${existing.id}`;
