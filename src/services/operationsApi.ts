@@ -39,6 +39,53 @@ async function request<T>(path: string, method: HttpMethod = 'GET', body?: unkno
   return response.json() as Promise<T>;
 }
 
+/**
+ * A single line item within a sub-order. Mirrors what
+ * server/operationsRouter.ts's recomputeOrderPricingServerSide (checkout path)
+ * and server/booking/bookingService.ts's buildOrderFromRequest (booking path)
+ * actually persist — see also findOrderItem/mark-delivered in
+ * server/operationsRouter.ts for the fields that get set post-creation
+ * (deliveredAt, inventoryConsumed, warrantyStartsAt/warrantyExpiresAt).
+ */
+export interface OpsOrderItem {
+  itemId: string;
+  productId?: string;
+  serviceId?: string;
+  variantId?: string;
+  productTitle: string;
+  quantity: number;
+  price: number;
+  productType?: 'physical' | 'service';
+  serviceCategory?: string;
+  serviceDetails?: Record<string, string | number>;
+  /** Warranty terms snapshotted from the product at purchase time (never re-derived live). */
+  warrantyMonthsAtPurchase?: number;
+  warrantyTypeAtPurchase?: string;
+  warrantyProviderAtPurchase?: string;
+  warrantyTermsSnapshot?: string;
+  warrantyStartsAt?: string;
+  warrantyExpiresAt?: string;
+  /** Set exactly once, server-side, by POST .../items/:itemId/mark-delivered. */
+  deliveredAt?: string;
+  /** True once this item's reserved stock has been converted to consumed (mark-delivered, idempotent). */
+  inventoryConsumed?: boolean;
+}
+
+/** One seller's slice of a (possibly multi-seller/split) order. */
+export interface OpsSubOrder {
+  sellerId: string;
+  sellerBusinessName?: string;
+  invoiceId?: string;
+  deliveryFee: number;
+  /**
+   * Free-form; 'pending' is the implicit default when unset (see
+   * operationsRouter.ts cancel-order handler). Only ever set to 'delivered'
+   * server-side by mark-delivered — no other admin-settable states exist.
+   */
+  trackingStatus?: string;
+  items: OpsOrderItem[];
+}
+
 export interface OpsStorefrontOrder {
   id: string;
   orderId: string;
@@ -48,7 +95,7 @@ export interface OpsStorefrontOrder {
   overallTotal: number;
   subtotal?: number;
   deliveryTotal?: number;
-  subOrders: unknown[];
+  subOrders: OpsSubOrder[];
   promoCode?: string;
   promoDiscount?: number;
   promoType?: string;
@@ -61,7 +108,8 @@ export interface OpsStorefrontOrder {
     region: string;
     deliveryNotes?: string;
   };
-  status: string;
+  /** Booking / service orders use pending_payment until paid, then confirmed. */
+  status: 'pending_payment' | 'active' | 'confirmed' | 'cancelled' | 'completed';
   createdAt: string;
   updatedAt: string;
   cancelledAt?: string;
@@ -312,8 +360,31 @@ export interface RoleAnalyticsPayload {
 }
 
 export const operationsApi = {
-  listOrders: async (): Promise<OpsStorefrontOrder[]> => {
-    const result = await request<{ data: OpsStorefrontOrder[] }>('/operations/orders');
+  /** No params, called by staff, returns every real order (server auto-scopes non-staff callers). */
+  listOrders: async (params?: {
+    buyerId?: string;
+    sellerId?: string;
+    status?: string;
+  }): Promise<OpsStorefrontOrder[]> => {
+    const qs = new URLSearchParams();
+    if (params?.buyerId) qs.set('buyerId', params.buyerId);
+    if (params?.sellerId) qs.set('sellerId', params.sellerId);
+    if (params?.status) qs.set('status', params.status);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    const result = await request<{ data: OpsStorefrontOrder[] }>(`/operations/orders${suffix}`);
+    return result.data;
+  },
+  getOrder: async (orderId: string): Promise<OpsStorefrontOrder> => {
+    const result = await request<{ data: OpsStorefrontOrder }>(
+      `/operations/orders/${encodeURIComponent(orderId)}`,
+    );
+    return result.data;
+  },
+  markOrderItemDelivered: async (orderId: string, itemId: string): Promise<OpsStorefrontOrder> => {
+    const result = await request<{ data: OpsStorefrontOrder }>(
+      `/operations/orders/${encodeURIComponent(orderId)}/items/${encodeURIComponent(itemId)}/mark-delivered`,
+      'POST',
+    );
     return result.data;
   },
   createOrder: async (
