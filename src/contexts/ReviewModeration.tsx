@@ -13,6 +13,10 @@ interface Toast {
 interface ReviewModerationContextType {
   reviews: Review[];
   toasts: Toast[];
+  isLoading: boolean;
+  loadError: string | null;
+  /** True for staff/moderator -- the only roles whose status changes the backend actually persists. */
+  canModerate: boolean;
   showToast: (message: string, type?: 'success' | 'info' | 'error' | 'warning') => void;
   removeToast: (id: string) => void;
   approveReview: (id: string) => void;
@@ -36,82 +40,6 @@ export const useReviewModeration = () => {
   return context;
 };
 
-const initialMockReviews: Review[] = [
-  { 
-    id: '1', 
-    user: 'Mehedi Rahman', 
-    product: 'Samsung Galaxy S25 Ultra', 
-    store: 'TechZone BD', 
-    rating: 1, 
-    comment: '"This phone is absolute garbage. The seller is a cheat and scammer. I will make sure everyone knows this shop is a fraud. Complete waste of money and time..."', 
-    status: 'Flagged', 
-    reports: 4, 
-    flags: ['Personal Threats', 'Abusive Language'],
-    isAuthentic: false,
-    authenticityScore: 25,
-    authenticityReason: 'Contains abusive vocabulary and highly repetitive fraud accusations.',
-    timestamp: '2026-06-12T14:10:00Z'
-  },
-  { 
-    id: '2', 
-    user: 'Anonymous K.', 
-    product: 'Walton 2-Door Fridge', 
-    store: 'ElectroBD', 
-    rating: 5, 
-    comment: '"Amazing product! Buy from this link: [bit.ly/xyz] for best price! This seller is the best. Everyone should buy here. [Affiliate link spam suspected]"', 
-    status: 'Flagged', 
-    reports: 2, 
-    flags: ['External Links', 'Suspected Spam'],
-    isAuthentic: false,
-    authenticityScore: 10,
-    authenticityReason: 'Detected shortened external hyperlink [bit.ly] indicating commercial click hijacking.',
-    timestamp: '2026-06-11T11:30:00Z'
-  },
-  { 
-    id: '3', 
-    user: 'Rifat Hasan', 
-    product: 'Aarong Jamdani Saree', 
-    store: 'Aarong Digital', 
-    rating: 3, 
-    comment: '"Fabric quality is good but delivery took 5 days longer than promised. The color was slightly different but acceptable. Would buy again."', 
-    status: 'Published', 
-    reports: 0,
-    isAuthentic: true,
-    authenticityScore: 98,
-    authenticityReason: 'Balanced tone, specific criticism matching logistics delays. High authenticity index.',
-    timestamp: '2026-06-10T09:12:00Z'
-  },
-  {
-    id: '4',
-    user: 'Sultana Ahmed',
-    product: 'Aarong Silk Panjabi',
-    store: 'Aarong Digital',
-    rating: 5,
-    comment: 'absolutely stunning design and pure silk fabric!!! highly recommended and great customer service from the store representative!',
-    status: 'Published',
-    reports: 0,
-    isAuthentic: true,
-    authenticityScore: 92,
-    authenticityReason: 'Organic sentence structure, verified buyer credentials verified.',
-    timestamp: '2026-06-09T18:00:00Z'
-  },
-  {
-    id: '5',
-    user: 'Hasan Al-Amin',
-    product: 'Apex Mens Formal Leather',
-    store: 'Apex Shoes',
-    rating: 5,
-    comment: 'CHEAP CHEAP CHEAP!!! BUY HERE INSTEAD OF THAT OTHER BRAND!!! http://spam-store.info/apex-shoes super fast shipment, discount code: BIGPROMO',
-    status: 'pending',
-    reports: 1,
-    flags: ['Suspected Spam'],
-    isAuthentic: false,
-    authenticityScore: 15,
-    authenticityReason: 'Aggressive block capitals, external links, promotional coupon advertisement.',
-    timestamp: '2026-06-12T15:30:00Z'
-  }
-];
-
 // Map store names to TrustCenter entity IDs for integrated reputation scoring
 const getStoreEntityDetails = (storeName: string): { type: TrustEntityType; id: string; name: string } => {
   const nameLower = storeName.toLowerCase();
@@ -129,10 +57,10 @@ const getStoreEntityDetails = (storeName: string): { type: TrustEntityType; id: 
 export const ReviewModerationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { addTrustEvent } = useTrust();
   const { loading: authLoading, profile } = useAuth();
-  const [reviews, setReviews] = useState<Review[]>(() => {
-    const saved = localStorage.getItem('choosify_moderation_reviews');
-    return saved ? JSON.parse(saved) : initialMockReviews;
-  });
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const canModerate = profile?.role === 'admin' || profile?.role === 'super_admin' || profile?.role === 'moderator';
 
   const [toasts, setToasts] = useState<Toast[]>([]);
 
@@ -147,11 +75,6 @@ export const ReviewModerationProvider: React.FC<{ children: React.ReactNode }> =
   const removeToast = (id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id));
   };
-
-  // Persist reviews to local storage
-  useEffect(() => {
-    localStorage.setItem('choosify_moderation_reviews', JSON.stringify(reviews));
-  }, [reviews]);
 
   const mapOpsReview = (row: OpsReview): Review => ({
     id: row.id,
@@ -184,20 +107,35 @@ export const ReviewModerationProvider: React.FC<{ children: React.ReactNode }> =
   // Pre-commit audit follow-up: fired unconditionally on every mount, racing
   // AuthContext's async session bootstrap and producing a spurious first-paint
   // 401 for every role including admin. Wait for a resolved session.
+  //
+  // Sprint 11 (BUG-3-04): a seller/creator viewer only gets reviews for their
+  // own products (backend enforces this too -- this is not just a UI filter).
+  // Reviews now load exclusively from the real API; there is no local/mock
+  // fallback, so a load failure is a real, visible error rather than silently
+  // showing stale or fabricated data.
   useEffect(() => {
     if (authLoading || !profile) return;
+    let cancelled = false;
+    const isSellerOrCreator = profile.role === 'seller' || profile.role === 'creator';
+    setIsLoading(true);
+    setLoadError(null);
     operationsApi
-      .listReviews()
+      .listReviews(isSellerOrCreator ? { sellerId: profile.id } : undefined)
       .then((apiReviews) => {
-        if (!apiReviews.length) return;
-        setReviews((prev) => {
-          const mapped = apiReviews.map(mapOpsReview);
-          const existingIds = new Set(prev.map((review) => review.id));
-          const merged = [...mapped.filter((review) => !existingIds.has(review.id)), ...prev];
-          return merged;
-        });
+        if (cancelled) return;
+        setReviews(apiReviews.map(mapOpsReview));
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (cancelled) return;
+        setLoadError(err instanceof Error ? err.message : 'Failed to load reviews.');
+        setReviews([]);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [authLoading, profile]);
 
   // Approve review (move from pending/flagged to Published)
@@ -435,6 +373,9 @@ export const ReviewModerationProvider: React.FC<{ children: React.ReactNode }> =
     <ReviewModerationContext.Provider value={{
       reviews,
       toasts,
+      isLoading,
+      loadError,
+      canModerate,
       showToast,
       removeToast,
       approveReview,

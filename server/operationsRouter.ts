@@ -576,7 +576,7 @@ function userCanListOrders(
 /** Internal reviews list: own reviews via userId, or staff/moderator for everything. */
 function userCanListReviews(
   req: { userId?: string; userRole?: (typeof ROLES)[keyof typeof ROLES] },
-  filter: { userId?: string },
+  filter: { userId?: string; sellerId?: string },
 ): boolean {
   if (userIsStaff(req)) return true;
   const role = req.userRole;
@@ -584,6 +584,13 @@ function userCanListReviews(
   const userId = req.userId;
   if (!userId) return false;
   if (filter.userId) return filter.userId === userId;
+  if (
+    filter.sellerId &&
+    role &&
+    (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER) || hasRole(role, ROLES.CREATOR))
+  ) {
+    return filter.sellerId === userId;
+  }
   return false;
 }
 
@@ -2751,26 +2758,43 @@ operationsRouter.post(
   },
 );
 
-operationsRouter.get('/operations/reviews', ...requireAuth, (req, res) => {
+operationsRouter.get('/operations/reviews', ...requireAuth, async (req, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : '';
   const productId = typeof req.query.productId === 'string' ? req.query.productId : '';
   let userId = typeof req.query.userId === 'string' ? req.query.userId : undefined;
+  const sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
 
-  if (!userCanListReviews(req, { userId })) {
+  if (!userCanListReviews(req, { userId, sellerId })) {
     if (!userId && req.userId && !userIsStaff(req) && !(req.userRole && hasRole(req.userRole, ROLES.MODERATOR))) {
       userId = req.userId;
     }
-    if (!userCanListReviews(req, { userId })) {
+    if (!userCanListReviews(req, { userId, sellerId })) {
       res.status(403).json({ error: 'Not authorized to list these reviews' });
       return;
     }
   }
 
-  const reviews = operationsStore.listReviews({
+  let reviews = operationsStore.listReviews({
     status: status || undefined,
     productId: productId || undefined,
     userId: userId || undefined,
   });
+
+  // Sprint 11 (BUG-3-04): reviews don't carry sellerId directly, so a
+  // seller-scoped request ("reviews on MY products") is resolved dynamically
+  // via each review's product ownership. Cross-seller isolation: a seller's
+  // own userId is the only value that can satisfy `sellerId === userId`
+  // above, so this can never return another seller's reviews.
+  if (sellerId) {
+    const ownedFlags = await Promise.all(
+      reviews.map(async (r) => {
+        const product = await catalogStore.getProduct(r.productId).catch(() => null);
+        return product?.sellerId === sellerId;
+      }),
+    );
+    reviews = reviews.filter((_, i) => ownedFlags[i]);
+  }
+
   res.json({ data: reviews });
 });
 

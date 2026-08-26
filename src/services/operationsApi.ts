@@ -376,8 +376,9 @@ export const operationsApi = {
     return result.data;
   },
 
-  listReviews: async (): Promise<OpsReview[]> => {
-    const result = await request<{ data: OpsReview[] }>('/operations/reviews');
+  listReviews: async (filter?: { sellerId?: string }): Promise<OpsReview[]> => {
+    const qs = filter?.sellerId ? `?sellerId=${encodeURIComponent(filter.sellerId)}` : '';
+    const result = await request<{ data: OpsReview[] }>(`/operations/reviews${qs}`);
     return result.data;
   },
   updateReview: async (id: string, payload: Partial<OpsReview>): Promise<OpsReview> => {

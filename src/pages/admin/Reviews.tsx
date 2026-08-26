@@ -33,6 +33,9 @@ export default function ReviewsPage() {
   const {
     reviews,
     toasts,
+    isLoading,
+    loadError,
+    canModerate,
     removeToast,
     approveReview,
     rejectReview,
@@ -214,7 +217,23 @@ export default function ReviewsPage() {
 
   return (
     <div className="space-y-6 text-app-text-primary font-sans animate-in fade-in duration-300">
-      
+
+      {isLoading && (
+        <div className="rounded-xl border border-app-border bg-app-card px-4 py-3 text-[12px] text-app-text-secondary">
+          Loading reviews…
+        </div>
+      )}
+      {!isLoading && loadError && (
+        <div className="rounded-xl border border-rose-300/50 bg-rose-50 px-4 py-3 text-[12px] text-rose-600">
+          Failed to load reviews: {loadError}
+        </div>
+      )}
+      {!isLoading && !canModerate && (
+        <div className="rounded-xl border border-app-border bg-app-card px-4 py-3 text-[12px] text-app-text-secondary">
+          You're viewing reviews for your own products. Approve/reject actions are handled by Choosify staff.
+        </div>
+      )}
+
       {/* Toast Overlay */}
       <div className="fixed bottom-6 right-6 z-50 space-y-2 pointer-events-none max-w-sm">
         <AnimatePresence>
@@ -443,8 +462,10 @@ export default function ReviewsPage() {
         </div>
       </div>
 
-      {/* Bulk actions bar */}
-      {selectedIds.size > 0 && (
+      {/* Bulk actions bar -- moderation actions are staff-only; a seller's status
+          change is silently dropped server-side, so hide rather than show a
+          button that would appear to work but do nothing. */}
+      {selectedIds.size > 0 && isAdmin && (
         <div className="bg-app-card text-app-text-primary px-4 py-3 rounded-xl flex items-center justify-between gap-3 text-[12px] font-bold border border-app-border shadow-lg animate-fade-in">
           <div className="flex items-center gap-3 flex-wrap">
             <span className="bg-app-accent/20 text-app-accent-light px-2.5 py-1 rounded-lg font-mono text-[11px]">
