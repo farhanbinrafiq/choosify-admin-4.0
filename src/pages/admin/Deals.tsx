@@ -18,8 +18,9 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { catalogApi } from '../../services/catalogApi';
+import { StatTile } from '../../components/ui/StatTile';
 import type { CatalogDeal } from '../../types/catalog';
 
 // Deals now use the real catalog contract — the client is the source of truth
@@ -45,14 +46,18 @@ const capitalize = (value: string) => (value ? value.charAt(0).toUpperCase() + v
 
 export default function DealsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = searchParams.get('tab') === 'promocodes' ? 'promo_codes' : 'deals';
-  const [activeTab, setActiveTab] = useState<'deals' | 'promo_codes'>(initialTab);
+  const navigate = useNavigate();
+  // Group 2: this page manages Deals only. Promo codes / vouchers have their
+  // own real, Operations-backed surface at /admin/coupons — the former
+  // in-page "Promo Code Manager" tab was local mock data and has been retired.
+  // activeTab stays a union for the legacy render branches but is pinned to 'deals'.
+  const [activeTab] = useState<'deals' | 'promo_codes'>('deals');
 
   useEffect(() => {
-    const urlTab = searchParams.get('tab');
-    if (urlTab === 'promocodes' && activeTab !== 'promo_codes') setActiveTab('promo_codes');
-    if (urlTab !== 'promocodes' && activeTab !== 'deals') setActiveTab('deals');
-  }, [searchParams]);
+    if (searchParams.get('tab') === 'promocodes') {
+      navigate('/admin/coupons', { replace: true });
+    }
+  }, [searchParams, navigate]);
 
   // Deals are loaded from the real catalog API (GET /catalog/deals) — no more local seed data.
   const [deals, setDeals] = useState<Deal[]>([]);
@@ -328,15 +333,6 @@ export default function DealsPage() {
       expiring48h: rawDeals.filter(d => d.computedStatus === 'expiring').length
     };
   }, [deals]);
-
-  // Compute promo code statistics
-  const promoStats = useMemo(() => {
-    const total = promoCodes.length;
-    const active = promoCodes.filter(p => p.active && !isPromoExpired(p)).length;
-    const expired = promoCodes.filter(isPromoExpired).length;
-    const totalUses = promoCodes.reduce((sum, p) => sum + p.usedCount, 0);
-    return { total, active, expired, totalUses };
-  }, [promoCodes]);
 
   // Extract all categories currently tracked inside our database catalog
   const uniqueCategories = useMemo(() => {
@@ -616,27 +612,25 @@ export default function DealsPage() {
     }
   };
 
-  // Toggle active tab settings and reset some UI states
+  // Deals-only page now; the Promo Code tab redirects to /admin/coupons.
   const switchTab = (tab: 'deals' | 'promo_codes') => {
-    setActiveTab(tab);
+    if (tab === 'promo_codes') {
+      navigate('/admin/coupons');
+      return;
+    }
     setSearchTerm('');
     setSelectedIds([]);
-    setSearchParams(tab === 'promo_codes' ? { tab: 'promocodes' } : {});
+    setSearchParams({});
   };
 
   const isFormActive = isAdding || editingDeal || isAddingPromo || editingPromo;
 
-  // Render metric items dynamically depending on activeTab
-  const metrics = activeTab === 'deals' ? [
-    { label: 'Total Deals', val: computedStats.total, color: 'border-l-[#FF5B00]' },
-    { label: 'Live Deals', val: computedStats.live, color: 'border-l-green-600' },
-    { label: 'Pending Approval', val: computedStats.pending, color: 'border-l-orange-400' },
-    { label: 'Expiring 48h', val: computedStats.expiring48h, color: 'border-l-red-600' },
-  ] : [
-    { label: 'Total Promo Codes', val: promoStats.total, color: 'border-l-[#FF5B00]' },
-    { label: 'Active Promotions', val: promoStats.active, color: 'border-l-green-600' },
-    { label: 'Expired Promo Codes', val: promoStats.expired, color: 'border-l-red-600' },
-    { label: 'Code Redemptions', val: promoStats.totalUses, color: 'border-l-indigo-600' },
+  // Real, deals-derived metrics only (no fabricated promo-code stats).
+  const metrics: Array<{ label: string; val: number; accent: 'orange' | 'emerald' | 'rose' }> = [
+    { label: 'Total Deals', val: computedStats.total, accent: 'orange' },
+    { label: 'Live Deals', val: computedStats.live, accent: 'emerald' },
+    { label: 'Pending Approval', val: computedStats.pending, accent: 'orange' },
+    { label: 'Expiring 48h', val: computedStats.expiring48h, accent: 'rose' },
   ];
 
   return (
@@ -656,23 +650,17 @@ export default function DealsPage() {
         </button>
         <button
           onClick={() => switchTab('promo_codes')}
-          className={`px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer flex items-center gap-2 outline-none ${
-            activeTab === 'promo_codes'
-              ? 'border-[#FF5B00] text-[#FF5B00]'
-              : 'border-transparent text-gray-500 hover:text-[#FF5B00]'
-          }`}
+          className="px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 border-transparent text-gray-500 hover:text-[#FF5B00] transition-all cursor-pointer flex items-center gap-2 outline-none"
+          title="Promo codes & vouchers are managed on their own page"
         >
-          🎟️ Promo Code Manager
+          🎟️ Promo Codes &amp; Vouchers <ExternalLink className="w-3 h-3" />
         </button>
       </div>
 
-      {/* Dynamic top metrics bar cards updated depend on activeTab */}
+      {/* Real deals-derived metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {metrics.map(s => (
-          <div key={s.label} className={`bg-white p-4 rounded-xl border-l-[3px] shadow-sm ${s.color} text-left`}>
-             <div className="text-2xl font-bold text-[#111827]">{s.val}</div>
-             <div className="text-[10px] text-gray-400 uppercase font-bold mt-0.5">{s.label}</div>
-          </div>
+          <StatTile key={s.label} label={s.label} value={s.val} accent={s.accent} />
         ))}
       </div>
 
@@ -810,7 +798,7 @@ export default function DealsPage() {
                      <th className="p-4">Seller</th>
                      <th className="p-4">Discount</th>
                      <th className="p-4">Expires</th>
-                     <th className="p-4 animate-pulse">Clicks</th>
+                     <th className="p-4">Clicks</th>
                      <th className="p-4">Status</th>
                      <th className="p-4 text-right">Actions</th>
                    </tr>
@@ -842,7 +830,7 @@ export default function DealsPage() {
                           <td className={`p-4 text-[10px] flex items-center gap-1.5 mt-2.5 ${isExpiring ? 'text-red-650' : 'text-gray-400'}`}>
                             {isExpiring && <Clock className="w-3.5 h-3.5" />} {getExpiryDisplay(deal.validUntil)}
                           </td>
-                          <td className="p-4 text-[11px] font-medium text-gray-700">{deal.clicks.toLocaleString()}</td>
+                          <td className="p-4 text-[11px] font-medium text-gray-700">{deal.clicks ? deal.clicks.toLocaleString() : '—'}</td>
                           <td className="p-4">
                             <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold border uppercase tracking-tighter ${getStatusBadgeStyleAndClasses(dynamicStatus)}`}>
                               {capitalize(dynamicStatus)}
