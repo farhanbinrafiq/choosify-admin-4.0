@@ -96,6 +96,35 @@ If a changed route resolves to a known Gen-1 component, the deploy is **FAILED**
 unless that route is an explicitly documented temporary exception approved by the
 product owner.
 
+### 6. Mandatory local-preview workflow for every UI restoration
+
+No dashboard UI restoration is committed or deployed before local visual
+approval, whenever the page can reasonably be previewed locally. The required
+sequence for each Sprint 13 surface (Categories, Orders, Messages, Finance,
+Logistics, …) is:
+
+```
+local restoration → local visual approval → local functional regression
+  → commit / push → production deploy → production regression
+```
+
+- **local restoration** — apply the presentation-only change in the local clone
+  (`D:\Choosify Projects\choosify-admin-4.0`); do not touch APIs, contexts, auth,
+  routes, handlers, or business logic.
+- **local visual approval** — run the repo's own dev command
+  (`npm run dev`, served on `http://localhost:3001`) and compare the surface
+  side-by-side against `design-reference/Choosify Admin CMS (standalone).html`.
+  The product owner signs off on the visuals before anything is committed.
+- **local functional regression** — exercise the surface's real API/handler
+  contract against the local server with synthetic (`ZZZ_PROBE_`) data only, then
+  clean the fixtures up and confirm the data returned to baseline.
+- **commit / push** — presentation-only diff, functional layer unchanged.
+- **production deploy** — normal `deploy-admin.sh` dry-run then real.
+- **production regression** — non-destructive (read-only) checks on the live
+  surface after deploy.
+
+One surface per commit; the full pipeline runs for each.
+
 ## Surfaces covered
 
 Orders, Messages, Products & Inventory, Brands / Seller Management,

@@ -12,3 +12,6 @@ src/cms-mirror/_reference/
 .vercel
 .env*
 .data/
+.local-pg/
+# Approved UI reference - local only, never commit/deploy
+design-reference/
