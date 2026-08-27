@@ -370,6 +370,31 @@ const AdminAreaEntry: React.FC = () => <CmsMirrorHost />;
 
 const ContentStudioEntry: React.FC = () => <CmsMirrorHost />;
 
+/**
+ * Products & Inventory list (/admin/products).
+ * Seller → migrated React surface (AdminWorkspaceLayout chrome), backed by the
+ *   canonical catalog API with server-side ownership scoping.
+ * Admin / Super Admin / everyone else → unchanged CmsMirrorHost catalog
+ *   management (richer admin catalog tooling not yet ported).
+ * Rollback: delete this component + its route; /admin/products falls straight
+ * back through the /admin/* catch-all to CmsMirrorHost, no backend change.
+ */
+const ProductsListEntry: React.FC = () => {
+  const { profile } = useAuth();
+  if (profile?.role === 'seller') {
+    return (
+      <AdminWorkspaceLayout>
+        <MarketplaceAccessGate>
+          <Suspense fallback={routeSuspenseFallback}>
+            <Products />
+          </Suspense>
+        </MarketplaceAccessGate>
+      </AdminWorkspaceLayout>
+    );
+  }
+  return <CmsMirrorHost />;
+};
+
 const ForcePasswordChangeGate: React.FC = () => {
   const { profile, loading, mustChangePassword } = useAuth();
   if (loading) return null;
@@ -627,10 +652,23 @@ export default function App() {
             />
 
             {/*
-              Product Visual Builder — surgical cutover ONLY for single-product editor.
-              /admin/products (Products & Inventory Management) stays on CmsMirrorHost.
-              Rollback: remove these two routes; Edit falls back to in-iframe Product Studio.
+              Product Visual Builder — single-product editor (create + edit).
+              The /admin/products LIST is now migrated for sellers too (see
+              ProductsListEntry); admin/staff catalog management still uses
+              CmsMirrorHost. Registered BEFORE the /admin/* catch-all.
+              Rollback: remove the /admin/products route + ProductsListEntry;
+              the list falls back to CmsMirrorHost with no backend change.
             */}
+            <Route
+              path="/admin/products"
+              element={
+                <ProtectedRoute>
+                  <ProductVisualBuilderRoleGate>
+                    <ProductsListEntry />
+                  </ProductVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/admin/products/new"
               element={
