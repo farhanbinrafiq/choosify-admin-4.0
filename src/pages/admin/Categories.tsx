@@ -4,16 +4,14 @@ import { CategoryType } from '../../types';
 import { catalogApi } from '../../services/catalogApi';
 import type { CatalogCategoryAttribute } from '../../types/catalog';
 import {
-  Folder, FolderOpen, ChevronRight, ChevronDown, Plus, Trash2,
-  Save, X, Search, ArrowUp, ArrowDown, Upload, Download, ToggleLeft,
-  ToggleRight, Settings, AlertTriangle, Layers, Smartphone,
+  Folder, ChevronRight, ChevronDown, Plus, Trash2,
+  Save, X, Search, ArrowUp, ArrowDown, Upload, Download,
+  Settings, AlertTriangle, Smartphone,
   Shirt, Home, Briefcase, Grid, Database,
   Undo2, Redo2, Gem, Gamepad2,
-  Monitor, Utensils, Tv, Baby, Eye, EyeOff,
+  Monitor, Utensils, Tv, Baby,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { StatTile } from '../../components/ui/StatTile';
-import { Badge } from '../../components/ui/Badge';
 import { Modal } from '../../components/ui/Modal';
 
 // Supported Lucide Icons for Categorization
@@ -28,25 +26,28 @@ const AVAILABLE_ICONS = [
   { name: 'Tv', label: 'TV & Appliances', icon: Tv },
   { name: 'Home', label: 'Home & Living', icon: Home },
   { name: 'Baby', label: 'Baby & Maternity', icon: Baby },
-  { name: 'Layers', label: 'Layers & Fabric', icon: Layers },
+  { name: 'Layers', label: 'Layers & Fabric', icon: Grid },
   { name: 'Briefcase', label: 'Office & Work', icon: Briefcase },
   { name: 'Grid', label: 'Grid / General', icon: Grid },
   { name: 'Database', label: 'Data & Utilities', icon: Database },
   { name: 'Folder', label: 'Standard Folder', icon: Folder },
 ];
 
-// Helper to resolve the icon component
 const getIconComponent = (name: string) => {
   const match = AVAILABLE_ICONS.find(i => i.name === name);
   return match ? match.icon : Folder;
 };
 
 /**
- * Categories Management Component for Choosify.bd Admin Dashboard.
- * Sprint 13: recomposed onto the current light dashboard design system.
- * Functional contract unchanged — hierarchical tree, real-time edit form,
- * slug generator, bulk actions, Undo/Redo, JSON import/export, and the
- * canonical catalogApi attribute-schema editor are all preserved verbatim.
+ * Category Management Studio.
+ *
+ * Sprint 13 UI regression lock: PRESENTATION follows the approved reference
+ * (`design-reference/Choosify Admin CMS (standalone).html` → `isCategories`).
+ * FUNCTIONALITY is the current canonical layer — unchanged from 03711be:
+ * useAuth() category CRUD/reorder/import, catalogApi.*CategoryAttribute,
+ * Undo/Redo history, circular-parent guard, slug generation, JSON import/export.
+ * Reference-only fields with no CategoryType column (Category Photo, Featured
+ * Brand) render as clearly-disabled placeholders and persist nothing.
  */
 export default function CategoriesPage() {
   const {
@@ -60,22 +61,14 @@ export default function CategoriesPage() {
     importCategories,
   } = useAuth();
 
-  // Selected state for category editor
   const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  // Tab control on Mobile Layouts: 'tree' | 'editor'
   const [activeMobileTab, setActiveMobileTab] = useState<'tree' | 'editor'>('tree');
-
-  // Search filter query
   const [searchQuery, setSearchQuery] = useState('');
-
-  // Expanded node state tracker (by Category ID)
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
     'cat-fashion': true,
     'cat-mobile': true,
   });
 
-  // Editor form state
   const [formName, setFormName] = useState('');
   const [formSlug, setFormSlug] = useState('');
   const [formIcon, setFormIcon] = useState('Folder');
@@ -83,26 +76,20 @@ export default function CategoriesPage() {
   const [formParentId, setFormParentId] = useState<string | null>(null);
   const [formEnabled, setFormEnabled] = useState(true);
 
-  // Editor mode: 'edit' | 'create_child' | 'create_root'
   const [editorMode, setEditorMode] = useState<'edit' | 'create_child' | 'create_root'>('edit');
   const [targetParentId, setTargetParentId] = useState<string | null>(null);
 
-  // Undo/Redo tracking
   const [history, setHistory] = useState<CategoryType[][]>([]);
   const [historyPointer, setHistoryPointer] = useState(-1);
 
-  // Toast status
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // File import/loading states
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState(false);
 
-  // Confirmation modal state
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // Attribute schema editor (canonical catalogApi)
   const [schemaAttrs, setSchemaAttrs] = useState<CatalogCategoryAttribute[]>([]);
   const [schemaLoading, setSchemaLoading] = useState(false);
   const [attrName, setAttrName] = useState('');
@@ -111,16 +98,10 @@ export default function CategoriesPage() {
   const [attrVariant, setAttrVariant] = useState(false);
   const [attrOptions, setAttrOptions] = useState('');
 
-  // Skip the next auto-tracked history push — set right before an explicit
-  // Undo/Redo replays a past snapshot, since that snapshot is already in
-  // `history` and shouldn't be re-recorded as a brand-new entry.
   const skipHistoryTrackRef = useRef(false);
 
-  // Track category tree snapshots for Undo/Redo directly off the live
-  // `categories` state from AuthContext (backed by the real /catalog/categories
-  // API). This replaces re-reading a `choosify_categories` localStorage blob
-  // immediately after firing an async mutation, which raced the actual state
-  // update and could record a stale snapshot.
+  // Undo/Redo snapshot tracking off the live `categories` state (real
+  // /catalog/categories API). Unchanged from 03711be.
   useEffect(() => {
     if (!categories) return;
     if (history.length === 0) {
@@ -151,18 +132,10 @@ export default function CategoriesPage() {
     setSchemaLoading(true);
     catalogApi
       .listCategoryAttributes(selectedId)
-      .then((rows) => {
-        if (!cancelled) setSchemaAttrs(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setSchemaAttrs([]);
-      })
-      .finally(() => {
-        if (!cancelled) setSchemaLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .then((rows) => { if (!cancelled) setSchemaAttrs(rows); })
+      .catch(() => { if (!cancelled) setSchemaAttrs([]); })
+      .finally(() => { if (!cancelled) setSchemaLoading(false); });
+    return () => { cancelled = true; };
   }, [selectedId, editorMode]);
 
   const refreshSchema = async () => {
@@ -170,9 +143,7 @@ export default function CategoriesPage() {
     try {
       const rows = await catalogApi.listCategoryAttributes(selectedId);
       setSchemaAttrs(rows);
-    } catch {
-      /* keep prior */
-    }
+    } catch { /* keep prior */ }
   };
 
   const handleAddAttribute = async () => {
@@ -188,10 +159,7 @@ export default function CategoriesPage() {
         variantEligible: attrVariant,
         options:
           attrType === 'select' || attrType === 'multi_select'
-            ? attrOptions
-                .split(',')
-                .map((o) => o.trim())
-                .filter(Boolean)
+            ? attrOptions.split(',').map((o) => o.trim()).filter(Boolean)
             : [],
       });
       setAttrName('');
@@ -231,16 +199,12 @@ export default function CategoriesPage() {
     }
   };
 
-  /** Helper to trigger elegant auto-dismissing toast alerts */
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     setToast({ message, type });
-    toastTimeoutRef.current = setTimeout(() => {
-      setToast(null);
-    }, 3500);
+    toastTimeoutRef.current = setTimeout(() => setToast(null), 3500);
   };
 
-  /** Performs an Undo operation returning to the previous state */
   const handleUndo = async () => {
     if (historyPointer <= 0) return;
     const prevPointer = historyPointer - 1;
@@ -256,7 +220,6 @@ export default function CategoriesPage() {
     }
   };
 
-  /** Performs a Redo operation restoring the forward state */
   const handleRedo = async () => {
     if (historyPointer >= history.length - 1) return;
     const nextPointer = historyPointer + 1;
@@ -272,7 +235,6 @@ export default function CategoriesPage() {
     }
   };
 
-  // Sync editor form state when selection or mode changes
   useEffect(() => {
     if (editorMode === 'edit' && selectedId) {
       const cat = categories.find(c => c.id === selectedId);
@@ -302,22 +264,18 @@ export default function CategoriesPage() {
     }
   }, [selectedId, editorMode, targetParentId, categories]);
 
-  // Handle Slug auto-generation from category Name
   const handleNameChange = (val: string) => {
     setFormName(val);
     const generated = val
-      .toLowerCase()
-      .trim()
+      .toLowerCase().trim()
       .replace(/[^\w\s-]/g, '')
       .replace(/[\s_-]+/g, '-')
       .replace(/^-+|-+$/g, '');
     setFormSlug(generated);
   };
 
-  // Saving state so the submit button can't be double-clicked mid-request.
   const [savingCategory, setSavingCategory] = useState(false);
 
-  /** Save category handler */
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName.trim()) {
@@ -335,7 +293,6 @@ export default function CategoriesPage() {
         showToast(`A category named "${formName}" already exists under this parent.`, 'error');
         return;
       }
-
       if (formParentId === selectedId) {
         showToast('A category cannot be its own parent', 'error');
         return;
@@ -357,7 +314,7 @@ export default function CategoriesPage() {
           icon: formIcon,
           description: formDescription,
           parentId: formParentId,
-          enabled: formEnabled
+          enabled: formEnabled,
         });
         showToast('Category updated successfully', 'success');
       } catch (error) {
@@ -374,7 +331,6 @@ export default function CategoriesPage() {
         showToast(`A category named "${formName}" already exists under this level.`, 'error');
         return;
       }
-
       setSavingCategory(true);
       try {
         const newCat = await createCategory(formParentId, formName.trim(), formIcon, formDescription);
@@ -389,7 +345,6 @@ export default function CategoriesPage() {
     }
   };
 
-  /** Deletion sequence with guard checks */
   const handleDeleteTrigger = (id: string) => {
     const hasChildren = categories.some(c => c.parentId === id);
     if (hasChildren) {
@@ -419,15 +374,12 @@ export default function CategoriesPage() {
     }
   };
 
-  /** Moves a category node using standard arrow navigation */
   const handleMoveNode = async (id: string, direction: 'up' | 'down') => {
     const item = categories.find(c => c.id === id);
     if (!item) return;
-
     const siblings = categories
       .filter(c => c.parentId === item.parentId)
       .sort((a, b) => a.displayOrder - b.displayOrder);
-
     const index = siblings.findIndex(s => s.id === id);
     if (direction === 'up' && index > 0) {
       try {
@@ -446,7 +398,6 @@ export default function CategoriesPage() {
     }
   };
 
-  /** Bulk action: Global Toggle */
   const [togglingAll, setTogglingAll] = useState(false);
 
   const handleToggleAll = async () => {
@@ -463,17 +414,16 @@ export default function CategoriesPage() {
     }
   };
 
-  /** Bulk action: Export JSON taxonomy file */
   const handleExportJSON = () => {
     setExporting(true);
     try {
-      const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(categories, null, 2));
-      const downloadAnchor = document.createElement('a');
-      downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", "choosify_bd_category_taxonomy.json");
-      document.body.appendChild(downloadAnchor);
-      downloadAnchor.click();
-      downloadAnchor.remove();
+      const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(categories, null, 2));
+      const a = document.createElement('a');
+      a.setAttribute('href', dataStr);
+      a.setAttribute('download', 'choosify_bd_category_taxonomy.json');
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
       showToast('Taxonomy JSON exported successfully', 'success');
     } catch (e) {
       showToast('Failed to export taxonomy', 'error');
@@ -482,11 +432,9 @@ export default function CategoriesPage() {
     }
   };
 
-  /** Bulk action: Import JSON taxonomy file */
   const handleImportJSON = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setImporting(true);
     const reader = new FileReader();
     reader.onload = async (event) => {
@@ -507,13 +455,11 @@ export default function CategoriesPage() {
     reader.readAsText(file);
   };
 
-  // Toggle tree node expanded state
   const toggleNode = (nodeId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     setExpandedNodes(prev => ({ ...prev, [nodeId]: !prev[nodeId] }));
   };
 
-  // Search filter implementation
   const filteredCategories = categories.filter(c => {
     if (!searchQuery) return true;
     return (
@@ -523,129 +469,91 @@ export default function CategoriesPage() {
     );
   });
 
-  // Top level categories to start the recursive tree
   const rootNodes = filteredCategories.filter(c => c.parentId === null);
 
-  // Return full hierarchy breadcrumb of selected category
   const getBreadcrumb = (catId: string | null): string => {
     if (!catId) return 'Taxonomy Root';
     const path: string[] = [];
     let currentId: string | null = catId;
     while (currentId !== null) {
       const match = categories.find(c => c.id === currentId);
-      if (match) {
-        path.unshift(match.name);
-        currentId = match.parentId;
-      } else {
-        break;
-      }
+      if (match) { path.unshift(match.name); currentId = match.parentId; } else break;
     }
     return path.join(' › ');
   };
 
-  // Honest, categories-derived counts (no simulated product totals).
-  const catStats = React.useMemo(() => ({
-    total: categories.length,
-    enabled: categories.filter(c => c.enabled).length,
-    hidden: categories.filter(c => !c.enabled).length,
-  }), [categories]);
+  const childrenOf = (id: string | null) => categories.filter(c => c.parentId === id);
 
-  // Tree Node recursive renderer
+  // ── Hierarchy: approved reference renders flat "cards". We keep the real
+  // expand/collapse + depth indent as an integrated affordance the prototype
+  // omitted (per the regression lock: never drop working functionality).
   const renderTreeNode = (cat: CategoryType, depth = 0) => {
-    const children = filteredCategories.filter(c => c.parentId === cat.id);
+    const kids = filteredCategories.filter(c => c.parentId === cat.id);
     const isExpanded = !!expandedNodes[cat.id];
     const isSelected = selectedId === cat.id && editorMode === 'edit';
-    const IconComponent = getIconComponent(cat.icon);
+    const Icon = getIconComponent(cat.icon);
 
     return (
       <div key={cat.id} className="select-none" id={`node-${cat.id}`}>
         <div
-          onClick={() => {
-            setSelectedId(cat.id);
-            setEditorMode('edit');
-            setActiveMobileTab('editor');
-          }}
-          style={{ paddingLeft: `${Math.max(8, depth * 16)}px` }}
-          className={`group flex items-center justify-between py-2 px-2.5 rounded-lg transition-all cursor-pointer border ${
+          onClick={() => { setSelectedId(cat.id); setEditorMode('edit'); setActiveMobileTab('editor'); }}
+          style={{ marginLeft: depth ? `${depth * 14}px` : undefined }}
+          className={`group flex items-center gap-2.5 px-3.5 py-3 rounded-lg cursor-pointer border transition-colors ${
             isSelected
-              ? 'bg-app-accent/10 border-app-accent/40 text-app-accent'
-              : 'border-transparent hover:bg-slate-50 text-app-text-primary'
+              ? 'bg-app-accent/10 border-app-accent/45 text-app-accent'
+              : 'bg-white border-app-border hover:border-app-accent/30 text-app-text-primary'
           }`}
         >
-          <div className="flex items-center gap-2 min-w-0">
-            <button
-              onClick={(e) => toggleNode(cat.id, e)}
-              className="p-1 rounded-md hover:bg-slate-200/70 transition-colors text-app-text-muted"
-            >
-              {children.length > 0 ? (
-                isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />
-              ) : (
-                <span className="block w-3.5 h-3.5 rounded-full bg-slate-200 flex items-center justify-center">
-                  <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                </span>
-              )}
-            </button>
+          <button
+            onClick={(e) => toggleNode(cat.id, e)}
+            className="shrink-0 text-app-text-muted hover:text-app-text-primary"
+            aria-label={isExpanded ? 'Collapse' : 'Expand'}
+          >
+            {kids.length > 0
+              ? (isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />)
+              : <span className="block w-1.5 h-1.5 rounded-full bg-app-text-muted/60" />}
+          </button>
 
-            <IconComponent className={`w-4 h-4 shrink-0 ${cat.enabled ? 'text-app-accent' : 'text-app-text-muted'}`} />
+          <Icon className={`w-4 h-4 shrink-0 ${cat.enabled ? '' : 'opacity-40'}`} />
 
-            <span className={`text-xs font-semibold truncate ${!cat.enabled ? 'line-through text-app-text-muted' : ''}`}>
-              {cat.name}
-            </span>
-            {!cat.enabled && <Badge variant="neutral">hidden</Badge>}
-          </div>
+          <span className={`flex-1 min-w-0 truncate text-[12.5px] font-bold ${!cat.enabled ? 'line-through text-app-text-muted' : ''}`}>
+            {cat.name}
+          </span>
 
-          <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0 pl-2">
-            <button
-              onClick={(e) => { e.stopPropagation(); handleMoveNode(cat.id, 'up'); }}
-              className="p-1 rounded-md text-app-text-muted hover:text-app-text-primary hover:bg-slate-100 transition-all"
-              title="Move Up"
-            >
+          {/* Retained controls — no reference equivalent; subtle, hover-revealed */}
+          <span className="shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={(e) => { e.stopPropagation(); handleMoveNode(cat.id, 'up'); }} title="Move up" className="p-1 rounded text-app-text-muted hover:text-app-text-primary hover:bg-slate-100">
               <ArrowUp className="w-3 h-3" />
             </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleMoveNode(cat.id, 'down'); }}
-              className="p-1 rounded-md text-app-text-muted hover:text-app-text-primary hover:bg-slate-100 transition-all"
-              title="Move Down"
-            >
+            <button onClick={(e) => { e.stopPropagation(); handleMoveNode(cat.id, 'down'); }} title="Move down" className="p-1 rounded text-app-text-muted hover:text-app-text-primary hover:bg-slate-100">
               <ArrowDown className="w-3 h-3" />
             </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setTargetParentId(cat.id);
-                setEditorMode('create_child');
-                setActiveMobileTab('editor');
-              }}
-              className="p-1 rounded-md text-app-accent hover:bg-app-accent/10 transition-all"
-              title="Add Subcategory"
-            >
+            <button onClick={(e) => { e.stopPropagation(); setTargetParentId(cat.id); setEditorMode('create_child'); setActiveMobileTab('editor'); }} title="Add subcategory" className="p-1 rounded text-app-accent hover:bg-app-accent/10">
               <Plus className="w-3 h-3" />
             </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); handleDeleteTrigger(cat.id); }}
-              className="p-1 rounded-md text-rose-500 hover:text-rose-600 hover:bg-rose-50 transition-all"
-              title="Delete Category"
-            >
+            <button onClick={(e) => { e.stopPropagation(); handleDeleteTrigger(cat.id); }} title="Delete" className="p-1 rounded text-rose-500 hover:text-rose-600 hover:bg-rose-50">
               <Trash2 className="w-3 h-3" />
             </button>
-          </div>
+          </span>
         </div>
 
-        {children.length > 0 && isExpanded && (
-          <div className="mt-0.5 border-l border-app-border ml-4">
-            {children.map(child => renderTreeNode(child, depth + 1))}
+        {kids.length > 0 && isExpanded && (
+          <div className="mt-2 flex flex-col gap-2">
+            {kids.map(child => renderTreeNode(child, depth + 1))}
           </div>
         )}
       </div>
     );
   };
 
-  const inputCls =
-    'w-full px-3 py-2 text-xs bg-white border border-app-border rounded-lg text-app-text-primary placeholder:text-app-text-muted focus:outline-none focus:border-app-accent focus:ring-2 focus:ring-app-accent/15 transition-all';
-  const labelCls = 'text-[10px] font-bold uppercase tracking-widest text-app-text-secondary block mb-1';
+  const label = 'text-[10px] font-extrabold uppercase tracking-[0.04em] text-app-text-muted block mb-1.5';
+  const field = 'w-full box-border h-10 rounded-lg border border-app-border px-3 text-[12.5px] text-app-text-primary bg-white focus:outline-none focus:border-app-accent';
+  const headBtn = 'flex items-center gap-1.5 bg-white border border-app-border rounded-lg px-4 py-2.5 text-[11.5px] font-extrabold text-app-text-primary hover:border-app-accent/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+
+  const selectedChildren = selectedId ? childrenOf(selectedId) : [];
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-4 pb-12">
       <AnimatePresence>
         {toast && (
           <motion.div
@@ -662,7 +570,6 @@ export default function CategoriesPage() {
         )}
       </AnimatePresence>
 
-      {/* Confirmation Delete Modal */}
       <Modal
         isOpen={!!deleteConfirmId}
         onClose={() => setDeleteConfirmId(null)}
@@ -671,80 +578,49 @@ export default function CategoriesPage() {
       >
         <div className="space-y-4">
           <p className="text-[12px] text-app-text-secondary leading-relaxed">
-            Delete the category{' '}
+            Delete{' '}
             <span className="font-bold font-mono text-app-text-primary">
               &quot;{categories.find(c => c.id === deleteConfirmId)?.name}&quot;
             </span>
-            ? This removes it from the catalog routing tree. This action cannot be undone.
+            ? This removes it from the catalog routing tree and cannot be undone.
           </p>
           <div className="flex justify-end gap-2">
-            <button
-              onClick={() => setDeleteConfirmId(null)}
-              className="px-4 py-2 text-xs font-bold text-app-text-secondary bg-slate-100 hover:bg-slate-200 rounded-lg transition-all"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleConfirmDelete}
-              className="px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition-all"
-            >
-              Delete category
-            </button>
+            <button onClick={() => setDeleteConfirmId(null)} className="px-4 py-2 text-xs font-bold text-app-text-secondary bg-slate-100 hover:bg-slate-200 rounded-lg">Cancel</button>
+            <button onClick={handleConfirmDelete} className="px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-lg">Delete category</button>
           </div>
         </div>
       </Modal>
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* ── Studio header ── */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-app-text-primary tracking-tight flex items-center gap-2">
-            <Layers className="w-5 h-5 text-app-accent" />
-            Category Management
-          </h1>
-          <p className="text-app-text-secondary text-[12px]">
-            Manage the hierarchical catalog taxonomy and per-category attribute schemas
-          </p>
+          <div className="flex items-center gap-2">
+            <span className="text-[16px]" aria-hidden>🗂</span>
+            <span className="text-[15.5px] font-extrabold tracking-[0.02em] text-app-text-primary">CATEGORY MANAGEMENT STUDIO</span>
+          </div>
+          <div className="text-[12px] text-app-text-secondary font-semibold mt-1">
+            Manage hierarchical taxonomy and product classification configurations for Choosify.bd
+          </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Undo/Redo — retained, integrated (no reference slot) */}
           <div className="flex bg-white border border-app-border rounded-lg p-0.5">
-            <button
-              onClick={handleUndo}
-              disabled={historyPointer <= 0}
-              className="p-2 rounded-md hover:bg-slate-100 text-app-text-secondary hover:text-app-text-primary disabled:opacity-40 disabled:hover:bg-transparent transition-all"
-              title="Undo"
-            >
+            <button onClick={handleUndo} disabled={historyPointer <= 0} title="Undo" className="p-2 rounded-md text-app-text-secondary hover:text-app-text-primary hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent">
               <Undo2 className="w-3.5 h-3.5" />
             </button>
-            <button
-              onClick={handleRedo}
-              disabled={historyPointer >= history.length - 1}
-              className="p-2 rounded-md hover:bg-slate-100 text-app-text-secondary hover:text-app-text-primary disabled:opacity-40 disabled:hover:bg-transparent transition-all"
-              title="Redo"
-            >
+            <button onClick={handleRedo} disabled={historyPointer >= history.length - 1} title="Redo" className="p-2 rounded-md text-app-text-secondary hover:text-app-text-primary hover:bg-slate-100 disabled:opacity-40 disabled:hover:bg-transparent">
               <Redo2 className="w-3.5 h-3.5" />
             </button>
           </div>
-
-          <button
-            onClick={handleToggleAll}
-            disabled={togglingAll}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-app-text-secondary bg-white border border-app-border rounded-lg hover:border-app-accent/40 hover:text-app-text-primary transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
+          <button onClick={handleToggleAll} disabled={togglingAll} className={headBtn}>
             <Settings className="w-3.5 h-3.5" />
             <span>{togglingAll ? 'Updating…' : 'Toggle Status'}</span>
           </button>
-
-          <button
-            onClick={handleExportJSON}
-            disabled={exporting}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-app-text-secondary bg-white border border-app-border rounded-lg hover:border-app-accent/40 hover:text-app-text-primary transition-all"
-          >
+          <button onClick={handleExportJSON} disabled={exporting} className={headBtn}>
             <Download className="w-3.5 h-3.5" />
             <span>{exporting ? 'Exporting…' : 'Export JSON'}</span>
           </button>
-
-          <label className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-app-accent bg-app-accent/10 border border-app-accent/20 rounded-lg hover:bg-app-accent/20 cursor-pointer transition-all">
+          <label className="flex items-center gap-1.5 bg-app-accent/10 border border-app-accent/40 rounded-lg px-4 py-2.5 text-[11.5px] font-extrabold text-app-accent hover:bg-app-accent/15 cursor-pointer transition-colors">
             <Upload className="w-3.5 h-3.5" />
             <span>{importing ? 'Importing…' : 'Import Taxonomy'}</span>
             <input type="file" accept=".json" onChange={handleImportJSON} className="hidden" disabled={importing} />
@@ -752,48 +628,31 @@ export default function CategoriesPage() {
         </div>
       </div>
 
-      {/* Real, categories-derived counts */}
-      <div className="grid grid-cols-3 gap-4">
-        <StatTile label="Total Categories" value={catStats.total} icon={Layers} accent="indigo" />
-        <StatTile label="Visible in Stores" value={catStats.enabled} icon={Eye} accent="emerald" />
-        <StatTile label="Hidden" value={catStats.hidden} icon={EyeOff} accent="slate" />
-      </div>
-
-      {/* Mobile tab switch */}
+      {/* Mobile switch */}
       <div className="flex md:hidden bg-white border border-app-border rounded-xl p-1">
-        <button
-          onClick={() => setActiveMobileTab('tree')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg text-center transition-all ${
-            activeMobileTab === 'tree' ? 'bg-app-accent text-white' : 'text-app-text-secondary'
-          }`}
-        >
-          Category Tree
-        </button>
-        <button
-          onClick={() => setActiveMobileTab('editor')}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg text-center transition-all ${
-            activeMobileTab === 'editor' ? 'bg-app-accent text-white' : 'text-app-text-secondary'
-          }`}
-        >
-          Category Editor
-        </button>
+        {(['tree', 'editor'] as const).map(t => (
+          <button
+            key={t}
+            onClick={() => setActiveMobileTab(t)}
+            className={`flex-1 py-2 text-xs font-bold rounded-lg text-center transition-colors ${
+              activeMobileTab === t ? 'bg-app-accent text-white' : 'text-app-text-secondary'
+            }`}
+          >
+            {t === 'tree' ? 'Category Tree' : 'Category Editor'}
+          </button>
+        ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
-        {/* LEFT: hierarchical tree */}
-        <div className={`md:col-span-4 bg-white border border-app-border rounded-2xl p-4 shadow-sm ${
-          activeMobileTab === 'tree' ? 'block' : 'hidden md:block'
-        }`}>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-[11px] font-black uppercase tracking-widest text-app-text-secondary">
-              Category Hierarchy
-            </h2>
+      <div className="grid grid-cols-1 gap-4 items-start md:grid-cols-[minmax(0,300px)_minmax(0,1fr)]">
+        {/* ── Left: hierarchy ── */}
+        <div className={`bg-white border border-app-border rounded-[10px] p-4 ${activeMobileTab === 'tree' ? 'block' : 'hidden md:block'}`}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[11px] font-extrabold tracking-[0.05em] text-app-text-muted">CATEGORY HIERARCHY</div>
             <button
               onClick={() => { setEditorMode('create_root'); setActiveMobileTab('editor'); }}
-              className="text-[10px] bg-app-accent/10 text-app-accent hover:bg-app-accent hover:text-white px-2 py-1 rounded-md transition-all flex items-center gap-1 font-bold"
+              className="text-[11.5px] font-extrabold text-app-accent hover:opacity-80"
             >
-              <Plus className="w-3 h-3" />
-              <span>Add Root</span>
+              + Add Root
             </button>
           </div>
 
@@ -803,48 +662,38 @@ export default function CategoriesPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search taxonomy…"
-              className="w-full pl-9 pr-8 py-2 text-xs bg-white border border-app-border rounded-lg text-app-text-primary placeholder:text-app-text-muted focus:outline-none focus:border-app-accent focus:ring-2 focus:ring-app-accent/15 transition-all"
+              placeholder="Search taxonomy rule..."
+              className="w-full box-border h-9 rounded-lg border border-app-border pl-9 pr-8 text-[12px] text-app-text-primary bg-white focus:outline-none focus:border-app-accent"
             />
             {searchQuery && (
-              <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-app-text-muted hover:text-app-text-primary"
-              >
+              <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-app-text-muted hover:text-app-text-primary">
                 <X className="w-3 h-3" />
               </button>
             )}
           </div>
 
-          <div className="space-y-1 max-h-[560px] overflow-y-auto pr-1">
+          <div className="flex flex-col gap-2 max-h-[640px] overflow-y-auto pr-1">
             {categoriesLoading && categories.length === 0 ? (
-              <div className="py-10 text-center">
-                <p className="text-[11px] text-app-text-muted">Loading category taxonomy…</p>
-              </div>
+              <div className="py-10 text-center text-[11px] text-app-text-muted">Loading category taxonomy…</div>
             ) : rootNodes.length > 0 ? (
               rootNodes.map(node => renderTreeNode(node))
             ) : (
               <div className="py-10 text-center">
-                <FolderOpen className="w-8 h-8 text-app-text-muted/50 mx-auto mb-2" />
                 <p className="text-[11px] text-app-text-muted">No matching taxonomy rules found.</p>
                 {searchQuery && (
-                  <button onClick={() => setSearchQuery('')} className="mt-2 text-[10px] text-app-accent hover:underline">
-                    Clear filter
-                  </button>
+                  <button onClick={() => setSearchQuery('')} className="mt-2 text-[10px] text-app-accent hover:underline">Clear filter</button>
                 )}
               </div>
             )}
           </div>
         </div>
 
-        {/* RIGHT: taxonomy editor */}
-        <div className={`md:col-span-8 bg-white border border-app-border rounded-2xl p-5 shadow-sm ${
-          activeMobileTab === 'editor' ? 'block' : 'hidden md:block'
-        }`}>
-          <div className="border-b border-app-border pb-3 mb-5 flex flex-wrap items-center justify-between gap-2">
+        {/* ── Right: editor ── */}
+        <div className={`bg-white border border-app-border rounded-[10px] p-5 ${activeMobileTab === 'editor' ? 'block' : 'hidden md:block'}`}>
+          <div className="flex items-center justify-between mb-4">
             <div>
-              <div className="text-[9px] font-bold text-app-text-muted uppercase tracking-widest">Breadcrumb path</div>
-              <div className="text-xs font-bold font-mono text-app-accent mt-0.5">
+              <div className="text-[10px] font-extrabold tracking-[0.05em] text-app-text-muted">BREADCRUMB PATH</div>
+              <div className="text-[13px] font-extrabold text-app-accent mt-0.5">
                 {editorMode === 'edit'
                   ? getBreadcrumb(selectedId)
                   : editorMode === 'create_child'
@@ -852,75 +701,49 @@ export default function CategoriesPage() {
                     : '[New Root Category]'}
               </div>
             </div>
-            <Badge variant={editorMode === 'edit' ? 'info' : editorMode === 'create_child' ? 'warning' : 'success'}>
-              {editorMode === 'edit' ? 'Editor Active' : editorMode === 'create_child' ? 'Subcategory Creation' : 'Root Creation'}
-            </Badge>
+            <span className="text-[9.5px] font-extrabold tracking-[0.04em] text-emerald-600">
+              {editorMode === 'edit' ? 'EDITOR ACTIVE' : editorMode === 'create_child' ? 'SUBCATEGORY CREATION' : 'ROOT CREATION'}
+            </span>
           </div>
 
-          <form onSubmit={handleSave} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <form onSubmit={handleSave} className="space-y-3.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <label className={labelCls}>Category Name <span className="text-rose-500">*</span></label>
-                <input
-                  type="text"
-                  value={formName}
-                  onChange={(e) => handleNameChange(e.target.value)}
-                  placeholder="e.g. Jamdani & Silk Sarees"
-                  className={inputCls}
-                />
+                <label className={label}>Category Name <span className="text-rose-500">*</span></label>
+                <input value={formName} onChange={(e) => handleNameChange(e.target.value)} placeholder="e.g. Jamdani &amp; Silk Sarees" className={field} />
               </div>
               <div>
-                <label className={`${labelCls} flex items-center justify-between`}>
+                <label className={`${label} flex items-center justify-between`}>
                   <span>Routing Slug</span>
-                  <span className="text-[8px] text-app-text-muted lowercase font-mono normal-case">auto-generated</span>
+                  <span className="text-[8px] normal-case text-app-text-muted font-semibold">auto-generated</span>
                 </label>
-                <input
-                  type="text"
-                  value={formSlug}
-                  onChange={(e) => setFormSlug(e.target.value)}
-                  placeholder="e.g. jamdani-silk-sarees"
-                  className={`${inputCls} font-mono`}
-                />
+                <input value={formSlug} onChange={(e) => setFormSlug(e.target.value)} placeholder="e.g. jamdani-silk-sarees" className={`${field} text-app-text-secondary`} />
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-[90px_1fr_1fr] gap-3.5">
               <div>
-                <label className={labelCls}>Taxonomy Icon</label>
-                <select value={formIcon} onChange={(e) => setFormIcon(e.target.value)} className={inputCls}>
-                  {AVAILABLE_ICONS.map(i => (
-                    <option key={i.name} value={i.name}>{i.label}</option>
+                <label className={label}>Icon</label>
+                {/* Reference uses a raw emoji input; production icon model is a
+                    named lucide component, so the working select is retained. */}
+                <select value={formIcon} onChange={(e) => setFormIcon(e.target.value)} className={`${field} px-2`}>
+                  {AVAILABLE_ICONS.map(i => <option key={i.name} value={i.name}>{i.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={label}>Parent Node</label>
+                <select value={formParentId || ''} onChange={(e) => setFormParentId(e.target.value || null)} className={field}>
+                  <option value="">[No Parent - Root Category]</option>
+                  {categories.filter(c => c.id !== selectedId).map(c => (
+                    <option key={c.id} value={c.id}>{c.name} ({c.slug})</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Parent Node</label>
-                <select
-                  value={formParentId || ''}
-                  onChange={(e) => setFormParentId(e.target.value || null)}
-                  className={inputCls}
-                >
-                  <option value="">[No Parent - Root Category]</option>
-                  {categories
-                    .filter(c => c.id !== selectedId)
-                    .map(c => (
-                      <option key={c.id} value={c.id}>{c.name} ({c.slug})</option>
-                    ))}
-                </select>
-              </div>
-              <div>
-                <label className={labelCls}>Enabled Status</label>
-                <div className="flex items-center gap-2 py-1">
-                  <button
-                    type="button"
-                    onClick={() => setFormEnabled(!formEnabled)}
-                    className="text-app-text-secondary hover:text-app-text-primary transition-colors"
-                  >
-                    {formEnabled
-                      ? <ToggleRight className="w-8 h-8 text-app-accent" />
-                      : <ToggleLeft className="w-8 h-8 text-app-text-muted" />}
-                  </button>
-                  <span className="text-xs font-bold text-app-text-primary">
+                <label className={label}>Enabled Status</label>
+                <div onClick={() => setFormEnabled(!formEnabled)} className="flex items-center gap-2 h-10 cursor-pointer select-none">
+                  <span className={`text-[20px] leading-none ${formEnabled ? 'text-app-accent' : 'text-app-text-muted'}`}>◉</span>
+                  <span className="text-[12px] font-bold text-app-text-primary">
                     {formEnabled ? 'Visible in Stores' : 'Taxonomy Hidden'}
                   </span>
                 </div>
@@ -928,46 +751,94 @@ export default function CategoriesPage() {
             </div>
 
             <div>
-              <label className={labelCls}>Category Description</label>
+              <label className={label}>Category Taxonomy Description</label>
               <textarea
                 value={formDescription}
                 onChange={(e) => setFormDescription(e.target.value)}
                 placeholder="Describe product classification, search indexing words, tags, and tax rules of this category."
                 rows={3}
-                className={inputCls}
+                className="w-full box-border rounded-lg border border-app-border px-3 py-2.5 text-[12px] text-app-text-primary bg-white focus:outline-none focus:border-app-accent resize-y"
               />
             </div>
 
-            {editorMode === 'edit' && selectedId && (
-              <div className="bg-slate-50 border border-app-border rounded-lg p-3 text-xs text-app-text-secondary flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Database className="w-4 h-4 text-app-text-muted" />
-                  <span>Category ID</span>
-                </div>
-                <span className="bg-white border border-app-border text-app-text-primary px-1.5 py-0.5 rounded font-mono text-[10px]">
-                  {selectedId}
+            {/* CATEGORY PHOTO — reference layout slot; no CategoryType field → disabled, persists nothing */}
+            <div>
+              <label className={label}>Category Photo</label>
+              <div className="w-[220px] h-[120px] rounded-lg border border-dashed border-app-border bg-slate-50 flex items-center justify-center text-center px-3">
+                <span className="text-[10px] font-semibold text-app-text-muted leading-snug">
+                  Category photos are not available in this release
                 </span>
+              </div>
+            </div>
+
+            {/* ── Subcategories (real: children of the selected category) ── */}
+            {editorMode === 'edit' && selectedId && (
+              <div className="border-t border-slate-100 pt-3.5">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className={label + ' mb-0'}>Subcategories</div>
+                  <button
+                    type="button"
+                    onClick={() => { setTargetParentId(selectedId); setEditorMode('create_child'); }}
+                    className="text-[11.5px] font-extrabold text-app-accent hover:opacity-80"
+                  >
+                    + Add Subcategory
+                  </button>
+                </div>
+                {selectedChildren.length > 0 ? (
+                  <div className="flex flex-col gap-2">
+                    {selectedChildren.map(sub => (
+                      <div key={sub.id} className="flex items-center gap-2.5 bg-slate-50 rounded-lg px-2.5 py-2">
+                        <input
+                          defaultValue={sub.name}
+                          onBlur={(e) => {
+                            const v = e.target.value.trim();
+                            if (v && v !== sub.name) {
+                              updateCategory(sub.id, { name: v }).catch((err) =>
+                                showToast(err instanceof Error ? err.message : 'Failed to rename subcategory.', 'error'),
+                              );
+                            }
+                          }}
+                          className="flex-1 min-w-0 h-8 rounded-md border border-app-border px-2.5 text-[11.5px] bg-white text-app-text-primary focus:outline-none focus:border-app-accent"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSelectedId(sub.id)}
+                          className="shrink-0 text-[10px] font-bold text-app-text-muted hover:text-app-accent"
+                        >
+                          open
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteTrigger(sub.id)}
+                          className="shrink-0 text-rose-600 hover:text-rose-700 text-[12px] font-extrabold"
+                          title="Delete subcategory"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center text-app-text-muted text-[11.5px] font-semibold italic py-3.5 border border-dashed border-app-border rounded-lg">
+                    No subcategories yet — add as many as needed.
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Canonical catalogApi attribute / variant schema */}
+            {/* ── Attribute & Variant Schema — real, canonical catalogApi; no reference slot, integrated here ── */}
             {editorMode === 'edit' && selectedId && (
-              <div className="border border-app-border rounded-lg p-3 space-y-3 bg-slate-50">
-                <div className="flex items-center justify-between gap-2">
-                  <label className="text-[10px] font-bold uppercase tracking-widest text-app-text-secondary">
-                    Attribute &amp; Variant Schema
-                  </label>
+              <div className="border-t border-slate-100 pt-3.5">
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className={label + ' mb-0'}>Attribute &amp; Variant Schema</div>
                   {schemaLoading && <span className="text-[9px] text-app-text-muted font-mono">Loading…</span>}
                 </div>
                 {schemaAttrs.length === 0 && !schemaLoading ? (
                   <p className="text-[11px] text-app-text-muted">No attributes defined for this category yet.</p>
                 ) : (
-                  <div className="space-y-1.5 max-h-44 overflow-y-auto">
+                  <div className="flex flex-col gap-1.5 max-h-44 overflow-y-auto">
                     {schemaAttrs.map((attr) => (
-                      <div
-                        key={attr.id}
-                        className="flex flex-wrap items-center justify-between gap-2 text-[11px] bg-white border border-app-border rounded-lg px-2.5 py-1.5"
-                      >
+                      <div key={attr.id} className="flex flex-wrap items-center justify-between gap-2 text-[11px] bg-slate-50 border border-app-border rounded-lg px-2.5 py-1.5">
                         <div className="min-w-0">
                           <span className="text-app-text-primary font-bold">{attr.name}</span>
                           <span className="text-app-text-muted font-mono ml-2">{attr.key}</span>
@@ -976,45 +847,17 @@ export default function CategoriesPage() {
                           {attr.variantEligible && <span className="ml-2 text-[9px] uppercase text-app-accent font-bold">Variant</span>}
                         </div>
                         <div className="flex items-center gap-1">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleAttrFlag(attr, { required: !attr.required })}
-                            className="px-2 py-0.5 text-[9px] font-bold text-app-text-secondary bg-slate-100 hover:bg-app-accent hover:text-white rounded transition-colors"
-                          >
-                            Required
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleAttrFlag(attr, { variantEligible: !attr.variantEligible })}
-                            className="px-2 py-0.5 text-[9px] font-bold text-app-text-secondary bg-slate-100 hover:bg-app-accent hover:text-white rounded transition-colors"
-                          >
-                            Variant
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveAttribute(attr)}
-                            className="px-2 py-0.5 text-[9px] font-bold text-rose-500 bg-rose-50 hover:bg-rose-100 rounded transition-colors"
-                          >
-                            Remove
-                          </button>
+                          <button type="button" onClick={() => handleToggleAttrFlag(attr, { required: !attr.required })} className="px-2 py-0.5 text-[9px] font-bold text-app-text-secondary bg-white border border-app-border hover:border-app-accent hover:text-app-accent rounded">Required</button>
+                          <button type="button" onClick={() => handleToggleAttrFlag(attr, { variantEligible: !attr.variantEligible })} className="px-2 py-0.5 text-[9px] font-bold text-app-text-secondary bg-white border border-app-border hover:border-app-accent hover:text-app-accent rounded">Variant</button>
+                          <button type="button" onClick={() => handleRemoveAttribute(attr)} className="px-2 py-0.5 text-[9px] font-bold text-rose-500 bg-rose-50 hover:bg-rose-100 rounded">Remove</button>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-app-border">
-                  <input
-                    type="text"
-                    value={attrName}
-                    onChange={(e) => setAttrName(e.target.value)}
-                    placeholder="Attribute name"
-                    className={`${inputCls} py-1.5`}
-                  />
-                  <select
-                    value={attrType}
-                    onChange={(e) => setAttrType(e.target.value as typeof attrType)}
-                    className={`${inputCls} py-1.5`}
-                  >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 mt-2 border-t border-slate-100">
+                  <input value={attrName} onChange={(e) => setAttrName(e.target.value)} placeholder="Attribute name" className="h-9 rounded-lg border border-app-border px-2.5 text-[12px] bg-white text-app-text-primary focus:outline-none focus:border-app-accent" />
+                  <select value={attrType} onChange={(e) => setAttrType(e.target.value as typeof attrType)} className="h-9 rounded-lg border border-app-border px-2 text-[12px] bg-white text-app-text-primary focus:outline-none focus:border-app-accent">
                     <option value="text">text</option>
                     <option value="number">number</option>
                     <option value="boolean">boolean</option>
@@ -1022,49 +865,35 @@ export default function CategoriesPage() {
                     <option value="multi_select">multi_select</option>
                   </select>
                   {(attrType === 'select' || attrType === 'multi_select') && (
-                    <input
-                      type="text"
-                      value={attrOptions}
-                      onChange={(e) => setAttrOptions(e.target.value)}
-                      placeholder="Options (comma-separated)"
-                      className={`${inputCls} py-1.5 sm:col-span-2`}
-                    />
+                    <input value={attrOptions} onChange={(e) => setAttrOptions(e.target.value)} placeholder="Options (comma-separated)" className="sm:col-span-2 h-9 rounded-lg border border-app-border px-2.5 text-[12px] bg-white text-app-text-primary focus:outline-none focus:border-app-accent" />
                   )}
-                  <div className="flex items-center gap-3 sm:col-span-2">
+                  <div className="sm:col-span-2 flex items-center gap-3">
                     <label className="flex items-center gap-1.5 text-[10px] text-app-text-secondary font-bold uppercase tracking-wider">
-                      <input type="checkbox" checked={attrRequired} onChange={(e) => setAttrRequired(e.target.checked)} className="accent-app-accent" />
-                      Required
+                      <input type="checkbox" checked={attrRequired} onChange={(e) => setAttrRequired(e.target.checked)} className="accent-app-accent" /> Required
                     </label>
                     <label className="flex items-center gap-1.5 text-[10px] text-app-text-secondary font-bold uppercase tracking-wider">
-                      <input type="checkbox" checked={attrVariant} onChange={(e) => setAttrVariant(e.target.checked)} className="accent-app-accent" />
-                      Variant
+                      <input type="checkbox" checked={attrVariant} onChange={(e) => setAttrVariant(e.target.checked)} className="accent-app-accent" /> Variant
                     </label>
-                    <button
-                      type="button"
-                      onClick={handleAddAttribute}
-                      className="ml-auto px-3 py-1.5 text-xs font-bold text-white bg-app-accent hover:bg-app-accent-hover rounded-lg flex items-center gap-1 transition-colors"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Attribute</span>
+                    <button type="button" onClick={handleAddAttribute} className="ml-auto px-3 py-1.5 text-xs font-bold text-white bg-app-accent hover:bg-app-accent-hover rounded-lg flex items-center gap-1">
+                      <Plus className="w-3.5 h-3.5" /> Add Attribute
                     </button>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* Actions */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-app-border">
+            {/* FEATURED BRAND — reference layout slot; no CategoryType field → disabled, persists nothing */}
+            <div className="border-t border-slate-100 pt-3.5">
+              <label className={label}>Featured Brand (shown on storefront card)</label>
+              <select disabled className="w-[280px] max-w-full box-border h-10 rounded-lg border border-app-border px-3 text-[12.5px] bg-slate-50 text-app-text-muted cursor-not-allowed">
+                <option>Not available in this release</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
               <div className="flex items-center gap-2">
                 {editorMode === 'edit' && selectedId && (
                   <>
-                    <button
-                      type="button"
-                      onClick={() => { setTargetParentId(selectedId); setEditorMode('create_child'); }}
-                      className="px-3 py-1.5 text-xs font-bold text-app-text-primary bg-slate-100 hover:bg-app-accent hover:text-white rounded-lg transition-all flex items-center gap-1"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>Add Subcategory</span>
-                    </button>
                     <button
                       type="button"
                       onClick={() => {
@@ -1072,49 +901,41 @@ export default function CategoriesPage() {
                         setTargetParentId(cat ? cat.parentId : null);
                         setEditorMode('create_child');
                       }}
-                      className="px-3 py-1.5 text-xs font-bold text-app-text-secondary bg-white border border-app-border hover:bg-slate-50 hover:text-app-text-primary rounded-lg transition-all"
+                      className="px-3 py-2 text-xs font-bold text-app-text-secondary bg-white border border-app-border hover:bg-slate-50 hover:text-app-text-primary rounded-lg"
                     >
-                      Add Sibling Category
+                      Add Sibling
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteTrigger(selectedId)}
+                      className="px-3 py-2 text-xs font-bold text-rose-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg"
+                    >
+                      Delete Category
                     </button>
                   </>
                 )}
-              </div>
-
-              <div className="flex items-center gap-2">
                 {editorMode !== 'edit' && (
                   <button
                     type="button"
                     onClick={() => {
                       setEditorMode('edit');
-                      if (!selectedId && categories.length > 0) {
-                        setSelectedId(categories[0].id);
-                      }
+                      if (!selectedId && categories.length > 0) setSelectedId(categories[0].id);
                     }}
-                    className="px-4 py-2 text-xs font-bold text-app-text-secondary bg-transparent hover:text-app-text-primary transition-colors"
+                    className="px-4 py-2 text-xs font-bold text-app-text-secondary hover:text-app-text-primary"
                   >
                     Cancel
                   </button>
                 )}
-
-                {editorMode === 'edit' && selectedId && (
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteTrigger(selectedId)}
-                    className="px-3 py-2 text-xs font-bold text-rose-500 bg-rose-50 hover:bg-rose-100 rounded-lg transition-all"
-                  >
-                    Delete Category
-                  </button>
-                )}
-
-                <button
-                  type="submit"
-                  disabled={savingCategory}
-                  className="px-5 py-2 text-xs font-bold uppercase tracking-wider text-white bg-app-accent hover:bg-app-accent-hover rounded-lg shadow-lg shadow-app-accent/20 transition-all flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>{savingCategory ? 'Saving…' : editorMode === 'edit' ? 'Save Changes' : 'Create Category'}</span>
-                </button>
               </div>
+
+              <button
+                type="submit"
+                disabled={savingCategory}
+                className="px-5 py-2.5 text-[12.5px] font-extrabold text-white bg-app-accent hover:bg-app-accent-hover rounded-lg flex items-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>{savingCategory ? 'Saving…' : editorMode === 'edit' ? 'Save Changes' : 'Create Category'}</span>
+              </button>
             </div>
           </form>
         </div>
