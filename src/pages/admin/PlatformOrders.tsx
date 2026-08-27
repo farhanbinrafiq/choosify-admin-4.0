@@ -12,6 +12,7 @@ import {
   MessageSquare,
 } from 'lucide-react';
 import { operationsApi, type OpsStorefrontOrder, type OpsShipment } from '../../services/operationsApi';
+import { useAuth } from '../../contexts/AuthContext';
 import type { ReturnRequest } from '../../contexts/ReturnsContext';
 import { GlassCard } from '../../components/ui/GlassCard';
 import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
@@ -89,6 +90,9 @@ export default function PlatformOrdersPage() {
     setToast({ kind, message });
     setTimeout(() => setToast(null), 3500);
   }, []);
+
+  const { profile } = useAuth();
+  const isSeller = profile?.role === 'seller' || profile?.role === 'verified_seller';
 
   const loadOrders = useCallback(async () => {
     setLoading(true);
@@ -269,9 +273,11 @@ export default function PlatformOrdersPage() {
             <Package className="w-5 h-5 text-app-accent" />
           </div>
           <div>
-            <h1 className="text-xl font-black text-app-text-primary tracking-tight">Platform Orders</h1>
+            <h1 className="text-xl font-black text-app-text-primary tracking-tight">
+              {isSeller ? 'Orders Hub' : 'Platform Orders'}
+            </h1>
             <p className="text-xs text-app-text-secondary">
-              Live Operations order engine — the platform's real order data
+              {isSeller ? 'Orders placed against your products' : "Live Operations order engine — the platform's real order data"}
             </p>
           </div>
         </div>

@@ -81,6 +81,10 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/sellers') || pathname.startsWith('/admin/brand-profiles')) return 'brands';
   if (pathname.startsWith('/admin/products')) return 'products';
   if (pathname.startsWith('/admin/orders')) return 'orders';
+  // Sprint 11 rewrite: real Operations-backed order hub for sellers/admins
+  // (the legacy /admin/orders CmsMirror stays Commerce-backed on purpose --
+  // see the App.tsx route comment -- so this needs its own prefix rule).
+  if (pathname.startsWith('/admin/platform-orders')) return 'orders';
   if (pathname.startsWith('/admin/creator-profile')) return 'creatorProfile';
   if (pathname.startsWith('/admin/consumer-profile')) return 'consumerProfile';
   if (pathname.startsWith('/admin/creator-studio')) return 'creators';

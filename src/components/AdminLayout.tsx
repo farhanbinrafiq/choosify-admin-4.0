@@ -202,7 +202,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Brand Management Studio', icon: Building2, path: '/admin/brand-studio' },
     { label: 'Seller Profile', icon: Store, path: '/admin/brand-profile' },
-    { label: 'Orders Hub', icon: ListOrdered, path: '/admin/orders', badge: 4 },
+    { label: 'Orders Hub', icon: ListOrdered, path: '/admin/platform-orders', badge: 4 },
     { label: 'My Customers', icon: Users, path: '/admin/customers' },
     { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
     { label: 'Promo Codes & Vouchers', icon: Ticket, path: '/admin/coupons' },
