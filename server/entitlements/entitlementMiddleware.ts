@@ -20,7 +20,14 @@ export async function requirePartnerEntitlement(
   const role = req.userRole || req.user?.role;
   const userId = req.userId || req.user?.uid;
   const path = req.originalUrl || req.url || '';
-  if (isPartnerIdentityApiPath(path, req.method || 'GET')) {
+  // isPartnerIdentityApiPath does an exact-path match for several entries
+  // (e.g. /api/v1/operations/orders) -- unlike requireMarketplaceAccess's
+  // normalizePath, `path` here still carries the query string, so a request
+  // like GET .../orders?buyerId=X never matched and fell through to the
+  // stricter entitlement check below, wrongly 403'ing a locked partner's own
+  // buyer-side order list.
+  const pathWithoutQuery = path.split('?')[0] || path;
+  if (isPartnerIdentityApiPath(pathWithoutQuery, req.method || 'GET')) {
     try {
       const life = await resolvePartnerLifecycle({
         userId,
