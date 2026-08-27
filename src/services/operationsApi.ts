@@ -129,6 +129,8 @@ export interface OpsStorefrontOrder {
   paymentValidatedAt?: string;
   paidAt?: string;
   paymentDueAt?: string;
+  /** COD orders only -- delivery fee prepaid online at checkout; product amount stays due at the doorstep. */
+  codDeliveryFeePaid?: boolean;
 }
 
 export interface OpsCouponRule {

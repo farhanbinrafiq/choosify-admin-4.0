@@ -413,7 +413,14 @@ export default function PlatformOrdersPage() {
                         {sub.sellerBusinessName || sub.sellerId}
                       </div>
                       <div className="flex items-center gap-3 text-[10px] text-app-text-muted">
-                        {sub.invoiceId && <span>Invoice: {sub.invoiceId}</span>}
+                        {sub.invoiceId && (
+                          <Link
+                            to={`/admin/invoice/op/${detailOrder.orderId}/${sub.sellerId}`}
+                            className="text-app-accent font-bold hover:underline"
+                          >
+                            Invoice: {sub.invoiceId}
+                          </Link>
+                        )}
                         <span>Delivery fee: {formatCurrency(sub.deliveryFee)}</span>
                         <span className="uppercase font-bold">{sub.trackingStatus || 'pending'}</span>
                       </div>

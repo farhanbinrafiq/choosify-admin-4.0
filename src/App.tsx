@@ -72,6 +72,7 @@ const SponsoredPromotionsPage = lazy(() => import('./pages/admin/SponsoredPromot
 import OrdersOverview from './pages/admin/OrdersOverview';
 const SellerCustomers = lazy(() => import('./pages/admin/SellerCustomers'));
 const InvoiceView = lazy(() => import('./pages/admin/InvoiceView').then(m => ({ default: m.InvoiceView })));
+const OperationsInvoiceView = lazy(() => import('./pages/admin/OperationsInvoiceView').then(m => ({ default: m.OperationsInvoiceView })));
 
 // Logistics Pages
 const CourierProviders = lazy(() => import('./pages/admin/Logistics/CourierProviders'));
@@ -842,6 +843,22 @@ export default function App() {
                     <AdminLayout>
                       <Suspense fallback={routeSuspenseFallback}>
                         <InvoiceView />
+                      </Suspense>
+                    </AdminLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            {/* Real Operations-backed invoice -- the route above (InvoiceView)
+                reads from Commerce, which has no bearing on real orders. */}
+            <Route
+              path="/admin/invoice/op/:orderId/:sellerId"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <OperationsInvoiceView />
                       </Suspense>
                     </AdminLayout>
                   </RoleGuard>
