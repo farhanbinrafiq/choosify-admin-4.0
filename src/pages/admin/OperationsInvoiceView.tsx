@@ -104,6 +104,13 @@ export function OperationsInvoiceView() {
         __html: `
           @media print {
             .no-print { display: none !important; }
+            /* This page renders inside AdminLayout -- its sidebar/header chrome
+               isn't part of this component and has no .no-print class of its
+               own to opt into, so print/PDF output was showing the whole
+               dashboard shell around the invoice. Hide it by the layout's own
+               stable selectors instead of restructuring the route. */
+            aside, header.glass-header { display: none !important; }
+            main { margin: 0 !important; padding: 0 !important; }
             body { background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .invoice-card { box-shadow: none !important; border: none !important; margin: 0 !important; }
             @page { margin: 15mm; size: A4; }
