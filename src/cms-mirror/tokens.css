@@ -45,6 +45,35 @@
   --cms-gradient-orange-button: linear-gradient(90deg, #c8321a 0%, #ef3c23 100%);
 
   --cms-sidebar-bg: var(--cms-gradient-dark-surface);
+
+  /* ── React workspace shell (AdminWorkspaceLayout) ──
+     Presentation tokens so adminWorkspace.css stops hardcoding literals.
+     Values are the shell's existing effective values, promoted to tokens. */
+  --cms-font-sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --cms-font-display: 'Outfit', var(--cms-font-sans);
+
+  --cms-topbar-height: 64px;
+  --cms-content-pad-y: 28px;
+  --cms-content-pad-x: 32px;
+  --cms-radius-control: 8px;
+
+  /* On-dark chrome (sidebar + topbar) */
+  --cms-on-dark: #ffffff;
+  --cms-on-dark-hairline: rgba(255, 255, 255, 0.12);
+  --cms-on-dark-hairline-soft: rgba(255, 255, 255, 0.08);
+  --cms-sidebar-label: rgba(255, 255, 255, 0.80);
+  --cms-sidebar-label-muted: rgba(255, 255, 255, 0.55);
+  --cms-sidebar-group-title: rgba(255, 255, 255, 0.38);
+  --cms-sidebar-hover: rgba(255, 255, 255, 0.06);
+  --cms-sidebar-role: rgba(255, 255, 255, 0.42);
+  --cms-topbar-subtitle: rgba(255, 255, 255, 0.60);
+
+  /* Accent washes for active nav / tags */
+  --cms-accent-wash: rgba(239, 60, 35, 0.16);
+  --cms-accent-wash-strong: rgba(239, 60, 35, 0.22);
+  --cms-accent-wash-tag: rgba(239, 60, 35, 0.14);
+
+  --cms-avatar-gradient: linear-gradient(135deg, #ef3c23, #2323ff);
 }
 
 .cms-mirror-host {
