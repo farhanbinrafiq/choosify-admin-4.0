@@ -6,6 +6,7 @@ import { authApi, UserDirectoryEntry, UserDetail } from '../../services/authApi'
 import { Badge } from '../../components/ui/Badge';
 import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
 import { BulkActionBar, BulkAction } from '../../components/ui/BulkActionBar';
+import { StatTile } from '../../components/ui/StatTile';
 import {
   Search,
   MoreVertical,
@@ -19,6 +20,8 @@ import {
   X,
   ShieldCheck,
   IdCard,
+  Users,
+  Filter,
 } from 'lucide-react';
 
 // ============================================================================
@@ -179,38 +182,17 @@ export default function ConsumersPage() {
       return;
     }
     let cancelled = false;
-    const token = localStorage.getItem('choosify_auth_token');
-    if (!token) return;
     const t = window.setTimeout(() => {
       void (async () => {
         try {
-          const res = await fetch(
-            `/api/v1/auth/users/search?q=${encodeURIComponent(q)}`,
-            { headers: { Authorization: `Bearer ${token}` } },
-          );
-          const body = (await res.json().catch(() => ({}))) as {
-            data?: {
-              uid: string;
-              email: string;
-              displayName: string;
-              role: string;
-              choosifyUserId: string;
-            };
-            error?: string;
-          };
+          const data = await authApi.searchUser(q);
           if (cancelled) return;
-          if (!res.ok || !body.data) {
-            setCfLookup(null);
-            setCfLookupError(body.error || 'No account found for this User ID');
-            return;
-          }
           setCfLookupError(null);
-          setCfLookup(body.data);
-        } catch {
-          if (!cancelled) {
-            setCfLookup(null);
-            setCfLookupError('User ID lookup failed');
-          }
+          setCfLookup(data);
+        } catch (err) {
+          if (cancelled) return;
+          setCfLookup(null);
+          setCfLookupError(err instanceof Error ? err.message : 'No account found for this User ID');
         }
       })();
     }, 250);
@@ -358,7 +340,7 @@ export default function ConsumersPage() {
         <div className="flex justify-end relative">
           <button
             onClick={() => setActiveMenu(activeMenu === u.uid ? null : u.uid)}
-            className={`w-8 h-8 flex items-center justify-center rounded-[4px] border transition-all cursor-pointer ${
+            className={`w-8 h-8 flex items-center justify-center rounded-lg border transition-all cursor-pointer ${
               activeMenu === u.uid
                 ? 'bg-app-accent text-white border-app-accent shadow-lg'
                 : 'bg-white/5 text-app-text-secondary border-transparent hover:text-white hover:bg-white/10'
@@ -370,7 +352,7 @@ export default function ConsumersPage() {
           {activeMenu === u.uid && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setActiveMenu(null)} />
-              <div className="absolute right-0 top-10 w-48 bg-app-card border border-app-border rounded-[4px] shadow-2xl z-20 py-1 overflow-hidden animate-in fade-in zoom-in duration-200">
+              <div className="absolute right-0 top-10 w-48 bg-app-card border border-app-border rounded-lg shadow-2xl z-20 py-1 overflow-hidden animate-in fade-in zoom-in duration-200">
                 <button
                   onClick={() => openDetail(u.uid)}
                   className="w-full flex items-center gap-2 px-4 py-2 text-[11.5px] font-medium text-app-text-primary hover:bg-app-accent/10 hover:text-app-accent-light transition-colors text-left cursor-pointer"
@@ -389,7 +371,7 @@ export default function ConsumersPage() {
                 <button
                   onClick={() => {
                     setActiveMenu(null);
-                    triggerMessage({ id: u.uid, name: u.displayName || u.email, avatarUrl: '', phone: '+8801700000000', role: u.role });
+                    triggerMessage({ id: u.uid, name: u.displayName || u.email, avatarUrl: '', role: u.role });
                   }}
                   className="w-full flex items-center gap-2 px-4 py-2 text-[11.5px] font-medium text-app-text-primary hover:bg-app-accent/10 hover:text-app-accent-light transition-colors text-left cursor-pointer"
                 >
@@ -492,48 +474,39 @@ export default function ConsumersPage() {
           <span className="flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {usersError}</span>
           <button
             onClick={() => fetchDirectory()}
-            className="px-2 py-1 bg-rose-100 hover:bg-rose-200 border border-rose-300 rounded-[3px] font-bold uppercase tracking-wider text-[10px] cursor-pointer"
+            className="px-2 py-1 bg-rose-100 hover:bg-rose-200 border border-rose-300 rounded-md font-bold uppercase tracking-wider text-[10px] cursor-pointer"
           >
             Retry
           </button>
         </div>
       )}
 
-      {/* REAL, DIRECTORY-DERIVED STAT TILES */}
+      {/* REAL, DIRECTORY-DERIVED STAT TILES (no fabricated engagement/session data) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-lg border border-app-border border-l-4 border-l-[#6C4CFF]">
-          <div className="text-[20px] font-extrabold text-app-text-primary tracking-tight font-mono">
-            {usersLoading ? '—' : roleCounts[currentViewRole]}
-          </div>
-          <div className="text-[10px] text-app-text-disabled uppercase font-extrabold tracking-widest mt-1">
-            Registered {currentViewRole}s
-          </div>
-          <div className="text-[9.5px] text-app-text-muted font-semibold mt-1">From the live account directory</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg border border-app-border border-l-4 border-l-[#2563EB]">
-          <div className="text-[20px] font-extrabold text-app-text-primary tracking-tight font-mono">
-            {usersLoading ? '—' : roleCounts.missingCfId}
-          </div>
-          <div className="text-[10px] text-app-text-disabled uppercase font-extrabold tracking-widest mt-1">
-            Missing Choosify ID
-          </div>
-          <div className="text-[9.5px] text-app-text-muted font-semibold mt-1">Accounts without a backfilled CF ID</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg border border-app-border border-l-4 border-l-[#16A34A]">
-          <div className="text-[20px] font-extrabold text-app-text-primary tracking-tight font-mono">
-            {usersLoading ? '—' : finalFiltered.length}
-          </div>
-          <div className="text-[10px] text-app-text-disabled uppercase font-extrabold tracking-widest mt-1">
-            Matching current filter
-          </div>
-          <div className="text-[9.5px] text-app-text-muted font-semibold mt-1">{searchQuery ? `Search: "${searchQuery}"` : 'No search applied'}</div>
-        </div>
+        <StatTile
+          label={`Registered ${currentViewRole}s`}
+          value={usersLoading ? '—' : roleCounts[currentViewRole]}
+          icon={Users}
+          accent="indigo"
+        />
+        <StatTile
+          label="Missing Choosify ID"
+          value={usersLoading ? '—' : roleCounts.missingCfId}
+          icon={IdCard}
+          accent="slate"
+        />
+        <StatTile
+          label="Matching current filter"
+          value={usersLoading ? '—' : finalFiltered.length}
+          icon={Filter}
+          accent="emerald"
+        />
       </div>
 
       {isAdminView && staffRoleBreakdown.length > 0 && (
-        <div className="bg-app-card border border-app-border rounded-[4px] p-4 flex flex-wrap gap-2">
+        <div className="bg-app-card border border-app-border rounded-lg p-4 flex flex-wrap gap-2">
           {staffRoleBreakdown.map(([role, count]) => (
-            <span key={role} className="px-2.5 py-1 rounded-[3px] bg-white/5 border border-app-border text-[10px] font-bold text-app-text-secondary font-mono">
+            <span key={role} className="px-2.5 py-1 rounded-md bg-white/5 border border-app-border text-[10px] font-bold text-app-text-secondary font-mono">
               {role}: {count}
             </span>
           ))}
@@ -570,17 +543,17 @@ export default function ConsumersPage() {
               <button
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage <= 1}
-                className="px-3 py-1 bg-white border border-app-border text-app-text-secondary hover:text-app-accent disabled:text-app-text-disabled disabled:cursor-not-allowed rounded-[2px] transition-all"
+                className="px-3 py-1 bg-white border border-app-border text-app-text-secondary hover:text-app-accent disabled:text-app-text-disabled disabled:cursor-not-allowed rounded-md transition-all"
               >
                 Prev
               </button>
-              <button className="px-3 py-1 bg-app-accent text-white shadow-sm rounded-[2px]">
+              <button className="px-3 py-1 bg-app-accent text-white shadow-sm rounded-md">
                 {String(currentPage).padStart(2, '0')} / {String(totalPages).padStart(2, '0')}
               </button>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage >= totalPages}
-                className="px-3 py-1 bg-white border border-app-border text-app-text-secondary hover:text-app-accent disabled:text-app-text-disabled disabled:cursor-not-allowed rounded-[2px] transition-all"
+                className="px-3 py-1 bg-white border border-app-border text-app-text-secondary hover:text-app-accent disabled:text-app-text-disabled disabled:cursor-not-allowed rounded-md transition-all"
               >
                 Next
               </button>

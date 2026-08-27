@@ -53,6 +53,15 @@ export interface UserDetail extends UserDirectoryEntry {
   profileStatusSecondary?: string | null;
 }
 
+/** Row shape returned by GET /auth/users/search — a single account by Choosify User ID / CF-##### string. */
+export interface UserSearchResult {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: string;
+  choosifyUserId: string;
+}
+
 export const authApi = {
   /** Admin directory of all registered accounts (uid/email/displayName/role/choosifyUserId only). */
   getUsersDirectory: async (): Promise<UserDirectoryEntry[]> => {
@@ -61,5 +70,9 @@ export const authApi = {
   /** Admin lookup of a single account by internal Auth UID. */
   getUserDetail: async (userId: string): Promise<UserDetail> => {
     return request<UserDetail>(`/auth/users/${encodeURIComponent(userId)}`);
+  },
+  /** Admin lookup of a single account by Choosify User ID (CF-##### or numeric). Throws if not found. */
+  searchUser: async (q: string): Promise<UserSearchResult> => {
+    return request<UserSearchResult>(`/auth/users/search?q=${encodeURIComponent(q)}`);
   },
 };
