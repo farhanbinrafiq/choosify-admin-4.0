@@ -25,11 +25,24 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { operationsApi, type AnalyticsSummary } from '../../services/operationsApi';
+import { operationsApi, type AnalyticsSummary, type RoleAnalyticsPayload } from '../../services/operationsApi';
 import { catalogApi } from '../../services/catalogApi';
 import type { HomepageConfig, SiteConfig } from '../../types/catalog';
 
 type RangeKey = '7d' | '30d' | '90d';
+
+/**
+ * GET /operations/analytics returns this admin-shaped AnalyticsSummary
+ * directly for admin/staff, but a role-scoped RoleAnalyticsPayload (cards/
+ * quickLinks/summary) for seller/creator callers instead -- this page was
+ * only ever built against the admin shape, so a seller landing here (the
+ * shared /admin/dashboard route every role lands on after login) hit a
+ * hard crash reading fields the role-scoped response never had at the top
+ * level. No one had click-tested this page as a real seller before.
+ */
+function isRoleScoped(a: AnalyticsSummary | RoleAnalyticsPayload | null): a is RoleAnalyticsPayload {
+  return !!a && 'cards' in a;
+}
 
 interface CatalogSnapshot {
   products: number;
@@ -74,7 +87,7 @@ const StatCard = ({
 
 export default function Dashboard() {
   const [range, setRange] = useState<RangeKey>('30d');
-  const [analytics, setAnalytics] = useState<AnalyticsSummary | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsSummary | RoleAnalyticsPayload | null>(null);
   const [catalog, setCatalog] = useState<CatalogSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -116,14 +129,18 @@ export default function Dashboard() {
     load();
   }, [range]);
 
+  // The admin-shaped summary regardless of which top-level shape the
+  // endpoint returned -- role-scoped payloads nest it under .summary.
+  const scopedSummary: AnalyticsSummary | null = isRoleScoped(analytics) ? analytics.summary : analytics;
+
   const trafficData = useMemo(
     () =>
-      analytics?.daily.slice(-7).map((row) => ({
+      scopedSummary?.daily.slice(-7).map((row) => ({
         name: row.date.slice(5),
         orders: row.orders,
         revenue: row.revenue,
       })) || [],
-    [analytics],
+    [scopedSummary],
   );
 
   const visibleHomeSections =
@@ -144,23 +161,104 @@ export default function Dashboard() {
     },
     {
       label: 'Lead Inbox',
-      count: analytics?.leads.new ?? 0,
+      count: scopedSummary?.leads.new ?? 0,
       href: '/admin/leads',
       icon: Mail,
     },
     {
       label: 'Review Moderation',
-      count: analytics?.reviews.pending ?? 0,
+      count: scopedSummary?.reviews.pending ?? 0,
       href: '/admin/reviews',
       icon: Star,
     },
     {
       label: 'Active Shipments',
-      count: analytics?.shipments.pending ?? 0,
+      count: scopedSummary?.shipments.pending ?? 0,
       href: '/admin/logistics/shipments',
       icon: RefreshCw,
     },
   ].filter((item) => item.count > 0 || loading);
+
+  // Seller/creator landing here (the shared /admin/dashboard route) gets
+  // their own scoped view -- the admin "Platform Command Center" below
+  // (Product Catalog, Brand Studio, Website Manager, global queues) is
+  // platform-management surface that doesn't apply to a single seller.
+  if (isRoleScoped(analytics)) {
+    const roleAnalytics = analytics;
+    return (
+      <div className="space-y-8 pb-16">
+        <div>
+          <h1 className="text-2xl font-bold text-app-text-primary tracking-tight capitalize">
+            {roleAnalytics.role} Dashboard
+          </h1>
+          <p className="text-app-text-secondary text-sm">Your own orders, revenue, and quick links on Choosify.</p>
+        </div>
+
+        <div className="rounded-[20px] p-5" style={{ backgroundImage: 'linear-gradient(120deg, rgba(255,91,0,0.1), rgba(0,4,53,0.06))' }}>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {roleAnalytics.cards.map((card) => (
+              <StatCard key={card.label} label={card.label} value={card.value} sub={card.sub || ''} />
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-app-card border border-app-border rounded-2xl p-6 shadow-sm">
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h3 className="text-lg font-bold text-app-text-primary tracking-tight">Your Order & Revenue Trend</h3>
+              <p className="text-[11px] text-app-text-secondary uppercase font-bold tracking-widest mt-1">
+                Last 7 days, scoped to your own orders
+              </p>
+            </div>
+          </div>
+          <div className="min-h-[280px]">
+            {trafficData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={trafficData}>
+                  <defs>
+                    <linearGradient id="dashRevSeller" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#EB4501" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#EB4501" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
+                  <XAxis dataKey="name" stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
+                  <YAxis stroke="#888888" fontSize={10} tickLine={false} axisLine={false} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: 'var(--color-app-card)',
+                      border: '1px solid var(--color-app-border)',
+                      borderRadius: '12px',
+                    }}
+                  />
+                  <Area type="monotone" dataKey="revenue" stroke="#EB4501" strokeWidth={2} fill="url(#dashRevSeller)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[280px] flex items-center justify-center text-app-text-secondary text-sm">
+                No order activity yet for this range.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {roleAnalytics.quickLinks.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {roleAnalytics.quickLinks.map((link) => (
+              <Link
+                key={link.path}
+                to={link.path}
+                className="bg-app-card border border-app-border rounded-2xl p-6 hover:border-app-accent/40 transition-all flex items-center gap-4"
+              >
+                <ChevronRight className="w-6 h-6 text-app-accent shrink-0" />
+                <div className="font-bold text-app-text-primary">{link.label}</div>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8 pb-16">
@@ -209,8 +307,8 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
         <StatCard
           label="Storefront Orders"
-          value={analytics ? String(analytics.orders.total) : loading ? '…' : '—'}
-          sub={analytics ? `৳ ${analytics.orders.revenue.toLocaleString()} revenue` : 'Checkout pipeline'}
+          value={scopedSummary ? String(scopedSummary.orders.total) : loading ? '…' : '—'}
+          sub={scopedSummary ? `৳ ${scopedSummary.orders.revenue.toLocaleString()} revenue` : 'Checkout pipeline'}
           href="/admin/orders"
         />
         <StatCard

@@ -519,8 +519,17 @@ export const operationsApi = {
     return result.permissions;
   },
 
-  getAnalytics: async (range = '30d'): Promise<AnalyticsSummary> => {
-    const result = await request<{ data: AnalyticsSummary }>(`/operations/analytics?range=${range}`);
+  /**
+   * GET /operations/analytics returns the admin-shaped AnalyticsSummary
+   * directly for admin/staff, but for seller/creator callers the server
+   * returns the role-scoped RoleAnalyticsPayload instead (cards/quickLinks/
+   * summary) -- same endpoint, role-dependent shape. Callers must narrow
+   * on 'cards' in result before assuming either shape.
+   */
+  getAnalytics: async (range = '30d'): Promise<AnalyticsSummary | RoleAnalyticsPayload> => {
+    const result = await request<{ data: AnalyticsSummary | RoleAnalyticsPayload }>(
+      `/operations/analytics?range=${range}`,
+    );
     return result.data;
   },
 
