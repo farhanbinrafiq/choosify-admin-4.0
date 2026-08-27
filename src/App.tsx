@@ -67,6 +67,7 @@ const LeadsInboxPage = lazy(() => import('./pages/admin/LeadsInbox'));
 const JobPostingsPage = lazy(() => import('./pages/admin/JobPostings'));
 const SellerOffersPage = lazy(() => import('./pages/admin/SellerOffers'));
 const PlatformOrdersPage = lazy(() => import('./pages/admin/PlatformOrders'));
+const SellerConversations = lazy(() => import('./pages/admin/SellerConversations'));
 const AdsSponsorsPage = lazy(() => import('./pages/admin/AdsSponsors'));
 const SponsoredPromotionsPage = lazy(() => import('./pages/admin/SponsoredPromotions'));
 import OrdersOverview from './pages/admin/OrdersOverview';
@@ -843,6 +844,25 @@ export default function App() {
                     <AdminLayout>
                       <Suspense fallback={routeSuspenseFallback}>
                         <PlatformOrdersPage />
+                      </Suspense>
+                    </AdminLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            {/*
+              Real buyer<->seller conversation thread for seller/creator accounts
+              (SellerConversations.tsx, GET/POST /operations/platform-messages).
+              /admin/messages stays on CmsMirrorHost for staff -- untouched.
+            */}
+            <Route
+              path="/admin/conversations"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <SellerConversations />
                       </Suspense>
                     </AdminLayout>
                   </RoleGuard>

@@ -209,7 +209,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },
     { label: 'Products', icon: Package, path: '/admin/products' },
     { label: 'My Brand Studio', icon: Store, path: '/dashboard/content-studio/brands' },
-    { label: 'Messages', icon: MessageCircleMore, path: '/admin/messages', badge: 2 },
+    { label: 'Messages', icon: MessageCircleMore, path: '/admin/conversations', badge: 2 },
     { label: 'Reviews', icon: Star, path: '/admin/reviews' },
     { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
     

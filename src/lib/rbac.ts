@@ -135,6 +135,7 @@ const ROUTE_PERMISSION: Array<{ prefix: string; permission: PermissionKey }> = [
   { prefix: '/admin/jobs', permission: 'users' },
   { prefix: '/admin/seller-offers', permission: 'users' },
   { prefix: '/admin/platform-orders', permission: 'users' },
+  { prefix: '/admin/conversations', permission: 'users' },
   { prefix: '/admin/sellers', permission: 'brand' },
   { prefix: '/admin/brand-studio', permission: 'brand' },
   { prefix: '/admin/brand-profile', permission: 'brand' },

@@ -85,6 +85,9 @@ export function resolveAdminPageKey(pathname: string): string | null {
   // (the legacy /admin/orders CmsMirror stays Commerce-backed on purpose --
   // see the App.tsx route comment -- so this needs its own prefix rule).
   if (pathname.startsWith('/admin/platform-orders')) return 'orders';
+  // Seller/creator real conversation view -- reuse the 'messages' page key
+  // so sidebar highlighting/entitlements match /admin/messages.
+  if (pathname.startsWith('/admin/conversations')) return 'messages';
   if (pathname.startsWith('/admin/creator-profile')) return 'creatorProfile';
   if (pathname.startsWith('/admin/consumer-profile')) return 'consumerProfile';
   if (pathname.startsWith('/admin/creator-studio')) return 'creators';

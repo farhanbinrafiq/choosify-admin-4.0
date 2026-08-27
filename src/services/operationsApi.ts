@@ -376,6 +376,24 @@ export interface RoleAnalyticsPayload {
   summary: AnalyticsSummary;
 }
 
+export interface OpsPlatformMessage {
+  id: string;
+  conversationId: string;
+  senderId: string;
+  senderName: string;
+  content: { type: 'text' | 'image' | 'file'; body: string; mediaUrl?: string };
+  direction: 'inbound' | 'outbound';
+  timestamp: string;
+}
+
+export interface OpsPlatformConversation {
+  conversationId: string;
+  senderName: string;
+  lastMessage?: string;
+  status: 'open' | 'pending' | 'resolved';
+  updatedAt: string;
+}
+
 export const operationsApi = {
   /** No params, called by staff, returns every real order (server auto-scopes non-staff callers). */
   listOrders: async (params?: {
@@ -743,5 +761,32 @@ export const operationsApi = {
       payload,
     );
     return result;
+  },
+
+  /**
+   * Real buyer<->seller conversation thread (one per buyer, id
+   * conv_platform_<buyerId>) -- the same backend choosify-web's buyer
+   * inbox reads/writes. A seller/creator may read/reply to any buyer
+   * they have a real order/booking/manual-offer relationship with
+   * (enforced server-side); passing userId=<buyerId> resolves that
+   * buyer's conversation for the caller.
+   */
+  listPlatformMessages: async (userId: string): Promise<{ data: OpsPlatformMessage[]; conversationId: string }> => {
+    return request<{ data: OpsPlatformMessage[]; conversationId: string }>(
+      `/operations/platform-messages?userId=${encodeURIComponent(userId)}`,
+    );
+  },
+  sendPlatformMessage: async (payload: {
+    buyerId: string;
+    userName: string;
+    body: string;
+    orderId?: string;
+  }): Promise<{ conversation: OpsPlatformConversation; message: OpsPlatformMessage }> => {
+    const result = await request<{ success: boolean; data: { conversation: OpsPlatformConversation; message: OpsPlatformMessage } }>(
+      '/operations/platform-messages',
+      'POST',
+      payload,
+    );
+    return result.data;
   },
 };
