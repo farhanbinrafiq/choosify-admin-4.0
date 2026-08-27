@@ -13,6 +13,7 @@ import {
   getCanonicalAdminCategories,
   isStaleCategorySet,
 } from '../lib/storefrontCategories';
+import { refreshAccessToken } from '../services/authRefresh';
 
 export type UserRole = 
   | 'super_admin' 
@@ -202,31 +203,7 @@ async function fetchAuthProfile(token: string) {
   });
 }
 
-// Refresh is reactive only: called after a 401, never proactively/on a timer.
-async function refreshAccessToken(): Promise<string | null> {
-  console.info('[Auth] 401 received — attempting token refresh');
-  try {
-    const response = await fetch(`${API_BASE}/auth/refresh`, {
-      method: 'POST',
-      credentials: 'include',
-    });
-    if (!response.ok) {
-      console.warn('[Auth] Refresh failed', { status: response.status });
-      return null;
-    }
-    const data = (await response.json().catch(() => ({}))) as { accessToken?: string };
-    if (!data.accessToken) {
-      console.warn('[Auth] Refresh response missing accessToken');
-      return null;
-    }
-    localStorage.setItem(AUTH_TOKEN_KEY, data.accessToken);
-    console.info('[Auth] Token refreshed successfully');
-    return data.accessToken;
-  } catch (error) {
-    console.warn('[Auth] Refresh request threw', error);
-    return null;
-  }
-}
+// refreshAccessToken now lives in services/authRefresh.ts (shared with catalogApi.ts / operationsApi.ts).
 
 class AuthResolveError extends Error {
   status: number;

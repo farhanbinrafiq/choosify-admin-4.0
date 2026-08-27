@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Check, History, RotateCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { catalogApi } from '../../services/catalogApi';
+import { ProductImageUploader } from '../../components/admin/ProductImageUploader';
 import { useEntityDraft } from '../../hooks/useEntityDraft';
 import { ProductDetailPresentation } from '../../components/product-detail';
 import {
@@ -524,20 +525,22 @@ export default function ProductEditStudio() {
                       />
                     </div>
                   </div>
-                  <label className="block text-[9px] font-black uppercase text-slate-500">Main image URL</label>
-                  <input
-                    value={headerForm.image}
-                    onChange={(e) => setHeaderForm({ ...headerForm, image: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl text-xs"
-                  />
                   <label className="block text-[9px] font-black uppercase text-slate-500">
-                    Gallery URLs (one per line)
+                    Photos (first photo is the main image)
                   </label>
-                  <textarea
-                    rows={4}
-                    value={headerForm.galleryText}
-                    onChange={(e) => setHeaderForm({ ...headerForm, galleryText: e.target.value })}
-                    className="w-full p-2.5 border rounded-xl text-xs font-mono"
+                  <ProductImageUploader
+                    images={
+                      headerForm.image
+                        ? [headerForm.image, ...linesFromTextarea(headerForm.galleryText).filter((url) => url !== headerForm.image)]
+                        : linesFromTextarea(headerForm.galleryText)
+                    }
+                    onImagesChange={(images) =>
+                      setHeaderForm({
+                        ...headerForm,
+                        image: images[0] || '',
+                        galleryText: images.slice(1).join(String.fromCharCode(10)),
+                      })
+                    }
                   />
                   <label className="block text-[9px] font-black uppercase text-slate-500">Status</label>
                   <select

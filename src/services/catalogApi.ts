@@ -15,6 +15,7 @@ import type {
   HomepageConfig,
   SiteConfig,
 } from '../types/catalog';
+import { getStoredAccessToken, refreshAccessToken } from './authRefresh';
 
 export type DraftEntityType = 'brand' | 'product' | 'creator' | 'guide';
 
@@ -39,7 +40,6 @@ export interface EntityVersion {
 }
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
-const AUTH_TOKEN_KEY = 'choosify_auth_token';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -55,24 +55,36 @@ function parseErrorMessage(rawError: string, status: number): string {
   return rawError;
 }
 
-async function request<T>(path: string, method: HttpMethod = 'GET', body?: unknown): Promise<T> {
+function doFetch(path: string, method: HttpMethod, body: unknown, token: string | null) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-
-  // Write routes require a Firebase Bearer token (authenticateRequest); some GET
-  // routes (draft/version endpoints) are admin-only too, so attach it whenever
-  // present — public GET routes simply ignore the header.
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-
-  const response = await fetch(`${API_BASE}${path}`, {
+  return fetch(`${API_BASE}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+}
+
+async function request<T>(path: string, method: HttpMethod = 'GET', body?: unknown): Promise<T> {
+  // Write routes require a Firebase Bearer token (authenticateRequest); some GET
+  // routes (draft/version endpoints) are admin-only too, so attach it whenever
+  // present — public GET routes simply ignore the header.
+  const token = getStoredAccessToken();
+  let response = await doFetch(path, method, body, token);
+
+  // A dashboard tab left open across a long session (e.g. drafting a product)
+  // can outlive its access token. Try one silent refresh via the httpOnly
+  // refresh cookie and retry before surfacing a raw "expired token" error.
+  if (response.status === 401 && token) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      response = await doFetch(path, method, body, refreshed);
+    }
+  }
 
   if (!response.ok) {
     const rawError = await response.text();

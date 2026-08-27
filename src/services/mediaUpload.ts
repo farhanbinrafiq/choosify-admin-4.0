@@ -1,3 +1,5 @@
+import { getStoredAccessToken, refreshAccessToken } from './authRefresh';
+
 const API_BASE =
   ((import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_API_BASE_URL as string | undefined) ||
   '/api/v1';
@@ -55,15 +57,12 @@ function categoryFromFolder(folder: string): string {
   return last;
 }
 
-async function uploadViaCatalogApi(file: File, folder: string): Promise<string> {
-  const base64Data = await fileToBase64(file);
+function doUploadFetch(base64Data: string, file: File, folder: string, token: string | null) {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  const token = localStorage.getItem('choosify_auth_token');
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-
-  const response = await fetch(`${API_BASE}/catalog/media/upload`, {
+  return fetch(`${API_BASE}/catalog/media/upload`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -73,6 +72,21 @@ async function uploadViaCatalogApi(file: File, folder: string): Promise<string> 
       category: categoryFromFolder(folder),
     }),
   });
+}
+
+async function uploadViaCatalogApi(file: File, folder: string): Promise<string> {
+  const base64Data = await fileToBase64(file);
+  const token = getStoredAccessToken();
+  let response = await doUploadFetch(base64Data, file, folder, token);
+
+  // Same long-session token expiry as other admin API calls -- retry once
+  // via a silent refresh before surfacing a raw 'expired token' error.
+  if (response.status === 401 && token) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      response = await doUploadFetch(base64Data, file, folder, refreshed);
+    }
+  }
 
   if (!response.ok) {
     const raw = await response.text();

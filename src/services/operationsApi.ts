@@ -1,5 +1,6 @@
+import { getStoredAccessToken, refreshAccessToken } from './authRefresh';
+
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
-const AUTH_TOKEN_KEY = 'choosify_auth_token';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -15,23 +16,37 @@ function parseErrorMessage(rawError: string, status: number): string {
   return rawError;
 }
 
-async function request<T>(path: string, method: HttpMethod = 'GET', body?: unknown): Promise<T> {
+function doFetch(path: string, method: HttpMethod, body: unknown, token: string | null) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  // Write routes require Firebase Bearer (authenticateRequest). Attach whenever
-  // present — public GETs/validate ignore it. Mock TempRoleSwitcher login has no
-  // token and must fail loudly on protected writes.
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
-
-  const response = await fetch(`${API_BASE}${path}`, {
+  return fetch(`${API_BASE}${path}`, {
     method,
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+}
+
+async function request<T>(path: string, method: HttpMethod = 'GET', body?: unknown): Promise<T> {
+  // Write routes require Firebase Bearer (authenticateRequest). Attach whenever
+  // present — public GETs/validate ignore it. Mock TempRoleSwitcher login has no
+  // token and must fail loudly on protected writes.
+  const token = getStoredAccessToken();
+  let response = await doFetch(path, method, body, token);
+
+  // A dashboard tab left open across a long session can outlive its access
+  // token. Try one silent refresh via the httpOnly refresh cookie and retry
+  // before surfacing a raw 'expired token' error the user has no way to act on.
+  if (response.status === 401 && token) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      response = await doFetch(path, method, body, refreshed);
+    }
+  }
+
   if (!response.ok) {
     const rawError = await response.text();
     throw new Error(parseErrorMessage(rawError, response.status));
