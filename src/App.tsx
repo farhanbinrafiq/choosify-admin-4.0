@@ -430,12 +430,26 @@ const LoginRoute: React.FC = () => {
   );
 };
 
+/** Does an already-authenticated session's own role satisfy this specific signup link's intent? */
+function sessionAlreadySatisfiesSignup(role: string | undefined, requestedType: string): boolean {
+  const r = String(role || '').toLowerCase();
+  if (requestedType === 'creator') return r === 'creator';
+  return r === 'seller' || r === 'verified_seller';
+}
+
 const SignupRoute: React.FC = () => {
   const { profile, loading } = useAuth();
+  const [searchParams] = useSearchParams();
+  const requestedType = (searchParams.get('type') || 'seller').trim().toLowerCase();
 
   if (loading) return null;
-  // Applications do not create sessions; only redirect if already authenticated.
-  if (profile) {
+  // Applications do not create sessions; only redirect when the already-
+  // authenticated session's own role actually matches what this link is
+  // for. An unrelated existing session -- an admin/staff account clicking
+  // "Join as Seller", or a seller clicking "Join as Creator" -- must still
+  // see the real signup form instead of being silently dropped into
+  // whatever dashboard they already happen to have open.
+  if (profile && sessionAlreadySatisfiesSignup(profile.role, requestedType)) {
     return <Navigate to="/admin/dashboard" replace />;
   }
   return (
