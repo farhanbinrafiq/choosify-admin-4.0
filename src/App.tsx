@@ -418,7 +418,19 @@ const LoginRoute: React.FC = () => {
     return <Navigate to={`/signup${qs.toString() ? `?${qs}` : ''}`} replace />;
   }
 
-  if (profile) {
+  const requestedEmail = searchParams.get('email')?.trim().toLowerCase();
+  // An explicit ?email= that doesn't match the currently-authenticated
+  // session means someone is trying to sign in as a DIFFERENT account --
+  // most commonly right after submitting a seller/creator application,
+  // redirected here with their brand-new account's email. If an unrelated
+  // session is still active on that browser/device (an admin testing the
+  // flow, a shared machine, a stale tab), this used to silently bounce
+  // straight to that unrelated session's own dashboard instead of ever
+  // showing the login form -- the new account never got a chance to
+  // actually authenticate. Mirrors sessionAlreadySatisfiesSignup below.
+  const sessionMatchesRequest = !requestedEmail || profile?.email?.trim().toLowerCase() === requestedEmail;
+
+  if (profile && sessionMatchesRequest) {
     if (mustChangePassword) {
       return <Navigate to="/force-password-change" replace />;
     }
