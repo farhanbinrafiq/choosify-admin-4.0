@@ -11889,7 +11889,29 @@ class Component extends DCLogic {
   _resolveNotifPath = (n) => {
     if (!n) return null;
     var action = (n.actionUrl || '').trim();
+    var role = window.__CMS_MIRROR_ROLE__ || '';
+    var isPartnerRole = role === 'seller' || role === 'creator';
     if (action) {
+      // Same actionUrl shape is sent to both sides of a conversation -- a
+      // seller/creator has no session on choosify.bd at all, so send them
+      // to their own real conversation view here instead.
+      if (action === '/messages' || action.indexOf('/messages/') === 0) {
+        if (isPartnerRole) {
+          var convMatch = action.match(/^\/messages\/conv_platform_(.+)$/);
+          return convMatch ? ('/admin/conversations?buyerId=' + encodeURIComponent(convMatch[1])) : '/admin/conversations';
+        }
+        return 'https://choosify.bd' + action;
+      }
+      // Seller order notifications (new order / dispatched / delivered) carry
+      // this web-app-shaped actionUrl even though sellers view them here.
+      if (action.indexOf('/dashboard') === 0 && action.indexOf('tab=seller-orders') >= 0) {
+        return '/admin/platform-orders';
+      }
+      // Every other /dashboard?tab=... / /profile/orders actionUrl is this
+      // same person's own buyer-identity tab -- only exists on the web app.
+      if (action.indexOf('/dashboard') === 0 || action.indexOf('/profile/') === 0) {
+        return 'https://choosify.bd' + action;
+      }
       if (action.charAt(0) === '/') return action;
       try {
         var u = new URL(action, window.location.origin);
@@ -11903,17 +11925,16 @@ class Component extends DCLogic {
     var type = String(n.type || '').toLowerCase();
     var category = String(n.category || '').toLowerCase();
     var hay = (String(n.title || '') + ' ' + String(n.summary || '') + ' ' + type + ' ' + category).toLowerCase();
-    var role = window.__CMS_MIRROR_ROLE__ || '';
     if (orderId || type.indexOf('order') >= 0 || hay.indexOf('order') >= 0) {
-      return orderId ? ('/admin/orders?orderId=' + encodeURIComponent(orderId)) : '/admin/orders';
+      return orderId ? ('/admin/platform-orders?orderId=' + encodeURIComponent(orderId)) : '/admin/platform-orders';
     }
     if (paymentId || type.indexOf('payment') >= 0 || type.indexOf('escrow') >= 0 || hay.indexOf('refund') >= 0 || hay.indexOf('escrow') >= 0) {
-      if (orderId) return '/admin/orders?orderId=' + encodeURIComponent(orderId);
-      if (paymentId) return '/admin/orders?paymentId=' + encodeURIComponent(paymentId);
-      return '/admin/orders';
+      if (orderId) return '/admin/platform-orders?orderId=' + encodeURIComponent(orderId);
+      if (paymentId) return '/admin/platform-orders?paymentId=' + encodeURIComponent(paymentId);
+      return '/admin/platform-orders';
     }
     if (threadId || type.indexOf('message') >= 0 || hay.indexOf('message') >= 0) {
-      return threadId ? ('/admin/messages?thread=' + encodeURIComponent(threadId)) : '/admin/messages';
+      return '/admin/conversations';
     }
     if (hay.indexOf('verif') >= 0 || hay.indexOf('kyc') >= 0 || meta.verificationId) {
       if (role === 'seller') return '/admin/brand-profile';
@@ -12008,7 +12029,9 @@ class Component extends DCLogic {
     if (path) {
       this.setState({ notifMenuOpen: false, notifDetailId: null });
       try {
-        if (window.parent && window.parent !== window) {
+        if (path.indexOf('http') === 0) {
+          window.top.location.href = path;
+        } else if (window.parent && window.parent !== window) {
           window.parent.postMessage({ type: 'cms-mirror-navigate', path: path }, '*');
         }
       } catch (_) {}
@@ -12715,6 +12738,11 @@ class Component extends DCLogic {
   }
 
   setPage = (p, opts) => {
+      if ((p === 'platformOrders' || p === 'sellerConversations') && window.parent && window.parent !== window) {
+        var escapePath = p === 'platformOrders' ? '/admin/platform-orders' : '/admin/conversations';
+        window.parent.postMessage({ type: 'cms-mirror-navigate', path: escapePath }, '*');
+        return;
+      }
       window.__CMS_MIRROR_INSTANCE__ = this;
       var silent = opts && opts.silent;
       try {
