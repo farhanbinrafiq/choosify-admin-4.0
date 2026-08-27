@@ -4,6 +4,7 @@ import { ArrowLeft, Check, History, RotateCw } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { catalogApi } from '../../services/catalogApi';
 import { ProductImageUploader } from '../../components/admin/ProductImageUploader';
+import { useAuth } from '../../contexts/AuthContext';
 import { useEntityDraft } from '../../hooks/useEntityDraft';
 import { ProductDetailPresentation } from '../../components/product-detail';
 import {
@@ -59,6 +60,7 @@ export default function ProductEditStudio() {
     brandName: '',
     brandId: '',
     categoryName: '',
+    categoryId: '',
     description: '',
     price: '',
     originalPrice: '',
@@ -166,6 +168,35 @@ export default function ProductEditStudio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, isNew]);
 
+  // Sellers only ever manage their own brand (scoped server-side by
+  // GET /catalog/brands); admins may see more than one. Either way, publish
+  // requires a real brandId -- this page previously had no way to set one at
+  // all (just a free-text "Brand" input never wired to an id), which is why
+  // creating a brand-new product always failed at Publish with
+  // "brandId is required and must reference an existing brand."
+  const { allBrands, activeBrandId } = useAuth();
+  const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; name: string }>>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    catalogApi
+      .listCategories()
+      .then((categories) => {
+        if (!cancelled) setCategoryOptions(categories.map((c) => ({ id: c.id, name: c.name })));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isNew || !model || model.brandId || !allBrands.length) return;
+    const brand = allBrands.find((b) => b.id === activeBrandId) || allBrands[0];
+    if (!brand) return;
+    setModel((prev) => (prev && !prev.brandId ? { ...prev, brandId: brand.id, brandName: brand.name } : prev));
+  }, [isNew, model, allBrands, activeBrandId]);
+
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
     window.setTimeout(() => setToastMessage(null), 3500);
@@ -180,6 +211,7 @@ export default function ProductEditStudio() {
         brandName: model.brandName,
         brandId: model.brandId,
         categoryName: model.categoryName,
+        categoryId: model.categoryId,
         description: model.description,
         price: String(model.price || ''),
         originalPrice: String(model.originalPrice || ''),
@@ -222,6 +254,7 @@ export default function ProductEditStudio() {
         brandName: headerForm.brandName,
         brandId: headerForm.brandId,
         categoryName: headerForm.categoryName,
+        categoryId: headerForm.categoryId,
         description: headerForm.description,
         price: Number(headerForm.price) || 0,
         originalPrice: Number(headerForm.originalPrice) || 0,
@@ -481,17 +514,37 @@ export default function ProductEditStudio() {
                     className="w-full p-2.5 border rounded-xl text-xs"
                   />
                   <label className="block text-[9px] font-black uppercase text-slate-500">Brand</label>
-                  <input
-                    value={headerForm.brandName}
-                    onChange={(e) => setHeaderForm({ ...headerForm, brandName: e.target.value })}
+                  <select
+                    value={headerForm.brandId}
+                    onChange={(e) => {
+                      const brand = allBrands.find((b) => b.id === e.target.value);
+                      setHeaderForm({ ...headerForm, brandId: e.target.value, brandName: brand?.name || '' });
+                    }}
                     className="w-full p-2.5 border rounded-xl text-xs"
-                  />
+                  >
+                    <option value="">Select a brand...</option>
+                    {allBrands.map((brand) => (
+                      <option key={brand.id} value={brand.id}>
+                        {brand.name}
+                      </option>
+                    ))}
+                  </select>
                   <label className="block text-[9px] font-black uppercase text-slate-500">Category</label>
-                  <input
-                    value={headerForm.categoryName}
-                    onChange={(e) => setHeaderForm({ ...headerForm, categoryName: e.target.value })}
+                  <select
+                    value={headerForm.categoryId}
+                    onChange={(e) => {
+                      const category = categoryOptions.find((c) => c.id === e.target.value);
+                      setHeaderForm({ ...headerForm, categoryId: e.target.value, categoryName: category?.name || '' });
+                    }}
                     className="w-full p-2.5 border rounded-xl text-xs"
-                  />
+                  >
+                    <option value="">Select a category...</option>
+                    {categoryOptions.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
+                  </select>
                   <label className="block text-[9px] font-black uppercase text-slate-500">Description</label>
                   <textarea
                     rows={3}
