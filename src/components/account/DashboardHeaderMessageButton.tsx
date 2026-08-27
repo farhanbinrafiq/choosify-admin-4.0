@@ -4,6 +4,7 @@ import { MessageCircleMore } from 'lucide-react';
 import { useNavAttention } from '../../contexts/NavAttentionContext';
 import { formatNavAttentionCount } from '../../services/navAttentionApi';
 import { PAGE_KEY_TO_PATH } from '../../cms-mirror/nav';
+import { useAuth } from '../../contexts/AuthContext';
 
 type DashboardHeaderMessageButtonProps = {
   className?: string;
@@ -19,9 +20,18 @@ export function DashboardHeaderMessageButton({
   buttonRef,
 }: DashboardHeaderMessageButtonProps) {
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const { counts } = useNavAttention();
   const unread = counts.messages?.count || 0;
-  const inboxPath = PAGE_KEY_TO_PATH.messages || '/admin/messages';
+  // Seller/creator have their own real conversation view (/admin/conversations)
+  // -- the shared 'messages' page key still points staff at the legacy
+  // CmsMirror-hosted /admin/messages screen on purpose. This button is
+  // rendered in both the migrated-page header (AdminWorkspaceLayout) and the
+  // CmsMirror iframe's own header (CmsMirrorHost), so it needs to branch
+  // itself rather than relying on a single shared page key.
+  const role = profile?.role;
+  const isPartnerRole = role === 'seller' || role === 'verified_seller' || role === 'creator';
+  const inboxPath = isPartnerRole ? '/admin/conversations' : PAGE_KEY_TO_PATH.messages || '/admin/messages';
 
   return (
     <button

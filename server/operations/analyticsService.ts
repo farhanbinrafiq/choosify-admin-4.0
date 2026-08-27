@@ -156,7 +156,11 @@ export function getRoleAnalytics(
   if (permissions.analytics) {
     quickLinks.push({ label: 'Analytics', path: '/admin/analytics' });
   }
-  quickLinks.push({ label: 'Messages', path: '/admin/messages' });
+  // Seller/creator have their own real conversation view -- the shared
+  // 'messages' page key still points staff at the legacy CmsMirror-hosted
+  // /admin/messages screen on purpose (see App.tsx route comment).
+  const isPartnerRole = role === 'seller' || role === 'verified_seller' || role === 'creator';
+  quickLinks.push({ label: 'Messages', path: isPartnerRole ? '/admin/conversations' : '/admin/messages' });
 
   const cards: { label: string; value: string; sub?: string }[] = [];
   const ownerId = options?.ownerId?.trim() || '';
