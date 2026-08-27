@@ -313,6 +313,8 @@ export const PAGE_META: Record<string, [string, string]> = {
   consumerProfile: ['My Profile', 'Your consumer account, orders preference, and security settings'],
   deals: ['Deals', 'Promotions and discounts'],
   orders: ['Orders Hub', 'Track and fulfill customer orders'],
+  platformOrders: ['Orders Hub', 'Orders placed against your products'],
+  sellerConversations: ['Messages', 'Conversations with your buyers'],
   customers: ['Consumer Management', 'View and manage customer accounts'],
   settings: ['Settings', 'Store configuration'],
   adminProfile: ['Admin Profile', 'Account, security, RBAC scope, and preferences'],

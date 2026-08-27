@@ -853,11 +853,11 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <RoleGuard>
-                    <AdminLayout>
+                    <AdminWorkspaceLayout>
                       <Suspense fallback={routeSuspenseFallback}>
                         <PlatformOrdersPage />
                       </Suspense>
-                    </AdminLayout>
+                    </AdminWorkspaceLayout>
                   </RoleGuard>
                 </ProtectedRoute>
               }
@@ -872,11 +872,11 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <RoleGuard>
-                    <AdminLayout>
+                    <AdminWorkspaceLayout>
                       <Suspense fallback={routeSuspenseFallback}>
                         <SellerConversations />
                       </Suspense>
-                    </AdminLayout>
+                    </AdminWorkspaceLayout>
                   </RoleGuard>
                 </ProtectedRoute>
               }
