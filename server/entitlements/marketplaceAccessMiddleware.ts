@@ -37,6 +37,15 @@ export function isPartnerIdentityApiPath(path: string, method: string): boolean 
   if (m === 'POST' && p.startsWith('/api/v1/catalog/media')) return true;
   if (p.startsWith('/api/v1/operations/verifications')) return true;
   if (p.startsWith('/api/v1/operations/partner-applications')) return true;
+  // Buying/messaging is a role-independent identity action, not a partner
+  // commercial capability -- a person mid-review on a seller/creator
+  // application must still be able to shop and message as a buyer on the
+  // same account. Only genuinely seller/creator-operational writes within
+  // operationsRouter (e.g. mark-delivered) stay gated by this check.
+  if (p === '/api/v1/operations/orders') return true; // GET (list) / POST (place order)
+  if (/^\/api\/v1\/operations\/orders\/[^/]+$/.test(p)) return true; // GET / PATCH a specific order
+  if (/^\/api\/v1\/operations\/orders\/[^/]+\/cancel$/.test(p)) return true;
+  if (p === '/api/v1/operations/platform-messages') return true;
   if (p.startsWith('/api/v1/support/')) return true;
   if (m === 'GET' && p.startsWith('/api/v1/dashboard/nav-attention')) return true;
   if (m === 'GET' && (p.startsWith('/api/v1/notifications') || p.startsWith('/api/notifications'))) {
