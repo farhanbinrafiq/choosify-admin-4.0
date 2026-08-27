@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { MessageCircleMore, Loader2, RefreshCw, Send, AlertCircle } from 'lucide-react';
 import { operationsApi, type OpsPlatformMessage, type OpsStorefrontOrder } from '../../services/operationsApi';
 import { useAuth } from '../../contexts/AuthContext';
@@ -57,6 +58,8 @@ function displayBody(body: string): string {
 
 export default function SellerConversations() {
   const { profile } = useAuth();
+  const [searchParams] = useSearchParams();
+  const deepLinkBuyerId = searchParams.get('buyerId');
   const [conversations, setConversations] = useState<ConversationRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +142,14 @@ export default function SellerConversations() {
     setSelectedBuyerId(buyerId);
     void loadMessages(buyerId);
   };
+
+  // Deep-link from a notification (?buyerId=...) -- select immediately,
+  // independent of the derived conversation list (which may still be
+  // loading, or may not include this buyer if their order predates it).
+  useEffect(() => {
+    if (deepLinkBuyerId) selectConversation(deepLinkBuyerId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkBuyerId]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });

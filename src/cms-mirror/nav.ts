@@ -61,6 +61,16 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   settings: '/admin/settings',
   adminProfile: '/admin/profile',
   featureAccess: '/admin/feature-access',
+  // Sprint 12: real Operations-backed pages for sellers/creators, kept as
+  // their own page keys rather than reusing 'orders'/'messages' -- those
+  // keys' canonical path (this map) still needs to point admin/staff at the
+  // legacy CmsMirror-hosted /admin/orders and /admin/messages screens
+  // unchanged (see App.tsx route comment); reusing the key here would have
+  // silently redirected the CMS-mirror sidebar's own "Orders Hub"/
+  // "Messages" links straight back to those legacy pages instead of
+  // through to the new ones.
+  platformOrders: '/admin/platform-orders',
+  sellerConversations: '/admin/conversations',
 };
 
 export const PATH_TO_PAGE_KEY: Record<string, string> = Object.fromEntries(
@@ -81,13 +91,6 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/sellers') || pathname.startsWith('/admin/brand-profiles')) return 'brands';
   if (pathname.startsWith('/admin/products')) return 'products';
   if (pathname.startsWith('/admin/orders')) return 'orders';
-  // Sprint 11 rewrite: real Operations-backed order hub for sellers/admins
-  // (the legacy /admin/orders CmsMirror stays Commerce-backed on purpose --
-  // see the App.tsx route comment -- so this needs its own prefix rule).
-  if (pathname.startsWith('/admin/platform-orders')) return 'orders';
-  // Seller/creator real conversation view -- reuse the 'messages' page key
-  // so sidebar highlighting/entitlements match /admin/messages.
-  if (pathname.startsWith('/admin/conversations')) return 'messages';
   if (pathname.startsWith('/admin/creator-profile')) return 'creatorProfile';
   if (pathname.startsWith('/admin/consumer-profile')) return 'consumerProfile';
   if (pathname.startsWith('/admin/creator-studio')) return 'creators';
@@ -153,12 +156,12 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
     'products',
     'contentStudio',
     'adsDealsStudio',
-    'orders',
+    'platformOrders',
     'sellerCustomers',
     'returnsRefunds',
     'warrantyClaims',
     'promoCodes',
-    'messages',
+    'sellerConversations',
     'notifications',
     'reviews',
     'finance',
@@ -393,7 +396,7 @@ export const SELLER_NAV_GROUPS: CmsNavGroup[] = [
   {
     title: 'COMMERCE',
     items: [
-      navItem('orders', 'Orders Hub'),
+      navItem('platformOrders', 'Orders Hub'),
       navItem('sellerCustomers', 'My Customers'),
       navItem('returnsRefunds', 'Returns & Refunds'),
       navItem('warrantyClaims', 'Warranty Claims'),
@@ -411,7 +414,7 @@ export const SELLER_NAV_GROUPS: CmsNavGroup[] = [
   { title: 'TRUST & SAFETY', items: [navItem('reviews', 'Reviews')] },
   {
     title: 'COMMUNICATION',
-    items: [navItem('messages', 'Messages'), navItem('notifications', 'Notifications')],
+    items: [navItem('sellerConversations', 'Messages'), navItem('notifications', 'Notifications')],
   },
   {
     title: 'FINANCE & PAYOUTS',

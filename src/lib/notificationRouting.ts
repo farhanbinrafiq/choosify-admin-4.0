@@ -12,10 +12,36 @@ export function resolveNotificationPath(
 ): string | null {
   const action = (notification.actionUrl || '').trim();
   if (action) {
-    // /messages/... only exists as a route in the consumer web app
-    // (choosify.bd), not this admin workspace -- send the viewer there
-    // directly rather than returning a path that 404s inside /admin/*.
+    const isPartnerRole = role === 'seller' || role === 'verified_seller' || role === 'creator';
+
+    // The SAME actionUrl shape (/messages/conv_platform_<buyerId>) is sent to
+    // both sides of a conversation -- the buyer notification and the seller/
+    // creator notification for the same message both carry it. It's a real
+    // route for a buyer on choosify.bd, but a seller/creator has no session
+    // there at all: following it lands them on the storefront's 404. For a
+    // partner viewing their own notification, resolve it to their own real
+    // conversation view here in admin instead.
     if (action === '/messages' || action.startsWith('/messages/')) {
+      if (isPartnerRole) {
+        const buyerId = action.match(/^\/messages\/conv_platform_(.+)$/)?.[1];
+        return buyerId ? `/admin/conversations?buyerId=${encodeURIComponent(buyerId)}` : '/admin/conversations';
+      }
+      return `https://choosify.bd${action}`;
+    }
+    // Seller order notifications (new order / dispatched / delivered) are
+    // generated with this web-app-shaped actionUrl even though a seller
+    // views their notifications here in admin, not on choosify.bd -- send
+    // to the real Operations order hub instead of 404ing on a route that
+    // has never existed in this app.
+    if (action.startsWith('/dashboard') && action.includes('tab=seller-orders')) {
+      return '/admin/platform-orders';
+    }
+    // Every other /dashboard?tab=... / /profile/orders actionUrl (my-returns,
+    // my-warranty, my-reviews, ...) is this same person's own BUYER-identity
+    // tab, which only exists on the consumer web app -- same reasoning as
+    // /messages/* above, minus the partner-conversation special case (there
+    // is no admin equivalent of "my returns as a buyer").
+    if (action.startsWith('/dashboard') || action.startsWith('/profile/')) {
       return `https://choosify.bd${action}`;
     }
     if (action.startsWith('/')) return action;
@@ -39,19 +65,18 @@ export function resolveNotificationPath(
   const haystack = `${notification.title} ${notification.summary || ''} ${type} ${category}`.toLowerCase();
 
   if (orderId || type.includes('order') || haystack.includes('order')) {
-    if (orderId) return `/admin/orders?orderId=${encodeURIComponent(orderId)}`;
-    return '/admin/orders';
+    if (orderId) return `/admin/platform-orders?orderId=${encodeURIComponent(orderId)}`;
+    return '/admin/platform-orders';
   }
 
   if (paymentId || escrowId || type.includes('payment') || type.includes('escrow') || haystack.includes('refund') || haystack.includes('payout') || haystack.includes('escrow')) {
-    if (orderId) return `/admin/orders?orderId=${encodeURIComponent(orderId)}`;
-    if (paymentId) return `/admin/orders?paymentId=${encodeURIComponent(paymentId)}`;
-    return '/admin/orders';
+    if (orderId) return `/admin/platform-orders?orderId=${encodeURIComponent(orderId)}`;
+    if (paymentId) return `/admin/platform-orders?paymentId=${encodeURIComponent(paymentId)}`;
+    return '/admin/platform-orders';
   }
 
   if (threadId || type.includes('message') || haystack.includes('message') || haystack.includes('conversation')) {
-    if (threadId) return `/admin/messages?thread=${encodeURIComponent(threadId)}`;
-    return '/admin/messages';
+    return '/admin/conversations';
   }
 
   if (haystack.includes('verif') || haystack.includes('kyc') || meta.verificationId) {
