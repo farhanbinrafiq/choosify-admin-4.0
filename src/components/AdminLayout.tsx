@@ -429,6 +429,8 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
       const allowedSellers = [
         '/admin/dashboard',
         '/admin/orders',
+        '/admin/platform-orders',
+        '/admin/conversations',
         '/admin/products',
         '/products',
         '/seller/products',
@@ -470,6 +472,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
     else if (profile.role === 'creator') {
       const allowedCreators = [
         '/admin/dashboard',
+        '/admin/conversations',
         '/admin/creators/1',
         '/admin/creator-studio',
         '/admin/creator-profile',
