@@ -1,184 +1,111 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, CSSProperties } from 'react';
 import {
-  Tag,
-  Clock,
-  Search,
-  Filter,
-  Download,
-  ExternalLink,
-  CheckCircle,
-  XCircle,
-  Plus,
-  Trash2,
-  Edit3,
-  Pause,
-  Check,
-  X,
-  Loader2,
-  AlertTriangle
+  Clock, Search, ExternalLink, CheckCircle, XCircle, Plus, Trash2, Edit3, Pause,
+  Loader2, AlertTriangle, Save,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { catalogApi } from '../../services/catalogApi';
-import { StatTile } from '../../components/ui/StatTile';
 import type { CatalogDeal } from '../../types/catalog';
 
-// Deals now use the real catalog contract — the client is the source of truth
-// for shape (see src/types/catalog.ts CatalogDeal / server/catalogRouter.ts).
+// Deals use the real catalog contract — src/types/catalog.ts CatalogDeal /
+// server/catalogRouter.ts (GET /catalog/deals public; POST/PATCH/DELETE gated
+// by requireCmsWrite).
 export type Deal = CatalogDeal;
 
-export interface PromoCode {
-  id: string;
-  code: string; // uppercase
-  brandId: string;
-  brandName: string;
-  discount: string; // "Flat 12% OFF", etc.
-  type: 'percentage' | 'flat';
-  value: number;
-  minOrderValue?: number;
-  maxUsage?: number;
-  usedCount: number; // starts at 0
-  validUntil: string; // ISO date
-  active: boolean;
-}
+// ============================================================================
+// Sprint 13 UI regression lock — Step 3. PRESENTATION is a faithful reproduction
+// of the approved standalone `isDeals` section (design-reference/Choosify Admin
+// CMS (standalone).html, decoded lines 2957–2979): "Deals & Promotions" header +
+// "+ Create Deal" + a Deal | Brand | Discount | Starts | Ends | Status table,
+// expressed as inline styles. Sanctioned deviation: accent = var(--cms-accent),
+// not the raw reference #FF5B00.
+//
+// FUNCTIONALITY is the current canonical layer, unchanged: catalogApi.listDeals /
+// createDeal / updateDeal / deleteDeal, computed live/expiring/expired status,
+// search + status + category filter, per-row approve/reject/pause/edit/delete,
+// bulk approve/delete, the real deals-derived metrics, and the ?tab=promocodes
+// redirect to /admin/coupons. Real controls the prototype lacks (checkbox column,
+// per-row Actions, metrics, filters, the Add/Edit form) are integrated into the
+// same visual system rather than dropped.
+//
+// The former in-page "Promo Code Manager" (5 hardcoded promo codes + its form +
+// table, unreachable dead code since 75b8b4b) is removed — that surface is
+// /admin/coupons, linked from the header.
+// ============================================================================
 
-const capitalize = (value: string) => (value ? value.charAt(0).toUpperCase() + value.slice(1) : value);
+const ACCENT = 'var(--cms-accent)';
+const ACCENT_WASH = 'color-mix(in srgb, var(--cms-accent) 10%, transparent)';
+
+const capitalize = (v: string) => (v ? v.charAt(0).toUpperCase() + v.slice(1) : v);
+
+/** Status pill — inline, matching the standalone status-badge chrome. */
+const statusBadge = (status: Deal['status']): CSSProperties => {
+  const map: Record<string, { bg: string; fg: string }> = {
+    live: { bg: 'rgba(34,197,94,0.12)', fg: '#16A34A' },
+    pending: { bg: 'rgba(245,158,11,0.14)', fg: '#B45309' },
+    expiring: { bg: 'rgba(239,68,68,0.1)', fg: '#DC2626' },
+    expired: { bg: '#F1F3F5', fg: '#9CA3AF' },
+    rejected: { bg: '#F1F3F5', fg: '#6B7280' },
+    draft: { bg: '#F1F3F5', fg: '#6B7280' },
+  };
+  const c = map[status] || { bg: '#F1F3F5', fg: '#6B7280' };
+  return {
+    background: c.bg, color: c.fg, fontSize: 9, fontWeight: 800, letterSpacing: '0.03em',
+    textTransform: 'uppercase', padding: '3px 8px', borderRadius: 999, whiteSpace: 'nowrap',
+  };
+};
+
+const fmtDate = (iso?: string) => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
 
 export default function DealsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  // Group 2: this page manages Deals only. Promo codes / vouchers have their
-  // own real, Operations-backed surface at /admin/coupons — the former
-  // in-page "Promo Code Manager" tab was local mock data and has been retired.
-  // activeTab stays a union for the legacy render branches but is pinned to 'deals'.
-  const [activeTab] = useState<'deals' | 'promo_codes'>('deals');
 
+  // Promo codes / vouchers have their own real Operations-backed surface at
+  // /admin/coupons — the former in-page tab redirects there.
   useEffect(() => {
     if (searchParams.get('tab') === 'promocodes') {
       navigate('/admin/coupons', { replace: true });
     }
   }, [searchParams, navigate]);
 
-  // Deals are loaded from the real catalog API (GET /catalog/deals) — no more local seed data.
   const [deals, setDeals] = useState<Deal[]>([]);
   const [dealsLoading, setDealsLoading] = useState(true);
   const [dealsError, setDealsError] = useState<string | null>(null);
 
-  const loadDeals = async () => {
+  const loadDeals = useCallback(async () => {
     setDealsLoading(true);
     setDealsError(null);
     try {
-      const data = await catalogApi.listDeals();
-      setDeals(data);
+      setDeals(await catalogApi.listDeals());
     } catch (err) {
       setDealsError(err instanceof Error ? err.message : 'Failed to load deals.');
     } finally {
       setDealsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    loadDeals();
   }, []);
 
-  // Promo codes remain local/mock — there is no backend for them yet.
-  // Seed with 5 promo codes for Bangladeshi brands matching SearchPage codes
-  const [promoCodes, setPromoCodes] = useState<PromoCode[]>([
-    {
-      id: 'p_1',
-      code: 'AARONG12',
-      brandId: 'brand_aarong',
-      brandName: 'Aarong',
-      discount: '12% OFF',
-      type: 'percentage',
-      value: 12,
-      minOrderValue: 2000,
-      maxUsage: 1000,
-      usedCount: 140,
-      validUntil: '2026-12-31T23:59:59.000Z',
-      active: true
-    },
-    {
-      id: 'p_2',
-      code: 'APEXFLAT400',
-      brandId: 'brand_apex',
-      brandName: 'Apex',
-      discount: 'Flat ৳400 OFF',
-      type: 'flat',
-      value: 400,
-      minOrderValue: 2500,
-      maxUsage: 500,
-      usedCount: 98,
-      validUntil: '2026-09-30T23:59:59.000Z',
-      active: true
-    },
-    {
-      id: 'p_3',
-      code: 'SAILORSPRING',
-      brandId: 'brand_sailor',
-      brandName: 'Sailor',
-      discount: '15% OFF',
-      type: 'percentage',
-      value: 15,
-      minOrderValue: 1500,
-      maxUsage: 350,
-      usedCount: 52,
-      validUntil: '2026-08-31T23:59:59.000Z',
-      active: true
-    },
-    {
-      id: 'p_4',
-      code: 'ADIDAS500',
-      brandId: 'brand_adidas',
-      brandName: 'Adidas',
-      discount: 'Flat ৳500 OFF',
-      type: 'flat',
-      value: 500,
-      minOrderValue: 4000,
-      maxUsage: 200,
-      usedCount: 65,
-      validUntil: '2026-11-30T23:59:59.000Z',
-      active: true
-    },
-    {
-      id: 'p_5',
-      code: 'BAYFLASH',
-      brandId: 'brand_bay_emporium',
-      brandName: 'Bay Emporium',
-      discount: 'Flat ৳300 OFF',
-      type: 'flat',
-      value: 300,
-      minOrderValue: 1500,
-      maxUsage: 150,
-      usedCount: 150,
-      validUntil: '2025-12-31T23:59:59.000Z', // Expired
-      active: false
-    }
-  ]);
+  useEffect(() => { void loadDeals(); }, [loadDeals]);
 
-  // UI state managers
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('All');
   const [categoryFilter, setCategoryFilter] = useState('All');
-  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
-  const [showBulkDeleteForm, setShowBulkDeleteForm] = useState(false);
   const [actionPendingId, setActionPendingId] = useState<string | null>(null);
   const [bulkActionPending, setBulkActionPending] = useState(false);
 
-  // Form slide-in state managers (Deals)
+  // Add / Edit Deal form (real CatalogDeal contract)
   const [isAdding, setIsAdding] = useState(false);
   const [editingDeal, setEditingDeal] = useState<Deal | null>(null);
   const [savingDeal, setSavingDeal] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-
-  // Form slide-in state managers (Promo Codes)
-  const [isAddingPromo, setIsAddingPromo] = useState(false);
-  const [editingPromo, setEditingPromo] = useState<PromoCode | null>(null);
-
-  // Form input states (Deals) — field names follow the real CatalogDeal contract.
   const [formName, setFormName] = useState('');
   const [formSeller, setFormSeller] = useState('');
   const [formDiscountType, setFormDiscountType] = useState<'percentage' | 'flat'>('percentage');
@@ -187,16 +114,6 @@ export default function DealsPage() {
   const [formValidUntil, setFormValidUntil] = useState('');
   const [formPromoCode, setFormPromoCode] = useState('');
 
-  // Form input states (Promo Codes)
-  const [promoFormCode, setPromoFormCode] = useState('');
-  const [promoFormBrandName, setPromoFormBrandName] = useState('');
-  const [promoFormType, setPromoFormType] = useState<'percentage' | 'flat'>('percentage');
-  const [promoFormValue, setPromoFormValue] = useState<number>(0);
-  const [promoFormMinOrder, setPromoFormMinOrder] = useState<number>(0);
-  const [promoFormMaxUsage, setPromoFormMaxUsage] = useState<number>(0);
-  const [promoFormValidUntil, setPromoFormValidUntil] = useState('');
-
-  // Auto-fill form state when editing or adding (Deals)
   useEffect(() => {
     setFormError(null);
     if (editingDeal) {
@@ -205,243 +122,100 @@ export default function DealsPage() {
       setFormDiscountType(editingDeal.discountType === 'flat' ? 'flat' : 'percentage');
       setFormDiscountValue(editingDeal.discountValue);
       setFormCategory(editingDeal.category);
-
-      const parsedDate = new Date(editingDeal.validUntil);
-      const yyyy = parsedDate.getFullYear();
-      const mm = String(parsedDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(parsedDate.getDate()).padStart(2, '0');
-      setFormValidUntil(`${yyyy}-${mm}-${dd}`);
+      const p = new Date(editingDeal.validUntil);
+      setFormValidUntil(`${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, '0')}-${String(p.getDate()).padStart(2, '0')}`);
       setFormPromoCode(editingDeal.promoCode || '');
       setIsAdding(false);
     } else if (isAdding) {
-      setFormName('');
-      setFormSeller('');
-      setFormDiscountType('percentage');
-      setFormDiscountValue(0);
-      setFormCategory('Electronics');
-
-      // Default to 48 hours tomorrow YYYY-MM-DD
-      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
-      const yyyy = tomorrow.getFullYear();
-      const mm = String(tomorrow.getMonth() + 1).padStart(2, '0');
-      const dd = String(tomorrow.getDate()).padStart(2, '0');
-      setFormValidUntil(`${yyyy}-${mm}-${dd}`);
+      setFormName(''); setFormSeller(''); setFormDiscountType('percentage'); setFormDiscountValue(0); setFormCategory('Electronics');
+      const t = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      setFormValidUntil(`${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, '0')}-${String(t.getDate()).padStart(2, '0')}`);
       setFormPromoCode('');
     }
   }, [editingDeal, isAdding]);
 
-  // Auto-fill form state when editing or adding (Promo Codes)
-  useEffect(() => {
-    if (editingPromo) {
-      setPromoFormCode(editingPromo.code);
-      setPromoFormBrandName(editingPromo.brandName);
-      setPromoFormType(editingPromo.type);
-      setPromoFormValue(editingPromo.value);
-      setPromoFormMinOrder(editingPromo.minOrderValue || 0);
-      setPromoFormMaxUsage(editingPromo.maxUsage || 0);
-
-      const parsedDate = new Date(editingPromo.validUntil);
-      const yyyy = parsedDate.getFullYear();
-      const mm = String(parsedDate.getMonth() + 1).padStart(2, '0');
-      const dd = String(parsedDate.getDate()).padStart(2, '0');
-      setPromoFormValidUntil(`${yyyy}-${mm}-${dd}`);
-      setIsAddingPromo(false);
-    } else if (isAddingPromo) {
-      setPromoFormCode('');
-      setPromoFormBrandName('');
-      setPromoFormType('percentage');
-      setPromoFormValue(0);
-      setPromoFormMinOrder(0);
-      setPromoFormMaxUsage(0);
-
-      // Default to 30 days starting from today
-      const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-      const yyyy = future.getFullYear();
-      const mm = String(future.getMonth() + 1).padStart(2, '0');
-      const dd = String(future.getDate()).padStart(2, '0');
-      setPromoFormValidUntil(`${yyyy}-${mm}-${dd}`);
-    }
-  }, [editingPromo, isAddingPromo]);
-
-  // Dynamic helper for toast system
-  const triggerToast = (msg: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message: msg, type });
+  const triggerToast = (message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Condition check: Expiring status automatically computed if deal expires within 48 hours
-  const isExpiringWithin48h = (validUntilStr: string, currentStatus: Deal['status']) => {
-    if (currentStatus === 'expired' || currentStatus === 'rejected') return false;
-    const expiry = new Date(validUntilStr).getTime();
-    const now = new Date().getTime();
-    const diffHours = (expiry - now) / (1000 * 60 * 60);
-    return diffHours > 0 && diffHours <= 48;
+  // ── computed status (verbatim) ──
+  const isExpiredDeal = (s: string) => new Date(s).getTime() < Date.now();
+  const isExpiringWithin48h = (s: string, cur: Deal['status']) => {
+    if (cur === 'expired' || cur === 'rejected') return false;
+    const h = (new Date(s).getTime() - Date.now()) / 3.6e6;
+    return h > 0 && h <= 48;
+  };
+  const getComputedStatus = (d: Deal): Deal['status'] => {
+    if (d.status === 'rejected') return 'rejected';
+    if (d.status === 'expired' || isExpiredDeal(d.validUntil)) return 'expired';
+    if (isExpiringWithin48h(d.validUntil, d.status)) return 'expiring';
+    return d.status;
+  };
+  const getExpiryDisplay = (s: string) => {
+    const diff = new Date(s).getTime() - Date.now();
+    if (diff <= 0) return 'Expired';
+    const h = Math.floor(diff / 3.6e6);
+    if (h < 48) return h === 0 ? `${Math.floor(diff / 6e4)}m left` : `${h}h left`;
+    return fmtDate(s);
   };
 
-  // Condition check: Expired status automatically computed if current date is past expiry
-  const isExpiredDeal = (validUntilStr: string) => {
-    return new Date(validUntilStr).getTime() < new Date().getTime();
-  };
-
-  // Get raw/computed status dynamically
-  const getComputedStatus = (deal: Deal): Deal['status'] => {
-    if (deal.status === 'rejected') return 'rejected';
-    if (deal.status === 'expired' || isExpiredDeal(deal.validUntil)) return 'expired';
-    if (isExpiringWithin48h(deal.validUntil, deal.status)) return 'expiring';
-    return deal.status;
-  };
-
-  // Expiry display string builder helper (dynamic or formatted)
-  const getExpiryDisplay = (validUntilStr: string) => {
-    const expiry = new Date(validUntilStr).getTime();
-    const now = new Date().getTime();
-    const diffMs = expiry - now;
-    if (diffMs <= 0) return 'Expired';
-
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    if (diffHours < 48) {
-      if (diffHours === 0) {
-        const diffMins = Math.floor(diffMs / (1000 * 60));
-        return `${diffMins}m left`;
-      }
-      return `${diffHours}h left`;
-    }
-
-    return new Date(validUntilStr).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
-
-  // Check if promo code is expired
-  const isPromoExpired = (promo: PromoCode) => {
-    return new Date(promo.validUntil).getTime() < Date.now();
-  };
-
-  // Dynamically compute global catalog stats from the loaded state (not cached list)
   const computedStats = useMemo(() => {
-    const rawDeals = deals.map(d => ({
-      ...d,
-      computedStatus: getComputedStatus(d)
-    }));
-
+    const c = deals.map((d) => getComputedStatus(d));
     return {
-      total: rawDeals.length,
-      live: rawDeals.filter(d => d.computedStatus === 'live').length,
-      pending: rawDeals.filter(d => d.computedStatus === 'pending').length,
-      expiring48h: rawDeals.filter(d => d.computedStatus === 'expiring').length
+      total: c.length,
+      live: c.filter((s) => s === 'live').length,
+      pending: c.filter((s) => s === 'pending').length,
+      expiring48h: c.filter((s) => s === 'expiring').length,
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deals]);
 
-  // Extract all categories currently tracked inside our database catalog
-  const uniqueCategories = useMemo(() => {
-    return Array.from(new Set(deals.map(d => d.category)));
-  }, [deals]);
+  const uniqueCategories = useMemo(() => Array.from(new Set(deals.map((d) => d.category).filter(Boolean))), [deals]);
 
-  // Search filter and conditional filters using useMemo for high performance
   const filteredDeals = useMemo(() => {
-    return deals.filter(deal => {
-      // 1. Controlled search matches name or seller
-      const matchesSearch =
-        deal.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        deal.seller.toLowerCase().includes(searchTerm.toLowerCase());
-
-      // 2. Computed status filter match
-      const currentComputedStatus = getComputedStatus(deal);
-      const matchesStatus =
-        statusFilter === 'All' ||
-        currentComputedStatus.toLowerCase() === statusFilter.toLowerCase();
-
-      // 3. Category filter match
-      const matchesCategory =
-        categoryFilter === 'All' ||
-        deal.category.toLowerCase() === categoryFilter.toLowerCase();
-
+    const q = searchTerm.toLowerCase();
+    return deals.filter((d) => {
+      const matchesSearch = d.name.toLowerCase().includes(q) || d.seller.toLowerCase().includes(q);
+      const cs = getComputedStatus(d);
+      const matchesStatus = statusFilter === 'All' || cs.toLowerCase() === statusFilter.toLowerCase();
+      const matchesCategory = categoryFilter === 'All' || d.category.toLowerCase() === categoryFilter.toLowerCase();
       return matchesSearch && matchesStatus && matchesCategory;
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deals, searchTerm, statusFilter, categoryFilter]);
 
-  // Promo code search filtering
-  const filteredPromoCodes = useMemo(() => {
-    return promoCodes.filter(promo => {
-      const matchesSearch =
-        promo.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        promo.brandName.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesSearch;
-    });
-  }, [promoCodes, searchTerm]);
-
-  // Checkbox management state hooks
-  const allFilteredSelected = useMemo(() => {
-    if (filteredDeals.length === 0) return false;
-    return filteredDeals.every(d => selectedIds.includes(d.id));
-  }, [filteredDeals, selectedIds]);
-
-  const handleSelectAllToggle = () => {
-    if (allFilteredSelected) {
-      const filteredIds = filteredDeals.map(d => d.id);
-      setSelectedIds(prev => prev.filter(id => !filteredIds.includes(id)));
-    } else {
-      const filteredIds = filteredDeals.map(d => d.id);
-      setSelectedIds(prev => Array.from(new Set([...prev, ...filteredIds])));
-    }
+  const allFilteredSelected = filteredDeals.length > 0 && filteredDeals.every((d) => selectedIds.includes(d.id));
+  const toggleSelectAll = () => {
+    const ids = filteredDeals.map((d) => d.id);
+    setSelectedIds((prev) => (allFilteredSelected ? prev.filter((i) => !ids.includes(i)) : Array.from(new Set([...prev, ...ids]))));
   };
+  const toggleSelect = (id: string) => setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
 
-  const handleSelectToggle = (id: string) => {
-    setSelectedIds(prev =>
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
-  };
-
-  // Actions handler implementations (Deals) — each now calls the real API and
-  // only updates local state once the request has actually succeeded.
-  const handleApprove = async (id: string) => {
+  // ── per-row actions (verbatim) ──
+  const patchStatus = async (id: string, status: Deal['status'], okMsg: string, failMsg: string) => {
     setActionPendingId(id);
     try {
-      const updated = await catalogApi.updateDeal(id, { status: 'live' });
-      setDeals(prev => prev.map(d => d.id === id ? updated : d));
-      triggerToast("Deal successfully approved and made Live!");
+      const updated = await catalogApi.updateDeal(id, { status });
+      setDeals((prev) => prev.map((d) => (d.id === id ? updated : d)));
+      triggerToast(okMsg);
     } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Failed to approve deal.', 'error');
+      triggerToast(err instanceof Error ? err.message : failMsg, 'error');
     } finally {
       setActionPendingId(null);
     }
   };
-
-  const handleReject = async (id: string) => {
-    setActionPendingId(id);
-    try {
-      const updated = await catalogApi.updateDeal(id, { status: 'rejected' });
-      setDeals(prev => prev.map(d => d.id === id ? updated : d));
-      triggerToast("Deal request rejected.");
-    } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Failed to reject deal.', 'error');
-    } finally {
-      setActionPendingId(null);
-    }
-  };
-
-  const handlePause = async (id: string) => {
-    setActionPendingId(id);
-    try {
-      const updated = await catalogApi.updateDeal(id, { status: 'expired' });
-      setDeals(prev => prev.map(d => d.id === id ? updated : d));
-      triggerToast("Deal paused (moved to expired state).");
-    } catch (err) {
-      triggerToast(err instanceof Error ? err.message : 'Failed to pause deal.', 'error');
-    } finally {
-      setActionPendingId(null);
-    }
-  };
+  const handleApprove = (id: string) => patchStatus(id, 'live', 'Deal approved and made Live.', 'Failed to approve deal.');
+  const handleReject = (id: string) => patchStatus(id, 'rejected', 'Deal request rejected.', 'Failed to reject deal.');
+  const handlePause = (id: string) => patchStatus(id, 'expired', 'Deal paused (moved to expired).', 'Failed to pause deal.');
 
   const handleDelete = async (id: string) => {
     setActionPendingId(id);
     try {
       await catalogApi.deleteDeal(id);
-      setDeals(prev => prev.filter(d => d.id !== id));
-      setSelectedIds(prev => prev.filter(selectedId => selectedId !== id));
-      triggerToast("Deal removed successfully.");
+      setDeals((prev) => prev.filter((d) => d.id !== id));
+      setSelectedIds((prev) => prev.filter((i) => i !== id));
+      triggerToast('Deal removed.');
     } catch (err) {
       triggerToast(err instanceof Error ? err.message : 'Failed to delete deal.', 'error');
     } finally {
@@ -449,91 +223,61 @@ export default function DealsPage() {
     }
   };
 
-  // Bulk actions handlers
   const handleBulkApprove = async () => {
-    const targets = deals.filter(d => selectedIds.includes(d.id) && d.status === 'pending');
-    if (targets.length === 0) {
-      setSelectedIds([]);
-      return;
-    }
+    const targets = deals.filter((d) => selectedIds.includes(d.id) && getComputedStatus(d) === 'pending');
+    if (targets.length === 0) { setSelectedIds([]); return; }
     setBulkActionPending(true);
-    const results = await Promise.allSettled(targets.map(d => catalogApi.updateDeal(d.id, { status: 'live' })));
-    const updatedById = new Map<string, Deal>();
-    let failCount = 0;
-    results.forEach((result, idx) => {
-      if (result.status === 'fulfilled') {
-        updatedById.set(targets[idx].id, result.value);
-      } else {
-        failCount += 1;
-      }
-    });
-    setDeals(prev => prev.map(d => updatedById.get(d.id) ?? d));
+    const results = await Promise.allSettled(targets.map((d) => catalogApi.updateDeal(d.id, { status: 'live' })));
+    const updated = new Map<string, Deal>();
+    let fails = 0;
+    results.forEach((r, i) => (r.status === 'fulfilled' ? updated.set(targets[i].id, r.value) : (fails += 1)));
+    setDeals((prev) => prev.map((d) => updated.get(d.id) ?? d));
     setSelectedIds([]);
     setBulkActionPending(false);
-    if (failCount === 0) {
-      triggerToast("Approved selected pending deal approvals!");
-    } else {
-      triggerToast(`Approved ${updatedById.size} deal(s); ${failCount} failed.`, 'error');
-    }
+    triggerToast(fails === 0 ? 'Approved selected pending deals.' : `Approved ${updated.size}; ${fails} failed.`, fails === 0 ? 'success' : 'error');
   };
 
   const handleBulkDelete = async () => {
-    const targetIds = [...selectedIds];
-    if (targetIds.length === 0) return;
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
     setBulkActionPending(true);
-    const results = await Promise.allSettled(targetIds.map(id => catalogApi.deleteDeal(id)));
-    const succeededIds = new Set<string>();
-    let failCount = 0;
-    results.forEach((result, idx) => {
-      if (result.status === 'fulfilled') {
-        succeededIds.add(targetIds[idx]);
-      } else {
-        failCount += 1;
-      }
-    });
-    setDeals(prev => prev.filter(d => !succeededIds.has(d.id)));
-    setSelectedIds(prev => prev.filter(id => !succeededIds.has(id)));
+    const results = await Promise.allSettled(ids.map((id) => catalogApi.deleteDeal(id)));
+    const done = new Set<string>();
+    let fails = 0;
+    results.forEach((r, i) => (r.status === 'fulfilled' ? done.add(ids[i]) : (fails += 1)));
+    setDeals((prev) => prev.filter((d) => !done.has(d.id)));
+    setSelectedIds((prev) => prev.filter((i) => !done.has(i)));
     setBulkActionPending(false);
-    if (failCount === 0) {
-      triggerToast("Selected deals successfully removed.");
-    } else {
-      triggerToast(`Removed ${succeededIds.size} deal(s); ${failCount} failed.`, 'error');
-    }
+    triggerToast(fails === 0 ? 'Selected deals removed.' : `Removed ${done.size}; ${fails} failed.`, fails === 0 ? 'success' : 'error');
   };
 
-  // Form submission handler (Deals)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formName || !formSeller || formDiscountValue <= 0 || !formValidUntil) {
-      setFormError("Please fill out all fields.");
+      setFormError('Please fill out all fields.');
       return;
     }
-
-    // Capture user expiry input and build a standard valid ISO string
-    const isoValidUntil = new Date(formValidUntil + 'T23:59:59.000Z').toISOString();
-
     const payload: Partial<CatalogDeal> = {
       name: formName,
       seller: formSeller,
       category: formCategory,
       discountType: formDiscountType,
       discountValue: Number(formDiscountValue),
-      validUntil: isoValidUntil,
+      validUntil: new Date(`${formValidUntil}T23:59:59.000Z`).toISOString(),
       promoCode: formPromoCode || undefined,
     };
-
     setSavingDeal(true);
     setFormError(null);
     try {
       if (editingDeal) {
         const updated = await catalogApi.updateDeal(editingDeal.id, payload);
-        setDeals(prev => prev.map(d => d.id === editingDeal.id ? updated : d));
-        triggerToast("Deal successfully updated!");
+        setDeals((prev) => prev.map((d) => (d.id === editingDeal.id ? updated : d)));
+        triggerToast('Deal updated.');
         setEditingDeal(null);
       } else {
         const created = await catalogApi.createDeal({ ...payload, status: 'pending' });
-        setDeals(prev => [created, ...prev]);
-        triggerToast("New deal launched (Pending admin verification).");
+        setDeals((prev) => [created, ...prev]);
+        triggerToast('New deal launched (Pending admin verification).');
         setIsAdding(false);
       }
     } catch (err) {
@@ -543,852 +287,277 @@ export default function DealsPage() {
     }
   };
 
-  // Form submission handler (Promo Codes)
-  const handlePromoSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!promoFormCode || !promoFormBrandName || promoFormValue <= 0 || !promoFormValidUntil) {
-      alert("Please fill out all required promo fields.");
-      return;
-    }
+  const isFormActive = isAdding || !!editingDeal;
+  const selectedCount = filteredDeals.filter((d) => selectedIds.includes(d.id)).length;
 
-    const uppercaseCode = promoFormCode.trim().toUpperCase();
-    const discountStr = promoFormType === 'percentage'
-      ? `${promoFormValue}% OFF`
-      : `Flat ৳${promoFormValue} OFF`;
-
-    // Calculate standardized ISO Date string
-    const isoDate = new Date(promoFormValidUntil + 'T23:59:59.000Z').toISOString();
-
-    if (editingPromo) {
-      setPromoCodes(prev => prev.map(p => p.id === editingPromo.id ? {
-        ...p,
-        code: uppercaseCode,
-        brandName: promoFormBrandName.trim(),
-        discount: discountStr,
-        type: promoFormType,
-        value: Number(promoFormValue),
-        minOrderValue: promoFormMinOrder ? Number(promoFormMinOrder) : undefined,
-        maxUsage: promoFormMaxUsage ? Number(promoFormMaxUsage) : undefined,
-        validUntil: isoDate
-      } : p));
-      triggerToast("Promo code successfully updated!");
-      setEditingPromo(null);
-    } else {
-      const newPromo: PromoCode = {
-        id: 'p_' + Date.now(),
-        code: uppercaseCode,
-        brandId: 'brand_' + promoFormBrandName.toLowerCase().replace(/\s+/g, '_'),
-        brandName: promoFormBrandName.trim(),
-        discount: discountStr,
-        type: promoFormType,
-        value: Number(promoFormValue),
-        minOrderValue: promoFormMinOrder ? Number(promoFormMinOrder) : undefined,
-        maxUsage: promoFormMaxUsage ? Number(promoFormMaxUsage) : undefined,
-        usedCount: 0,
-        validUntil: isoDate,
-        active: true
-      };
-      setPromoCodes(prev => [newPromo, ...prev]);
-      triggerToast("New promo code launched successfully.");
-      setIsAddingPromo(false);
-    }
+  // ── presentation — exact reference values (isDeals 2957–2979) ──
+  const S: Record<string, CSSProperties> = {
+    headRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 },
+    h1: { fontSize: 15, fontWeight: 800, color: '#111827' },
+    createBtn: { background: ACCENT, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 },
+    couponLink: { fontSize: '11.5px', fontWeight: 800, color: ACCENT, display: 'inline-flex', alignItems: 'center', gap: 5, background: 'none', border: 0, cursor: 'pointer' },
+    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 14, marginBottom: 14 },
+    statCard: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 16 },
+    statNum: { fontSize: 22, fontWeight: 800, color: '#111827' },
+    statLabel: { fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', marginTop: 4 },
+    controls: { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 },
+    search: { height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 14px 0 34px', fontSize: '12.5px', minWidth: 240, outline: 'none', background: '#fff' },
+    select: { height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 12px', fontSize: 12, color: '#111827', background: '#fff', outline: 'none', cursor: 'pointer' },
+    bulkBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(180deg,rgba(0,4,53,0.94) 0%,rgba(0,6,46,0.92) 80%,rgba(0,2,37,0.94) 100%)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', borderRadius: 8, padding: '12px 16px', marginBottom: 12, flexWrap: 'wrap', gap: 10 },
+    bulkChip: { background: ACCENT_WASH, color: ACCENT, padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800 },
+    bulkBtn: { background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 6, padding: '5px 12px', fontSize: 10.5, fontWeight: 800, cursor: 'pointer' },
+    bulkClear: { cursor: 'pointer', fontSize: 10.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', background: 'none', border: 0 },
+    tableWrap: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, overflow: 'hidden' },
+    th: { textAlign: 'left', padding: '12px 16px', fontSize: '10.5px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' },
+    td: { padding: '14px 16px', fontSize: 13, color: '#111827', verticalAlign: 'middle' },
+    tdMuted: { padding: '14px 16px', fontSize: 13, color: '#6B7280', verticalAlign: 'middle' },
+    row: { borderTop: '1px solid #F1F3F5' },
+    discountPill: { background: ACCENT, color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 800, whiteSpace: 'nowrap' },
+    iconBtn: { width: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 6, border: '1px solid #E8EDF2', background: '#fff', cursor: 'pointer', color: '#6B7280' },
+    formCard: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, padding: 20 },
+    fLabel: { fontSize: 10, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.04em', marginBottom: 6, display: 'block' },
+    input: { width: '100%', boxSizing: 'border-box', height: 40, borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 12px', fontSize: '12.5px', outline: 'none', background: '#fff' },
+    saveBtn: { background: ACCENT, color: '#fff', border: 'none', borderRadius: 8, padding: '11px 20px', fontSize: '12.5px', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 },
+    ghost: { fontSize: 11, fontWeight: 700, color: '#6B7280', background: 'none', border: 0, cursor: 'pointer', padding: 0 },
   };
 
-  // Status Badge Styling map
-  const getStatusBadgeStyleAndClasses = (status: Deal['status']) => {
-    switch (status) {
-      case 'live':
-        return 'bg-green-50 text-green-700 border-green-200';
-      case 'pending':
-        return 'bg-orange-50 text-orange-700 border-orange-100';
-      case 'expiring':
-        return 'bg-red-50 text-red-600 border-red-200';
-      case 'expired':
-        return 'bg-gray-50 text-gray-400 border-gray-200';
-      case 'rejected':
-        return 'bg-slate-100 text-slate-500 border-slate-200';
-      default:
-        return 'bg-gray-50 text-gray-400 border-gray-200';
-    }
-  };
-
-  // Deals-only page now; the Promo Code tab redirects to /admin/coupons.
-  const switchTab = (tab: 'deals' | 'promo_codes') => {
-    if (tab === 'promo_codes') {
-      navigate('/admin/coupons');
-      return;
-    }
-    setSearchTerm('');
-    setSelectedIds([]);
-    setSearchParams({});
-  };
-
-  const isFormActive = isAdding || editingDeal || isAddingPromo || editingPromo;
-
-  // Real, deals-derived metrics only (no fabricated promo-code stats).
-  const metrics: Array<{ label: string; val: number; accent: 'orange' | 'emerald' | 'rose' }> = [
-    { label: 'Total Deals', val: computedStats.total, accent: 'orange' },
-    { label: 'Live Deals', val: computedStats.live, accent: 'emerald' },
-    { label: 'Pending Approval', val: computedStats.pending, accent: 'orange' },
-    { label: 'Expiring 48h', val: computedStats.expiring48h, accent: 'rose' },
-  ];
+  const CATEGORY_OPTIONS = ['Electronics', 'Fashion', 'Home & Living', 'Groceries', 'Beauty', 'Sports & Outdoor', 'Baby & Kids', 'Mobile & Gadgets', ...uniqueCategories]
+    .filter((v, i, a) => a.indexOf(v) === i);
 
   return (
-    <div className="space-y-6 text-[#111827]">
-
-      {/* Tab Selector Headers */}
-      <div className="flex border-b border-gray-200 gap-2 mb-2">
-        <button
-          onClick={() => switchTab('deals')}
-          className={`px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 transition-all cursor-pointer flex items-center gap-2 outline-none ${
-            activeTab === 'deals'
-              ? 'border-[#FF5B00] text-[#FF5B00]'
-              : 'border-transparent text-gray-500 hover:text-[#FF5B00]'
-          }`}
-        >
-          🏷️ Active Deals Manager
-        </button>
-        <button
-          onClick={() => switchTab('promo_codes')}
-          className="px-5 py-3 text-xs font-bold uppercase tracking-wider border-b-2 border-transparent text-gray-500 hover:text-[#FF5B00] transition-all cursor-pointer flex items-center gap-2 outline-none"
-          title="Promo codes & vouchers are managed on their own page"
-        >
-          🎟️ Promo Codes &amp; Vouchers <ExternalLink className="w-3 h-3" />
-        </button>
-      </div>
-
-      {/* Real deals-derived metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {metrics.map(s => (
-          <StatTile key={s.label} label={s.label} value={s.val} accent={s.accent} />
-        ))}
-      </div>
-
-      {/* Control bar: search, dynamic filters button, create card triggers */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex-1 bg-white border border-gray-200 rounded-lg flex items-center px-3 py-2 gap-2">
-          <Search className="w-4 h-4 text-gray-400" />
-          <input
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder={activeTab === 'deals' ? "Search deals by name or seller..." : "Search promotions by code or brand name..."}
-            className="flex-1 bg-transparent text-[12px] outline-none text-[#111827]"
-          />
-        </div>
-
-        {/* Actions panel alignment */}
-        <div className="flex gap-2 relative">
-
-          {activeTab === 'deals' && (
-            <div className="relative">
-              <button
-                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
-                className="bg-[#FF5B00] hover:bg-orange-600 text-white px-4 py-2 h-full rounded-lg text-xs font-bold shadow-lg shadow-orange-500/10 flex items-center gap-1.5 transition cursor-pointer border-none"
-              >
-                <Filter className="w-3.5 h-3.5" />
-                <span>Filter</span>
-              </button>
-
-              {showFilterDropdown && (
-                <div className="absolute right-0 mt-2 bg-white border border-gray-200 shadow-xl rounded-xl p-4 w-60 z-50 text-left text-xs space-y-3">
-                  <div>
-                     <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Status Filter</label>
-                     <select
-                       value={statusFilter}
-                       onChange={(e) => setStatusFilter(e.target.value)}
-                       className="w-full bg-slate-50 border border-gray-200 rounded-lg p-2 text-xs text-[#111827] outline-none"
-                     >
-                        <option value="All">All Statuses</option>
-                        <option value="Live">Live</option>
-                        <option value="Pending">Pending</option>
-                        <option value="Expiring">Expiring</option>
-                        <option value="Expired">Expired</option>
-                     </select>
-                  </div>
-                  <div>
-                     <label className="block text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5">Category Filter</label>
-                     <select
-                       value={categoryFilter}
-                       onChange={(e) => setCategoryFilter(e.target.value)}
-                       className="w-full bg-slate-50 border border-gray-200 rounded-lg p-2 text-xs text-[#111827] outline-none"
-                     >
-                        <option value="All">All Categories</option>
-                        {uniqueCategories.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                     </select>
-                  </div>
-                  <div className="flex justify-between pt-2 border-t border-slate-100 items-center">
-                     <button
-                       onClick={() => { setStatusFilter('All'); setCategoryFilter('All'); }}
-                       className="text-[10px] text-gray-400 font-bold hover:text-gray-600 bg-transparent border-none cursor-pointer"
-                     >
-                       Reset Filters
-                     </button>
-                     <button
-                       onClick={() => setShowFilterDropdown(false)}
-                       className="text-[10px] text-[#FF5B00] font-black uppercase hover:underline bg-transparent border-none cursor-pointer"
-                     >
-                       Close
-                     </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          <button
-            onClick={() => {
-              if (activeTab === 'deals') {
-                setEditingDeal(null);
-                setEditingPromo(null);
-                setIsAdding(true);
-              } else {
-                setEditingDeal(null);
-                setEditingPromo(null);
-                setIsAddingPromo(true);
-              }
-            }}
-            className="bg-white hover:bg-slate-50 text-[#FF5B00] border border-[#FF5B00]/40 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-sm"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{activeTab === 'deals' ? 'Create Deal' : 'Create Promo Code'}</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Main layout with responsive columns changing dynamically depending on forms panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-
-        {/* Dynamic column sizing */}
-        <div className={isFormActive ? "lg:col-span-8 space-y-6 w-full overflow-x-auto" : "lg:col-span-12 space-y-6 w-full"}>
-
-          <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
-
-            {activeTab === 'deals' ? (
-              dealsLoading ? (
-                <div className="p-10 flex flex-col items-center justify-center gap-2 text-gray-400">
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span className="text-xs font-bold">Loading deals…</span>
-                </div>
-              ) : dealsError ? (
-                <div className="p-10 flex flex-col items-center justify-center gap-3 text-center">
-                  <AlertTriangle className="w-5 h-5 text-red-500" />
-                  <span className="text-xs font-bold text-red-600 max-w-sm">{dealsError}</span>
-                  <button
-                    onClick={loadDeals}
-                    className="px-3 py-1.5 bg-[#FF5B00] hover:bg-orange-600 text-white text-[10px] font-black uppercase tracking-widest rounded-lg cursor-pointer transition-colors border-none"
-                  >
-                    Retry
-                  </button>
-                </div>
-              ) : (
-              <table className="w-full text-left table-auto">
-                <thead className="bg-[#F7F8FA] border-b border-gray-100">
-                   <tr className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                     <th className="p-4 w-10">
-                       <input
-                         type="checkbox"
-                         checked={allFilteredSelected}
-                         onChange={handleSelectAllToggle}
-                         className="cursor-pointer font-bold rounded"
-                       />
-                     </th>
-                     <th className="p-4">Deal Name</th>
-                     <th className="p-4">Seller</th>
-                     <th className="p-4">Discount</th>
-                     <th className="p-4">Expires</th>
-                     <th className="p-4">Clicks</th>
-                     <th className="p-4">Status</th>
-                     <th className="p-4 text-right">Actions</th>
-                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                   {filteredDeals.map(deal => {
-                     const dynamicStatus = getComputedStatus(deal);
-                     const isExpiring = dynamicStatus === 'expiring';
-                     const rowPending = actionPendingId === deal.id;
-                     return (
-                       <tr key={deal.id} className={`hover:bg-gray-50/50 transition-colors ${rowPending ? 'opacity-60' : ''}`}>
-                          <td className="p-4">
-                            <input
-                              type="checkbox"
-                              checked={selectedIds.includes(deal.id)}
-                              onChange={() => handleSelectToggle(deal.id)}
-                              className="cursor-pointer rounded"
-                            />
-                          </td>
-                          <td className="p-4 font-bold text-[12px] text-[#111827] max-w-[200px] truncate">
-                            {deal.name}
-                          </td>
-                          <td className="p-4 text-[11px] text-gray-500">{deal.seller}</td>
-                          <td className="p-4">
-                            <span className="bg-[#FF5B00] text-white px-2 py-0.5 rounded text-[10px] font-bold">
-                              {deal.discountType === 'flat' ? `৳${deal.discountValue} OFF` : `${deal.discountValue}% OFF`}
-                            </span>
-                          </td>
-                          <td className={`p-4 text-[10px] flex items-center gap-1.5 mt-2.5 ${isExpiring ? 'text-red-650' : 'text-gray-400'}`}>
-                            {isExpiring && <Clock className="w-3.5 h-3.5" />} {getExpiryDisplay(deal.validUntil)}
-                          </td>
-                          <td className="p-4 text-[11px] font-medium text-gray-700">{deal.clicks ? deal.clicks.toLocaleString() : '—'}</td>
-                          <td className="p-4">
-                            <span className={`text-[9px] px-2 py-0.5 rounded-full font-bold border uppercase tracking-tighter ${getStatusBadgeStyleAndClasses(dynamicStatus)}`}>
-                              {capitalize(dynamicStatus)}
-                            </span>
-                          </td>
-                          <td className="p-4 text-right">
-                            <div className="flex flex-col items-end gap-1">
-                              <div className="flex gap-2 justify-end">
-
-                                 {/* Condition: Pending deal actions */}
-                                 {dynamicStatus === 'pending' ? (
-                                   <>
-                                     <button
-                                       onClick={() => handleApprove(deal.id)}
-                                       disabled={rowPending}
-                                       className="p-1 text-green-600 hover:bg-green-50 rounded border border-green-100 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                       title="Approve / Publish Live"
-                                     >
-                                       <CheckCircle className="w-4 h-4" />
-                                     </button>
-                                     <button
-                                       onClick={() => handleReject(deal.id)}
-                                       disabled={rowPending}
-                                       className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                       title="Reject Request"
-                                     >
-                                       <XCircle className="w-4 h-4" />
-                                     </button>
-                                   </>
-                                 ) : (
-                                   <>
-                                     {/* Condition: Live / expiring deals have Pause equivalent */}
-                                     {(dynamicStatus === 'live' || dynamicStatus === 'expiring') ? (
-                                       <button
-                                         onClick={() => handlePause(deal.id)}
-                                         disabled={rowPending}
-                                         className="p-1 text-amber-600 hover:bg-amber-50 rounded border border-amber-100 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                         title="Pause / End Deal"
-                                       >
-                                         <Pause className="w-4 h-4" />
-                                       </button>
-                                     ) : null}
-
-                                     <button
-                                       onClick={() => setConfirmingId(deal.id)}
-                                       disabled={rowPending}
-                                       className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                       title="Remove Deal"
-                                     >
-                                       <Trash2 className="w-4 h-4" />
-                                     </button>
-                                   </>
-                                 )}
-
-                                 {/* Edit button populated on all rows */}
-                                 <button
-                                   onClick={() => setEditingDeal(deal)}
-                                   disabled={rowPending}
-                                   className="p-1 text-blue-600 hover:bg-blue-50 rounded border border-blue-100 cursor-pointer transition disabled:opacity-50 disabled:cursor-not-allowed"
-                                   title="Edit Deal Specifications"
-                                 >
-                                   <Edit3 className="w-4 h-4" />
-                                 </button>
-                              </div>
-                              {confirmingId === deal.id && (
-                                <div className="mt-1 p-2 bg-red-50 border border-red-200 rounded-lg flex flex-col items-end gap-1 z-10">
-                                  <span className="text-[9px] font-black text-red-600">Delete deal?</span>
-                                  <div className="flex gap-1">
-                                    <button
-                                      onClick={() => { handleDelete(deal.id); setConfirmingId(null); }}
-                                      className="px-2 py-1 bg-red-500 text-white text-[8px] font-black uppercase rounded hover:bg-red-600 transition-colors border border-transparent"
-                                    >Confirm</button>
-                                    <button
-                                      onClick={() => setConfirmingId(null)}
-                                      className="px-2 py-1 bg-white border border-slate-250 text-slate-600 text-[8px] font-black uppercase rounded hover:bg-slate-50 transition-colors"
-                                    >Cancel</button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                       </tr>
-                     );
-                   })}
-
-                   {filteredDeals.length === 0 && (
-                     <tr>
-                       <td colSpan={8} className="p-8 text-center text-xs text-gray-400 italic">
-                         No matching deals currently listed inside database dashboard.
-                       </td>
-                     </tr>
-                   )}
-                </tbody>
-              </table>
-              )
-            ) : (
-              // Promo Codes Tab Table View
-              <table className="w-full text-left table-auto">
-                <thead className="bg-[#F7F8FA] border-b border-gray-100">
-                   <tr className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">
-                     <th className="p-4">Code</th>
-                     <th className="p-4">Brand</th>
-                     <th className="p-4">Discount</th>
-                     <th className="p-4">Type</th>
-                     <th className="p-4">Min Order</th>
-                     <th className="p-4">Used / Max</th>
-                     <th className="p-4">Valid Until</th>
-                     <th className="p-4">Active</th>
-                     <th className="p-4 text-right">Actions</th>
-                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                   {filteredPromoCodes.map(promo => {
-                     const expired = isPromoExpired(promo);
-                     return (
-                       <tr key={promo.id} className="hover:bg-gray-50/50 transition-colors">
-                          <td className="p-4">
-                            <span className="font-mono bg-orange-100 border border-orange-200 text-[#FF5B00] px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider select-all">
-                              {promo.code}
-                            </span>
-                          </td>
-                          <td className="p-4 text-xs font-bold text-[#111827]">{promo.brandName}</td>
-                          <td className="p-4 text-xs font-semibold text-[#FF5B00]">{promo.discount}</td>
-                          <td className="p-4 text-xs uppercase text-gray-500 font-mono tracking-tight">{promo.type}</td>
-                          <td className="p-4 text-xs text-gray-700">
-                            {promo.minOrderValue ? `৳ ${promo.minOrderValue.toLocaleString()}` : "৳ 0"}
-                          </td>
-                          <td className="p-4 text-xs text-gray-600">
-                            <span className="font-bold">{promo.usedCount}</span>
-                            {promo.maxUsage ? ` / ${promo.maxUsage}` : " / ∞"}
-                          </td>
-                          <td className="p-4 text-xs">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className={expired ? "text-red-500 font-bold" : "text-gray-600"}>
-                                {new Date(promo.validUntil).toLocaleDateString('en-US', {
-                                  month: 'short',
-                                  day: 'numeric',
-                                  year: 'numeric'
-                                })}
-                              </span>
-                              {expired && (
-                                <span className="bg-red-500/10 text-red-600 border border-red-500/10 text-[9px] px-1.5 py-0.5 rounded font-black uppercase tracking-wider whitespace-nowrap">
-                                  Expired
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-4">
-                            <label className="relative inline-flex items-center cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={promo.active && !expired}
-                                disabled={expired}
-                                onChange={(e) => {
-                                  if (expired) return;
-                                  const val = e.target.checked;
-                                  setPromoCodes(prev => prev.map(p => p.id === promo.id ? { ...p, active: val } : p));
-                                  triggerToast(`Promo code ${promo.code} ${val ? 'activated' : 'deactivated'}.`);
-                                }}
-                                className="sr-only peer"
-                              />
-                              <div className={`w-9 h-5 bg-gray-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600 ${expired ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'}`}></div>
-                            </label>
-                          </td>
-                          <td className="p-4 text-right">
-                            <div className="flex flex-col items-end gap-1">
-                              <div className="flex gap-2 justify-end">
-                                <button
-                                  onClick={() => {
-                                    setEditingPromo(promo);
-                                    setIsAddingPromo(false);
-                                  }}
-                                  className="p-1 text-blue-600 hover:bg-blue-50 rounded border border-blue-100 cursor-pointer transition"
-                                  title="Edit Promo Code"
-                                >
-                                  <Edit3 className="w-4 h-4" />
-                                </button>
-                                <button
-                                  onClick={() => setConfirmingId(promo.id)}
-                                  className="p-1 text-red-600 hover:bg-red-50 rounded border border-red-100 cursor-pointer transition"
-                                  title="Delete Promo Code"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                              {confirmingId === promo.id && (
-                                <div className="mt-1 p-2 bg-red-50 border border-red-200 rounded-lg flex flex-col items-end gap-1 z-10">
-                                  <span className="text-[9px] font-black text-red-600">Delete promo?</span>
-                                  <div className="flex gap-1">
-                                    <button
-                                      onClick={() => {
-                                        setPromoCodes(prev => prev.filter(p => p.id !== promo.id));
-                                        triggerToast(`Promo code ${promo.code} deleted successfully.`);
-                                        setConfirmingId(null);
-                                      }}
-                                      className="px-2 py-1 bg-red-500 text-white text-[8px] font-black uppercase rounded hover:bg-red-600 transition-colors border border-transparent"
-                                    >Confirm</button>
-                                    <button
-                                      onClick={() => setConfirmingId(null)}
-                                      className="px-2 py-1 bg-white border border-slate-250 text-slate-600 text-[8px] font-black uppercase rounded hover:bg-slate-50 transition-colors"
-                                    >Cancel</button>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                       </tr>
-                     );
-                   })}
-
-                   {filteredPromoCodes.length === 0 && (
-                     <tr>
-                       <td colSpan={9} className="p-8 text-center text-xs text-gray-400 italic">
-                         No matching promo codes currently list under this search value.
-                       </td>
-                     </tr>
-                   )}
-                </tbody>
-              </table>
-            )}
-
-          </div>
-        </div>
-
-        {/* Dynamic drawer side form: handles both Deals and Promo Codes depend on tab */}
-        <AnimatePresence mode="wait">
-          {isFormActive && (
-            <div className="lg:col-span-4 h-fit sticky top-24">
-              <motion.div
-                key={activeTab === 'deals' ? "form-deal" : "form-promo"}
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 20 }}
-                className="bg-white border border-gray-200 rounded-[2rem] p-6 shadow-2xl text-left space-y-4"
-              >
-                <div className="flex justify-between items-center pb-3 border-b border-gray-100">
-                  <h3 className="text-xs font-black uppercase tracking-widest text-[#111827] flex items-center gap-1.5">
-                    <Tag className="w-4 h-4 text-[#FF5B00]" />
-                    <span>
-                      {activeTab === 'deals'
-                        ? (editingDeal ? 'Modify Custom Deal' : 'Publish New Deal')
-                        : (editingPromo ? 'Modify Promo Code' : 'Create Promo Code')
-                      }
-                    </span>
-                  </h3>
-                  <button
-                    onClick={() => {
-                      setIsAdding(false);
-                      setEditingDeal(null);
-                      setFormError(null);
-                      setIsAddingPromo(false);
-                      setEditingPromo(null);
-                    }}
-                    className="p-1.5 text-slate-400 hover:text-[#FF5B00] rounded-xl text-xs font-bold transition cursor-pointer bg-transparent border-none"
-                  >
-                    Cancel
-                  </button>
-                </div>
-
-                {activeTab === 'deals' ? (
-                  // DEALS SECTOR FORM
-                  <form onSubmit={handleSubmit} className="space-y-4 text-xs">
-                    {formError && (
-                      <div className="p-2.5 bg-red-50 border border-red-200 rounded-lg text-[10px] font-bold text-red-600 flex items-center gap-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                        <span>{formError}</span>
-                      </div>
-                    )}
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Deal Label Name</label>
-                      <input
-                        type="text"
-                        required
-                        value={formName}
-                        onChange={(e) => setFormName(e.target.value)}
-                        placeholder="e.g. Walton Smart TV Discount"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Seller Business Name</label>
-                      <input
-                        type="text"
-                        required
-                        value={formSeller}
-                        onChange={(e) => setFormSeller(e.target.value)}
-                        placeholder="e.g. ElectroBD Dhaka"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Discount Type</label>
-                        <select
-                          value={formDiscountType}
-                          onChange={(e) => setFormDiscountType(e.target.value as 'percentage' | 'flat')}
-                          className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                        >
-                          <option value="percentage">Percentage (%)</option>
-                          <option value="flat">Flat Cash (৳)</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Discount Value</label>
-                        <input
-                          type="number"
-                          required
-                          min="1"
-                          max={formDiscountType === 'percentage' ? 100 : undefined}
-                          value={formDiscountValue || ''}
-                          onChange={(e) => setFormDiscountValue(Number(e.target.value))}
-                          placeholder={formDiscountType === 'percentage' ? 'e.g. 15' : 'e.g. 500'}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Category</label>
-                      <select
-                        value={formCategory}
-                        onChange={(e) => setFormCategory(e.target.value)}
-                        className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                      >
-                        <option value="Electronics">Electronics</option>
-                        <option value="Home">Home</option>
-                        <option value="Fashion">Fashion</option>
-                        <option value="Beauty">Beauty</option>
-                        <option value="Groceries">Groceries</option>
-                        <option value="Others">Others</option>
-                      </select>
-                    </div>
-
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Expiry Date</label>
-                        <input
-                          type="date"
-                          required
-                          value={formValidUntil}
-                          onChange={(e) => setFormValidUntil(e.target.value)}
-                          className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-2 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                        />
-                      </div>
-
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5 text-left">Coupon Code (Optional)</label>
-                      <input
-                        type="text"
-                        value={formPromoCode}
-                        onChange={(e) => setFormPromoCode(e.target.value)}
-                        placeholder="e.g. SAVINGS25"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      disabled={savingDeal}
-                      className="w-full py-3 bg-[#FF5B00] hover:bg-orange-600 text-white font-extrabold uppercase tracking-wide rounded-xl text-xs shadow-lg shadow-orange-500/10 cursor-pointer transition border-none mt-4 disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                      {savingDeal && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                      <span>
-                        {savingDeal
-                          ? 'Saving…'
-                          : editingDeal ? 'Apply Updates' : 'Publish / Add Deal'}
-                      </span>
-                    </button>
-                  </form>
-                ) : (
-                  // PROMO CODES SECTOR FORM
-                  <form onSubmit={handlePromoSubmit} className="space-y-4 text-xs">
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Promo Code (Uppercase)</label>
-                      <input
-                        type="text"
-                        required
-                        value={promoFormCode}
-                        onChange={(e) => setPromoFormCode(e.target.value.toUpperCase())}
-                        placeholder="e.g. AARONG20"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00] font-mono font-bold"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Brand Name</label>
-                      <input
-                        type="text"
-                        required
-                        value={promoFormBrandName}
-                        onChange={(e) => setPromoFormBrandName(e.target.value)}
-                        placeholder="e.g. Aarong, Apex, Sailor, etc."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Discount Type</label>
-                        <select
-                          value={promoFormType}
-                          onChange={(e) => setPromoFormType(e.target.value as 'percentage' | 'flat')}
-                          className="w-full bg-slate-50 border border-gray-200 rounded-xl px-3 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                        >
-                          <option value="percentage">Percentage (%)</option>
-                          <option value="flat">Flat Cash (৳)</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Discount Value</label>
-                        <input
-                          type="number"
-                          required
-                          min="1"
-                          value={promoFormValue || ''}
-                          onChange={(e) => setPromoFormValue(Number(e.target.value))}
-                          placeholder={promoFormType === 'percentage' ? "e.g. 15" : "e.g. 500"}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Min Order Value (৳)</label>
-                        <input
-                          type="number"
-                          value={promoFormMinOrder || ''}
-                          onChange={(e) => setPromoFormMinOrder(Number(e.target.value))}
-                          placeholder="e.g. 2500"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Max Usage Count</label>
-                        <input
-                          type="number"
-                          value={promoFormMaxUsage || ''}
-                          onChange={(e) => setPromoFormMaxUsage(Number(e.target.value))}
-                          placeholder="e.g. 500"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-1.5">Valid Until Date</label>
-                      <input
-                        type="date"
-                        required
-                        value={promoFormValidUntil}
-                        onChange={(e) => setPromoFormValidUntil(e.target.value)}
-                        className="w-full bg-slate-50 border border-gray-200 rounded-xl px-4 py-2 text-xs text-[#111827] outline-none focus:border-[#FF5B00]"
-                      />
-                    </div>
-
-                    <button
-                      type="submit"
-                      className="w-full py-3 bg-[#FF5B00] hover:bg-orange-600 text-white font-extrabold uppercase tracking-wide rounded-xl text-xs shadow-lg shadow-orange-500/10 cursor-pointer transition border-none mt-4"
-                    >
-                      {editingPromo ? 'Apply Promo Updates' : 'Launch Promo Code'}
-                    </button>
-                  </form>
-                )}
-
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
-
-      </div>
-
-      {/* Bulk actions menu bar popping on checkboxes selection for Deals */}
-      <AnimatePresence>
-        {activeTab === 'deals' && selectedIds.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 100 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 100 }}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 md:translate-x-0 md:left-auto md:right-32 z-55 bg-[#111827] text-white px-6 py-3.5 rounded-2xl shadow-2xl flex flex-col gap-3 border border-[#FF5B00]/30 w-96 max-w-full"
-          >
-            <div className="flex items-center justify-between gap-6">
-              <div className="flex items-center gap-2 text-left">
-                <span className="w-5 h-5 bg-[#FF5B00] rounded-full text-[10px] font-black flex items-center justify-center text-white">
-                  {selectedIds.length}
-                </span>
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-350">Selected Deals</span>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleBulkApprove}
-                  disabled={bulkActionPending}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 border-none disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {bulkActionPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  <span>Approve</span>
-                </button>
-                <button
-                  onClick={() => setShowBulkDeleteForm(prev => !prev)}
-                  disabled={bulkActionPending}
-                  className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition cursor-pointer flex items-center gap-1 border-none disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete</span>
-                </button>
-                <button
-                  onClick={() => { setSelectedIds([]); setShowBulkDeleteForm(false); }}
-                  className="text-slate-400 hover:text-white font-bold text-xs px-2 py-1.5 bg-transparent border-none cursor-pointer"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-            {showBulkDeleteForm && (
-              <div className="p-3 bg-[#1F1F35] rounded-xl border border-rose-500/30 text-white flex flex-col gap-2 shadow-2xl">
-                <span className="text-[10px] font-black text-rose-400 uppercase tracking-wider">Are you absolutely sure?</span>
-                <span className="text-[9px] text-slate-400">This will permanently delete all {selectedIds.length} selected deals from the platform database listings.</span>
-                <div className="flex gap-2 justify-end">
-                  <button
-                    onClick={() => {
-                      handleBulkDelete();
-                      setShowBulkDeleteForm(false);
-                    }}
-                    disabled={bulkActionPending}
-                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-[9px] font-black uppercase tracking-widest rounded-lg cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  >Confirm Bulk Delete</button>
-                  <button
-                    onClick={() => setShowBulkDeleteForm(false)}
-                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 text-[9px] font-black uppercase tracking-widest rounded-lg cursor-pointer transition-colors"
-                  >Cancel</button>
-                </div>
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Floating interactive notification system */}
+    <div style={{ color: '#111827' }}>
       <AnimatePresence>
         {toast && (
           <motion.div
-            initial={{ opacity: 0, y: 50, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9, y: 20 }}
-            className={`fixed bottom-6 right-6 z-[600] border p-4 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold text-white ${
-              toast.type === 'error' ? 'bg-red-600 border-red-400/40' : 'bg-[#111827] border-[#FF5B00]/30'
-            }`}
+            initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
+            style={{
+              position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 100,
+              background: toast.type === 'error' ? '#DC2626' : '#111827', color: '#fff',
+              borderRadius: 12, padding: '11px 18px', fontSize: 12.5, fontWeight: 700,
+              display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
+            }}
           >
-            <div className={`w-2.5 h-2.5 rounded-full animate-pulse ${toast.type === 'error' ? 'bg-white' : 'bg-emerald-500'}`} />
-            <span>{toast.message}</span>
+            {toast.type === 'error' ? <AlertTriangle size={15} /> : <Save size={15} />} {toast.message}
           </motion.div>
         )}
       </AnimatePresence>
 
+      {/* ── Header (reference) ── */}
+      <div style={S.headRow}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap' }}>
+          <span style={S.h1}>Deals &amp; Promotions</span>
+          <button onClick={() => navigate('/admin/coupons')} style={S.couponLink}>
+            Promo Codes &amp; Vouchers <ExternalLink size={12} />
+          </button>
+        </div>
+        <button onClick={() => { setEditingDeal(null); setIsAdding(true); }} style={S.createBtn}>
+          <Plus size={14} /> Create Deal
+        </button>
+      </div>
+
+      {/* ── Real deals-derived metrics ── */}
+      <div style={S.statGrid}>
+        {([
+          ['Total Deals', computedStats.total, '#6C4CFF'],
+          ['Live Deals', computedStats.live, '#16A34A'],
+          ['Pending Approval', computedStats.pending, '#B45309'],
+          ['Expiring 48h', computedStats.expiring48h, '#DC2626'],
+        ] as const).map(([label, val, c]) => (
+          <div key={label} style={{ ...S.statCard, borderLeft: `4px solid ${c}` }}>
+            <div style={S.statNum}>{dealsLoading ? '—' : val}</div>
+            <div style={S.statLabel}>{label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Controls (real search + filters) ── */}
+      <div style={S.controls}>
+        <div style={{ position: 'relative' }}>
+          <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: 12, top: 12, pointerEvents: 'none' }} />
+          <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} placeholder="Search deals by name or seller…" style={S.search} />
+        </div>
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={S.select}>
+          {['All', 'Live', 'Pending', 'Expiring', 'Expired', 'Rejected'].map((s) => (
+            <option key={s} value={s}>{s === 'All' ? 'All statuses' : s}</option>
+          ))}
+        </select>
+        <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={S.select}>
+          <option value="All">All categories</option>
+          {uniqueCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
+        {(statusFilter !== 'All' || categoryFilter !== 'All' || searchTerm) && (
+          <button onClick={() => { setStatusFilter('All'); setCategoryFilter('All'); setSearchTerm(''); }} style={S.ghost}>Reset</button>
+        )}
+      </div>
+
+      {/* ── Bulk bar (real) ── */}
+      {selectedCount > 0 && (
+        <div style={S.bulkBar}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={S.bulkChip}>{selectedCount} selected</span>
+            <button onClick={handleBulkApprove} disabled={bulkActionPending} style={S.bulkBtn}>Approve pending</button>
+            <button onClick={handleBulkDelete} disabled={bulkActionPending} style={{ ...S.bulkBtn, background: 'rgba(239,68,68,0.25)' }}>Delete</button>
+          </div>
+          <button onClick={() => setSelectedIds([])} style={S.bulkClear}>✕ Clear</button>
+        </div>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: isFormActive ? 'minmax(0,1fr) minmax(0,340px)' : 'minmax(0,1fr)', gap: 20, alignItems: 'start' }} className="deals-grid">
+        {/* ── Table (reference) ── */}
+        <div style={S.tableWrap}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#F9FAFB' }}>
+                  <th style={{ ...S.th, width: 36, textAlign: 'center' }}>
+                    <input type="checkbox" checked={allFilteredSelected} onChange={toggleSelectAll} aria-label="Select all deals" />
+                  </th>
+                  <th style={S.th}>Deal</th>
+                  <th style={S.th}>Brand</th>
+                  <th style={S.th}>Discount</th>
+                  <th style={S.th}>Starts</th>
+                  <th style={S.th}>Ends</th>
+                  <th style={S.th}>Clicks</th>
+                  <th style={S.th}>Status</th>
+                  <th style={{ ...S.th, width: 120, textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {dealsLoading ? (
+                  <tr><td colSpan={9} style={{ ...S.tdMuted, textAlign: 'center', padding: '40px 0' }}>
+                    <Loader2 size={16} className="animate-spin" style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle' }} /> Loading deals…
+                  </td></tr>
+                ) : dealsError ? (
+                  <tr><td colSpan={9} style={{ ...S.td, textAlign: 'center', padding: '32px 16px' }}>
+                    <div style={{ color: '#DC2626', fontWeight: 600, fontSize: 12, marginBottom: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <AlertTriangle size={15} /> {dealsError}
+                    </div>
+                    <button onClick={() => void loadDeals()} style={{ ...S.iconBtn, width: 'auto', padding: '6px 12px', fontSize: 11, fontWeight: 800 }}>Retry</button>
+                  </td></tr>
+                ) : filteredDeals.length === 0 ? (
+                  <tr><td colSpan={9} style={{ ...S.tdMuted, textAlign: 'center', padding: '40px 16px', fontStyle: 'italic' }}>
+                    No matching deals currently listed.
+                  </td></tr>
+                ) : (
+                  filteredDeals.map((deal) => {
+                    const cs = getComputedStatus(deal);
+                    const isExpiring = cs === 'expiring';
+                    const rowPending = actionPendingId === deal.id;
+                    return (
+                      <tr key={deal.id} style={{ ...S.row, opacity: rowPending ? 0.6 : 1 }}>
+                        <td style={{ ...S.td, textAlign: 'center' }}>
+                          <input type="checkbox" checked={selectedIds.includes(deal.id)} onChange={() => toggleSelect(deal.id)} aria-label={`Select ${deal.name}`} />
+                        </td>
+                        <td style={{ ...S.td, fontWeight: 700, maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{deal.name}</td>
+                        <td style={S.tdMuted}>{deal.seller}</td>
+                        <td style={S.td}>
+                          <span style={S.discountPill}>
+                            {deal.discountType === 'flat' ? `৳${deal.discountValue} OFF` : `${deal.discountValue}% OFF`}
+                          </span>
+                        </td>
+                        <td style={S.tdMuted}>{fmtDate(deal.validFrom)}</td>
+                        <td style={{ ...S.tdMuted, color: isExpiring ? '#DC2626' : '#6B7280' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            {isExpiring && <Clock size={13} />} {getExpiryDisplay(deal.validUntil)}
+                          </span>
+                        </td>
+                        <td style={S.tdMuted}>{deal.clicks ? deal.clicks.toLocaleString() : '—'}</td>
+                        <td style={S.td}><span style={statusBadge(cs)}>{capitalize(cs)}</span></td>
+                        <td style={{ ...S.td, textAlign: 'right' }}>
+                          <div style={{ display: 'inline-flex', gap: 6, justifyContent: 'flex-end' }}>
+                            {cs === 'pending' ? (
+                              <>
+                                <button onClick={() => handleApprove(deal.id)} disabled={rowPending} title="Approve / publish live" style={{ ...S.iconBtn, color: '#16A34A', borderColor: '#BBF7D0' }}><CheckCircle size={14} /></button>
+                                <button onClick={() => handleReject(deal.id)} disabled={rowPending} title="Reject request" style={{ ...S.iconBtn, color: '#DC2626', borderColor: '#FECACA' }}><XCircle size={14} /></button>
+                              </>
+                            ) : (cs === 'live' || cs === 'expiring') ? (
+                              <button onClick={() => handlePause(deal.id)} disabled={rowPending} title="Pause / end deal" style={{ ...S.iconBtn, color: '#B45309', borderColor: '#FDE68A' }}><Pause size={14} /></button>
+                            ) : null}
+                            <button onClick={() => { setIsAdding(false); setEditingDeal(deal); }} disabled={rowPending} title="Edit deal" style={{ ...S.iconBtn, color: '#2563EB', borderColor: '#BFDBFE' }}><Edit3 size={14} /></button>
+                            <button onClick={() => setConfirmingId(deal.id)} disabled={rowPending} title="Remove deal" style={{ ...S.iconBtn, color: '#DC2626', borderColor: '#FECACA' }}><Trash2 size={14} /></button>
+                          </div>
+                          {confirmingId === deal.id && (
+                            <div style={{ marginTop: 6, padding: 8, background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+                              <span style={{ fontSize: 9, fontWeight: 800, color: '#DC2626' }}>Delete this deal?</span>
+                              <div style={{ display: 'flex', gap: 6 }}>
+                                <button onClick={() => { void handleDelete(deal.id); setConfirmingId(null); }} style={{ padding: '4px 8px', background: '#DC2626', color: '#fff', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', borderRadius: 5, border: 0, cursor: 'pointer' }}>Confirm</button>
+                                <button onClick={() => setConfirmingId(null)} style={{ padding: '4px 8px', background: '#fff', border: '1px solid #E8EDF2', color: '#6B7280', fontSize: 9, fontWeight: 800, textTransform: 'uppercase', borderRadius: 5, cursor: 'pointer' }}>Cancel</button>
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ── Add / Edit Deal — integrated into the same visual system ── */}
+        <AnimatePresence mode="wait">
+          {isFormActive && (
+            <motion.div
+              key={editingDeal ? 'edit' : 'add'}
+              initial={{ opacity: 0, x: 16 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 16 }}
+              style={{ ...S.formCard, position: 'sticky', top: 16 }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #F1F3F5', paddingBottom: 12, marginBottom: 14 }}>
+                <span style={{ fontSize: '12.5px', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                  {editingDeal ? 'Modify Deal' : 'Publish New Deal'}
+                </span>
+                <button type="button" onClick={() => { setIsAdding(false); setEditingDeal(null); }} style={S.ghost}>Close</button>
+              </div>
+              <form onSubmit={handleSubmit}>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={S.fLabel}>DEAL NAME</label>
+                  <input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. Eid Mega Sale" style={S.input} />
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={S.fLabel}>BRAND / SELLER</label>
+                  <input value={formSeller} onChange={(e) => setFormSeller(e.target.value)} placeholder="e.g. Aarong" style={S.input} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <label style={S.fLabel}>DISCOUNT TYPE</label>
+                    <select value={formDiscountType} onChange={(e) => setFormDiscountType(e.target.value as 'percentage' | 'flat')} style={{ ...S.input, fontSize: 12 }}>
+                      <option value="percentage">Percentage</option>
+                      <option value="flat">Flat (৳)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>VALUE</label>
+                    <input type="number" min={0} value={formDiscountValue || ''} onChange={(e) => setFormDiscountValue(Number(e.target.value))} style={S.input} />
+                  </div>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={S.fLabel}>CATEGORY</label>
+                  <select value={formCategory} onChange={(e) => setFormCategory(e.target.value)} style={{ ...S.input, fontSize: 12 }}>
+                    {CATEGORY_OPTIONS.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={S.fLabel}>VALID UNTIL</label>
+                  <input type="date" value={formValidUntil} onChange={(e) => setFormValidUntil(e.target.value)} style={{ ...S.input, fontSize: 12 }} />
+                </div>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={S.fLabel}>PROMO CODE <span style={{ color: '#9CA3AF', fontWeight: 600 }}>(optional)</span></label>
+                  <input value={formPromoCode} onChange={(e) => setFormPromoCode(e.target.value)} placeholder="e.g. EID2026" style={S.input} />
+                </div>
+                {formError && (
+                  <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 12px', marginBottom: 12, fontSize: 11.5, fontWeight: 600, color: '#B91C1C' }}>{formError}</div>
+                )}
+                <button type="submit" disabled={savingDeal} style={{ ...S.saveBtn, width: '100%', justifyContent: 'center', opacity: savingDeal ? 0.6 : 1 }}>
+                  <Save size={14} /> {savingDeal ? 'SAVING…' : editingDeal ? 'SAVE CHANGES' : 'PUBLISH DEAL'}
+                </button>
+              </form>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <style>{`@media (max-width: 980px){ .deals-grid{ grid-template-columns: minmax(0,1fr) !important; } }`}</style>
     </div>
   );
 }
