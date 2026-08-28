@@ -38,6 +38,7 @@ const SellerSignupPage = lazy(() => import('./pages/SellerSignupPage'));
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
 // Profile & Detail Pages
 const UnifiedProfileShell = lazy(() => import('./pages/admin/profiles/UnifiedProfileShell'));
+const ConsumerProfileView = lazy(() => import('./pages/admin/profiles/ConsumerProfileView'));
 const SellerDashboardPreview = lazy(() => import('./pages/admin/previews/SellerDashboardPreview'));
 const RecommendationPreview = lazy(() => import('./pages/admin/previews/RecommendationPreview'));
 const Products = lazy(() => import('./pages/admin/Products'));
@@ -1134,34 +1135,40 @@ export default function App() {
               }
             />
             {/*
-              Canonical consumer universal-profile route.
+              Canonical consumer profile route.
 
-              route before:  (no explicit route) -> /admin/* catch-all -> CmsMirrorHost
-              route after:   /admin/consumers/:id -> UnifiedProfileShell
-              component before: CmsMirrorHost (Gen-2 iframe). Its cms-mirror-select-customer
-                deep link resolves the target ONLY against the prototype's mock
-                Component.USERS array, so a real registered buyer never matched and the
-                iframe dead-ended on the mock "Consumer Management" list (the duplicate
-                layer). inspectionUniversalPath('consumer') has always pointed here.
-              component after: UnifiedProfileShell -- the same real React universal profile
-                /brand/:id and /order/:id already mount. It detects /consumers/ and reads
-                the real GET /auth/users/:id (identity, CF-ID, role, lifecycle).
-              visual generation: unreachable-Gen-2-mock -> existing universal profile shell.
-                No Gen-1 legacy screen, no new detail route, no isCustomerDetail duplication.
-              preserved: RoleGuard keeps the admin/super_admin gate; UnifiedProfileShell
-                keeps "Login As User" + ?impersonate=1 auto-open, so impersonation via
-                inspectionUniversalPath('consumer') is unchanged.
+              route before:  (no explicit route) -> /admin/* catch-all -> CmsMirrorHost,
+                whose cms-mirror-select-customer deep link resolves the target ONLY
+                against the prototype's mock Component.USERS array, so a real registered
+                buyer never matched and the iframe dead-ended on the mock "Consumer
+                Management" list (the duplicate layer). inspectionUniversalPath('consumer')
+                has always pointed here.
+              route after:   /admin/consumers/:id -> ConsumerProfileView
+              component: ConsumerProfileView -- a consumer-specific presentation extracted
+                so the shared UnifiedProfileShell (Seller/Creator/Brand/Order/Admin) is
+                untouched. It reproduces the approved standalone #isCustomerDetail design
+                and reads the real GET /auth/users/:id (identity, CF-ID, role, lifecycle);
+                every prototype section with no production data source keeps its approved
+                shape but renders an honest empty/disabled state -- no mock values.
+              visual generation: unreachable-Gen-2-mock -> approved #isCustomerDetail.
+                No Gen-1 legacy screen, no new route path.
+              preserved: same ProtectedRoute > RoleGuard > AdminWorkspaceLayout wrappers
+                as the /admin/consumers list route (admin/super_admin gate + the approved
+                light shell chrome -- NOT the legacy AdminLayout the brand/order mounts
+                use, so the sidebar stays consistent list -> profile -> back);
+                "Login As User" + ?impersonate=1 auto-open via the existing
+                ImpersonationContext.
             */}
             <Route
               path="/admin/consumers/:id"
               element={
                 <ProtectedRoute>
                   <RoleGuard>
-                    <AdminLayout>
+                    <AdminWorkspaceLayout>
                       <Suspense fallback={routeSuspenseFallback}>
-                        <UnifiedProfileShell />
+                        <ConsumerProfileView />
                       </Suspense>
-                    </AdminLayout>
+                    </AdminWorkspaceLayout>
                   </RoleGuard>
                 </ProtectedRoute>
               }
