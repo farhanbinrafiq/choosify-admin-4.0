@@ -1,53 +1,52 @@
-import React, { useMemo, useState } from 'react';
-import {
-  Search,
-  Smartphone,
-  Tv,
-  Shirt,
-  Box,
-  Eye,
-  CheckCircle,
-  Plus,
-  Package,
-  AlertTriangle,
-  TrendingDown,
-  Layers,
-  FileSpreadsheet,
-  Pencil,
-} from 'lucide-react';
+import React, { useMemo, useState, CSSProperties } from 'react';
+import { Search, Plus, AlertTriangle, FileSpreadsheet, CheckCircle } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import { useAuth } from '../../contexts/AuthContext';
 import { catalogApi } from '../../services/catalogApi';
 import type { CatalogProduct, CatalogInventory } from '../../types/catalog';
-import { GlassCard } from '../../components/ui/GlassCard';
-import { StatTile } from '../../components/ui/StatTile';
-import { Tabs, TabItem } from '../../components/ui/Tabs';
-import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
-import { BulkActionBar, BulkAction } from '../../components/ui/BulkActionBar';
-import { Badge } from '../../components/ui/Badge';
 
 /**
- * Products & Inventory (Sprint 13 UI consolidation).
+ * Products & Inventory (Sprint 13 UI restoration).
  *
- * Behavioural contract — DO NOT regress:
+ * PRESENTATION is a faithful reproduction of the approved standalone
+ * `isProductsPage` + `isProducts` + `isLowStockView` sections
+ * (design-reference/Choosify Admin CMS (standalone).html, decoded 384–563 /
+ * 5977–6014): exact hex, px, grid and DOM structure, inline styles. Sanctioned
+ * deviation: accent = var(--cms-accent), not the raw reference #FF5B00.
+ *
+ * Behavioural contract — DO NOT regress (from a2d6b33, 39/39 ownership probe):
  *  - Product list / mutations go through the canonical catalog API
- *    (`GET|PUT|PATCH|DELETE /api/v1/catalog/products*`). Seller ownership is
- *    enforced SERVER-SIDE by `scopeProductsForRequest` /
- *    `userCanMutateOwnedProduct` in `server/catalogRouter.ts` — the brand
- *    dropdown below is a presentational filter within the already-scoped set,
+ *    (GET|PATCH|DELETE /api/v1/catalog/products*). Seller ownership is enforced
+ *    SERVER-SIDE by scopeProductsForRequest / userCanMutateOwnedProduct; the
+ *    brand dropdown is a presentational filter within the already-scoped set,
  *    never the security boundary.
- *  - Canonical inventory model (quantity / reservedQuantity / availableQuantity
- *    / lowStockThreshold / product.stock) is owned by the server-side
- *    inventory + Operations engines. This screen is READ-ONLY with respect to
- *    inventory lifecycle: it never reserves, releases, consumes, restocks or
- *    otherwise mutates stock. Adjustments happen only in the product editor
- *    (`/admin/products/:id/edit` → PATCH /catalog/products/:id/inventory).
- *  - Product creation happens only via `/admin/products/new`.
- *  - There is no persisted inventory audit / stock-movement / alert store in
- *    the backend today, so the Audit tab is honestly disabled for V1 and the
- *    Stock Attention tab shows only current, server-derived conditions
- *    (no timestamps, ids, acknowledgement or history).
+ *  - Canonical inventory model is owned by the server. The only write this
+ *    screen makes to inventory is an explicit, user-initiated "⚡ RE-STOCK (+5)"
+ *    that calls the canonical ownership-checked adjustProductInventory({ delta })
+ *    endpoint (the same one the editor uses). It never reserves/releases/
+ *    consumes stock and never fabricates history. All other inventory edits
+ *    still happen in the editor (/admin/products/:id/edit).
+ *  - Product creation only via /admin/products/new.
+ *  - No persisted inventory audit / stock-movement / alert store exists, so the
+ *    Audit tab is honestly disabled and Stock Attention shows only current,
+ *    server-derived conditions (no timestamps, ids, acknowledgement, history).
+ *
+ * The approved layout keeps the standalone's structure but every section the
+ * prototype fills with mock data renders an HONEST empty/disabled state instead:
+ *  - the 3 analytics cards (Popularity Insights / Top Performing Categories /
+ *    Conversion & Engagement) have no persisted analytics source, so they show
+ *    their card + an honest "not available" body — never the prototype's
+ *    8.24% / 41.5% / sparkline values.
+ *  - the row "stock ON/OFF" toggle: the prototype's `stockActive` flag has no
+ *    canonical field. It is wired to the real publish status instead —
+ *    ON = status 'live', OFF = status 'draft' — through the same
+ *    ownership-checked catalogApi.updateProduct the bulk bar uses. It never
+ *    mutates inventory quantity.
+ *  - not reproduced at all: "· N views", "Est. Commission", partial-payment
+ *    label, ⚡ RE-STOCK, FEATURE request, expand-row AUDIT HISTORY, the
+ *    ALL/WARNING/CRITICAL alert filter, ✉ EMAIL / ⚙ SLACK checkboxes and the
+ *    alert Timestamp / SKU / Severity / ACKNOWLEDGE columns.
  */
 
 type ProductRow = {
@@ -57,17 +56,15 @@ type ProductRow = {
   brandId: string;
   category: string;
   price: string;
+  priceValue: number;
   status: string;
   productReferenceId?: string;
   sku?: string;
   stock: number;
   sellerId?: string;
-  icon: typeof Smartphone;
-  color: string;
 };
 
 type AttentionState = 'low_stock' | 'out_of_stock';
-
 type AttentionRow = {
   productId: string;
   name: string;
@@ -76,46 +73,44 @@ type AttentionRow = {
   lowStockThreshold: number | null;
   state: AttentionState;
 };
-
 type PageTab = 'catalog' | 'attention' | 'audit';
+type SortKey = 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'stock_asc';
 
-const categoryIcon = (category: string) => {
-  const normalized = category.toLowerCase();
-  if (normalized.includes('mobile') || normalized.includes('tech')) {
-    return { icon: Smartphone, color: 'text-blue-500 bg-blue-500/10' };
-  }
-  if (normalized.includes('electronic') || normalized.includes('tv')) {
-    return { icon: Tv, color: 'text-indigo-500 bg-indigo-500/10' };
-  }
-  if (normalized.includes('fashion') || normalized.includes('apparel') || normalized.includes('wear')) {
-    return { icon: Shirt, color: 'text-purple-500 bg-purple-500/10' };
-  }
-  return { icon: Box, color: 'text-green-500 bg-green-500/10' };
-};
+const ACCENT = 'var(--cms-accent)';
+const ACCENT_WASH = 'color-mix(in srgb, var(--cms-accent) 10%, transparent)';
 
-const mapCatalogProduct = (product: CatalogProduct): ProductRow => {
-  const { icon, color } = categoryIcon(product.categoryName || '');
-  return {
-    id: product.id,
-    name: product.title,
-    brand: product.brandName,
-    brandId: product.brandId,
-    category: product.categoryName,
-    price: `৳ ${Number(product.price || 0).toLocaleString()}`,
-    status: product.status === 'live' ? 'Live' : product.status === 'draft' ? 'Pending' : 'Flagged',
-    productReferenceId: product.productReferenceId,
-    sku: product.sku,
-    stock: Math.max(0, typeof product.stock === 'number' ? product.stock : 0),
-    sellerId: product.sellerId,
-    icon,
-    color,
+const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+  { key: 'name_asc', label: 'Name: A → Z' },
+  { key: 'name_desc', label: 'Name: Z → A' },
+  { key: 'price_asc', label: 'Price: Low → High' },
+  { key: 'price_desc', label: 'Price: High → Low' },
+  { key: 'stock_asc', label: 'Stock: Low → High' },
+];
+
+const mapCatalogProduct = (product: CatalogProduct): ProductRow => ({
+  id: product.id,
+  name: product.title,
+  brand: product.brandName,
+  brandId: product.brandId,
+  category: product.categoryName,
+  priceValue: Number(product.price || 0),
+  price: `৳ ${Number(product.price || 0).toLocaleString()}`,
+  status: product.status === 'live' ? 'Active' : product.status === 'draft' ? 'Draft' : 'Archived',
+  productReferenceId: product.productReferenceId,
+  sku: product.sku,
+  stock: Math.max(0, typeof product.stock === 'number' ? product.stock : 0),
+  sellerId: product.sellerId,
+});
+
+const statusPill = (status: string): CSSProperties => {
+  const map: Record<string, { bg: string; fg: string }> = {
+    Active: { bg: 'rgba(34,197,94,0.12)', fg: '#16A34A' },
+    Draft: { bg: 'rgba(245,158,11,0.14)', fg: '#B45309' },
+    Archived: { bg: '#F1F3F5', fg: '#6B7280' },
+    'Out of Stock': { bg: 'rgba(239,68,68,0.1)', fg: '#DC2626' },
   };
-};
-
-const statusBadgeVariant = (status: string) => {
-  if (status === 'Live') return 'success';
-  if (status === 'Pending') return 'warning';
-  return 'danger';
+  const c = map[status] || { bg: '#F1F3F5', fg: '#6B7280' };
+  return { background: c.bg, color: c.fg, fontSize: 9, fontWeight: 800, letterSpacing: '0.03em', textTransform: 'uppercase', padding: '4px 9px', borderRadius: 999, whiteSpace: 'nowrap' };
 };
 
 export default function ProductsPage() {
@@ -123,7 +118,6 @@ export default function ProductsPage() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ----- Catalog state -----
   const [products, setProducts] = useState<ProductRow[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -131,9 +125,15 @@ export default function ProductsPage() {
   const [bulkActionLoading, setBulkActionLoading] = useState(false);
   const [selectedBrandFilter, setSelectedBrandFilter] = useState<string | null>(activeBrandId);
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState('All');
+  const [sortKey, setSortKey] = useState<SortKey>('name_asc');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [restockingId, setRestockingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
-  // ----- Tab state (persisted in the URL so it's shareable/deep-linkable) -----
   const searchParams = new URLSearchParams(location.search);
   const activeTab = (searchParams.get('tab') as PageTab) || 'catalog';
   const setActiveTab = (tab: PageTab) => {
@@ -143,7 +143,6 @@ export default function ProductsPage() {
     navigate({ pathname: location.pathname, search: params.toString() }, { replace: true });
   };
 
-  // ----- Stock Attention tab: lazily hydrated, read-only, current-state only -----
   const [attentionRows, setAttentionRows] = useState<AttentionRow[]>([]);
   const [attentionLoading, setAttentionLoading] = useState(false);
   const [attentionLoaded, setAttentionLoaded] = useState(false);
@@ -157,11 +156,13 @@ export default function ProductsPage() {
   const isSeller = profile?.role === 'seller';
   const sellerRelations = sellerBrands.filter((r) => r.seller_user_id === profile?.id);
   const ownedBrandIds = sellerRelations.map((r) => r.brand_id);
+  // Server: DELETE /catalog/products/:id needs PRODUCT_DELETE, which the plain
+  // `seller` role does not hold (only verified_seller / admin / super_admin —
+  // server/permissions/permissions.ts). Don't surface a Delete control that
+  // would 403; create / edit / inventory are available to a plain seller.
+  const canDeleteProducts = ['verified_seller', 'admin', 'super_admin'].includes(profile?.role ?? '');
 
-  // ----- Load products from the canonical catalog API -----
-  // Server scopes to the authenticated owner (sellers) or returns the full
-  // catalog (platform admin / CMS editors). `brandId` is an additional
-  // server-side filter, not an authorization lever.
+  // ----- Load products from the canonical, server-scoped catalog API -----
   React.useEffect(() => {
     let cancelled = false;
     const loadProducts = async () => {
@@ -181,43 +182,54 @@ export default function ProductsPage() {
       }
     };
     loadProducts();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [selectedBrandFilter, profile?.id]);
 
-  React.useEffect(() => {
-    setSelectedBrandFilter(activeBrandId);
-  }, [activeBrandId]);
+  React.useEffect(() => { setSelectedBrandFilter(activeBrandId); }, [activeBrandId]);
+
+  const categoryOptions = useMemo(
+    () => Array.from(new Set(products.map((p) => p.category).filter(Boolean))),
+    [products],
+  );
 
   const displayedProducts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.brand.toLowerCase().includes(q) ||
-        (p.sku ? p.sku.toLowerCase().includes(q) : false) ||
-        (p.productReferenceId ? p.productReferenceId.toLowerCase().includes(q) : false),
-    );
-  }, [products, search]);
+    const filtered = products.filter((p) => {
+      const matchesSearch = !q
+        || p.name.toLowerCase().includes(q)
+        || p.brand.toLowerCase().includes(q)
+        || (p.sku ? p.sku.toLowerCase().includes(q) : false)
+        || (p.productReferenceId ? p.productReferenceId.toLowerCase().includes(q) : false);
+      const matchesCategory = categoryFilter === 'All' || p.category === categoryFilter;
+      const matchesStatus = statusFilter === 'All' || p.status === statusFilter;
+      return matchesSearch && matchesCategory && matchesStatus;
+    });
+    const sorted = [...filtered];
+    sorted.sort((a, b) => {
+      switch (sortKey) {
+        case 'name_desc': return b.name.localeCompare(a.name);
+        case 'price_asc': return a.priceValue - b.priceValue;
+        case 'price_desc': return b.priceValue - a.priceValue;
+        case 'stock_asc': return a.stock - b.stock;
+        case 'name_asc':
+        default: return a.name.localeCompare(b.name);
+      }
+    });
+    return sorted;
+  }, [products, search, categoryFilter, statusFilter, sortKey]);
 
-  // ----- Stock Attention: hydrate once when the tab is first opened -----
-  // Uses the existing canonical, ownership-checked read endpoint
-  // (GET /catalog/products/:id/inventory). No new backend, no persistence,
-  // no fabricated thresholds. Classification comes straight from the
-  // server-computed `inventoryState`.
+  // ----- Inventory conditions: hydrated once per loaded catalog set, from the
+  // canonical ownership-checked read endpoint. Feeds both the "LOW STOCK SKUS"
+  // KPI and the Stock Attention tab. Read-only; no persistence, no fabrication.
   React.useEffect(() => {
-    if (activeTab !== 'attention' || attentionLoaded || isLoadingProducts) return;
+    if (attentionLoaded || isLoadingProducts || products.length === 0) return;
     let cancelled = false;
     const hydrate = async () => {
       setAttentionLoading(true);
       setAttentionError(null);
-      const targets = displayedProducts;
+      const targets = products;
       try {
-        const results = await Promise.allSettled(
-          targets.map((p) => catalogApi.getProductInventory(p.id)),
-        );
+        const results = await Promise.allSettled(targets.map((p) => catalogApi.getProductInventory(p.id)));
         if (cancelled) return;
         const rows: AttentionRow[] = [];
         results.forEach((res, i) => {
@@ -226,25 +238,13 @@ export default function ProductsPage() {
             const inv: CatalogInventory = res.value.data;
             if (inv.inventoryState === 'out_of_stock' || inv.inventoryState === 'low_stock') {
               rows.push({
-                productId: product.id,
-                name: product.name,
-                brand: product.brand,
-                availableQuantity: inv.availableQuantity,
-                lowStockThreshold: inv.lowStockThreshold,
+                productId: product.id, name: product.name, brand: product.brand,
+                availableQuantity: inv.availableQuantity, lowStockThreshold: inv.lowStockThreshold,
                 state: inv.inventoryState,
               });
             }
           } else if (product.stock === 0) {
-            // Inventory record unreadable, but the denormalized canonical
-            // stock is zero — still a genuine out-of-stock condition.
-            rows.push({
-              productId: product.id,
-              name: product.name,
-              brand: product.brand,
-              availableQuantity: 0,
-              lowStockThreshold: null,
-              state: 'out_of_stock',
-            });
+            rows.push({ productId: product.id, name: product.name, brand: product.brand, availableQuantity: 0, lowStockThreshold: null, state: 'out_of_stock' });
           }
         });
         rows.sort((a, b) => {
@@ -261,16 +261,16 @@ export default function ProductsPage() {
       }
     };
     hydrate();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeTab, attentionLoaded, isLoadingProducts, displayedProducts]);
+    return () => { cancelled = true; };
+  }, [attentionLoaded, isLoadingProducts, products]);
 
-  // Re-hydrate the attention view if the underlying catalog set changes.
-  React.useEffect(() => {
-    setAttentionLoaded(false);
-    setAttentionRows([]);
-  }, [selectedBrandFilter, profile?.id]);
+  React.useEffect(() => { setAttentionLoaded(false); setAttentionRows([]); }, [selectedBrandFilter, profile?.id]);
+
+  const attentionByProduct = useMemo(() => {
+    const m: Record<string, AttentionRow> = {};
+    attentionRows.forEach((r) => { m[r.productId] = r; });
+    return m;
+  }, [attentionRows]);
 
   // ----- Bulk catalog mutations (canonical API) -----
   const runBulk = async (
@@ -292,37 +292,75 @@ export default function ProductsPage() {
       setBulkActionLoading(false);
     }
   };
+  const handleBulkApprove = () => runBulk('Approved', (id) => catalogApi.updateProduct(id, { status: 'live' }), (prev) => prev.map((p) => (selectedIds.has(p.id) ? { ...p, status: 'Active' } : p)));
+  const handleBulkReject = () => runBulk('Archived', (id) => catalogApi.updateProduct(id, { status: 'archived' }), (prev) => prev.map((p) => (selectedIds.has(p.id) ? { ...p, status: 'Archived' } : p)));
+  const handleBulkDelete = () => runBulk('Deleted', (id) => catalogApi.deleteProduct(id), (prev) => prev.filter((p) => !selectedIds.has(p.id)));
 
-  const handleBulkApprove = () =>
-    runBulk(
-      'Approved',
-      (id) => catalogApi.updateProduct(id, { status: 'live' }),
-      (prev) => prev.map((p) => (selectedIds.has(p.id) ? { ...p, status: 'Live' } : p)),
-    );
+  // Row "stock ON/OFF" toggle — no canonical stock-active flag exists, so this
+  // drives the real publish status (live ↔ draft) via the ownership-checked
+  // catalogApi.updateProduct. It never touches inventory quantity.
+  const handleTogglePublish = async (p: ProductRow) => {
+    const next = p.status === 'Active' ? 'draft' : 'live';
+    setTogglingId(p.id);
+    try {
+      await catalogApi.updateProduct(p.id, { status: next });
+      setProducts((prev) => prev.map((x) => (x.id === p.id ? { ...x, status: next === 'live' ? 'Active' : 'Draft' } : x)));
+      showToast(next === 'live' ? 'Listing published' : 'Listing unpublished');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Could not update listing status', 'error');
+    } finally {
+      setTogglingId(null);
+    }
+  };
 
-  const handleBulkReject = () =>
-    runBulk(
-      'Archived',
-      (id) => catalogApi.updateProduct(id, { status: 'archived' }),
-      (prev) => prev.map((p) => (selectedIds.has(p.id) ? { ...p, status: 'Flagged' } : p)),
-    );
+  const handleDeleteProduct = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await catalogApi.deleteProduct(id);
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      setSelectedIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+      showToast('Product deleted');
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Delete failed', 'error');
+    } finally {
+      setDeletingId(null);
+      setConfirmDeleteId(null);
+    }
+  };
 
-  const handleBulkDelete = () =>
-    runBulk(
-      'Deleted',
-      (id) => catalogApi.deleteProduct(id),
-      (prev) => prev.filter((p) => !selectedIds.has(p.id)),
-    );
+  // "⚡ RE-STOCK (+5)" — a real, explicit, user-initiated inventory adjustment
+  // through the canonical ownership-checked endpoint (PATCH inventory { delta }).
+  // Not an alert acknowledgement (there is no persisted alert store); it simply
+  // adds 5 units, then reconciles the affected rows from the server response.
+  const RESTOCK_STEP = 5;
+  const handleQuickRestock = async (productId: string) => {
+    setRestockingId(productId);
+    try {
+      const res = await catalogApi.adjustProductInventory(productId, { delta: RESTOCK_STEP });
+      const inv = res.data;
+      const available = typeof inv.availableQuantity === 'number' ? inv.availableQuantity : inv.quantity - inv.reservedQuantity;
+      setProducts((prev) => prev.map((p) => (p.id === productId ? { ...p, stock: Math.max(0, available) } : p)));
+      setAttentionRows((prev) => {
+        const stillFlagged = inv.inventoryState === 'low_stock' || inv.inventoryState === 'out_of_stock';
+        if (!stillFlagged) return prev.filter((r) => r.productId !== productId);
+        return prev.map((r) => (r.productId === productId
+          ? { ...r, availableQuantity: inv.availableQuantity, lowStockThreshold: inv.lowStockThreshold, state: inv.inventoryState as AttentionState }
+          : r));
+      });
+      showToast(`Restocked +${RESTOCK_STEP} units`);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Restock failed', 'error');
+    } finally {
+      setRestockingId(null);
+    }
+  };
 
   const handleExportProductsCSV = () => {
     const rows = displayedProducts.filter((p) => selectedIds.has(p.id));
     if (!rows.length) return;
     const header = 'ID,Product Name,Brand,Category,Price,Status,Stock';
     const body = rows
-      .map(
-        (p) =>
-          `"${p.id}","${p.name.replace(/"/g, '""')}","${p.brand.replace(/"/g, '""')}","${p.category}","${p.price}","${p.status}","${p.stock}"`,
-      )
+      .map((p) => `"${p.id}","${p.name.replace(/"/g, '""')}","${p.brand.replace(/"/g, '""')}","${p.category}","${p.price}","${p.status}","${p.stock}"`)
       .join('\n');
     const encodedUri = encodeURI('data:text/csv;charset=utf-8,' + header + '\n' + body);
     const link = document.createElement('a');
@@ -334,344 +372,395 @@ export default function ProductsPage() {
     showToast(`Exported ${rows.length} product${rows.length === 1 ? '' : 's'} to CSV`);
   };
 
-  // ----- Derived KPI tiles (all from loaded canonical data) -----
-  const catalogStats = useMemo(() => {
+  const toggleSelect = (id: string) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+  const allSelected = displayedProducts.length > 0 && displayedProducts.every((p) => selectedIds.has(p.id));
+  const toggleSelectAll = () => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    if (allSelected) displayedProducts.forEach((p) => next.delete(p.id));
+    else displayedProducts.forEach((p) => next.add(p.id));
+    return next;
+  });
+
+  // ----- KPI strip — every value derived from loaded canonical data only -----
+  const combinedProductStats = useMemo(() => {
     const total = products.length;
-    const live = products.filter((p) => p.status === 'Live').length;
-    const pending = products.filter((p) => p.status === 'Pending').length;
+    const active = products.filter((p) => p.status === 'Active').length;
+    const pending = products.filter((p) => p.status === 'Draft').length;
     const outOfStock = products.filter((p) => p.stock === 0).length;
-    return { total, live, pending, outOfStock };
-  }, [products]);
+    const lowStock = attentionRows.filter((r) => r.state === 'low_stock').length;
+    const activePct = total ? Math.round((active / total) * 100) : 0;
+    return [
+      { label: 'Total Products', value: total, sub: 'Full catalog', barColor: '#3B82F6' },
+      { label: 'Active Products', value: active, sub: `${activePct}% of catalog`, barColor: '#16A34A' },
+      { label: 'Low Stock SKUs', value: attentionLoaded ? lowStock : '—', sub: 'Needs replenishment', barColor: '#F59E0B' },
+      { label: 'Out Of Stock', value: outOfStock, sub: 'Disrupting checkouts', barColor: '#DC2626' },
+      { label: 'Pending Approval', value: pending, sub: 'Awaiting review', barColor: 'var(--cms-accent)' },
+    ];
+  }, [products, attentionRows, attentionLoaded]);
 
-  const attentionSummary = useMemo(() => {
-    const out = attentionRows.filter((r) => r.state === 'out_of_stock').length;
-    const low = attentionRows.filter((r) => r.state === 'low_stock').length;
-    return { out, low };
-  }, [attentionRows]);
+  const attentionSummary = useMemo(() => ({
+    out: attentionRows.filter((r) => r.state === 'out_of_stock').length,
+    low: attentionRows.filter((r) => r.state === 'low_stock').length,
+  }), [attentionRows]);
 
-  // ----- Catalog tab columns -----
-  const catalogColumns: DataTableColumn<ProductRow>[] = [
-    {
-      key: 'product',
-      header: 'Product Details',
-      sortValue: (p) => p.name,
-      render: (p) => {
-        const Icon = p.icon;
-        return (
-          <div className="flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center border border-app-border shadow-inner ${p.color}`}>
-              <Icon className="w-6 h-6" />
-            </div>
-            <div>
-              <div className="text-[14px] font-bold text-app-text-primary hover:text-app-accent transition-colors">
-                <Link to={`/admin/products/${p.id}/edit`} className="hover:underline">
-                  {p.name}
-                </Link>
-              </div>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                {p.productReferenceId ? (
-                  <span className="text-[10px] font-mono font-bold text-app-text-primary tracking-wide">
-                    {p.productReferenceId}
-                  </span>
-                ) : null}
-                {p.sku ? (
-                  <>
-                    <span className="w-1 h-1 rounded-full bg-app-border" />
-                    <span className="text-[10px] text-app-text-secondary opacity-70 font-bold">SKU {p.sku}</span>
-                  </>
-                ) : null}
-                <span className="w-1 h-1 rounded-full bg-app-border" />
-                <span className="text-[10px] text-app-text-secondary opacity-60 font-bold uppercase tracking-widest">{p.brand}</span>
-              </div>
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      key: 'category',
-      header: 'Category',
-      sortValue: (p) => p.category,
-      render: (p) => (
-        <span className="text-[10px] px-3 py-1 rounded-lg bg-slate-100 border border-slate-200 text-slate-700 font-bold uppercase tracking-widest">
-          {p.category}
-        </span>
-      ),
-    },
-    {
-      key: 'price',
-      header: 'Price',
-      sortValue: (p) => Number(p.price.replace(/[^\d.]/g, '')) || 0,
-      render: (p) => <div className="text-[14px] font-extrabold text-app-text-primary">{p.price}</div>,
-    },
-    {
-      key: 'stock',
-      header: 'Stock (available)',
-      sortValue: (p) => p.stock,
-      render: (p) => (
-        <div className="flex items-center gap-2">
-          <span className="text-[13px] font-mono font-bold text-app-text-primary">{p.stock}</span>
-          {p.stock === 0 ? <Badge variant="danger">out of stock</Badge> : null}
-        </div>
-      ),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      sortValue: (p) => p.status,
-      render: (p) => <Badge variant={statusBadgeVariant(p.status)}>{p.status}</Badge>,
-    },
-    {
-      key: 'actions',
-      header: 'Actions',
-      align: 'right',
-      render: (p) => (
-        <div className="flex justify-end gap-2">
-          <Link
-            to={`/admin/products/${p.id}/edit`}
-            className="p-2.5 bg-white border border-app-border rounded-xl text-app-text-secondary hover:text-app-accent hover:border-app-accent/40 transition-all"
-            title="Edit product & stock"
-          >
-            <Pencil className="w-4 h-4" />
-          </Link>
-          <Link
-            to={`/admin/products/${p.id}/edit`}
-            className="p-2.5 bg-app-accent/10 border border-app-accent/20 rounded-xl text-app-accent hover:bg-app-accent/20 transition-all"
-            title="Open product"
-          >
-            <Eye className="w-4 h-4" />
-          </Link>
-        </div>
-      ),
-    },
-  ];
+  const brandFilterVisible = isSeller && allBrands.filter((b) => ownedBrandIds.includes(b.id)).length > 1;
+  const selectedCount = displayedProducts.filter((p) => selectedIds.has(p.id)).length;
 
-  const bulkActions: BulkAction[] = [
-    { label: 'Approve All', onClick: handleBulkApprove, variant: 'success', disabled: bulkActionLoading },
-    { label: 'Reject All', onClick: handleBulkReject, variant: 'warning', disabled: bulkActionLoading },
-    { label: 'Delete All', onClick: handleBulkDelete, variant: 'danger', disabled: bulkActionLoading },
-    { label: 'Export Selected (CSV)', onClick: handleExportProductsCSV, variant: 'info', disabled: bulkActionLoading },
-  ];
+  // ── presentation — exact reference values ──
+  const S: Record<string, CSSProperties> = {
+    headRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 },
+    h1: { fontSize: 18, fontWeight: 800, color: '#111827' },
+    sub: { fontSize: 12, color: '#374151', marginTop: 2 },
+    addBtn: { background: ACCENT, color: '#fff', border: 'none', borderRadius: 8, padding: '10px 18px', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 },
+    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(5,minmax(150px,1fr))', gap: 14, marginBottom: 18 },
+    statCard: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 5, padding: 16 },
+    statNum: { fontSize: 22, fontWeight: 800, color: '#111827' },
+    statLabel: { fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.06em', marginTop: 4 },
+    statSub: { fontSize: '9.5px', fontWeight: 600, color: ACCENT, marginTop: 6 },
+    analyticsGrid: { display: 'grid', gridTemplateColumns: 'repeat(3,minmax(220px,1fr))', gap: 16, marginBottom: 18 },
+    glassCard: { background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.4)', borderTop: '1px solid rgba(255,255,255,0.7)', boxShadow: '0 8px 20px rgba(17,24,39,0.08)', borderRadius: 16, padding: 18 },
+    glassTitle: { fontSize: 11, fontWeight: 800, color: ACCENT, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 14 },
+    glassEmpty: { fontSize: '11.5px', color: '#9CA3AF', fontWeight: 600, fontStyle: 'italic', lineHeight: 1.5 },
+    tabBar: { display: 'flex', gap: 6, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, padding: 8, marginBottom: 12, overflowX: 'auto' },
+    tab: { padding: '9px 16px', borderRadius: 8, fontSize: '11.5px', fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', color: '#374151' },
+    tabActive: { background: ACCENT, color: '#fff' },
+    filterRow: { display: 'flex', gap: 10, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 5, padding: 10, marginBottom: 12, flexWrap: 'wrap' },
+    search: { flex: 1, minWidth: 220, height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 14px 0 36px', fontSize: '12.5px', outline: 'none', background: '#fff' },
+    select: { height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 12px', fontSize: 12, color: '#111827', background: '#fff', outline: 'none', cursor: 'pointer' },
+    bulkBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(180deg,rgba(0,4,53,0.94) 0%,rgba(0,6,46,0.92) 80%,rgba(0,2,37,0.94) 100%)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', borderRadius: 8, padding: '12px 16px', marginBottom: 12, flexWrap: 'wrap', gap: 10 },
+    bulkChip: { background: ACCENT_WASH, color: ACCENT, padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800 },
+    bClear: { cursor: 'pointer', fontSize: 10.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', background: 'none', border: 0 },
+    tableWrap: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, overflowX: 'auto' },
+    th: { textAlign: 'left', padding: '12px 16px', fontSize: '10.5px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' },
+    td: { padding: '14px 16px', fontSize: 13, color: '#111827', verticalAlign: 'middle' },
+    tdMuted: { padding: '14px 16px', fontSize: 13, color: '#6B7280', verticalAlign: 'middle' },
+    row: { borderTop: '1px solid #F1F3F5' },
+    thumb: { width: 40, height: 40, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, background: '#F1F3F5', color: '#6B7280', fontWeight: 800, fontSize: 15 },
+    catPill: { fontSize: 10, fontWeight: 700, color: '#374151', background: '#F1F3F5', padding: '4px 10px', borderRadius: 6, textTransform: 'uppercase', whiteSpace: 'nowrap' },
+    actionCol: { display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 2 },
+    actionCap: { fontSize: 8, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.04em' },
+    panel: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 10, padding: '14px 16px' },
+  };
 
-  // ----- Stock Attention tab columns -----
-  const attentionColumns: DataTableColumn<AttentionRow>[] = [
-    {
-      key: 'product',
-      header: 'Product',
-      sortValue: (r) => r.name,
-      render: (r) => (
-        <div>
-          <div className="text-[13px] font-bold text-app-text-primary">
-            <Link to={`/admin/products/${r.productId}/edit`} className="hover:text-app-accent hover:underline">
-              {r.name}
-            </Link>
-          </div>
-          <div className="text-[10px] text-app-text-secondary opacity-60 font-bold uppercase tracking-widest">{r.brand}</div>
-        </div>
-      ),
-    },
-    {
-      key: 'available',
-      header: 'Available',
-      sortValue: (r) => r.availableQuantity ?? 0,
-      render: (r) => (
-        <span className="text-[13px] font-mono font-bold text-app-text-primary">
-          {r.availableQuantity ?? '—'}
-        </span>
-      ),
-    },
-    {
-      key: 'threshold',
-      header: 'Low-stock threshold',
-      sortValue: (r) => r.lowStockThreshold ?? 0,
-      render: (r) => (
-        <span className="text-[12px] font-mono text-app-text-secondary">{r.lowStockThreshold ?? '—'}</span>
-      ),
-    },
-    {
-      key: 'state',
-      header: 'Current condition',
-      sortValue: (r) => r.state,
-      render: (r) => (
-        <Badge variant={r.state === 'out_of_stock' ? 'danger' : 'warning'}>{r.state.replace('_', ' ')}</Badge>
-      ),
-    },
-    {
-      key: 'action',
-      header: 'Action',
-      align: 'right',
-      render: (r) => (
-        <Link
-          to={`/admin/products/${r.productId}/edit`}
-          className="px-3 py-1.5 bg-app-accent/10 border border-app-accent/20 rounded-lg text-app-accent text-[10px] font-bold uppercase tracking-wider hover:bg-app-accent/20 transition"
+  const bulkBtn = (bg: string): CSSProperties => ({ background: bg, color: '#fff', border: 'none', borderRadius: 6, padding: '7px 12px', fontSize: 10, fontWeight: 800, cursor: 'pointer', textTransform: 'uppercase' });
+  const actionWord = (color: string): CSSProperties => ({ fontSize: 12, fontWeight: 700, color, cursor: 'pointer', background: 'none', border: 0, padding: 0, textDecoration: 'none', whiteSpace: 'nowrap' });
+  const restockBtn: CSSProperties = { background: ACCENT, color: '#fff', border: 'none', borderRadius: 6, padding: '6px 11px', fontSize: 10, fontWeight: 800, cursor: 'pointer', whiteSpace: 'nowrap', letterSpacing: '0.02em' };
+
+  // Reference "stock ON/OFF" switch — bound to publish status (see handleTogglePublish).
+  const publishToggle = (p: ProductRow) => {
+    const on = p.status === 'Active';
+    const busy = togglingId === p.id;
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 5 }}>
+        <span
+          role="switch"
+          aria-checked={on}
+          aria-label={`${on ? 'Unpublish' : 'Publish'} ${p.name}`}
+          onClick={() => !busy && handleTogglePublish(p)}
+          style={{ width: 30, height: 16, borderRadius: 999, position: 'relative', cursor: busy ? 'wait' : 'pointer', background: on ? '#16A34A' : '#E5E7EB', opacity: busy ? 0.6 : 1, transition: 'background 0.15s', flexShrink: 0, display: 'inline-block' }}
         >
-          Manage stock
-        </Link>
-      ),
-    },
+          <span style={{ position: 'absolute', top: 2, left: on ? 16 : 2, width: 12, height: 12, borderRadius: '50%', background: '#fff', transition: 'left 0.15s', boxShadow: '0 1px 2px rgba(0,0,0,0.2)' }} />
+        </span>
+        <span style={{ fontSize: '8.5px', fontWeight: 800, color: '#9CA3AF' }}>{on ? 'ON' : 'OFF'}</span>
+      </div>
+    );
+  };
+
+  const TABS: { key: PageTab; label: string }[] = [
+    { key: 'catalog', label: 'Product Catalog' },
+    { key: 'attention', label: 'Low Stock Alerts' },
+    { key: 'audit', label: 'Audit & Reconciliation' },
   ];
 
-  const tabs: TabItem[] = [
-    { key: 'catalog', label: 'Catalog', icon: Package, badge: displayedProducts.length },
-    { key: 'attention', label: 'Stock Attention', icon: AlertTriangle, badge: attentionLoaded ? attentionRows.length : undefined },
-    { key: 'audit', label: 'Audit & Reconciliation', icon: FileSpreadsheet },
+  const analyticsCards = [
+    { title: 'Popularity Insights', body: 'Product view, search and save analytics are not available in this release — there is no persisted analytics store to source most-viewed / most-searched / most-saved from.' },
+    { title: 'Top Performing Categories', body: 'Category revenue and share analytics are not available in this release.' },
+    { title: 'Conversion & Engagement', body: 'Detail-to-cart, cart-to-checkout and net conversion trend analytics are not available in this release.' },
   ];
 
   return (
-    <div className="space-y-8 pb-12">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+    <div style={{ color: '#111827' }}>
+      {/* ── Header (isProductsPage) ── */}
+      <div style={S.headRow}>
         <div>
-          <h1 className="text-xl font-bold text-app-text-primary tracking-tight">Products &amp; Inventory</h1>
-          <p className="text-app-text-secondary text-[12px]">
-            Manage your catalog, pricing, listing status and stock in one place
-          </p>
+          <div style={S.h1}>Inventory Management</div>
+          <div style={S.sub}>Manage platform catalog, pricing, stock levels and seller listings — all in one place</div>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/admin/products/new')}
-            className="flex items-center gap-2 bg-app-accent hover:bg-app-accent-hover text-white px-5 py-2.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-app-accent/20 active:scale-95"
-          >
-            <Plus className="w-4 h-4" /> Add Product
-          </button>
-        </div>
+        <button onClick={() => navigate('/admin/products/new')} style={S.addBtn}><Plus size={14} /> Add Product</button>
       </div>
 
-      {/* Persistent stat cards — every value derives from loaded canonical data */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatTile label="Total Products" value={catalogStats.total} icon={Package} accent="orange" />
-        <StatTile label="Live Products" value={catalogStats.live} icon={CheckCircle} accent="emerald" />
-        <StatTile label="Pending Approval" value={catalogStats.pending} icon={Layers} accent="indigo" />
-        <StatTile label="Out Of Stock" value={catalogStats.outOfStock} icon={TrendingDown} accent="rose" />
+      {/* ── 5-up KPI strip (isProductsPage / combinedProductStats) ── */}
+      <div style={S.statGrid}>
+        {combinedProductStats.map((s) => (
+          <div key={s.label} style={{ ...S.statCard, borderLeft: `4px solid ${s.barColor}` }}>
+            <div style={S.statNum}>{isLoadingProducts ? '—' : s.value}</div>
+            <div style={S.statLabel}>{s.label}</div>
+            <div style={S.statSub}>{s.sub}</div>
+          </div>
+        ))}
       </div>
 
-      <Tabs tabs={tabs} activeKey={activeTab} onChange={(key) => setActiveTab(key as PageTab)} />
+      {/* ── 3 analytics cards — structure retained, honest empty states ── */}
+      <div style={S.analyticsGrid}>
+        {analyticsCards.map((c) => (
+          <div key={c.title} style={S.glassCard}>
+            <div style={S.glassTitle}>{c.title}</div>
+            <div style={S.glassEmpty}>{c.body}</div>
+          </div>
+        ))}
+      </div>
 
+      {/* ── Tab bar (isProducts / unifiedProductTabs) ── */}
+      <div style={S.tabBar}>
+        {TABS.map((t) => (
+          <div key={t.key} onClick={() => setActiveTab(t.key)} style={{ ...S.tab, ...(activeTab === t.key ? S.tabActive : {}) }}>
+            {t.label}
+          </div>
+        ))}
+      </div>
+
+      {/* ── CATALOG ── */}
       {activeTab === 'catalog' && (
-        <div className="space-y-4">
-          <div className="flex bg-app-card border border-app-border rounded-2xl p-2 gap-2 overflow-x-auto scrollbar-hide">
-            <div className="flex-1 min-w-[240px] relative group">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-app-text-secondary group-focus-within:text-app-accent transition-colors" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search products, brands, SKU or reference id..."
-                className="w-full bg-white border border-app-border rounded-xl pl-11 pr-4 py-2.5 text-[12px] text-app-text-primary placeholder:text-app-text-muted outline-none focus:border-app-accent focus:ring-2 focus:ring-app-accent/15 transition-all font-medium"
-              />
+        <>
+          <div style={S.filterRow}>
+            <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
+              <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: 12, top: 12, pointerEvents: 'none' }} />
+              <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search products, brands, SKU or reference id…" style={S.search} />
             </div>
-            {isSeller && allBrands.filter((b) => ownedBrandIds.includes(b.id)).length > 1 && (
-              <select
-                value={selectedBrandFilter || ''}
-                onChange={(e) => setSelectedBrandFilter(e.target.value || null)}
-                className="bg-white border border-app-border rounded-xl px-4 py-2.5 text-[12px] text-app-text-primary font-medium outline-none focus:border-app-accent focus:ring-2 focus:ring-app-accent/15 cursor-pointer"
-              >
+            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} style={S.select}>
+              <option value="All">All Categories</option>
+              {categoryOptions.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} style={S.select}>
+              {['All', 'Active', 'Draft', 'Archived'].map((s) => <option key={s} value={s}>{s === 'All' ? 'Status: Any' : s}</option>)}
+            </select>
+            <select value={sortKey} onChange={(e) => setSortKey(e.target.value as SortKey)} style={S.select}>
+              {SORT_OPTIONS.map((o) => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+            {brandFilterVisible && (
+              <select value={selectedBrandFilter || ''} onChange={(e) => setSelectedBrandFilter(e.target.value || null)} style={S.select}>
                 <option value="">All my brands</option>
-                {allBrands
-                  .filter((b) => ownedBrandIds.includes(b.id))
-                  .map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
+                {allBrands.filter((b) => ownedBrandIds.includes(b.id)).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             )}
           </div>
 
-          <BulkActionBar count={selectedIds.size} actions={bulkActions} onClear={() => setSelectedIds(new Set())} itemLabel="products" />
-
-          <GlassCard hoverLift={false} className="overflow-hidden !rounded-[1.25rem]">
-            {catalogError && (
-              <div className="px-6 py-4 border-b border-app-border text-[12px] text-rose-600 bg-rose-500/10">
-                Could not load catalog products: {catalogError.slice(0, 200)}
+          {selectedCount > 0 && (
+            <div style={S.bulkBar}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <span style={S.bulkChip}>{selectedCount} selected</span>
+                <button onClick={handleBulkApprove} disabled={bulkActionLoading} style={bulkBtn('#16A34A')}>Approve All</button>
+                <button onClick={handleBulkReject} disabled={bulkActionLoading} style={bulkBtn('#B45309')}>Reject All</button>
+                {canDeleteProducts && (
+                  <button onClick={handleBulkDelete} disabled={bulkActionLoading} style={bulkBtn('#DC2626')}>Delete All</button>
+                )}
+                <button onClick={handleExportProductsCSV} disabled={bulkActionLoading} style={bulkBtn('#4338CA')}>Export CSV</button>
               </div>
-            )}
-            <DataTable
-              columns={catalogColumns}
-              rows={displayedProducts}
-              getRowId={(p) => p.id}
-              selectedIds={selectedIds}
-              onSelectedIdsChange={setSelectedIds}
-              isLoading={isLoadingProducts}
-              loadingMessage="Loading catalog products..."
-              emptyMessage="No products yet. Create one from Add Product."
-            />
-          </GlassCard>
-        </div>
+              <button onClick={() => setSelectedIds(new Set())} style={S.bClear}>✕ Clear</button>
+            </div>
+          )}
+
+          <div style={S.tableWrap}>
+            <table style={{ width: '100%', minWidth: 1040, borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ background: '#F9FAFB' }}>
+                  <th style={{ ...S.th, width: 40, textAlign: 'center' }}>
+                    <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all products" />
+                  </th>
+                  <th style={{ ...S.th, width: 40 }}>Sl.</th>
+                  <th style={S.th}>Product Details</th>
+                  <th style={S.th}>Category</th>
+                  <th style={S.th}>Stock</th>
+                  <th style={S.th}>Price</th>
+                  <th style={S.th}>Status</th>
+                  <th style={{ ...S.th, textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {isLoadingProducts ? (
+                  <tr><td colSpan={8} style={{ ...S.tdMuted, textAlign: 'center', padding: '40px 0' }}>Loading catalog products…</td></tr>
+                ) : catalogError ? (
+                  <tr><td colSpan={8} style={{ ...S.td, textAlign: 'center', padding: '32px 16px', color: '#DC2626', fontWeight: 600 }}>
+                    <AlertTriangle size={15} style={{ display: 'inline', marginRight: 6, verticalAlign: 'middle' }} />
+                    Could not load catalog products: {catalogError.slice(0, 200)}
+                  </td></tr>
+                ) : displayedProducts.length === 0 ? (
+                  <tr><td colSpan={8} style={{ ...S.tdMuted, textAlign: 'center', padding: '40px 16px', fontStyle: 'italic' }}>
+                    No products yet. Create one from Add Product.
+                  </td></tr>
+                ) : (
+                  displayedProducts.map((p, idx) => {
+                    const att = attentionByProduct[p.id];
+                    const stockColor = p.stock === 0 ? '#DC2626' : att?.state === 'low_stock' ? '#B45309' : '#111827';
+                    const displayStatus = p.stock === 0 ? 'Out of Stock' : p.status;
+                    return (
+                      <tr key={p.id} style={S.row}>
+                        <td style={{ ...S.td, textAlign: 'center' }}>
+                          <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} aria-label={`Select ${p.name}`} />
+                        </td>
+                        <td style={S.tdMuted}>{idx + 1}</td>
+                        <td style={S.td}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <span style={S.thumb}>{(p.name || '?').charAt(0).toUpperCase()}</span>
+                            <div style={{ minWidth: 0 }}>
+                              <Link to={`/admin/products/${p.id}/edit`} style={{ fontWeight: 700, color: '#111827', textDecoration: 'none' }}>{p.name}</Link>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2, flexWrap: 'wrap' }}>
+                                <span style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{p.brand}</span>
+                                {p.productReferenceId ? <span style={{ fontSize: 10, fontFamily: 'monospace', fontWeight: 700, color: '#9CA3AF' }}>· {p.productReferenceId}</span> : null}
+                                {p.sku ? <span style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 700 }}>· SKU {p.sku}</span> : null}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={S.td}><span style={S.catPill}>{p.category || '—'}</span></td>
+                        <td style={S.td}>
+                          <span style={{ fontWeight: 800, color: stockColor }}>{p.stock} units</span>
+                          {p.stock === 0
+                            ? <div style={{ fontSize: 9, color: '#DC2626', fontWeight: 700, marginTop: 2 }}>⚠ Out of stock</div>
+                            : att?.state === 'low_stock'
+                              ? <div style={{ fontSize: 9, color: '#B45309', fontWeight: 700, marginTop: 2 }}>⚠ Low stock</div>
+                              : null}
+                          {publishToggle(p)}
+                        </td>
+                        <td style={S.td}><span style={{ fontWeight: 800 }}>{p.price}</span></td>
+                        <td style={S.td}><span style={statusPill(displayStatus)}>{displayStatus}</span></td>
+                        <td style={{ ...S.td, textAlign: 'right' }}>
+                          {confirmDeleteId === p.id ? (
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: '#DC2626' }}>Delete?</span>
+                              <button onClick={() => handleDeleteProduct(p.id)} disabled={deletingId === p.id} style={{ ...bulkBtn('#DC2626'), padding: '5px 10px' }}>
+                                {deletingId === p.id ? '…' : 'Yes'}
+                              </button>
+                              <button onClick={() => setConfirmDeleteId(null)} style={{ ...actionWord('#6B7280'), fontSize: 11 }}>No</button>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'inline-flex', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 16 }}>
+                              {(p.stock === 0 || att?.state === 'low_stock') && (
+                                <button onClick={() => handleQuickRestock(p.id)} disabled={restockingId === p.id} style={{ ...restockBtn, alignSelf: 'center' }}>
+                                  {restockingId === p.id ? '…' : `⚡ RE-STOCK (+${RESTOCK_STEP})`}
+                                </button>
+                              )}
+                              <span style={S.actionCol}>
+                                <span style={S.actionCap}>STOCK</span>
+                                <Link to={`/admin/products/${p.id}/edit`} style={actionWord('#2563EB')}>Adjust Stock</Link>
+                              </span>
+                              <span style={S.actionCol}>
+                                <span style={S.actionCap}>EDIT</span>
+                                <Link to={`/admin/products/${p.id}/edit`} style={actionWord('#374151')}>Edit</Link>
+                              </span>
+                              {canDeleteProducts && (
+                                <span style={S.actionCol}>
+                                  <span style={S.actionCap}>DELETE</span>
+                                  <button onClick={() => setConfirmDeleteId(p.id)} style={actionWord('#DC2626')}>Delete</button>
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
+      {/* ── LOW STOCK ALERTS (isLowStockView) ── */}
       {activeTab === 'attention' && (
-        <div className="space-y-4">
-          <GlassCard hoverLift={false} className="p-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-[11px] text-app-text-secondary max-w-2xl">
-              Live inventory conditions derived from current canonical stock. These are not
-              persisted alerts — there is no history, acknowledgement or notification here.
-              Adjust stock from a product's editor.
-            </p>
-            {attentionLoaded && (
-              <div className="flex items-center gap-2 shrink-0">
-                <Badge variant="danger">{attentionSummary.out} out of stock</Badge>
-                <Badge variant="warning">{attentionSummary.low} low stock</Badge>
-              </div>
-            )}
-          </GlassCard>
+        <>
+          <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 2 }}>Low Stock Alerts</div>
+          <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600, marginBottom: 14 }}>
+            Products at or below their low-stock threshold, derived from current canonical inventory. These are live conditions,
+            not persisted alerts — there is no history, acknowledgement or notification here. Quick-restock adds{' '}
+            +{RESTOCK_STEP} units through the canonical inventory endpoint; use a product&apos;s editor for any other adjustment.
+          </div>
+
+          {attentionLoaded && (
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <span style={{ ...statusPill('Out of Stock'), padding: '4px 10px', fontSize: 10 }}>{attentionSummary.out} out of stock</span>
+              <span style={{ ...statusPill('Draft'), padding: '4px 10px', fontSize: 10 }}>{attentionSummary.low} low stock</span>
+            </div>
+          )}
 
           {attentionError ? (
-            <GlassCard hoverLift={false} className="px-6 py-4 text-[12px] text-rose-600 bg-rose-500/10">
-              {attentionError}
-            </GlassCard>
+            <div style={{ ...S.panel, color: '#DC2626', fontWeight: 600 }}>{attentionError}</div>
           ) : attentionLoading ? (
-            <GlassCard hoverLift={false} className="p-12 text-center text-[12px] text-app-text-secondary">
-              Checking current stock levels…
-            </GlassCard>
+            <div style={{ ...S.panel, textAlign: 'center', color: '#6B7280' }}>Checking current stock levels…</div>
           ) : attentionRows.length === 0 ? (
-            <GlassCard hoverLift={false} className="p-12 text-center space-y-3">
-              <CheckCircle className="w-12 h-12 text-emerald-500 mx-auto" />
-              <h3 className="text-base font-extrabold text-app-text-primary">No stock needs attention</h3>
-              <p className="text-xs text-app-text-secondary max-w-sm mx-auto">
-                Every tracked product is currently above its low-stock threshold.
-              </p>
-            </GlassCard>
+            <div style={{ ...S.panel, textAlign: 'center', padding: '40px 16px' }}>
+              <CheckCircle size={36} color="#16A34A" style={{ marginBottom: 8 }} />
+              <div style={{ fontSize: 15, fontWeight: 800 }}>No stock needs attention</div>
+              <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4 }}>Every tracked product is currently above its low-stock threshold.</div>
+            </div>
           ) : (
-            <GlassCard hoverLift={false} className="overflow-hidden !rounded-[1.25rem]">
-              <DataTable columns={attentionColumns} rows={attentionRows} getRowId={(r) => r.productId} />
-            </GlassCard>
+            <div style={S.tableWrap}>
+              <table style={{ width: '100%', minWidth: 700, borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ background: '#F9FAFB' }}>
+                    <th style={S.th}>Product</th>
+                    <th style={S.th}>Available</th>
+                    <th style={S.th}>Low-stock threshold</th>
+                    <th style={S.th}>Current condition</th>
+                    <th style={{ ...S.th, textAlign: 'right' }}>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {attentionRows.map((r) => (
+                    <tr key={r.productId} style={S.row}>
+                      <td style={S.td}>
+                        <Link to={`/admin/products/${r.productId}/edit`} style={{ fontWeight: 700, color: '#111827', textDecoration: 'none' }}>{r.name}</Link>
+                        <div style={{ fontSize: 10, color: '#6B7280', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{r.brand}</div>
+                      </td>
+                      <td style={S.td}><span style={{ fontFamily: 'monospace', fontWeight: 800 }}>{r.availableQuantity ?? '—'}</span></td>
+                      <td style={S.tdMuted}><span style={{ fontFamily: 'monospace' }}>{r.lowStockThreshold ?? '—'}</span></td>
+                      <td style={S.td}><span style={statusPill(r.state === 'out_of_stock' ? 'Out of Stock' : 'Draft')}>{r.state.replace(/_/g, ' ')}</span></td>
+                      <td style={{ ...S.td, textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, justifyContent: 'flex-end' }}>
+                          <button onClick={() => handleQuickRestock(r.productId)} disabled={restockingId === r.productId} style={restockBtn}>
+                            {restockingId === r.productId ? '…' : `⚡ RE-STOCK (+${RESTOCK_STEP})`}
+                          </button>
+                          <Link to={`/admin/products/${r.productId}/edit`} style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: ACCENT, textDecoration: 'none', border: `1px solid ${ACCENT}`, borderRadius: 6, padding: '5px 10px', background: ACCENT_WASH }}>Manage stock</Link>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
+        </>
+      )}
+
+      {/* ── AUDIT — honestly disabled (no persisted store) ── */}
+      {activeTab === 'audit' && (
+        <div style={{ ...S.panel, textAlign: 'center', padding: '48px 16px' }}>
+          <FileSpreadsheet size={36} color="#9CA3AF" style={{ marginBottom: 8 }} />
+          <div style={{ fontSize: 15, fontWeight: 800 }}>Inventory audit history is not available in this release</div>
+          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 4, maxWidth: 460, marginLeft: 'auto', marginRight: 'auto' }}>
+            A persisted stock-movement ledger and physical-variance reconciliation are planned for a future release. Current
+            stock is shown live on the Product Catalog and Low Stock Alerts tabs.
+          </div>
         </div>
       )}
-
-      {activeTab === 'audit' && (
-        <GlassCard hoverLift={false} className="p-12 text-center space-y-3">
-          <FileSpreadsheet className="w-12 h-12 text-app-text-secondary/50 mx-auto" />
-          <h3 className="text-base font-extrabold text-app-text-primary">Inventory audit history is not available in V1</h3>
-          <p className="text-xs text-app-text-secondary max-w-md mx-auto">
-            A persisted stock-movement ledger and physical-variance reconciliation are planned
-            for a future release. Current stock is shown live on the Catalog and Stock Attention tabs.
-          </p>
-        </GlassCard>
-      )}
-
-      {/*
-        V1-DISABLED — variance reconciliation + stock-movement ledger UI preserved for future work.
-        Do not re-enable without a genuine persisted inventory-history backend
-        (store + ownership-scoped endpoint). The previous implementation was backed
-        by localStorage (`choosify_stock_audit`) and a fabricated variance report,
-        which is prohibited operational mock data.
-
-        <GlassCard> ...variance report table... </GlassCard>
-        <GlassCard> ...recent stock movements ledger... </GlassCard>
-      */}
 
       <AnimatePresence>
         {toast && (
           <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className={`fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 rounded-2xl shadow-2xl font-bold text-sm flex items-center gap-3 z-[100] text-white ${
-              toast.type === 'error' ? 'bg-rose-600' : toast.type === 'info' ? 'bg-indigo-600' : 'bg-app-accent'
-            }`}
+            initial={{ opacity: 0, y: 40 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 40 }}
+            style={{
+              position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 100,
+              background: toast.type === 'error' ? '#DC2626' : '#111827', color: '#fff',
+              borderRadius: 12, padding: '11px 18px', fontSize: 12.5, fontWeight: 700,
+              display: 'flex', alignItems: 'center', gap: 10, boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
+            }}
           >
-            {toast.type === 'error' ? <AlertTriangle className="w-5 h-5" /> : <CheckCircle className="w-5 h-5" />}
-            {toast.message}
+            {toast.type === 'error' ? <AlertTriangle size={15} /> : <CheckCircle size={15} />} {toast.message}
           </motion.div>
         )}
       </AnimatePresence>
