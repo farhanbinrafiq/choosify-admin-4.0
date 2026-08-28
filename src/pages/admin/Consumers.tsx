@@ -1,33 +1,65 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import React, { useState, useEffect, useMemo, useCallback, CSSProperties } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useContact } from '../../contexts/ContactInteractionContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { authApi, UserDirectoryEntry, UserDetail } from '../../services/authApi';
-import { Badge } from '../../components/ui/Badge';
-import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
-import { BulkActionBar, BulkAction } from '../../components/ui/BulkActionBar';
-import { StatTile } from '../../components/ui/StatTile';
+import { authApi, UserDirectoryEntry } from '../../services/authApi';
 import {
   Search,
   MoreVertical,
-  Eye,
   MessageCircle,
   ExternalLink,
   ChevronRight,
   AlertTriangle,
   Loader2,
   RefreshCw,
-  X,
-  ShieldCheck,
-  IdCard,
-  Users,
-  Filter,
+  SlidersHorizontal,
+  UserPlus,
+  Save,
 } from 'lucide-react';
 
 // ============================================================================
 // Real backend data — GET /auth/users/directory (bulk list) and
-// GET /auth/users/:userId (single-account detail). See
-// server/authRouter.ts:1419 / :1440 and src/services/authApi.ts.
+// GET /auth/users/search (CF-ID lookup). See server/authRouter.ts:1419 / :1386
+// and src/services/authApi.ts.
+// ============================================================================
+//
+// Sprint 13 UI regression lock — Step 2 (restoration method for all dashboard
+// pages). PRESENTATION is a faithful reproduction of the approved standalone
+// `isCustomerList` section (design-reference/Choosify Admin CMS (standalone).html,
+// decoded lines 3400–3486): exact hex, px, grid and DOM structure, expressed as
+// inline styles rather than translated into shared-component defaults. Sanctioned
+// deviation: the accent uses the canonical `--cms-accent` token for dashboard-wide
+// consistency (per product-owner decision), not the raw reference `#FF5B00`.
+//
+// FUNCTIONALITY is the current canonical layer: GET /auth/users/directory list,
+// GET /auth/users/search CF-ID lookup, viewMode (consumers/creators/admins)
+// reuse, client pagination, CSV export of selected rows, DM via
+// ContactInteraction. Selecting a consumer for inspection navigates to the
+// existing universal profile route /upe/{consumer,creator}/:id via the
+// canonical getProfilePath() mechanism — the full profile page is the
+// authoritative detail surface. No in-page detail panel / modal is rendered.
+//
+// DATA-INTEGRITY NOTES (values only appear where a canonical production source
+// exists; the approved column/panel STRUCTURE is kept regardless):
+//  - Registry columns Sl. | Account Identification | Role Type are backed by the
+//    directory contract. Behavior Intent Segment / Security Trust Score / Status
+//    Badge / Last Access Active have NO field in the list contract (or anywhere
+//    canonical) → rendered as an honest "—".
+//  - The three insight panels (Most Searched / Most Viewed / Most Saved) have no
+//    persisted canonical source. `/api/analytics/trending` exists but its store
+//    (server/analytics/analyticsStorage.ts) is volatile in-memory,
+//    `persistence: 'not_configured'`, empty on boot, and unauthenticated; there
+//    is no wishlist table and no product-search-count concept. Panels are
+//    restored as shells with a neutral empty state.
+//  - "Refine List" and "Invite Consumer" have no canonical implementation
+//    (the prototype buttons carry no handler; there is no consumer-invite
+//    endpoint) → rendered in the approved position but visibly disabled.
+//
+// The standalone prototype's mock fields — behavior segment, trust score,
+// last-access, purchased-in-30d, average basket, most-searched/viewed/saved
+// numbers, LTV, wallet, addresses, sessions, followed brands/creators, search
+// history, suspend toggle — are exactly what Sprint 11 (6250eaa) removed. None
+// are reproduced.
 // ============================================================================
 
 type ViewRole = 'Consumer' | 'Creator' | 'Admin';
@@ -44,7 +76,12 @@ const STAFF_ROLES = new Set([
 
 function roleGroup(role: string): ViewRole | 'Seller' | 'Other' {
   const r = (role || '').toLowerCase();
-  if (r === 'consumer') return 'Consumer';
+  // `user` is the persisted role for platform buyers — the user_role enum has no
+  // `consumer` value, and every account created through /auth/register is stored
+  // as `user`. AuthContext.toUserRole() already normalizes `user` → `consumer`
+  // for the logged-in profile; without the same mapping here, no real buyer
+  // account ever appears in the Consumers tab.
+  if (r === 'consumer' || r === 'user') return 'Consumer';
   if (r === 'creator') return 'Creator';
   if (r === 'seller') return 'Seller';
   if (STAFF_ROLES.has(r)) return 'Admin';
@@ -59,23 +96,57 @@ const initialsFor = (name: string) =>
     .map((part) => part[0]?.toUpperCase() || '')
     .join('') || 'U';
 
-const RoleBadge = ({ role }: { role: string }) => {
-  const group = roleGroup(role);
-  const variants: Record<string, 'info' | 'accent' | 'success' | 'danger'> = {
-    Consumer: 'info',
-    Seller: 'accent',
-    Creator: 'success',
-    Admin: 'danger',
+const ACCENT = 'var(--cms-accent)';
+const ACCENT_WASH = 'color-mix(in srgb, var(--cms-accent) 10%, transparent)';
+
+/** Reference role-badge pill — inline, matching the standalone status-badge chrome. */
+const roleBadgeStyle = (role: string): CSSProperties => {
+  const g = roleGroup(role);
+  const map: Record<string, { bg: string; fg: string }> = {
+    Consumer: { bg: 'rgba(37,99,235,0.12)', fg: '#2563EB' },
+    Seller: { bg: ACCENT_WASH, fg: ACCENT },
+    Creator: { bg: 'rgba(34,197,94,0.12)', fg: '#16A34A' },
+    Admin: { bg: 'rgba(239,68,68,0.1)', fg: '#DC2626' },
   };
-  return <Badge variant={variants[group] || 'neutral'}>{role}</Badge>;
+  const c = map[g] || { bg: '#F1F3F5', fg: '#6B7280' };
+  return {
+    background: c.bg,
+    color: c.fg,
+    fontSize: 9,
+    fontWeight: 800,
+    letterSpacing: '0.03em',
+    textTransform: 'uppercase',
+    padding: '3px 8px',
+    borderRadius: 5,
+    whiteSpace: 'nowrap',
+  };
+};
+
+/** Grouped, display-friendly role label ('user' → 'Consumer'). */
+const roleLabel = (role: string): string => {
+  const g = roleGroup(role);
+  return g === 'Other' ? role : g;
 };
 
 const PAGE_SIZE = 25;
 
+/**
+ * Approved insight panels. No canonical persisted source exists for any of the
+ * three, so each renders a neutral empty state (see header notes). The shell —
+ * position, proportions, border, title treatment — matches isCustomerList.
+ */
+const INSIGHT_PANELS: Array<{ title: string; emptyLabel: string }> = [
+  { title: 'MOST SEARCHED PRODUCTS', emptyLabel: 'No search analytics available yet' },
+  { title: 'MOST VIEWED PRODUCTS', emptyLabel: 'No view analytics available yet' },
+  { title: 'MOST SAVED / WISHLISTED', emptyLabel: 'No saved-product analytics available yet' },
+];
+
 export default function ConsumersPage() {
   const { profile, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortKey, setSortKey] = useState<'az' | 'za'>('az');
   const [searchParams] = useSearchParams();
   const viewMode = searchParams.get('viewMode') || 'consumers';
 
@@ -128,36 +199,6 @@ export default function ConsumersPage() {
     setPage(1);
     setSelectedIds(new Set());
   }, [searchQuery, viewMode]);
-
-  // ------------------------------------------------------------------------
-  // Single-account detail panel — real GET /auth/users/:userId
-  // ------------------------------------------------------------------------
-  const [detailUserId, setDetailUserId] = useState<string | null>(null);
-  const [detailData, setDetailData] = useState<UserDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-  const [detailError, setDetailError] = useState<string | null>(null);
-
-  const openDetail = async (uid: string) => {
-    setActiveMenu(null);
-    setDetailUserId(uid);
-    setDetailData(null);
-    setDetailError(null);
-    setDetailLoading(true);
-    try {
-      const data = await authApi.getUserDetail(uid);
-      setDetailData(data);
-    } catch (err) {
-      setDetailError(err instanceof Error ? err.message : 'Failed to load account detail.');
-    } finally {
-      setDetailLoading(false);
-    }
-  };
-
-  const closeDetail = () => {
-    setDetailUserId(null);
-    setDetailData(null);
-    setDetailError(null);
-  };
 
   // ------------------------------------------------------------------------
   // Choosify User ID quick lookup — unrelated live search feature, kept as-is
@@ -215,25 +256,35 @@ export default function ConsumersPage() {
 
   const finalFiltered = useMemo(() => {
     const s = searchQuery.toLowerCase().trim();
-    if (!s) return baseFiltered;
-    return baseFiltered.filter((u) => {
-      if (
-        (u.displayName || '').toLowerCase().includes(s) ||
-        (u.email || '').toLowerCase().includes(s) ||
-        (u.choosifyUserId || '').toLowerCase().includes(s)
-      ) {
-        return true;
-      }
-      // Numeric / CF-padded forms: 127 / 00127 → CF-00127
-      const digits = s.replace(/^cf-/, '').replace(/\D/g, '');
-      if (digits && u.choosifyUserId) {
-        const cfDigits = u.choosifyUserId.replace(/^CF-/i, '').replace(/^0+/, '') || '0';
-        const qDigits = digits.replace(/^0+/, '') || '0';
-        if (cfDigits === qDigits) return true;
-      }
-      return false;
+    const matched = !s
+      ? baseFiltered
+      : baseFiltered.filter((u) => {
+          if (
+            (u.displayName || '').toLowerCase().includes(s) ||
+            (u.email || '').toLowerCase().includes(s) ||
+            (u.choosifyUserId || '').toLowerCase().includes(s)
+          ) {
+            return true;
+          }
+          // Numeric / CF-padded forms: 127 / 00127 → CF-00127
+          const digits = s.replace(/^cf-/, '').replace(/\D/g, '');
+          if (digits && u.choosifyUserId) {
+            const cfDigits = u.choosifyUserId.replace(/^CF-/i, '').replace(/^0+/, '') || '0';
+            const qDigits = digits.replace(/^0+/, '') || '0';
+            if (cfDigits === qDigits) return true;
+          }
+          return false;
+        });
+    // Reference exposes a sort control; wire it to a real client-side sort over
+    // the fetched directory. The prototype's Joined-date options are dropped —
+    // directory rows carry no join date (that field is detail-only).
+    const sorted = [...matched].sort((a, b) => {
+      const an = (a.displayName || a.email || '').toLowerCase();
+      const bn = (b.displayName || b.email || '').toLowerCase();
+      return sortKey === 'za' ? bn.localeCompare(an) : an.localeCompare(bn);
     });
-  }, [baseFiltered, searchQuery]);
+    return sorted;
+  }, [baseFiltered, searchQuery, sortKey]);
 
   const totalPages = Math.max(1, Math.ceil(finalFiltered.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -242,9 +293,20 @@ export default function ConsumersPage() {
     [finalFiltered, currentPage],
   );
 
+  // Canonical universal-profile route the app already uses internally:
+  // inspectionUniversalPath('consumer') === '/admin/consumers/:id'. Navigate
+  // straight to it — the previous '/upe/consumer/:id' target only redirected
+  // here anyway, and that route now renders the real React UnifiedProfileShell
+  // (App.tsx), not the mock CmsMirror customer deep-link.
   const getProfilePath = (role: ViewRole, id: string) => {
     if (role === 'Creator') return `/upe/creator/${id}`;
-    return `/upe/consumer/${id}`;
+    return `/admin/consumers/${id}`;
+  };
+
+  /** Selecting a consumer for inspection → canonical full profile, one navigation. */
+  const openProfile = (uid: string) => {
+    setActiveMenu(null);
+    navigate(getProfilePath(currentViewRole, uid));
   };
 
   const handleExportCSV = () => {
@@ -263,10 +325,6 @@ export default function ConsumersPage() {
     URL.revokeObjectURL(url);
     showToast(`Exported ${rows.length} record(s) to CSV.`);
   };
-
-  const bulkActions: BulkAction[] = [
-    { label: 'Export CSV', onClick: handleExportCSV, variant: 'info' },
-  ];
 
   // Real, directory-derived counts (no fabricated stats — the directory
   // endpoint has no purchase/engagement/session data to report on).
@@ -292,164 +350,139 @@ export default function ConsumersPage() {
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
   }, [directory, isAdminView]);
 
-  const registryColumns = useMemo<DataTableColumn<UserDirectoryEntry>[]>(() => {
-    const columns: DataTableColumn<UserDirectoryEntry>[] = [
-      {
-        key: 'account',
-        header: 'Account Identification',
-        sortValue: (u) => u.displayName,
-        render: (u) => (
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => openDetail(u.uid)}
-              className="w-9 h-9 rounded-full flex items-center justify-center text-[11.5px] font-bold bg-app-sidebar border border-app-border text-app-accent-light hover:border-app-accent/50 transition-all active:scale-95 shrink-0 cursor-pointer"
-              title="Quick view account detail"
-            >
-              {initialsFor(u.displayName || u.email)}
-            </button>
-            <div className="min-w-0">
-              <button
-                onClick={() => openDetail(u.uid)}
-                className="font-bold text-white hover:text-app-accent-light transition-colors block truncate text-left cursor-pointer"
-              >
-                {u.displayName || '(no name on file)'}
-              </button>
-              <div className="text-[10px] text-app-text-secondary/50 font-mono italic truncate">{u.email}</div>
-            </div>
-          </div>
-        ),
-      },
-      {
-        key: 'cfId',
-        header: 'CF ID',
-        sortValue: (u) => u.choosifyUserId || '',
-        render: (u) => (
-          <span className="font-mono text-[11px] font-bold text-app-text-muted whitespace-nowrap">
-            {u.choosifyUserId || '—'}
-          </span>
-        ),
-      },
-      { key: 'role', header: 'Role Type', render: (u) => <RoleBadge role={u.role} /> },
-    ];
-
-    columns.push({
-      key: 'actions',
-      header: 'Administrative',
-      align: 'right',
-      render: (u) => (
-        <div className="flex justify-end relative">
-          <button
-            onClick={() => setActiveMenu(activeMenu === u.uid ? null : u.uid)}
-            className={`w-8 h-8 flex items-center justify-center rounded-lg border transition-all cursor-pointer ${
-              activeMenu === u.uid
-                ? 'bg-app-accent text-white border-app-accent shadow-lg'
-                : 'bg-white/5 text-app-text-secondary border-transparent hover:text-white hover:bg-white/10'
-            }`}
-          >
-            <MoreVertical className="w-4 h-4" />
-          </button>
-
-          {activeMenu === u.uid && (
-            <>
-              <div className="fixed inset-0 z-10" onClick={() => setActiveMenu(null)} />
-              <div className="absolute right-0 top-10 w-48 bg-app-card border border-app-border rounded-lg shadow-2xl z-20 py-1 overflow-hidden animate-in fade-in zoom-in duration-200">
-                <button
-                  onClick={() => openDetail(u.uid)}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-[11.5px] font-medium text-app-text-primary hover:bg-app-accent/10 hover:text-app-accent-light transition-colors text-left cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5 text-app-accent" />
-                  <span>Quick View</span>
-                </button>
-                <Link
-                  to={getProfilePath(currentViewRole, u.uid)}
-                  className="flex items-center gap-2 px-4 py-2 text-[11.5px] font-medium text-app-text-primary hover:bg-app-accent/10 hover:text-app-accent-light transition-colors"
-                  onClick={() => setActiveMenu(null)}
-                >
-                  <ExternalLink className="w-3.5 h-3.5 text-app-accent" />
-                  <span>Open Full Profile</span>
-                </Link>
-                <button
-                  onClick={() => {
-                    setActiveMenu(null);
-                    triggerMessage({ id: u.uid, name: u.displayName || u.email, avatarUrl: '', role: u.role });
-                  }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-[11.5px] font-medium text-app-text-primary hover:bg-app-accent/10 hover:text-app-accent-light transition-colors text-left cursor-pointer"
-                >
-                  <MessageCircle className="w-3.5 h-3.5 text-app-accent" />
-                  <span>Direct Message</span>
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      ),
+  const selectedCount = pagedRows.filter((u) => selectedIds.has(u.uid)).length;
+  const allSelected = pagedRows.length > 0 && pagedRows.every((u) => selectedIds.has(u.uid));
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) pagedRows.forEach((u) => next.delete(u.uid));
+      else pagedRows.forEach((u) => next.add(u.uid));
+      return next;
     });
+  };
+  const toggleSelect = (uid: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(uid)) next.delete(uid);
+      else next.add(uid);
+      return next;
+    });
+  };
 
-    return columns;
-  }, [activeMenu, currentViewRole, triggerMessage]);
+  // ── presentation — exact reference values (isCustomerList 3400–3486) ─────
+  const S: Record<string, CSSProperties> = {
+    headRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16, flexWrap: 'wrap', gap: 12 },
+    crumb: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9CA3AF', marginBottom: 6 },
+    h1: { fontSize: '15.5px', fontWeight: 800, color: '#111827' },
+    sub: { fontSize: 12, color: '#6B7280', fontWeight: 600, marginTop: 2 },
+    controls: { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' },
+    search: { height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 14px 0 34px', fontSize: '12.5px', minWidth: 220, outline: 'none', background: '#fff' },
+    select: { height: 38, boxSizing: 'border-box', borderRadius: 8, border: '1px solid #E8EDF2', padding: '0 12px', fontSize: 12, color: '#111827', background: '#fff', outline: 'none', cursor: 'pointer' },
+    btn: { height: 38, boxSizing: 'border-box', background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '0 16px', fontSize: '11.5px', fontWeight: 800, color: '#111827', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 },
+    btnDisabled: { height: 38, boxSizing: 'border-box', borderRadius: 8, padding: '0 16px', fontSize: '11.5px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'not-allowed', opacity: 0.45 },
+    statGrid: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 14 },
+    statCard: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 16 },
+    statNum: { fontSize: 22, fontWeight: 800, color: '#111827' },
+    statLabel: { fontSize: 10, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', marginTop: 4 },
+    statSub: { fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginTop: 4 },
+    panelGrid: { display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14, marginBottom: 14 },
+    panel: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 16 },
+    panelTitle: { fontSize: 10, fontWeight: 800, color: '#111827', letterSpacing: '0.04em', textTransform: 'uppercase', marginBottom: 12 },
+    panelEmpty: { borderTop: '1px solid #F1F3F5', paddingTop: 14, textAlign: 'center', color: '#9CA3AF', fontSize: 11, fontWeight: 600, fontStyle: 'italic' },
+    bulkBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(180deg,rgba(0,4,53,0.94) 0%,rgba(0,6,46,0.92) 80%,rgba(0,2,37,0.94) 100%)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(255,255,255,0.12)', color: '#fff', borderRadius: 8, padding: '12px 16px', marginBottom: 12, flexWrap: 'wrap', gap: 10 },
+    bulkChip: { background: ACCENT_WASH, color: ACCENT, padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 800 },
+    bulkBtn: { background: 'rgba(255,255,255,0.12)', color: '#fff', border: '1px solid rgba(255,255,255,0.18)', borderRadius: 6, padding: '5px 12px', fontSize: 10.5, fontWeight: 800, cursor: 'pointer' },
+    bulkClear: { cursor: 'pointer', fontSize: 10.5, fontWeight: 700, color: 'rgba(255,255,255,0.7)', background: 'none', border: 0 },
+    tableWrap: { background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, overflow: 'hidden' },
+    th: { textAlign: 'left', padding: '12px 16px', fontSize: '10.5px', fontWeight: 700, color: '#6B7280', letterSpacing: '0.05em', textTransform: 'uppercase', whiteSpace: 'nowrap' },
+    td: { padding: '14px 16px', fontSize: 13, color: '#111827' },
+    tdMuted: { padding: '14px 16px', fontSize: 13, color: '#6B7280' },
+    row: { borderTop: '1px solid #F1F3F5', cursor: 'pointer' },
+    empty: { color: '#9CA3AF' },
+    avatar: { width: 32, height: 32, borderRadius: '50%', background: `linear-gradient(135deg, ${ACCENT}, #000435)`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700, flexShrink: 0 },
+    pager: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid #F1F3F5', background: '#F9FAFB', fontSize: 11, fontWeight: 700, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.04em' },
+    pagerBtn: { padding: '6px 12px', background: '#fff', border: '1px solid #E8EDF2', borderRadius: 6, fontSize: 10.5, fontWeight: 800, color: '#374151', cursor: 'pointer' },
+    menu: { position: 'absolute', right: 0, top: 34, width: 190, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, boxShadow: '0 12px 32px rgba(0,0,0,0.14)', zIndex: 20, padding: 4, overflow: 'hidden' },
+    menuItem: { width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', fontSize: '11.5px', fontWeight: 700, color: '#374151', background: 'none', border: 0, borderRadius: 6, cursor: 'pointer', textAlign: 'left', textDecoration: 'none' },
+  };
+
+  const pillRoleLabel = isCreatorView ? 'Creators' : isAdminView ? 'Admins' : 'Consumers';
+  const title = isCreatorView ? 'Creator Management' : isAdminView ? 'Security & Administration' : 'Consumer Management Hub';
+  const subtitle = isCreatorView
+    ? 'Registered content creator accounts.'
+    : isAdminView
+      ? 'Registered platform staff accounts (admin, moderator, and operations roles).'
+      : 'Manage registered platform buyers, and audit account safety.';
+  const registeredSub = isCreatorView
+    ? 'Enrolled creator accounts'
+    : isAdminView
+      ? 'Platform staff & operations roles'
+      : 'Enrolled platform buyers';
 
   return (
-    <div className="space-y-6 pb-12 text-app-text-primary transition-all animate-in fade-in duration-300">
-
-      {/* Toast banner */}
+    <div style={{ color: '#111827' }}>
+      {/* Toast — dashboard-consistent (matches Category Studio) */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-3 bg-white shadow-2xl px-4 py-2.5 rounded-lg border border-app-border animate-slide-in">
-          <div className="w-2 h-2 rounded-full bg-app-accent" />
-          <span className="text-xs font-bold font-mono text-app-text-primary">{toastMessage}</span>
+        <div
+          style={{
+            position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', zIndex: 100,
+            background: '#111827', color: '#fff', borderRadius: 12, padding: '11px 18px',
+            fontSize: 12.5, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 10,
+            boxShadow: '0 12px 32px rgba(0,0,0,0.22)',
+          }}
+        >
+          <Save size={15} /> {toastMessage}
         </div>
       )}
 
-      {/* Breadcrumb Indicators */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* ── Header (reference) ── */}
+      <div style={S.headRow}>
         <div>
-          <div className="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-[0.05em] text-app-text-disabled">
+          <div style={S.crumb}>
             <span>Platform Registry</span>
-            <ChevronRight className="w-3.5 h-3.5 text-app-text-disabled/50" />
+            <ChevronRight size={13} style={{ opacity: 0.5 }} />
             <span>Consumers</span>
-            <ChevronRight className="w-3.5 h-3.5 text-app-text-disabled/50" />
-            <span className="text-app-accent">{currentViewRole}s Directory</span>
+            <ChevronRight size={13} style={{ opacity: 0.5 }} />
+            <span style={{ color: ACCENT }}>{currentViewRole}s Directory</span>
           </div>
-
-           <h1 className="text-[17px] font-extrabold text-app-text-primary tracking-tight">
-            {isCreatorView && 'Creator Management'}
-            {isAdminView && 'Security & Administration'}
-            {isConsumerView && 'Consumer Management Hub'}
-          </h1>
-          <p className="text-app-text-secondary text-[12px] font-semibold">
-            {isCreatorView && 'Registered content creator accounts.'}
-            {isAdminView && 'Registered platform staff accounts (admin, moderator, and operations roles).'}
-            {isConsumerView && 'Registered platform buyer accounts.'}
-          </p>
+          <div style={S.h1}>{title}</div>
+          <div style={S.sub}>{subtitle}</div>
         </div>
 
-        {/* Filters and Inputs */}
-        <div className="flex items-center gap-3">
-          <div className="relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-app-text-muted group-focus-within:text-app-accent transition-colors" />
+        <div style={S.controls}>
+          <div style={{ position: 'relative' }}>
+            <Search size={14} color="#9CA3AF" style={{ position: 'absolute', left: 12, top: 12, pointerEvents: 'none' }} />
             <input
-              type="text"
-              placeholder={`Search ${currentViewRole.toLowerCase()}s or User ID (CF-00127)`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-1.5 bg-white border border-app-border rounded-lg text-xs w-full md:w-64 focus:outline-none focus:border-app-accent/50 transition-all text-app-text-primary placeholder-app-text-muted font-semibold"
+              placeholder={`Search ${currentViewRole.toLowerCase()}s or User ID (CF-00127)`}
+              style={S.search}
             />
           </div>
-          <button
-            onClick={() => fetchDirectory()}
-            disabled={usersLoading}
-            className="flex items-center gap-1.5 bg-white border border-app-border hover:border-app-accent text-app-text-secondary px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all shadow-sm active:scale-95 shrink-0 hover:text-app-accent cursor-pointer disabled:opacity-50"
-          >
-             <RefreshCw className={`w-3.5 h-3.5 text-app-accent ${usersLoading ? 'animate-spin' : ''}`} />
-             <span>Refresh</span>
+          <select value={sortKey} onChange={(e) => setSortKey(e.target.value as 'az' | 'za')} style={S.select}>
+            <option value="az">Name: A → Z</option>
+            <option value="za">Name: Z → A</option>
+          </select>
+          {/* Reference control — no canonical filter-panel implementation → disabled */}
+          <button type="button" disabled aria-disabled title="Advanced filters are not available in this release" style={{ ...S.btnDisabled, background: '#fff', border: '1px solid #E8EDF2', color: '#111827' }}>
+            <SlidersHorizontal size={13} /> Refine List
+          </button>
+          <button onClick={() => fetchDirectory()} disabled={usersLoading} style={{ ...S.btn, opacity: usersLoading ? 0.6 : 1 }}>
+            <RefreshCw size={13} className={usersLoading ? 'animate-spin' : ''} /> Refresh
+          </button>
+          {/* Reference control — no consumer-invite endpoint → disabled */}
+          <button type="button" disabled aria-disabled title="Consumer invitations are not available in this release" style={{ ...S.btnDisabled, background: ACCENT, color: '#fff' }}>
+            <UserPlus size={13} /> Invite Consumer
           </button>
         </div>
       </div>
 
+      {/* CF-ID lookup match (real; no reference equivalent) */}
       {cfLookup ? (
-        <div className="rounded-lg border border-app-border bg-white px-4 py-3 text-xs">
-          <div className="font-extrabold text-app-text-primary">Choosify User ID match</div>
-          <div className="mt-1 font-mono font-bold text-app-accent">{cfLookup.choosifyUserId}</div>
-          <div className="mt-1 text-app-text-secondary font-semibold">
+        <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: '12px 16px', marginBottom: 12, fontSize: 12 }}>
+          <div style={{ fontWeight: 800, color: '#111827' }}>Choosify User ID match</div>
+          <div style={{ marginTop: 3, fontFamily: 'monospace', fontWeight: 800, color: ACCENT }}>{cfLookup.choosifyUserId}</div>
+          <div style={{ marginTop: 3, color: '#6B7280', fontWeight: 600 }}>
             {cfLookup.displayName} · {cfLookup.email} · {cfLookup.role}
           </div>
           <Link
@@ -457,213 +490,190 @@ export default function ConsumersPage() {
               cfLookup.role === 'creator' ? 'Creator' : cfLookup.role === 'admin' || cfLookup.role === 'super_admin' ? 'Admin' : 'Consumer',
               cfLookup.uid,
             )}
-            className="mt-2 inline-flex items-center gap-1 text-app-accent font-extrabold hover:underline"
+            style={{ marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 4, color: ACCENT, fontWeight: 800, fontSize: 11.5 }}
           >
-            Open profile <ChevronRight className="w-3.5 h-3.5" />
+            Open profile <ChevronRight size={13} />
           </Link>
         </div>
       ) : null}
       {cfLookupError ? (
-        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-semibold text-rose-700">
+        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '8px 14px', marginBottom: 12, fontSize: 12, fontWeight: 600, color: '#B91C1C' }}>
           {cfLookupError}
         </div>
       ) : null}
 
       {usersError && (
-        <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-center justify-between gap-3 text-xs text-rose-700">
-          <span className="flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {usersError}</span>
-          <button
-            onClick={() => fetchDirectory()}
-            className="px-2 py-1 bg-rose-100 hover:bg-rose-200 border border-rose-300 rounded-md font-bold uppercase tracking-wider text-[10px] cursor-pointer"
-          >
-            Retry
-          </button>
+        <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, fontSize: 12, color: '#B91C1C' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><AlertTriangle size={15} /> {usersError}</span>
+          <button onClick={() => fetchDirectory()} style={{ ...S.btn, height: 30, background: '#FEE2E2', borderColor: '#FECACA', color: '#B91C1C' }}>Retry</button>
         </div>
       )}
 
-      {/* REAL, DIRECTORY-DERIVED STAT TILES (no fabricated engagement/session data) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatTile
-          label={`Registered ${currentViewRole}s`}
-          value={usersLoading ? '—' : roleCounts[currentViewRole]}
-          icon={Users}
-          accent="indigo"
-        />
-        <StatTile
-          label="Missing Choosify ID"
-          value={usersLoading ? '—' : roleCounts.missingCfId}
-          icon={IdCard}
-          accent="slate"
-        />
-        <StatTile
-          label="Matching current filter"
-          value={usersLoading ? '—' : finalFiltered.length}
-          icon={Filter}
-          accent="emerald"
-        />
+      {/* ── Real directory-derived stat cards (reference card chrome) ── */}
+      <div style={S.statGrid}>
+        <div style={{ ...S.statCard, borderLeft: '4px solid #6C4CFF' }}>
+          <div style={S.statNum}>{usersLoading ? '—' : roleCounts[currentViewRole]}</div>
+          <div style={S.statLabel}>Registered {pillRoleLabel}</div>
+          <div style={S.statSub}>{registeredSub}</div>
+        </div>
+        <div style={{ ...S.statCard, borderLeft: '4px solid #DC2626' }}>
+          <div style={S.statNum}>{usersLoading ? '—' : roleCounts.missingCfId}</div>
+          <div style={S.statLabel}>Missing Choosify ID</div>
+          <div style={S.statSub}>Accounts without a CF-ID</div>
+        </div>
+        <div style={{ ...S.statCard, borderLeft: '4px solid #2563EB' }}>
+          <div style={S.statNum}>{usersLoading ? '—' : finalFiltered.length}</div>
+          <div style={S.statLabel}>Matching current filter</div>
+          <div style={S.statSub}>Search + role tab applied</div>
+        </div>
+      </div>
+
+      {/* ── Insight panels (approved shells; no canonical source → empty state) ── */}
+      <div style={S.panelGrid}>
+        {INSIGHT_PANELS.map((p) => (
+          <div key={p.title} style={S.panel}>
+            <div style={S.panelTitle}>{p.title}</div>
+            <div style={S.panelEmpty}>{p.emptyLabel}</div>
+          </div>
+        ))}
       </div>
 
       {isAdminView && staffRoleBreakdown.length > 0 && (
-        <div className="bg-app-card border border-app-border rounded-lg p-4 flex flex-wrap gap-2">
+        <div style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 8, padding: 14, marginBottom: 14, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {staffRoleBreakdown.map(([role, count]) => (
-            <span key={role} className="px-2.5 py-1 rounded-md bg-white/5 border border-app-border text-[10px] font-bold text-app-text-secondary font-mono">
+            <span key={role} style={{ padding: '4px 10px', borderRadius: 6, background: '#F9FAFB', border: '1px solid #E8EDF2', fontSize: 10, fontWeight: 800, color: '#6B7280', fontFamily: 'monospace' }}>
               {role}: {count}
             </span>
           ))}
         </div>
       )}
 
-      {/* REGISTRY TABLE PANEL */}
-      <BulkActionBar
-        count={selectedIds.size}
-        actions={bulkActions}
-        onClear={() => setSelectedIds(new Set())}
-        itemLabel={currentViewRole.toLowerCase() + 's'}
-      />
-      <div className="bg-white border border-app-border rounded-2xl overflow-hidden shadow-sm">
-        <div className="overflow-x-auto custom-scrollbar">
-          <DataTable
-            columns={registryColumns}
-            rows={pagedRows}
-            getRowId={(u: UserDirectoryEntry) => u.uid}
-            selectedIds={selectedIds}
-            onSelectedIdsChange={setSelectedIds}
-            isLoading={usersLoading}
-            loadingMessage="Loading registry..."
-            emptyMessage="No matches found for your search inquiry. Refine your keyword queries or select a different user catalog tab."
-          />
-        </div>
-
-        {/* Pagination Section */}
-        <div className="px-6 py-4 border-t border-app-border flex items-center justify-between text-[11px] font-bold text-app-text-secondary uppercase tracking-widest bg-slate-50/60">
-           <div>
-             Registry range: {finalFiltered.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1} — {Math.min(currentPage * PAGE_SIZE, finalFiltered.length)} of {finalFiltered.length} matches
-           </div>
-           <div className="flex gap-1.5">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage <= 1}
-                className="px-3 py-1 bg-white border border-app-border text-app-text-secondary hover:text-app-accent disabled:text-app-text-disabled disabled:cursor-not-allowed rounded-md transition-all"
-              >
-                Prev
-              </button>
-              <button className="px-3 py-1 bg-app-accent text-white shadow-sm rounded-md">
-                {String(currentPage).padStart(2, '0')} / {String(totalPages).padStart(2, '0')}
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage >= totalPages}
-                className="px-3 py-1 bg-white border border-app-border text-app-text-secondary hover:text-app-accent disabled:text-app-text-disabled disabled:cursor-not-allowed rounded-md transition-all"
-              >
-                Next
-              </button>
-           </div>
-        </div>
-      </div>
-
-      {/* QUICK VIEW DETAIL PANEL — GET /auth/users/:userId */}
-      {detailUserId && (
-        <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-app-border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs animate-in zoom-in-95 duration-200">
-            <div className="flex justify-between items-center border-b border-app-border pb-3">
-              <h3 className="font-extrabold text-app-text-primary uppercase tracking-wider flex items-center gap-1.5">
-                <IdCard className="w-4 h-4 text-app-accent" /> Account Detail
-              </h3>
-              <button
-                onClick={closeDetail}
-                className="p-1 hover:bg-black/5 rounded-full text-app-text-secondary hover:text-app-text-primary cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {detailLoading ? (
-              <div className="py-10 text-center text-app-text-secondary">
-                <Loader2 className="w-6 h-6 mx-auto mb-2 animate-spin opacity-50" />
-                <p>Loading account detail…</p>
-              </div>
-            ) : detailError ? (
-              <div className="py-6 space-y-3 text-center">
-                <p className="text-rose-600 font-semibold flex items-center justify-center gap-1.5"><AlertTriangle className="w-4 h-4" /> {detailError}</p>
-                <button
-                  onClick={() => detailUserId && openDetail(detailUserId)}
-                  className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg font-bold text-rose-700 cursor-pointer"
-                >
-                  Retry
-                </button>
-              </div>
-            ) : detailData ? (
-              <div className="space-y-3 font-mono">
-                <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-app-border">
-                  <span className="text-app-text-secondary">Name:</span>
-                  <span className="col-span-2 text-app-text-primary font-bold">{detailData.displayName || '—'}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-app-border">
-                  <span className="text-app-text-secondary">Email:</span>
-                  <span className="col-span-2 text-app-text-primary">{detailData.email}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-app-border">
-                  <span className="text-app-text-secondary">Role:</span>
-                  <span className="col-span-2"><RoleBadge role={detailData.role} /></span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-app-border">
-                  <span className="text-app-text-secondary">CF ID:</span>
-                  <span className="col-span-2 text-app-text-primary font-bold">{detailData.choosifyUserId || '—'}</span>
-                </div>
-                <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-app-border">
-                  <span className="text-app-text-secondary">Joined:</span>
-                  <span className="col-span-2 text-app-text-primary">
-                    {detailData.createdAt ? new Date(detailData.createdAt).toLocaleString() : '—'}
-                  </span>
-                </div>
-                {detailData.profileStatus && (
-                  <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-app-border">
-                    <span className="text-app-text-secondary">Profile Status:</span>
-                    <span className="col-span-2 flex items-center gap-1.5 text-app-text-primary font-bold">
-                      <ShieldCheck className="w-3.5 h-3.5 text-app-accent" /> {detailData.profileStatus}
-                    </span>
-                  </div>
-                )}
-                {typeof detailData.identityVerified === 'boolean' && (
-                  <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-app-border">
-                    <span className="text-app-text-secondary">Identity Verified:</span>
-                    <span className="col-span-2 text-app-text-primary">{detailData.identityVerified ? 'Yes' : 'No'}</span>
-                  </div>
-                )}
-                {typeof detailData.marketplaceAccess === 'boolean' && (
-                  <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-app-border">
-                    <span className="text-app-text-secondary">Marketplace Access:</span>
-                    <span className="col-span-2 text-app-text-primary">{detailData.marketplaceAccess ? 'Granted' : 'Not Granted'}</span>
-                  </div>
-                )}
-                {detailData.partnerApplicationStatus && (
-                  <div className="grid grid-cols-3 gap-2 py-1.5 border-b border-app-border">
-                    <span className="text-app-text-secondary">Partner App:</span>
-                    <span className="col-span-2 text-app-text-primary capitalize">{detailData.partnerApplicationStatus}</span>
-                  </div>
-                )}
-              </div>
-            ) : null}
-
-            <div className="pt-2 border-t border-app-border flex justify-end gap-2">
-              <Link
-                to={getProfilePath(currentViewRole, detailUserId)}
-                onClick={closeDetail}
-                className="px-4 py-1.5 bg-app-accent text-white rounded-lg font-bold hover:bg-[var(--color-accent-hover)] flex items-center gap-1.5"
-              >
-                <ExternalLink className="w-3.5 h-3.5" /> Open Full Profile
-              </Link>
-              <button
-                onClick={closeDetail}
-                className="px-4 py-1.5 bg-black/5 rounded-lg text-app-text-secondary hover:bg-black/10 cursor-pointer"
-              >
-                Dismiss
-              </button>
-            </div>
+      {/* ── Bulk selection bar (reference) ── */}
+      {selectedCount > 0 && (
+        <div style={S.bulkBar}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={S.bulkChip}>{selectedCount} selected</span>
+            <button onClick={handleExportCSV} style={S.bulkBtn}>Export CSV</button>
           </div>
+          <button onClick={() => setSelectedIds(new Set())} style={S.bulkClear}>✕ Clear</button>
         </div>
       )}
 
+      {/* ── Registry table (reference — 7 approved columns) ── */}
+      <div style={S.tableWrap}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#F9FAFB' }}>
+                <th style={{ ...S.th, width: 36, textAlign: 'center' }}>
+                  <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} aria-label="Select all on page" />
+                </th>
+                <th style={{ ...S.th, width: 40 }}>Sl.</th>
+                <th style={S.th}>Account Identification</th>
+                <th style={S.th}>Role Type</th>
+                <th style={S.th}>Behavior Intent Segment</th>
+                <th style={S.th}>Security Trust Score</th>
+                <th style={S.th}>Status Badge</th>
+                <th style={S.th}>Last Access Active</th>
+                <th style={{ ...S.th, width: 52, textAlign: 'right' }} aria-label="Actions" />
+              </tr>
+            </thead>
+            <tbody>
+              {usersLoading ? (
+                <tr>
+                  <td colSpan={9} style={{ ...S.tdMuted, textAlign: 'center', padding: '40px 0' }}>
+                    <Loader2 size={16} className="animate-spin" style={{ display: 'inline', marginRight: 8, verticalAlign: 'middle' }} />
+                    Loading registry…
+                  </td>
+                </tr>
+              ) : pagedRows.length === 0 ? (
+                <tr>
+                  <td colSpan={9} style={{ ...S.tdMuted, textAlign: 'center', padding: '40px 16px', fontStyle: 'italic' }}>
+                    No matches found for your search inquiry. Refine your keyword queries or select a different user catalog tab.
+                  </td>
+                </tr>
+              ) : (
+                pagedRows.map((u, idx) => {
+                  const sl = (currentPage - 1) * PAGE_SIZE + idx + 1;
+                  return (
+                    <tr key={u.uid} style={S.row} onClick={() => openProfile(u.uid)}>
+                      <td style={{ ...S.td, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+                        <input type="checkbox" checked={selectedIds.has(u.uid)} onChange={() => toggleSelect(u.uid)} aria-label={`Select ${u.displayName || u.email}`} />
+                      </td>
+                      <td style={S.tdMuted}>{sl}</td>
+                      <td style={S.td}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={S.avatar}>{initialsFor(u.displayName || u.email)}</span>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {u.displayName || '(no name on file)'}
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: '#9CA3AF', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {u.email}
+                            </div>
+                            <div style={{ fontSize: '10.5px', color: '#6B7280', fontWeight: 700, fontFamily: 'monospace', letterSpacing: '0.02em', marginTop: 2 }}>
+                              {u.choosifyUserId || '—'}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={S.td}><span style={roleBadgeStyle(u.role)}>{roleLabel(u.role)}</span></td>
+                      <td style={S.tdMuted}><span style={S.empty}>—</span></td>
+                      <td style={S.tdMuted}><span style={S.empty}>—</span></td>
+                      <td style={S.tdMuted}><span style={S.empty}>—</span></td>
+                      <td style={S.tdMuted}><span style={S.empty}>—</span></td>
+                      <td style={{ ...S.td, textAlign: 'right', position: 'relative', overflow: 'visible' }} onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => setActiveMenu(activeMenu === u.uid ? null : u.uid)}
+                          style={{
+                            width: 30, height: 30, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                            borderRadius: 7, border: '1px solid ' + (activeMenu === u.uid ? ACCENT : 'transparent'),
+                            background: activeMenu === u.uid ? ACCENT_WASH : 'transparent', color: activeMenu === u.uid ? ACCENT : '#6B7280', cursor: 'pointer',
+                          }}
+                        >
+                          <MoreVertical size={15} />
+                        </button>
+                        {activeMenu === u.uid && (
+                          <>
+                            <div style={{ position: 'fixed', inset: 0, zIndex: 10 }} onClick={() => setActiveMenu(null)} />
+                            <div style={S.menu}>
+                              <Link to={getProfilePath(currentViewRole, u.uid)} onClick={() => setActiveMenu(null)} style={S.menuItem}>
+                                <ExternalLink size={14} color={ACCENT} /> Open Full Profile
+                              </Link>
+                              <button
+                                onClick={() => {
+                                  setActiveMenu(null);
+                                  triggerMessage({ id: u.uid, name: u.displayName || u.email, avatarUrl: '', role: u.role });
+                                }}
+                                style={S.menuItem}
+                              >
+                                <MessageCircle size={14} color={ACCENT} /> Direct Message
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        <div style={S.pager}>
+          <div>
+            Registry range: {finalFiltered.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1} — {Math.min(currentPage * PAGE_SIZE, finalFiltered.length)} of {finalFiltered.length} matches
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage <= 1} style={{ ...S.pagerBtn, opacity: currentPage <= 1 ? 0.4 : 1, cursor: currentPage <= 1 ? 'not-allowed' : 'pointer' }}>Prev</button>
+            <span style={{ ...S.pagerBtn, background: ACCENT, color: '#fff', border: 'none' }}>
+              {String(currentPage).padStart(2, '0')} / {String(totalPages).padStart(2, '0')}
+            </span>
+            <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} style={{ ...S.pagerBtn, opacity: currentPage >= totalPages ? 0.4 : 1, cursor: currentPage >= totalPages ? 'not-allowed' : 'pointer' }}>Next</button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
