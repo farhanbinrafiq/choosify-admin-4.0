@@ -1133,6 +1133,39 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            {/*
+              Canonical consumer universal-profile route.
+
+              route before:  (no explicit route) -> /admin/* catch-all -> CmsMirrorHost
+              route after:   /admin/consumers/:id -> UnifiedProfileShell
+              component before: CmsMirrorHost (Gen-2 iframe). Its cms-mirror-select-customer
+                deep link resolves the target ONLY against the prototype's mock
+                Component.USERS array, so a real registered buyer never matched and the
+                iframe dead-ended on the mock "Consumer Management" list (the duplicate
+                layer). inspectionUniversalPath('consumer') has always pointed here.
+              component after: UnifiedProfileShell -- the same real React universal profile
+                /brand/:id and /order/:id already mount. It detects /consumers/ and reads
+                the real GET /auth/users/:id (identity, CF-ID, role, lifecycle).
+              visual generation: unreachable-Gen-2-mock -> existing universal profile shell.
+                No Gen-1 legacy screen, no new detail route, no isCustomerDetail duplication.
+              preserved: RoleGuard keeps the admin/super_admin gate; UnifiedProfileShell
+                keeps "Login As User" + ?impersonate=1 auto-open, so impersonation via
+                inspectionUniversalPath('consumer') is unchanged.
+            */}
+            <Route
+              path="/admin/consumers/:id"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <UnifiedProfileShell />
+                      </Suspense>
+                    </AdminLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
 
             {/*
               Sprint 11 remediation, tier 3: these screens have no real backend

@@ -485,6 +485,8 @@ export default function UnifiedProfileShell() {
     claimStatus?: ProfileStatusFacts['claimStatus'];
     ownershipClaimPending?: boolean;
     role?: string;
+    displayName?: string;
+    email?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -529,6 +531,8 @@ export default function UnifiedProfileShell() {
           data?: {
             choosifyUserId?: string;
             role?: string;
+            displayName?: string;
+            email?: string;
             partnerApplicationStatus?: 'pending' | 'approved' | 'rejected' | null;
             identityVerified?: boolean;
             marketplaceAccess?: boolean;
@@ -720,6 +724,13 @@ export default function UnifiedProfileShell() {
               avatarUrl: orderCust.avatar || fallback.avatarUrl,
             }
           : {}),
+        // Real identity from GET /auth/users/:id wins over the FALLBACK_CONSUMERS
+        // prototype record — the admin is inspecting a specific real account.
+        id: idKey,
+        ...(inspectedAccount?.displayName
+          ? { name: inspectedAccount.displayName, initials: '' }
+          : {}),
+        ...(inspectedAccount?.email ? { email: inspectedAccount.email } : {}),
       };
       const associatedList = orders.filter(o => o.customer.name === cust.name || o.customer.id === cust.id);
       return {
@@ -882,7 +893,7 @@ export default function UnifiedProfileShell() {
     }
 
     return null;
-  }, [typeKey, idKey, orders, customers, brandProfiles, catalogBrand, loggedInProfile]);
+  }, [typeKey, idKey, orders, customers, brandProfiles, catalogBrand, loggedInProfile, inspectedAccount]);
 
   // ----- Marketplace Access (grant/suspend/reinstate) — shared across Brand/Seller/Creator Account Info tabs -----
   // Backed by the real backend (PATCH /catalog/brands/:id/marketplace-access for Brand/Seller,
