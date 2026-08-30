@@ -1,6 +1,7 @@
 import React from 'react';
 import { Check, Globe, Share2, ShieldCheck, Pencil } from 'lucide-react';
 import type { BrandCMSModel } from '../../pages/admin/brandSeeds';
+import type { BrandEditSection } from '../../pages/admin/brandEditorModel';
 
 export type BrandProfileEditSection =
   | 'header'
@@ -13,7 +14,157 @@ export type BrandProfileEditSection =
   | 'reviews'
   | 'story';
 
-export type BrandProfilePresentationMode = 'public' | 'editor';
+export type BrandProfilePresentationMode = 'public' | 'editor' | 'studio';
+
+/**
+ * Inline section-editing bridge — the Brand Studio equivalent of Product
+ * Studio's `StudioBridge`. One active section at a time, in-place Save / Cancel,
+ * no drawer / modal.
+ */
+export type BrandStudioBridge = {
+  editingSection: BrandEditSection | null;
+  dirty: boolean;
+  saving: boolean;
+  onEdit: (k: BrandEditSection) => void;
+  onCancel: () => void;
+  onSave: () => void;
+  renderEditor: (k: BrandEditSection) => React.ReactNode;
+};
+
+/** Shared chrome for an inline section editor (Editing eyebrow + Save/Cancel). */
+export function BrandInlineEditFrame({
+  k,
+  title,
+  studio,
+  children,
+}: {
+  k: BrandEditSection;
+  title: string;
+  studio: BrandStudioBridge;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="relative rounded-xl bg-white border border-[#E8EDF2] p-4 sm:p-5">
+      <div className="text-[10px] font-extrabold uppercase tracking-wider text-[#9AA0AC] mb-3">
+        Editing — {title}
+      </div>
+      {children}
+      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-[#F1F1F3]">
+        <button
+          type="button"
+          onClick={studio.onCancel}
+          disabled={studio.saving}
+          className="px-3.5 py-2 rounded-lg border border-[#E8EDF2] text-[11px] font-bold text-[#374151] bg-white"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={studio.onSave}
+          disabled={studio.saving}
+          className="px-4 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#EF3C23]"
+        >
+          {studio.saving ? 'Saving…' : 'Save Changes'}
+        </button>
+        {studio.dirty ? (
+          <span className="text-[10px] text-[#9AA0AC] italic">Unsaved changes</span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** Small storefront-style "Edit" pill for a studio section region. */
+export function BrandStudioEditPill({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="absolute top-2 right-2 z-20 inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[#E8EDF2] bg-white/95 text-[#EF3C23] text-[10px] font-extrabold uppercase shadow-sm hover:bg-[#EF3C23] hover:text-white hover:border-[#EF3C23] transition-colors"
+    >
+      <Pencil className="w-3 h-3" /> Edit
+    </button>
+  );
+}
+
+const MARKETPLACE_STATUS_LABEL: Record<string, string> = {
+  not_granted: 'Not granted',
+  granted: 'Granted',
+  restricted: 'Restricted',
+  suspended: 'Suspended',
+  restored: 'Restored',
+  revoked: 'Revoked',
+};
+const MARKETPLACE_RESTRICTED = new Set(['restricted', 'suspended', 'revoked']);
+
+/**
+ * Seller-only status strip — Marketplace Access, lifecycle status, ownership and
+ * any active profile restriction. Dynamic from platform-owned fields. NEVER
+ * rendered on the public storefront (`mode === 'public'`).
+ */
+export function BrandStudioStatusStrip({ model }: { model: BrandCMSModel }) {
+  const accessOn = model.marketplaceAccess !== false;
+  const mkStatus = model.marketplaceStatus;
+  const restricted = !!mkStatus && MARKETPLACE_RESTRICTED.has(mkStatus);
+  const ownership =
+    model.verifiedOwner || model.claimState === 'verified'
+      ? { label: 'Verified brand owner', cls: 'bg-[#EEF2FF] text-[#2323FF]' }
+      : model.claimState === 'pending'
+        ? { label: 'Ownership verification pending', cls: 'bg-[#FEF3C7] text-[#92400E]' }
+        : { label: 'Community profile — ownership unclaimed', cls: 'bg-[#F3F4F6] text-[#6B7280]' };
+
+  const Pill = ({ label, value, cls }: { label: string; value: string; cls: string }) => (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E8EDF2] bg-white px-2.5 py-1 text-[10px] font-bold text-[#6B7280]">
+      {label}
+      <span className={`rounded-full px-1.5 py-0.5 text-[9.5px] font-extrabold uppercase ${cls}`}>
+        {value}
+      </span>
+    </span>
+  );
+
+  return (
+    <div className="mb-4 rounded-xl border border-[#E8EDF2] bg-[#FBFCFE] px-4 py-3">
+      <div className="mb-2 text-[9.5px] font-extrabold uppercase tracking-wider text-[#9AA0AC]">
+        Seller status · only you see this — not shown on your public brand page
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Pill
+          label="Marketplace Access"
+          value={accessOn ? 'On' : 'Off'}
+          cls={accessOn ? 'bg-[#DCFCE7] text-[#166534]' : 'bg-[#F3F4F6] text-[#6B7280]'}
+        />
+        {mkStatus ? (
+          <Pill
+            label="Marketplace status"
+            value={MARKETPLACE_STATUS_LABEL[mkStatus] || mkStatus}
+            cls={
+              restricted
+                ? 'bg-[#FEE2E2] text-[#991B1B]'
+                : mkStatus === 'granted' || mkStatus === 'restored'
+                  ? 'bg-[#DCFCE7] text-[#166534]'
+                  : 'bg-[#F3F4F6] text-[#6B7280]'
+            }
+          />
+        ) : null}
+        <span className={`inline-flex items-center rounded-full px-2 py-1 text-[9.5px] font-extrabold uppercase ${ownership.cls}`}>
+          {ownership.label}
+        </span>
+      </div>
+      {!accessOn ? (
+        <p className="mt-2 mb-0 text-[10.5px] font-semibold text-[#92400E]">
+          Marketplace Access is off — your brand page and products are hidden from the public
+          storefront until Choosify grants access.
+        </p>
+      ) : null}
+      {restricted ? (
+        <p className="mt-2 mb-0 text-[10.5px] font-semibold text-[#991B1B]">
+          Active restriction on your profile ({MARKETPLACE_STATUS_LABEL[mkStatus!] || mkStatus}).
+          Public visibility is limited — contact Choosify support to resolve it.
+        </p>
+      ) : null}
+    </div>
+  );
+}
 
 function formatCount(value: string | number | undefined | null): string | null {
   if (value === undefined || value === null || value === '') return null;
@@ -64,15 +215,19 @@ export function BrandProfileHero({
   model,
   mode,
   onEdit,
+  studio,
   onExploreProducts,
   onShare,
 }: {
   model: BrandCMSModel;
   mode: BrandProfilePresentationMode;
   onEdit?: (section: BrandProfileEditSection) => void;
+  studio?: BrandStudioBridge;
   onExploreProducts?: () => void;
   onShare?: () => void;
 }) {
+  const isStudio = mode === 'studio' && !!studio;
+  const editing = (k: BrandEditSection) => isStudio && studio!.editingSection === k;
   const claimStatus =
     model.verificationStatus === 'Verified'
       ? 'verified'
@@ -127,8 +282,27 @@ export function BrandProfileHero({
     model.socialInstaUrl ? { label: 'Instagram', href: model.socialInstaUrl } : null,
     model.socialTiktokUrl ? { label: 'TikTok', href: model.socialTiktokUrl } : null,
     model.socialYtUrl ? { label: 'YouTube', href: model.socialYtUrl } : null,
+    ...(model.customSocials || [])
+      .filter((c) => c && c.label && c.url)
+      .map((c) => ({ label: c.label, href: c.url })),
     model.website ? { label: 'Website', href: model.website } : null,
   ].filter(Boolean) as Array<{ label: string; href: string }>;
+
+  // In studio mode, editing the cover / logo / identity swaps that region for an
+  // inline editor with Save / Cancel (no drawer). One at a time.
+  if (isStudio && (editing('cover') || editing('logo') || editing('identity'))) {
+    const k: BrandEditSection = editing('cover') ? 'cover' : editing('logo') ? 'logo' : 'identity';
+    const title = k === 'cover' ? 'Cover Image' : k === 'logo' ? 'Brand Logo' : 'Brand Identity';
+    return (
+      <div className="bg-[#F0F8FF] w-full px-5 sm:px-8 lg:px-10 pt-4 pb-6">
+        <div className="max-w-[1440px] mx-auto">
+          <BrandInlineEditFrame k={k} title={title} studio={studio!}>
+            {studio!.renderEditor(k)}
+          </BrandInlineEditFrame>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-[#F0F8FF] relative">
@@ -136,15 +310,24 @@ export function BrandProfileHero({
         <BrandProfileEditChip label="Edit" onClick={() => onEdit('header')} />
       ) : null}
 
+      {mode !== 'public' ? (
+        <div className="w-full px-5 sm:px-8 lg:px-10 pt-4">
+          <div className="max-w-[1440px] mx-auto">
+            <BrandStudioStatusStrip model={model} />
+          </div>
+        </div>
+      ) : null}
+
       {/* Cover — Choosify-Web BrandDetailHero feed silhouette */}
       <div className="w-full px-5 sm:px-8 lg:px-10 pt-4">
         <div className="max-w-[1440px] mx-auto relative">
           <div className="relative h-[220px] sm:h-[280px] md:h-[320px] overflow-hidden choosify-dark-surface rounded-none">
+            {isStudio ? <BrandStudioEditPill onClick={() => studio!.onEdit('cover')} /> : null}
             {cover ? (
               <img src={cover} alt="" className="w-full h-full object-cover" />
             ) : (
               <div className="w-full h-full flex items-center justify-center text-[11px] text-white/50 font-semibold">
-                {mode === 'editor' ? 'Add a brand cover image' : ''}
+                {mode !== 'public' ? 'Add a brand cover image' : ''}
               </div>
             )}
             <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent rounded-none" />
@@ -157,13 +340,24 @@ export function BrandProfileHero({
                 <span className="text-lg font-extrabold text-[#1A1A2E]">{initials}</span>
               )}
             </div>
+            {isStudio ? (
+              <button
+                type="button"
+                onClick={() => studio!.onEdit('logo')}
+                title="Upload / change brand logo"
+                className="absolute -bottom-1 -right-1 z-10 inline-flex items-center gap-1 rounded-full border-2 border-white bg-[#EF3C23] px-2.5 py-1 text-[9px] font-extrabold uppercase tracking-wide text-white shadow-md hover:bg-[#CF3319]"
+              >
+                <Pencil className="h-3 w-3" /> Photo
+              </button>
+            ) : null}
           </div>
         </div>
       </div>
 
       <div className="max-w-[1440px] mx-auto px-5 sm:px-8 lg:px-10 pb-6">
         <div className="flex flex-col lg:flex-row justify-between items-start gap-6 mt-[74px] mb-5">
-          <div className="flex-1 min-w-0 text-center lg:text-left w-full">
+          <div className="flex-1 min-w-0 text-center lg:text-left w-full relative">
+            {isStudio ? <BrandStudioEditPill onClick={() => studio!.onEdit('identity')} /> : null}
             <div className="text-[22px] font-extrabold text-[#1A1A2E] flex items-center justify-center lg:justify-start gap-2 flex-wrap">
               {model.brandName || 'Untitled Brand'}
               {claimStatus === 'verified' && (
@@ -182,14 +376,8 @@ export function BrandProfileHero({
                 <ShieldCheck size={12} /> Verified Brand Owner
               </div>
             )}
-            {claimStatus === 'pending' && (
-              <div className="inline-flex items-center gap-1.5 bg-[#FF000D] text-white text-[10px] font-bold px-2.5 py-1 rounded-full mb-2">
-                Ownership verification pending
-              </div>
-            )}
-            {claimStatus === 'community' && (
-              <div className="text-[10px] font-bold text-[#9AA0AC] mb-2">Community brand profile</div>
-            )}
+            {/* Ownership / claim state is a seller-only signal now — it lives in the
+                Studio status strip above and is never shown on the public page. */}
             {model.tagline ? (
               <p className="text-[12.5px] text-[#4B5563] max-w-xl mx-auto lg:mx-0">{model.tagline}</p>
             ) : null}

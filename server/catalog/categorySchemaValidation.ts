@@ -80,7 +80,7 @@ export type ListingSchemaValidationInput = {
   status: string;
   attributes?: Record<string, unknown> | null;
   /** optionGroups from product detail (variant dimensions). */
-  optionGroups?: Array<{ name: string; values?: string[] }> | null;
+  optionGroups?: Array<{ name: string; values?: string[]; custom?: boolean; customValues?: string[] }> | null;
   /** productVariants options keys must be variant-eligible. */
   productVariants?: Array<{ options?: Record<string, string> }> | null;
   /**
@@ -134,32 +134,68 @@ export async function validateListingAgainstCategorySchema(
     schema.filter((a) => a.variantEligible).map((a) => [a.name.toLowerCase(), a]),
   );
 
-  const resolveVariantDim = (name: string): CatalogCategoryAttribute | undefined => {
-    const keySlug = name
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '_')
-      .replace(/^_+|_+$/g, '');
-    return (
-      variantEligible.get(name) ||
-      variantEligible.get(keySlug) ||
-      variantByName.get(name.toLowerCase())
-    );
+  const slugOf = (name: string) =>
+    name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+
+  const resolveVariantDim = (name: string): CatalogCategoryAttribute | undefined =>
+    variantEligible.get(name) ||
+    variantEligible.get(slugOf(name)) ||
+    variantByName.get(name.toLowerCase());
+
+  // ANY attribute on this category (variant-eligible or descriptive) — used to
+  // stop a seller custom dimension from shadowing a known descriptive attribute.
+  const anyAttrByAlias = new Map<string, CatalogCategoryAttribute>();
+  for (const a of schema) {
+    anyAttrByAlias.set(a.key, a);
+    anyAttrByAlias.set(slugOf(a.key), a);
+    anyAttrByAlias.set(a.name.toLowerCase(), a);
+  }
+  const resolveAnyAttr = (name: string): CatalogCategoryAttribute | undefined =>
+    anyAttrByAlias.get(name) || anyAttrByAlias.get(slugOf(name)) || anyAttrByAlias.get(name.toLowerCase());
+
+  /**
+   * Hybrid model: a dimension is EITHER a category variant-eligible attribute
+   * (values constrained by its schema) OR a seller custom product-only
+   * dimension (free-form values). The one thing a custom dimension may NOT do
+   * is reuse the name of a category attribute that exists but is NOT
+   * variant-eligible — that would let a descriptive facet be spoofed as a
+   * variant.
+   */
+  const assertDimensionAllowed = (name: string, kind: 'Option group' | 'Variant option') => {
+    if (resolveVariantDim(name)) return; // canonical variant dimension
+    const clash = resolveAnyAttr(name);
+    if (clash && !clash.variantEligible) {
+      throw new CategorySchemaError(
+        `${kind} "${name}" matches the descriptive attribute "${clash.name}" on this category and cannot be used as a variant dimension. Rename the custom dimension.`,
+      );
+    }
+    // otherwise: a seller custom dimension — permitted, values unconstrained.
   };
+
+  // Hybrid model: a seller may append extra values to a category `select`
+  // dimension (e.g. 12GB on 8/16/32GB RAM, "M(42)" on S/M/L) as long as the
+  // group DECLARES them in `customValues`. Declared extras sell like any value
+  // but are not category search facets. An undeclared out-of-schema value is
+  // still a typo guard and is rejected.
+  const declaredCustomValues = new Map<string, Set<string>>();
+  for (const group of input.optionGroups ?? []) {
+    const key = slugOf(group.name);
+    const set = declaredCustomValues.get(key) ?? new Set<string>();
+    for (const v of group.customValues ?? []) set.add(v);
+    declaredCustomValues.set(key, set);
+  }
+  const valueAllowedForDim = (dim: CatalogCategoryAttribute, dimName: string, value: string) =>
+    dim.options.includes(value) || declaredCustomValues.get(slugOf(dimName))?.has(value) === true;
 
   if (input.optionGroups && input.optionGroups.length > 0) {
     for (const group of input.optionGroups) {
+      assertDimensionAllowed(group.name, 'Option group');
       const dim = resolveVariantDim(group.name);
-      if (!dim) {
-        throw new CategorySchemaError(
-          `Option group "${group.name}" is not a variant-eligible attribute for this category`,
-        );
-      }
-      if (dim.type === 'select' || dim.type === 'multi_select') {
+      if (dim && (dim.type === 'select' || dim.type === 'multi_select')) {
         for (const v of group.values ?? []) {
-          if (!dim.options.includes(v)) {
+          if (!valueAllowedForDim(dim, group.name, v)) {
             throw new CategorySchemaError(
-              `Variant value "${v}" is not allowed for dimension "${dim.name}"`,
+              `Variant value "${v}" is not in the "${dim.name}" schema list. Add it as a custom value on the dimension to sell it.`,
             );
           }
         }
@@ -171,17 +207,12 @@ export async function validateListingAgainstCategorySchema(
     for (const variant of input.productVariants) {
       const opts = variant.options ?? {};
       for (const optKey of Object.keys(opts)) {
+        assertDimensionAllowed(optKey, 'Variant option');
         const dim = resolveVariantDim(optKey);
-        if (!dim) {
-          throw new CategorySchemaError(
-            `Variant option "${optKey}" is not a variant-eligible attribute for this category`,
-          );
-        }
-        const val = opts[optKey];
-        if (dim.type === 'select' || dim.type === 'multi_select') {
-          if (!dim.options.includes(val)) {
+        if (dim && (dim.type === 'select' || dim.type === 'multi_select')) {
+          if (!valueAllowedForDim(dim, optKey, opts[optKey])) {
             throw new CategorySchemaError(
-              `Variant option value "${val}" is not allowed for "${dim.name}"`,
+              `Variant option value "${opts[optKey]}" is not allowed for "${dim.name}".`,
             );
           }
         }

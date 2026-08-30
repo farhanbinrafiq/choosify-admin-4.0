@@ -84,12 +84,17 @@ export function mapCatalogGuideToEditor(guide: CatalogGuide): GuideEditorModel {
   const status: GuideEditorStatus =
     guide.status === 'live' ? 'LIVE' : guide.status === 'archived' ? 'ARCHIVED' : 'DRAFT';
 
-  const brandIds = sectionBullets(guide, 'brands_mentioned', 'brandIds');
-  const takeawayBody = sectionBullets(guide, 'takeaways', 'takeawayBody');
-  const bodyFromSections =
-    takeawayBody.length === 1
-      ? takeawayBody[0]
-      : takeawayBody.join('\n');
+  // Canonical brandIds win; legacy sections['brands_mentioned'].data.brandIds is a fallback.
+  const brandIds = Array.isArray(guide.brandIds) && guide.brandIds.length
+    ? guide.brandIds.map(String)
+    : sectionBullets(guide, 'brands_mentioned', 'brandIds');
+  // Canonical body wins; legacy guides kept their prose in the takeaways section.
+  const takeawaySection = (guide.sections || []).find((s) => s.id === 'takeaways');
+  const legacyBody =
+    typeof takeawaySection?.data?.takeawayBody === 'string'
+      ? (takeawaySection.data.takeawayBody as string)
+      : '';
+  const bodyFromSections = guide.body || legacyBody;
 
   return {
     id: guide.id,
@@ -140,12 +145,17 @@ export function editorModelToGuidePayload(model: GuideEditorModel): Partial<Cata
     tags: model.tags,
     creatorId: model.creatorId || undefined,
     productIds: model.productIds,
+    brandIds: model.brandIds,
+    body: model.bodyText || undefined,
     verdict: model.verdict || undefined,
     whatWeLike: model.whatWeLike,
     whatToConsider: model.whatToConsider,
     seoTitle: model.seoTitle || undefined,
     seoDescription: model.seoDescription || undefined,
-    status: model.status === 'LIVE' ? 'live' : model.status === 'ARCHIVED' ? 'archived' : 'draft',
+    // NOTE: `status` / `publishedAt` are intentionally NOT emitted — lifecycle is
+    // a server-side explicit transition (publish/archive/unpublish), never an
+    // ordinary save. The main editorial body lives in the canonical `body`
+    // field above, not in a `takeaways` section.
     sections: [
       {
         id: 'verdict',
@@ -154,25 +164,18 @@ export function editorModelToGuidePayload(model: GuideEditorModel): Partial<Cata
         data: {
           whatWeLike: model.whatWeLike,
           whatToConsider: model.whatToConsider,
-          takeawayBody: model.verdict,
         },
-      },
-      {
-        id: 'takeaways',
-        enabled: !!model.bodyText,
-        order: 2,
-        data: { takeawayBody: model.bodyText },
       },
       {
         id: 'items_mentioned',
         enabled: model.productIds.length > 0,
-        order: 3,
+        order: 2,
         data: { itemIds: model.productIds },
       },
       {
         id: 'brands_mentioned',
         enabled: model.brandIds.length > 0,
-        order: 4,
+        order: 3,
         data: { brandIds: model.brandIds },
       },
     ],
@@ -180,6 +183,5 @@ export function editorModelToGuidePayload(model: GuideEditorModel): Partial<Cata
       ? { platform: 'youtube', embedUrl: model.watchUrl, status: 'replay' }
       : undefined,
     updatedAt: new Date().toISOString(),
-    publishedAt: model.status === 'LIVE' ? model.publishedAt || new Date().toISOString() : model.publishedAt,
   };
 }

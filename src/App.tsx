@@ -94,9 +94,10 @@ const ModerationV2 = lazy(() => import('./pages/admin/ModerationV2'));
 
 const BrandEditStudio = lazy(() => import('./pages/admin/BrandEditStudio'));
 const ProductEditStudio = lazy(() => import('./pages/admin/ProductEditStudio'));
+const ProductStorefrontPreview = lazy(() => import('./pages/admin/ProductStorefrontPreview'));
 const CreatorEditStudio = lazy(() => import('./pages/admin/CreatorEditStudio'));
 
-const GuidesStudioList = lazy(() => import('./pages/admin/GuidesStudioList'));
+const GuideManagementList = lazy(() => import('./pages/admin/GuideManagementList'));
 const GuideEditStudio = lazy(() => import('./pages/admin/GuideEditStudio'));
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -200,11 +201,35 @@ const AdsStudioRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }
   return <>{children}</>;
 };
 
-/** Guide Visual Builder — creator self-edit + admin/super_admin. Sellers denied. */
-const GUIDE_VISUAL_BUILDER_ALLOWED_ROLES = new Set(['creator', 'admin', 'super_admin']);
+/**
+ * Guide Studio — creator (own guides) + seller (guides published by a brand they
+ * own) + CMS staff (moderator/admin/super_admin/marketing_manager). The server's
+ * `requireGuideStudioWrite` / `GET /catalog/guides/manage` remain the real
+ * authority: a partner only ever sees and edits guides they own.
+ */
+const GUIDE_STUDIO_ALLOWED_ROLES = new Set([
+  'creator',
+  'seller',
+  'verified_seller',
+  'moderator',
+  'admin',
+  'super_admin',
+  'marketing_manager',
+]);
 const GuideVisualBuilderRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { profile } = useAuth();
-  if (!profile || !GUIDE_VISUAL_BUILDER_ALLOWED_ROLES.has(profile.role)) {
+  const { profile, loading } = useAuth();
+  // Never decide (and never fire a replace-redirect) while auth is still
+  // settling — a transient null/wrong-role snapshot must not permanently bounce
+  // a direct URL entry / refresh to the dashboard.
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-app-bg flex items-center justify-center text-app-accent font-mono text-[10px] uppercase tracking-[4px] animate-pulse">
+        Authenticating Choosify Session...
+      </div>
+    );
+  }
+  if (!profile) return <Navigate to="/login" replace />;
+  if (!GUIDE_STUDIO_ALLOWED_ROLES.has(profile.role)) {
     return <Navigate to="/admin/dashboard" replace />;
   }
   return <>{children}</>;
@@ -702,6 +727,20 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            {/* Read-only storefront-parity preview (live catalog data) — not the
+                public storefront itself; renders the shared ProductDetailPresentation. */}
+            <Route
+              path="/admin/products/:id/preview"
+              element={
+                <ProtectedRoute>
+                  <ProductVisualBuilderRoleGate>
+                    <Suspense fallback={routeSuspenseFallback}>
+                      <ProductStorefrontPreview />
+                    </Suspense>
+                  </ProductVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
 
             <Route
               path="/admin/warranty-claims"
@@ -773,10 +812,27 @@ export default function App() {
             />
 
             {/*
-              Guide Visual Builder — surgical cutover ONLY for single-guide editor.
-              /admin/guides (Guide Management list) stays on CmsMirrorHost.
-              Rollback: remove these two routes.
+              Guide Management + single-guide editor.
+              The list now uses the real canonical, ownership-scoped management
+              API (GET /catalog/guides/manage) — no CmsMirror iframe, no
+              localStorage authority. The storefront-parity Guide Studio is a
+              later pass; /admin/guides/:id/edit keeps the transitional editor.
+              Rollback: remove these three routes.
             */}
+            <Route
+              path="/admin/guides"
+              element={
+                <ProtectedRoute>
+                  <GuideVisualBuilderRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <GuideManagementList />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </GuideVisualBuilderRoleGate>
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/admin/guides/new"
               element={

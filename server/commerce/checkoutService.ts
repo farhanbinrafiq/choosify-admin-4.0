@@ -16,6 +16,7 @@ import {
   releaseInventoryQuantity,
 } from '../catalog/inventoryStore';
 import { getService } from '../catalog/serviceStore';
+import { resolveActiveGuideOffer } from '../catalog/guideOfferService';
 import { operationsStore } from '../operations/operationsStore';
 import { publishEvent } from '../events/eventBus';
 import { commerceStore } from './commerceStore';
@@ -24,6 +25,10 @@ import {
   computeCartTotals,
   getOrCreateCart,
   refreshCartPrices,
+  resolveAddonsForProduct,
+  resolveVariantPricing,
+  sumAddonLines,
+  variantIsActive,
 } from './cartService';
 import { listOrdersGroupedByCheckout } from './orderService';
 import type {
@@ -65,18 +70,98 @@ async function revalidateCartItem(item: CommerceCartItem): Promise<void> {
     if (!isProductPubliclyEligible(product, brand) && lifecycle !== 'active') {
       throw new CommerceError(`Product "${product.title}" is not eligible for checkout`);
     }
-    let record = await getInventoryRecord(product.id, item.variantId);
-    if (!record) {
-      const all = await listInventoryForProduct(product.id);
-      record = all.find((r) => !r.variantId) || null;
+
+    // Server-authoritative pricing — variant price when a variant is selected.
+    item.unitPrice = product.price;
+    item.originalUnitPrice = product.originalPrice;
+    if (item.variantId) {
+      const rv = await resolveVariantPricing(
+        product.id,
+        item.variantId,
+        product.price,
+        product.originalPrice,
+      );
+      if (!rv) throw new CommerceError(`Variant no longer exists for "${product.title}"`);
+      if (!rv.active) {
+        throw new CommerceError(`Selected variant of "${product.title}" is no longer available`);
+      }
+      item.unitPrice = rv.unitPrice;
+      item.originalUnitPrice = rv.originalUnitPrice;
+      item.variantSku = rv.sku;
     }
-    const available = record?.availableQuantity ?? product.stock ?? 0;
-    if (item.quantity > available) {
+
+    // ── Guide LIVE offer (guide-scoped temporary price) ──────────────────
+    // Server-authoritative + server clock. The base product price above is
+    // never mutated; we only override this line's unitPrice while the offer is
+    // active, and snapshot the base for history.
+    const canonicalUnitPrice = item.unitPrice;
+    item.guideOfferApplied = undefined;
+    if (item.guideOfferRef?.guideId && item.guideOfferRef.productId === item.listingId) {
+      const resolved = await resolveActiveGuideOffer(
+        item.guideOfferRef.guideId,
+        item.listingId,
+        canonicalUnitPrice,
+        Date.now(),
+        Boolean(item.variantId),
+      );
+      if (resolved) {
+        item.unitPrice = resolved.unitPrice;
+        item.guideOfferApplied = {
+          guideId: resolved.guideId,
+          offerId: resolved.offerId,
+          basePrice: resolved.basePrice,
+        };
+      } else {
+        // Offer expired / disabled / changed — drop the ref, keep canonical price.
+        item.guideOfferRef = undefined;
+      }
+    }
+    // Price-change guard: if the buyer last saw a different price for this line
+    // (offer expired between add-to-cart and checkout, or a promo changed),
+    // stop and make them review — never silently charge a new amount.
+    if (
+      typeof item.expectedUnitPrice === 'number' &&
+      Math.abs(item.expectedUnitPrice - item.unitPrice) > 0.001
+    ) {
       throw new CommerceError(
-        `Insufficient stock for "${product.title}": need ${item.quantity}, available ${available}`,
+        `The price for "${product.title}" changed since you added it. Please review the updated total.`,
+        409,
+        {
+          code: 'GUIDE_OFFER_PRICE_CHANGED',
+          details: {
+            productId: item.listingId,
+            expectedUnitPrice: item.expectedUnitPrice,
+            actualUnitPrice: item.unitPrice,
+            guideOfferActive: Boolean(item.guideOfferApplied),
+          },
+        },
       );
     }
-    item.unitPrice = product.price;
+
+    // Re-resolve add-ons from canonical config — a since-disabled/removed add-on
+    // must NOT check out (never trust the client-carried price/title).
+    if (item.addons?.length) {
+      item.addons = await resolveAddonsForProduct(
+        product.id,
+        item.addons.map((a) => ({ id: a.id, quantity: a.quantity })),
+      );
+    }
+
+    // Physical inventory only — a service-type product's variants configure
+    // price, not stock.
+    if (product.productType !== 'service') {
+      let record = await getInventoryRecord(product.id, item.variantId);
+      if (!record) {
+        const all = await listInventoryForProduct(product.id);
+        record = all.find((r) => !r.variantId) || null;
+      }
+      const available = record?.availableQuantity ?? product.stock ?? 0;
+      if (item.quantity > available) {
+        throw new CommerceError(
+          `Insufficient stock for "${product.title}": need ${item.quantity}, available ${available}`,
+        );
+      }
+    }
     item.sellerId = product.sellerId || brand.sellerId || item.sellerId;
     item.brandId = product.brandId;
     item.brandName = brand.name || product.brandName;
@@ -102,19 +187,37 @@ async function revalidateCartItem(item: CommerceCartItem): Promise<void> {
 
 function toSnapshot(item: CommerceCartItem): CommerceOrderItemSnapshot {
   const finalUnitPrice = item.unitPrice;
+  const addons = item.addons?.length ? item.addons.map((a) => ({ ...a })) : undefined;
+  const addonsTot = sumAddonLines(addons);
+  // A Guide LIVE offer counts as the reference "was" price when it beats the MRP.
+  const offerBase = item.guideOfferApplied?.basePrice;
+  const mrp =
+    typeof item.originalUnitPrice === 'number' && item.originalUnitPrice > item.unitPrice
+      ? item.originalUnitPrice
+      : undefined;
+  const original =
+    typeof offerBase === 'number' && offerBase > item.unitPrice
+      ? Math.max(offerBase, mrp ?? 0)
+      : mrp;
   return {
     listingType: item.listingType,
     listingId: item.listingId,
     variantId: item.variantId,
+    sku: item.variantSku,
     title: item.title,
     brandId: item.brandId,
     brandName: item.brandName,
     sellerId: item.sellerId,
     quantity: item.quantity,
     unitPrice: item.unitPrice,
-    discount: 0,
+    originalUnitPrice: original,
+    // `discount` = (reference price − charged price) for display only.
+    discount: original ? Math.max(0, original - item.unitPrice) : 0,
     finalUnitPrice,
-    lineTotal: finalUnitPrice * item.quantity,
+    ...(item.guideOfferApplied ? { guideOffer: item.guideOfferApplied } : {}),
+    addons,
+    addonsTotal: addons ? addonsTot : undefined,
+    lineTotal: finalUnitPrice * item.quantity + addonsTot,
     currency: item.currency || 'BDT',
     selectedOptions: item.selectedOptions,
   };
@@ -312,8 +415,13 @@ export async function executeCheckout(input: CheckoutInput): Promise<CheckoutRes
       const brandName = items[0].brandName;
       const hasService = items.some((i) => i.listingType === 'service');
 
+      let reservedAnyPhysical = false;
       for (const item of items.filter((i) => i.listingType === 'product')) {
+        // Service-type products carry configurable variants but no physical stock.
+        const p = await catalogStore.getProduct(item.listingId);
+        if (p?.productType === 'service') continue;
         reservations.push(await reserveProductInventory(item));
+        reservedAnyPhysical = true;
       }
 
       const order: CommerceOrder = {
@@ -334,7 +442,7 @@ export async function executeCheckout(input: CheckoutInput): Promise<CheckoutRes
         taxTotal: 0,
         grandTotal: subtotal,
         shipping: input.shipping,
-        inventoryReserved: items.some((i) => i.listingType === 'product'),
+        inventoryReserved: reservedAnyPhysical,
         inventoryConsumed: false,
         createdAt: nowIso(),
         updatedAt: nowIso(),

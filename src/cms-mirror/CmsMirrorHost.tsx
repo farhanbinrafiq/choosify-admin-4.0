@@ -385,8 +385,16 @@ export const CmsMirrorHost: React.FC = () => {
         return;
       }
       if (data?.type === 'cms-mirror-navigate' && typeof data.path === 'string') {
-        if (data.path !== location.pathname) {
-          navigate(data.path, { replace: Boolean(data.replace) });
+        // The pre-built mirror bundle can carry a stale page→path map (e.g. an
+        // older path for a nav key that has since moved). Re-resolve through the
+        // host's live PAGE_KEY_TO_PATH so a nav click always lands on the current
+        // route — this is what makes seller/creator "Guide Management" reach the
+        // canonical /admin/guides React surface instead of a legacy path.
+        const navKey = pathToPageKey(data.path);
+        const canonical = navKey ? PAGE_KEY_TO_PATH[navKey] : undefined;
+        const dest = canonical && canonical !== data.path ? canonical : data.path;
+        if (dest !== location.pathname) {
+          navigate(dest, { replace: Boolean(data.replace) });
         }
         return;
       }

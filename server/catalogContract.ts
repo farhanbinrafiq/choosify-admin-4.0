@@ -80,6 +80,38 @@ const toStringArray = (value: unknown): string[] => {
   return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
 };
 
+/**
+ * A product video is one canonical source. Accepts:
+ *  - an app-owned upload path (`/media/...`, produced by POST /catalog/media/upload),
+ *  - a YouTube URL (youtube.com / youtu.be / *.youtube-nocookie.com),
+ *  - a direct HTTPS video file URL (.mp4 / .webm / .mov / .m4v).
+ * Anything else is rejected so the storefront never gets a link it cannot render.
+ * `undefined` in the payload keeps the existing value; an empty string clears it.
+ */
+export const normalizeProductVideoUrl = (raw: unknown, existing?: string): string | undefined => {
+  if (raw === undefined || raw === null) return existing || undefined;
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (!s) return undefined;
+  if (s.startsWith('/media/')) return s;
+  let url: URL;
+  try {
+    url = new URL(s);
+  } catch {
+    throw new Error('Product video must be a valid absolute URL or an uploaded /media path.');
+  }
+  if (url.protocol !== 'https:') {
+    throw new Error('Product video URL must use https.');
+  }
+  const host = url.hostname.replace(/^www\./, '').toLowerCase();
+  const isYouTube =
+    host === 'youtube.com' || host === 'm.youtube.com' || host === 'youtu.be' || host === 'youtube-nocookie.com';
+  const isDirectFile = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(url.pathname);
+  if (!isYouTube && !isDirectFile) {
+    throw new Error('Unsupported product video URL. Use a YouTube link or a direct .mp4/.webm/.mov URL.');
+  }
+  return url.toString();
+};
+
 const categorySchema = z.object({
   id: nonEmpty,
   slug: nonEmpty,
@@ -110,15 +142,42 @@ const brandSchema = z.object({
       youtube: z.string().optional(),
       tiktok: z.string().optional(),
       linkedin: z.string().optional(),
+      custom: z.array(z.object({ label: z.string(), url: z.string() })).optional(),
     })
     .optional(),
   story: z.string().optional(),
+  storyBlocks: z
+    .array(
+      z.object({
+        id: z.string(),
+        heading: z.string(),
+        body: z.string(),
+        kind: z.enum(['text', 'link', 'content']).optional(),
+        url: z.string().optional(),
+        thumbnail: z.string().optional(),
+        contentId: z.string().optional(),
+        mediaKind: z
+          .enum([
+            'youtube',
+            'youtube_shorts',
+            'instagram_reel',
+            'instagram_post',
+            'tiktok',
+            'facebook',
+            'other',
+          ])
+          .optional(),
+      }),
+    )
+    .optional(),
+  pinnedStoryContentIds: z.array(z.string()).optional(),
   /** HTTPS URL for brand story / creator-review embed on storefront */
   storyVideoUrl: z.string().optional(),
   credentials: z.string().optional(),
   overview: z
     .object({
       address: z.string().optional(),
+      mapLink: z.string().optional(),
       email: z.string().optional(),
       phone: z.string().optional(),
       priceRange: z.string().optional(),
@@ -152,6 +211,8 @@ const brandSchema = z.object({
       }),
     )
     .optional(),
+  pinnedProductIds: z.array(z.string()).optional(),
+  pinnedShowcaseProductIds: z.array(z.string()).optional(),
   verifiedStatus: z.boolean(),
   claimStatus: z.enum(['community', 'pending', 'verified']),
   followers: z.number().nonnegative(),
@@ -184,6 +245,7 @@ const productSchema = z.object({
   categoryName: z.string(),
   image: nonEmpty,
   gallery: z.array(z.string()),
+  videoUrl: z.string().optional(),
   modeType: z.literal('retail'),
   productType: z.enum(['physical', 'service']).optional(),
   serviceCategory: z
@@ -215,6 +277,8 @@ const productSchema = z.object({
   price: z.number().nonnegative(),
   originalPrice: z.number().nonnegative().optional(),
   stock: z.number().int(),
+  /** Optional seller-supplied product code / SKU / article number. Free-form. */
+  sku: z.string().optional(),
   /** `live` = legacy Active; also accepts ES-005 states. */
   status: z.enum(['draft', 'live', 'active', 'out_of_stock', 'suspended', 'archived']),
   warrantyMonths: z.number().int().nonnegative().optional(),
@@ -367,15 +431,91 @@ export const normalizeBrandInput = (
             youtube: toString(socialRaw?.youtube, existing?.socialLinks?.youtube ?? '') || undefined,
             tiktok: toString(socialRaw?.tiktok, existing?.socialLinks?.tiktok ?? '') || undefined,
             linkedin: toString(socialRaw?.linkedin, existing?.socialLinks?.linkedin ?? '') || undefined,
+            custom: (() => {
+              const src = Array.isArray(socialRaw?.custom)
+                ? (socialRaw!.custom as unknown[])
+                : socialRaw && 'custom' in socialRaw
+                  ? [] // explicit empty from client ⇒ clear
+                  : existing?.socialLinks?.custom;
+              if (!Array.isArray(src)) return undefined;
+              const rows = src
+                .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+                .map((r) => ({
+                  label: toString(r.label).trim().slice(0, 40),
+                  url: toString(r.url).trim().slice(0, 500),
+                }))
+                .filter((r) => r.label && r.url)
+                .slice(0, 10);
+              return rows.length ? rows : undefined;
+            })(),
           }
         : undefined,
     story: toString(raw.story, existing?.story ?? '') || undefined,
+    storyBlocks: (() => {
+      if (!Array.isArray(raw.storyBlocks)) return existing?.storyBlocks;
+      return (raw.storyBlocks as unknown[])
+        .filter((b): b is Record<string, unknown> => !!b && typeof b === 'object')
+        .map((b, i) => {
+          const kindRaw = toString(b.kind);
+          const kind: 'text' | 'link' | 'content' =
+            kindRaw === 'link' || kindRaw === 'content' ? kindRaw : 'text';
+          const url = toString(b.url).trim().slice(0, 500);
+          const thumbnail = toString(b.thumbnail).trim().slice(0, 500);
+          const contentId = toString(b.contentId).trim().slice(0, 80);
+          const mkRaw = toString(b.mediaKind);
+          const MK = new Set([
+            'youtube',
+            'youtube_shorts',
+            'instagram_reel',
+            'instagram_post',
+            'tiktok',
+            'facebook',
+            'other',
+          ]);
+          return {
+            id: toString(b.id) || `sb-${i}`,
+            heading: toString(b.heading).trim().slice(0, 120),
+            body: toString(b.body).trim().slice(0, 4000),
+            kind,
+            ...(kind === 'link' && url ? { url } : {}),
+            ...(kind === 'link' && thumbnail ? { thumbnail } : {}),
+            ...(kind === 'content' && contentId ? { contentId } : {}),
+            ...(MK.has(mkRaw) ? { mediaKind: mkRaw as 'youtube' } : {}),
+          };
+        })
+        .filter(
+          (b) =>
+            (b.kind === 'text' && (b.heading || b.body)) ||
+            (b.kind === 'link' && b.url) ||
+            (b.kind === 'content' && b.contentId),
+        )
+        .slice(0, 16);
+    })(),
+    pinnedStoryContentIds: (() => {
+      // Seller-pinned published content in the Brand Story section — the union of
+      // any explicit pin list and every `content` story section's contentId.
+      const hasBlocks = Array.isArray(raw.storyBlocks);
+      const hasExplicit = Array.isArray(raw.pinnedStoryContentIds);
+      if (!hasBlocks && !hasExplicit) return existing?.pinnedStoryContentIds;
+      const explicit = hasExplicit
+        ? (raw.pinnedStoryContentIds as unknown[]).map((v) => toString(v).trim()).filter(Boolean)
+        : [];
+      const fromBlocks = hasBlocks
+        ? (raw.storyBlocks as unknown[])
+            .filter((b): b is Record<string, unknown> => !!b && typeof b === 'object')
+            .filter((b) => toString(b.kind) === 'content')
+            .map((b) => toString(b.contentId).trim())
+            .filter(Boolean)
+        : [];
+      return Array.from(new Set([...explicit, ...fromBlocks])).slice(0, 16);
+    })(),
     storyVideoUrl: toString(raw.storyVideoUrl, existing?.storyVideoUrl ?? '') || undefined,
     credentials: toString(raw.credentials, existing?.credentials ?? '') || undefined,
     overview:
       overviewRaw || existing?.overview
         ? {
             address: toString(overviewRaw?.address, existing?.overview?.address ?? '') || undefined,
+            mapLink: toString(overviewRaw?.mapLink, existing?.overview?.mapLink ?? '') || undefined,
             email: toString(overviewRaw?.email, existing?.overview?.email ?? '') || undefined,
             phone: toString(overviewRaw?.phone, existing?.overview?.phone ?? '') || undefined,
             priceRange: toString(overviewRaw?.priceRange, existing?.overview?.priceRange ?? '') || undefined,
@@ -397,6 +537,22 @@ export const normalizeBrandInput = (
     promoCodes: Array.isArray(raw.promoCodes)
       ? (raw.promoCodes as CatalogBrand['promoCodes'])
       : existing?.promoCodes,
+    pinnedProductIds: Array.isArray(raw.pinnedProductIds)
+      ? Array.from(
+          new Set(
+            (raw.pinnedProductIds as unknown[])
+              .map((v) => toString(v).trim())
+              .filter(Boolean),
+          ),
+        ).slice(0, 12)
+      : existing?.pinnedProductIds,
+    pinnedShowcaseProductIds: Array.isArray(raw.pinnedShowcaseProductIds)
+      ? Array.from(
+          new Set(
+            (raw.pinnedShowcaseProductIds as unknown[]).map((v) => toString(v).trim()).filter(Boolean),
+          ),
+        ).slice(0, 24)
+      : existing?.pinnedShowcaseProductIds,
     verifiedStatus: toBoolean(raw.verifiedStatus, existing?.verifiedStatus ?? false),
     claimStatus: claimStatusRaw === 'verified' || claimStatusRaw === 'pending' ? claimStatusRaw : 'community',
     followers: toNumber(raw.followers, existing?.followers ?? 0),
@@ -509,6 +665,7 @@ export const normalizeProductInput = (
     categoryName,
     image: toString(raw.image, existing?.image ?? ''),
     gallery: toStringArray(raw.gallery).length > 0 ? toStringArray(raw.gallery) : existing?.gallery ?? [],
+    videoUrl: normalizeProductVideoUrl(raw.videoUrl, existing?.videoUrl),
     modeType: 'retail',
     productType: (() => {
       const v = toString(raw.productType, existing?.productType);
@@ -564,6 +721,7 @@ export const normalizeProductInput = (
         : existing?.originalPrice,
     stock,
     status,
+    sku: toString(raw.sku, existing?.sku) || undefined,
     warrantyMonths:
       raw.warrantyMonths !== undefined ? toNumber(raw.warrantyMonths) : existing?.warrantyMonths,
     warrantyType: toString(raw.warrantyType, existing?.warrantyType) || undefined,
@@ -596,8 +754,29 @@ export const normalizeProductInput = (
     createdAt: existingOrNow(existing?.createdAt),
     updatedAt: nowIso(),
   };
+  assertOriginalPriceNotBelowPrice(normalized.originalPrice, normalized.price, 'Product');
   return productSchema.parse(normalized);
 };
+
+/**
+ * Canonical pricing rule (variants sprint): a supplied MRP / strike price
+ * (`originalPrice`) must be >= the selling `price`. Absent / null / 0 means "no
+ * MRP" and is left alone — this only rejects a genuinely inconsistent pair so the
+ * storefront never has to silently hide a negative discount.
+ */
+export function assertOriginalPriceNotBelowPrice(
+  originalPrice: number | undefined | null,
+  price: number | undefined | null,
+  label = 'Listing',
+): void {
+  const op = typeof originalPrice === 'number' ? originalPrice : NaN;
+  const p = typeof price === 'number' ? price : NaN;
+  if (Number.isFinite(op) && op > 0 && Number.isFinite(p) && op < p) {
+    throw new Error(
+      `${label} originalPrice (${op}) cannot be lower than price (${p}). Leave it blank for no MRP.`,
+    );
+  }
+}
 
 export const normalizeDealInput = (payload: unknown, existing?: CatalogDeal): CatalogDeal => {
   const raw = (payload ?? {}) as Record<string, unknown>;

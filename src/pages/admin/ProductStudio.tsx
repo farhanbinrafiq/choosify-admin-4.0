@@ -1160,7 +1160,20 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
         physicalStores: physicalStores || [],
         overviewBlocks: overviewBlocks || [],
         optionGroups: optionGroups || [],
-        productVariants: productVariants || [],
+        productVariants: (productVariants || []).map((v) => ({
+          id: v.id,
+          sku: v.sku,
+          ...(v.price !== undefined ? { price: v.price } : {}),
+          ...(v.actualPrice !== undefined ? { originalPrice: v.actualPrice } : {}),
+          ...(v.stock !== undefined ? { stock: v.stock } : {}),
+          options: v.options,
+          ...(v.images?.length ? { images: v.images } : {}),
+          enabled: v.enabled,
+          // Legacy editor status ("Draft" | "Live") → canonical ("inactive" | "active").
+          status: (v.status === 'Live' || (v.status === undefined && v.enabled)
+            ? 'active'
+            : 'inactive') as 'active' | 'inactive',
+        })),
         creatorContent: creatorContent || [],
         // Section on/off toggles — previously only written into the localStorage-only
         // `liveData` object below and never sent to the backend at all.
@@ -1303,7 +1316,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
       </AnimatePresence>
 
       {/* Persistent Sticky Top Workspace Control Rail */}
-      <div className="bg-white border-b border-[#E5E7EB] sticky top-0 z-[100] px-6 py-4 shadow-sm">
+      <div className="bg-white border-b border-[#E5E7EB] sticky top-[var(--cms-topbar-height,64px)] z-[8] px-6 py-4 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
             <Link

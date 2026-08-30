@@ -108,10 +108,51 @@ export interface BrandCMSModel {
   socialInstaUrl: string;
   socialTiktokUrl: string;
   socialYtUrl: string;
+  /** Seller-added links beyond the presets (canonical CatalogBrand.socialLinks.custom). */
+  customSocials?: Array<{ id: string; label: string; url: string }>;
   website: string;
   description: string;
   missionStatement: string;
   brandStory: string;
+  /** Canonical CatalogBrand.storyBlocks — hybrid Brand Story sections (text / link / content). */
+  storyBlocks?: Array<{
+    id: string;
+    heading: string;
+    body: string;
+    kind?: 'text' | 'link' | 'content';
+    url?: string;
+    thumbnail?: string;
+    contentId?: string;
+    mediaKind?:
+      | 'youtube'
+      | 'youtube_shorts'
+      | 'instagram_reel'
+      | 'instagram_post'
+      | 'tiktok'
+      | 'facebook'
+      | 'other';
+  }>;
+  /** Seller-pinned published content ids featured in the Brand Story section. */
+  pinnedStoryContentIds?: string[];
+  /**
+   * Preview-only platform state — powers the seller-only Studio status strip
+   * (Marketplace Access / restrictions / ownership). Never rendered on the
+   * public storefront and never written back via the canonical patch.
+   */
+  marketplaceAccess?: boolean;
+  marketplaceStatus?:
+    | 'not_granted'
+    | 'granted'
+    | 'restricted'
+    | 'suspended'
+    | 'restored'
+    | 'revoked';
+  claimState?: 'community' | 'pending' | 'verified';
+  verifiedOwner?: boolean;
+  /** Canonical CatalogBrand.storyVideoUrl — HTTPS video/embed shown on the storefront Brand Story. */
+  storyVideoUrl?: string;
+  /** Canonical CatalogBrand.credentials — guarantees / certifications free text. */
+  credentials?: string;
   values: string;
   verificationStatus: "Verified" | "Standard" | "Suspended";
   status: "LIVE" | "DRAFT" | "SUSPENDED";
@@ -135,6 +176,10 @@ export interface BrandCMSModel {
   products: BrandProductItem[];
   deals: BrandDealItem[];
   promoCodes: PromoCodeItem[];
+  /** Seller-curated product ids spotlighted at the top of the brand Deals section (canonical CatalogBrand.pinnedProductIds). */
+  pinnedProductIds?: string[];
+  /** Seller-curated product ids pinned to the front of the brand Products grid (canonical CatalogBrand.pinnedShowcaseProductIds). */
+  pinnedShowcaseProductIds?: string[];
   creators: CreatorVideoItem[];
   reviews: BrandReviewItem[];
   team: TeamMemberItem[];

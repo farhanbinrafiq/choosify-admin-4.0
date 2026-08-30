@@ -36,11 +36,19 @@ import { requireMarketplaceAccess } from './entitlements/marketplaceAccessMiddle
 import { requireAnyPermission } from './middleware/authorization';
 import { requireBrandStudioWrite } from './middleware/brandStudioAuth';
 import { requireCreatorStudioWrite } from './middleware/creatorStudioAuth';
+import {
+  requireGuideStudioWrite,
+  creatorIdsForUser,
+  primaryCreatorIdForUser,
+  userOwnsGuide,
+  userOwnsGuidePublisherBrand,
+} from './middleware/guideStudioAuth';
 import { hasPermission, hasRole } from './permissions/authorization';
 import { PERMISSIONS } from './permissions/permissions';
 import { ROLES } from './permissions/roles';
 import { draftStore, type DraftEntityType } from '../lib/vercel-catalog/draftStore';
 import type { CatalogProduct } from '../src/types/catalog';
+import type { CatalogProductDetail } from '../lib/vercel-catalog/catalogEditorialTypes';
 import type { CatalogBrand } from '../src/types/catalog';
 import type { Request, Response } from 'express';
 import {
@@ -89,10 +97,7 @@ import {
   normalizeAttributeInput,
   upsertAttribute,
 } from './catalog/categorySchemaStore';
-import {
-  attributesFromSpecs,
-  validateListingAgainstCategorySchema,
-} from './catalog/categorySchemaValidation';
+import { validateListingAgainstCategorySchema } from './catalog/categorySchemaValidation';
 import { publishEvent } from './events/eventBus';
 import { operationsStore } from './operations/operationsStore';
 import { getCatalogPersistenceMode } from '../lib/vercel-catalog/catalogStore';
@@ -356,6 +361,63 @@ function preserveProductOwnershipOnUpdate(
 ): CatalogProduct {
   if (userIsPlatformAdmin(req)) return normalized;
   return { ...normalized, sellerId: existing.sellerId };
+}
+
+/** Related-info fields a seller may own; used for the admin section lock. */
+const SELLER_RELATED_INFO_KEYS = [
+  'storeComparisonList',
+  'relatedInfoType',
+  'priceAcrossStoresEnabled',
+  'whatsNearby',
+  'beforeYourVisit',
+  'customRelatedInfo',
+  'enableStoreComparison',
+  'enablePhysicalStores',
+] as const;
+
+/**
+ * Ownership + section-lock enforcement for the Related Information section.
+ *
+ *  - Non-admin callers can NEVER write `adminPromotedStores` or flip
+ *    `relatedInfoLockedByAdmin`; those always revert to the stored values.
+ *  - `storeComparisonList` rows are already pinned `source: 'seller'` by the
+ *    normalizer, so a seller cannot spoof `source: 'admin'`.
+ *  - When the section is admin-locked, a non-admin caller may not change ANY
+ *    seller-owned related-info field — the mutation is rejected (403). Unrelated
+ *    section saves are unaffected because the values are unchanged.
+ *
+ * Admin callers are unrestricted. Mutates `normalized` in place; returns a
+ * response descriptor to send, or null when the write may proceed.
+ */
+function enforceRelatedInfoOwnership(
+  req: Request,
+  existing: CatalogProductDetail | null | undefined,
+  normalized: CatalogProductDetail,
+): { status: number; error: string } | null {
+  if (userIsPlatformAdmin(req)) return null;
+
+  // Seller can neither own promoted rows nor change the lock.
+  normalized.adminPromotedStores = existing?.adminPromotedStores;
+  normalized.relatedInfoLockedByAdmin = existing?.relatedInfoLockedByAdmin;
+
+  if (existing?.relatedInfoLockedByAdmin === true) {
+    const norm = (v: unknown) => JSON.stringify(v ?? null);
+    const normRec = normalized as unknown as Record<string, unknown>;
+    const existRec = existing as unknown as Record<string, unknown>;
+    const attempted = SELLER_RELATED_INFO_KEYS.filter((k) => norm(normRec[k]) !== norm(existRec[k]));
+    if (attempted.length > 0) {
+      // Roll the section back so a partial write can't land, then reject.
+      for (const k of SELLER_RELATED_INFO_KEYS) {
+        normRec[k] = existRec[k];
+      }
+      return {
+        status: 403,
+        error:
+          'Related information for this product is currently managed by Choosify and cannot be edited.',
+      };
+    }
+  }
+  return null;
 }
 
 function forbidUnlessOwnsProduct(
@@ -2310,66 +2372,457 @@ catalogRouter.patch('/catalog/creators/:id', ...requireCreatorStudioWriteMw, asy
   }
 });
 
-catalogRouter.get('/catalog/guides', async (req, res) => {
+/**
+ * Guide Studio writes — cms:edit staff OR the owning creator (server-enforced,
+ * see guideStudioAuth). Guide authoring is a creator/editorial capability, not a
+ * seller marketplace one, so the seller Marketplace Access gate does not apply
+ * here; `requireGuideStudioWrite` is the complete authorization boundary.
+ */
+const requireGuideStudioWriteMw = [authenticateRequest, requireGuideStudioWrite];
+
+const userIsGuideStaff = (req: Request): boolean =>
+  !!req.userRole && hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions);
+
+/** Keep only ids that resolve to a real catalog product / brand (order preserved). */
+async function filterKnownProductIds(ids: string[]): Promise<string[]> {
+  if (!ids.length) return [];
+  const known = new Set((await catalogStore.listProducts()).map((p) => p.id));
+  return ids.filter((id) => known.has(id));
+}
+async function filterKnownBrandIds(ids: string[]): Promise<string[]> {
+  if (!ids.length) return [];
+  const known = new Set((await catalogStore.listBrands()).map((b) => b.id));
+  return ids.filter((id) => known.has(id));
+}
+
+type GuideManageRow = {
+  id: string;
+  slug: string;
+  title: string;
+  type: string;
+  format?: string;
+  status: string;
+  image: string;
+  contentReferenceId?: string;
+  updatedAt: string;
+  publishedAt: string;
+  creatorId?: string;
+  publisherType: 'creator' | 'brand';
+  publisherBrandId?: string;
+  publisherName?: string;
+  productCount: number;
+  brandCount: number;
+};
+
+const toGuideManageRow = (
+  g: Awaited<ReturnType<typeof catalogStore.listGuides>>[number],
+  creatorNameById: Map<string, string>,
+  brandNameById: Map<string, string>,
+): GuideManageRow => {
+  const publisherType = g.publisherType === 'brand' ? 'brand' : 'creator';
+  return {
+    id: g.id,
+    slug: g.slug,
+    title: g.title,
+    type: g.type,
+    format: g.format,
+    status: g.status,
+    image: g.image || '',
+    contentReferenceId: g.contentReferenceId,
+    updatedAt: g.updatedAt || '',
+    publishedAt: g.publishedAt || '',
+    creatorId: g.creatorId,
+    publisherType,
+    publisherBrandId: g.publisherBrandId,
+    publisherName:
+      publisherType === 'brand'
+        ? g.publisherBrandId
+          ? brandNameById.get(g.publisherBrandId)
+          : undefined
+        : g.creatorId
+          ? creatorNameById.get(g.creatorId)
+          : undefined,
+    productCount: Array.isArray(g.productIds) ? g.productIds.length : 0,
+    brandCount: Array.isArray(g.brandIds)
+      ? g.brandIds.length
+      : (((g.sections ?? []).find((s) => s.id === 'brands_mentioned')?.data?.brandIds as
+          | unknown[]
+          | undefined)?.length ?? 0),
+  };
+};
+
+/**
+ * Persist a Guide Studio create / edit. Lifecycle is NOT changed here — status
+ * stays whatever it was (new ⇒ 'draft'); publish/archive/unpublish are dedicated
+ * transitions. `creatorId` is server-authoritative for creator actors.
+ */
+async function persistGuideStudioWrite(
+  req: Request,
+  res: Response,
+  opts: { patch: boolean },
+): Promise<void> {
+  const idParam = typeof req.params.id === 'string' ? req.params.id : '';
+  const existing = idParam ? await catalogStore.getGuide(idParam) : null;
+  if (opts.patch && idParam && !existing) {
+    res.status(404).json({ error: 'Guide not found' });
+    return;
+  }
+
+  const body: Record<string, unknown> = { ...(req.body ?? {}) };
+  delete body.status; // lifecycle-only; never via ordinary save
+  delete body.publishedAt;
+  if (idParam) body.id = idParam;
+
+  const isStaff = userIsGuideStaff(req);
+
+  // ── Publisher identity (server-authoritative) ─────────────────────────────
+  // Intended publisher: explicit body value, else the existing record's.
+  const bodyPublisherType = typeof body.publisherType === 'string' ? body.publisherType : '';
+  const bodyPublisherBrandId =
+    typeof body.publisherBrandId === 'string' ? body.publisherBrandId.trim() : '';
+  const intendedPublisherType: 'creator' | 'brand' =
+    bodyPublisherType === 'brand' || bodyPublisherType === 'creator'
+      ? bodyPublisherType
+      : existing?.publisherType ?? 'creator';
+  const intendedPublisherBrandId =
+    bodyPublisherBrandId || existing?.publisherBrandId || '';
+
+  if (intendedPublisherType === 'brand') {
+    if (!intendedPublisherBrandId) {
+      res.status(400).json({ error: 'publisherBrandId is required for a brand-authored guide' });
+      return;
+    }
+    const brandExists = !!(await catalogStore.getBrand(intendedPublisherBrandId));
+    if (!brandExists) {
+      res.status(400).json({ error: 'publisherBrandId does not resolve to a real brand' });
+      return;
+    }
+    // A non-staff writer must own/administer that brand. Never trust the client.
+    if (!isStaff && !(await sellerOwnsBrand(req.userId as string, intendedPublisherBrandId))) {
+      res.status(403).json({ error: 'Not authorized to publish as this brand' });
+      return;
+    }
+    body.publisherType = 'brand';
+    body.publisherBrandId = intendedPublisherBrandId;
+    body.creatorId = ''; // brand-authored guides carry no creator author identity
+  } else {
+    body.publisherType = 'creator';
+    body.publisherBrandId = '';
+    if (!isStaff) {
+      // Creator publisher: creatorId comes from the authenticated identity, never the client.
+      let creatorId = await primaryCreatorIdForUser(req.userId as string);
+      if (!creatorId) {
+        const { creators } = await ensureCreatorWorkspace(req.userId as string, {});
+        creatorId = creators[0]?.id ?? null;
+      }
+      if (!creatorId) {
+        res.status(403).json({ error: 'No creator workspace for this account' });
+        return;
+      }
+      body.creatorId = creatorId;
+    } else if (existing && !('creatorId' in (req.body ?? {}))) {
+      body.creatorId = existing.creatorId;
+    }
+  }
+
+  const normalized = normalizeGuideInput(body, existing || undefined);
+  const status = existing ? normalized.status : 'draft';
+
+  const validProductIds = await filterKnownProductIds(normalized.productIds);
+  const validBrandIds = await filterKnownBrandIds(normalized.brandIds ?? []);
+
+  // ── Live offers: authorization (V1) ─────────────────────────────────────
+  //  - Creator-authored guide → NO promotional pricing (yet).
+  //  - Brand-authored guide → only on products owned/managed by the publisher
+  //    brand's seller (CMS staff bypass). Any offer failing this is dropped.
+  let liveOffers = normalized.liveOffers ?? [];
+  if (liveOffers.length) {
+    if (normalized.publisherType !== 'brand') {
+      res.status(403).json({
+        error: 'Creator-authored guides cannot set promotional pricing yet',
+        code: 'GUIDE_OFFER_AUTHOR_NOT_ALLOWED',
+      });
+      return;
+    }
+    const pubBrand = normalized.publisherBrandId
+      ? await catalogStore.getBrand(normalized.publisherBrandId)
+      : null;
+    const brandSellerId = pubBrand?.sellerId;
+    const productById = new Map((await catalogStore.listProducts()).map((p) => [p.id, p]));
+    liveOffers = liveOffers.filter((o) => {
+      if (!validProductIds.includes(o.productId)) return false;
+      if (isStaff) return true;
+      const p = productById.get(o.productId);
+      return !!p && !!brandSellerId && p.sellerId === brandSellerId;
+    });
+    if (!liveOffers.length && (normalized.liveOffers ?? []).length) {
+      res.status(403).json({
+        error: 'A brand-authored guide may only offer promotions on products it owns',
+        code: 'GUIDE_OFFER_PRODUCT_NOT_OWNED',
+      });
+      return;
+    }
+  }
+
+  // ── Winner / awards: refs must exist among the guide's discussed entities ──
+  const externalIds = new Set((normalized.externalRefs ?? []).map((r) => r.id));
+  const refIsPresent = (ref: { entityType: string; entityId: string }): boolean => {
+    if (ref.entityType === 'product') return validProductIds.includes(ref.entityId);
+    if (ref.entityType === 'brand') return validBrandIds.includes(ref.entityId);
+    return externalIds.has(ref.entityId); // external_product | external_brand
+  };
+  const sections = (normalized.sections ?? []).map((s) => {
+    if (s.id === 'brands_mentioned') {
+      const prev = (s.data ?? {}) as Record<string, unknown>;
+      const highlightTags = prev.highlightTags && typeof prev.highlightTags === 'object' ? prev.highlightTags : undefined;
+      return { ...s, data: { brandIds: validBrandIds, ...(highlightTags ? { highlightTags } : {}) } };
+    }
+    if (s.id === 'winner') {
+      const data = (s.data ?? {}) as Record<string, unknown>;
+      const overall = data.overall as { entityType: string; entityId: string } | undefined;
+      const awards = Array.isArray(data.awards)
+        ? (data.awards as Array<{ id: string; label: string; ref: { entityType: string; entityId: string } }>)
+        : [];
+      if (overall && !refIsPresent(overall)) {
+        throw new Error('Overall Winner must reference an entity already present in the guide');
+      }
+      const validAwards = awards.filter((a) => a.ref && refIsPresent(a.ref));
+      return {
+        ...s,
+        data: {
+          ...(overall ? { overall } : {}),
+          ...(validAwards.length ? { awards: validAwards } : {}),
+        },
+      };
+    }
+    if (s.id === 'recommendations') {
+      const data = (s.data ?? {}) as Record<string, unknown>;
+      const picks = Array.isArray(data.picks)
+        ? (data.picks as Array<{ id: string; label: string; ref: { entityType: string; entityId: string } }>)
+        : [];
+      const validPicks = picks.filter((p) => p.ref && refIsPresent(p.ref));
+      return { ...s, data: { picks: validPicks } };
+    }
+    return s;
+  });
+
+  const withRef = {
+    ...normalized,
+    status,
+    productIds: validProductIds,
+    brandIds: validBrandIds,
+    liveOffers: liveOffers.length ? liveOffers : undefined,
+    sections: sections.length ? sections : undefined,
+    contentReferenceId:
+      existing?.contentReferenceId ||
+      (await stampReferenceId('content', normalized, normalized.contentReferenceId)) ||
+      normalized.contentReferenceId,
+  };
+  const saved = await catalogStore.upsertGuide(withRef);
+  res.json({ success: true, data: saved });
+}
+
+async function persistGuideLifecycle(
+  req: Request,
+  res: Response,
+  nextStatus: 'live' | 'archived' | 'draft',
+): Promise<void> {
+  const existing = await catalogStore.getGuide(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Guide not found' });
+    return;
+  }
+  const normalized = normalizeGuideInput(
+    { ...existing, id: req.params.id, status: nextStatus },
+    existing,
+    { allowStatus: true },
+  );
+  const saved = await catalogStore.upsertGuide({
+    ...normalized,
+    contentReferenceId: existing.contentReferenceId || normalized.contentReferenceId,
+  });
+
+  // Publishing a guide makes its author resolvable on the storefront: promote a
+  // still-draft owning creator workspace to live so "About the Author" renders
+  // canonical identity (never a fabricated stand-in).
+  if (nextStatus === 'live' && saved.creatorId) {
+    try {
+      const creator = await catalogStore.getCreator(saved.creatorId);
+      if (creator && creator.status === 'draft') {
+        await catalogStore.upsertCreator(
+          normalizeCreatorInput({ ...creator, status: 'live' }, creator),
+        );
+      }
+    } catch {
+      /* non-fatal — guide still publishes */
+    }
+  }
+
+  res.json({ success: true, data: saved });
+}
+
+// Public: live guides only. Query `status` is intentionally ignored so drafts
+// and archived content can never leak through the public endpoint.
+
+/**
+ * Read-time enrichment: resolve the publisher-brand identity for a
+ * brand-authored guide so the storefront can always render "About the Brand"
+ * without cross-referencing a separately-filtered public brand list. NOT
+ * persisted — `normalizeGuideInput` rebuilds a fresh object and never carries it.
+ */
+async function withGuidePublisherBrand<T extends { publisherType?: string; publisherBrandId?: string }>(
+  guides: T[],
+): Promise<Array<T & { publisherBrand?: { id: string; name: string; logo?: string; slug?: string } }>> {
+  const needed = guides.some((g) => g.publisherType === 'brand' && g.publisherBrandId);
+  if (!needed) return guides as Array<T & { publisherBrand?: never }>;
+  const brandById = new Map((await catalogStore.listBrands()).map((b) => [b.id, b]));
+  return guides.map((g) => {
+    if (g.publisherType === 'brand' && g.publisherBrandId) {
+      const b = brandById.get(g.publisherBrandId);
+      if (b) {
+        return {
+          ...g,
+          publisherBrand: { id: b.id, name: b.name, logo: b.logo, slug: b.slug },
+        };
+      }
+    }
+    return g;
+  });
+}
+
+catalogRouter.get('/catalog/guides', async (_req, res) => {
   try {
-    const status = typeof req.query.status === 'string' ? req.query.status : 'live';
-    const guides = (await catalogStore.listGuides()).filter((guide) => !status || guide.status === status);
-    res.json({ data: guides });
+    const guides = (await catalogStore.listGuides()).filter((guide) => guide.status === 'live');
+    res.json({ data: await withGuidePublisherBrand(guides) });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list guides' });
   }
 });
 
-catalogRouter.get('/catalog/guides/:id', async (req, res) => {
+// Authenticated owned-guide management list (draft / live / archived).
+// Creators → own guides only. Staff (cms:edit) → all guides.
+catalogRouter.get('/catalog/guides/manage', authenticateRequest, async (req, res) => {
+  try {
+    if (!req.userId || !req.userRole) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    const isStaff = userIsGuideStaff(req);
+    const roleVal = req.userRole as (typeof ROLES)[keyof typeof ROLES];
+    const isCreator = hasRole(roleVal, ROLES.CREATOR);
+    const isSeller = hasRole(roleVal, ROLES.SELLER) || hasRole(roleVal, ROLES.VERIFIED_SELLER);
+    if (!isStaff && !isCreator && !isSeller) {
+      res.status(403).json({ error: 'Not authorized to manage guides' });
+      return;
+    }
+
+    const statusQ = typeof req.query.status === 'string' ? req.query.status : 'all';
+    const all = await catalogStore.listGuides();
+    const creators = await catalogStore.listCreators();
+    const brands = await catalogStore.listBrands();
+    const creatorNameById = new Map(creators.map((c) => [c.id, c.name]));
+    const brandNameById = new Map(brands.map((b) => [b.id, b.name]));
+
+    let guides = all;
+    if (!isStaff) {
+      const myCreatorIds = new Set(await creatorIdsForUser(req.userId));
+      // seller → guides whose publisher brand they own
+      const myBrandIds = new Set<string>();
+      if (isSeller) {
+        for (const b of brands) {
+          if (b.sellerId === req.userId) myBrandIds.add(b.id);
+        }
+      }
+      guides = guides.filter(
+        (g) =>
+          (g.creatorId && myCreatorIds.has(g.creatorId)) ||
+          (g.publisherType === 'brand' && g.publisherBrandId && myBrandIds.has(g.publisherBrandId)),
+      );
+    }
+    if (statusQ === 'draft' || statusQ === 'live' || statusQ === 'archived') {
+      guides = guides.filter((g) => g.status === statusQ);
+    }
+    const rows = guides
+      .slice()
+      .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+      .map((g) => toGuideManageRow(g, creatorNameById, brandNameById));
+    const scope = isStaff ? 'staff' : isCreator ? 'creator' : 'seller';
+    res.json({ data: rows, scope });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to list managed guides' });
+  }
+});
+
+// Single guide. Live → public. Non-live → owner or cms:edit staff only (404 to others).
+catalogRouter.get('/catalog/guides/:id', softAuthenticateRequest, async (req, res) => {
   try {
     const guide = await catalogStore.getGuide(req.params.id);
     if (!guide) {
       res.status(404).json({ error: 'Guide not found' });
       return;
     }
-    res.json(guide);
+    if (guide.status !== 'live') {
+      const isStaff = userIsGuideStaff(req);
+      const owns = req.userId
+        ? (await userOwnsGuide(req.userId, guide)) ||
+          (await userOwnsGuidePublisherBrand(req.userId, guide))
+        : false;
+      if (!isStaff && !owns) {
+        res.status(404).json({ error: 'Guide not found' });
+        return;
+      }
+    }
+    res.json((await withGuidePublisherBrand([guide]))[0]);
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get guide' });
   }
 });
 
-catalogRouter.put('/catalog/guides/:id', ...requireCmsWrite, async (req, res) => {
+catalogRouter.post('/catalog/guides', ...requireGuideStudioWriteMw, async (req, res) => {
   try {
-    const existing = await catalogStore.getGuide(req.params.id);
-    const normalized = normalizeGuideInput({ ...req.body, id: req.params.id }, existing || undefined);
-    const withRef = {
-      ...normalized,
-      contentReferenceId:
-        existing?.contentReferenceId ||
-        (await stampReferenceId('content', normalized, normalized.contentReferenceId)) ||
-        normalized.contentReferenceId,
-    };
-    const saved = await catalogStore.upsertGuide(withRef);
-    res.json({ success: true, data: saved });
+    await persistGuideStudioWrite(req, res, { patch: false });
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid guide payload') });
   }
 });
 
-catalogRouter.patch('/catalog/guides/:id', ...requireCmsWrite, async (req, res) => {
+catalogRouter.put('/catalog/guides/:id', ...requireGuideStudioWriteMw, async (req, res) => {
   try {
-    const existing = await catalogStore.getGuide(req.params.id);
-    if (!existing) {
-      res.status(404).json({ error: 'Guide not found' });
-      return;
-    }
-    const normalized = normalizeGuideInput({ ...existing, ...req.body, id: req.params.id }, existing);
-    const withRef = {
-      ...normalized,
-      contentReferenceId:
-        existing.contentReferenceId ||
-        (await stampReferenceId('content', normalized, normalized.contentReferenceId)) ||
-        normalized.contentReferenceId,
-    };
-    const saved = await catalogStore.upsertGuide(withRef);
-    res.json({ success: true, data: saved });
+    await persistGuideStudioWrite(req, res, { patch: false });
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Invalid guide payload') });
+  }
+});
+
+catalogRouter.patch('/catalog/guides/:id', ...requireGuideStudioWriteMw, async (req, res) => {
+  try {
+    await persistGuideStudioWrite(req, res, { patch: true });
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid guide patch payload') });
+  }
+});
+
+catalogRouter.post('/catalog/guides/:id/publish', ...requireGuideStudioWriteMw, async (req, res) => {
+  try {
+    await persistGuideLifecycle(req, res, 'live');
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Failed to publish guide') });
+  }
+});
+
+catalogRouter.post('/catalog/guides/:id/archive', ...requireGuideStudioWriteMw, async (req, res) => {
+  try {
+    await persistGuideLifecycle(req, res, 'archived');
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Failed to archive guide') });
+  }
+});
+
+catalogRouter.post('/catalog/guides/:id/unpublish', ...requireGuideStudioWriteMw, async (req, res) => {
+  try {
+    await persistGuideLifecycle(req, res, 'draft');
+  } catch (error) {
+    res.status(400).json({ error: validationErrorMessage(error, 'Failed to unpublish guide') });
   }
 });
 
@@ -2521,6 +2974,27 @@ catalogRouter.post('/catalog/media/upload', ...requireCatalogMedia, async (req, 
       return;
     }
 
+    // Public-category video (e.g. a product's single optional storefront video).
+    // Stored as-is on the app's own media disk — no image pipeline — and served
+    // from a public /media URL. The JSON body limit still applies, so only short
+    // clips fit this path; larger videos must be supplied as a video link.
+    if (isVideoAttempt) {
+      const videoValidation = validateVideoUploadInput({ base64Data: data || '', mimeType, fileName });
+      if (videoValidation.ok === false) {
+        res.status(400).json({ error: videoValidation.error });
+        return;
+      }
+      const uploaded = await storeUploadedDocument({
+        category: resolvedCategory,
+        base64Data: data!,
+        mimeType: videoValidation.mimeType,
+        fileName: videoValidation.fileName,
+        uploaderId,
+      });
+      res.json({ success: true, url: uploaded.url, mediaId: uploaded.mediaId });
+      return;
+    }
+
     const validation = validateImageUploadInput({
       base64Data: data || '',
       mimeType,
@@ -2653,14 +3127,21 @@ catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, 
       req.params.productId,
       existing || undefined,
     );
+    {
+      const denied = enforceRelatedInfoOwnership(req, existing, normalized);
+      if (denied) {
+        res.status(denied.status).json({ error: denied.error });
+        return;
+      }
+    }
     try {
-      const attrs =
-        (product?.attributes as Record<string, unknown> | undefined) ||
-        attributesFromSpecs(normalized.specs, product?.attributes);
+      // Free-form `detail.specs` are presentation data and are NEVER folded into
+      // category-schema validation. Only the product's own canonical
+      // `product.attributes` are checked here (unchanged by a detail save).
       await validateListingAgainstCategorySchema({
         categoryId: product!.categoryId,
         status: product!.status,
-        attributes: attrs,
+        attributes: (product?.attributes as Record<string, unknown> | undefined) ?? {},
         optionGroups: normalized.optionGroups,
         productVariants: normalized.productVariants,
       });
@@ -2672,6 +3153,9 @@ catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, 
       throw error;
     }
     const saved = await catalogStore.upsertProductDetail(normalized);
+    // Services/bookables never get physical-stock inventory records auto-created
+    // for their configurable dimensions (variants sprint services boundary).
+    const usesPhysicalInventory = product.productType !== 'service';
     const prevIds = new Set((existing?.productVariants ?? []).map((v) => v.id));
     for (const variant of saved.productVariants ?? []) {
       if (!prevIds.has(variant.id)) {
@@ -2683,7 +3167,7 @@ catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, 
           actor: req.userId || 'anonymous',
           payload: { productId: product.id, variantId: variant.id, sku: variant.sku },
         });
-        if (typeof variant.stock === 'number') {
+        if (usesPhysicalInventory && typeof variant.stock === 'number') {
           await ensureInventoryRecord({
             productId: product.id,
             variantId: variant.id,
@@ -2702,7 +3186,9 @@ catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, 
         });
       }
     }
-    await syncProductStockFromInventory(product.id);
+    if (usesPhysicalInventory) {
+      await syncProductStockFromInventory(product.id);
+    }
     res.json({ success: true, data: saved });
   } catch (error) {
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid product detail payload') });
@@ -2723,14 +3209,21 @@ catalogRouter.patch('/catalog/product-details/:productId', ...requireProductEdit
       req.params.productId,
       existing,
     );
+    {
+      const denied = enforceRelatedInfoOwnership(req, existing, normalized);
+      if (denied) {
+        res.status(denied.status).json({ error: denied.error });
+        return;
+      }
+    }
     try {
-      const attrs =
-        (product?.attributes as Record<string, unknown> | undefined) ||
-        attributesFromSpecs(normalized.specs, product?.attributes);
+      // Free-form `detail.specs` are presentation data and are NEVER folded into
+      // category-schema validation — only the product's own canonical
+      // `product.attributes` are checked (unchanged by a detail save).
       await validateListingAgainstCategorySchema({
         categoryId: product!.categoryId,
         status: product!.status,
-        attributes: attrs,
+        attributes: (product?.attributes as Record<string, unknown> | undefined) ?? {},
         optionGroups: normalized.optionGroups,
         productVariants: normalized.productVariants,
       });
@@ -2758,6 +3251,71 @@ catalogRouter.patch('/catalog/product-details/:productId', ...requireProductEdit
     res.status(400).json({ error: validationErrorMessage(error, 'Invalid product detail patch payload') });
   }
 });
+
+/**
+ * Admin-only management of the Related Information section's Choosify-owned
+ * surface: the promoted "Where to Buy" entries and the section lock. Sellers use
+ * the normal product-details endpoints for their own rows; this route never
+ * touches seller-owned fields.
+ *
+ *   PUT /catalog/product-details/:productId/related-info/admin
+ *   body: { adminPromotedStores?: RelatedStoreEntry[], relatedInfoLockedByAdmin?: boolean }
+ */
+catalogRouter.put(
+  '/catalog/product-details/:productId/related-info/admin',
+  authenticateRequest,
+  async (req, res) => {
+    try {
+      if (!userIsPlatformAdmin(req)) {
+        res.status(403).json({ error: 'Admin role required to manage promoted related information.' });
+        return;
+      }
+      const product = await catalogStore.getProduct(req.params.productId);
+      if (!product) {
+        res.status(404).json({ error: 'Product not found' });
+        return;
+      }
+      const existing = await catalogStore.getProductDetail(req.params.productId);
+      if (!existing) {
+        res.status(404).json({ error: 'Product detail not found' });
+        return;
+      }
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      // Re-use the shared normalizer but feed it ONLY the admin-owned keys on top
+      // of the existing detail, so every seller-owned field is preserved exactly.
+      const merged = normalizeProductDetailInput(
+        {
+          ...existing,
+          ...('adminPromotedStores' in body ? { adminPromotedStores: body.adminPromotedStores } : {}),
+          ...('relatedInfoLockedByAdmin' in body
+            ? { relatedInfoLockedByAdmin: body.relatedInfoLockedByAdmin }
+            : {}),
+          productId: req.params.productId,
+        },
+        req.params.productId,
+        existing,
+      );
+      const saved = await catalogStore.upsertProductDetail(merged);
+      publishEvent({
+        eventName: 'ProductRelatedInfoAdminUpdated',
+        domain: 'Catalog',
+        producer: 'catalogRouter',
+        aggregateId: product.id,
+        actor: req.userId || 'admin',
+        payload: {
+          productId: product.id,
+          promotedCount: (saved.adminPromotedStores ?? []).length,
+          locked: saved.relatedInfoLockedByAdmin === true,
+        },
+      });
+      res.json({ success: true, data: saved });
+    } catch (error) {
+      res
+        .status(400)
+        .json({ error: validationErrorMessage(error, 'Invalid promoted related-info payload') });
+    }
+  },
+);
 
 catalogRouter.get('/catalog/brand-posts', async (req, res) => {
   try {

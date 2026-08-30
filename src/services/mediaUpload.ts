@@ -142,3 +142,52 @@ export async function uploadProductImages(files: File[]): Promise<string[]> {
   const uploads = files.map((file) => uploadProductImage(file));
   return Promise.all(uploads);
 }
+
+const ALLOWED_VIDEO_MIME = new Set(['video/mp4', 'video/webm']);
+
+/**
+ * Uploads a single product video file through the app's own media route
+ * (POST /catalog/media/upload → local media disk). Returns a public `/media/...`
+ * URL. The catalog JSON body limit still applies, so this is only for short
+ * clips; larger videos should be supplied as a video link instead. Throws a
+ * clear message on rejection — the caller must NOT persist anything on failure.
+ */
+export async function uploadProductVideoFile(file: File): Promise<string> {
+  const mime = (file.type || '').toLowerCase();
+  if (!ALLOWED_VIDEO_MIME.has(mime)) {
+    throw new Error('Unsupported video type. Upload an MP4 or WebM file.');
+  }
+  const base64Data = await fileToBase64(file);
+  const token = getStoredAccessToken();
+  const send = (bearer: string | null) => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (bearer) headers.Authorization = `Bearer ${bearer}`;
+    return fetch(`${API_BASE}/catalog/media/upload`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ fileName: file.name, mimeType: mime, data: base64Data, category: 'products' }),
+    });
+  };
+  let response = await send(token);
+  if (response.status === 401 && token) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) response = await send(refreshed);
+  }
+  if (response.status === 413) {
+    throw new Error('Video is too large to upload directly. Use a shorter clip, or paste a video link instead.');
+  }
+  if (!response.ok) {
+    const raw = await response.text();
+    let message = raw || `Video upload failed with ${response.status}`;
+    try {
+      const parsed = JSON.parse(raw) as { error?: string };
+      if (parsed.error) message = parsed.error;
+    } catch {
+      // keep raw
+    }
+    throw new Error(message);
+  }
+  const payload = (await response.json()) as { url?: string };
+  if (!payload.url) throw new Error('Video upload succeeded but no URL was returned.');
+  return payload.url;
+}

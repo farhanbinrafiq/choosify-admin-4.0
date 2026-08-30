@@ -15,3 +15,10 @@ src/cms-mirror/_reference/
 .local-pg/
 # Approved UI reference - local only, never commit/deploy
 design-reference/
+
+# Local-only dev server capture, throwaway probes / fixture scripts / debug shots.
+# Anything a sprint needs only transiently is named `_tmp_*` and never committed.
+.devserver*.log
+_tmp_*
+**/_tmp_*
+scripts/_tmp_*

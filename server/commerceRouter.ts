@@ -15,6 +15,7 @@ import {
   getOrCreateCart,
   refreshCartPrices,
   removeCartItem,
+  updateCartItemAddons,
   updateCartItemQuantity,
 } from './commerce/cartService';
 import {
@@ -49,7 +50,12 @@ function actorRole(req: { userRole?: string; user?: { role?: string } }): string
 
 function handleCommerceError(res: import('express').Response, error: unknown): void {
   if (error instanceof CommerceError) {
-    res.status(error.statusCode).json({ success: false, error: error.message });
+    res.status(error.statusCode).json({
+      success: false,
+      error: error.message,
+      ...(error.code ? { code: error.code } : {}),
+      ...(error.details ? { details: error.details } : {}),
+    });
     return;
   }
   console.error('[Commerce]', error);
@@ -107,6 +113,16 @@ commerceRouter.post('/cart/items', ...requireAuth, async (req, res) => {
       serviceArea: body.serviceArea ? String(body.serviceArea) : undefined,
       notes: body.notes ? String(body.notes) : undefined,
       selectedOptions: body.selectedOptions,
+      addons: Array.isArray(body.addons) ? body.addons : undefined,
+      guideOfferRef:
+        body.guideOfferRef && typeof body.guideOfferRef === 'object'
+          ? {
+              guideId: String(body.guideOfferRef.guideId || ''),
+              productId: String(body.guideOfferRef.productId || listingId),
+            }
+          : undefined,
+      expectedUnitPrice:
+        typeof body.expectedUnitPrice === 'number' ? body.expectedUnitPrice : undefined,
     });
     res.status(201).json({ success: true, data: result.cart, totals: result.totals });
   } catch (error) {
@@ -123,6 +139,18 @@ commerceRouter.patch('/cart/items/:id', ...requireAuth, async (req, res) => {
       return;
     }
     const result = await updateCartItemQuantity(actorId(req), req.params.id, quantity);
+    res.json({ success: true, data: result.cart, totals: result.totals });
+  } catch (error) {
+    handleCommerceError(res, error);
+  }
+});
+
+/** PATCH /api/v1/cart/items/:id/addons — replace the add-on selection on a line.
+ *  Body: { addons: Array<{ id, quantity? }> }. Empty array clears add-ons. */
+commerceRouter.patch('/cart/items/:id/addons', ...requireAuth, async (req, res) => {
+  try {
+    const addons = Array.isArray(req.body?.addons) ? req.body.addons : [];
+    const result = await updateCartItemAddons(actorId(req), req.params.id, addons);
     res.json({ success: true, data: result.cart, totals: result.totals });
   } catch (error) {
     handleCommerceError(res, error);

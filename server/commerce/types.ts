@@ -6,18 +6,50 @@
 
 export type CommerceListingType = 'product' | 'service';
 
+/**
+ * A resolved add-on line on a cart item / order snapshot. The client only ever
+ * sends `{ id, quantity }`; `title`/`unitPrice`/`lineTotal` are resolved
+ * server-side from the canonical listing configuration and are the historical
+ * truth even if the seller later renames / reprices / deletes the add-on.
+ */
+export type CommerceAddonLine = {
+  id: string;
+  title: string;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+};
+
 export type CommerceCartItem = {
   id: string;
   listingType: CommerceListingType;
   listingId: string;
   variantId?: string;
+  /** Resolved variant SKU (server-side), for display + snapshot. */
+  variantSku?: string;
   quantity: number;
   /** Resolved server-side for display; never trusted from client on mutate. */
   title: string;
   brandId: string;
   brandName: string;
   sellerId: string;
+  /** Server-resolved: variant price when a variant is selected, else base price. */
   unitPrice: number;
+  /** Server-resolved MRP / strike price at add-to-cart time (variant or base). */
+  originalUnitPrice?: number;
+  /** Server-resolved add-on selections. */
+  addons?: CommerceAddonLine[];
+  /**
+   * Optional reference to a Guide LIVE offer the buyer added this line under.
+   * Checkout revalidates it with server time; the base Product price is never
+   * mutated. If the offer expired / changed, checkout returns an explicit
+   * GUIDE_OFFER_PRICE_CHANGED response rather than silently charging.
+   */
+  guideOfferRef?: { guideId: string; productId: string };
+  /** The unit price the buyer last saw for this line — used only for the price-change guard. */
+  expectedUnitPrice?: number;
+  /** Set server-side when an active Guide offer was applied to this line. */
+  guideOfferApplied?: { guideId: string; offerId: string; basePrice: number };
   currency: string;
   image?: string;
   selectedOptions?: Record<string, string>;
@@ -48,8 +80,22 @@ export type CommerceOrderItemSnapshot = {
   sellerId: string;
   quantity: number;
   unitPrice: number;
+  /** MRP / strike price at purchase time (variant or base). For historical
+   *  discount display — a later seller reprice must not change it. */
+  originalUnitPrice?: number;
   discount: number;
   finalUnitPrice: number;
+  /** Purchase-time snapshot of an applied Guide LIVE offer (id + base price). */
+  guideOffer?: { guideId: string; offerId: string; basePrice: number };
+  /**
+   * Purchase-time snapshot of every add-on bought on this line. Self-sufficient:
+   * id + title + unitPrice + quantity + lineTotal, so the order stays truthful
+   * even if the add-on is later renamed / repriced / deleted / disabled.
+   */
+  addons?: CommerceAddonLine[];
+  /** Sum of `addons[].lineTotal`; already included in `lineTotal`. */
+  addonsTotal?: number;
+  /** `finalUnitPrice * quantity + addonsTotal`. */
   lineTotal: number;
   currency: string;
   selectedOptions?: Record<string, string>;

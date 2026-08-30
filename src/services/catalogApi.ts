@@ -19,6 +19,27 @@ import { getStoredAccessToken, refreshAccessToken } from './authRefresh';
 
 export type DraftEntityType = 'brand' | 'product' | 'creator' | 'guide';
 
+/** One row from GET /catalog/guides/manage (authenticated, ownership-scoped). */
+export interface GuideManageRow {
+  id: string;
+  slug: string;
+  title: string;
+  type: string;
+  format?: string;
+  status: 'draft' | 'live' | 'archived';
+  image: string;
+  contentReferenceId?: string;
+  updatedAt: string;
+  publishedAt: string;
+  creatorId?: string;
+  publisherType: 'creator' | 'brand';
+  publisherBrandId?: string;
+  /** Resolved publisher display name — brand name or creator name. */
+  publisherName?: string;
+  productCount: number;
+  brandCount: number;
+}
+
 export interface EntityDraft {
   id: string;
   entityType: DraftEntityType;
@@ -109,6 +130,12 @@ export const catalogApi = {
     const suffix = query.toString() ? `?${query.toString()}` : '';
     const result = await request<{ data: CatalogProduct[] }>(`/catalog/products${suffix}`);
     return result.data;
+  },
+  /** Authoritative single-product fetch — GET /catalog/products/:id returns the
+   *  product object directly (not wrapped) and 404s when it doesn't exist or is
+   *  not scoped to the caller. Throws on any non-2xx. */
+  getProduct: async (id: string): Promise<CatalogProduct> => {
+    return request<CatalogProduct>(`/catalog/products/${id}`);
   },
   createProduct: async (payload: Partial<CatalogProduct> & Record<string, unknown>): Promise<CatalogProduct> => {
     const result = await request<{ data: CatalogProduct }>('/catalog/products', 'POST', payload);
@@ -390,8 +417,74 @@ export const catalogApi = {
     const result = await request<{ data: CatalogGuide[] }>(`/catalog/guides${suffix}`);
     return result.data;
   },
+  getGuide: async (id: string): Promise<CatalogGuide | null> => {
+    try {
+      return await request<CatalogGuide>(`/catalog/guides/${encodeURIComponent(id)}`);
+    } catch {
+      return null;
+    }
+  },
+  /**
+   * Authenticated owned-guide management list (draft / live / archived).
+   * Creators get their own guides; cms:edit staff get all.
+   */
+  manageGuides: async (params?: {
+    status?: 'all' | 'draft' | 'live' | 'archived';
+  }): Promise<{
+    data: GuideManageRow[];
+    scope: 'staff' | 'creator';
+  }> => {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return request<{ data: GuideManageRow[]; scope: 'staff' | 'creator' }>(
+      `/catalog/guides/manage${suffix}`,
+    );
+  },
+  /** Create a new Guide (server stamps a draft + creatorId from the session for creators). */
+  createGuide: async (payload: Partial<CatalogGuide>): Promise<CatalogGuide> => {
+    const result = await request<{ data: CatalogGuide }>(`/catalog/guides`, 'POST', payload);
+    return result.data;
+  },
+  /** Full Guide save. Lifecycle (status) is NEVER changed here — use publish/archive/unpublish. */
   upsertGuide: async (id: string, payload: Partial<CatalogGuide>): Promise<CatalogGuide> => {
-    const result = await request<{ data: CatalogGuide }>(`/catalog/guides/${id}`, 'PUT', payload);
+    const result = await request<{ data: CatalogGuide }>(
+      `/catalog/guides/${encodeURIComponent(id)}`,
+      'PUT',
+      payload,
+    );
+    return result.data;
+  },
+  patchGuide: async (id: string, payload: Partial<CatalogGuide>): Promise<CatalogGuide> => {
+    const result = await request<{ data: CatalogGuide }>(
+      `/catalog/guides/${encodeURIComponent(id)}`,
+      'PATCH',
+      payload,
+    );
+    return result.data;
+  },
+  publishGuide: async (id: string): Promise<CatalogGuide> => {
+    const result = await request<{ data: CatalogGuide }>(
+      `/catalog/guides/${encodeURIComponent(id)}/publish`,
+      'POST',
+      {},
+    );
+    return result.data;
+  },
+  archiveGuide: async (id: string): Promise<CatalogGuide> => {
+    const result = await request<{ data: CatalogGuide }>(
+      `/catalog/guides/${encodeURIComponent(id)}/archive`,
+      'POST',
+      {},
+    );
+    return result.data;
+  },
+  unpublishGuide: async (id: string): Promise<CatalogGuide> => {
+    const result = await request<{ data: CatalogGuide }>(
+      `/catalog/guides/${encodeURIComponent(id)}/unpublish`,
+      'POST',
+      {},
+    );
     return result.data;
   },
 

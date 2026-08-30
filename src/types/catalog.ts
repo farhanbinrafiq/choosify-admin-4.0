@@ -56,10 +56,14 @@ export interface CatalogSocialLinks {
   youtube?: string;
   tiktok?: string;
   linkedin?: string;
+  /** Seller-added links beyond the presets (Discord, Threads, a blog, …). */
+  custom?: Array<{ label: string; url: string }>;
 }
 
 export interface CatalogBrandOverview {
   address?: string;
+  /** Google Maps (or any map) URL for the shop address — "Open on Maps" link. */
+  mapLink?: string;
   email?: string;
   phone?: string;
   priceRange?: string;
@@ -105,12 +109,47 @@ export interface CatalogBrand {
   website?: string;
   socialLinks?: CatalogSocialLinks;
   story?: string;
+  /**
+   * Multi-entry Brand Story — a titled list of hybrid story sections shown on
+   * the storefront (falls back to `story` when empty). Each section is one of:
+   *  - `text`    (default): heading + body paragraph
+   *  - `link`   : an external URL + a custom thumbnail image
+   *  - `content`: a Guide / Review / Live / blog the seller published on Choosify
+   */
+  storyBlocks?: Array<{
+    id: string;
+    heading: string;
+    body: string;
+    kind?: 'text' | 'link' | 'content';
+    url?: string;
+    thumbnail?: string;
+    contentId?: string;
+    /** Media/platform of the link — drives the storefront video aspect ratio. Absent ⇒ auto-detect from `url`. */
+    mediaKind?:
+      | 'youtube'
+      | 'youtube_shorts'
+      | 'instagram_reel'
+      | 'instagram_post'
+      | 'tiktok'
+      | 'facebook'
+      | 'other';
+  }>;
+  /** Derived mirror — the `contentId`s of the `content` story sections, in order. */
+  pinnedStoryContentIds?: string[];
   storyVideoUrl?: string;
   credentials?: string;
   overview?: CatalogBrandOverview;
   faq?: CatalogBrandFaq[];
   stores?: CatalogBrandStores;
   promoCodes?: CatalogBrandPromoCode[];
+  /**
+   * Seller-curated product ids spotlighted at the top of the brand page's
+   * "Top Deals & Coupons" section, in display order. Ids that no longer resolve
+   * to a live product of this brand are ignored at render time.
+   */
+  pinnedProductIds?: string[];
+  /** Seller-curated product ids pinned to the front of the brand page's Products grid, in order. */
+  pinnedShowcaseProductIds?: string[];
   verifiedStatus: boolean;
   claimStatus: 'community' | 'pending' | 'verified';
   followers: number;
@@ -156,6 +195,14 @@ export interface CatalogProduct {
   categoryName: string;
   image: string;
   gallery: string[];
+  /**
+   * Optional single storefront product video. One canonical source only:
+   * a YouTube URL, a direct HTTPS video file URL (.mp4/.webm/.mov), or a
+   * `/media/products/*.mp4` produced by the app's own media upload. Empty /
+   * absent = no product video. Feeds the Product Detail media carousel
+   * alongside `image` + `gallery`.
+   */
+  videoUrl?: string;
   modeType: 'retail';
   /** physical (default) or bookable service listing */
   productType?: 'physical' | 'service';
@@ -500,6 +547,42 @@ export interface CatalogCreator {
   updatedAt: string;
 }
 
+export type GuideEntityRef = {
+  entityType: 'product' | 'brand' | 'external_product' | 'external_brand';
+  entityId: string;
+};
+export interface GuideSocialLink {
+  id: string;
+  platform: 'youtube' | 'facebook' | 'tiktok' | 'instagram' | 'twitch' | 'vimeo' | 'other';
+  url: string;
+  label?: string;
+  enabled?: boolean;
+  sortOrder?: number;
+}
+export interface GuideExternalRef {
+  id: string;
+  kind: 'product' | 'brand';
+  title: string;
+  imageUrl?: string;
+  externalUrl: string;
+  subtitle?: string;
+  brandName?: string;
+  commentary?: string;
+  sortOrder?: number;
+  /** Up to 4 short "why it's good for…" keyword chips shown on the card. */
+  highlightTags?: string[];
+}
+export interface GuideLiveOffer {
+  id: string;
+  productId: string;
+  promoPrice?: number;
+  discountType?: 'percent' | 'amount';
+  discountValue?: number;
+  startsAt: string;
+  endsAt: string;
+  enabled?: boolean;
+}
+
 export interface CatalogGuide {
   id: string;
   slug: string;
@@ -510,7 +593,10 @@ export interface CatalogGuide {
   authorAvatar?: string;
   category: string;
   excerpt?: string;
+  /** Primary cover photo (= gallery[0]). May be empty for a video-only guide. */
   image: string;
+  /** Ordered hero photo list (primary + extras). Independent of `videoUrl`. */
+  gallery?: string[];
   videoUrl?: string;
   duration?: string;
   type: 'article' | 'reels' | 'video' | 'shorts';
@@ -519,7 +605,23 @@ export interface CatalogGuide {
   shares?: string;
   tags: string[];
   creatorId?: string;
+  /** Public publisher identity: 'creator' (default, uses creatorId) or 'brand' (uses publisherBrandId). Server-authoritative. */
+  publisherType?: 'creator' | 'brand';
+  /** Canonical CatalogBrand id when publisherType === 'brand' — the AUTHOR, distinct from brandIds (mentions). */
+  publisherBrandId?: string;
+  /** Read-only enrichment on GET responses — resolved publisher brand identity. Never persisted. */
+  publisherBrand?: { id: string; name: string; logo?: string; slug?: string };
   productIds: string[];
+  /** Brands the guide MENTIONS / discusses ("Brand Mentioned"). Not authorship. Real CatalogBrand ids. */
+  brandIds?: string[];
+  /** Canonical main editorial/article body (plain text). Separate from Key Takeaways. */
+  body?: string;
+  /** Guide-scoped social / continue-on-platform links (distinct from profile socials). */
+  socialLinks?: GuideSocialLink[];
+  /** Guide-editorial references to off-Choosify products / brands. Never enter catalog/cart/orders/compare. */
+  externalRefs?: GuideExternalRef[];
+  /** Guide-scoped temporary promo pricing on tagged canonical products. Never mutates the Product. */
+  liveOffers?: GuideLiveOffer[];
   verdict?: string;
   whatWeLike: string[];
   whatToConsider: string[];
@@ -575,10 +677,49 @@ export interface CatalogPlacement {
   updatedAt: string;
 }
 
+/** One "Where to Buy / Price Across Stores" row. `source` marks ownership. */
+export interface RelatedStoreEntry {
+  id: string;
+  storeName: string;
+  price: number;
+  availability: string;
+  storeRating?: number;
+  storeUrl?: string;
+  storeLocation?: string;
+  isFeatured?: boolean;
+  /** Optional visual identity. Prefer a resolved Choosify seller/brand asset. */
+  logoUrl?: string;
+  /**
+   * Ownership. `seller` (default) = the listing owner manages it. `admin` =
+   * a Choosify-promoted / sponsored entry — sellers can never edit, delete,
+   * disable, reorder or mutate these. Server-enforced.
+   */
+  source?: 'seller' | 'admin';
+  /** admin rows only — badge wording ("Sponsored", "Featured by Choosify", …). */
+  promoLabel?: string;
+  /** admin rows only — lower sorts earlier in the merged storefront list. */
+  priority?: number;
+  /** admin rows only — optional link to an Ads campaign reference (AD-#####). */
+  adRef?: string;
+}
+
 export interface CatalogProductDetail {
   productId: string;
-  relatedInfoType?: 'price_across_stores' | 'whats_nearby' | 'before_your_visit';
+  relatedInfoType?: 'price_across_stores' | 'whats_nearby' | 'before_your_visit' | 'custom';
   priceAcrossStoresEnabled?: boolean;
+  /** Seller-defined Related Information section (titled heading + bullet blocks). */
+  customRelatedInfo?: {
+    title?: string;
+    blocks?: Array<{ id: string; heading: string; items: string[] }>;
+  };
+  /**
+   * Admin-only section lock. When true, seller management of the Related
+   * Information section is temporarily restricted by Choosify — seller sees all
+   * content read-only. Server-enforced. NOT how sponsored rows are represented.
+   */
+  relatedInfoLockedByAdmin?: boolean;
+  /** Choosify/admin-owned promoted "Where to Buy" entries (independent list). */
+  adminPromotedStores?: RelatedStoreEntry[];
   whatsNearby?: {
     restaurantCafe?: string[];
     entertainmentAttraction?: string[];
@@ -592,22 +733,16 @@ export interface CatalogProductDetail {
     whatToBring?: string;
     wheelchairAccess?: string;
     insuranceAccepted?: string;
+    /** Seller-added fields beyond the five presets. */
+    customFields?: Array<{ id: string; label: string; value: string }>;
   };
   about?: string;
   specs: { key: string; value: string }[];
   pros: string[];
   cons: string[];
   bestForTags: string[];
-  storeComparisonList: Array<{
-    id: string;
-    storeName: string;
-    price: number;
-    availability: string;
-    storeRating?: number;
-    storeUrl?: string;
-    storeLocation?: string;
-    isFeatured?: boolean;
-  }>;
+  /** Seller-owned "Where to Buy / Price Across Stores" rows. */
+  storeComparisonList: RelatedStoreEntry[];
   physicalStores: Array<{
     id: string;
     storeName: string;
@@ -624,15 +759,41 @@ export interface CatalogProductDetail {
     enabled: boolean;
     sortOrder: number;
   }>;
-  optionGroups: Array<{ id: string; name: string; displayType: string; values: string[] }>;
+  optionGroups: Array<{
+    id: string;
+    name: string;
+    displayType: string;
+    values: string[];
+    /**
+     * Additive (hybrid variants): true when the seller added this dimension on
+     * THIS product rather than it coming from the category variant schema.
+     * Custom dimensions drive variant resolution + pricing but are not category
+     * search facets and are never flagged incompatible on a category change.
+     */
+    custom?: boolean;
+    /**
+     * Additive (hybrid variants): for a category `select` dimension, values the
+     * seller appended beyond the category schema's option list. Not search
+     * facets; never flagged incompatible on a category change.
+     */
+    customValues?: string[];
+  }>;
   productVariants: Array<{
     id: string;
     sku: string;
     price?: number;
+    /** Additive (variants sprint): per-variant MRP / strike price. */
+    originalPrice?: number;
     stock?: number;
     options: Record<string, string>;
     images?: string[];
+    /** Legacy on/off flag — still honored. `status` wins when both are present. */
     enabled?: boolean;
+    /**
+     * Additive (variants sprint): explicit lifecycle. Backward compatible —
+     * absent ⇒ derive from `enabled` (enabled !== false ⇒ 'active').
+     */
+    status?: 'active' | 'inactive';
   }>;
   creatorContent: Array<{
     id: string;
@@ -672,6 +833,20 @@ export interface CatalogProductDetail {
   enableAdditionalSpecs?: boolean;
   enablePublicReviews?: boolean;
   enableAddonItems?: boolean;
+  enableDeliveryInfo?: boolean;
+  enableWarrantyInfo?: boolean;
+
+  /** Seller-authored "Delivery Information" block (region + quick-service delivery
+   *  facts) shown on the storefront Product Detail. Absent ⇒ platform default. */
+  deliveryInfo?: {
+    region?: string;
+    bullets?: string[];
+  };
+  /** "Warranty & After-Sales Services" — after-sales bullet list (warranty
+   *  duration/type/provider/terms live on CatalogProduct). */
+  afterSalesInfo?: {
+    bullets?: string[];
+  };
 
   boxContents?: Array<{
     id: string;
@@ -687,7 +862,22 @@ export interface CatalogProductDetail {
   }>;
   additionalSpecs?: { key: string; value: string }[];
   publicReviews?: Array<{ id: string; reviewerName: string; rating: number; comment: string }>;
-  addonItems?: Array<{ id: string; title: string; description?: string; price: number }>;
+  /**
+   * Optional paid extras bought alongside the main item (distinct from variants).
+   * `enabled`/`sortOrder`/`badge`/`maxQuantity` are additive (add-ons sprint) —
+   * backward compatible: absent `enabled` ⇒ true.
+   */
+  addonItems?: Array<{
+    id: string;
+    title: string;
+    description?: string;
+    price: number;
+    enabled?: boolean;
+    sortOrder?: number;
+    badge?: string;
+    /** When set (≥1), the buyer may pick a quantity of this add-on up to this cap. */
+    maxQuantity?: number;
+  }>;
 }
 
 export interface SiteSeoEntry {

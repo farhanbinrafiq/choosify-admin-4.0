@@ -1,12 +1,41 @@
 import React, { useMemo, useState } from 'react';
-import { ChevronDown, MapPin, Star } from 'lucide-react';
+import { ChevronDown, ExternalLink, MapPin, Star } from 'lucide-react';
 import type { BrandCMSModel } from '../../pages/admin/brandSeeds';
+import { resolveStoryMedia, type BrandEditSection } from '../../pages/admin/brandEditorModel';
+
+/** CSS aspect-ratio for a resolved story-media aspect (inline style — purge-proof). */
+const STORY_ASPECT_RATIO: Record<'landscape' | 'portrait' | 'square', string> = {
+  landscape: '16 / 9',
+  portrait: '9 / 16',
+  square: '1 / 1',
+};
 import {
+  BrandInlineEditFrame,
   BrandProfileEditChip,
   BrandProfileHero,
+  BrandStudioEditPill,
   type BrandProfileEditSection,
   type BrandProfilePresentationMode,
+  type BrandStudioBridge,
 } from './BrandProfileHero';
+
+const SECTION_TITLES: Record<BrandEditSection, string> = {
+  identity: 'Brand Identity',
+  cover: 'Cover Image',
+  logo: 'Brand Logo',
+  deals: 'Pinned Spotlight Products',
+  products: 'Pinned Products',
+  brandAbout: 'About This Brand',
+  brandAddress: 'Shop Address & Links',
+  brandContact: 'Contact Information',
+  brandAudience: 'Price & Audience',
+  brandServices: 'Services & Specialties',
+  brandTags: 'Best For Tags',
+  credentials: 'Guarantees & Credentials',
+  stores: 'Where to Buy',
+  faq: 'FAQ',
+  story: 'Brand Story',
+};
 
 /** Matches Choosify-Web BrandDetailPage sticky nav (Compare is below fold, not in tabs). */
 const SECTION_NAV = [
@@ -51,6 +80,8 @@ function SectionShell({
   mode,
   editLabel,
   onEdit,
+  sectionKey,
+  studio,
   trailing,
   children,
 }: {
@@ -60,12 +91,30 @@ function SectionShell({
   mode: BrandProfilePresentationMode;
   editLabel?: string;
   onEdit?: () => void;
+  /** Canonical section key — enables inline studio editing for this region. */
+  sectionKey?: BrandEditSection;
+  studio?: BrandStudioBridge;
   trailing?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const isStudio = mode === 'studio' && !!studio;
+  const editingThis = isStudio && sectionKey != null && studio!.editingSection === sectionKey;
+
+  if (editingThis) {
+    return (
+      <section id={id} className="scroll-mt-36 w-full">
+        <BrandInlineEditFrame k={sectionKey!} title={SECTION_TITLES[sectionKey!]} studio={studio!}>
+          {studio!.renderEditor(sectionKey!)}
+        </BrandInlineEditFrame>
+      </section>
+    );
+  }
+
   return (
     <section id={id} className="scroll-mt-36 w-full relative">
-      {mode === 'editor' && onEdit ? (
+      {isStudio && sectionKey != null ? (
+        <BrandStudioEditPill onClick={() => studio!.onEdit(sectionKey!)} />
+      ) : mode === 'editor' && onEdit ? (
         <BrandProfileEditChip label={editLabel || 'Edit'} onClick={onEdit} />
       ) : null}
       <div className="flex items-baseline justify-between gap-3 mb-1 text-left pr-20">
@@ -78,32 +127,78 @@ function SectionShell({
   );
 }
 
+/** Preview-only section — relational / system content managed on a dedicated surface. */
+function PreviewOnlyLink({ href, label }: { href?: string; label: string }) {
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      className="inline-flex items-center gap-1 mt-3 text-[11px] font-extrabold uppercase tracking-wider text-[#EF3C23] hover:underline"
+    >
+      {label} <ExternalLink size={12} />
+    </a>
+  );
+}
+
 export function BrandProfilePresentation({
   model,
   mode = 'editor',
   onEditSection,
+  studio,
   compareBrands = [],
+  manageLinks = {},
+  storyContentById = {},
 }: {
   model: BrandCMSModel;
   mode?: BrandProfilePresentationMode;
   onEditSection?: (section: BrandProfileEditSection) => void;
+  /** Inline section-editing bridge (mode="studio"). */
+  studio?: BrandStudioBridge;
   compareBrands?: Array<{ id: string; name: string; category?: string; score?: number }>;
+  /** Canonical management surfaces for the preview-only sections. */
+  manageLinks?: { products?: string; deals?: string; creators?: string; verification?: string };
+  /** Resolved metadata for Brand Story `content`-kind sections + pinned stories, keyed by guide id. */
+  storyContentById?: Record<
+    string,
+    {
+      title: string;
+      image?: string;
+      kind: string;
+      href?: string;
+      aspect?: 'landscape' | 'portrait' | 'square';
+    }
+  >;
 }) {
   const [activeNav, setActiveNav] = useState<string>('deals-section');
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const isStudio = mode === 'studio' && !!studio;
 
   const brandName = model.brandName || 'this brand';
   const brandNameUpper = (model.brandName || 'BRAND').toUpperCase();
 
   const liveProducts = useMemo(
-    () => (model.products || []).filter((p) => p.status === 'Live' || mode === 'editor'),
+    () => (model.products || []).filter((p) => p.status === 'Live' || mode !== 'public'),
     [model.products, mode],
   );
+  // The brand page's Products section shows ONLY the seller's pinned selection —
+  // the full catalog lives in the dedicated Products & Inventory console.
+  const showcaseProducts = useMemo(() => {
+    const byId = new Map((model.products || []).map((p) => [p.id, p]));
+    return (model.pinnedShowcaseProductIds || [])
+      .map((pid) => byId.get(pid))
+      .filter((p): p is NonNullable<typeof p> => !!p && (p.status === 'Live' || mode !== 'public'));
+  }, [model.products, model.pinnedShowcaseProductIds, mode]);
   const activeDeals = useMemo(
-    () => (model.deals || []).filter((d) => d.status === 'Active' || mode === 'editor'),
+    () => (model.deals || []).filter((d) => d.status === 'Active' || mode !== 'public'),
     [model.deals, mode],
   );
   const promos = model.promoCodes || [];
+  const pinnedProducts = useMemo(() => {
+    const byId = new Map((model.products || []).map((p) => [p.id, p]));
+    return (model.pinnedProductIds || [])
+      .map((pid) => byId.get(pid))
+      .filter((p): p is NonNullable<typeof p> => !!p && (p.status === 'Live' || mode !== 'public'));
+  }, [model.products, model.pinnedProductIds, mode]);
   const reviews = model.reviews || [];
   const faq = model.faq || [];
   const stores = model.stores || { authorized: [], distributors: [], serviceCenters: [] };
@@ -117,19 +212,6 @@ export function BrandProfilePresentation({
     setActiveNav(id);
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
-
-  const overviewHasContent = Boolean(
-    model.address ||
-      model.website ||
-      model.contactEmail ||
-      model.phone ||
-      model.priceRange ||
-      model.ageRange ||
-      model.audienceType ||
-      (model.services || []).length ||
-      (model.bestForTags || []).length ||
-      model.description,
-  );
 
   const trustStats = [
     typeof model.followersCount === 'number' && model.followersCount > 0
@@ -148,6 +230,7 @@ export function BrandProfilePresentation({
         model={model}
         mode={mode}
         onEdit={onEditSection}
+        studio={studio}
         onExploreProducts={() => scrollTo('products-section')}
         onShare={() => {
           if (typeof navigator !== 'undefined' && navigator.clipboard) {
@@ -189,20 +272,41 @@ export function BrandProfilePresentation({
           subtitle={`Limited-time offers on ${brandName} products`}
           mode={mode}
           editLabel="Edit"
+          sectionKey="deals"
+          studio={studio}
           onEdit={onEditSection ? () => onEditSection('promos') : undefined}
+          trailing={
+            isStudio ? (
+              <PreviewOnlyLink href={manageLinks.deals} label="Manage deals in Ads & Deals Studio" />
+            ) : undefined
+          }
         >
-          {activeDeals.length === 0 && promos.length === 0 ? (
+          {activeDeals.length === 0 && promos.length === 0 && pinnedProducts.length === 0 ? (
             <EmptyEditorState
-              message={
-                mode === 'editor'
-                  ? `No deals or coupons available for ${brandName} yet.`
-                  : `No deals or coupons available for ${brandName} yet.`
-              }
-              actionLabel={mode === 'editor' ? 'Add first deal / coupon' : undefined}
+              message={`No deals or coupons available for ${brandName} yet.`}
+              actionLabel={!isStudio && mode === 'editor' ? 'Add first deal / coupon' : undefined}
               onAction={onEditSection ? () => onEditSection('promos') : undefined}
             />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+              {pinnedProducts.map((p, i) => (
+                <div key={`pin-${p.id}`} className="bg-white border border-[#EF3C23]/30 rounded-[10px] overflow-hidden">
+                  <div className="flex items-center gap-1 text-[9px] font-extrabold text-[#EF3C23] uppercase tracking-wider px-3 pt-2.5">
+                    ★ Pinned #{i + 1}
+                  </div>
+                  <div className="flex gap-3 p-3">
+                    <div className="w-14 h-14 shrink-0 rounded-md bg-[#F4F7F9] overflow-hidden">
+                      {p.thumbnail ? <img src={p.thumbnail} alt="" className="w-full h-full object-cover" /> : null}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[12px] font-bold text-[#1A1A2E] line-clamp-2">{p.name}</div>
+                      <div className="text-[12.5px] font-extrabold text-[#EF3C23] mt-1">
+                        ৳{Number(p.price || 0).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
               {activeDeals.map((deal) => (
                 <div key={deal.id} className="bg-white border border-[#E8EDF2] rounded-[10px] p-4">
                   <div className="text-[10px] font-extrabold text-[#EF3C23] uppercase tracking-wider mb-1">
@@ -238,26 +342,36 @@ export function BrandProfilePresentation({
         <SectionShell
           id="products-section"
           title={`${brandNameUpper} PRODUCTS`}
-          subtitle={`Explore all products from ${brandName}`}
+          subtitle={`Products ${brandName} has pinned to feature here`}
           mode={mode}
           editLabel="Edit"
+          sectionKey="products"
+          studio={studio}
           onEdit={onEditSection ? () => onEditSection('products') : undefined}
+          trailing={
+            isStudio ? (
+              <PreviewOnlyLink href={manageLinks.products} label="All products in Products & Inventory" />
+            ) : undefined
+          }
         >
-          {liveProducts.length === 0 ? (
+          {showcaseProducts.length === 0 ? (
             <EmptyEditorState
               message={
-                mode === 'editor'
-                  ? `No products listed for ${brandName} yet.`
-                  : `No products listed for ${brandName} yet.`
+                mode === 'public'
+                  ? `${brandName} hasn't featured any products here yet.`
+                  : 'No products pinned yet — pin products to feature them here.'
               }
-              actionLabel={mode === 'editor' ? 'Manage products in catalog' : undefined}
-              onAction={onEditSection ? () => onEditSection('products') : undefined}
+              actionLabel={isStudio ? 'Pin products' : undefined}
+              onAction={isStudio && studio ? () => studio.onEdit('products') : undefined}
             />
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
-              {liveProducts.slice(0, 12).map((p) => (
-                <div key={p.id} className="bg-white border border-[#E8EDF2] rounded-[10px] overflow-hidden">
-                  <div className="aspect-square bg-[#F4F7F9]">
+              {showcaseProducts.map((p, i) => (
+                <div key={p.id} className="bg-white border border-[#EF3C23]/40 rounded-[10px] overflow-hidden">
+                  <div className="relative aspect-square bg-[#F4F7F9]">
+                    <span className="absolute left-1.5 top-1.5 z-10 rounded bg-[#EF3C23] px-1.5 py-0.5 text-[8px] font-extrabold uppercase tracking-wide text-white">
+                      ★ Pinned #{i + 1}
+                    </span>
                     {p.thumbnail ? (
                       <img src={p.thumbnail} alt="" className="w-full h-full object-cover" />
                     ) : (
@@ -284,18 +398,12 @@ export function BrandProfilePresentation({
           id="public-reviews-section"
           title="WHAT CUSTOMERS SAY"
           subtitle="Real reviews from verified buyers"
-          mode={mode}
+          mode={isStudio ? 'public' : mode}
           editLabel="Edit"
           onEdit={onEditSection ? () => onEditSection('reviews') : undefined}
         >
           {reviews.length === 0 ? (
-            <EmptyEditorState
-              message={
-                mode === 'editor'
-                  ? `No customer reviews yet for ${brandName}`
-                  : `No customer reviews yet for ${brandName}`
-              }
-            />
+            <EmptyEditorState message={`No customer reviews yet for ${brandName}`} />
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-left">
               {reviews.slice(0, 6).map((r) => (
@@ -317,92 +425,97 @@ export function BrandProfilePresentation({
           )}
         </SectionShell>
 
-        <SectionShell
-          id="brand-overview-section"
-          title="BRAND OVERVIEW"
-          subtitle={`About ${brandName}`}
-          mode={mode}
-          onEdit={onEditSection ? () => onEditSection('overview') : undefined}
-        >
-          {!overviewHasContent ? (
-            <EmptyEditorState
-              message={mode === 'editor' ? 'No overview details yet.' : 'No overview available.'}
-              actionLabel={mode === 'editor' ? 'Add overview details' : undefined}
-              onAction={onEditSection ? () => onEditSection('overview') : undefined}
-            />
-          ) : (
-            <div className="space-y-3.5">
-              {model.description ? (
-                <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-[18px] text-[12.5px] text-[#4B5563] leading-relaxed text-left">
-                  {model.description}
-                </div>
-              ) : null}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                <div className="bg-white rounded-[10px] p-[18px] border border-[#E8EDF2] text-left">
-                  <h4 className="text-[11px] font-extrabold text-[#1A1A2E] uppercase tracking-wider mb-3">
-                    Shop Address & Links
-                  </h4>
-                  <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-2">
-                    {model.address || '—'}
-                  </p>
-                  {model.website ? (
-                    <a
-                      href={model.website}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[11px] font-bold text-[#EB4501] hover:underline"
-                    >
-                      {model.website}
-                    </a>
-                  ) : null}
-                </div>
-                <div className="bg-white rounded-[10px] p-[18px] border border-[#E8EDF2] text-left">
-                  <h4 className="text-[11px] font-extrabold text-[#1A1A2E] uppercase tracking-wider mb-3">
-                    Contact
-                  </h4>
-                  <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-2">
-                    Email: {model.contactEmail || '—'}
-                  </p>
-                  <p className="text-[11.5px] text-[#6B7280] font-semibold m-0">
-                    Phone: {model.phone || '—'}
-                  </p>
-                </div>
-                <div className="bg-white rounded-[10px] p-[18px] border border-[#E8EDF2] text-left">
-                  <h4 className="text-[11px] font-extrabold text-[#1A1A2E] uppercase tracking-wider mb-3">
-                    Price & Audience
-                  </h4>
-                  <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-1">
-                    {model.priceRange || '—'}
-                  </p>
-                  <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-1">
-                    {model.ageRange || '—'}
-                  </p>
-                  <p className="text-[11.5px] text-[#EB4501] font-extrabold m-0 uppercase">
-                    {model.audienceType || '—'}
-                  </p>
-                </div>
+        <section id="brand-overview-section" className="scroll-mt-36 w-full space-y-3.5">
+          <div className="text-left">
+            <h3 className="text-[15px] font-extrabold text-[#1A1A2E] tracking-tight m-0">BRAND OVERVIEW</h3>
+            <p className="text-[11.5px] text-[#9AA0AC] m-0">About {brandName}</p>
+          </div>
+
+          <SectionShell id="brand-about-box" title="ABOUT THIS BRAND" mode={mode} sectionKey="brandAbout" studio={studio}>
+            {model.description && model.description.trim() ? (
+              <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-[18px] text-[12.5px] text-[#4B5563] leading-relaxed text-left whitespace-pre-wrap">
+                {model.description}
               </div>
-              {(model.services || []).length > 0 || (model.bestForTags || []).length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {(model.services || []).map((s) => (
-                    <span
-                      key={s}
-                      className="px-2.5 py-1 rounded-full bg-white border border-[#E8EDF2] text-[10.5px] font-bold text-[#1A1A2E]"
-                    >
-                      {s}
-                    </span>
-                  ))}
+            ) : (
+              <EmptyEditorState message={mode === 'public' ? 'No description available.' : 'No description yet.'} />
+            )}
+          </SectionShell>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 items-start">
+            <SectionShell id="brand-address-box" title="SHOP ADDRESS & LINKS" mode={mode} sectionKey="brandAddress" studio={studio}>
+              <div className="bg-white rounded-[10px] p-[18px] border border-[#E8EDF2] text-left">
+                <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-2">{model.address || '—'}</p>
+                {model.website ? (
+                  <a href={model.website} target="_blank" rel="noopener noreferrer" className="block text-[11px] font-bold text-[#EB4501] hover:underline">
+                    {model.website}
+                  </a>
+                ) : null}
+                {model.mapLink ? (
+                  <a href={model.mapLink} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-[11px] font-extrabold uppercase tracking-wider text-[#EF3C23] hover:underline">
+                    Open on Maps →
+                  </a>
+                ) : null}
+              </div>
+            </SectionShell>
+
+            <SectionShell id="brand-contact-box" title="CONTACT INFORMATION" mode={mode} sectionKey="brandContact" studio={studio}>
+              <div className="bg-white rounded-[10px] p-[18px] border border-[#E8EDF2] text-left">
+                <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-2">Email: {model.contactEmail || '—'}</p>
+                <p className="text-[11.5px] text-[#6B7280] font-semibold m-0">Phone: {model.phone || '—'}</p>
+              </div>
+            </SectionShell>
+
+            <SectionShell id="brand-audience-box" title="PRICE & AUDIENCE" mode={mode} sectionKey="brandAudience" studio={studio}>
+              <div className="bg-white rounded-[10px] p-[18px] border border-[#E8EDF2] text-left">
+                <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-1">{model.priceRange || '—'}</p>
+                <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-1">{model.ageRange || '—'}</p>
+                <p className="text-[11.5px] text-[#EB4501] font-extrabold m-0 uppercase">{model.audienceType || '—'}</p>
+              </div>
+            </SectionShell>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 items-start">
+            <SectionShell id="brand-services-box" title="SERVICES & SPECIALTIES" mode={mode} sectionKey="brandServices" studio={studio}>
+              {(model.services || []).length ? (
+                <ul className="bg-white border border-[#E8EDF2] rounded-[10px] p-[18px] m-0 pl-5 text-left space-y-1 text-[12px] text-[#4B5563]">
+                  {(model.services || []).map((s) => <li key={s}>{s}</li>)}
+                </ul>
+              ) : (
+                <EmptyEditorState message={mode === 'public' ? 'None listed.' : 'No services listed yet.'} />
+              )}
+            </SectionShell>
+
+            <SectionShell id="brand-tags-box" title="BEST FOR #TAGS" mode={mode} sectionKey="brandTags" studio={studio}>
+              {(model.bestForTags || []).length ? (
+                <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-[18px] flex flex-wrap gap-2 text-left">
                   {(model.bestForTags || []).map((t) => (
-                    <span
-                      key={t}
-                      className="px-2.5 py-1 rounded-full bg-[#FFF4ED] text-[10.5px] font-bold text-[#EF3C23]"
-                    >
-                      {t}
+                    <span key={t} className="px-2.5 py-1 rounded-full bg-[#F3E8FF] text-[10.5px] font-bold text-[#8A00C4]">
+                      #{t.replace(/^#+/, '')}
                     </span>
                   ))}
                 </div>
-              ) : null}
+              ) : (
+                <EmptyEditorState message={mode === 'public' ? 'None listed.' : 'No tags yet.'} />
+              )}
+            </SectionShell>
+          </div>
+        </section>
+
+        <SectionShell
+          id="brand-credentials-section"
+          title="GUARANTEES & CREDENTIALS"
+          mode={mode}
+          sectionKey="credentials"
+          studio={studio}
+        >
+          {model.credentials && model.credentials.trim() ? (
+            <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-[18px] text-[12.5px] text-[#4B5563] leading-relaxed text-left whitespace-pre-wrap">
+              {model.credentials}
             </div>
+          ) : (
+            <EmptyEditorState
+              message={mode === 'public' ? 'No guarantees listed.' : 'No guarantees or credentials yet.'}
+            />
           )}
         </SectionShell>
 
@@ -410,11 +523,13 @@ export function BrandProfilePresentation({
           id="store-location-section"
           title={`WHERE TO BUY ${brandNameUpper}`}
           mode={mode}
+          sectionKey="stores"
+          studio={studio}
           onEdit={onEditSection ? () => onEditSection('stores') : undefined}
         >
           {!hasStores ? (
             <EmptyEditorState
-              message={mode === 'editor' ? 'No stores added' : 'No store locations listed.'}
+              message={mode === 'public' ? 'No store locations listed.' : 'No stores added'}
               actionLabel={mode === 'editor' ? 'Add first store location' : undefined}
               onAction={onEditSection ? () => onEditSection('stores') : undefined}
             />
@@ -426,7 +541,10 @@ export function BrandProfilePresentation({
                 { title: 'SERVICE CENTERS', rows: stores.serviceCenters || [] },
               ].map((col) => (
                 <div key={col.title} className="bg-white border border-[#E8EDF2] rounded-[10px] overflow-hidden">
-                  <div className="text-[11px] font-extrabold text-white choosify-dark-surface px-2.5 py-1.5">
+                  <div
+                    className="text-[11px] font-extrabold px-2.5 py-1.5"
+                    style={{ backgroundColor: '#1A1A2E', color: '#FFFFFF' }}
+                  >
                     {col.title}
                   </div>
                   <div className="p-[18px] pt-3 text-left">
@@ -463,11 +581,13 @@ export function BrandProfilePresentation({
           id="faq-section"
           title="FREQUENTLY ASKED QUESTIONS"
           mode={mode}
+          sectionKey="faq"
+          studio={studio}
           onEdit={onEditSection ? () => onEditSection('faq') : undefined}
         >
           {faq.length === 0 ? (
             <EmptyEditorState
-              message={mode === 'editor' ? 'Add your first FAQ' : 'No FAQs available.'}
+              message={mode === 'public' ? 'No FAQs available.' : 'Add your first FAQ'}
               actionLabel={mode === 'editor' ? 'Add first FAQ' : undefined}
               onAction={onEditSection ? () => onEditSection('faq') : undefined}
             />
@@ -503,44 +623,174 @@ export function BrandProfilePresentation({
           title="BRAND STORY"
           mode={mode}
           editLabel="Edit"
+          sectionKey="story"
+          studio={studio}
           onEdit={onEditSection ? () => onEditSection('story') : undefined}
         >
-          {!model.brandStory && !model.missionStatement && !model.values ? (
-            <EmptyEditorState
-              message={mode === 'editor' ? 'No Brand Stories yet' : 'No brand story available.'}
-              actionLabel={mode === 'editor' ? 'Add Brand Story' : undefined}
-              onAction={onEditSection ? () => onEditSection('story') : undefined}
-            />
-          ) : (
-            <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-[18px] space-y-3 text-left">
-              {model.missionStatement ? (
-                <div>
-                  <div className="text-[10px] font-extrabold text-[#9AA0AC] uppercase tracking-wider mb-1">
-                    Mission
+          {(() => {
+            const allBlocks = (model.storyBlocks || []).filter((b) => {
+              const k = b.kind || 'text';
+              return (
+                (k === 'text' && ((b.heading || '').trim() || (b.body || '').trim())) ||
+                (k === 'link' && (b.url || '').trim()) ||
+                (k === 'content' && (b.contentId || '').trim())
+              );
+            });
+            const textBlocks = allBlocks.filter((b) => (b.kind || 'text') === 'text');
+            const cardBlocks = allBlocks.filter((b) => b.kind === 'link' || b.kind === 'content');
+            const legacyOnly = !allBlocks.length && !!(model.brandStory || '').trim();
+
+            // Seller-pinned published stories (guide ids) not already shown as a
+            // `content` story section.
+            const cardContentIds = new Set(
+              cardBlocks
+                .filter((b) => b.kind === 'content')
+                .map((b) => (b.contentId || '').trim()),
+            );
+            const pinnedStoryIds = (model.pinnedStoryContentIds || [])
+              .map((id) => String(id || '').trim())
+              .filter((id) => id && !cardContentIds.has(id));
+
+            type StoryCard = {
+              key: string;
+              title: string;
+              image?: string;
+              kindLabel: string;
+              caption?: string;
+              href?: string;
+              ratio: string;
+            };
+            const blockCards: StoryCard[] = cardBlocks.map((b) => {
+              const resolved =
+                b.kind === 'content' ? storyContentById[(b.contentId || '').trim()] : undefined;
+              const aspect =
+                b.kind === 'link'
+                  ? resolveStoryMedia({ url: b.url, mediaKind: b.mediaKind }).aspect
+                  : b.mediaKind
+                    ? resolveStoryMedia({ mediaKind: b.mediaKind }).aspect
+                    : resolved?.aspect || 'landscape';
+              return {
+                key: b.id,
+                title: (b.heading || '').trim() || resolved?.title || 'View',
+                image: b.kind === 'link' ? b.thumbnail : resolved?.image,
+                kindLabel: b.kind === 'link' ? 'Link' : resolved?.kind || 'Content',
+                caption: b.kind === 'link' ? b.body : '',
+                href: b.kind === 'link' ? b.url : resolved?.href,
+                ratio: STORY_ASPECT_RATIO[aspect],
+              };
+            });
+            const pinnedCards: StoryCard[] = pinnedStoryIds
+              .map((id): StoryCard | null => {
+                const r = storyContentById[id];
+                if (!r) return null;
+                return {
+                  key: `pin-${id}`,
+                  title: r.title || 'View',
+                  image: r.image,
+                  kindLabel: r.kind || 'Content',
+                  href: r.href,
+                  ratio: STORY_ASPECT_RATIO[r.aspect || 'landscape'],
+                };
+              })
+              .filter((c): c is StoryCard => !!c);
+            const storyCards = [...pinnedCards, ...blockCards];
+
+            if (
+              !allBlocks.length &&
+              !legacyOnly &&
+              !model.storyVideoUrl &&
+              !storyCards.length
+            ) {
+              return (
+                <EmptyEditorState
+                  message={mode === 'public' ? 'No brand story available.' : 'No Brand Story yet'}
+                  actionLabel={mode === 'editor' ? 'Add Brand Story' : undefined}
+                  onAction={onEditSection ? () => onEditSection('story') : undefined}
+                />
+              );
+            }
+            return (
+              <div className="space-y-3.5">
+                {model.storyVideoUrl || textBlocks.length || legacyOnly ? (
+                  <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-[18px] space-y-4 text-left">
+                    {model.storyVideoUrl ? (
+                      <div>
+                        <div className="text-[10px] font-extrabold text-[#9AA0AC] uppercase tracking-wider mb-1">
+                          Story Video
+                        </div>
+                        <a
+                          href={model.storyVideoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11.5px] font-bold text-[#EB4501] hover:underline break-all"
+                        >
+                          {model.storyVideoUrl}
+                        </a>
+                      </div>
+                    ) : null}
+                    {legacyOnly ? (
+                      <p className="text-[12.5px] text-[#4B5563] m-0 leading-relaxed whitespace-pre-wrap">
+                        {model.brandStory}
+                      </p>
+                    ) : (
+                      textBlocks.map((b) => (
+                        <div key={b.id}>
+                          {b.heading ? (
+                            <div className="text-[10px] font-extrabold text-[#9AA0AC] uppercase tracking-wider mb-1">
+                              {b.heading}
+                            </div>
+                          ) : null}
+                          <p className="text-[12.5px] text-[#4B5563] m-0 leading-relaxed whitespace-pre-wrap">
+                            {b.body}
+                          </p>
+                        </div>
+                      ))
+                    )}
                   </div>
-                  <p className="text-[12.5px] text-[#4B5563] m-0 leading-relaxed">{model.missionStatement}</p>
-                </div>
-              ) : null}
-              {model.brandStory ? (
-                <div>
-                  <div className="text-[10px] font-extrabold text-[#9AA0AC] uppercase tracking-wider mb-1">
-                    Story
+                ) : null}
+                {storyCards.length ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                    {storyCards.map((c) => (
+                      <a
+                        key={c.key}
+                        href={mode === 'public' && c.href ? c.href : undefined}
+                        target={mode === 'public' && c.href ? '_blank' : undefined}
+                        rel="noopener noreferrer"
+                        className="block bg-white border border-[#E8EDF2] rounded-[10px] overflow-hidden"
+                      >
+                        <div
+                          className="bg-[#F4F7F9] w-full"
+                          style={{
+                            aspectRatio: c.ratio,
+                            ...(c.ratio === '9 / 16'
+                              ? { maxWidth: 220, marginLeft: 'auto', marginRight: 'auto' }
+                              : {}),
+                          }}
+                        >
+                          {c.image ? (
+                            <img src={c.image} alt="" className="w-full h-full object-cover" />
+                          ) : null}
+                        </div>
+                        <div className="p-3 text-left">
+                          <div className="text-[9px] font-extrabold text-[#8A00C4] uppercase tracking-wider">
+                            {c.kindLabel}
+                          </div>
+                          <div className="text-[12px] font-bold text-[#1A1A2E] mt-0.5 line-clamp-2">
+                            {c.title}
+                          </div>
+                          {c.caption ? (
+                            <div className="text-[10.5px] text-[#9AA0AC] mt-0.5 line-clamp-1">
+                              {c.caption}
+                            </div>
+                          ) : null}
+                        </div>
+                      </a>
+                    ))}
                   </div>
-                  <p className="text-[12.5px] text-[#4B5563] m-0 leading-relaxed whitespace-pre-wrap">
-                    {model.brandStory}
-                  </p>
-                </div>
-              ) : null}
-              {model.values ? (
-                <div>
-                  <div className="text-[10px] font-extrabold text-[#9AA0AC] uppercase tracking-wider mb-1">
-                    Values
-                  </div>
-                  <p className="text-[12.5px] text-[#4B5563] m-0 leading-relaxed">{model.values}</p>
-                </div>
-              ) : null}
-            </div>
-          )}
+                ) : null}
+              </div>
+            );
+          })()}
         </SectionShell>
 
         <section id="compare-section" className="scroll-mt-36 w-full">

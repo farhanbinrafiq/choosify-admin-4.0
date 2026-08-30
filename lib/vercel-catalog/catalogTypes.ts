@@ -58,10 +58,14 @@ export interface CatalogSocialLinks {
   youtube?: string;
   tiktok?: string;
   linkedin?: string;
+  /** Seller-added links beyond the presets (Discord, Threads, a blog, …). */
+  custom?: Array<{ label: string; url: string }>;
 }
 
 export interface CatalogBrandOverview {
   address?: string;
+  /** Google Maps (or any map) URL for the shop address — "Open on Maps" link. */
+  mapLink?: string;
   email?: string;
   phone?: string;
   priceRange?: string;
@@ -109,6 +113,31 @@ export interface CatalogBrand {
   socialLinks?: CatalogSocialLinks;
   /** Long-form brand story shown on storefront */
   story?: string;
+  /**
+   * Multi-entry hybrid Brand Story sections (fall back to `story` when empty).
+   * Each section is `text` (heading + body), `link` (url + custom thumbnail) or
+   * `content` (a Guide / Review / Live / blog published on Choosify).
+   */
+  storyBlocks?: Array<{
+    id: string;
+    heading: string;
+    body: string;
+    kind?: 'text' | 'link' | 'content';
+    url?: string;
+    thumbnail?: string;
+    contentId?: string;
+    /** Media/platform of the link — drives the storefront video aspect ratio. Absent ⇒ auto-detect from `url`. */
+    mediaKind?:
+      | 'youtube'
+      | 'youtube_shorts'
+      | 'instagram_reel'
+      | 'instagram_post'
+      | 'tiktok'
+      | 'facebook'
+      | 'other';
+  }>;
+  /** Derived mirror — the `contentId`s of the `content` story sections, in order. */
+  pinnedStoryContentIds?: string[];
   /** HTTPS URL for brand story / review embed */
   storyVideoUrl?: string;
   credentials?: string;
@@ -116,6 +145,10 @@ export interface CatalogBrand {
   faq?: CatalogBrandFaq[];
   stores?: CatalogBrandStores;
   promoCodes?: CatalogBrandPromoCode[];
+  /** Seller-curated product ids spotlighted at the top of the brand "Top Deals & Coupons" section, in order. */
+  pinnedProductIds?: string[];
+  /** Seller-curated product ids pinned to the front of the brand Products grid, in order. */
+  pinnedShowcaseProductIds?: string[];
   verifiedStatus: boolean;
   claimStatus: 'community' | 'pending' | 'verified';
   followers: number;

@@ -43,6 +43,7 @@ import {
   consumeInventoryQuantity,
 } from './catalog/inventoryStore';
 import { getService } from './catalog/serviceStore';
+import { resolveActiveGuideOffer, guideOfferWasPresent } from './catalog/guideOfferService';
 import { normalizeBrandInput } from './catalogContract';
 import { normalizeCreatorInput } from '../lib/vercel-catalog/catalogEditorialContract';
 import { recordSuspiciousRequest, recordClaimConfirmAttempt } from './lib/abuseProtection';
@@ -192,6 +193,25 @@ function userCanCreateManualOrder(req: {
 /** Mirrors Choosify-Web CheckoutPage.tsx's DELIVERY_FEE_PER_SELLER flat rate. */
 const FLAT_DELIVERY_FEE_PER_SELLER = 120;
 
+/**
+ * Thrown by recomputeOrderPricingServerSide when it can't be resolved to a plain
+ * 400. Lets the POST /operations/orders handler emit a specific status + code so
+ * the storefront can react (e.g. GUIDE_OFFER_PRICE_CHANGED → show the buyer the
+ * updated total and require re-confirmation).
+ */
+class OrderPricingError extends Error {
+  readonly statusCode: number;
+  readonly code?: string;
+  readonly details?: Record<string, unknown>;
+  constructor(message: string, statusCode = 400, opts?: { code?: string; details?: Record<string, unknown> }) {
+    super(message);
+    this.name = 'OrderPricingError';
+    this.statusCode = statusCode;
+    this.code = opts?.code;
+    this.details = opts?.details;
+  }
+}
+
 async function recomputeOrderPricingServerSide(
   body: Partial<OpsStorefrontOrder>,
 ): Promise<{ subOrders: unknown[]; subtotal: number; deliveryTotal: number; overallTotal: number; promoDiscount: number }> {
@@ -237,6 +257,22 @@ async function recomputeOrderPricingServerSide(
             warrantyStartsAt?: string;
             warrantyExpiresAt?: string;
           } = {};
+          // Guide LIVE-offer context (client-supplied, never trusted for price).
+          const rawGuideOfferRef =
+            item.guideOfferRef && typeof item.guideOfferRef === 'object'
+              ? (item.guideOfferRef as Record<string, unknown>)
+              : null;
+          const guideOfferGuideId = rawGuideOfferRef ? toIdString(rawGuideOfferRef.guideId) : '';
+          const guideOfferProductId = rawGuideOfferRef
+            ? toIdString(rawGuideOfferRef.productId) || productId
+            : '';
+          const expectedUnitPrice =
+            typeof item.expectedUnitPrice === 'number' && Number.isFinite(item.expectedUnitPrice)
+              ? item.expectedUnitPrice
+              : undefined;
+          let guideOfferSnapshot:
+            | { guideId: string; offerId: string; basePrice: number }
+            | undefined;
           if (productId) {
             const product = await catalogStore.getProduct(productId);
             if (!product) throw new Error(`Product ${productId} no longer exists`);
@@ -247,6 +283,57 @@ async function recomputeOrderPricingServerSide(
             }
             realPrice = product.price;
             realTitle = product.title;
+
+            // ── Guide LIVE offer: server-authoritative promotional price ──────
+            // The offer only ever LOWERS realPrice, only for the exact product it
+            // references, only inside its server-time window, only for a
+            // brand-authored guide whose brand owns the product. It never touches
+            // add-ons or variant deltas — it replaces the product unit price only.
+            if (guideOfferGuideId && guideOfferProductId === productId) {
+              const lineHasVariant = Boolean(
+                (typeof item.variantId === 'string' && item.variantId) ||
+                  (typeof item.variantSku === 'string' && item.variantSku),
+              );
+              const resolved = await resolveActiveGuideOffer(
+                guideOfferGuideId,
+                productId,
+                product.price,
+                Date.now(),
+                lineHasVariant,
+              );
+              if (resolved) {
+                realPrice = resolved.unitPrice;
+                guideOfferSnapshot = {
+                  guideId: resolved.guideId,
+                  offerId: resolved.offerId,
+                  basePrice: resolved.basePrice,
+                };
+              }
+              // If the buyer added the item expecting a promotional price, the
+              // authoritative price MUST match it — otherwise the offer changed
+              // or expired while the item sat in the cart. Reject explicitly so
+              // the storefront can show the updated total and require re-confirm;
+              // never silently charge a different amount.
+              if (typeof expectedUnitPrice === 'number' && Math.abs(expectedUnitPrice - realPrice) > 0.001) {
+                const wasPresent = await guideOfferWasPresent(guideOfferGuideId, productId);
+                throw new OrderPricingError(
+                  wasPresent
+                    ? `The LIVE offer for "${product.title}" has changed or expired. The current price is ৳${realPrice.toLocaleString()}. Please review the updated total before continuing.`
+                    : `The price for "${product.title}" has changed. The current price is ৳${realPrice.toLocaleString()}. Please review the updated total before continuing.`,
+                  409,
+                  {
+                    code: 'GUIDE_OFFER_PRICE_CHANGED',
+                    details: {
+                      productId,
+                      expectedUnitPrice,
+                      actualUnitPrice: realPrice,
+                      guideOfferActive: Boolean(resolved),
+                      offerWasPresent: wasPresent,
+                    },
+                  },
+                );
+              }
+            }
             if (product.warrantyMonths && product.warrantyMonths > 0) {
               const startsAt = new Date().toISOString();
               const expiresAt = new Date(
@@ -276,7 +363,17 @@ async function recomputeOrderPricingServerSide(
           }
 
           subtotal += realPrice * quantity;
-          return { ...item, itemId, ...warrantySnapshot, price: realPrice, productTitle: realTitle, quantity };
+          // Drop the transient client assertion; keep an authoritative offer snapshot.
+          const { expectedUnitPrice: _dropExpected, ...cleanItem } = item as Record<string, unknown>;
+          return {
+            ...cleanItem,
+            itemId,
+            ...warrantySnapshot,
+            price: realPrice,
+            productTitle: realTitle,
+            quantity,
+            ...(guideOfferSnapshot ? { guideOffer: guideOfferSnapshot } : {}),
+          };
         }),
       );
 
@@ -762,6 +859,14 @@ operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => 
       try {
         pricing = await recomputeOrderPricingServerSide(body);
       } catch (err) {
+        if (err instanceof OrderPricingError) {
+          res.status(err.statusCode).json({
+            error: err.message,
+            ...(err.code ? { code: err.code } : {}),
+            ...(err.details ? { details: err.details } : {}),
+          });
+          return;
+        }
         res.status(400).json({
           error: err instanceof Error ? err.message : 'Unable to validate order items',
         });
