@@ -1083,14 +1083,14 @@ export function ProductDetailView({
                   <div className="space-y-8">
                     {data.overviewBlocks.filter(b => b.enabled).map((blk, idx) => (
                       <div key={blk.id || idx} className="bg-slate-50 border border-slate-150 p-6 rounded-2xl">
-                        <span className="text-[8px] text-[#EB4501] font-black tracking-widest uppercase block mb-1 font-mono">BLOCK MODULE {idx + 1}</span>
+                        <span className="text-[8px] text-[#FF5B00] font-black tracking-widest uppercase block mb-1 font-mono">BLOCK MODULE {idx + 1}</span>
                         <h4 className="text-sm font-extrabold text-slate-900 tracking-tight uppercase border-b border-slate-200 pb-2 mb-3.5 italic">{blk.title}</h4>
                         
                         {blk.bullets && blk.bullets.length > 0 && (
                           <ul className="space-y-2 text-left">
                             {blk.bullets.map((bullet, bIdx) => (
                               <li key={bIdx} className="text-xs font-bold text-slate-700 flex items-start gap-2 uppercase tracking-wide">
-                                <span className="text-[#EB4501] font-bold text-xs shrink-0 mt-0.5">•</span>
+                                <span className="text-[#FF5B00] font-bold text-xs shrink-0 mt-0.5">•</span>
                                 <span>{bullet}</span>
                               </li>
                             ))}

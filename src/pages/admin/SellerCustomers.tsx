@@ -249,7 +249,7 @@ export default function SellerCustomers() {
       case 'High Value':
         return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
       case 'New':
-        return 'bg-[#EB4501]/10 text-app-accent-light border-[#EB4501]/20';
+        return 'bg-[#FF5B00]/10 text-app-accent-light border-[#FF5B00]/20';
       case 'Inactive':
         return 'bg-red-500/10 text-red-400 border-red-500/20';
       default:

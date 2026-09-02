@@ -3,11 +3,11 @@
 import React from 'react';
 
 export const glassKpiStyle: React.CSSProperties = {
-  background: 'linear-gradient(180deg,rgba(0,4,53,0.85),rgba(0,4,53,0.78))',
+  background: 'linear-gradient(180deg,rgba(24,21,76,0.85),rgba(24,21,76,0.78))',
   backdropFilter: 'blur(18px)',
   WebkitBackdropFilter: 'blur(18px)',
   border: '1px solid rgba(255,255,255,0.14)',
-  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08),0 8px 24px rgba(0,4,53,0.12)',
+  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.08),0 8px 24px rgba(24,21,76,0.12)',
   borderRadius: 18,
   padding: 20,
   cursor: 'pointer',

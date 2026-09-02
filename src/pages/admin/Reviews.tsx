@@ -264,7 +264,7 @@ export default function ReviewsPage() {
       {/* Header and Path */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
-          <span className="text-[9.5px] font-black uppercase tracking-widest text-[#F4631E] block">Unified Trust & Review Moderation</span>
+          <span className="text-[9.5px] font-black uppercase tracking-widest text-[#FF5B00] block">Unified Trust & Review Moderation</span>
           <h1 className="text-xl font-bold text-app-text-primary tracking-tight">{roleDisplayLabel}</h1>
           <p className="text-app-text-secondary text-[11.5px]">Manage client reviews, verify content authenticity, detect fake feedback, and lock spam agents.</p>
         </div>
@@ -277,7 +277,7 @@ export default function ReviewsPage() {
             className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-extrabold uppercase tracking-wider transition-all shadow-md cursor-pointer${
               isScanning 
                 ? 'bg-slate-800 text-slate-400 border border-slate-700' 
-                : 'bg-gradient-to-r from-[#F4631E] to-[#EB4501] text-white hover:opacity-90 active:scale-95 shadow-[#F4631E]/20'
+                : 'bg-gradient-to-r from-[#FF5B00] to-[#FF5B00] text-white hover:opacity-90 active:scale-95 shadow-[#FF5B00]/20'
             }`}
           >
             <RefreshCw className={`w-4 h-4${isScanning ? 'animate-spin' : ''}`} />
@@ -295,17 +295,17 @@ export default function ReviewsPage() {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="bg-[#1A1A2E]/60 border border-[#F4631E]/20 p-5 rounded-2xl space-y-3">
+            <div className="bg-[#1A1A2E]/60 border border-[#FF5B00]/20 p-5 rounded-2xl space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-[#F4631E] animate-pulse" />
+                  <Activity className="w-4 h-4 text-[#FF5B00] animate-pulse" />
                   <span className="text-xs font-bold uppercase tracking-widest text-app-text-primary">Review Corpus Spam Auditing Engine Active...</span>
                 </div>
-                <span className="text-xs font-mono font-bold text-[#F4631E]">{scanProgress}%</span>
+                <span className="text-xs font-mono font-bold text-[#FF5B00]">{scanProgress}%</span>
               </div>
               <div className="w-full bg-app-bg h-2.5 rounded-full overflow-hidden border border-app-border">
                 <motion.div 
-                  className="h-full bg-gradient-to-r from-[#F4631E] to-amber-500 rounded-full"
+                  className="h-full bg-gradient-to-r from-[#FF5B00] to-amber-500 rounded-full"
                   initial={{ width: '0%' }}
                   animate={{ width: `${scanProgress}%` }}
                   transition={{ ease: 'easeInOut' }}
@@ -322,7 +322,7 @@ export default function ReviewsPage() {
         <div className="bg-[#1A1A2E]/30 border border-app-border/70 p-4 rounded-xl">
           <div className="flex items-center justify-between cursor-pointer" onClick={() => setShowShortcutsHUD(!showShortcutsHUD)}>
             <div className="flex items-center gap-2">
-              <Keyboard className="w-4 h-4 text-[#F4631E]" />
+              <Keyboard className="w-4 h-4 text-[#FF5B00]" />
               <span className="text-xs font-bold text-app-text-primary uppercase tracking-wider">Keyboard Interactive Terminal Shortcuts</span>
             </div>
             <span className="text-[10px] text-app-text-secondary hover:text-white uppercase font-bold tracking-widest">{showShortcutsHUD ? '[Collapse HUD]' : '[Expand HUD]'}</span>
@@ -338,19 +338,19 @@ export default function ReviewsPage() {
               >
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-2 text-[11px] font-mono border-t border-app-border">
                   <div className="flex items-center gap-2">
-                    <kbd className="px-2 py-0.5 bg-app-card border border-app-border rounded text-[#F4631E]">Tab</kbd>
+                    <kbd className="px-2 py-0.5 bg-app-card border border-app-border rounded text-[#FF5B00]">Tab</kbd>
                     <span className="text-app-text-secondary">Cycle focused review</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <kbd className="px-2 py-0.5 bg-app-card border border-app-border rounded text-[#F4631E]">Q</kbd>
+                    <kbd className="px-2 py-0.5 bg-app-card border border-app-border rounded text-[#FF5B00]">Q</kbd>
                     <span className="text-app-text-secondary">Approve & Publish review</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <kbd className="px-2 py-0.5 bg-app-card border border-app-border rounded text-[#F4631E]">R</kbd>
+                    <kbd className="px-2 py-0.5 bg-app-card border border-app-border rounded text-[#FF5B00]">R</kbd>
                     <span className="text-app-text-secondary">Reject & Archive review</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <kbd className="px-2 py-0.5 bg-app-card border border-app-border rounded text-[#F4631E]">F</kbd>
+                    <kbd className="px-2 py-0.5 bg-app-card border border-app-border rounded text-[#FF5B00]">F</kbd>
                     <span className="text-app-text-secondary">Flag as Deceptive Spam</span>
                   </div>
                   <div className="flex items-center gap-2 col-span-full text-[10px] text-amber-500 italic">
@@ -394,7 +394,7 @@ export default function ReviewsPage() {
                   onClick={() => setActiveTab(tab)}
                   className={`px-3 py-1.5 text-[9.5px] uppercase font-bold tracking-widest cursor-pointer transition-all rounded-[3px] whitespace-nowrap${
                     activeTab === tab 
-                      ? 'bg-[#F4631E]/10 text-[#F4631E] border border-[#F4631E]/20' 
+                      ? 'bg-[#FF5B00]/10 text-[#FF5B00] border border-[#FF5B00]/20' 
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
@@ -406,13 +406,13 @@ export default function ReviewsPage() {
 
           {/* Search Query */}
           <div className="relative group w-full md:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-app-text-secondary group-focus-within:text-[#F4631E]" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-app-text-secondary group-focus-within:text-[#FF5B00]" />
             <input 
               type="text" 
               placeholder="Search reviewer, SKU, comment..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9 pr-4 py-2 bg-app-bg border border-app-border rounded-[4px] text-xs w-full focus:outline-none focus:border-[#F4631E]/40 text-app-text-primary placeholder-slate-500 font-medium"
+              className="pl-9 pr-4 py-2 bg-app-bg border border-app-border rounded-[4px] text-xs w-full focus:outline-none focus:border-[#FF5B00]/40 text-app-text-primary placeholder-slate-500 font-medium"
             />
           </div>
         </div>
@@ -433,7 +433,7 @@ export default function ReviewsPage() {
                   key={rate}
                   onClick={() => setFilterRating(rate)}
                   className={`px-2 py-0.5 text-[9px] font-mono font-bold rounded${
-                    filterRating === rate ? 'bg-[#F4631E]/20 text-[#F4631E]' : 'text-slate-400 hover:text-white'
+                    filterRating === rate ? 'bg-[#FF5B00]/20 text-[#FF5B00]' : 'text-slate-400 hover:text-white'
                   }`}
                 >
                   {rate} {typeof rate === 'number' && '★'}
@@ -451,7 +451,7 @@ export default function ReviewsPage() {
                   key={auth}
                   onClick={() => setFilterAuthenticity(auth)}
                   className={`px-2 py-0.5 text-[9px] font-bold rounded${
-                    filterAuthenticity === auth ? 'bg-[#F4631E]/20 text-[#F4631E]' : 'text-slate-400 hover:text-white'
+                    filterAuthenticity === auth ? 'bg-[#FF5B00]/20 text-[#FF5B00]' : 'text-slate-400 hover:text-white'
                   }`}
                 >
                   {auth}
@@ -604,7 +604,7 @@ export default function ReviewsPage() {
                       <div>
                         <h4 className="text-xs font-black text-app-text-primary">{rev.user}</h4>
                         <p className="text-[10px] text-app-text-secondary mt-0.5">
-                          SKU: <span className="text-app-text-secondary font-semibold">{rev.product}</span> · Merchant: <span className="font-bold text-[#F4631E]">{rev.store}</span>
+                          SKU: <span className="text-app-text-secondary font-semibold">{rev.product}</span> · Merchant: <span className="font-bold text-[#FF5B00]">{rev.store}</span>
                         </p>
                       </div>
                     </div>
@@ -634,7 +634,7 @@ export default function ReviewsPage() {
                       <textarea 
                         value={editCommentText}
                         onChange={(e) => setEditCommentText(e.target.value)}
-                        className="w-full bg-app-card border border-app-border rounded p-2 text-xs text-app-text-primary focus:outline-none focus:border-[#F4631E]"
+                        className="w-full bg-app-card border border-app-border rounded p-2 text-xs text-app-text-primary focus:outline-none focus:border-[#FF5B00]"
                         rows={2}
                       />
                       <div className="flex justify-end gap-1.5">
@@ -704,12 +704,12 @@ export default function ReviewsPage() {
                   {/* Merchant Response thread block */}
                   <div className="space-y-3 pt-3 border-t border-app-border" onClick={(e) => e.stopPropagation()}>
                     {rev.response ? (
-                      <div className="flex gap-2 items-start text-xs border-l-2 border-[#F4631E] pl-3.5 py-1">
-                        <CornerDownRight className="w-3.5 h-3.5 text-[#F4631E] shrink-0 mt-0.5" />
+                      <div className="flex gap-2 items-start text-xs border-l-2 border-[#FF5B00] pl-3.5 py-1">
+                        <CornerDownRight className="w-3.5 h-3.5 text-[#FF5B00] shrink-0 mt-0.5" />
                         <div className="flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-extrabold text-app-text-primary text-[11px]">{rev.response.author}</span>
-                            <span className="bg-[#F4631E]/15 text-[#F4631E] px-1.5 py-0.2 text-[7px] font-black rounded uppercase tracking-wider">Official Response</span>
+                            <span className="bg-[#FF5B00]/15 text-[#FF5B00] px-1.5 py-0.2 text-[7px] font-black rounded uppercase tracking-wider">Official Response</span>
                             <span className="text-[9px] text-slate-500 font-mono italic">{rev.response.timestamp}</span>
                           </div>
                           <p className="text-app-text-secondary italic mt-1 font-medium bg-app-card/20 p-2.5 rounded border border-app-border text-[11.5px]">{rev.response.comment}</p>
@@ -718,7 +718,7 @@ export default function ReviewsPage() {
                     ) : (
                       (isSeller || isAdmin) && (
                         <div className="space-y-2">
-                          <div className="relative flex items-center bg-app-bg p-1.5 rounded-lg border border-app-border focus-within:border-[#F4631E]/30">
+                          <div className="relative flex items-center bg-app-bg p-1.5 rounded-lg border border-app-border focus-within:border-[#FF5B00]/30">
                             <input 
                               type="text"
                               placeholder="Submit merchant reply official statement..."
@@ -728,7 +728,7 @@ export default function ReviewsPage() {
                             />
                             <button 
                               onClick={() => handleSellerReply(rev.id)}
-                              className="p-1.5 text-[#F4631E] hover:text-[#F4631E]-light cursor-pointer"
+                              className="p-1.5 text-[#FF5B00] hover:text-[#FF5B00]-light cursor-pointer"
                               title="Submit Response"
                             >
                               <Send className="w-3.5 h-3.5" />
@@ -804,7 +804,7 @@ export default function ReviewsPage() {
           {/* Active focus detail box */}
           <div className="bg-app-card p-5 rounded-xl border border-app-border space-y-4">
             <h3 className="text-xs font-black text-app-text-primary uppercase tracking-wider flex items-center gap-2">
-              <Sliders className="w-4 h-4 text-[#F4631E]" />
+              <Sliders className="w-4 h-4 text-[#FF5B00]" />
               Interactive Audit Inspector
             </h3>
 
@@ -818,7 +818,7 @@ export default function ReviewsPage() {
                     <div className="text-[10px] text-app-text-secondary font-mono">ACTIVE TARGET PROFILE</div>
                     <div className="text-xs font-extrabold text-app-text-primary">{r.user}</div>
                     <div className="text-[10px] text-app-text-secondary leading-relaxed font-mono mt-1">
-                      Posted via Web Ingress Node · Verified Client Purchase ID: <span className="text-[#F4631E]">ORD-9283-REK</span>
+                      Posted via Web Ingress Node · Verified Client Purchase ID: <span className="text-[#FF5B00]">ORD-9283-REK</span>
                     </div>
                   </div>
 
@@ -828,10 +828,10 @@ export default function ReviewsPage() {
                       placeholder="Write custom administrative logs or dispute notes regarding this client action..."
                       value={reviewNotes[r.id] || ''}
                       onChange={(e) => handleSaveNote(r.id, e.target.value)}
-                      className="w-full bg-app-bg border border-app-border rounded-lg p-3 text-xs text-app-text-primary placeholder-slate-600 focus:outline-none focus:border-[#F4631E] min-h-[90px] font-medium"
+                      className="w-full bg-app-bg border border-app-border rounded-lg p-3 text-xs text-app-text-primary placeholder-slate-600 focus:outline-none focus:border-[#FF5B00] min-h-[90px] font-medium"
                     />
                     <div className="flex justify-end">
-                      <span className="text-[9px] text-[#F4631E] font-mono font-bold uppercase tracking-wider">Auto-Saved to Local Node Logs</span>
+                      <span className="text-[9px] text-[#FF5B00] font-mono font-bold uppercase tracking-wider">Auto-Saved to Local Node Logs</span>
                     </div>
                   </div>
 
@@ -860,20 +860,20 @@ export default function ReviewsPage() {
           {/* Quick Stats Summary */}
           <div className="bg-app-card p-5 rounded-xl border border-app-border space-y-4">
             <h3 className="text-xs font-black text-app-text-primary uppercase tracking-wider flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-[#F4631E]" />
+              <ShieldAlert className="w-4 h-4 text-[#FF5B00]" />
               Policy Summary
             </h3>
             <ul className="space-y-2.5 text-xs text-app-text-secondary leading-relaxed">
               <li className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#F4631E] shrink-0 mt-1.5" />
+                <div className="w-1.5 h-1.5 rounded-full bg-[#FF5B00] shrink-0 mt-1.5" />
                 <span>Any review flagged with score under <strong className="text-app-text-primary">50</strong> is automatically quarantined and hidden.</span>
               </li>
               <li className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#F4631E] shrink-0 mt-1.5" />
+                <div className="w-1.5 h-1.5 rounded-full bg-[#FF5B00] shrink-0 mt-1.5" />
                 <span>Merchant replies are frozen once submitted to prevent multi-thread client disputes.</span>
               </li>
               <li className="flex items-start gap-2">
-                <div className="w-1.5 h-1.5 rounded-full bg-[#F4631E] shrink-0 mt-1.5" />
+                <div className="w-1.5 h-1.5 rounded-full bg-[#FF5B00] shrink-0 mt-1.5" />
                 <span>Removing a valid review results in automated <strong className="text-amber-500">-10</strong> reputation ledger deduction.</span>
               </li>
             </ul>

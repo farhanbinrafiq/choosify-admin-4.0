@@ -23,7 +23,7 @@ export const BrandReviewsTab: React.FC<BrandReviewsTabProps> = ({
         {/* Rating index card */}
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col justify-between text-left col-span-1">
           <div className="space-y-1.5">
-            <span className="text-[9px] font-black tracking-widest text-[#F4631E] uppercase">Total Rating Score</span>
+            <span className="text-[9px] font-black tracking-widest text-[#FF5B00] uppercase">Total Rating Score</span>
             <div className="flex items-baseline gap-2">
               <span className="text-4xl font-black text-slate-950 font-mono">4.92</span>
               <span className="text-slate-400 font-bold">/ 5.0</span>

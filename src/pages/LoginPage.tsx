@@ -162,7 +162,7 @@ export default function LoginPage() {
                 type="button"
                 disabled={resetRequesting}
                 onClick={() => void handleForgotPassword()}
-                className="text-[11px] font-bold text-[#FF5B00] hover:text-[#E64A00] transition-colors disabled:opacity-60"
+                className="text-[11px] font-bold text-[#FF5B00] hover:text-[#FF5B00] transition-colors disabled:opacity-60"
               >
                 {resetRequesting ? 'Requesting…' : 'Forgot your password?'}
               </button>
@@ -198,7 +198,7 @@ export default function LoginPage() {
             New to Choosify?{' '}
             <Link
               to={`/signup${email.trim() ? `?email=${encodeURIComponent(email.trim())}` : ''}`}
-              className="text-[#FF5B00] font-bold hover:text-[#E64A00]"
+              className="text-[#FF5B00] font-bold hover:text-[#FF5B00]"
             >
               Apply as a Partner
             </Link>

@@ -67,7 +67,7 @@ export default function ModerationV2() {
   const getSeverityBadge = (sev: SeverityType) => {
     switch (sev) {
       case 'Critical': return 'bg-red-650/15 text-red-400 border-red-500/25 font-bold';
-      case 'High': return 'bg-[#EB4501]/10 text-app-accent-light border-[#EB4501]/20 font-bold';
+      case 'High': return 'bg-[#FF5B00]/10 text-app-accent-light border-[#FF5B00]/20 font-bold';
       case 'Medium': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/15';
       default: return 'bg-blue-500/10 text-blue-400 border-blue-500/15';
     }
@@ -121,7 +121,7 @@ export default function ModerationV2() {
         <div className="flex flex-wrap items-center gap-3">
           <Link
             to="/admin/reviews"
-            className="flex items-center gap-1.5 px-4 py-2 bg-[#F4631E]/15 border border-[#F4631E]/30 hover:bg-[#F4631E]/25 text-[#F4631E] rounded-[4px] text-[10.5px] font-black uppercase tracking-widest transition-all shadow-md cursor-pointer"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#FF5B00]/15 border border-[#FF5B00]/30 hover:bg-[#FF5B00]/25 text-[#FF5B00] rounded-[4px] text-[10.5px] font-black uppercase tracking-widest transition-all shadow-md cursor-pointer"
           >
             Review Moderation Console
           </Link>
@@ -403,7 +403,7 @@ export default function ModerationV2() {
 
                   <div className="p-2 bg-app-card rounded-[2px] border border-app-border">
                     <span className="text-[8.5px] text-slate-500 block uppercase">Auto Action consequence:</span>
-                    <span className="text-[#EB4501] text-[11px] font-bold">{rule.auto_action}</span>
+                    <span className="text-[#FF5B00] text-[11px] font-bold">{rule.auto_action}</span>
                   </div>
                 </div>
 
@@ -437,7 +437,7 @@ export default function ModerationV2() {
                     <td className="py-3 text-[#8E9BAE] font-bold">{act.id}</td>
                     <td className="text-app-text-primary capitalize">{act.entity_type} ({act.entity_id})</td>
                     <td>
-                      <span className="px-1.5 py-0.5 rounded-[2.5px] bg-[#EB4501]/10 border border-[#EB4501]/20 text-[#EB4501] font-bold text-[9px] uppercase tracking-wider">
+                      <span className="px-1.5 py-0.5 rounded-[2.5px] bg-[#FF5B00]/10 border border-[#FF5B00]/20 text-[#FF5B00] font-bold text-[9px] uppercase tracking-wider">
                         {act.action_taken}
                       </span>
                     </td>
@@ -516,7 +516,7 @@ export default function ModerationV2() {
               />
               <button
                 type="submit"
-                className="bg-[#EB4501] hover:bg-app-accent-light text-app-text-primary font-bold px-4 rounded-[3px] cursor-pointer"
+                className="bg-[#FF5B00] hover:bg-app-accent-light text-app-text-primary font-bold px-4 rounded-[3px] cursor-pointer"
               >
                 File Alert
               </button>

@@ -34,7 +34,7 @@ interface BrandStudioItem {
 }
 
 const BRAND_COLORS = [
-  "bg-[#0A2540] text-[#00D4B2]",
+  "bg-[#18154C] text-[#00D4B2]",
   "bg-orange-950 text-orange-400",
   "bg-blue-950 text-blue-400",
   "bg-purple-950 text-purple-400",
@@ -438,7 +438,7 @@ export default function BrandsStudioList() {
                       }}
                       disabled={!newBrandName.trim()}
                       className="px-3 py-1.5 text-white text-[10px] font-black uppercase rounded-lg disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                      style={{ background: 'linear-gradient(90deg,#B4411C,#D15E32)' }}
+                      style={{ background: 'linear-gradient(90deg,#EF3C23,#FF5B00)' }}
                     >Create</button>
                     <button
                       onClick={() => { setShowCreateForm(false); setNewBrandName(''); }}
@@ -469,7 +469,7 @@ export default function BrandsStudioList() {
                 ? "text-white shadow-lg"
                 : "text-app-text-secondary hover:text-app-text-primary hover:bg-[#F1F3F5]"
             }`}
-            style={activeSubTab === "storefronts" ? { background: 'linear-gradient(90deg,#B4411C,#D15E32)' } : undefined}
+            style={activeSubTab === "storefronts" ? { background: 'linear-gradient(90deg,#EF3C23,#FF5B00)' } : undefined}
           >
             <Edit3 className="w-4 h-4" /> Visual Builder
           </button>
@@ -798,7 +798,7 @@ export default function BrandsStudioList() {
             {/* Live active context display */}
             <div className="text-right space-y-1 bg-white/5 px-4.5 py-3 rounded-2xl border border-app-border self-stretch md:self-auto flex flex-col justify-center">
               <div className="text-[9px] font-black uppercase tracking-widest text-app-text-secondary">Selected Active Context</div>
-              <div className="text-sm font-bold text-[#F4631E] flex items-center gap-1.5 justify-end">
+              <div className="text-sm font-bold text-[#FF5B00] flex items-center gap-1.5 justify-end">
                 <VerifiedIcon className="w-4 h-4 text-emerald-400" />
                 {allBrands.find(b => b.id === activeBrandId)?.name || 'All Brands'}
               </div>
@@ -902,7 +902,7 @@ export default function BrandsStudioList() {
                   </div>
 
                   <div className="p-3 bg-white/[0.01] border border-app-border rounded-xl flex items-start gap-3">
-                    <span className="w-2 h-2 rounded-full bg-[#F4631E] mt-1.5 shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-[#FF5B00] mt-1.5 shrink-0" />
                     <div className="space-y-1 flex-1">
                       <div className="flex justify-between flex-wrap gap-2">
                         <span className="font-bold text-app-text-primary uppercase text-[10px]">Dual fulfillment dispatch checks</span>
@@ -983,7 +983,7 @@ export default function BrandsStudioList() {
 
                 <button
                   type="submit"
-                  className="w-full py-3.5 bg-[#F4631E] hover:bg-orange-500 text-white font-extrabold uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+                  className="w-full py-3.5 bg-[#FF5B00] hover:bg-orange-500 text-white font-extrabold uppercase text-[10px] tracking-widest rounded-xl transition-all shadow-md active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   <Sparkles className="w-3.5 h-3.5" /> Update Merchant Records
                 </button>
@@ -1081,7 +1081,7 @@ export default function BrandsStudioList() {
 
                     <div className="bg-[#05050C] border border-[#202030] p-4 rounded-2xl space-y-1">
                       <div className="text-[9px] uppercase font-mono font-black text-slate-500">Registered Business Name</div>
-                      <div className="text-[#F4631E] font-extrabold font-sans">
+                      <div className="text-[#FF5B00] font-extrabold font-sans">
                         {matchedRequest?.brand_name || allBrands.find(b => b.id === activeBrandId)?.name || 'Apex Brand Group'}
                       </div>
                     </div>

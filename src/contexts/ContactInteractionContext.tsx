@@ -637,7 +637,7 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
             >
               
               {/* CHAT/MESSENGER HEADER */}
-              <div id="MessageHeader" className="bg-[#0B1528] text-white px-5 py-4.5 flex items-center justify-between border-b border-slate-800 shrink-0 MessageHeader">
+              <div id="MessageHeader" className="bg-[#18154C] text-white px-5 py-4.5 flex items-center justify-between border-b border-slate-800 shrink-0 MessageHeader">
                 <div className="flex items-center gap-3">
                   
                   {/* Back to Inbox arrow (only visible when a thread is selected) */}
@@ -665,12 +665,12 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
                             className="w-10 h-10 rounded-full border border-slate-700 object-cover bg-slate-900"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-full bg-[#F97316] text-white font-bold flex items-center justify-center text-xs border border-slate-700 lowercase">
+                          <div className="w-10 h-10 rounded-full bg-[#FF5B00] text-white font-bold flex items-center justify-center text-xs border border-slate-700 lowercase">
                             {chatTarget.name.substring(0, 2)}
                           </div>
                         )}
                         {chatTarget.online !== false && (
-                          <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#0B1528] rounded-full" />
+                          <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-[#18154C] rounded-full" />
                         )}
                       </div>
                       <div className="min-w-0">
@@ -775,7 +775,7 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
                     </p>
                     <button
                       onClick={closeMessenger}
-                      className="mt-4 px-4 py-2 bg-[#0B1528] text-white text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+                      className="mt-4 px-4 py-2 bg-[#18154C] text-white text-[10px] font-bold uppercase tracking-widest rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
                     >
                       Dismiss & Close
                     </button>
@@ -823,7 +823,7 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
                               }}
                               className={`p-3 rounded-2xl cursor-pointer transition-all border flex gap-3 relative justify-between items-center ${
                                 thread.unread 
-                                  ? 'bg-[#F97316]/5 border-orange-500/10 hover:bg-[#F97316]/10' 
+                                  ? 'bg-[#FF5B00]/5 border-orange-500/10 hover:bg-[#FF5B00]/10' 
                                   : 'bg-white hover:bg-slate-100 border-slate-100/80 shadow-xs'
                               }`}
                             >
@@ -841,7 +841,7 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
                                     </div>
                                   )}
                                   {thread.unread && (
-                                    <span id="NotificationBadge" className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-[#F97316] rounded-full border-2 border-white animate-pulse NotificationBadge" />
+                                    <span id="NotificationBadge" className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-[#FF5B00] rounded-full border-2 border-white animate-pulse NotificationBadge" />
                                   )}
                                 </div>
                                 <div className="min-w-0 flex-1">
@@ -927,7 +927,7 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
                                 <div
                                   className={`rounded-2xl px-4 py-3 text-xs leading-relaxed ${
                                     isMe
-                                      ? 'bg-[#F97316] text-white rounded-br-none shadow-sm shadow-orange-500/10'
+                                      ? 'bg-[#FF5B00] text-white rounded-br-none shadow-sm shadow-orange-500/10'
                                       : 'bg-white text-slate-800 border border-slate-200/80 rounded-bl-none shadow-xs'
                                   }`}
                                 >
@@ -958,7 +958,7 @@ export const ContactInteractionProvider: React.FC<{ children: React.ReactNode }>
                       <button
                         type="submit"
                         disabled={!inputText.trim()}
-                        className="p-2.5 bg-[#F97316] text-white rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
+                        className="p-2.5 bg-[#FF5B00] text-white rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0"
                         title="Send message"
                       >
                         <Send className="w-4 h-4" />

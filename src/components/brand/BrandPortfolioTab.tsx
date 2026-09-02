@@ -95,7 +95,7 @@ export const BrandPortfolioTab: React.FC<BrandPortfolioTabProps> = ({
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="bg-slate-50/50 border border-slate-200 rounded-2xl p-5 flex gap-4 hover:border-slate-350 transition-all text-left">
-            <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center font-black text-lg text-[#F4631E] uppercase shadow-sm">
+            <div className="w-12 h-12 rounded-xl bg-orange-100 flex items-center justify-center font-black text-lg text-[#FF5B00] uppercase shadow-sm">
               {brandProfile.initials || brandProfile.name.slice(0, 2).toUpperCase()}
             </div>
             <div className="space-y-1">

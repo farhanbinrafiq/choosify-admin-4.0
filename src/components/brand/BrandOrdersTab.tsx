@@ -85,7 +85,7 @@ export const BrandOrdersTab: React.FC<BrandOrdersTabProps> = ({
                     <td className="px-6 py-4">
                       <Link
                         to={`/admin/customers?search=${encodeURIComponent(o.customer)}`}
-                        className="font-bold text-[#F4631E] hover:underline"
+                        className="font-bold text-[#FF5B00] hover:underline"
                         title="View Customer Profile"
                       >
                         {o.customer}
@@ -109,7 +109,7 @@ export const BrandOrdersTab: React.FC<BrandOrdersTabProps> = ({
                     <td className="px-6 py-4 text-right">
                       <Link
                         to={`/admin/invoice/${o.id}`}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 hover:bg-[#F4631E]/10 hover:border-[#F4631E]/20 text-[#F4631E] rounded-lg transition-all text-[10px]"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-200 hover:bg-[#FF5B00]/10 hover:border-[#FF5B00]/20 text-[#FF5B00] rounded-lg transition-all text-[10px]"
                       >
                         <FileText className="w-3.5 h-3.5" /> PDF
                       </Link>

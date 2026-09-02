@@ -291,7 +291,7 @@ export default function CommunitySubmissions() {
       {/* Header and Path */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <span className="text-[9.5px] font-black uppercase tracking-widest text-[#F97316] block mb-1">Consumer Moderation Logs</span>
+          <span className="text-[9.5px] font-black uppercase tracking-widest text-[#FF5B00] block mb-1">Consumer Moderation Logs</span>
           <h1 className="text-xl font-bold text-[#1A1A2E] tracking-tight">Community Product Submissions</h1>
           <p className="text-gray-500 text-[11.5px]">Approve, deny or flag products flagged for Customer Favorites lists.</p>
         </div>
@@ -362,7 +362,7 @@ export default function CommunitySubmissions() {
         </div>
 
         {/* Searching text */}
-        <div className="relative w-full lg:w-72 bg-[#F8F9FA] border border-gray-200 rounded-lg flex items-center px-3 py-1.5 gap-2 focus-within:border-[#F97316] transition-colors">
+        <div className="relative w-full lg:w-72 bg-[#F8F9FA] border border-gray-200 rounded-lg flex items-center px-3 py-1.5 gap-2 focus-within:border-[#FF5B00] transition-colors">
           <Search className="w-3.5 h-3.5 text-app-text-secondary" />
           <input 
             type="text"
@@ -380,9 +380,9 @@ export default function CommunitySubmissions() {
         <div className="flex flex-col gap-2">
           <div className="bg-app-card p-4 rounded-xl shadow-lg flex items-center justify-between text-app-text-primary animate-fade-in">
             <div className="flex items-center gap-2.5 text-xs">
-              <CheckSquare className="w-4 h-4 text-[#F97316]" />
+              <CheckSquare className="w-4 h-4 text-[#FF5B00]" />
               <span className="font-bold">
-                Bulk Actions: <strong className="text-[#F97316] font-extrabold">{selectedIds.length}</strong> items selected
+                Bulk Actions: <strong className="text-[#FF5B00] font-extrabold">{selectedIds.length}</strong> items selected
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -472,7 +472,7 @@ export default function CommunitySubmissions() {
                 isFlagged 
                   ? 'border-red-500 ring-1 ring-red-100' 
                   : isSelected 
-                    ? 'border-[#F97316] bg-amber-50/5' 
+                    ? 'border-[#FF5B00] bg-amber-50/5' 
                     : 'border-gray-150 hover:border-gray-300'
               }`}
             >
@@ -489,7 +489,7 @@ export default function CommunitySubmissions() {
                     className="mt-2 text-app-text-secondary hover:text-gray-600 bg-transparent border-none cursor-pointer self-start"
                   >
                     {isSelected ? (
-                      <CheckSquare className="w-4 h-4 text-[#F97316]" />
+                      <CheckSquare className="w-4 h-4 text-[#FF5B00]" />
                     ) : (
                       <Square className="w-4 h-4 text-app-text-secondary" />
                     )}
@@ -529,7 +529,7 @@ export default function CommunitySubmissions() {
                     <div className="flex items-center gap-2">
                        <span className="text-[12px] font-black text-[#1A1A2E]">৳ {sub.price.toLocaleString()}</span>
                        <span className="text-[10px] text-app-text-secondary line-through">৳ {sub.originalPrice.toLocaleString()}</span>
-                       <span className="text-[9px] bg-amber-50 text-[#F97316] font-black px-1.5 py-0.5 rounded border border-amber-100 uppercase tracking-tighter">
+                       <span className="text-[9px] bg-amber-50 text-[#FF5B00] font-black px-1.5 py-0.5 rounded border border-amber-100 uppercase tracking-tighter">
                          {sub.discount}% OFF
                        </span>
                     </div>
@@ -542,7 +542,7 @@ export default function CommunitySubmissions() {
                     {/* Social proof optional citation */}
                     {sub.socialProof && (
                       <div className="text-[10px] text-app-text-secondary italic flex items-center gap-1">
-                        <Sparkles className="w-3 h-3 text-[#F97316] shrink-0" />
+                        <Sparkles className="w-3 h-3 text-[#FF5B00] shrink-0" />
                         <span>* "{sub.socialProof}"</span>
                       </div>
                     )}
@@ -674,7 +674,7 @@ export default function CommunitySubmissions() {
                       <div className="grid grid-cols-2 gap-3 text-[11px]">
                          <div className="bg-white p-2 rounded-lg border border-gray-150">
                             <span className="text-[8.5px] font-bold text-app-text-secondary uppercase tracking-widest block">Promo Coupon Code</span>
-                            <span className="font-mono font-bold text-[#F97316]">
+                            <span className="font-mono font-bold text-[#FF5B00]">
                               {sub.promoCode || 'NO PROMO APPLIES'}
                             </span>
                          </div>
@@ -698,7 +698,7 @@ export default function CommunitySubmissions() {
                           value={adminNotesStates[sub.id] !== undefined ? adminNotesStates[sub.id] : (sub.adminNotes || '')}
                           onChange={(e) => setAdminNotesStates(prev => ({ ...prev, [sub.id]: e.target.value }))}
                           rows={3}
-                          className="w-full bg-white border border-gray-200 rounded-lg p-3 text-xs outline-none focus:border-[#F97316] text-[#1A1A2E] font-medium resize-none"
+                          className="w-full bg-white border border-gray-200 rounded-lg p-3 text-xs outline-none focus:border-[#FF5B00] text-[#1A1A2E] font-medium resize-none"
                         />
                       </div>
 

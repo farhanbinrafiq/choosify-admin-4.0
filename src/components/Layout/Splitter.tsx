@@ -124,7 +124,7 @@ export const Splitter: React.FC<SplitterProps> = ({
   // Styling - Creates a tactile grab area with a centered elegant visual divider line
   const containerClasses = `
     ${isVertical ? 'cursor-col-resize w-[10px] h-full hover:w-[10px]' : 'cursor-row-resize h-[10px] w-full hover:h-[10px]'}
-    ${isDragging ? 'bg-[#F97316]/5' : 'bg-transparent'}
+    ${isDragging ? 'bg-[#FF5B00]/5' : 'bg-transparent'}
     relative
     select-none
     z-50
@@ -140,7 +140,7 @@ export const Splitter: React.FC<SplitterProps> = ({
 
   const lineClasses = `
     ${isVertical ? 'w-[1.5px] h-full' : 'h-[1.5px] w-full'}
-    ${isDragging ? 'bg-[#F97316]' : 'bg-white/10 group-hover:bg-[#F97316]/60'}
+    ${isDragging ? 'bg-[#FF5B00]' : 'bg-white/10 group-hover:bg-[#FF5B00]/60'}
     transition-colors
     duration-150
   `;

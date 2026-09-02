@@ -80,7 +80,7 @@ export const ResizableWorkspace: React.FC<ResizableWorkspaceProps> = ({
               <div className="flex items-center gap-2">
                 <Sliders className="w-4.5 h-4.5 text-orange-500" />
                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-tight">{title}</h3>
-                <span className="text-[10px] bg-orange-100 text-[#F97316] font-mono px-2 py-0.5 rounded font-bold">
+                <span className="text-[10px] bg-orange-100 text-[#FF5B00] font-mono px-2 py-0.5 rounded font-bold">
                   {width}px
                 </span>
               </div>

@@ -253,7 +253,7 @@ export function BrandProfilePresentation({
                   onClick={() => scrollTo(item.id)}
                   className={`shrink-0 px-4 sm:px-5 py-4 text-[12.5px] font-bold cursor-pointer whitespace-nowrap border-0 border-b-2 bg-transparent transition-colors ${
                     active
-                      ? 'text-[#EB4501] border-[#EB4501]'
+                      ? 'text-[#FF5B00] border-[#FF5B00]'
                       : 'text-[#6B7280] border-transparent hover:text-[#1A1A2E]'
                   }`}
                 >
@@ -446,7 +446,7 @@ export function BrandProfilePresentation({
               <div className="bg-white rounded-[10px] p-[18px] border border-[#E8EDF2] text-left">
                 <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-2">{model.address || '—'}</p>
                 {model.website ? (
-                  <a href={model.website} target="_blank" rel="noopener noreferrer" className="block text-[11px] font-bold text-[#EB4501] hover:underline">
+                  <a href={model.website} target="_blank" rel="noopener noreferrer" className="block text-[11px] font-bold text-[#FF5B00] hover:underline">
                     {model.website}
                   </a>
                 ) : null}
@@ -469,7 +469,7 @@ export function BrandProfilePresentation({
               <div className="bg-white rounded-[10px] p-[18px] border border-[#E8EDF2] text-left">
                 <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-1">{model.priceRange || '—'}</p>
                 <p className="text-[11.5px] text-[#6B7280] font-semibold m-0 mb-1">{model.ageRange || '—'}</p>
-                <p className="text-[11.5px] text-[#EB4501] font-extrabold m-0 uppercase">{model.audienceType || '—'}</p>
+                <p className="text-[11.5px] text-[#FF5B00] font-extrabold m-0 uppercase">{model.audienceType || '—'}</p>
               </div>
             </SectionShell>
           </div>
@@ -722,7 +722,7 @@ export function BrandProfilePresentation({
                           href={model.storyVideoUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[11.5px] font-bold text-[#EB4501] hover:underline break-all"
+                          className="text-[11.5px] font-bold text-[#FF5B00] hover:underline break-all"
                         >
                           {model.storyVideoUrl}
                         </a>
@@ -841,7 +841,7 @@ export function BrandProfilePresentation({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {trustStats.map((ts) => (
                 <div key={ts.label}>
-                  <div className="text-[20px] font-extrabold text-[#EB4501]">{ts.value}</div>
+                  <div className="text-[20px] font-extrabold text-[#FF5B00]">{ts.value}</div>
                   <div className="text-[10.5px] text-white/50">{ts.label}</div>
                 </div>
               ))}

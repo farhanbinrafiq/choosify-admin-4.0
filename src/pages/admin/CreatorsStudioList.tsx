@@ -40,7 +40,7 @@ export default function CreatorsStudioList() {
             localStorage.setItem(CREATOR_STUDIO_LIST_KEY, JSON.stringify(next));
             refresh();
           }}
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FF5B00] hover:bg-[#E64A00] text-white text-xs font-extrabold uppercase tracking-wider rounded-xl shadow-sm"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FF5B00] hover:bg-[#FF5B00] text-white text-xs font-extrabold uppercase tracking-wider rounded-xl shadow-sm"
         >
           <Plus className="w-4 h-4" />
           New Creator Profile

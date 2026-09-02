@@ -1213,7 +1213,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
         </div>
         <div className="flex gap-2">
           <div className="bg-app-card border border-app-border rounded-lg px-4 py-2 flex items-center gap-3">
-            <div className="w-1.5 h-1.5 rounded-full bg-[#EB4501] animate-pulse" />
+            <div className="w-1.5 h-1.5 rounded-full bg-[#FF5B00] animate-pulse" />
             <span className="text-[10px] font-bold text-white uppercase tracking-widest">Global Audit Secure Room</span>
           </div>
         </div>
@@ -2307,7 +2307,7 @@ CREATE INDEX idx_fraud_entity ON fraud_detection_flags(entity_id);
                                 <td colSpan={7} className="p-4 px-6 border-b border-app-border/40">
                                   <div className="space-y-3 font-sans">
                                     <div>
-                                      <span className="text-[10px] font-black uppercase tracking-wider text-[#F4631E] block">Full Description Trail</span>
+                                      <span className="text-[10px] font-black uppercase tracking-wider text-[#FF5B00] block">Full Description Trail</span>
                                       <p className="text-[12px] text-slate-200 mt-0.5 leading-relaxed font-semibold">{log.description}</p>
                                     </div>
                                     <div className="grid grid-cols-2 gap-4 border-t border-white/[0.03] pt-2.5">

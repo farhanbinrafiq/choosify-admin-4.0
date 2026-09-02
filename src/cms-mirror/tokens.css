@@ -4,8 +4,8 @@
   --cms-page-bg: #f0f2f5;
   --cms-surface: #ffffff;
   --cms-border: #e8edf2;
-  --cms-navy: #000435;
-  --cms-accent: #ef3c23;
+  --cms-navy: #18154C;                          /* canonical Choosify Navy */
+  --cms-accent: var(--choosify-red, #ef3c23);   /* canonical Choosify Red/Coral */
   --cms-accent-hover: #d4331b;
   --cms-text: #111827;
   --cms-text-secondary: #374151;
@@ -14,37 +14,29 @@
   --cms-danger-bg: #fef2f2;
   --cms-sidebar-width: 240px;
 
-  /* Storefront --gradient-dark-surface / .footer-brand-gradient */
-  --cms-gradient-dark-surface:
-    radial-gradient(1200px 500px at 15% 0%, hsla(6, 86%, 54%, 0.18), transparent 65%),
-    radial-gradient(900px 500px at 90% 20%, hsla(6, 86%, 45%, 0.14), transparent 65%),
-    rgba(10, 10, 31, 0.96);
+  /* Canonical Choosify dark-surface (footer / dark chrome parity) */
+  --cms-gradient-dark-surface: var(--choosify-gradient-dark);
 
   /*
-   * Profile cover strip — warm→navy with lifted midtones (no near-black end)
-   * so an ~80px banner does not read as solid black.
+   * Profile cover strip / Command Center connected parent — warm red→navy
+   * with lifted midtones (no near-black terminus) so an ~80px banner does
+   * not read as solid black.
    */
-  --cms-gradient-profile-cover:
-    radial-gradient(95% 170% at 8% 50%, hsla(6, 86%, 54%, 0.62), transparent 72%),
-    radial-gradient(80% 150% at 92% 50%, hsla(230, 58%, 48%, 0.42), transparent 70%),
-    linear-gradient(100deg, #8B3A3E 0%, #5A2A2E 28%, #3A1E22 52%, #2a2858 82%, #1e2260 100%);
+  --cms-gradient-profile-cover: var(--choosify-gradient-command);
 
-  /* Compact cards / KPI tiles — same gradient as profile cover */
+  /* Compact cards / KPI tiles — same connected gradient as the profile cover */
   --cms-gradient-dark-surface-card: var(--cms-gradient-profile-cover);
 
-  /* Storefront .choosify-chrome-header */
-  --cms-gradient-chrome-header:
-    radial-gradient(900px 200px at 15% 0%, hsla(6, 86%, 54%, 0.16), transparent 70%),
-    radial-gradient(700px 200px at 90% 100%, hsla(6, 86%, 45%, 0.12), transparent 70%),
-    rgba(10, 10, 31, 0.94);
+  /* Storefront .choosify-chrome-header parity */
+  --cms-gradient-chrome-header: var(--choosify-header-gradient);
 
   /* Storefront hero / dark-brand linear */
-  --cms-gradient-hero: linear-gradient(180deg, #3a1e22 0%, #000435 100%);
+  --cms-gradient-hero: linear-gradient(180deg, color-mix(in srgb, var(--choosify-red) 22%, var(--choosify-navy)) 0%, var(--choosify-navy) 100%);
 
-  /* Brand primary button — logo orange */
-  --cms-gradient-orange-button: linear-gradient(90deg, #c8321a 0%, #ef3c23 100%);
+  /* Brand primary button — canonical warm gradient (red → orange) */
+  --cms-gradient-orange-button: var(--choosify-gradient-warm);
 
-  --cms-sidebar-bg: var(--cms-gradient-dark-surface);
+  --cms-sidebar-bg: var(--choosify-gradient-sidebar);
 
   /* ── React workspace shell (AdminWorkspaceLayout) ──
      Presentation tokens so adminWorkspace.css stops hardcoding literals.
@@ -355,7 +347,7 @@
   border-radius: 999px;
   padding: 2px;
   background: var(--cms-gradient-chrome-header);
-  box-shadow: 0 8px 24px rgba(0, 4, 53, 0.18);
+  box-shadow: 0 8px 24px rgba(24, 21, 76, 0.18);
   cursor: pointer;
   outline: none;
 }
@@ -382,7 +374,7 @@
   letter-spacing: 0.04em;
   text-transform: uppercase;
   cursor: pointer;
-  box-shadow: 0 8px 24px rgba(0, 4, 53, 0.18);
+  box-shadow: 0 8px 24px rgba(24, 21, 76, 0.18);
 }
 
 .cms-mirror-logout:hover {

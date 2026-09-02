@@ -388,7 +388,7 @@ export default function SellerSignupPage() {
                   href={STOREFRONT_TERMS_URL}
                   target="_blank"
                   rel="noreferrer"
-                  className="text-[#FF5B00] font-bold hover:text-[#E64A00]"
+                  className="text-[#FF5B00] font-bold hover:text-[#FF5B00]"
                 >
                   Terms of Service
                 </a>{' '}
@@ -419,7 +419,7 @@ export default function SellerSignupPage() {
 
           <p className="text-center text-[11px] font-semibold text-[#6B7280] mt-5">
             Already have an account?{' '}
-            <Link to={loginHref} className="text-[#FF5B00] font-bold hover:text-[#E64A00]">
+            <Link to={loginHref} className="text-[#FF5B00] font-bold hover:text-[#FF5B00]">
               Sign in
             </Link>
           </p>

@@ -4502,7 +4502,7 @@ export default function ProductStudio({ mode, productId }: ProductStudioProps = 
                   <div>
                     <h3 className="text-[14px] font-extrabold text-[#1A1A2E] tracking-tight">
                       {productType === 'service' ? 'Service' : 'Product'}{' '}
-                      <span className="text-[#EB4501]">Overview</span>
+                      <span className="text-[#FF5B00]">Overview</span>
                     </h3>
                     <p className="text-[10px] font-bold text-[#9AA0AC] tracking-wide mt-1 uppercase">
                       Benefits, quality structure & trust

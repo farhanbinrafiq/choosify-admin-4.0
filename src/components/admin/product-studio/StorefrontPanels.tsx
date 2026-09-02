@@ -101,7 +101,7 @@ export function CheckoutBuyBoxPreview({
         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 font-mono">
           Checkout buy box preview
         </span>
-        <span className="text-[11px] font-extrabold text-[#EB4501] font-mono">
+        <span className="text-[11px] font-extrabold text-[#FF5B00] font-mono">
           ৳ {(price || 0).toLocaleString()}
         </span>
       </div>
@@ -140,7 +140,7 @@ export function CheckoutBuyBoxPreview({
             className={`w-full border-none py-3 rounded-lg text-[13px] font-bold inline-flex items-center justify-center gap-2 ${
               outOfStock && !flags.actionPreOrder
                 ? 'bg-[#F1F1F3] text-[#9AA0AC] cursor-not-allowed'
-                : 'bg-[#EB4501] text-white cursor-pointer'
+                : 'bg-[#FF5B00] text-white cursor-pointer'
             }`}
           >
             <ShoppingCart size={14} />
@@ -157,10 +157,10 @@ export function CheckoutBuyBoxPreview({
             type="button"
             onClick={() => setWish((w) => !w)}
             className={`w-full bg-white border py-2.5 rounded-lg text-[12.5px] font-semibold inline-flex items-center justify-center gap-2 cursor-pointer ${
-              wish ? 'border-[#EB4501] text-[#EB4501]' : 'border-[#E5E7EB] text-[#EB4501]'
+              wish ? 'border-[#FF5B00] text-[#FF5B00]' : 'border-[#E5E7EB] text-[#FF5B00]'
             }`}
           >
-            <Heart size={14} className={wish || flags.actionLove ? 'fill-[#EB4501] text-[#EB4501]' : ''} />
+            <Heart size={14} className={wish || flags.actionLove ? 'fill-[#FF5B00] text-[#FF5B00]' : ''} />
             {wish ? 'Wishlisted' : 'Add to Wishlist'}
           </button>
         )}
@@ -168,7 +168,7 @@ export function CheckoutBuyBoxPreview({
         {flags.actionContactSeller && (
           <button
             type="button"
-            className="w-full bg-[#000435] text-white border-none py-2.5 rounded-lg text-[12.5px] font-bold inline-flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full bg-[#18154C] text-white border-none py-2.5 rounded-lg text-[12.5px] font-bold inline-flex items-center justify-center gap-2 cursor-pointer"
           >
             <MessageCircleMore size={14} />
             Message Seller
@@ -180,7 +180,7 @@ export function CheckoutBuyBoxPreview({
             type="button"
             className="w-full bg-white border border-[#E5E7EB] py-2.5 rounded-lg text-[12.5px] font-semibold inline-flex items-center justify-center gap-2 cursor-pointer text-[#1A1A2E]"
           >
-            <MapPin size={14} className="text-[#EB4501]" />
+            <MapPin size={14} className="text-[#FF5B00]" />
             Find in Store
           </button>
         )}

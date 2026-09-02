@@ -111,7 +111,7 @@ export default function TrustCenter() {
       case 'fake_review_detected': 
         return { label: 'Fake Interaction Algorithmic Flag', bg: 'bg-red-600/10 text-red-500 border-red-600/20', scoreSign: '-' };
       case 'account_suspended': 
-        return { label: 'Audit Suspension Status Pub', bg: 'bg-[#EB4501]/10 text-app-accent-light border-[#EB4501]/20', scoreSign: '-' };
+        return { label: 'Audit Suspension Status Pub', bg: 'bg-[#FF5B00]/10 text-app-accent-light border-[#FF5B00]/20', scoreSign: '-' };
       case 'cancellation_rate_high': 
         return { label: 'Abnormal Checkout Cancellations', bg: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20', scoreSign: '-' };
       case 'return_rate_high': 
@@ -256,7 +256,7 @@ export default function TrustCenter() {
   const getAlertSeverityColor = (sev: SeverityType) => {
     switch(sev) {
       case 'Critical': return 'bg-red-650/10 text-red-400 border-red-500/30 font-bold';
-      case 'High': return 'bg-[#EB4501]/10 text-app-accent-light border-[#EB4501]/20 font-bold';
+      case 'High': return 'bg-[#FF5B00]/10 text-app-accent-light border-[#FF5B00]/20 font-bold';
       case 'Medium': return 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20';
       default: return 'bg-blue-500/10 text-blue-400 border-blue-500/25';
     }
@@ -307,7 +307,7 @@ export default function TrustCenter() {
           <span className="text-[10px] text-app-text-secondary font-bold uppercase tracking-wider block">Seller Trust Average</span>
           <div className="flex items-end justify-between">
             <span className="text-3xl font-extrabold text-white font-mono tracking-tight">{stats.sellerAvg}%</span>
-            <span className="text-[11px] font-bold text-[#EB4501] font-mono flex items-center gap-0.5 mb-1 bg-red-500/10 px-1.5 py-0.5 rounded-[2px]">
+            <span className="text-[11px] font-bold text-[#FF5B00] font-mono flex items-center gap-0.5 mb-1 bg-red-500/10 px-1.5 py-0.5 rounded-[2px]">
               -0.4%
             </span>
           </div>
@@ -394,7 +394,7 @@ export default function TrustCenter() {
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#121212', borderColor: '#262626' }}
                 />
-                <Bar dataKey="count" fill="#EB4501" radius={[2, 2, 0, 0]}>
+                <Bar dataKey="count" fill="#FF5B00" radius={[2, 2, 0, 0]}>
                   {distributionChartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
@@ -508,7 +508,7 @@ export default function TrustCenter() {
                   setBreakdownEntityType(selectedEntityType);
                   setShowBreakdownModal(true);
                 }}
-                className="w-full bg-[#EB4501] hover:bg-app-accent-light text-white text-[10px] font-bold py-1.5 rounded-[2px] cursor-pointer transition-colors"
+                className="w-full bg-[#FF5B00] hover:bg-app-accent-light text-white text-[10px] font-bold py-1.5 rounded-[2px] cursor-pointer transition-colors"
               >
                 Inquire Logic Trace
               </button>
@@ -765,7 +765,7 @@ export default function TrustCenter() {
               />
               <button
                 type="submit"
-                className="bg-[#EB4501] hover:bg-app-accent-light text-white font-bold px-4 py-2 rounded-[3px] cursor-pointer"
+                className="bg-[#FF5B00] hover:bg-app-accent-light text-white font-bold px-4 py-2 rounded-[3px] cursor-pointer"
               >
                 Inject Event
               </button>
@@ -848,7 +848,7 @@ export default function TrustCenter() {
                   <span className="text-white font-bold block">4. Secure Returns Gate</span>
                   <div className="flex justify-between items-center text-[10px] mb-1 font-mono">
                     <span className="text-slate-500">Calculated value:</span>
-                    <span className="text-[#EB4501] font-bold">{activeBreakdown.returns}%</span>
+                    <span className="text-[#FF5B00] font-bold">{activeBreakdown.returns}%</span>
                   </div>
                   <p className="text-[10px] text-app-text-secondary leading-normal">
                     Weighted ratio of standard returns versus forced chargebacks. Protects the node against fraud checkout spam.

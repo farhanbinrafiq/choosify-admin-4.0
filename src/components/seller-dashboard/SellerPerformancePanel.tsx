@@ -52,7 +52,7 @@ export default function SellerPerformancePanel({ performance, loading, error, on
                     <XAxis dataKey="date" stroke="#888" fontSize={10} axisLine={false} tickLine={false} />
                     <YAxis stroke="#888" fontSize={10} axisLine={false} tickLine={false} />
                     <Tooltip contentStyle={tooltipStyle} />
-                    <Area type="monotone" dataKey="views" stroke="#F4631E" fill="#F4631E22" strokeWidth={2} />
+                    <Area type="monotone" dataKey="views" stroke="#FF5B00" fill="#FF5B0022" strokeWidth={2} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -67,7 +67,7 @@ export default function SellerPerformancePanel({ performance, loading, error, on
                     <XAxis dataKey="week" stroke="#888" fontSize={10} axisLine={false} tickLine={false} />
                     <YAxis stroke="#888" fontSize={10} axisLine={false} tickLine={false} />
                     <Tooltip contentStyle={tooltipStyle} />
-                    <Bar dataKey="views" fill="#F4631E" radius={[6, 6, 0, 0]} />
+                    <Bar dataKey="views" fill="#FF5B00" radius={[6, 6, 0, 0]} />
                     <Bar dataKey="orders" fill="#38bdf8" radius={[6, 6, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>

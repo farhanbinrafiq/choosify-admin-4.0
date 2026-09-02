@@ -192,7 +192,7 @@ const defaultCMSData: CMSData = {
   ],
   productBadges: [
     { id: '1', label: 'New', color: '#22C55E', icon: 'Sparkles', priority: 1, isActive: true },
-    { id: '2', label: 'Trending', color: '#F97316', icon: 'TrendingUp', priority: 2, isActive: true },
+    { id: '2', label: 'Trending', color: '#FF5B00', icon: 'TrendingUp', priority: 2, isActive: true },
     { id: '3', label: 'Hot', color: '#EF4444', icon: 'Flame', priority: 3, isActive: true },
     { id: '4', label: 'Featured', color: '#8B5CF6', icon: 'Star', priority: 4, isActive: true },
     { id: '5', label: 'Verified', color: '#0F172A', icon: 'ShieldCheck', priority: 5, isActive: true },

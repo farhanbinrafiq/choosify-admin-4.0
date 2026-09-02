@@ -85,7 +85,7 @@ export function BookingOfferAdminCard({ offer, sellerId, sellerName, onUpdated }
         </span>
       </div>
 
-      <div className="text-[15px] font-black text-[#EB4501]">
+      <div className="text-[15px] font-black text-[#FF5B00]">
         ৳{Number(offer.price || 0).toLocaleString()}
       </div>
 
@@ -147,7 +147,7 @@ export function BookingOfferAdminCard({ offer, sellerId, sellerName, onUpdated }
               setShowDecline(false);
               setCounterPrice(String(offer.price || ''));
             }}
-            className="px-3 py-1.5 rounded-lg bg-[#FFF3EA] text-[#EB4501] border border-[#EB4501]/20 text-[11px] font-extrabold uppercase tracking-wide disabled:opacity-50"
+            className="px-3 py-1.5 rounded-lg bg-[#FFF3EA] text-[#FF5B00] border border-[#FF5B00]/20 text-[11px] font-extrabold uppercase tracking-wide disabled:opacity-50"
           >
             Modify & Resend
           </button>
@@ -163,7 +163,7 @@ export function BookingOfferAdminCard({ offer, sellerId, sellerName, onUpdated }
             value={declineReason}
             onChange={(e) => setDeclineReason(e.target.value)}
             rows={2}
-            className="w-full rounded-xl border border-[#E8EDF2] px-3 py-2 text-[12px] outline-none focus:border-[#EB4501]"
+            className="w-full rounded-xl border border-[#E8EDF2] px-3 py-2 text-[12px] outline-none focus:border-[#FF5B00]"
             placeholder="Explain why this request cannot be fulfilled…"
           />
           <button
@@ -195,7 +195,7 @@ export function BookingOfferAdminCard({ offer, sellerId, sellerName, onUpdated }
             min={1}
             value={counterPrice}
             onChange={(e) => setCounterPrice(e.target.value)}
-            className="w-full rounded-xl border border-[#E8EDF2] px-3 py-2 text-[12px] outline-none focus:border-[#EB4501] font-mono font-bold"
+            className="w-full rounded-xl border border-[#E8EDF2] px-3 py-2 text-[12px] outline-none focus:border-[#FF5B00] font-mono font-bold"
           />
           <p className="text-[11px] text-[#9AA0AC]">
             Resets a fresh 24-hour buyer response window (original seller clock does not keep counting).
@@ -212,7 +212,7 @@ export function BookingOfferAdminCard({ offer, sellerId, sellerName, onUpdated }
                 }),
               )
             }
-            className="px-3 py-1.5 rounded-lg bg-[#EB4501] text-white text-[11px] font-extrabold uppercase tracking-wide disabled:opacity-50"
+            className="px-3 py-1.5 rounded-lg bg-[#FF5B00] text-white text-[11px] font-extrabold uppercase tracking-wide disabled:opacity-50"
           >
             Send counter-offer
           </button>

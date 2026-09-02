@@ -680,7 +680,7 @@ export default function Coupons() {
                               <div className="h-16 w-full">
                                 <ResponsiveContainer width="100%" height="100%">
                                   <AreaChart data={coupon.usageByDate}>
-                                    <Area type="monotone" dataKey="count" stroke="#F4631E" fill="#f4631e1a" strokeWidth={1.5} />
+                                    <Area type="monotone" dataKey="count" stroke="#FF5B00" fill="#ff5b001a" strokeWidth={1.5} />
                                     <Tooltip contentStyle={{ background: '#0F172A', borderColor: '#1E293B', fontSize: '10px' }} />
                                   </AreaChart>
                                 </ResponsiveContainer>
@@ -765,14 +765,14 @@ export default function Coupons() {
                 <AreaChart data={dailyTrendData}>
                   <defs>
                     <linearGradient id="colorRedemptions" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#f4631e" stopOpacity={0.2}/>
-                      <stop offset="95%" stopColor="#f4631e" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#ff5b00" stopOpacity={0.2}/>
+                      <stop offset="95%" stopColor="#ff5b00" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
                   <XAxis dataKey="date" stroke="#475569" fontSize={8} tickLine={false} />
                   <YAxis stroke="#475569" fontSize={8} width={15} tickLine={false} axisLine={false} />
                   <Tooltip contentStyle={{ background: '#0F172A', borderColor: '#1E293B', fontSize: '10px' }} />
-                  <Area type="monotone" dataKey="Redemptions" stroke="#f4631e" fillOpacity={1} fill="url(#colorRedemptions)" strokeWidth={1.5} />
+                  <Area type="monotone" dataKey="Redemptions" stroke="#ff5b00" fillOpacity={1} fill="url(#colorRedemptions)" strokeWidth={1.5} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -794,7 +794,7 @@ export default function Coupons() {
                     <Tooltip contentStyle={{ background: '#0F172A', borderColor: '#1E293B', fontSize: '10px' }} />
                     <Bar dataKey="Discount Value" fill="#8b5cf6" radius={[0, 4, 4, 0]}>
                       {categoryPerformance.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={index === 0 ? '#f4631e' : index === 1 ? '#8b5cf6' : '#3b82f6'} />
+                        <Cell key={`cell-${index}`} fill={index === 0 ? '#ff5b00' : index === 1 ? '#8b5cf6' : '#3b82f6'} />
                       ))}
                     </Bar>
                   </BarChart>

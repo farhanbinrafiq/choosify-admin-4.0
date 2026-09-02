@@ -46,7 +46,7 @@ export function OverviewBentoGrid({
       {enabled.map((blk) => (
         <div key={blk.id} className="bg-[#F4F7F9] rounded-[10px] px-5 py-[18px] flex flex-col gap-3 text-left">
           <div className="flex items-center gap-2 text-[12px] font-extrabold text-[#1A1A2E]">
-            <span className="text-[#EB4501]">{quadrantIcon(blk.title)}</span>
+            <span className="text-[#FF5B00]">{quadrantIcon(blk.title)}</span>
             {blk.title}
           </div>
           {blk.content ? (
@@ -57,7 +57,7 @@ export function OverviewBentoGrid({
               {blk.bullets.map((item, i) =>
                 blk.listStyle === 'numbered' ? (
                   <div key={i} className="flex items-start gap-2">
-                    <span className="text-[#EB4501] font-black shrink-0">{i + 1}.</span>
+                    <span className="text-[#FF5B00] font-black shrink-0">{i + 1}.</span>
                     <span>{item}</span>
                   </div>
                 ) : (
@@ -86,7 +86,7 @@ export function OverviewQuadrantEditor({
     <div className="bg-[#F4F7F9] rounded-[10px] p-4 space-y-3 text-left border border-[#E8EDF2]">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 flex-grow min-w-0">
-          <span className="text-[#EB4501] shrink-0">{quadrantIcon(block.title)}</span>
+          <span className="text-[#FF5B00] shrink-0">{quadrantIcon(block.title)}</span>
           <input
             value={block.title}
             onChange={(e) => onChange({ ...block, title: e.target.value })}
@@ -173,7 +173,7 @@ export function OverviewQuadrantEditor({
             <button
               type="button"
               onClick={() => onChange({ ...block, bullets: [...block.bullets, 'New checklist item'] })}
-              className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-[#EB4501] bg-transparent border-0 cursor-pointer"
+              className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-[#FF5B00] bg-transparent border-0 cursor-pointer"
             >
               <Plus className="w-3 h-3" /> Add bullet
             </button>

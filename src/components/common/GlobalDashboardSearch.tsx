@@ -114,7 +114,7 @@ function normalizeActorKey(profile: { choosifyUserId?: string; id?: string } | n
 
 function groupIcon(group: DashboardSearchGroup) {
   const Icon = GROUP_ICONS[group] || SearchCheck;
-  return <Icon size={12} className="text-[#EB4501] shrink-0" />;
+  return <Icon size={12} className="text-[#FF5B00] shrink-0" />;
 }
 
 
@@ -520,7 +520,7 @@ export function GlobalDashboardSearch(props: {
               type="button"
               onClick={() => persistRecent([])}
               disabled={recent.length === 0}
-              className="text-[9.5px] font-bold text-[#EB4501] hover:text-[#CF4400] hover:underline bg-transparent border-0 cursor-pointer p-0 shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-default disabled:no-underline"
+              className="text-[9.5px] font-bold text-[#FF5B00] hover:text-[#EF3C23] hover:underline bg-transparent border-0 cursor-pointer p-0 shrink-0 whitespace-nowrap disabled:opacity-40 disabled:cursor-default disabled:no-underline"
             >
               Clear search history
             </button>
@@ -556,7 +556,7 @@ export function GlobalDashboardSearch(props: {
 
       <div className="flex flex-col text-left space-y-2 pt-4 md:pt-0 md:pl-4">
         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
-          <Eye size={12} className="text-[#EB4501]" />
+          <Eye size={12} className="text-[#FF5B00]" />
           Recently Viewed
         </span>
         {recentlyViewed.length === 0 ? (
@@ -584,7 +584,7 @@ export function GlobalDashboardSearch(props: {
               setRecentlyViewed([]);
               saveRecentlyViewed(actorKey, []);
             }}
-            className="text-[9.5px] font-bold text-[#EB4501] hover:text-[#CF4400] hover:underline bg-transparent border-0 cursor-pointer p-0 self-start"
+            className="text-[9.5px] font-bold text-[#FF5B00] hover:text-[#EF3C23] hover:underline bg-transparent border-0 cursor-pointer p-0 self-start"
           >
             Clear recently viewed
           </button>
@@ -594,7 +594,7 @@ export function GlobalDashboardSearch(props: {
 
       <div className="flex flex-col text-left space-y-2 pt-4 md:pt-0 md:pl-4">
         <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
-          <Zap size={12} className="text-[#EB4501]" />
+          <Zap size={12} className="text-[#FF5B00]" />
           Quick Access
         </span>
         <div className="flex flex-wrap gap-2">
@@ -611,7 +611,7 @@ export function GlobalDashboardSearch(props: {
                   route: item.route,
                 })
               }
-              className="px-2.5 py-1.5 rounded-full text-[10px] font-bold border transition-colors bg-gray-50 text-[#1A1A2E] border-gray-100 hover:border-[#EB4501]/20 hover:bg-[#EB4501]/5"
+              className="px-2.5 py-1.5 rounded-full text-[10px] font-bold border transition-colors bg-gray-50 text-[#1A1A2E] border-gray-100 hover:border-[#FF5B00]/20 hover:bg-[#FF5B00]/5"
             >
               {item.label}
             </button>
@@ -688,7 +688,7 @@ export function GlobalDashboardSearch(props: {
                   onMouseEnter={() => setActiveIndex(idx)}
                   className={cn(
                     'flex items-center justify-between gap-3 px-3 py-2 rounded-[5px] cursor-pointer transition-colors',
-                    isActive ? 'bg-[#EB4501]/5 text-[#EB4501]' : 'text-[#1A1A2E] hover:bg-gray-50',
+                    isActive ? 'bg-[#FF5B00]/5 text-[#FF5B00]' : 'text-[#1A1A2E] hover:bg-gray-50',
                   )}
                 >
                   <div className="min-w-0 text-left flex-1">
@@ -735,13 +735,13 @@ export function GlobalDashboardSearch(props: {
                           setFocused(false);
                           setQuery('');
                         }}
-                        className="text-[8px] font-black uppercase tracking-wider bg-[#EB4501]/10 text-[#EB4501] border border-[#EB4501]/20 px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                        className="text-[8px] font-black uppercase tracking-wider bg-[#FF5B00]/10 text-[#FF5B00] border border-[#FF5B00]/20 px-2 py-0.5 rounded-full inline-flex items-center gap-1"
                       >
                         <LogIn size={10} />
                         Login As
                       </button>
                     ) : null}
-                    <span className="text-[8px] font-black uppercase tracking-wider bg-[#EB4501]/10 text-[#EB4501] border border-[#EB4501]/20 px-2 py-0.5 rounded-full scale-90">
+                    <span className="text-[8px] font-black uppercase tracking-wider bg-[#FF5B00]/10 text-[#FF5B00] border border-[#FF5B00]/20 px-2 py-0.5 rounded-full scale-90">
                       {item.type}
                     </span>
                   </div>
@@ -805,7 +805,7 @@ export function GlobalDashboardSearch(props: {
           <div
             ref={dropdownRef}
             style={dropdownStyle}
-            className="choosify-omni-search-dropdown bg-white border border-gray-200 rounded-lg shadow-[0_18px_40px_rgba(0,4,53,0.14)] font-sans text-left text-[#1A1A2E] overflow-y-auto overflow-x-hidden no-scrollbar"
+            className="choosify-omni-search-dropdown bg-white border border-gray-200 rounded-lg shadow-[0_18px_40px_rgba(24,21,76,0.14)] font-sans text-left text-[#1A1A2E] overflow-y-auto overflow-x-hidden no-scrollbar"
           >
             {showIdle ? renderIdlePanel() : null}
             {showResults ? renderResultsPanel() : null}

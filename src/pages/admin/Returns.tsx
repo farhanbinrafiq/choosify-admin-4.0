@@ -333,7 +333,7 @@ export default function ReturnsPage() {
   };
 
   const secondaryBtn = 'px-3 py-1.5 bg-white border border-app-border text-app-text-secondary text-xs font-extrabold rounded-md hover:border-app-accent hover:text-app-accent transition-all';
-  const primaryBtn = 'px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold uppercase tracking-wide rounded-md transition-all shadow-sm';
+  const primaryBtn = 'px-4 py-2 bg-app-accent hover:bg-[#FF5B00] text-white text-xs font-extrabold uppercase tracking-wide rounded-md transition-all shadow-sm';
 
   return (
     <div className="min-h-screen bg-app-bg text-app-text-primary p-4 sm:p-6 font-sans">
@@ -1048,7 +1048,7 @@ export default function ReturnsPage() {
                               <button
                                 onClick={handleApprove}
                                 disabled={actionBusy === 'approve'}
-                                className="px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold uppercase tracking-wider rounded-md transition-all shadow-sm disabled:opacity-60"
+                                className="px-4 py-2 bg-app-accent hover:bg-[#FF5B00] text-white text-xs font-extrabold uppercase tracking-wider rounded-md transition-all shadow-sm disabled:opacity-60"
                               >
                                 {actionBusy === 'approve' ? 'Approving…' : 'Approve Return'}
                               </button>
@@ -1146,7 +1146,7 @@ export default function ReturnsPage() {
                             }
                           }}
                           disabled={actionBusy === 'transit'}
-                          className="w-full py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
+                          className="w-full py-2 bg-app-accent hover:bg-[#FF5B00] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
                         >
                           {actionBusy === 'transit' ? 'Updating…' : 'Mark as Shipped/In Transit'}
                         </button>
@@ -1175,7 +1175,7 @@ export default function ReturnsPage() {
                             }
                           }}
                           disabled={actionBusy === 'received'}
-                          className="w-full py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
+                          className="w-full py-2 bg-app-accent hover:bg-[#FF5B00] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
                         >
                           {actionBusy === 'received' ? 'Updating…' : 'Mark as Received at Warehouse'}
                         </button>
@@ -1194,7 +1194,7 @@ export default function ReturnsPage() {
                         <button
                           onClick={handleProcessRefund}
                           disabled={actionBusy === 'refund'}
-                          className="w-full py-2 bg-app-accent hover:bg-[#E64A00] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
+                          className="w-full py-2 bg-app-accent hover:bg-[#FF5B00] text-white text-xs font-extrabold rounded-md transition-all disabled:opacity-60"
                         >
                           {actionBusy === 'refund' ? 'Processing…' : 'Process & Issue Refund Payment'}
                         </button>

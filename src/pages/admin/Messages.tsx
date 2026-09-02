@@ -875,7 +875,7 @@ export default function MessagesPage() {
       <div className="border-b border-app-border bg-gradient-to-r from-slate-900 to-indigo-950 px-6 py-3.5 flex flex-col sm:flex-row items-center justify-between gap-4 shrink-0 transition-all">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-app-accent/20 rounded-xl">
-            <MessageCircleMore className="w-5 h-5 text-[#EB4501]" />
+            <MessageCircleMore className="w-5 h-5 text-[#FF5B00]" />
           </div>
           <div>
             <h1 className="text-sm font-black uppercase tracking-widest text-app-text-primary leading-none">Choosify Workspace</h1>
@@ -1203,7 +1203,7 @@ export default function MessagesPage() {
                               {parsedCommerce.linkedOrder && (
                                 <div className="mt-2 pt-2 border-t border-app-border flex items-center justify-between text-[9px] text-app-text-secondary font-bold uppercase">
                                   <span>Order ID Match:</span>
-                                  <span className="bg-[#f97316]/20 text-app-accent px-1.5 py-0.5 rounded font-black">{parsedCommerce.linkedOrder.id}</span>
+                                  <span className="bg-[#ff5b00]/20 text-app-accent px-1.5 py-0.5 rounded font-black">{parsedCommerce.linkedOrder.id}</span>
                                 </div>
                               )}
 
@@ -1224,7 +1224,7 @@ export default function MessagesPage() {
                                 
                                 <button 
                                   onClick={() => alert(`Redirecting simulation portal to Product Page: ${parsedCommerce.linkedProduct.name}`)}
-                                  className="py-1.5 bg-[#f97316] hover:bg-orange-500 text-app-text-primary rounded-lg text-[9px] font-black text-center transition-all cursor-pointer"
+                                  className="py-1.5 bg-[#ff5b00] hover:bg-orange-500 text-app-text-primary rounded-lg text-[9px] font-black text-center transition-all cursor-pointer"
                                 >
                                   Open Product Page
                                 </button>
@@ -1368,7 +1368,7 @@ export default function MessagesPage() {
             {selectedConv && currentCommerce.linkedOrder ? (
               <div className="p-4 border-b border-app-border bg-orange-500/[0.02]/30 space-y-4">
                 <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-1.5 text-[#f97316]">
+                  <div className="flex items-center gap-1.5 text-[#ff5b00]">
                     <ShoppingBag className="w-4 h-4" />
                     <span className="text-[10px] font-black uppercase tracking-widest">Linked Customer Order</span>
                   </div>
@@ -1544,7 +1544,7 @@ export default function MessagesPage() {
                             setTempTrackingUrl(`https://pathao.com/track/CSS-${currentCommerce.linkedOrder!.id}`);
                             setShowDispatchForm(true);
                           }}
-                          className="w-full bg-[#f97316] hover:bg-orange-600 text-app-text-primary font-extrabold uppercase py-2 px-3 rounded-lg text-[9px] tracking-wider transition-all cursor-pointer shadow flex items-center justify-center gap-1"
+                          className="w-full bg-[#ff5b00] hover:bg-orange-600 text-app-text-primary font-extrabold uppercase py-2 px-3 rounded-lg text-[9px] tracking-wider transition-all cursor-pointer shadow flex items-center justify-center gap-1"
                         >
                           <Truck className="w-3.5 h-3.5" /> Dispatch Courier
                         </button>
@@ -1888,7 +1888,7 @@ export default function MessagesPage() {
                             <h4 className="text-xs font-black text-app-text-primary truncate group-hover:text-app-accent transition-colors">
                               {t.customer.name}
                             </h4>
-                            <span className="text-[9px] text-[#f97316] font-bold font-mono">
+                            <span className="text-[9px] text-[#ff5b00] font-bold font-mono">
                               {t.id.substring(0, 8).toUpperCase()}
                             </span>
                           </div>
@@ -2016,7 +2016,7 @@ export default function MessagesPage() {
                 
                 {/* Visual Card Sourcing */}
                 <div className="space-y-1">
-                  <span className="text-[9px] font-black text-[#F4631E] uppercase tracking-widest block">Associated ERP Transaction Detail</span>
+                  <span className="text-[9px] font-black text-[#FF5B00] uppercase tracking-widest block">Associated ERP Transaction Detail</span>
                   <div className="bg-app-bg p-4 border border-app-border rounded-2xl space-y-3 text-app-text-primary">
                     <div className="flex gap-3">
                       <img 
@@ -2116,7 +2116,7 @@ export default function MessagesPage() {
                         value={courierField}
                         onChange={(e) => setCourierField(e.target.value)}
                         placeholder="Pathao, RedX, Steadfast..."
-                        className="w-full bg-app-card text-app-text-primary px-3 py-1.5 rounded-lg border border-app-border text-[10px] outline-none focus:border-[#F4631E]/40"
+                        className="w-full bg-app-card text-app-text-primary px-3 py-1.5 rounded-lg border border-app-border text-[10px] outline-none focus:border-[#FF5B00]/40"
                       />
                     </div>
 
@@ -2127,7 +2127,7 @@ export default function MessagesPage() {
                         value={trackingIdField}
                         onChange={(e) => setTrackingIdField(e.target.value)}
                         placeholder="e.g. TRK-PATHAO-12938"
-                        className="w-full bg-app-card text-app-text-primary px-3 py-1.5 rounded-lg border border-app-border text-[10px] outline-none focus:border-[#F4631E]/40"
+                        className="w-full bg-app-card text-app-text-primary px-3 py-1.5 rounded-lg border border-app-border text-[10px] outline-none focus:border-[#FF5B00]/40"
                       />
                     </div>
 
@@ -2136,7 +2136,7 @@ export default function MessagesPage() {
                       <select
                         value={currentCommerce.linkedOrder.status}
                         onChange={(e) => updateOrderStatus(currentCommerce.linkedOrder!.id, e.target.value as any)}
-                        className="w-full bg-app-card text-app-text-primary px-3 py-1.5 rounded-lg border border-app-border text-[10px] outline-none focus:border-[#F4631E]/40 cursor-pointer"
+                        className="w-full bg-app-card text-app-text-primary px-3 py-1.5 rounded-lg border border-app-border text-[10px] outline-none focus:border-[#FF5B00]/40 cursor-pointer"
                       >
                         <option value="Pending">Pending</option>
                         <option value="Confirmed">Confirmed / Approved</option>
@@ -2176,7 +2176,7 @@ export default function MessagesPage() {
                         value={localPrivateNote}
                         onChange={(e) => setLocalPrivateNote(e.target.value)}
                         placeholder="Private operational override notes..."
-                        className="flex-1 bg-app-card text-app-text-primary px-2.5 py-1.5 rounded-lg border border-app-border text-[9px] outline-none focus:border-[#F4631E]/40"
+                        className="flex-1 bg-app-card text-app-text-primary px-2.5 py-1.5 rounded-lg border border-app-border text-[9px] outline-none focus:border-[#FF5B00]/40"
                       />
                       <button
                         type="button"
@@ -2201,7 +2201,7 @@ export default function MessagesPage() {
                         value={localCustomerNote}
                         onChange={(e) => setLocalCustomerNote(e.target.value)}
                         placeholder="Visible to customer on invoice receipt..."
-                        className="flex-1 bg-app-card text-app-text-primary px-2.5 py-1.5 rounded-lg border border-app-border text-[9px] outline-none focus:border-[#F4631E]/40"
+                        className="flex-1 bg-app-card text-app-text-primary px-2.5 py-1.5 rounded-lg border border-app-border text-[9px] outline-none focus:border-[#FF5B00]/40"
                       />
                       <button
                         type="button"
@@ -2502,7 +2502,7 @@ export default function MessagesPage() {
                           value={manualCustomerName}
                           onChange={(e) => setManualCustomerName(e.target.value)}
                           placeholder="e.g. Farhan Bin Rafiq"
-                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
+                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#FF5B00]/40 transition-all font-sans"
                         />
                       </div>
 
@@ -2514,7 +2514,7 @@ export default function MessagesPage() {
                           value={manualCustomerPhone}
                           onChange={(e) => setManualCustomerPhone(e.target.value)}
                           placeholder="e.g. +8801712345678"
-                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
+                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#FF5B00]/40 transition-all font-sans"
                         />
                       </div>
 
@@ -2525,7 +2525,7 @@ export default function MessagesPage() {
                           value={manualCustomerEmail}
                           onChange={(e) => setManualCustomerEmail(e.target.value)}
                           placeholder="e.g. farhan@domain.com"
-                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
+                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#FF5B00]/40 transition-all font-sans"
                         />
                       </div>
 
@@ -2537,7 +2537,7 @@ export default function MessagesPage() {
                           onChange={(e) => setManualCustomerAddress(e.target.value)}
                           placeholder="Provide detailed supply delivery landmark location in Bangladesh..."
                           rows={3}
-                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans resize-none"
+                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#FF5B00]/40 transition-all font-sans resize-none"
                         />
                       </div>
                     </div>
@@ -2552,7 +2552,7 @@ export default function MessagesPage() {
                           <select
                             value={manualPlatformSource}
                             onChange={(e) => setManualPlatformSource(e.target.value as any)}
-                            className="w-full bg-app-card border border-app-border rounded-xl px-3 py-2.5 text-xs text-app-text-primary outline-none focus:border-[#F4631E]/40 cursor-pointer font-sans"
+                            className="w-full bg-app-card border border-app-border rounded-xl px-3 py-2.5 text-xs text-app-text-primary outline-none focus:border-[#FF5B00]/40 cursor-pointer font-sans"
                           >
                             <option value="WhatsApp">💬 WhatsApp DM</option>
                             <option value="Facebook">📬 Facebook Chat</option>
@@ -2568,7 +2568,7 @@ export default function MessagesPage() {
                             value={manualChatRefId}
                             onChange={(e) => setManualChatRefId(e.target.value)}
                             placeholder="e.g. MSG-99120"
-                            className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
+                            className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#FF5B00]/40 transition-all font-sans"
                           />
                         </div>
                       </div>
@@ -2579,7 +2579,7 @@ export default function MessagesPage() {
                           value={manualProductSelection}
                           onChange={(e) => setManualProductSelection(e.target.value)}
                           disabled={manualCatalogLoading || manualCatalogProducts.length === 0}
-                          className="w-full bg-app-card border border-app-border rounded-xl px-3 py-2 text-xs text-app-text-primary outline-none focus:border-[#F4631E]/40 cursor-pointer font-sans"
+                          className="w-full bg-app-card border border-app-border rounded-xl px-3 py-2 text-xs text-app-text-primary outline-none focus:border-[#FF5B00]/40 cursor-pointer font-sans"
                         >
                           {manualCatalogLoading && <option value="">Loading catalog…</option>}
                           {!manualCatalogLoading && manualCatalogProducts.length === 0 && (
@@ -2600,7 +2600,7 @@ export default function MessagesPage() {
                             required
                             value={manualQuantity}
                             onChange={(e) => setManualQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                            className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary outline-none focus:border-[#F4631E]/40 transition-all font-mono"
+                            className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary outline-none focus:border-[#FF5B00]/40 transition-all font-mono"
                           />
                         </div>
 
@@ -2611,7 +2611,7 @@ export default function MessagesPage() {
                             value={manualPriceOverride}
                             onChange={(e) => setManualPriceOverride(e.target.value)}
                             placeholder="Overwrite normal BDT..."
-                            className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-700 outline-none focus:border-[#F4631E]/40 transition-all font-mono"
+                            className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-700 outline-none focus:border-[#FF5B00]/40 transition-all font-mono"
                           />
                         </div>
                       </div>
@@ -2623,7 +2623,7 @@ export default function MessagesPage() {
                           value={manualNotes}
                           onChange={(e) => setManualNotes(e.target.value)}
                           placeholder="Comments: e.g. Customer requested gift wrapping."
-                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#F4631E]/40 transition-all font-sans"
+                          className="w-full bg-app-card border border-app-border rounded-xl px-4 py-2.5 text-xs text-app-text-primary placeholder-slate-600 outline-none focus:border-[#FF5B00]/40 transition-all font-sans"
                         />
                       </div>
                     </div>

@@ -101,7 +101,7 @@ export function GuideDetailPresentation({
             </div>
           </div>
           <div>
-            <div className="text-[15px] font-extrabold text-[#EB4501] tabular-nums">—</div>
+            <div className="text-[15px] font-extrabold text-[#FF5B00] tabular-nums">—</div>
             <div className="mt-1 bg-[#F4F7F9] text-[9.5px] font-bold px-2.5 py-0.5 rounded-[10px] inline-flex items-center gap-1 text-[#4B5563]">
               <ShoppingBag size={11} /> Purchased
             </div>
@@ -111,7 +111,7 @@ export function GuideDetailPresentation({
         {/* Title card */}
         <div className="bg-white rounded-xl border border-[#E8EDF2] p-[26px] text-left relative">
           {isEditor ? <EditChip label="Header" onClick={() => onEditSection!('header')} /> : null}
-          <span className="inline-block bg-[#EB4501] text-white text-[9px] font-extrabold px-2.5 py-1 rounded-[5px] mb-3.5 uppercase tracking-wide">
+          <span className="inline-block bg-[#FF5B00] text-white text-[9px] font-extrabold px-2.5 py-1 rounded-[5px] mb-3.5 uppercase tracking-wide">
             {formatKind(model)}
           </span>
           <h1 className="text-2xl font-extrabold text-[#1A1A2E] mb-2 leading-snug m-0">
@@ -130,7 +130,7 @@ export function GuideDetailPresentation({
                 referrerPolicy="no-referrer"
               />
             ) : (
-              <div className="w-[34px] h-[34px] rounded-full bg-[#EB4501] flex items-center justify-center text-white text-xs font-extrabold shrink-0">
+              <div className="w-[34px] h-[34px] rounded-full bg-[#FF5B00] flex items-center justify-center text-white text-xs font-extrabold shrink-0">
                 {authorInitial}
               </div>
             )}
@@ -150,7 +150,7 @@ export function GuideDetailPresentation({
           <div className="flex flex-wrap gap-2.5 items-center">
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 bg-[linear-gradient(90deg,#6C4CFF,#EB4501)] text-white border-0 px-[18px] py-[11px] rounded-lg text-xs font-bold"
+              className="inline-flex items-center gap-1.5 bg-[linear-gradient(90deg,#6C4CFF,#FF5B00)] text-white border-0 px-[18px] py-[11px] rounded-lg text-xs font-bold"
             >
               Ask Emi about this Discovery
             </button>
@@ -296,7 +296,7 @@ export function GuideDetailPresentation({
           </p>
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 bg-[#EB4501] text-white border-0 px-5 py-2.5 rounded-lg text-xs font-bold"
+            className="inline-flex items-center gap-1.5 bg-[#FF5B00] text-white border-0 px-5 py-2.5 rounded-lg text-xs font-bold"
           >
             Support Creator
           </button>

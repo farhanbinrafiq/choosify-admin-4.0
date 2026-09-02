@@ -278,11 +278,11 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
         <button
           onClick={() => toggleSection("identity")}
           className={`w-full px-5 py-4 border-l-4 flex items-center justify-between text-left transition-colors ${
-            activeSection === "identity" ? "border-[#F97316] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
+            activeSection === "identity" ? "border-[#FF5B00] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
           }`}
         >
           <div className="flex items-center gap-3">
-            <span className="p-1.5 bg-orange-50 text-[#F97316] rounded-md">
+            <span className="p-1.5 bg-orange-50 text-[#FF5B00] rounded-md">
               <FileText className="w-4 h-4" />
             </span>
             <div>
@@ -320,7 +320,7 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
                   type="text"
                   value={model.brandName}
                   onChange={(e) => { updateModelField("brandName", e.target.value); setHasUnsavedChanges(true); }}
-                  className="w-full bg-[#F5F5F5] border border-gray-200 px-3 py-2 rounded-lg text-[12px] font-bold text-[#111827] focus:outline-none focus:border-[#F97316]"
+                  className="w-full bg-[#F5F5F5] border border-gray-200 px-3 py-2 rounded-lg text-[12px] font-bold text-[#111827] focus:outline-none focus:border-[#FF5B00]"
                 />
               </div>
 
@@ -407,7 +407,7 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
                     placeholder="Add brand tag..."
                     className="flex-1 bg-[#F5F5F5] border border-gray-200 px-3 py-1.5 rounded-lg text-[12px] focus:outline-none"
                   />
-                  <button onClick={addCategoryTag} className="px-3 bg-[#F97316] text-white rounded-lg font-bold text-xs">Add</button>
+                  <button onClick={addCategoryTag} className="px-3 bg-[#FF5B00] text-white rounded-lg font-bold text-xs">Add</button>
                 </div>
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {model.bestForTags?.map((tag, idx) => (
@@ -472,11 +472,11 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
         <button
           onClick={() => toggleSection("trust")}
           className={`w-full px-5 py-4 border-l-4 flex items-center justify-between text-left transition-colors ${
-            activeSection === "trust" ? "border-[#F97316] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
+            activeSection === "trust" ? "border-[#FF5B00] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
           }`}
         >
           <div className="flex items-center gap-3">
-            <span className="p-1.5 bg-orange-50 text-[#F97316] rounded-md">
+            <span className="p-1.5 bg-orange-50 text-[#FF5B00] rounded-md">
               <ShieldCheck className="w-4 h-4" />
             </span>
             <div>
@@ -565,11 +565,11 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
         <button
           onClick={() => toggleSection("products")}
           className={`w-full px-5 py-4 border-l-4 flex items-center justify-between text-left transition-colors ${
-            activeSection === "products" ? "border-[#F97316] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
+            activeSection === "products" ? "border-[#FF5B00] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
           }`}
         >
           <div className="flex items-center gap-3">
-            <span className="p-1.5 bg-orange-50 text-[#F97316] rounded-md">
+            <span className="p-1.5 bg-orange-50 text-[#FF5B00] rounded-md">
               <ShoppingBag className="w-4 h-4" />
             </span>
             <div>
@@ -615,7 +615,7 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
               <span className="font-extrabold text-[#111827]">Products List ({model.products?.length || 0})</span>
               <button
                 onClick={() => navigate("/dashboard/content-studio/products/new")}
-                className="px-2.5 py-1.5 bg-[#EA6C0A] hover:bg-[#F97316] text-white rounded-lg text-xs font-bold flex items-center gap-1"
+                className="px-2.5 py-1.5 bg-[#EA6C0A] hover:bg-[#FF5B00] text-white rounded-lg text-xs font-bold flex items-center gap-1"
               >
                 <PlusCircle className="w-3.5 h-3.5" /> Add Product to Catalog
               </button>
@@ -708,7 +708,7 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
                             onClick={() => handleFeatureProduct(p.id)}
                             className={`p-1.5 rounded-md ${
                               p.featured 
-                                ? "bg-amber-100 text-[#F97316] border border-amber-200" 
+                                ? "bg-amber-100 text-[#FF5B00] border border-amber-200" 
                                 : "bg-gray-50 text-gray-400 hover:text-[#111827]"
                             }`}
                             title="Feature this product (Maximum of 3)"
@@ -757,11 +757,11 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
         <button
           onClick={() => toggleSection("deals")}
           className={`w-full px-5 py-4 border-l-4 flex items-center justify-between text-left transition-colors ${
-            activeSection === "deals" ? "border-[#F97316] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
+            activeSection === "deals" ? "border-[#FF5B00] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
           }`}
         >
           <div className="flex items-center gap-3">
-            <span className="p-1.5 bg-orange-50 text-[#F97316] rounded-md">
+            <span className="p-1.5 bg-orange-50 text-[#FF5B00] rounded-md">
               <Sparkles className="w-4 h-4" />
             </span>
             <div>
@@ -780,7 +780,7 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
                 <span className="text-[11px] font-black uppercase text-[#1a1a2e]">Active Campaigns & Deals</span>
                 <button
                   onClick={() => setIsAddingDeal(!isAddingDeal)}
-                  className="px-2 py-1 bg-[#EA6C0A] hover:bg-[#F97316] text-white rounded text-[10px] font-bold flex items-center gap-1"
+                  className="px-2 py-1 bg-[#EA6C0A] hover:bg-[#FF5B00] text-white rounded text-[10px] font-bold flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" /> Start Deal
                 </button>
@@ -926,11 +926,11 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
         <button
           onClick={() => toggleSection("creator")}
           className={`w-full px-5 py-4 border-l-4 flex items-center justify-between text-left transition-colors ${
-            activeSection === "creator" ? "border-[#F97316] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
+            activeSection === "creator" ? "border-[#FF5B00] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
           }`}
         >
           <div className="flex items-center gap-3">
-            <span className="p-1.5 bg-orange-50 text-[#F97316] rounded-md">
+            <span className="p-1.5 bg-orange-50 text-[#FF5B00] rounded-md">
               <Video className="w-4 h-4" />
             </span>
             <div>
@@ -1034,12 +1034,12 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
         <button
           onClick={() => toggleSection("reviews")}
           className={`w-full px-5 py-4 border-l-4 flex items-center justify-between text-left transition-colors ${
-            activeSection === "reviews" ? "border-[#F97316] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
+            activeSection === "reviews" ? "border-[#FF5B00] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
           }`}
         >
           <div className="flex items-center gap-3">
-            <span className="p-1.5 bg-orange-50 text-[#F97316] rounded-md">
-              <Star className="w-4 h-4 text-[#F97316]" />
+            <span className="p-1.5 bg-orange-50 text-[#FF5B00] rounded-md">
+              <Star className="w-4 h-4 text-[#FF5B00]" />
             </span>
             <div>
               <h3 className="text-[13px] font-black text-[#111827] uppercase tracking-wide">6. Verified Buyer Reviews</h3>
@@ -1119,12 +1119,12 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
         <button
           onClick={() => toggleSection("team")}
           className={`w-full px-5 py-4 border-l-4 flex items-center justify-between text-left transition-colors ${
-            activeSection === "team" ? "border-[#F97316] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
+            activeSection === "team" ? "border-[#FF5B00] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
           }`}
         >
           <div className="flex items-center gap-3">
-            <span className="p-1.5 bg-orange-50 text-[#F97316] rounded-md">
-              <Users2 className="w-4 h-4 text-[#F97316]" />
+            <span className="p-1.5 bg-orange-50 text-[#FF5B00] rounded-md">
+              <Users2 className="w-4 h-4 text-[#FF5B00]" />
             </span>
             <div>
               <h3 className="text-[13px] font-black text-[#111827] uppercase tracking-wide">7. Organization & Team Seatings</h3>
@@ -1199,7 +1199,7 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
                         <div className="flex gap-1 justify-end">
                           {tm.role !== "Owner" && (
                             <>
-                              <button onClick={() => toggleSuspendTeam(tm.id)} className="px-1.5 py-0.5 bg-gray-100 text-slate-700 hover:bg-[#F97316] hover:text-white rounded text-[9px] font-bold">
+                              <button onClick={() => toggleSuspendTeam(tm.id)} className="px-1.5 py-0.5 bg-gray-100 text-slate-700 hover:bg-[#FF5B00] hover:text-white rounded text-[9px] font-bold">
                                 {tm.status === "Active" ? "Suspend" : "Unsuspend"}
                               </button>
                               <button onClick={() => removeTeamMember(tm.id)} className="p-1 hover:bg-red-50 text-red-500 rounded">
@@ -1260,11 +1260,11 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
         <button
           onClick={() => toggleSection("info")}
           className={`w-full px-5 py-4 border-l-4 flex items-center justify-between text-left transition-colors ${
-            activeSection === "info" ? "border-[#F97316] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
+            activeSection === "info" ? "border-[#FF5B00] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
           }`}
         >
           <div className="flex items-center gap-3">
-            <span className="p-1.5 bg-orange-50 text-[#F97316] rounded-md">
+            <span className="p-1.5 bg-orange-50 text-[#FF5B00] rounded-md">
               <MapPin className="w-4 h-4" />
             </span>
             <div>
@@ -1401,12 +1401,12 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
         <button
           onClick={() => toggleSection("visibility")}
           className={`w-full px-5 py-4 border-l-4 flex items-center justify-between text-left transition-colors ${
-            activeSection === "visibility" ? "border-[#F97316] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
+            activeSection === "visibility" ? "border-[#FF5B00] bg-orange-50/10" : "border-transparent bg-white hover:bg-gray-50"
           }`}
         >
           <div className="flex items-center gap-3">
-            <span className="p-1.5 bg-orange-50 text-[#F97316] rounded-md">
-              <Eye className="w-4 h-4 text-[#F97316]" />
+            <span className="p-1.5 bg-orange-50 text-[#FF5B00] rounded-md">
+              <Eye className="w-4 h-4 text-[#FF5B00]" />
             </span>
             <div>
               <h3 className="text-[13px] font-black text-[#111827] uppercase tracking-wide">9. Page Visibility Controls</h3>
@@ -1443,7 +1443,7 @@ export const LeftEditorPanel: React.FC<LeftEditorPanelProps> = ({
                       updateModelField("visibility", updatedVis);
                       setHasUnsavedChanges(true);
                     }}
-                    className="accent-[#F97316] w-4 h-4 rounded"
+                    className="accent-[#FF5B00] w-4 h-4 rounded"
                   />
                   {l}
                 </label>

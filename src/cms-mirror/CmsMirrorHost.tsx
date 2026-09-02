@@ -29,7 +29,7 @@ import './tokens.css';
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 
 /** Bump when public/cms-mirror/app.html behavior changes so the iframe never serves a stale 304. */
-const CMS_MIRROR_ASSET_VERSION = '20260827-sprint12-seller-nav-escape';
+const CMS_MIRROR_ASSET_VERSION = '20260902-brand-palette-canonical';
 
 function pageSkeletonVariant(pageKey: string): 'dashboard' | 'profile' | 'orders' | 'products' | 'generic' {
   if (pageKey === 'dashboard') return 'dashboard';

@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 
 const EMOJI_CHOICES = ['📒', '🛒', '🛍️', '💼', '🧵', '🎥', '✨', '📦', '🏦', '🎨'];
-const COLOR_CHOICES = ['#F97316', '#10B981', '#3B82F6', '#6366F1', '#EC4899', '#8B5CF6', '#14B8A6', '#64748B'];
+const COLOR_CHOICES = ['#FF5B00', '#10B981', '#3B82F6', '#6366F1', '#EC4899', '#8B5CF6', '#14B8A6', '#64748B'];
 
 type ToastState = { message: string; type: 'success' | 'danger' | 'info' } | null;
 
@@ -271,7 +271,7 @@ export default function CashBookHub() {
                 </button>
                 <button
                   onClick={() => setIsNewBookModalOpen(true)}
-                  className="px-4 py-2 bg-app-accent text-white hover:bg-[#EA580C] text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer shadow-md border-0"
+                  className="px-4 py-2 bg-app-accent text-white hover:bg-[#EF3C23] text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer shadow-md border-0"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   New Book
@@ -308,7 +308,7 @@ export default function CashBookHub() {
                 <button
                   type="submit"
                   disabled={financeSummaryLoading}
-                  className="px-5 py-2 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EA580C] disabled:opacity-60 cursor-pointer border-0 flex items-center gap-1.5"
+                  className="px-5 py-2 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EF3C23] disabled:opacity-60 cursor-pointer border-0 flex items-center gap-1.5"
                 >
                   {financeSummaryLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
                   Inspect
@@ -402,7 +402,7 @@ export default function CashBookHub() {
                     </p>
                     <button
                       onClick={() => setIsNewBookModalOpen(true)}
-                      className="mt-4 px-5 py-2 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EA580C] cursor-pointer border-0"
+                      className="mt-4 px-5 py-2 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EF3C23] cursor-pointer border-0"
                     >
                       + Create Your First Book
                     </button>
@@ -713,7 +713,7 @@ export default function CashBookHub() {
             <button
               type="submit"
               disabled={creatingBook}
-              className="w-full py-2.5 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EA580C] disabled:opacity-60 cursor-pointer border-0 flex items-center justify-center gap-2"
+              className="w-full py-2.5 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EF3C23] disabled:opacity-60 cursor-pointer border-0 flex items-center justify-center gap-2"
             >
               {creatingBook && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               Create Book
@@ -803,7 +803,7 @@ export default function CashBookHub() {
               <button
                 onClick={handleImportOrders}
                 disabled={importing || selectedOrderIds.size === 0}
-                className="px-5 py-2 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EA580C] disabled:opacity-60 cursor-pointer border-0 flex items-center gap-2"
+                className="px-5 py-2 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EF3C23] disabled:opacity-60 cursor-pointer border-0 flex items-center gap-2"
               >
                 {importing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 Import Selected

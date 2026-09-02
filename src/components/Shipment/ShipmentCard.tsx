@@ -136,7 +136,7 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
     if (s.includes('delivered')) return 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
     if (s.includes('cancelled')) return 'bg-rose-500/10 text-rose-400 border border-rose-500/20';
     if (s.includes('transit')) return 'bg-sky-500/10 text-sky-400 border border-sky-500/20';
-    return 'bg-[#F4631E]/10 text-[#F4631E] border border-[#F4631E]/20';
+    return 'bg-[#FF5B00]/10 text-[#FF5B00] border border-[#FF5B00]/20';
   };
 
   return (
@@ -144,8 +144,8 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
       {/* Header */}
       <div className="bg-app-bg px-8 py-5 flex items-center justify-between border-b border-app-border">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-[#F4631E]/15 rounded-xl border border-[#F4631E]/20">
-            <Truck size={20} className="text-[#F4631E]" />
+          <div className="p-2 bg-[#FF5B00]/15 rounded-xl border border-[#FF5B00]/20">
+            <Truck size={20} className="text-[#FF5B00]" />
           </div>
           <div>
             <h3 className="text-sm font-black uppercase tracking-wider text-app-text-primary">Logistics &amp; Shipment Management</h3>
@@ -179,7 +179,7 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
             className="w-full px-5 py-4 bg-app-bg/20 hover:bg-app-bg/40 flex items-center justify-between transition-colors text-left"
           >
             <div className="flex items-center gap-3">
-              <Package size={18} className="text-[#F4631E]" />
+              <Package size={18} className="text-[#FF5B00]" />
               <span className="font-extrabold text-xs uppercase tracking-wider text-app-text-primary">
                 {currentShipment ? 'Shipment Record & Actions' : 'Configure New Consignment'}
               </span>
@@ -225,7 +225,7 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
                                 navigator.clipboard.writeText(currentShipment.trackingNumber);
                                 toast.success('Tracking code copied!');
                               }}
-                              className="text-[9px] text-app-text-secondary hover:text-[#F4631E] underline font-sans cursor-pointer font-bold"
+                              className="text-[9px] text-app-text-secondary hover:text-[#FF5B00] underline font-sans cursor-pointer font-bold"
                             >
                               Copy
                             </button>
@@ -270,7 +270,7 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
                           type="button"
                           onClick={handleRequestPickup}
                           disabled={isRequestingPickup || currentShipment.status === 'picked_up' || currentShipment.status === 'cancelled'}
-                          className="px-3 py-2.5 bg-[#F4631E]/10 hover:bg-[#F4631E]/20 text-[#F4631E] rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-[#F4631E]/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="px-3 py-2.5 bg-[#FF5B00]/10 hover:bg-[#FF5B00]/20 text-[#FF5B00] rounded-xl text-[10px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-[#FF5B00]/20 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <Truck size={12} />
                           {isRequestingPickup ? 'Requesting...' : 'Request Pickup'}
@@ -345,7 +345,7 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
                             Choose Courier Provider
                           </label>
                           {recommendedCourier && (
-                            <span className="text-[9px] font-black text-[#F4631E] bg-[#F4631E]/10 border border-[#F4631E]/20 px-2.5 py-0.5 rounded-full uppercase tracking-widest animate-pulse">
+                            <span className="text-[9px] font-black text-[#FF5B00] bg-[#FF5B00]/10 border border-[#FF5B00]/20 px-2.5 py-0.5 rounded-full uppercase tracking-widest animate-pulse">
                               ★ Rule match: {recommendedCourier.name} Suggested
                             </span>
                           )}
@@ -373,7 +373,7 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
                           </span>
                           {estimateLoading ? (
                             <div className="flex items-center gap-2 text-xs text-app-text-secondary font-medium">
-                              <RefreshCw size={12} className="animate-spin text-[#F4631E]" />
+                              <RefreshCw size={12} className="animate-spin text-[#FF5B00]" />
                               <span>Querying courier rate tables...</span>
                             </div>
                           ) : shippingEstimate ? (
@@ -388,7 +388,7 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
                               </div>
                               <div>
                                 <span className="text-[9px] font-bold text-app-text-secondary block uppercase">Total Invoice Charges</span>
-                                <span className="text-xs font-black text-[#F4631E]">৳ {shippingEstimate.totalCharge}</span>
+                                <span className="text-xs font-black text-[#FF5B00]">৳ {shippingEstimate.totalCharge}</span>
                               </div>
                               <div>
                                 <span className="text-[9px] font-bold text-app-text-secondary block uppercase">Transit Speed</span>
@@ -404,7 +404,7 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
                       {/* Parcel Summary banner */}
                       <div className="bg-app-bg border border-app-border rounded-xl px-5 py-3.5 flex items-center justify-between">
                         <div className="flex items-center gap-2 text-xs font-semibold text-app-text-secondary">
-                          <Package size={14} className="text-[#F4631E]" />
+                          <Package size={14} className="text-[#FF5B00]" />
                           <span>Parcel Summary: <strong>{items?.length || 1} item(s)</strong> • <strong>৳ {codAmount} BDT Cash On Delivery (COD)</strong></span>
                         </div>
                       </div>
@@ -414,7 +414,7 @@ export const ShipmentCard: React.FC<ShipmentCardProps> = ({
                         type="button"
                         onClick={handleCreateClick}
                         disabled={!selectedCourierCode || isCreatingShipment}
-                        className="w-full py-4.5 bg-[#F4631E] hover:bg-[#F4631E]/90 disabled:bg-app-bg disabled:text-app-text-secondary/50 text-white font-black uppercase tracking-widest rounded-xl transition-all shadow-xl shadow-[#F4631E]/10 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
+                        className="w-full py-4.5 bg-[#FF5B00] hover:bg-[#FF5B00]/90 disabled:bg-app-bg disabled:text-app-text-secondary/50 text-white font-black uppercase tracking-widest rounded-xl transition-all shadow-xl shadow-[#FF5B00]/10 flex items-center justify-center gap-2 cursor-pointer active:scale-98"
                       >
                         <Plus size={16} />
                         {isCreatingShipment ? 'Registering Consignment on Courier servers...' : 'Register and Dispatch Consignment'}

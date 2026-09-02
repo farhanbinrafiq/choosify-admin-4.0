@@ -41,7 +41,7 @@ export default function CreatorsHub() {
         </div>
         <Link
           to="/admin/creator-studio"
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FF5B00] hover:bg-[#E64A00] text-white text-xs font-extrabold uppercase tracking-wider rounded-xl shadow-sm no-underline"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-[#FF5B00] hover:bg-[#FF5B00] text-white text-xs font-extrabold uppercase tracking-wider rounded-xl shadow-sm no-underline"
         >
           Open Creator Studio
         </Link>

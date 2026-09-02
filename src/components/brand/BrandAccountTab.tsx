@@ -60,7 +60,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
             <input 
               value={merchantContact.repName} 
               onChange={(e) => setMerchantContact(prev => ({ ...prev, repName: e.target.value }))}
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#F4631E] font-medium" 
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#FF5B00] font-medium" 
             />
           </div>
           <div className="space-y-1.5">
@@ -68,7 +68,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
             <input 
               value={merchantContact.busEmail} 
               onChange={(e) => setMerchantContact(prev => ({ ...prev, busEmail: e.target.value }))}
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#F4631E] font-mono" 
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#FF5B00] font-mono" 
             />
           </div>
           <div className="space-y-1.5">
@@ -76,7 +76,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
             <input 
               value={merchantContact.phone} 
               onChange={(e) => setMerchantContact(prev => ({ ...prev, phone: e.target.value }))}
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#F4631E]" 
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#FF5B00]" 
             />
           </div>
           <div className="space-y-1.5">
@@ -84,7 +84,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
             <input 
               value={merchantContact.logoUrl} 
               onChange={(e) => setMerchantContact(prev => ({ ...prev, logoUrl: e.target.value }))}
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#F4631E]" 
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#FF5B00]" 
             />
           </div>
           <div className="space-y-1.5 md:col-span-2">
@@ -93,7 +93,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
               rows={2}
               value={merchantContact.address} 
               onChange={(e) => setMerchantContact(prev => ({ ...prev, address: e.target.value }))}
-              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#F4631E] font-medium resize-none" 
+              className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2.5 focus:outline-none focus:border-[#FF5B00] font-medium resize-none" 
             />
           </div>
         </div>
@@ -124,7 +124,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
                 type="checkbox" 
                 checked={!!notifications[item.key]} 
                 onChange={(e) => setNotifications((prev: any) => ({ ...prev, [item.key]: e.target.checked }))}
-                className="mt-0.5 accent-[#F4631E]" 
+                className="mt-0.5 accent-[#FF5B00]" 
               />
               <div className="text-left">
                 <span className="font-bold text-slate-800 block">{item.title}</span>
@@ -147,7 +147,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
       {/* Access Controls Panel */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-5 text-left">
         <div className="flex items-center gap-2">
-          <Lock className="w-4 h-4 text-[#F4631E]" />
+          <Lock className="w-4 h-4 text-[#FF5B00]" />
           <h3 className="text-xs font-black text-app-text-secondary uppercase tracking-widest">Platform Access Controls (Administrative Only)</h3>
         </div>
 
@@ -193,7 +193,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
                     type="checkbox" 
                     checked={!!adminControls[f.key]} 
                     onChange={(e) => setAdminControls((prev: any) => ({ ...prev, [f.key]: e.target.checked }))}
-                    className="accent-[#F4631E]" 
+                    className="accent-[#FF5B00]" 
                   />
                   <span className="font-bold text-slate-650">{f.title}</span>
                 </label>
@@ -205,7 +205,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
         <div className="flex justify-end pt-2">
           <button 
             onClick={saveAdminControls}
-            className="px-6 py-2.5 bg-[#F4631E] hover:bg-[#eb4501] text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all"
+            className="px-6 py-2.5 bg-[#FF5B00] hover:bg-[#ff5b00] text-white rounded-xl text-xs font-black uppercase tracking-wider shadow-sm transition-all"
           >
             Save Access Constraints
           </button>
@@ -223,7 +223,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
                 type="checkbox" 
                 checked={!!authControls.twoFactor} 
                 onChange={(e) => setAuthControls((prev: any) => ({ ...prev, twoFactor: e.target.checked }))}
-                className="accent-[#F4631E]" 
+                className="accent-[#FF5B00]" 
               />
               <div className="text-left">
                 <span className="font-bold text-slate-800 block">Two Factor Authentication (MFA)</span>
@@ -236,7 +236,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
                 type="checkbox" 
                 checked={!!authControls.sessionLapse} 
                 onChange={(e) => setAuthControls((prev: any) => ({ ...prev, sessionLapse: e.target.checked }))}
-                className="accent-[#F4631E]" 
+                className="accent-[#FF5B00]" 
               />
               <div className="text-left">
                 <span className="font-bold text-slate-800 block">Enforce Inactive Session Timeout</span>
@@ -253,7 +253,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
                 <PasswordInput
                   value={authControls.currentPass || ''}
                   onChange={(value) => setAuthControls((prev: any) => ({ ...prev, currentPass: value }))}
-                  wrapperClassName="flex items-center gap-2 w-full bg-white border border-slate-300 rounded-xl px-4 focus-within:border-[#F4631E]"
+                  wrapperClassName="flex items-center gap-2 w-full bg-white border border-slate-300 rounded-xl px-4 focus-within:border-[#FF5B00]"
                   inputClassName="flex-1 min-w-0 bg-transparent border-0 outline-none py-2 text-sm"
                   placeholder="••••••••"
                   autoComplete="current-password"
@@ -264,7 +264,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
                 <PasswordInput
                   value={authControls.newPass || ''}
                   onChange={(value) => setAuthControls((prev: any) => ({ ...prev, newPass: value }))}
-                  wrapperClassName="flex items-center gap-2 w-full bg-white border border-slate-300 rounded-xl px-4 focus-within:border-[#F4631E]"
+                  wrapperClassName="flex items-center gap-2 w-full bg-white border border-slate-300 rounded-xl px-4 focus-within:border-[#FF5B00]"
                   inputClassName="flex-1 min-w-0 bg-transparent border-0 outline-none py-2 text-sm"
                   placeholder="••••••••"
                   autoComplete="new-password"
@@ -275,7 +275,7 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
                 <PasswordInput
                   value={authControls.confirmPass || ''}
                   onChange={(value) => setAuthControls((prev: any) => ({ ...prev, confirmPass: value }))}
-                  wrapperClassName="flex items-center gap-2 w-full bg-white border border-slate-300 rounded-xl px-4 focus-within:border-[#F4631E]"
+                  wrapperClassName="flex items-center gap-2 w-full bg-white border border-slate-300 rounded-xl px-4 focus-within:border-[#FF5B00]"
                   inputClassName="flex-1 min-w-0 bg-transparent border-0 outline-none py-2 text-sm"
                   placeholder="••••••••"
                   autoComplete="new-password"
@@ -320,21 +320,21 @@ export const BrandAccountTab: React.FC<BrandAccountTabProps> = ({
           </div>
 
           <div className="bg-slate-50/50 border border-slate-205 rounded-xl p-4 space-y-3">
-            <span className="text-[10px] font-black tracking-widest text-[#F4631E] uppercase block">Record New Audit Event</span>
+            <span className="text-[10px] font-black tracking-widest text-[#FF5B00] uppercase block">Record New Audit Event</span>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
               <input 
                 type="text" 
                 placeholder="Action Title (e.g., KYC Document Approved)" 
                 value={newLogAction}
                 onChange={(e) => setNewLogAction(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:outline-none focus:border-[#F4631E] font-bold"
+                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:outline-none focus:border-[#FF5B00] font-bold"
               />
               <input 
                 type="text" 
                 placeholder="Audit description details..." 
                 value={newLogNotes}
                 onChange={(e) => setNewLogNotes(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:outline-none focus:border-[#F4631E] font-medium"
+                className="w-full bg-white border border-slate-300 rounded-xl px-4 py-2 focus:outline-none focus:border-[#FF5B00] font-medium"
               />
             </div>
             <div className="flex justify-end">

@@ -51,7 +51,7 @@ export const CourierSelector: React.FC<CourierSelectorProps> = ({
               className="w-6 h-6 object-contain rounded"
             />
           ) : (
-            <div className="w-6 h-6 bg-[#F4631E]/20 text-[#F4631E] rounded flex items-center justify-center text-xs font-bold">
+            <div className="w-6 h-6 bg-[#FF5B00]/20 text-[#FF5B00] rounded flex items-center justify-center text-xs font-bold">
               {selected?.name?.charAt(0) || 'C'}
             </div>
           )}
@@ -96,7 +96,7 @@ export const CourierSelector: React.FC<CourierSelectorProps> = ({
                         className="w-6 h-6 object-contain rounded"
                       />
                     ) : (
-                      <div className="w-6 h-6 bg-[#F4631E]/20 text-[#F4631E] rounded flex items-center justify-center text-xs font-bold">
+                      <div className="w-6 h-6 bg-[#FF5B00]/20 text-[#FF5B00] rounded flex items-center justify-center text-xs font-bold">
                         {courier.name.charAt(0)}
                       </div>
                     )}
@@ -112,7 +112,7 @@ export const CourierSelector: React.FC<CourierSelectorProps> = ({
                       <div className="text-[10px] text-app-text-secondary font-semibold uppercase">Est. Delivery</div>
                       <div className="text-xs font-bold text-emerald-600">1-3 days</div>
                     </div>
-                    {isCurrent && <Check size={16} className="text-[#F4631E] ml-2" />}
+                    {isCurrent && <Check size={16} className="text-[#FF5B00] ml-2" />}
                   </div>
                 </button>
               );

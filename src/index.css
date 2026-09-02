@@ -22,35 +22,68 @@
   --color-accent-hover:    #D4331B;   /* Controlled darker hover of logo orange */
   --color-accent-light:    #FFF4ED;   /* Soft Orange bg/light tint */
 
-  --color-navy:            #000435;   /* Primary Navy (Theme Ticket brand swatch) — sidebar gradient base */
-  --color-navy-mid:        #1E293B;   /* Secondary Navy */
-  --color-navy-light:      #334155;   /* Hover Navy highlight */
+  --color-navy:            #18154C;   /* canonical Choosify Navy — sidebar gradient base */
+  --color-navy-mid:        #1E293B;   /* Secondary Navy (neutral slate hierarchy) */
+  --color-navy-light:      #334155;   /* Hover Navy highlight (neutral slate) */
+
+  /* ──────────────────────────────────────────────────────────────
+   * CHOOSIFY CANONICAL BRAND PALETTE — approved global gradient spec.
+   *   navy #18154C · red/coral #EF3C23 · orange #FF5B00
+   * Balance: ~80% neutral/light · ~15% navy surfaces · ~5% gradient.
+   * Semantic success/warning/danger/info stay independent, as does Emi AI.
+   * ────────────────────────────────────────────────────────────── */
+  --choosify-navy: #18154C;
+  --choosify-red: #EF3C23;   /* == --color-accent-primary (logo fill / brand text) */
+  --choosify-orange: #FF5B00;
+
+  --choosify-gradient-warm: linear-gradient(90deg, var(--choosify-red) 0%, var(--choosify-orange) 100%);
+  --choosify-gradient: var(--choosify-gradient-warm);
+  /* ── Approved platform-wide dark brand gradient ──────────────────
+     Warm orange bloom (top-left) + coral bloom (upper-right) over
+     canonical navy. Used EVERYWHERE dark & branded: admin sidebar +
+     topbar, storefront navbar + footer, all .choosify-dark-surface
+     banners/heroes, dark cards. One recipe, one look. */
+  --choosify-gradient-dark:
+    radial-gradient(1200px 500px at 15% 0%, color-mix(in srgb, var(--choosify-orange) 18%, transparent), transparent 65%),
+    radial-gradient(900px 500px at 90% 20%, color-mix(in srgb, var(--choosify-red) 14%, transparent), transparent 65%),
+    color-mix(in srgb, var(--choosify-navy) 96%, #000);
+  --choosify-gradient-sidebar: var(--choosify-gradient-dark);
+  --choosify-header-gradient:
+    radial-gradient(900px 200px at 15% 0%, color-mix(in srgb, var(--choosify-orange) 16%, transparent), transparent 70%),
+    radial-gradient(700px 200px at 90% 100%, color-mix(in srgb, var(--choosify-red) 12%, transparent), transparent 70%),
+    color-mix(in srgb, var(--choosify-navy) 94%, #000);
+  --choosify-footer-gradient: var(--choosify-gradient-dark);
+  /* Compact variant for small dark tiles (KPI) — same palette, calmer bloom
+     (10/8 vs 18/14) so a ~350px tile reads as clean warm-navy, not muddy. */
+  --choosify-gradient-dark-tile:
+    radial-gradient(460px 300px at 15% 0%, color-mix(in srgb, var(--choosify-orange) 10%, transparent), transparent 72%),
+    radial-gradient(380px 280px at 95% 20%, color-mix(in srgb, var(--choosify-red) 8%, transparent), transparent 72%),
+    color-mix(in srgb, var(--choosify-navy) 97%, #000);
+  /* Command Center connected parent — warm bloom lifting into navy (no near-black) */
+  --choosify-gradient-command:
+    radial-gradient(120% 180% at 6% 50%, color-mix(in srgb, var(--choosify-red) 55%, transparent), transparent 70%),
+    radial-gradient(90% 160% at 94% 50%, color-mix(in srgb, var(--choosify-orange) 30%, transparent), transparent 68%),
+    linear-gradient(100deg, color-mix(in srgb, var(--choosify-red) 60%, var(--choosify-navy)) 0%, var(--choosify-navy) 62%, color-mix(in srgb, var(--choosify-navy) 88%, #000) 100%);
 
   /*
    * Storefront footer / dark-surface gradient parity
    * (Choosify-Web --gradient-dark-surface / .footer-brand-gradient)
    */
-  --gradient-dark-surface:
-    radial-gradient(1200px 500px at 15% 0%, hsla(6, 86%, 54%, 0.18), transparent 65%),
-    radial-gradient(900px 500px at 90% 20%, hsla(6, 86%, 45%, 0.14), transparent 65%),
-    rgba(10, 10, 31, 0.96);
+  --gradient-dark-surface: var(--choosify-gradient-dark);
 
   /* Storefront chrome header (navbar / sticky dark bars) */
-  --gradient-chrome-header:
-    radial-gradient(900px 200px at 15% 0%, hsla(6, 86%, 54%, 0.16), transparent 70%),
-    radial-gradient(700px 200px at 90% 100%, hsla(6, 86%, 45%, 0.12), transparent 70%),
-    rgba(10, 10, 31, 0.94);
+  --gradient-chrome-header: var(--choosify-header-gradient);
 
   /* Storefront hero / dark brand linear */
-  --gradient-hero-chrome: linear-gradient(180deg, #3A1E22 0%, #000435 100%);
+  --gradient-hero-chrome: linear-gradient(180deg, color-mix(in srgb, var(--choosify-red) 22%, var(--choosify-navy)) 0%, var(--choosify-navy) 100%);
 
-  /* Brand primary button — logo orange with controlled darker start */
-  --gradient-orange-button: linear-gradient(90deg, #C8321A 0%, #EF3C23 100%);
+  /* Brand primary button — canonical warm gradient (red → orange) */
+  --gradient-orange-button: var(--choosify-gradient-warm);
 
-  /* Sidebar + dark CMS chrome use footer dark-surface */
-  --color-sidebar-gradient-orange: #EF3C23;
-  --color-sidebar-gradient-orange-deep: #D4331B;
-  --gradient-sidebar: var(--gradient-dark-surface);
+  /* Sidebar + dark CMS chrome */
+  --color-sidebar-gradient-orange: var(--choosify-orange);
+  --color-sidebar-gradient-orange-deep: var(--choosify-red);
+  --gradient-sidebar: var(--choosify-gradient-sidebar);
 
   --color-text-primary:    #111827;   /* Headings, titles, data values */
   --color-text-secondary:  #374151;   /* Descriptions, supporting content, form labels */
@@ -111,11 +144,11 @@
   --color-cyan-500: var(--color-accent-primary);
   --color-cyan-600: var(--color-accent-hover);
 
-  /* Normalize Tailwind orange scale to Choosify logo orange (not amber warning) */
-  --color-orange-500: var(--color-accent-primary);
-  --color-orange-600: var(--color-accent-hover);
-  --color-orange-400: var(--color-accent-primary);
-  --color-orange-700: var(--color-accent-hover);
+  /* Normalize Tailwind orange scale to the canonical Choosify Orange (not amber warning) */
+  --color-orange-400: var(--choosify-orange);
+  --color-orange-500: var(--choosify-orange);
+  --color-orange-600: var(--choosify-red);
+  --color-orange-700: var(--choosify-red);
 }
 
 @layer base {
@@ -168,12 +201,9 @@ aside.sidebar,
  * (full-viewport 1200×500px sidebar ellipses look solid at this height).
  */
 .profile-identity-banner {
-  /* Warm→navy strip: lifted midtones, no near-black terminus */
-  background:
-    radial-gradient(95% 170% at 8% 50%, hsla(6, 86%, 54%, 0.62), transparent 72%),
-    radial-gradient(80% 150% at 92% 50%, hsla(230, 58%, 48%, 0.42), transparent 70%),
-    linear-gradient(100deg, #8B3A3E 0%, #5A2A2E 28%, #3A1E22 52%, #2a2858 82%, #1e2260 100%) !important;
-  background-color: #5A2A2E !important;
+  /* Canonical warm→navy connected strip: lifted midtones, no near-black terminus */
+  background: var(--choosify-gradient-command) !important;
+  background-color: color-mix(in srgb, var(--choosify-red) 45%, var(--choosify-navy)) !important;
 }
 
 /* Keep role label readable on the dark sidebar gradient (typography otherwise unchanged). */
@@ -242,10 +272,10 @@ aside.sidebar .text-gray-500,
 /* Enforce orange accent color for highlighted / active items and icons */
 aside.sidebar .text-app-accent,
 .sidebar .text-app-accent,
-aside.sidebar [class*="text-[#F97316]"],
-.sidebar [class*="text-[#F97316]"],
-aside.sidebar [class*="text-[#EB4501]"],
-.sidebar [class*="text-[#EB4501]"],
+aside.sidebar [class*="text-[#FF5B00]"],
+.sidebar [class*="text-[#FF5B00]"],
+aside.sidebar [class*="text-[#FF5B00]"],
+.sidebar [class*="text-[#FF5B00]"],
 aside.sidebar [class*="text-[#FF5B00]"],
 .sidebar [class*="text-[#FF5B00]"],
 aside.sidebar [class*="text-[#EF3C23]"],
@@ -379,10 +409,10 @@ aside.sidebar nav button [class*="bg-white"],
   color: var(--color-accent-primary) !important;
 }
 
-aside.sidebar nav a [class*="bg-[#F97316]"],
-.sidebar nav a [class*="bg-[#F97316]"],
-aside.sidebar nav button [class*="bg-[#F97316]"],
-.sidebar nav button [class*="bg-[#F97316]"] {
+aside.sidebar nav a [class*="bg-[#FF5B00]"],
+.sidebar nav a [class*="bg-[#FF5B00]"],
+aside.sidebar nav button [class*="bg-[#FF5B00]"],
+.sidebar nav button [class*="bg-[#FF5B00]"] {
   color: #ffffff !important;
 }
 
@@ -465,32 +495,32 @@ aside.sidebar .sidebar-marketplace-cta:hover,
 /* Force correct colors inside ANY dynamic dark panels, card feeds, or insight boxes in Light Mode */
 html:not(.dark) [class*="bg-[#05050C]"],
 html:not(.dark) [class*="bg-[#0D1B2A]"],
-html:not(.dark) [class*="bg-[#0B1528]"],
+html:not(.dark) [class*="bg-[#18154C]"],
 html:not(.dark) [class*="bg-[#0B0F19]"],
 html:not(.dark) [class*="bg-slate-900"],
 html:not(.dark) [class*="bg-slate-950"],
 html:not(.dark) [class*="bg-slate-850"],
 html:not(.dark) [class*="bg-slate-800"],
 html:not(.dark) [class*="bg-indigo-950"],
-html:not(.dark) [class*="bg-[#000435]"] {
+html:not(.dark) [class*="bg-[#18154C]"] {
   color: #FFFFFF !important;
 }
 
 /* Enforce Primary white, Secondary soft grey, and Muted slate colors inside dark background sections */
 html:not(.dark) [class*="bg-[#05050C]"] h1, html:not(.dark) [class*="bg-[#05050C]"] h2, html:not(.dark) [class*="bg-[#05050C]"] h3, html:not(.dark) [class*="bg-[#05050C]"] h4, html:not(.dark) [class*="bg-[#05050C]"] p, html:not(.dark) [class*="bg-[#05050C]"] span:not(button *, .btn *, [class*="bg-white"] *), html:not(.dark) [class*="bg-[#05050C]"] label,
 html:not(.dark) [class*="bg-[#0D1B2A]"] h1, html:not(.dark) [class*="bg-[#0D1B2A]"] h2, html:not(.dark) [class*="bg-[#0D1B2A]"] h3, html:not(.dark) [class*="bg-[#0D1B2A]"] h4, html:not(.dark) [class*="bg-[#0D1B2A]"] p, html:not(.dark) [class*="bg-[#0D1B2A]"] span:not(button *, .btn *, [class*="bg-white"] *), html:not(.dark) [class*="bg-[#0D1B2A]"] label,
-html:not(.dark) [class*="bg-[#0B1528]"] h1, html:not(.dark) [class*="bg-[#0B1528]"] h2, html:not(.dark) [class*="bg-[#0B1528]"] h3, html:not(.dark) [class*="bg-[#0B1528]"] p, html:not(.dark) [class*="bg-[#0B1528]"] span:not(button *, .btn *, [class*="bg-white"] *), html:not(.dark) [class*="bg-[#0B1528]"] label,
+html:not(.dark) [class*="bg-[#18154C]"] h1, html:not(.dark) [class*="bg-[#18154C]"] h2, html:not(.dark) [class*="bg-[#18154C]"] h3, html:not(.dark) [class*="bg-[#18154C]"] p, html:not(.dark) [class*="bg-[#18154C]"] span:not(button *, .btn *, [class*="bg-white"] *), html:not(.dark) [class*="bg-[#18154C]"] label,
 html:not(.dark) [class*="bg-[#0B0F19]"] h1, html:not(.dark) [class*="bg-[#0B0F19]"] p, html:not(.dark) [class*="bg-[#0B0F19]"] span:not(button *, .btn *, [class*="bg-white"] *),
-html:not(.dark) [class*="bg-[#000435]"] h1, html:not(.dark) [class*="bg-[#000435]"] p, html:not(.dark) [class*="bg-[#000435]"] span:not(button *, .btn *, [class*="bg-white"] *) {
+html:not(.dark) [class*="bg-[#18154C]"] h1, html:not(.dark) [class*="bg-[#18154C]"] p, html:not(.dark) [class*="bg-[#18154C]"] span:not(button *, .btn *, [class*="bg-white"] *) {
   color: #FFFFFF !important;
 }
 
 /* Enforce Secondary and Muted text rules inside any dark sections in the main feed */
 html:not(.dark) [class*="bg-[#05050C]"] .text-slate-400, html:not(.dark) [class*="bg-[#05050C]"] .text-gray-400, html:not(.dark) [class*="bg-[#05050C]"] .text-zinc-400,
 html:not(.dark) [class*="bg-[#0D1B2A]"] .text-slate-400, html:not(.dark) [class*="bg-[#0D1B2A]"] .text-gray-400, html:not(.dark) [class*="bg-[#0D1B2A]"] .text-zinc-400,
-html:not(.dark) [class*="bg-[#0B1528]"] .text-slate-400, html:not(.dark) [class*="bg-[#0B1528]"] .text-gray-400, html:not(.dark) [class*="bg-[#0B1528]"] .text-zinc-400,
+html:not(.dark) [class*="bg-[#18154C]"] .text-slate-400, html:not(.dark) [class*="bg-[#18154C]"] .text-gray-400, html:not(.dark) [class*="bg-[#18154C]"] .text-zinc-400,
 html:not(.dark) [class*="bg-[#0B0F19]"] .text-slate-400, html:not(.dark) [class*="bg-[#0B0F19]"] .text-gray-400, html:not(.dark) [class*="bg-[#0B0F19]"] .text-zinc-400,
-html:not(.dark) [class*="bg-[#000435]"] .text-slate-400, html:not(.dark) [class*="bg-[#000435]"] .text-gray-400, html:not(.dark) [class*="bg-[#000435]"] .text-zinc-400,
+html:not(.dark) [class*="bg-[#18154C]"] .text-slate-400, html:not(.dark) [class*="bg-[#18154C]"] .text-gray-400, html:not(.dark) [class*="bg-[#18154C]"] .text-zinc-400,
 html:not(.dark) [class*="bg-slate-900"] .text-slate-400, html:not(.dark) [class*="bg-slate-900"] .text-gray-400,
 html:not(.dark) [class*="bg-slate-950"] .text-slate-400, html:not(.dark) [class*="bg-slate-950"] .text-gray-400 {
   color: #CBD5E1 !important; /* Muted Text: #CBD5E1 */
@@ -498,9 +528,9 @@ html:not(.dark) [class*="bg-slate-950"] .text-slate-400, html:not(.dark) [class*
 
 html:not(.dark) [class*="bg-[#05050C]"] .text-slate-500, html:not(.dark) [class*="bg-[#05050C]"] .text-gray-500,
 html:not(.dark) [class*="bg-[#0D1B2A]"] .text-slate-500, html:not(.dark) [class*="bg-[#0D1B2A]"] .text-gray-500,
-html:not(.dark) [class*="bg-[#0B1528]"] .text-slate-500, html:not(.dark) [class*="bg-[#0B1528]"] .text-gray-500,
+html:not(.dark) [class*="bg-[#18154C]"] .text-slate-500, html:not(.dark) [class*="bg-[#18154C]"] .text-gray-500,
 html:not(.dark) [class*="bg-[#0B0F19]"] .text-slate-500, html:not(.dark) [class*="bg-[#0B0F19]"] .text-gray-500,
-html:not(.dark) [class*="bg-[#000435]"] .text-slate-500, html:not(.dark) [class*="bg-[#000435]"] .text-gray-500,
+html:not(.dark) [class*="bg-[#18154C]"] .text-slate-500, html:not(.dark) [class*="bg-[#18154C]"] .text-gray-500,
 html:not(.dark) [class*="bg-slate-900"] .text-slate-500, html:not(.dark) [class*="bg-slate-900"] .text-gray-500,
 html:not(.dark) [class*="bg-slate-950"] .text-slate-500, html:not(.dark) [class*="bg-slate-950"] .text-gray-500 {
   color: #CBD5E1 !important; /* Muted Text: #CBD5E1 */
@@ -508,32 +538,32 @@ html:not(.dark) [class*="bg-slate-950"] .text-slate-500, html:not(.dark) [class*
 
 html:not(.dark) [class*="bg-[#05050C]"] .text-slate-300, html:not(.dark) [class*="bg-[#05050C]"] .text-gray-300,
 html:not(.dark) [class*="bg-[#0D1B2A]"] .text-slate-300, html:not(.dark) [class*="bg-[#0D1B2A]"] .text-gray-300,
-html:not(.dark) [class*="bg-[#0B1528]"] .text-slate-300, html:not(.dark) [class*="bg-[#0B1528]"] .text-gray-300,
+html:not(.dark) [class*="bg-[#18154C]"] .text-slate-300, html:not(.dark) [class*="bg-[#18154C]"] .text-gray-300,
 html:not(.dark) [class*="bg-[#0B0F19]"] .text-slate-300, html:not(.dark) [class*="bg-[#0B0F19]"] .text-gray-300,
-html:not(.dark) [class*="bg-[#000435]"] .text-slate-300, html:not(.dark) [class*="bg-[#000435]"] .text-gray-300,
+html:not(.dark) [class*="bg-[#18154C]"] .text-slate-300, html:not(.dark) [class*="bg-[#18154C]"] .text-gray-300,
 html:not(.dark) [class*="bg-slate-900"] .text-slate-300, html:not(.dark) [class*="bg-slate-900"] .text-gray-300,
 html:not(.dark) [class*="bg-slate-950"] .text-slate-300, html:not(.dark) [class*="bg-slate-950"] .text-gray-300 {
   color: #E2E8F0 !important; /* Secondary Text: #E2E8F0 */
 }
 
 html:not(.dark) [class*="bg-[#05050C]"] .text-slate-200, html:not(.dark) [class*="bg-[#0d1b2a]"] .text-slate-200,
-html:not(.dark) [class*="bg-[#0B1528]"] .text-slate-200, html:not(.dark) [class*="bg-[#000435]"] .text-slate-200 {
+html:not(.dark) [class*="bg-[#18154C]"] .text-slate-200, html:not(.dark) [class*="bg-[#18154C]"] .text-slate-200 {
   color: #E2E8F0 !important;
 }
 
 /* For direct white texts inside dark panels - ensure full brightness */
 html:not(.dark) [class*="bg-[#05050C]"] .text-white,
 html:not(.dark) [class*="bg-[#0D1B2A]"] .text-white,
-html:not(.dark) [class*="bg-[#0B1528]"] .text-white,
+html:not(.dark) [class*="bg-[#18154C]"] .text-white,
 html:not(.dark) [class*="bg-[#0B0F19]"] .text-white,
-html:not(.dark) [class*="bg-[#000435]"] .text-white {
+html:not(.dark) [class*="bg-[#18154C]"] .text-white {
   color: #FFFFFF !important;
 }
 
 /* 6. Enforce white font color on solid colored buttons/badges (including on hover/focus) */
 html:not(.dark) .bg-app-accent,
-html:not(.dark) .bg-\[\#F97316\],
-html:not(.dark) .bg-\[\#EB4501\],
+html:not(.dark) .bg-\[\#FF5B00\],
+html:not(.dark) .bg-\[\#FF5B00\],
 html:not(.dark) .bg-green-500,
 html:not(.dark) .bg-green-600,
 html:not(.dark) .bg-red-500,
@@ -546,13 +576,13 @@ html:not(.dark) .bg-purple-600,
 html:not(.dark) .bg-indigo-600,
 html:not(.dark) .bg-[#0D1B2A],
 html:not(.dark) .bg-[#1A1A2E],
-html:not(.dark) .bg-\[\#F4631E\] {
+html:not(.dark) .bg-\[\#FF5B00\] {
   color: #FFFFFF !important;
 }
 
 html:not(.dark) .bg-app-accent *,
-html:not(.dark) .bg-\[\#F97316\] *,
-html:not(.dark) .bg-\[\#EB4501\] *,
+html:not(.dark) .bg-\[\#FF5B00\] *,
+html:not(.dark) .bg-\[\#FF5B00\] *,
 html:not(.dark) .bg-green-500 *,
 html:not(.dark) .bg-green-600 *,
 html:not(.dark) .bg-red-500 *,
@@ -562,7 +592,7 @@ html:not(.dark) .bg-blue-600 *,
 html:not(.dark) .bg-orange-500 *,
 html:not(.dark) .bg-[#0D1B2A] *,
 html:not(.dark) .bg-[#1A1A2E] *,
-html:not(.dark) .bg-\[\#F4631E\] * {
+html:not(.dark) .bg-\[\#FF5B00\] * {
   color: #FFFFFF !important;
 }
 
@@ -578,7 +608,7 @@ html:not(.dark) .bg-white\/\[0\.04\],
 html:not(.dark) .bg-white\/\[0\.05\],
 html:not(.dark) .bg-white\/\[0\.08\],
 html:not(.dark) .bg-white\/\[0\.1\] {
-  background-color: rgba(0, 4, 53, 0.03) !important;
+  background-color: rgba(24, 21, 76, 0.03) !important;
 }
 
 html:not(.dark) .hover\:bg-white\/5:hover,
@@ -597,7 +627,7 @@ html:not(.dark) .group-hover\:bg-white\/\[0\.02\],
 html:not(.dark) .group-hover\:bg-white\/\[0\.03\],
 html:not(.dark) .group-hover\:bg-white\/\[0\.05\],
 html:not(.dark) .group-hover\:bg-white\/\[0\.08\] {
-  background-color: rgba(0, 4, 53, 0.06) !important;
+  background-color: rgba(24, 21, 76, 0.06) !important;
 }
 
 /* Transform matching low-contrast border boundaries into solid, readable lines in Light Mode */
@@ -612,7 +642,7 @@ html:not(.dark) .border-white\/\[0\.04\],
 html:not(.dark) .border-white\/\[0\.05\],
 html:not(.dark) .border-white\/\[0\.08\],
 html:not(.dark) .border-white\/\[0\.1\] {
-  border-color: rgba(0, 4, 53, 0.08) !important;
+  border-color: rgba(24, 21, 76, 0.08) !important;
 }
 
 /* Redefine/restore original dark-matching white opacities inside deep aside/sidebar containers in Light Mode */
@@ -674,12 +704,12 @@ html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([c
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-red-"],
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-blue-"],
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-orange-"],
-html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#EB4501]"],
-html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#F4631E]"],
-html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#000435]"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#FF5B00]"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#FF5B00]"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#18154C]"],
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#0D1B2A]"],
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-app-accent"],
-html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#F4631E]"],
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#FF5B00]"],
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-purple-"],
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-indigo-"],
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-slate-800"],
@@ -692,10 +722,10 @@ html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([c
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-red-"] *,
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-blue-"] *,
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-orange-"] *,
-html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#EB4501]"] *,
-html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#F4631E]"] *,
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#FF5B00]"] *,
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#FF5B00]"] *,
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-app-accent"] *,
-html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#000435]"] *,
+html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#18154C]"] *,
 html:not(.dark) [class*="rounded-"]:not([class*="/"]):not([class*="-50"]):not([class*="-100"]):not([class*="-200"])[class*="bg-[#0D1B2A]"] * {
   color: #F5F5F5 !important;
 }
@@ -725,13 +755,13 @@ html:not(.dark) [class*="rounded-"][class*="bg-orange-200"],
 html:not(.dark) [class*="rounded-"][class*="bg-orange-500/10"],
 html:not(.dark) [class*="rounded-"][class*="bg-orange-500/15"],
 html:not(.dark) [class*="rounded-"][class*="bg-orange-500/20"],
-html:not(.dark) [class*="rounded-"][class*="bg-[#EB4501]/10"],
-html:not(.dark) [class*="rounded-"][class*="bg-[#EB4501]/15"],
-html:not(.dark) [class*="rounded-"][class*="bg-[#EB4501]/20"],
-html:not(.dark) [class*="rounded-"][class*="bg-[#F97316]/10"],
+html:not(.dark) [class*="rounded-"][class*="bg-[#FF5B00]/10"],
+html:not(.dark) [class*="rounded-"][class*="bg-[#FF5B00]/15"],
+html:not(.dark) [class*="rounded-"][class*="bg-[#FF5B00]/20"],
+html:not(.dark) [class*="rounded-"][class*="bg-[#FF5B00]/10"],
 html:not(.dark) [class*="rounded-"][class*="bg-app-accent/10"],
 html:not(.dark) [class*="rounded-"][class*="bg-app-accent/15"],
-html:not(.dark) [class*="rounded-"][class*="bg-[#F4631E]/10"],
+html:not(.dark) [class*="rounded-"][class*="bg-[#FF5B00]/10"],
 html:not(.dark) [class*="rounded-"][class*="bg-slate-50"],
 html:not(.dark) [class*="rounded-"][class*="bg-slate-100"],
 html:not(.dark) [class*="rounded-"][class*="bg-slate-200"],
@@ -760,7 +790,7 @@ html:not(.dark) [class*="rounded-"][class*="bg-blue-500/15"] *,
 html:not(.dark) [class*="rounded-"][class*="bg-orange-50"] *,
 html:not(.dark) [class*="rounded-"][class*="bg-orange-100"] *,
 html:not(.dark) [class*="rounded-"][class*="bg-orange-500/10"] *,
-html:not(.dark) [class*="rounded-"][class*="bg-[#EB4501]/10"] *,
+html:not(.dark) [class*="rounded-"][class*="bg-[#FF5B00]/10"] *,
 html:not(.dark) [class*="rounded-"][class*="bg-app-accent/10"] * {
   color: var(--color-text-primary) !important;
 }
@@ -1019,7 +1049,7 @@ html:not(.dark) main [class*="text-orange-400"],
 html:not(.dark) main [class*="text-orange-200"],
 html:not(.dark) main [class*="text-orange-500"],
 html:not(.dark) main [class*="text-[#ffedd5]"],
-html:not(.dark) main [class*="text-[#F97316]"],
+html:not(.dark) main [class*="text-[#FF5B00]"],
 html:not(.dark) main [class*="text-[#FF5B00]"],
 html:not(.dark) main [class*="text-[#EF3C23]"] {
   color: var(--color-accent-primary) !important; /* Canonical logo orange */
@@ -1029,10 +1059,10 @@ html:not(.dark) main [class*="text-[#EF3C23]"] {
 html:not(.dark) main .text-orange-600,
 html:not(.dark) main .text-orange-700,
 html:not(.dark) main .text-orange-850,
-html:not(.dark) main [class*="text-[#EA580C]"],
+html:not(.dark) main [class*="text-[#EF3C23]"],
 html:not(.dark) main [class*="text-orange-600"],
 html:not(.dark) main [class*="text-orange-700"],
-html:not(.dark) main [class*="text-[#E64A00]"] {
+html:not(.dark) main [class*="text-[#FF5B00]"] {
   color: var(--color-accent-hover) !important; /* Controlled darker brand orange */
 }
 
@@ -1114,15 +1144,15 @@ html:not(.dark) main :is(
   [class*="bg-[#090a12]"],
   [class*="bg-[#1A1A2E]"],
   [class*="bg-[#1a1a2e]"],
-  [class*="bg-[#0B1F3B]"],
+  [class*="bg-[#18154C]"],
   [class*="bg-[#0B0D19]"],
   [class*="bg-[#050512]"],
-  [class*="bg-[#0B1528]"],
+  [class*="bg-[#18154C]"],
   [class*="bg-[#16192E]"],
   [class*="bg-[#0F172A]"],
   [class*="bg-[#0d0e1a]"],
   [class*="bg-[#0D1B2A]"],
-  [class*="bg-[#0A2540]"],
+  [class*="bg-[#18154C]"],
   [class*="bg-[#1F1F35]"],
   [class*="bg-[#12182F]"],
   [class*="bg-[#241A35]"],
@@ -1142,8 +1172,8 @@ html:not(.dark) main :is(
   [class*="bg-[#05110B]"],
   [class*="bg-[#05055C]"],
   [class*="bg-[#05051C]"],
-  [class*="bg-[#1E3A5F]"],
-  [class*="bg-[#000435]"],
+  [class*="bg-[#2A2560]"],
+  [class*="bg-[#18154C]"],
   [class*="bg-slate-700"],
   [class*="bg-slate-750"],
   [class*="bg-slate-800"],
@@ -1198,17 +1228,17 @@ html:not(.dark) main :is(
    since they are not part of the selector list above). */
 html:not(.dark) main :is(
   [class*="bg-[#121424]"], [class*="bg-[#05050C]"], [class*="bg-[#090a12]"],
-  [class*="bg-[#1A1A2E]"], [class*="bg-[#1a1a2e]"], [class*="bg-[#0B1F3B]"],
-  [class*="bg-[#0B0D19]"], [class*="bg-[#050512]"], [class*="bg-[#0B1528]"],
+  [class*="bg-[#1A1A2E]"], [class*="bg-[#1a1a2e]"], [class*="bg-[#18154C]"],
+  [class*="bg-[#0B0D19]"], [class*="bg-[#050512]"], [class*="bg-[#18154C]"],
   [class*="bg-[#16192E]"], [class*="bg-[#0F172A]"], [class*="bg-[#0d0e1a]"],
-  [class*="bg-[#0D1B2A]"], [class*="bg-[#0A2540]"], [class*="bg-[#1F1F35]"],
+  [class*="bg-[#0D1B2A]"], [class*="bg-[#18154C]"], [class*="bg-[#1F1F35]"],
   [class*="bg-[#12182F]"], [class*="bg-[#241A35]"], [class*="bg-[#202030]"],
   [class*="bg-[#1e2330]"], [class*="bg-[#1e1e2e]"], [class*="bg-[#1e1512]"],
   [class*="bg-[#1c1214]"], [class*="bg-[#1A314B]"], [class*="bg-[#12121A]"],
   [class*="bg-[#120509]"], [class*="bg-[#101117]"], [class*="bg-[#0e101f]"],
   [class*="bg-[#0F0F1D]"], [class*="bg-[#0B0F19]"], [class*="bg-[#06101B]"],
   [class*="bg-[#05110B]"], [class*="bg-[#05055C]"], [class*="bg-[#05051C]"],
-  [class*="bg-[#1E3A5F]"], [class*="bg-[#000435]"],
+  [class*="bg-[#2A2560]"], [class*="bg-[#18154C]"],
   [class*="bg-slate-700"], [class*="bg-slate-750"], [class*="bg-slate-800"],
   [class*="bg-slate-850"], [class*="bg-slate-900"], [class*="bg-slate-950"],
   [class*="bg-gray-800"], [class*="bg-gray-900"], [class*="bg-gray-950"],
@@ -1431,14 +1461,27 @@ html.dark .sidebar .sidebar-nav-search input::placeholder {
   color: #FFFFFF;
 }
 
-/* Dashboard KPI tiles: footer dark-surface (storefront parity) */
+/* Dashboard KPI tiles: clean canonical navy (calm — role dashboards stay
+   professional; the warm connected gradient is reserved for the branded
+   Command Center panel below). A single tile is too small to carry the
+   footer-scale radials without muddying to maroon. */
 .dash-kpi-tile {
-  background: var(--gradient-dark-surface) !important;
-  background-color: rgba(10, 10, 31, 0.96) !important;
+  background: var(--choosify-gradient-dark-tile) !important;
+  background-color: var(--choosify-navy) !important;
   border: 1px solid rgba(255, 255, 255, 0.14) !important;
 }
 .dash-kpi-tile:hover {
   border-color: rgba(255, 255, 255, 0.3) !important;
+}
+/* Command Center only: translucent glass tiles inside the connected brand parent */
+.dash-kpi-panel--branded .dash-kpi-tile {
+  background: rgba(255, 255, 255, 0.10) !important;
+  background-color: rgba(255, 255, 255, 0.10) !important;
+  border-color: rgba(255, 255, 255, 0.20) !important;
+  backdrop-filter: blur(2px);
+}
+.dash-kpi-panel--branded .dash-kpi-tile:hover {
+  border-color: rgba(255, 255, 255, 0.34) !important;
 }
 .dash-kpi-label,
 .dash-kpi-sub {
@@ -1465,7 +1508,7 @@ html.dark .sidebar .sidebar-nav-search input::placeholder {
 .choosify-dark-gradient,
 .dark-brand-gradient,
 .hero-gradient {
-  background: var(--gradient-hero-chrome) !important;
+  background: var(--choosify-gradient-dark) !important;
 }
 
 /* ============================================================
@@ -1531,7 +1574,7 @@ form.choosify-navbar-hero-search {
 
 .global-search-shell__cta {
   color: #ffffff !important;
-  background: #eb4501 !important;
+  background: var(--choosify-orange) !important;
   background-image: none !important;
   font-weight: 800 !important;
 }
@@ -1541,7 +1584,7 @@ form.choosify-navbar-hero-search {
 }
 
 .global-search-shell__cta:hover {
-  background: #cf4400 !important;
+  background: var(--choosify-red) !important;
   color: #ffffff !important;
 }
 
@@ -1564,8 +1607,8 @@ html:not(.dark) button[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
 html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
 html:not(.dark) button[class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]),
 html:not(.dark) a[class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]),
-html:not(.dark) button[class*="bg-[#F97316]"]:not([class*="bg-[#F97316]/"]),
-html:not(.dark) a[class*="bg-[#F97316]"]:not([class*="bg-[#F97316]/"]),
+html:not(.dark) button[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
+html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
 html:not(.dark) button[class*="bg-orange-500"]:not([class*="bg-orange-500/"]),
 html:not(.dark) a[class*="bg-orange-500"]:not([class*="bg-orange-500/"]),
 html:not(.dark) button[class*="bg-app-accent"]:not([class*="bg-app-accent/"]),
@@ -1578,8 +1621,8 @@ html:not(.dark) button[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hove
 html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover,
 html:not(.dark) button[class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]):hover,
 html:not(.dark) a[class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]):hover,
-html:not(.dark) button[class*="bg-[#F97316]"]:not([class*="bg-[#F97316]/"]):hover,
-html:not(.dark) a[class*="bg-[#F97316]"]:not([class*="bg-[#F97316]/"]):hover,
+html:not(.dark) button[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover,
+html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover,
 html:not(.dark) button[class*="bg-orange-500"]:not([class*="bg-orange-500/"]):hover,
 html:not(.dark) a[class*="bg-orange-500"]:not([class*="bg-orange-500/"]):hover {
   background: linear-gradient(90deg, #b02b16 0%, #d4331b 100%) !important;
@@ -1595,17 +1638,17 @@ html:not(.dark) a[class*="bg-orange-500"]:not([class*="bg-orange-500/"]):hover {
    ============================================================ */
 html:not(.dark) [class*="text-[#FF5B00]"],
 html:not(.dark) [class*="text-[#ff5b00]"],
-html:not(.dark) [class*="text-[#F97316]"],
-html:not(.dark) [class*="text-[#f97316]"],
-html:not(.dark) [class*="text-[#EB4501]"],
-html:not(.dark) [class*="text-[#F4631E]"],
+html:not(.dark) [class*="text-[#FF5B00]"],
+html:not(.dark) [class*="text-[#ff5b00]"],
+html:not(.dark) [class*="text-[#FF5B00]"],
+html:not(.dark) [class*="text-[#FF5B00]"],
 html:not(.dark) [class*="text-[#EF3C23]"],
 html:not(.dark) .text-app-accent {
   color: var(--color-accent-primary) !important;
 }
 
 html:not(.dark) [class*="border-[#FF5B00]"]:not([class*="border-[#FF5B00]/"]),
-html:not(.dark) [class*="border-[#F97316]"]:not([class*="border-[#F97316]/"]),
+html:not(.dark) [class*="border-[#FF5B00]"]:not([class*="border-[#FF5B00]/"]),
 html:not(.dark) [class*="border-[#EF3C23]"]:not([class*="border-[#EF3C23]/"]),
 html:not(.dark) [class*="border-orange-500"]:not([class*="border-orange-500/"]),
 html:not(.dark) .border-app-accent {
@@ -1613,7 +1656,7 @@ html:not(.dark) .border-app-accent {
 }
 
 html:not(.dark) [class*="from-[#FF5B00]"],
-html:not(.dark) [class*="from-[#F97316]"],
+html:not(.dark) [class*="from-[#FF5B00]"],
 html:not(.dark) [class*="from-orange-500"],
 html:not(.dark) [class*="to-orange-500"],
 html:not(.dark) [class*="to-orange-600"] {

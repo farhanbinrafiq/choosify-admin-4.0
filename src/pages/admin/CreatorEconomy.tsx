@@ -159,7 +159,7 @@ export default function CreatorEconomy() {
         <div className="flex flex-wrap items-center gap-3">
           <Link
             to="/admin/creator-earnings"
-            className="px-4 py-2 bg-gradient-to-r from-[#F4631E]/20 to-[#F4631E]/10 hover:from-[#F4631E]/30 hover:to-[#F4631E]/15 border border-[#F4631E]/40 text-[#F4631E] text-xs font-black uppercase tracking-wider rounded-[4px] shadow cursor-pointer transition-all flex items-center gap-1.5"
+            className="px-4 py-2 bg-gradient-to-r from-[#FF5B00]/20 to-[#FF5B00]/10 hover:from-[#FF5B00]/30 hover:to-[#FF5B00]/15 border border-[#FF5B00]/40 text-[#FF5B00] text-xs font-black uppercase tracking-wider rounded-[4px] shadow cursor-pointer transition-all flex items-center gap-1.5"
           >
             <Wallet className="w-4 h-4 animate-pulse" /> Review Creator Earnings Console
           </Link>
@@ -185,7 +185,7 @@ export default function CreatorEconomy() {
 
         <div className="bg-app-card border border-app-border rounded-[4px] p-4 shadow-xl space-y-1 relative group">
           <span className="text-[10px] text-app-text-secondary font-bold uppercase tracking-wider block">Creator Commission accrued</span>
-          <div className="text-2xl font-extrabold text-[#EB4501] font-mono tracking-tight">৳{totalFinancials.totalAffiliatePayoutsAccrued.toLocaleString()}</div>
+          <div className="text-2xl font-extrabold text-[#FF5B00] font-mono tracking-tight">৳{totalFinancials.totalAffiliatePayoutsAccrued.toLocaleString()}</div>
           <p className="text-[10px] text-slate-500">10% Default partnership share active</p>
           <Wallet className="absolute right-4 top-4 w-7 h-7 text-slate-500/10" />
         </div>
@@ -261,7 +261,7 @@ export default function CreatorEconomy() {
             
             <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-2xl">
               <h3 className="text-xs font-bold text-app-text-primary uppercase tracking-wider mb-4 flex items-center gap-1">
-                <MousePointerClick className="w-4 h-4 text-[#EB4501]" /> Curated Recommendation conversions (Revenue vs Payout)
+                <MousePointerClick className="w-4 h-4 text-[#FF5B00]" /> Curated Recommendation conversions (Revenue vs Payout)
               </h3>
               <div className="h-64 text-xs font-mono">
                 <ResponsiveContainer width="100%" height="100%">
@@ -271,7 +271,7 @@ export default function CreatorEconomy() {
                     <Tooltip contentStyle={{ backgroundColor: '#121212', borderColor: '#262626' }} />
                     <Legend />
                     <Bar dataKey="Generated Revenue BDT" fill="#1A1A2E" radius={[2,2,0,0]} />
-                    <Bar dataKey="Paid out Commission" fill="#EB4501" radius={[2,2,0,0]} />
+                    <Bar dataKey="Paid out Commission" fill="#FF5B00" radius={[2,2,0,0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -334,7 +334,7 @@ export default function CreatorEconomy() {
                       <td className="font-mono text-app-text-primary font-bold">{getCTR(r.clicks, r.views)}</td>
                       <td className="font-mono text-app-text-secondary font-bold">{r.conversions}</td>
                       <td className="font-mono text-emerald-400 font-bold">৳{r.revenue.toLocaleString()}</td>
-                      <td className="font-mono text-[#EB4501] font-bold">
+                      <td className="font-mono text-[#FF5B00] font-bold">
                         {r.creator_earnings > 0 ? `৳${r.creator_earnings.toLocaleString()}` : '—'}
                       </td>
                     </tr>
@@ -382,7 +382,7 @@ export default function CreatorEconomy() {
                     logRecommendationActivity(selectedRecToSim, 'conversion');
                     alert('Buyer Checkout fully converted! Revenue generated, and affiliate payouts registered instantly.');
                   }}
-                  className="flex-1 sm:flex-initial bg-[#EB4501] hover:bg-app-accent-light text-app-text-primary font-bold px-4 py-2 rounded-[3px] cursor-pointer"
+                  className="flex-1 sm:flex-initial bg-[#FF5B00] hover:bg-app-accent-light text-app-text-primary font-bold px-4 py-2 rounded-[3px] cursor-pointer"
                 >
                   Register checkout conversion
                 </button>
@@ -404,7 +404,7 @@ export default function CreatorEconomy() {
             
             <button
               onClick={() => setShowCampaignForm(!showCampaignForm)}
-              className="bg-[#EB4501] hover:bg-app-accent-light text-app-text-primary font-bold text-xs px-3 py-1.5 rounded-[2px] leading-none cursor-pointer flex items-center gap-1"
+              className="bg-[#FF5B00] hover:bg-app-accent-light text-app-text-primary font-bold text-xs px-3 py-1.5 rounded-[2px] leading-none cursor-pointer flex items-center gap-1"
             >
               <Plus className="w-3.5 h-3.5" /> Assemble campaign
             </button>
@@ -609,7 +609,7 @@ export default function CreatorEconomy() {
 
               <button
                 type="submit"
-                className="w-full bg-[#EB4501] hover:bg-app-accent-light text-app-text-primary font-bold py-2 rounded-[3px] cursor-pointer"
+                className="w-full bg-[#FF5B00] hover:bg-app-accent-light text-app-text-primary font-bold py-2 rounded-[3px] cursor-pointer"
               >
                 Send partnership invitation
               </button>

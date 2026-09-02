@@ -131,7 +131,7 @@ export function OperationsInvoiceView() {
           </span>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 bg-app-accent hover:bg-[#FF5B00] text-white rounded-lg text-xs font-bold uppercase tracking-wider transition-colors"
           >
             <Printer size={14} /> Print / Save as PDF
           </button>
@@ -165,7 +165,7 @@ export function OperationsInvoiceView() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-5">
             <div>
               <div className="text-[11px] font-bold text-slate-400 tracking-wider uppercase mb-2">Billed To</div>
-              <div className="text-base font-extrabold text-[#000435]">{order.shipping?.fullName || 'Buyer'}</div>
+              <div className="text-base font-extrabold text-[#18154C]">{order.shipping?.fullName || 'Buyer'}</div>
               <div className="text-xs text-slate-500 mt-1.5 leading-relaxed font-medium">
                 {order.shipping?.address || '—'}{order.shipping?.region ? `, ${order.shipping.region}` : ''}<br />
                 Phone: {order.shipping?.phone || '—'}
@@ -174,7 +174,7 @@ export function OperationsInvoiceView() {
             <div className="flex flex-col md:items-end">
               <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs text-left md:text-right">
                 <div className="text-slate-400 uppercase tracking-wider font-semibold">Invoice Number</div>
-                <div className="font-extrabold text-[#000435]">#{sub.invoiceId}</div>
+                <div className="font-extrabold text-[#18154C]">#{sub.invoiceId}</div>
 
                 <div className="text-slate-400 uppercase tracking-wider font-semibold self-center">Invoice Amount</div>
                 <div className="text-[26px] font-black text-app-accent leading-none">৳ {total.toLocaleString()}</div>
@@ -216,7 +216,7 @@ export function OperationsInvoiceView() {
                 {sub.items.map((item, idx) => (
                   <tr key={item.itemId || idx} className="border-b border-slate-100">
                     <td className="py-4">
-                      <div className="font-bold text-[#000435] text-sm">{item.productTitle}</div>
+                      <div className="font-bold text-[#18154C] text-sm">{item.productTitle}</div>
                       {item.productType === 'service' && item.serviceCategory && (
                         <div className="text-[11px] text-slate-400 mt-1">{item.serviceCategory}</div>
                       )}
@@ -246,7 +246,7 @@ export function OperationsInvoiceView() {
                 <span className="text-base font-black">৳ {total.toLocaleString()}</span>
               </div>
               <div className="text-right space-y-1">
-                <span className="inline-block mt-2 text-[10px] font-bold text-white bg-[#000435] px-2.5 py-0.5 rounded uppercase tracking-wider">
+                <span className="inline-block mt-2 text-[10px] font-bold text-white bg-[#18154C] px-2.5 py-0.5 rounded uppercase tracking-wider">
                   {paymentLabel}
                 </span>
                 <div className="text-[10.5px] text-slate-500">{paidLabel}</div>
@@ -258,7 +258,7 @@ export function OperationsInvoiceView() {
         {/* Footer */}
         <div className="border-t-2 border-app-accent pt-5 flex justify-between items-start">
           <div className="max-w-[80%]">
-            <div className="text-lg font-extrabold text-[#000435] mb-1">Thanks for shopping with Choosify.</div>
+            <div className="text-lg font-extrabold text-[#18154C] mb-1">Thanks for shopping with Choosify.</div>
             <div className="text-[10px] text-slate-400 leading-relaxed">
               This is a system-generated invoice — no signature required. Powered by Choosify.bd
             </div>

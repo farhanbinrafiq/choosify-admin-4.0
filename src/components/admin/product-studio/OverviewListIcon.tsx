@@ -96,7 +96,7 @@ export function OverviewListItem({
       <Icon
         size={iconSize}
         strokeWidth={2.25}
-        className={`shrink-0 mt-0.5 text-[#EB4501] ${iconClassName}`}
+        className={`shrink-0 mt-0.5 text-[#FF5B00] ${iconClassName}`}
         aria-hidden
       />
       <span className={textClassName}>{text}</span>

@@ -140,7 +140,7 @@ export default function GuidesStudioList() {
             exit={{ opacity: 0, scale: 0.95 }}
             className="fixed top-8 right-8 z-[300] bg-white border border-[#E5E7EB] px-6 py-4 rounded-2xl shadow-xl flex items-center gap-3"
           >
-            <span className="w-2.5 h-2.5 bg-[#F97316] rounded-full animate-ping" />
+            <span className="w-2.5 h-2.5 bg-[#FF5B00] rounded-full animate-ping" />
             <span className="text-xs font-bold text-[#111827] uppercase tracking-wider">{toastMessage}</span>
           </motion.div>
         )}
@@ -150,7 +150,7 @@ export default function GuidesStudioList() {
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 bg-white border border-[#E5E7EB] p-6 rounded-2xl shadow-sm">
         <div className="text-left space-y-1">
           <div className="flex items-center gap-2">
-            <span className="bg-[#F97316]/10 text-[#F97316] p-1.5 rounded-lg border border-[#F97316]/20">
+            <span className="bg-[#FF5B00]/10 text-[#FF5B00] p-1.5 rounded-lg border border-[#FF5B00]/20">
               <BookOpen className="w-5 h-5" />
             </span>
             <h1 className="text-xl font-bold text-[#111827] tracking-tight">
@@ -167,7 +167,7 @@ export default function GuidesStudioList() {
           <Link
             id="btn-create-guide"
             to="/dashboard/content-studio/guides/new"
-            className="flex items-center gap-2 bg-[#F97316] hover:bg-[#EA580C] text-white px-5 py-3 rounded-xl text-xs font-bold transition-all shadow-sm"
+            className="flex items-center gap-2 bg-[#FF5B00] hover:bg-[#EF3C23] text-white px-5 py-3 rounded-xl text-xs font-bold transition-all shadow-sm"
           >
             <Plus className="w-4 h-4" /> Create Buying Guide
           </Link>
@@ -179,7 +179,7 @@ export default function GuidesStudioList() {
         
         <div className="bg-white border border-[#E5E7EB] p-5 rounded-2xl shadow-sm">
           <div className="text-xs text-[#6B7280] uppercase tracking-wider font-bold font-mono flex items-center gap-1.5">
-            <ClipboardList className="w-4 h-4 text-[#F97316]" /> Active Guides
+            <ClipboardList className="w-4 h-4 text-[#FF5B00]" /> Active Guides
           </div>
           <div className="text-3xl font-extrabold text-[#111827] mt-2">{guides.length} Roundups</div>
           <p className="text-[10px] text-emerald-600 mt-1 flex items-center gap-1 font-mono font-bold">
@@ -189,9 +189,9 @@ export default function GuidesStudioList() {
 
         <div className="bg-white border border-[#E5E7EB] p-5 rounded-2xl shadow-sm">
           <div className="text-xs text-[#6B7280] uppercase tracking-wider font-bold font-mono flex items-center gap-1.5">
-            <Clock className="w-4 h-4 text-[#0B1F3B]" /> Total Reviewed Pool
+            <Clock className="w-4 h-4 text-[#18154C]" /> Total Reviewed Pool
           </div>
-          <div className="text-3xl font-extrabold text-[#0B1F3B] mt-2">
+          <div className="text-3xl font-extrabold text-[#18154C] mt-2">
             {guides.reduce((acc, curr) => acc + curr.productsReviewed, 0)} Items
           </div>
           <p className="text-[10px] text-[#6B7280] mt-1 font-mono">In-depth benchmark verified</p>
@@ -209,9 +209,9 @@ export default function GuidesStudioList() {
 
         <div className="bg-white border border-[#E5E7EB] p-5 rounded-2xl shadow-sm">
           <div className="text-xs text-[#6B7280] uppercase tracking-wider font-bold font-mono flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-[#F97316]" /> BD Market Fit
+            <ShieldCheck className="w-4 h-4 text-[#FF5B00]" /> BD Market Fit
           </div>
-          <div className="text-3xl font-extrabold text-[#F97316] mt-2 font-mono">CMS v3.0</div>
+          <div className="text-3xl font-extrabold text-[#FF5B00] mt-2 font-mono">CMS v3.0</div>
           <p className="text-[10px] text-[#6B7280] mt-1 font-mono font-bold">Bangladesh Standards Active</p>
         </div>
 
@@ -242,7 +242,7 @@ export default function GuidesStudioList() {
                 onClick={() => setStatusFilter(st)}
                 className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${
                   statusFilter === st 
-                    ? "bg-[#0B1F3B] text-white" 
+                    ? "bg-[#18154C] text-white" 
                     : "text-[#6B7280] hover:text-[#111827] hover:bg-slate-100"
                 }`}
               >
@@ -258,7 +258,7 @@ export default function GuidesStudioList() {
             <button 
               id="layout-grid"
               onClick={() => setViewLayout("grid")}
-              className={`p-1.5 rounded-lg transition-colors ${viewLayout === "grid" ? "bg-white text-[#0B1F3B] shadow-sm" : "text-[#6B7280] hover:text-[#111827]"}`}
+              className={`p-1.5 rounded-lg transition-colors ${viewLayout === "grid" ? "bg-white text-[#18154C] shadow-sm" : "text-[#6B7280] hover:text-[#111827]"}`}
               title="Grid View"
             >
               <LayoutGrid className="w-3.5 h-3.5" />
@@ -266,7 +266,7 @@ export default function GuidesStudioList() {
             <button 
               id="layout-list"
               onClick={() => setViewLayout("list")}
-              className={`p-1.5 rounded-lg transition-colors ${viewLayout === "list" ? "bg-white text-[#0B1F3B] shadow-sm" : "text-[#6B7280] hover:text-[#111827]"}`}
+              className={`p-1.5 rounded-lg transition-colors ${viewLayout === "list" ? "bg-white text-[#18154C] shadow-sm" : "text-[#6B7280] hover:text-[#111827]"}`}
               title="List View"
             >
               <List className="w-3.5 h-3.5" />
@@ -302,7 +302,7 @@ export default function GuidesStudioList() {
               <div 
                 key={guide.id}
                 id={`guide-card-${guide.id}`}
-                className="bg-white border border-[#E5E7EB] rounded-2xl p-5 hover:border-[#F97316]/30 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group relative text-left"
+                className="bg-white border border-[#E5E7EB] rounded-2xl p-5 hover:border-[#FF5B00]/30 shadow-sm hover:shadow-md transition-all flex flex-col justify-between group relative text-left"
               >
                 {/* Status Badge */}
                 <div className="absolute top-4 right-4 flex items-center gap-2">
@@ -320,10 +320,10 @@ export default function GuidesStudioList() {
                 <div className="space-y-4">
                   {/* Category & Title */}
                   <div className="text-left space-y-1 mt-2">
-                    <span className="text-[9px] font-mono text-[#F97316] font-bold uppercase tracking-wider block">
+                    <span className="text-[9px] font-mono text-[#FF5B00] font-bold uppercase tracking-wider block">
                       {guide.category}
                     </span>
-                    <h3 className="font-extrabold text-[#111827] text-sm group-hover:text-[#F97316] transition-colors tracking-tight line-clamp-2 pr-12">
+                    <h3 className="font-extrabold text-[#111827] text-sm group-hover:text-[#FF5B00] transition-colors tracking-tight line-clamp-2 pr-12">
                       {guide.guideTitle}
                     </h3>
                   </div>
@@ -354,7 +354,7 @@ export default function GuidesStudioList() {
                           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                         )}
                       </div>
-                      <div className="text-[8px] font-bold text-[#0B1F3B] tracking-wide font-mono uppercase">
+                      <div className="text-[8px] font-bold text-[#18154C] tracking-wide font-mono uppercase">
                         {guide.contributorBadgeLevel}
                       </div>
                     </div>
@@ -370,7 +370,7 @@ export default function GuidesStudioList() {
                   <Link 
                     id={`btn-edit-${guide.id}`}
                     to={`/dashboard/content-studio/guides/${guide.id}/edit`}
-                    className="flex-1 py-2.5 bg-[#0B1F3B] hover:bg-[#1E3A5F] text-white rounded-xl text-[10px] font-bold uppercase tracking-wider text-center flex items-center justify-center gap-1.5 transition-colors"
+                    className="flex-1 py-2.5 bg-[#18154C] hover:bg-[#2A2560] text-white rounded-xl text-[10px] font-bold uppercase tracking-wider text-center flex items-center justify-center gap-1.5 transition-colors"
                   >
                     <Edit3 className="w-3.5 h-3.5" /> Editorial Editor
                   </Link>
@@ -428,7 +428,7 @@ export default function GuidesStudioList() {
                       <div className="text-xs font-bold text-[#111827] tracking-tight leading-snug max-w-xs block">
                         {guide.guideTitle}
                       </div>
-                      <div className="text-[9px] font-bold text-[#F97316] font-mono uppercase tracking-wider mt-1">
+                      <div className="text-[9px] font-bold text-[#FF5B00] font-mono uppercase tracking-wider mt-1">
                         {guide.category}
                       </div>
                     </td>
@@ -445,7 +445,7 @@ export default function GuidesStudioList() {
                         </div>
                       </div>
                     </td>
-                    <td className="p-4.5 font-bold text-[#0B1F3B] text-xs max-w-[150px] truncate">
+                    <td className="p-4.5 font-bold text-[#18154C] text-xs max-w-[150px] truncate">
                       {guide.winnerProduct}
                     </td>
                     <td className="p-4.5 font-mono text-xs text-[#111827]">{guide.productsReviewed} Picks</td>
@@ -464,7 +464,7 @@ export default function GuidesStudioList() {
                         <div className="flex justify-end gap-2">
                           <Link 
                             to={`/dashboard/content-studio/guides/${guide.id}/edit`}
-                            className="p-1.5 bg-slate-100 hover:bg-[#0B1F3B] text-[#0B1F3B] hover:text-white rounded-lg transition-colors border border-[#E5E7EB]"
+                            className="p-1.5 bg-slate-100 hover:bg-[#18154C] text-[#18154C] hover:text-white rounded-lg transition-colors border border-[#E5E7EB]"
                             title="Edit Guide"
                           >
                             <Edit3 className="w-3.5 h-3.5" />
@@ -504,7 +504,7 @@ export default function GuidesStudioList() {
 
       {/* Guide Info - Clean white border message */}
       <div className="bg-white border border-[#E5E7EB] p-5 rounded-2xl flex items-center gap-4 text-left shadow-sm">
-        <HelpCircle className="w-10 h-10 text-[#F97316] shrink-0" />
+        <HelpCircle className="w-10 h-10 text-[#FF5B00] shrink-0" />
         <div className="space-y-1">
           <h4 className="text-[13px] font-bold text-[#111827] uppercase tracking-wider">Trust Engine Integration Rules</h4>
           <p className="text-[11px] text-[#6B7280] leading-relaxed max-w-4xl">

@@ -18,7 +18,7 @@ export function FollowBrandsBanner({
           : undefined
       }
     >
-      <div className={`absolute inset-0 ${imageUrl ? 'bg-[#000435]/80' : 'bg-gradient-to-r from-[#000435] to-[#111827]'}`} />
+      <div className={`absolute inset-0 ${imageUrl ? 'bg-[#18154C]/80' : 'bg-gradient-to-r from-[#18154C] to-[#111827]'}`} />
       <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-3 px-5 py-5 text-white">
         <div>
           <div className="text-[16px] md:text-[18px] font-extrabold">{headline}</div>

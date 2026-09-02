@@ -782,8 +782,8 @@ export default function OrdersOverview() {
               <AreaChart data={getChartDataset()} margin={{ top: 15, right: 10, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorGross" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#E64A00" stopOpacity={0.25}/>
-                    <stop offset="95%" stopColor="#E64A00" stopOpacity={0}/>
+                    <stop offset="5%" stopColor="#FF5B00" stopOpacity={0.25}/>
+                    <stop offset="95%" stopColor="#FF5B00" stopOpacity={0}/>
                   </linearGradient>
                   <linearGradient id="colorNet" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#10B981" stopOpacity={0.25}/>
@@ -794,7 +794,7 @@ export default function OrdersOverview() {
                 <YAxis stroke="#475569" fontSize={10} tickLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', fontSize: '11px', color: '#fff' }} />
                 <Legend wrapperStyle={{ fontSize: '10px' }} />
-                <Area type="monotone" name="Gross Marketplace Revenue" dataKey="gross" stroke="#E64A00" strokeWidth={2.5} fillOpacity={1} fill="url(#colorGross)" />
+                <Area type="monotone" name="Gross Marketplace Revenue" dataKey="gross" stroke="#FF5B00" strokeWidth={2.5} fillOpacity={1} fill="url(#colorGross)" />
                 <Area type="monotone" name="Platform Commission Net" dataKey="commission" stroke="#10B981" strokeWidth={2} fillOpacity={1} fill="url(#colorNet)" />
               </AreaChart>
             ) : activeRevenueChart === 'Line' ? (
@@ -803,7 +803,7 @@ export default function OrdersOverview() {
                 <YAxis stroke="#475569" fontSize={10} tickLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', fontSize: '11px', color: '#fff' }} />
                 <Legend wrapperStyle={{ fontSize: '10px' }} />
-                <Line type="monotone" name="Gross Revenue" dataKey="gross" stroke="#E64A00" strokeWidth={3} activeDot={{ r: 6 }} />
+                <Line type="monotone" name="Gross Revenue" dataKey="gross" stroke="#FF5B00" strokeWidth={3} activeDot={{ r: 6 }} />
                 <Line type="monotone" name="Seller Settlement values" dataKey="net" stroke="#3B82F6" strokeWidth={2} />
                 <Line type="monotone" name="Platform Earnings" dataKey="commission" stroke="#10B981" strokeWidth={2} />
               </LineChart>
@@ -813,9 +813,9 @@ export default function OrdersOverview() {
                 <YAxis stroke="#475569" fontSize={10} tickLine={false} />
                 <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', fontSize: '11px', color: '#fff' }} />
                 <Legend wrapperStyle={{ fontSize: '10px' }} />
-                <Bar name="Gross Revenue Flow" dataKey="gross" fill="#E64A00" radius={[4, 4, 0, 0]}>
+                <Bar name="Gross Revenue Flow" dataKey="gross" fill="#FF5B00" radius={[4, 4, 0, 0]}>
                   {getChartDataset().map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#EF3C23' : '#E64A00'} />
+                    <Cell key={`cell-${index}`} fill={index % 2 === 0 ? '#EF3C23' : '#FF5B00'} />
                   ))}
                 </Bar>
                 <Bar name="Platform Fee Split" dataKey="commission" fill="#10B981" radius={[4, 4, 0, 0]} />
@@ -840,7 +840,7 @@ export default function OrdersOverview() {
 
           <button
             onClick={() => handleTriggerExport('Financial Payout Outward Ledger')}
-            className="px-4 py-2 bg-app-accent hover:bg-[#E64A00] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-colors shrink-0"
+            className="px-4 py-2 bg-app-accent hover:bg-[#FF5B00] text-white rounded-xl text-xs font-black uppercase tracking-wider flex items-center gap-2 transition-colors shrink-0"
           >
             <FileSpreadsheet className="w-4 h-4" /> Export Ledger to Finance
           </button>

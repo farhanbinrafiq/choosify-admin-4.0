@@ -234,7 +234,7 @@ window.addEventListener('message', function(ev) {
     .cms-sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.22); border-radius: 4px; }
     /*
      * Profile identity-card cover — same color recipe as live sidebarStyle
-     * (hsla orange glows + rgba(10,10,31,0.96)), but radial sizes are % of the
+     * (hsla orange glows + rgba(24,21,76,0.96)), but radial sizes are % of the
      * cover box. Sidebar uses 1200×500px ellipses for a tall nav; on an 80px
      * strip those read as a solid wash because the falloff never fits in-frame.
      */
@@ -245,9 +245,9 @@ window.addEventListener('message', function(ev) {
       justify-content: center;
       /* Warm→navy strip: lifted midtones, no near-black terminus */
       background:
-        radial-gradient(95% 170% at 8% 50%, hsla(6, 86%, 54%, 0.62), transparent 72%),
+        radial-gradient(95% 170% at 8% 50%, rgba(255, 91, 0, 0.62), transparent 72%),
         radial-gradient(80% 150% at 92% 50%, hsla(230, 58%, 48%, 0.42), transparent 70%),
-        linear-gradient(100deg, #8B3A3E 0%, #5A2A2E 28%, #3A1E22 52%, #2a2858 82%, #1e2260 100%);
+        linear-gradient(100deg, #EF3C23 0%, #C4321C 26%, #4A2A6E 54%, #221E58 82%, #18154C 100%);
     }
     .cms-profile-identity-cover > span {
       color: #fff !important;
@@ -260,13 +260,13 @@ window.addEventListener('message', function(ev) {
     .cms-dark-surface-card {
       /* Exact same gradient as .cms-profile-identity-cover */
       background:
-        radial-gradient(95% 170% at 8% 50%, hsla(6, 86%, 54%, 0.62), transparent 72%),
+        radial-gradient(95% 170% at 8% 50%, rgba(255, 91, 0, 0.62), transparent 72%),
         radial-gradient(80% 150% at 92% 50%, hsla(230, 58%, 48%, 0.42), transparent 70%),
-        linear-gradient(100deg, #8B3A3E 0%, #5A2A2E 28%, #3A1E22 52%, #2a2858 82%, #1e2260 100%);
+        linear-gradient(100deg, #EF3C23 0%, #C4321C 26%, #4A2A6E 54%, #221E58 82%, #18154C 100%);
       backdrop-filter: blur(18px);
       -webkit-backdrop-filter: blur(18px);
       border: 1px solid rgba(255, 255, 255, 0.14);
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 24px rgba(0, 4, 53, 0.12);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 8px 24px rgba(24, 21, 76, 0.12);
       border-radius: 18px;
     }
     /* Storefront Navbar search pad band: px-1 / sm:px-3 / md:px-4 / lg:px-5 */
@@ -340,7 +340,7 @@ window.addEventListener('message', function(ev) {
 
   <!-- MAIN -->
   <div style="flex:1;min-width:0;display:flex;flex-direction:column">
-    <div style="height:64px;background:radial-gradient(900px 200px at 15% 0%,hsla(6,86%,54%,0.16),transparent 70%),radial-gradient(700px 200px at 90% 100%,hsla(6,86%,45%,0.12),transparent 70%),rgba(10,10,31,0.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,0.12);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);display:flex;align-items:center;gap:12px;padding:0 24px;position:sticky;top:0;z-index:10;flex-shrink:0">
+    <div style="height:64px;background:radial-gradient(900px 200px at 15% 0%,rgba(255,91,0,0.16),transparent 70%),radial-gradient(700px 200px at 90% 100%,rgba(239,60,35,0.12),transparent 70%),rgba(24,21,76,0.94);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-bottom:1px solid rgba(255,255,255,0.12);box-shadow:inset 0 1px 0 rgba(255,255,255,0.08);display:flex;align-items:center;gap:12px;padding:0 24px;position:sticky;top:0;z-index:10;flex-shrink:0">
       <div style="flex:0 1 auto;min-width:0;max-width:min(220px,20vw)">
         <div style="font-family:'Outfit',sans-serif;font-size:18px;font-weight:800;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pageTitle }}</div>
         <div style="font-size:11.5px;color:rgba(255,255,255,0.6);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ pageSubtitle }}</div>
@@ -357,7 +357,7 @@ window.addEventListener('message', function(ev) {
             </sc-if>
           </div>
           <sc-if value="{{ notifMenuOpen }}" hint-placeholder-val="{{ false }}">
-            <div style="position:absolute;right:0;top:calc(100% + 22px);width:360px;max-width:min(360px,calc(100vw - 24px));background:#fff;border:1px solid #E8EDF2;border-radius:12px;box-shadow:0 18px 50px rgba(0,4,53,0.18);overflow:hidden;z-index:80;color:#111827">
+            <div style="position:absolute;right:0;top:calc(100% + 22px);width:360px;max-width:min(360px,calc(100vw - 24px));background:#fff;border:1px solid #E8EDF2;border-radius:12px;box-shadow:0 18px 50px rgba(24,21,76,0.18);overflow:hidden;z-index:80;color:#111827">
               <div style="padding:14px 16px 10px;border-bottom:1px solid #F1F5F9;display:flex;align-items:center;justify-content:space-between;gap:12px">
                 <div>
                   <div style="font-size:13px;font-weight:800">Notifications</div>
@@ -542,7 +542,7 @@ window.addEventListener('message', function(ev) {
           </div>
         </div>
 
-        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:18px;position:relative;padding:20px;border-radius:20px;background:linear-gradient(120deg,rgba(239,60,35,0.10),rgba(0,4,53,0.06))">
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:18px;position:relative;padding:20px;border-radius:20px;background:linear-gradient(120deg,rgba(239,60,35,0.10),rgba(24,21,76,0.06))">
           <sc-for list="{{ statCards }}" as="k" hint-placeholder-count="4">
             <div class="cms-dark-surface-card" style="padding:20px;cursor:pointer" sc-camel-on-click="{{ k.onClick }}">
               <div style="font-size:10.5px;font-weight:700;color:rgba(255,255,255,0.55);letter-spacing:0.1em;margin-bottom:12px;text-transform:uppercase">{{ k.label }}</div>
@@ -747,7 +747,7 @@ window.addEventListener('message', function(ev) {
         </div>
 
         <sc-if value="{{ selectedCount }}" hint-placeholder-val="{{ false }}">
-          <div style="display:flex;justify-content:space-between;align-items:center;background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px;flex-wrap:wrap;gap:10px">
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
               <span style="background:rgba(239,60,35,0.25);color:#EF3C23;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800">{{ selectedCount }} selected</span>
               <button sc-camel-on-click="{{ bulkApprove }}" style="background:#16A34A;color:#fff;border:none;border-radius:6px;padding:7px 12px;font-size:10px;font-weight:800;cursor:pointer;text-transform:uppercase">Approve All</button>
@@ -1381,7 +1381,7 @@ window.addEventListener('message', function(ev) {
 
         <sc-if value="{{ showBrandAdminChrome }}" hint-placeholder-val="{{ true }}">
         <sc-if value="{{ brandSelectedCount }}" hint-placeholder-val="{{ false }}">
-          <div style="display:flex;justify-content:space-between;align-items:center;background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px;flex-wrap:wrap;gap:10px">
             <span style="background:rgba(239,60,35,0.25);color:#EF3C23;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800">{{ brandSelectedCount }} selected</span>
             <span style="cursor:pointer;font-size:10.5px;font-weight:700;color:rgba(255,255,255,0.7)" sc-camel-on-click="{{ clearBrandSelection }}">✕ Clear</span>
           </div>
@@ -3072,7 +3072,7 @@ window.addEventListener('message', function(ev) {
         </div>
 
         <sc-if value="{{ creatorSelectedCount }}" hint-placeholder-val="{{ false }}">
-          <div style="display:flex;justify-content:space-between;align-items:center;background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px;flex-wrap:wrap;gap:10px">
             <span style="background:rgba(239,60,35,0.25);color:#EF3C23;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800">{{ creatorSelectedCount }} selected</span>
             <span style="cursor:pointer;font-size:10.5px;font-weight:700;color:rgba(255,255,255,0.7)" sc-camel-on-click="{{ clearCreatorSelection }}">✕ Clear</span>
           </div>
@@ -4289,7 +4289,7 @@ window.addEventListener('message', function(ev) {
         </div>
 
         <sc-if value="{{ customerSelectedCount }}" hint-placeholder-val="{{ false }}">
-          <div style="display:flex;justify-content:space-between;align-items:center;background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px;flex-wrap:wrap;gap:10px">
             <span style="background:rgba(239,60,35,0.25);color:#EF3C23;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800">{{ customerSelectedCount }} selected</span>
             <span style="cursor:pointer;font-size:10.5px;font-weight:700;color:rgba(255,255,255,0.7)" sc-camel-on-click="{{ clearCustomerSelection }}">✕ Clear</span>
           </div>
@@ -4916,9 +4916,9 @@ window.addEventListener('message', function(ev) {
           <div style="font-size:15px;font-weight:800">Admin Login Page — Redesign Preview</div>
           <div style="font-size:12.5px;color:#6B7280;font-weight:600;margin-top:2px">Design concept for the dashboard sign-in screen, simplified to a single Admin role</div>
         </div>
-        <div style="background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);border-radius:16px;overflow:hidden;min-height:640px;display:flex;align-items:center;justify-content:center;padding:48px 24px;position:relative">
+        <div style="background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);border-radius:16px;overflow:hidden;min-height:640px;display:flex;align-items:center;justify-content:center;padding:48px 24px;position:relative">
           <div style="position:relative;width:100%;max-width:880px;display:flex;border-radius:16px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,0.45);border:1px solid rgba(255,255,255,0.12)">
-            <div style="flex:1;background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);padding:48px 40px;display:flex;flex-direction:column;justify-content:space-between;min-height:520px;border-right:1px solid rgba(255,255,255,0.1)">
+            <div style="flex:1;background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);padding:48px 40px;display:flex;flex-direction:column;justify-content:space-between;min-height:520px;border-right:1px solid rgba(255,255,255,0.1)">
               <div>
                 <div style="margin-bottom:48px">
                   <img src="/brand/choosify-logo-horizontal-white.svg" alt="Choosify" style="height:40px;width:auto;max-width:200px;display:block;object-fit:contain" draggable="false">
@@ -4987,7 +4987,7 @@ window.addEventListener('message', function(ev) {
 
               <div style="border:1px solid #E8EDF2;border-radius:14px;overflow:hidden;background:#F0F8FF">
                 <!-- SITE NAV (virtual) -->
-                <div style="position:relative;background:radial-gradient(900px 200px at 15% 0%,hsla(6,86%,54%,0.16),transparent 70%),radial-gradient(700px 200px at 90% 100%,hsla(6,86%,45%,0.12),transparent 70%),rgba(10,10,31,0.94);padding:14px 22px;display:flex;align-items:center;gap:18px">
+                <div style="position:relative;background:radial-gradient(900px 200px at 15% 0%,rgba(255,91,0,0.16),transparent 70%),radial-gradient(700px 200px at 90% 100%,rgba(239,60,35,0.12),transparent 70%),rgba(24,21,76,0.94);padding:14px 22px;display:flex;align-items:center;gap:18px">
                   <img src="/brand/choosify-logo-horizontal-white.svg" alt="Choosify" style="height:28px;width:auto;max-width:140px;display:block;object-fit:contain;flex-shrink:0" draggable="false">
                   <div style="flex:1;background:rgba(255,255,255,0.08);border-radius:99px;height:30px;max-width:340px"></div>
                   <div style="display:flex;gap:14px;flex-shrink:0">
@@ -5083,7 +5083,7 @@ window.addEventListener('message', function(ev) {
 
                 <!-- FOOTER -->
                 <div style="position:relative">
-                  <div style="background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);padding:26px;color:#fff">
+                  <div style="background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);padding:26px;color:#fff">
                     <div style="display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;margin-bottom:16px">
                       <div><img src="/brand/choosify-logo-horizontal-white.svg" alt="Choosify" style="height:28px;width:auto;max-width:140px;display:block;object-fit:contain" draggable="false"><div style="font-size:10px;color:rgba(255,255,255,0.5);font-weight:600;margin-top:6px;max-width:200px">{{ cmsFooter.disclaimer }}</div></div>
                       <sc-for list="{{ cmsFooter.columns }}" as="col" hint-placeholder-count="4">
@@ -5583,7 +5583,7 @@ window.addEventListener('message', function(ev) {
         <!-- SPONSORED ADS TAB -->
         <sc-if value="{{ isAdsTab }}" hint-placeholder-val="{{ true }}">
           <sc-if value="{{ adsSelectedCount }}" hint-placeholder-val="{{ false }}">
-            <div style="display:flex;justify-content:space-between;align-items:center;background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px">
+            <div style="display:flex;justify-content:space-between;align-items:center;background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px">
               <span style="background:rgba(239,60,35,0.25);color:#EF3C23;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800">{{ adsSelectedCount }} selected</span>
               <div style="display:flex;gap:8px">
                 <button sc-camel-on-click="{{ bulkApproveAds }}" style="background:#16A34A;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:10.5px;font-weight:800;cursor:pointer;text-transform:uppercase">Approve</button>
@@ -5931,7 +5931,7 @@ window.addEventListener('message', function(ev) {
         </div>
 
         <sc-if value="{{ contentSelectedCount }}" hint-placeholder-val="{{ false }}">
-          <div style="display:flex;justify-content:space-between;align-items:center;background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px">
             <span style="background:rgba(239,60,35,0.25);color:#EF3C23;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800">{{ contentSelectedCount }} selected</span>
             <div style="display:flex;gap:8px">
               <button sc-camel-on-click="{{ bulkApproveContent }}" style="background:#16A34A;color:#fff;border:none;border-radius:6px;padding:7px 14px;font-size:10.5px;font-weight:800;cursor:pointer;text-transform:uppercase">Approve</button>
@@ -5973,7 +5973,7 @@ window.addEventListener('message', function(ev) {
 
       <!-- ===== MESSAGES (Choosify Workspace) ===== -->
       <sc-if value="{{ isMessagesStudio }}" hint-placeholder-val="{{ false }}">
-        <div style="background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:12px">
+        <div style="background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,0.12);border-radius:10px;padding:16px 22px;display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:12px">
           <div>
             <div style="font-size:10px;font-weight:800;color:#EF3C23;letter-spacing:0.06em;margin-bottom:4px">ADMIN MESSAGE CENTER</div>
             <div style="font-size:18px;font-weight:800;color:#fff;display:flex;align-items:center;gap:8px"><sc-if value="{{ inboxTabIsChoosify }}" hint-placeholder-val="{{ false }}"><img src="/cms-mirror/e32f0f9b-23be-4467-bc44-124eb03b1fd5.svg" style="width:20px;height:20px;object-fit:contain"></sc-if>{{ omniHeaderTitle }}</div>
@@ -6239,7 +6239,7 @@ window.addEventListener('message', function(ev) {
         </sc-if>
 
         <sc-if value="{{ showManualOrderModal }}" hint-placeholder-val="{{ false }}">
-          <div style="position:fixed;inset:0;background:rgba(0,4,53,0.45);z-index:90;display:flex;align-items:center;justify-content:center" sc-camel-on-click="{{ closeManualOrder }}">
+          <div style="position:fixed;inset:0;background:rgba(24,21,76,0.45);z-index:90;display:flex;align-items:center;justify-content:center" sc-camel-on-click="{{ closeManualOrder }}">
             <div style="background:#fff;border-radius:12px;width:640px;max-width:92vw;max-height:88vh;overflow-y:auto" sc-camel-on-click="{{ stopClick }}">
               <div style="padding:18px 22px;border-bottom:1px solid #E8EDF2;display:flex;justify-content:space-between;align-items:center">
                 <div style="display:flex;gap:10px;align-items:center">
@@ -6651,7 +6651,7 @@ window.addEventListener('message', function(ev) {
         </sc-if>
 
         <sc-if value="{{ isReviewModerator }}" hint-placeholder-val="{{ true }}">
-        <div style="background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:10px;padding:14px 20px;margin-bottom:16px">
+        <div style="background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:10px;padding:14px 20px;margin-bottom:16px">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
             <span style="font-size:11px;font-weight:800;letter-spacing:0.04em">⌨ KEYBOARD INTERACTIVE TERMINAL SHORTCUTS</span>
             <span style="font-size:10px;color:#9CA3AF;font-weight:700;cursor:pointer">[COLLAPSE HUD]</span>
@@ -7226,7 +7226,7 @@ window.addEventListener('message', function(ev) {
         </sc-if>
 
         <sc-if value="{{ showFeeRuleModal }}" hint-placeholder-val="{{ false }}">
-          <div style="position:fixed;inset:0;background:rgba(0,4,53,0.45);z-index:100;display:flex;align-items:center;justify-content:center" sc-camel-on-click="{{ closeFeeRuleModal }}">
+          <div style="position:fixed;inset:0;background:rgba(24,21,76,0.45);z-index:100;display:flex;align-items:center;justify-content:center" sc-camel-on-click="{{ closeFeeRuleModal }}">
             <div style="background:#fff;border-radius:12px;width:520px;max-width:92vw;max-height:90vh;overflow-y:auto" sc-camel-on-click="{{ stopClick }}">
               <div style="padding:18px 22px;border-bottom:1px solid #E8EDF2;display:flex;justify-content:space-between;align-items:center">
                 <span style="font-size:14.5px;font-weight:800">{{ feeRuleModalTitle }}</span>
@@ -8363,7 +8363,7 @@ window.addEventListener('message', function(ev) {
         </div>
 
         <sc-if value="{{ shipmentSelectedCount }}" hint-placeholder-val="{{ false }}">
-          <div style="background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+          <div style="background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,0.12);color:#fff;border-radius:8px;padding:12px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
             <span style="background:rgba(239,60,35,0.25);color:#EF3C23;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:800">{{ shipmentSelectedCount }} selected</span>
             <span style="font-size:11px;color:#9CA3AF;font-weight:600">Batch actions apply to selected consignments</span>
           </div>
@@ -8792,7 +8792,7 @@ window.addEventListener('message', function(ev) {
 
   <!-- RECORD DETAIL DRAWER -->
   <sc-if value="{{ viewingRecord }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;inset:0;background:rgba(0,4,53,0.45);z-index:80;display:flex;justify-content:flex-end" sc-camel-on-click="{{ closeRecord }}">
+    <div style="position:fixed;inset:0;background:rgba(24,21,76,0.45);z-index:80;display:flex;justify-content:flex-end" sc-camel-on-click="{{ closeRecord }}">
       <div style="width:420px;max-width:92vw;height:100%;background:#fff;box-shadow:-16px 0 40px rgba(0,0,0,0.2);display:flex;flex-direction:column" sc-camel-on-click="{{ stopClick }}">
         <div style="padding:20px 24px;border-bottom:1px solid #E8EDF2;display:flex;justify-content:space-between;align-items:flex-start">
           <div>
@@ -8825,7 +8825,7 @@ window.addEventListener('message', function(ev) {
 
   <!-- WITHDRAWAL CONFIRMATION MODAL -->
   <sc-if value="{{ showWithdrawalModal }}" hint-placeholder-val="{{ false }}">
-    <div style="position:fixed;inset:0;background:rgba(0,4,53,0.45);z-index:110;display:flex;align-items:center;justify-content:center" sc-camel-on-click="{{ closeWithdrawalModal }}">
+    <div style="position:fixed;inset:0;background:rgba(24,21,76,0.45);z-index:110;display:flex;align-items:center;justify-content:center" sc-camel-on-click="{{ closeWithdrawalModal }}">
       <div style="background:#fff;border-radius:12px;width:460px;max-width:92vw;max-height:90vh;overflow-y:auto" sc-camel-on-click="{{ stopClick }}">
         <div style="padding:18px 22px;border-bottom:1px solid #E8EDF2;display:flex;justify-content:space-between;align-items:center">
           <span style="font-size:14.5px;font-weight:800">Confirm Withdrawal Request</span>
@@ -12730,7 +12730,7 @@ class Component extends DCLogic {
       Processing: {bg:'rgba(245,158,11,0.12)',fg:'#B45309'}, Scheduled: {bg:'rgba(245,158,11,0.12)',fg:'#B45309'},
       'Out of Stock': {bg:'rgba(239,68,68,0.1)',fg:'#DC2626'}, Suspended: {bg:'rgba(239,68,68,0.1)',fg:'#DC2626'},
       Cancelled: {bg:'rgba(239,68,68,0.1)',fg:'#DC2626'}, Expired: {bg:'rgba(239,68,68,0.1)',fg:'#DC2626'},
-      Refunded: {bg:'rgba(239,68,68,0.1)',fg:'#DC2626'}, COD: {bg:'rgba(0,4,53,0.08)',fg:'#000435'},
+      Refunded: {bg:'rgba(239,68,68,0.1)',fg:'#DC2626'}, COD: {bg:'rgba(24,21,76,0.08)',fg:'#18154C'},
       'Pending Review': {bg:'rgba(245,158,11,0.12)',fg:'#B45309'}, Rejected: {bg:'rgba(239,68,68,0.1)',fg:'#DC2626'},
     };
     const c = map[status] || {bg:'#F1F3F5',fg:'#6B7280'};
@@ -14312,7 +14312,7 @@ class Component extends DCLogic {
     const maxCat = Math.max(...Component.CATEGORIES.slice(0,6).map(c=>c.count));
     const topCategoryBars = Component.CATEGORIES.slice(0,6).map(c => ({
       name: c.name, count: c.count.toLocaleString('en-US'),
-      fillStyle: `height:100%;border-radius:3px;background:linear-gradient(90deg,#000435,#EF3C23);width:${Math.round((c.count/maxCat)*100)}%`,
+      fillStyle: `height:100%;border-radius:3px;background:linear-gradient(90deg,#18154C,#EF3C23);width:${Math.round((c.count/maxCat)*100)}%`,
     }));
 
     const mkOrder = (o) => {
@@ -16059,7 +16059,7 @@ class Component extends DCLogic {
         ...b,
         initial: b.name.charAt(0),
         badgeStyle: this.statusStyle(b.status),
-        thumbStyle: 'width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#000435,#111827);display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;flex-shrink:0',
+        thumbStyle: 'width:36px;height:36px;border-radius:8px;background:linear-gradient(135deg,#18154C,#111827);display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;flex-shrink:0',
         onClick: () => {
           if ((window.__CMS_MIRROR_ROLE__ || '') === 'seller') {
             this.openSellerBrandStudio(b.catalogId, b.name);
@@ -16897,7 +16897,7 @@ class Component extends DCLogic {
       platformStyle: `background:${platformColor[c.platform]}1A;color:${platformColor[c.platform]};font-size:10.5px;font-weight:700;padding:4px 10px;border-radius:20px`,
       onClick: () => this.selectCreator(c.name),
       initial: c.name.charAt(0),
-      thumbStyle: 'width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#EF3C23,#000435);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0',
+      thumbStyle: 'width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#EF3C23,#18154C);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0',
       handleLabel: c.handle || `@${c.name.toLowerCase().replace(/\s+/g,'')}`,
       cfIdLabel: (typeof window.cfIdLabelForUid === 'function'
         ? window.cfIdLabelForUid(c.userId, c.choosifyUserId)
@@ -17410,7 +17410,7 @@ class Component extends DCLogic {
         ...u, initial: u.name.charAt(0), spentLabel: this.fmtMoney(u.spent), badgeStyle: this.statusStyle(u.status),
         choosifyUserId: cfResolved,
         cfIdLabel: cfResolved && cfResolved !== '—' ? cfResolved : '—',
-        avatarStyle: 'width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#EF3C23,#000435);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0',
+        avatarStyle: 'width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#EF3C23,#18154C);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0',
         onClick: () => this.selectCustomer(u.name),
         behaviorSegment: u.behaviorSegment || (u.spent > 100000 ? 'High-Value Loyalist' : u.spent > 20000 ? 'Regular Shopper' : 'New / Occasional'),
         securityTrustScore: u.securityTrustScore ?? (u.status === 'Suspended' ? 42 : 90),
@@ -17533,7 +17533,7 @@ class Component extends DCLogic {
 
     return {
       appShellStyle: `display:flex;min-height:100vh;background:${dark?'#0B0D14':'#F0F2F5'};color:${dark?'#F3F4F6':'#111827'}`,
-      sidebarStyle: 'width:240px;flex-shrink:0;display:flex;flex-direction:column;background:radial-gradient(1200px 500px at 15% 0%,hsla(6,86%,54%,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,hsla(6,86%,45%,0.14),transparent 65%),rgba(10,10,31,0.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-right:1px solid rgba(255,255,255,0.12);box-shadow:inset -1px 0 0 rgba(255,255,255,0.05);height:100vh;position:sticky;top:0',
+      sidebarStyle: 'width:240px;flex-shrink:0;display:flex;flex-direction:column;background:radial-gradient(1200px 500px at 15% 0%,rgba(255,91,0,0.18),transparent 65%),radial-gradient(900px 500px at 90% 20%,rgba(239,60,35,0.14),transparent 65%),rgba(24,21,76,0.96);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border-right:1px solid rgba(255,255,255,0.12);box-shadow:inset -1px 0 0 rgba(255,255,255,0.05);height:100vh;position:sticky;top:0',
       logoTextStyle: `font-size:16px;font-weight:800;letter-spacing:-0.4px;color:#fff;font-family:'Outfit',sans-serif`,
       logoSubStyle: `font-size:10px;font-weight:600;color:rgba(255,255,255,0.45)`,
       groupTitleStyle: `font-size:10px;font-weight:700;letter-spacing:0.08em;color:rgba(255,255,255,0.35);padding:0 10px;margin-bottom:6px`,

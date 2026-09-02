@@ -23,7 +23,7 @@ export function SpecIconCard({
       } ${index % 2 !== 0 ? 'bg-white' : 'bg-gray-50'}`}
     >
       <div className="flex items-start gap-2 min-w-0">
-        <div className="w-7 h-7 rounded-lg bg-[#EB4501]/10 text-[#EB4501] flex items-center justify-center shrink-0">
+        <div className="w-7 h-7 rounded-lg bg-[#FF5B00]/10 text-[#FF5B00] flex items-center justify-center shrink-0">
           <Icon size={14} aria-hidden />
         </div>
         <span className="min-w-0 flex-1 text-[9px] font-black text-gray-400 uppercase tracking-wider break-words leading-snug">

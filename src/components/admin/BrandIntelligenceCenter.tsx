@@ -342,7 +342,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
             {matchedProfile?.logo ? (
               <img src={matchedProfile.logo} alt="" className="w-full h-full object-cover" />
             ) : (
-              <Building2 className="w-6 h-6 text-[#F4631E]" />
+              <Building2 className="w-6 h-6 text-[#FF5B00]" />
             )}
           </div>
           <div>
@@ -390,7 +390,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
               {currentStatus === 'UNCLAIMED' && (
                 <button 
                   onClick={() => adjustBrandStatus('OWNERSHIP_PENDING', 'Simulated on-behalf application submitted.')}
-                  className="px-2.5 py-1 text-[10px] uppercase font-black bg-orange-500/10 border border-orange-500/20 text-[#F4631E] rounded hover:bg-[#F4631E] hover:text-white transition-all cursor-pointer"
+                  className="px-2.5 py-1 text-[10px] uppercase font-black bg-orange-500/10 border border-orange-500/20 text-[#FF5B00] rounded hover:bg-[#FF5B00] hover:text-white transition-all cursor-pointer"
                 >
                   Push Claim Request
                 </button>
@@ -400,7 +400,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
 
           <button 
             onClick={onClose} 
-            className="flex items-center gap-1 p-2 bg-white/5 hover:bg-white/10 hover:text-[#F4631E] border border-app-border rounded-xl text-xs font-black transition-all cursor-pointer"
+            className="flex items-center gap-1 p-2 bg-white/5 hover:bg-white/10 hover:text-[#FF5B00] border border-app-border rounded-xl text-xs font-black transition-all cursor-pointer"
           >
             <X className="w-4 h-4" />
             <span>CLOSE</span>
@@ -427,7 +427,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
               onClick={() => setCurrentTab(sh.id as SubTabType)}
               className={`py-3.5 px-4 text-[10.5px] font-bold uppercase tracking-wider shrink-0 flex items-center gap-1.5 transition-all border-b-2 hover:text-white${
                 isActive 
-                  ? 'border-[#F4631E] text-[#F4631E] bg-white/[0.01]' 
+                  ? 'border-[#FF5B00] text-[#FF5B00] bg-white/[0.01]' 
                   : 'border-transparent text-slate-400 hover:border-white/10'
               }cursor-pointer`}
             >
@@ -494,7 +494,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
               <div className="bg-app-card border border-app-border p-4.5 rounded-2xl flex flex-col justify-between">
                 <div className="flex justify-between items-center">
                   <span className="text-[10px] text-app-text-secondary uppercase font-black tracking-widest block">Compliance & Grade</span>
-                  <ShieldCheck className="w-4 h-4 text-[#F4631E]" />
+                  <ShieldCheck className="w-4 h-4 text-[#FF5B00]" />
                 </div>
                 <div className="py-2.5">
                   <span className="text-md font-extrabold text-app-text-primary block tracking-tight">
@@ -564,12 +564,12 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
             <div className="bg-app-card border border-app-border rounded-2xl p-5 space-y-4">
               <div className="flex justify-between items-center border-b border-app-border pb-2">
                 <span className="text-[11px] font-black text-slate-500 uppercase tracking-widest block">Portfolio and Corporate Hierarchy</span>
-                <span className="text-[9px] bg-[#F4631E]/10 border border-[#F4631E]/20 text-[#F4631E] px-2.5 py-0.5 rounded font-black font-mono">Auto Associated</span>
+                <span className="text-[9px] bg-[#FF5B00]/10 border border-[#FF5B00]/20 text-[#FF5B00] px-2.5 py-0.5 rounded font-black font-mono">Auto Associated</span>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
                 <div className="p-3 bg-app-card/20 rounded-xl space-y-1">
-                  <span className="text-[9px] text-[#F4631E] uppercase font-bold block">Parent Holding</span>
+                  <span className="text-[9px] text-[#FF5B00] uppercase font-bold block">Parent Holding</span>
                   <span className="font-extrabold text-app-text-primary block">{brandName} Group Holdings Ltd.</span>
                 </div>
                 <div className="p-3 bg-app-card/20 rounded-xl space-y-1">
@@ -636,7 +636,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                   <div className="pt-2 flex justify-start">
                     <button 
                       onClick={() => adjustBrandStatus('OWNERSHIP_PENDING', 'Acquisition request initiated from operational headquarters.')}
-                      className="px-4 py-2 bg-[#F4631E] hover:bg-[#F4631E]/95 text-white text-[11px] font-black uppercase rounded-lg tracking-wide shadow transition-all cursor-pointer"
+                      className="px-4 py-2 bg-[#FF5B00] hover:bg-[#FF5B00]/95 text-white text-[11px] font-black uppercase rounded-lg tracking-wide shadow transition-all cursor-pointer"
                     >
                       Promote to Pending Ownership Audit
                     </button>
@@ -757,7 +757,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                     <Globe className="w-4 h-4 text-blue-400" />
                     <div>
                       <span className="text-[9px] text-slate-500 font-bold block uppercase">Corporate website domain</span>
-                      <a href={matchedProfile?.websiteUrl || '#'} target="_blank" rel="noreferrer" className="text-[#F4631E] hover:underline block mt-0.5 font-mono">
+                      <a href={matchedProfile?.websiteUrl || '#'} target="_blank" rel="noreferrer" className="text-[#FF5B00] hover:underline block mt-0.5 font-mono">
                         {matchedProfile?.websiteUrl || `https://www.${brandName.toLowerCase().replace(/\s+/g, '')}-brands.com`}
                       </a>
                     </div>
@@ -821,7 +821,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                 />
                 <button 
                   type="submit"
-                  className="px-5 py-3 bg-[#F4631E] hover:bg-[#F4631E]/90 text-white font-black text-[11px] uppercase rounded-xl tracking-wide cursor-pointer text-center whitespace-nowrap"
+                  className="px-5 py-3 bg-[#FF5B00] hover:bg-[#FF5B00]/90 text-white font-black text-[11px] uppercase rounded-xl tracking-wide cursor-pointer text-center whitespace-nowrap"
                 >
                   Post Note
                 </button>
@@ -840,7 +840,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
               <div className="p-4 bg-app-card border border-app-border rounded-2xl space-y-2">
                 <span className="text-slate-500 font-bold uppercase tracking-wider block text-[9.5px]">Est. Monthly GMV</span>
                 <span className="text-xl font-black text-emerald-400 font-mono">৳ {(bp.monthlyRevenue * 1.25).toLocaleString([], {maximumFractionDigits:0})}</span>
-                <span className="text-[#F4631E] flex items-center gap-1 font-bold text-[10px] mt-1">
+                <span className="text-[#FF5B00] flex items-center gap-1 font-bold text-[10px] mt-1">
                   <TrendingUp className="w-3 h-3" />
                   +12.4% velocity
                 </span>
@@ -874,8 +874,8 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                   <AreaChart data={commerceData} margin={{ top: 10, right: 30, left: 10, bottom: 0 }}>
                     <defs>
                       <linearGradient id="colorSales" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#F4631E" stopOpacity={0.4}/>
-                        <stop offset="95%" stopColor="#F4631E" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#FF5B00" stopOpacity={0.4}/>
+                        <stop offset="95%" stopColor="#FF5B00" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.06} />
@@ -885,7 +885,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                       contentStyle={{ backgroundColor: '#0f172a', borderColor: 'rgba(255,255,255,0.1)', color: '#fff', fontSize: '11px', borderRadius: '12px' }}
                       formatter={(value) => [`৳${Number(value).toLocaleString()}`, 'Simulated Sales Volume']} 
                     />
-                    <Area type="monotone" dataKey="Sales" stroke="#F4631E" strokeWidth={2.5} fillOpacity={1} fill="url(#colorSales)" />
+                    <Area type="monotone" dataKey="Sales" stroke="#FF5B00" strokeWidth={2.5} fillOpacity={1} fill="url(#colorSales)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -1033,7 +1033,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                   <tbody className="divide-y divide-white/[0.02]">
                     {simulatedOrders.map(ord => (
                       <tr key={ord.id} className="hover:bg-white/[0.01]">
-                        <td className="py-3 font-mono text-[10px] font-bold text-[#F4631E]">{ord.id}</td>
+                        <td className="py-3 font-mono text-[10px] font-bold text-[#FF5B00]">{ord.id}</td>
                         <td className="py-3 font-medium text-app-text-secondary">{ord.customer}</td>
                         <td className="py-3 text-app-text-secondary font-bold truncate max-w-[180px]">{ord.items}</td>
                         <td className="py-3 font-mono text-app-text-secondary">{ord.date}</td>
@@ -1137,7 +1137,7 @@ export const BrandIntelligenceCenter: React.FC<BrandIntelligenceCenterProps> = (
                   logs.filter(lg => lg.brandName.toLowerCase() === brandName.toLowerCase()).map(lg => (
                     <div key={lg.id} className="relative space-y-1">
                       {/* circle */}
-                      <span className="w-2.5 h-2.5 bg-[#F4631E] rounded-full border border-slate-950 absolute -left-[20px] top-[4px]" />
+                      <span className="w-2.5 h-2.5 bg-[#FF5B00] rounded-full border border-slate-950 absolute -left-[20px] top-[4px]" />
                       <div className="flex justify-between items-baseline text-xs">
                         <strong className="text-app-text-primary text-[11px] tracking-tight">{lg.action}</strong>
                         <span className="text-[9.5px] text-slate-500 font-mono">{new Date(lg.timestamp).toLocaleString()}</span>
