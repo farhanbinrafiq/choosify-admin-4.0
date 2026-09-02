@@ -8,7 +8,37 @@
  * (new id) if terms change. Do not merge these two models.
  */
 
-export type ManualOrderOfferStatus = 'pending' | 'accepted' | 'rejected';
+export type ManualOrderOfferStatus =
+  | 'pending'
+  /** External/unregistered customer — offer prepared, waiting for the customer to sign in and claim it. */
+  | 'awaiting_buyer_claim'
+  | 'accepted'
+  | 'rejected'
+  | 'expired';
+
+export type ManualOrderProvenanceSource =
+  | 'manual'
+  | 'external_whatsapp'
+  | 'external_facebook'
+  | 'external_instagram'
+  | 'external_offline';
+
+/**
+ * Customer identity captured by the Seller at offer-creation time for an
+ * external (no Choosify account yet) manual order. This is reconciliation
+ * INPUT only — never an authorization fact. Final ownership is bound by the
+ * server after the customer authenticates with a *verified* matching
+ * identity (see claim-confirm).
+ */
+export interface ManualOrderIntendedCustomer {
+  name: string;
+  normalizedEmail: string;
+  normalizedPhone: string;
+  /** Set only when a single existing Consumer uniquely matched at creation time (email + phone agree). Advisory. */
+  matchedConsumerId?: string;
+  /** Address text lifted from the Meta conversation — prefill/context only; the Buyer picks the canonical address at confirmation. */
+  addressHint?: string;
+}
 
 export interface ManualOrderOfferItem {
   productId: string;
@@ -32,6 +62,11 @@ export interface ManualOrderOffer {
   conversationId: string;
   sellerId: string;
   sellerName?: string;
+  /**
+   * Set for the native flow (offer to an existing Choosify Buyer) OR once an
+   * external customer has claimed + confirmed. Empty string while
+   * `status === 'awaiting_buyer_claim'`.
+   */
   buyerId: string;
   buyerName?: string;
   items: ManualOrderOfferItem[];
@@ -45,6 +80,19 @@ export interface ManualOrderOffer {
   updatedAt: string;
   orderId?: string;
   rejectReason?: string;
+
+  // ─── External / Meta acquisition (additive) ───────────────────────────
+  /** Present when the offer was created for an external customer (no buyerId yet). */
+  intendedCustomer?: ManualOrderIntendedCustomer;
+  /** SHA-256 of the opaque claim token. Raw token only lives in the customer link. */
+  claimTokenHash?: string;
+  /** ISO expiry for the claim token; confirm/preview reject after this. */
+  claimTokenExpiresAt?: string;
+  /** Authenticated Choosify userId the server bound the order to on claim. */
+  claimedByUserId?: string;
+  claimedAt?: string;
+  /** Where this customer/order originated — retained through conversion for acquisition analytics. */
+  provenance?: { source: ManualOrderProvenanceSource; conversationId?: string };
 }
 
 export type ManualOrderOfferCard = Pick<

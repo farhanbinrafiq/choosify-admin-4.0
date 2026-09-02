@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   Check,
   CheckCircle2,
+  ExternalLink,
   Heart,
   MessageCircleMore,
   Pencil,
@@ -15,16 +16,82 @@ import {
   type CreatorEditorModel,
 } from '../../pages/admin/creatorEditorModel';
 
-function EditChip({ label, onClick }: { label?: string; onClick: () => void }) {
+/**
+ * Storefront-parity Creator profile. VIEW ≈ the public Creator Profile page;
+ * STUDIO mode swaps one section at a time for an inline editor (Save Changes /
+ * Cancel). No drawer, no modal, no slide-over. Trust score, followers,
+ * verification, media and reviews are platform/relationship-derived and render
+ * read-only with no edit affordance.
+ */
+export type CreatorStudioBridge = {
+  editingSection: CreatorEditSection | null;
+  dirty: boolean;
+  saving: boolean;
+  onEdit: (k: CreatorEditSection) => void;
+  onCancel: () => void;
+  onSave: () => void;
+  renderEditor: (k: CreatorEditSection) => React.ReactNode;
+  /** Where the read-only Guides tab links for managing content. */
+  manageGuidesHref?: string;
+};
+
+const SECTION_TITLE: Record<CreatorEditSection, string> = {
+  cover: 'Cover & Avatar',
+  identity: 'Profile Identity',
+  social: 'Social Links',
+  overview: 'Creator Overview',
+  contact: 'Contact & Reach',
+  partnerships: 'Partnerships & Collaborations',
+  featured: 'Featured Content',
+};
+
+function EditPill({ onClick, label }: { onClick: () => void; label?: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className="absolute top-3 right-3 z-20 p-2 bg-white border border-[#EF3C23] text-[#EF3C23] hover:bg-[#EF3C23] hover:text-white rounded-lg transition-all shadow-sm flex items-center gap-1.5 text-[10px] font-extrabold uppercase"
+      className="absolute top-3 right-3 z-20 inline-flex items-center gap-1.5 px-2 py-1 rounded-md border border-[#E8EDF2] bg-white/95 text-[#EF3C23] text-[10px] font-extrabold uppercase shadow-sm hover:bg-[#EF3C23] hover:text-white hover:border-[#EF3C23] transition-colors"
     >
-      <Pencil className="w-3.5 h-3.5" />
-      {label || 'Edit'}
+      <Pencil className="w-3 h-3" /> {label || 'Edit'}
     </button>
+  );
+}
+
+function CreatorInlineEditFrame({
+  title,
+  studio,
+  children,
+}: {
+  title: string;
+  studio: CreatorStudioBridge;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="relative rounded-xl bg-white border border-[#E8EDF2] p-4 sm:p-5">
+      <div className="text-[10px] font-extrabold uppercase tracking-wider text-[#9AA0AC] mb-3">
+        Editing — {title}
+      </div>
+      {children}
+      <div className="flex items-center gap-2 mt-4 pt-3 border-t border-[#F1F1F3]">
+        <button
+          type="button"
+          onClick={studio.onCancel}
+          disabled={studio.saving}
+          className="px-3.5 py-2 rounded-lg border border-[#E8EDF2] text-[11px] font-bold text-[#374151] bg-white"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={studio.onSave}
+          disabled={studio.saving}
+          className="px-4 py-2 rounded-lg text-[11px] font-extrabold text-white bg-[#EF3C23]"
+        >
+          {studio.saving ? 'Saving…' : 'Save Changes'}
+        </button>
+        {studio.dirty ? <span className="text-[10px] text-[#9AA0AC] italic">Unsaved changes</span> : null}
+      </div>
+    </div>
   );
 }
 
@@ -36,11 +103,15 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
+function DerivedNote({ children }: { children: React.ReactNode }) {
+  return <p className="text-[10px] text-[#9AA0AC] mt-2 mb-0 italic">{children}</p>;
+}
+
 function OverviewCardHeader({ title }: { title: string }) {
   return (
     <div className="flex items-center gap-2.5 mb-4 border-b border-[#F1F1F3] pb-3">
-      <div className="w-8 h-8 rounded-lg bg-[#FFF3EA] text-[#EB4501] flex items-center justify-center shrink-0">
-        <CheckCircle2 size={16} fill="currentColor" className="text-[#EB4501] stroke-white" />
+      <div className="w-8 h-8 rounded-lg bg-[#FFF3EA] text-[#FF5B00] flex items-center justify-center shrink-0">
+        <CheckCircle2 size={16} fill="currentColor" className="text-[#FF5B00] stroke-white" />
       </div>
       <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-[#1A1A2E] m-0">{title}</h3>
     </div>
@@ -59,14 +130,15 @@ const TABS = ['Overview', 'Guides', 'Videos', 'Reviews', 'Collections', 'Deals',
 
 export function CreatorProfilePresentation({
   model,
-  mode = 'editor',
-  onEditSection,
+  mode = 'view',
+  studio,
 }: {
   model: CreatorEditorModel;
-  mode?: 'public' | 'editor';
-  onEditSection?: (section: CreatorEditSection) => void;
+  mode?: 'view' | 'studio';
+  studio?: CreatorStudioBridge;
 }) {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>('Overview');
+  const isStudio = mode === 'studio' && !!studio;
   const trust = normalizeTrustScore(model.score);
   const initial = String(model.name || 'C')
     .split(/\s+/)
@@ -76,7 +148,27 @@ export function CreatorProfilePresentation({
     .toUpperCase();
   const handle = model.handle || (model.name ? `@${model.name.toLowerCase().replace(/\s+/g, '')}` : '@creator');
   const firstName = (model.name || 'Creator').split(/\s+/)[0];
-  const featured = [...model.videos, ...model.reels, ...model.blogs].slice(0, 4);
+  // Featured Content: creator-curated list, else fall back to newest media.
+  const curatedFeatured = Array.isArray(model.featuredContent) ? model.featuredContent : [];
+  const featured = curatedFeatured.length
+    ? curatedFeatured.map((f) => ({
+        id: f.id,
+        kind: f.source === 'platform' ? f.kind : 'link',
+        title: f.title,
+        thumbnail: f.thumbnail,
+        url: f.url,
+        views: undefined as string | undefined,
+        external: f.source === 'external',
+      }))
+    : [...model.videos, ...model.reels, ...model.blogs].slice(0, 4).map((m) => ({
+        id: m.id,
+        kind: m.kind,
+        title: m.title,
+        thumbnail: m.thumbnail,
+        url: m.url,
+        views: m.views,
+        external: false,
+      }));
   const socialEntries = (
     [
       ['Facebook', model.socialLinks.facebook],
@@ -84,7 +176,8 @@ export function CreatorProfilePresentation({
       ['YouTube', model.socialLinks.youtube],
       ['LinkedIn', model.socialLinks.linkedin],
       ['TikTok', model.socialLinks.tiktok],
-    ] as const
+      ...(model.socialLinks.custom ?? []).map((c) => [c.label, c.url] as const),
+    ] as ReadonlyArray<readonly [string, string | undefined]>
   ).filter(([, url]) => !!url);
 
   const infoFacts = [
@@ -96,146 +189,160 @@ export function CreatorProfilePresentation({
     { icon: '🏷', label: 'Best for', value: model.bestFor || model.bestForTags[0] || '—' },
   ];
 
-  const isEditor = mode === 'editor' && !!onEditSection;
+  const editingId = isStudio ? studio!.editingSection : null;
+  const editingHere = (k: CreatorEditSection) => editingId === k;
+  const pill = (k: CreatorEditSection, label?: string) =>
+    isStudio && !editingHere(k) ? <EditPill onClick={() => studio!.onEdit(k)} label={label} /> : null;
+  const frame = (k: CreatorEditSection) => (
+    <CreatorInlineEditFrame title={SECTION_TITLE[k]} studio={studio!}>
+      {studio!.renderEditor(k)}
+    </CreatorInlineEditFrame>
+  );
 
   return (
     <div className="bg-[#F0F8FF] text-[#1A1A2E] overflow-hidden">
-      {/* Cover + avatar — Web CreatorProfileHero silhouette */}
+      {/* Cover + avatar */}
       <div className="w-full px-5 sm:px-8 lg:px-10 pt-4 relative">
-        {isEditor ? <EditChip label="Cover" onClick={() => onEditSection!('cover')} /> : null}
         <div className="max-w-[1180px] mx-auto relative">
-          <div className="relative h-[220px] sm:h-[280px] md:h-[320px] overflow-hidden choosify-dark-surface rounded-none">
-            {model.coverImage ? (
-              <img src={model.coverImage} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-[12px] text-white/50 font-semibold">
-                {isEditor ? 'Add cover image' : 'No cover image'}
+          {editingHere('cover') ? (
+            <div className="pb-2">{frame('cover')}</div>
+          ) : (
+            <>
+              {pill('cover', 'Cover')}
+              <div className="relative h-[220px] sm:h-[280px] md:h-[320px] overflow-hidden choosify-dark-surface rounded-none">
+                {model.coverImage ? (
+                  <img src={model.coverImage} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-[12px] text-white/50 font-semibold">
+                    {isStudio ? 'Add cover image' : 'No cover image'}
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
               </div>
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent" />
-          </div>
-          <div className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-[60px] w-[100px] h-[100px] md:w-[120px] md:h-[120px] z-[5]">
-            <div className="w-full h-full rounded-full bg-[#1A1A2E] border-[5px] border-white shadow-[0_16px_36px_rgba(0,0,0,0.28),0_0_0_4px_rgba(7,208,80,0.18)] overflow-hidden flex items-center justify-center text-white text-[30px] font-extrabold">
-              {model.avatar ? (
-                <img
-                  src={model.avatar}
-                  alt={model.name}
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                initial
-              )}
-            </div>
-          </div>
+              <div className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-[60px] w-[100px] h-[100px] md:w-[120px] md:h-[120px] z-[5]">
+                <div className="w-full h-full rounded-full bg-[#1A1A2E] border-[5px] border-white shadow-[0_16px_36px_rgba(0,0,0,0.28),0_0_0_4px_rgba(7,208,80,0.18)] overflow-hidden flex items-center justify-center text-white text-[30px] font-extrabold">
+                  {model.avatar ? (
+                    <img src={model.avatar} alt={model.name} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                  ) : (
+                    initial
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
       <div className="max-w-[1180px] mx-auto px-5 sm:px-8 lg:px-10 pb-6">
-        <div className="relative flex flex-col lg:flex-row justify-between items-start gap-6 mt-[74px] mb-6">
-          {isEditor ? <EditChip label="Identity" onClick={() => onEditSection!('identity')} /> : null}
-          <div className="flex-1 min-w-0 text-center lg:text-left w-full">
-            <div className="text-[22px] font-extrabold text-[#1A1A2E] flex items-center justify-center lg:justify-start gap-2 flex-wrap">
-              {model.name || 'Untitled Creator'}
-              {model.verified ? (
-                <span className="inline-flex text-[#2323FF]" title="Verified">
-                  <Check size={18} strokeWidth={3} />
-                </span>
-              ) : null}
-            </div>
-            <div className="text-[13px] text-[#2323FF] font-semibold">
-              {model.title || (isEditor ? 'Add creator title' : 'Creator')}
-            </div>
-            <div className="text-[12.5px] text-[#9AA0AC] mb-2.5">
-              {handle}
-              {model.location ? ` · ${model.location}` : isEditor ? ' · Add location' : ''}
-            </div>
-            {model.verified ? (
-              <div className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#2323FF] mb-2">
-                <ShieldCheck size={12} /> Verified Creator
+        {/* Identity + social */}
+        <div className={`relative ${editingHere('cover') ? 'mt-6' : 'mt-[74px]'} mb-6`}>
+          {editingHere('identity') ? (
+            frame('identity')
+          ) : (
+            <div className="relative flex flex-col lg:flex-row justify-between items-start gap-6">
+              {pill('identity', 'Identity')}
+              <div className="flex-1 min-w-0 text-center lg:text-left w-full">
+                <div className="text-[22px] font-extrabold text-[#1A1A2E] flex items-center justify-center lg:justify-start gap-2 flex-wrap">
+                  {model.name || 'Untitled Creator'}
+                  {model.verified ? (
+                    <span className="inline-flex text-[#2323FF]" title="Verified (platform-managed)">
+                      <Check size={18} strokeWidth={3} />
+                    </span>
+                  ) : null}
+                </div>
+                <div className="text-[13px] text-[#2323FF] font-semibold">
+                  {model.title || (isStudio ? 'Add creator title' : 'Creator')}
+                </div>
+                <div className="text-[12.5px] text-[#9AA0AC] mb-2.5">
+                  {handle}
+                  {model.location ? ` · ${model.location}` : isStudio ? ' · Add location' : ''}
+                </div>
+                {model.verified ? (
+                  <div className="inline-flex items-center gap-1.5 text-[10px] font-bold text-[#2323FF] mb-2">
+                    <ShieldCheck size={12} /> Verified Creator
+                  </div>
+                ) : (
+                  <div className="text-[10px] font-bold text-[#9AA0AC] mb-2">Community creator profile</div>
+                )}
+
+                {/* Social — its own editable section */}
+                <div className="relative mt-2.5 min-h-[30px]">
+                  {editingHere('social') ? (
+                    frame('social')
+                  ) : (
+                    <>
+                      {isStudio ? (
+                        <button
+                          type="button"
+                          onClick={() => studio!.onEdit('social')}
+                          className="absolute -top-1 right-0 text-[10px] font-extrabold text-[#EF3C23] uppercase bg-transparent border-0 cursor-pointer"
+                        >
+                          Edit social
+                        </button>
+                      ) : null}
+                      <div className="flex flex-wrap gap-2 justify-center lg:justify-start">
+                        {socialEntries.length ? (
+                          socialEntries.map(([label, url]) => (
+                            <a
+                              key={label}
+                              href={url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="px-3 py-1.5 rounded-full border border-[#E8EDF2] bg-white text-[11px] font-bold text-[#1A1A2E]"
+                            >
+                              {label}
+                            </a>
+                          ))
+                        ) : (
+                          <span className="text-[11px] text-[#9AA0AC]">
+                            {isStudio ? 'Add social links' : 'No social links'}
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {model.bio ? (
+                  <p className="text-[12.5px] text-[#4B5563] max-w-xl mx-auto lg:mx-0 leading-relaxed mt-3 m-0">
+                    {model.bio}
+                  </p>
+                ) : isStudio ? (
+                  <p className="text-[12.5px] text-[#9AA0AC] mt-3 m-0">Add a bio for the storefront profile.</p>
+                ) : null}
               </div>
-            ) : (
-              <div className="text-[10px] font-bold text-[#9AA0AC] mb-2">Community creator profile</div>
-            )}
 
-            <div className="relative mt-2.5 flex flex-wrap gap-2 justify-center lg:justify-start">
-              {isEditor ? (
-                <button
-                  type="button"
-                  onClick={() => onEditSection!('social')}
-                  className="absolute -top-1 right-0 text-[10px] font-extrabold text-[#EF3C23] uppercase bg-transparent border-0 cursor-pointer"
-                >
-                  Edit social
-                </button>
-              ) : null}
-              {socialEntries.length ? (
-                socialEntries.map(([label, url]) => (
-                  <a
-                    key={label}
-                    href={url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="px-3 py-1.5 rounded-full border border-[#E8EDF2] bg-white text-[11px] font-bold text-[#1A1A2E]"
+              <div className="flex gap-2.5 flex-wrap justify-center lg:justify-end lg:mt-[52px] shrink-0 w-full lg:w-auto">
+                {['Follow', 'Message', 'Share', 'Love', 'Ask For Branding'].map((b, i) => (
+                  <button
+                    key={b}
+                    type="button"
+                    disabled
+                    className={`inline-flex items-center gap-1.5 px-[18px] py-2.5 rounded-lg text-xs font-bold ${
+                      i === 0
+                        ? 'bg-[#2323FF] text-white border border-[#2323FF]'
+                        : 'bg-white text-[#1A1A2E] border border-[#E5E7EB] font-semibold'
+                    } ${isStudio ? 'opacity-60' : ''}`}
                   >
-                    {label}
-                  </a>
-                ))
-              ) : (
-                <span className="text-[11px] text-[#9AA0AC]">
-                  {isEditor ? 'Add social links' : 'No social links'}
-                </span>
-              )}
+                    {i === 1 ? <MessageCircleMore size={13} className="text-[#FF5B00]" /> : null}
+                    {i === 2 ? <Share2 size={13} /> : null}
+                    {i === 3 ? <Heart size={13} /> : null}
+                    {i === 4 ? <Sparkles size={13} /> : null}
+                    {b}
+                  </button>
+                ))}
+              </div>
             </div>
-
-            {model.bio ? (
-              <p className="text-[12.5px] text-[#4B5563] max-w-xl mx-auto lg:mx-0 leading-relaxed mt-3 m-0">
-                {model.bio}
-              </p>
-            ) : isEditor ? (
-              <p className="text-[12.5px] text-[#9AA0AC] mt-3 m-0">Add a bio for the storefront profile.</p>
-            ) : null}
-          </div>
-
-          <div className="flex gap-2.5 flex-wrap justify-center lg:justify-end lg:mt-[52px] shrink-0 w-full lg:w-auto">
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 bg-[#2323FF] text-white border border-[#2323FF] px-[18px] py-2.5 rounded-lg text-xs font-bold"
-            >
-              Follow
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 bg-white text-[#1A1A2E] border border-[#E5E7EB] px-[18px] py-2.5 rounded-lg text-xs font-semibold"
-            >
-              <MessageCircleMore size={13} className="text-[#EB4501]" /> Message
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 bg-white text-[#1A1A2E] border border-[#E5E7EB] px-[18px] py-2.5 rounded-lg text-xs font-semibold"
-            >
-              <Share2 size={13} /> Share
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 bg-white text-[#1A1A2E] border border-[#E5E7EB] px-[18px] py-2.5 rounded-lg text-xs font-semibold"
-            >
-              <Heart size={13} /> Love
-            </button>
-            <button
-              type="button"
-              className="inline-flex items-center gap-1.5 bg-white text-[#1A1A2E] border border-[#E5E7EB] px-[18px] py-2.5 rounded-lg text-xs font-semibold"
-            >
-              <Sparkles size={13} /> Ask For Branding
-            </button>
-          </div>
+          )}
         </div>
 
+        {/* Trust (derived) + Creator info (derived) */}
         <div className="flex flex-col md:flex-row gap-4 mb-2">
           <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-5 md:w-[300px] shadow-[0_2px_10px_rgba(0,0,0,0.03)] shrink-0">
             <div className="text-[11px] font-extrabold text-[#9AA0AC] tracking-wide mb-2.5">TRUST SCORE</div>
             <div className="flex items-baseline gap-2 mb-4">
               <div className="text-[30px] font-extrabold text-[#1A1A2E]">{trust > 0 ? trust : '—'}</div>
-              <div className="text-[11.5px] text-[#9AA0AC]">/5 · from catalog score</div>
+              <div className="text-[11.5px] text-[#9AA0AC]">/5 · platform-managed</div>
             </div>
             {trust > 0 ? (
               SCORE_ROWS.map((r) => {
@@ -254,10 +361,10 @@ export function CreatorProfilePresentation({
             ) : (
               <p className="text-[11px] text-[#9AA0AC] m-0">No trust score yet.</p>
             )}
+            {isStudio ? <DerivedNote>Trust Score is calculated by Choosify — not editable here.</DerivedNote> : null}
           </div>
 
-          <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-5 flex-1 shadow-[0_2px_10px_rgba(0,0,0,0.03)] relative">
-            {isEditor ? <EditChip onClick={() => onEditSection!('identity')} /> : null}
+          <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-5 flex-1 shadow-[0_2px_10px_rgba(0,0,0,0.03)]">
             <div className="text-[11px] font-extrabold text-[#9AA0AC] tracking-wide mb-4">CREATOR INFO</div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-5">
               {infoFacts.map((f) => (
@@ -272,6 +379,9 @@ export function CreatorProfilePresentation({
                 </div>
               ))}
             </div>
+            {isStudio ? (
+              <DerivedNote>Followers, media counts and Trust are resolved from your account &amp; content.</DerivedNote>
+            ) : null}
           </div>
         </div>
       </div>
@@ -294,7 +404,7 @@ export function CreatorProfilePresentation({
                 onClick={() => setActiveTab(tab)}
                 className={`shrink-0 py-3.5 text-[13px] font-bold cursor-pointer whitespace-nowrap border-0 border-b-2 bg-transparent ${
                   active
-                    ? 'text-[#07DD05] border-[#07DD05]'
+                    ? 'text-app-accent border-app-accent'
                     : 'text-[#6B7280] border-transparent hover:text-[#1A1A2E]'
                 }`}
               >
@@ -307,115 +417,155 @@ export function CreatorProfilePresentation({
       </div>
 
       <div className="max-w-[1180px] mx-auto px-5 sm:px-8 lg:px-10 py-6 w-full space-y-8 pb-10">
-        {activeTab !== 'Overview' ? (
+        {activeTab === 'Guides' ? (
+          <section className="bg-white border border-[#E8EDF2] rounded-[10px] p-5">
+            <div className="flex items-center justify-between gap-3 mb-3.5">
+              <h2 className="text-sm font-extrabold text-[#1A1A2E] m-0">Guides &amp; Content</h2>
+              <a
+                href={studio?.manageGuidesHref || '/admin/guides'}
+                className="inline-flex items-center gap-1 text-[11px] font-extrabold text-[#EF3C23] uppercase"
+              >
+                Manage Guides <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+            {model.blogs.length ? (
+              <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {model.blogs.map((b) => (
+                  <div key={b.id} className="border border-[#E8EDF2] rounded-[10px] overflow-hidden bg-[#F9FAFB]">
+                    <div className="aspect-video bg-[#1A1A2E]/10 flex items-center justify-center overflow-hidden">
+                      {b.thumbnail ? <img src={b.thumbnail} alt="" className="w-full h-full object-cover" /> : <span className="text-[10px] font-bold text-[#9AA0AC] uppercase">guide</span>}
+                    </div>
+                    <div className="p-3 text-[12px] font-bold text-[#1A1A2E] line-clamp-2">{b.title}</div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <EmptyState message="No guides yet — publish one from Guide Management." />
+            )}
+            {isStudio ? (
+              <DerivedNote>Guides are managed in Guide Management; this tab mirrors your published content.</DerivedNote>
+            ) : null}
+          </section>
+        ) : activeTab !== 'Overview' ? (
           <EmptyState
             message={
-              activeTab === 'Guides' && model.blogs.length === 0
-                ? 'No guides yet.'
-                : activeTab === 'Videos' && model.videos.length + model.reels.length === 0
-                  ? 'No videos yet.'
-                  : `${activeTab} content uses the Overview canvas in Creator Visual Builder for now.`
+              activeTab === 'Videos' && model.videos.length + model.reels.length === 0
+                ? 'No videos yet.'
+                : activeTab === 'Reviews'
+                  ? 'No reviews yet.'
+                  : `No ${activeTab.toLowerCase()} yet.`
             }
           />
         ) : (
           <>
-            {/* Featured Content */}
-            <section className="bg-white border border-[#E8EDF2] rounded-[10px] p-5 relative">
-              <div className="flex justify-between items-baseline mb-3.5">
-                <h2 className="text-sm font-extrabold text-[#1A1A2E] m-0">Featured Content</h2>
-              </div>
-              {featured.length ? (
-                <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 items-start">
-                  {featured.map((item) => (
-                    <div
-                      key={`${item.kind}-${item.id}`}
-                      className="border border-[#E8EDF2] rounded-[10px] overflow-hidden bg-[#F9FAFB]"
-                    >
-                      <div className="aspect-video bg-[#1A1A2E]/10 flex items-center justify-center overflow-hidden">
-                        {item.thumbnail ? (
-                          <img src={item.thumbnail} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <span className="text-[10px] font-bold text-[#9AA0AC] uppercase">{item.kind}</span>
-                        )}
-                      </div>
-                      <div className="p-3">
-                        <div className="text-[10px] font-extrabold text-[#EB4501] uppercase mb-1">{item.kind}</div>
-                        <div className="text-[12px] font-bold text-[#1A1A2E] line-clamp-2">{item.title}</div>
-                        {item.views ? (
-                          <div className="text-[10px] text-[#9AA0AC] mt-1">{item.views} views</div>
-                        ) : null}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+            {/* Featured Content — creator-curated (own Guides + external links) */}
+            <section className="relative">
+              {editingHere('featured') ? (
+                frame('featured')
               ) : (
-                <EmptyState message={isEditor ? 'No featured content yet' : 'No featured content'} />
+                <div className="relative bg-white border border-[#E8EDF2] rounded-[10px] p-5">
+                  {pill('featured')}
+                  <div className="flex justify-between items-baseline mb-3.5">
+                    <h2 className="text-sm font-extrabold text-[#1A1A2E] m-0">Featured Content</h2>
+                    {curatedFeatured.length === 0 && isStudio ? (
+                      <span className="text-[10px] text-[#9AA0AC] italic">auto — newest content</span>
+                    ) : null}
+                  </div>
+                  {featured.length ? (
+                    <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5 items-start">
+                      {featured.map((item) => {
+                        const Card = (
+                          <>
+                            <div className="aspect-video bg-[#1A1A2E]/10 flex items-center justify-center overflow-hidden">
+                              {item.thumbnail ? (
+                                <img src={item.thumbnail} alt="" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                              ) : (
+                                <span className="text-[10px] font-bold text-[#9AA0AC] uppercase">{item.kind}</span>
+                              )}
+                            </div>
+                            <div className="p-3">
+                              <div className="text-[10px] font-extrabold text-[#FF5B00] uppercase mb-1 flex items-center gap-1">
+                                {item.kind}
+                                {item.external ? <ExternalLink className="w-2.5 h-2.5" /> : null}
+                              </div>
+                              <div className="text-[12px] font-bold text-[#1A1A2E] line-clamp-2">{item.title}</div>
+                              {item.views ? <div className="text-[10px] text-[#9AA0AC] mt-1">{item.views} views</div> : null}
+                            </div>
+                          </>
+                        );
+                        return item.url ? (
+                          <a
+                            key={`${item.kind}-${item.id}`}
+                            href={item.url}
+                            {...(item.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                            className="block border border-[#E8EDF2] rounded-[10px] overflow-hidden bg-[#F9FAFB] hover:border-[#FF5B00]/40 transition-colors"
+                          >
+                            {Card}
+                          </a>
+                        ) : (
+                          <div key={`${item.kind}-${item.id}`} className="border border-[#E8EDF2] rounded-[10px] overflow-hidden bg-[#F9FAFB]">
+                            {Card}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <EmptyState message={isStudio ? 'Feature your own guides or add external links.' : 'No featured content yet.'} />
+                  )}
+                  {isStudio && curatedFeatured.length === 0 ? (
+                    <DerivedNote>Empty — the profile shows your newest videos/reels/guides until you curate this.</DerivedNote>
+                  ) : null}
+                </div>
               )}
             </section>
 
-            {/* Expertise + Latest Reviews */}
+            {/* Expertise & Topics (read-only mirror of Creator Overview) + Latest Reviews (derived) */}
             <section className="grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-4">
-              <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-5 relative">
-                {isEditor ? <EditChip onClick={() => onEditSection!('expertise')} /> : null}
-                <h3 className="text-[13px] font-extrabold text-[#1A1A2E] mb-3.5 m-0">Expertise & Topics</h3>
-                {model.bestForTags.length ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {model.bestForTags.map((tag) => (
-                      <div key={tag} className="flex items-center gap-2">
-                        <div className="w-[30px] h-[30px] rounded-lg bg-[#F4F7F9] flex items-center justify-center text-[13px] shrink-0">
-                          #
+              <div className="relative">
+                <div className="relative bg-white border border-[#E8EDF2] rounded-[10px] p-5">
+                  <h3 className="text-[13px] font-extrabold text-[#1A1A2E] mb-3.5 m-0">Expertise &amp; Topics</h3>
+                  {model.bestForTags.length ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      {model.bestForTags.map((tag) => (
+                        <div key={tag} className="flex items-center gap-2">
+                          <div className="w-[30px] h-[30px] rounded-lg bg-[#F4F7F9] flex items-center justify-center text-[13px] shrink-0">#</div>
+                          <div>
+                            <div className="text-[11.5px] font-bold text-[#1A1A2E]">{tag}</div>
+                            <div className="text-[10px] text-[#9AA0AC]">Topic</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="text-[11.5px] font-bold text-[#1A1A2E]">{tag}</div>
-                          <div className="text-[10px] text-[#9AA0AC]">Topic</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState message={isEditor ? 'Add expertise' : 'No expertise topics'} />
-                )}
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState message={isStudio ? 'Add expertise in Creator Overview' : 'No expertise topics'} />
+                  )}
+                  {model.platforms.length ? (
+                    <div className="mt-4 flex flex-wrap gap-1.5">
+                      {model.platforms.map((p) => (
+                        <span key={p} className="text-[10.5px] font-semibold text-[#4B5563] bg-[#F4F7F9] rounded-full px-2.5 py-1">
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                  {isStudio ? <DerivedNote>Expertise topics and platforms are edited in the Creator Overview section below.</DerivedNote> : null}
+                </div>
               </div>
               <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-5">
                 <h3 className="text-[13px] font-extrabold text-[#1A1A2E] mb-3.5 m-0">Latest Reviews</h3>
-                {model.videos.length ? (
-                  <div className="space-y-0">
-                    {model.videos.slice(0, 3).map((v, i) => (
-                      <div
-                        key={v.id}
-                        className={`flex items-center gap-2.5 py-2.5 ${
-                          i < Math.min(2, model.videos.length - 1) ? 'border-b border-[#F1F1F3]' : ''
-                        }`}
-                      >
-                        <div className="text-[11px] font-bold text-[#9AA0AC] w-3.5">{i + 1}</div>
-                        <div className="w-[34px] h-[34px] rounded-md overflow-hidden shrink-0 bg-[#F4F7F9]">
-                          {v.thumbnail ? (
-                            <img src={v.thumbnail} alt="" className="w-full h-full object-cover" />
-                          ) : null}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-[11.5px] font-bold text-[#1A1A2E] truncate">{v.title}</div>
-                          <div className="text-[10px] text-[#9AA0AC]">Creator video</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <EmptyState message="No latest reviews yet" />
-                )}
+                <EmptyState message="No reviews yet." />
+                {isStudio ? <DerivedNote>Community reviews are collected by Choosify and shown read-only.</DerivedNote> : null}
               </div>
             </section>
 
-            {/* Why Follow */}
-            <section className="choosify-dark-surface rounded-xl px-[30px] py-[26px] text-white overflow-hidden relative">
+            {/* Why Follow (derived from editable data) */}
+            <section className="choosify-dark-surface rounded-xl px-[30px] py-[26px] text-white overflow-hidden">
               <h3 className="text-sm font-extrabold mb-[18px] m-0">Why Follow {firstName}?</h3>
               {model.collabTypes.length || model.bestForTags.length ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                   {(model.collabTypes.length ? model.collabTypes : model.bestForTags).slice(0, 4).map((item) => (
                     <div key={item} className="flex gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[13px] shrink-0">
-                        ✦
-                      </div>
+                      <div className="w-8 h-8 rounded-lg bg-white/10 flex items-center justify-center text-[13px] shrink-0">✦</div>
                       <div>
                         <div className="text-xs font-bold mb-0.5">{item}</div>
                         <div className="text-[10.5px] text-white/50 leading-snug">From creator profile data</div>
@@ -425,105 +575,120 @@ export function CreatorProfilePresentation({
                 </div>
               ) : (
                 <p className="text-[12px] text-white/60 m-0">
-                  {isEditor ? 'Add collaboration types or expertise to populate this section.' : 'No reasons listed yet.'}
+                  {isStudio ? 'Add collaboration types or expertise to populate this section.' : 'No reasons listed yet.'}
                 </p>
               )}
             </section>
 
-            {/* Overview + Contact */}
+            {/* Creator Overview (editable — the one canonical bio) + Contact */}
             <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-[18px] relative">
-                {isEditor ? <EditChip onClick={() => onEditSection!('overview')} /> : null}
-                <OverviewCardHeader title="Creator Overview" />
-                <div className="mb-3.5">
-                  <div className="text-[11.5px] font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-1">
-                    📄 Background & Bio
-                  </div>
-                  <p className="text-[11px] text-[#4B5563] leading-relaxed m-0">
-                    {model.bio || (isEditor ? 'Add overview bio' : 'No bio yet.')}
-                  </p>
-                </div>
-                <div>
-                  <div className="text-[11.5px] font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-1">
-                    📁 Areas of Expertise
-                  </div>
-                  <p className="text-[11px] text-[#4B5563] leading-relaxed m-0">
-                    {model.bestForTags.length
-                      ? model.bestForTags.join(', ')
-                      : isEditor
-                        ? 'Add expertise'
-                        : 'No expertise listed.'}
-                  </p>
-                </div>
-              </div>
-              <div className="bg-white border border-[#E8EDF2] rounded-[10px] p-[18px] relative">
-                {isEditor ? <EditChip onClick={() => onEditSection!('contact')} /> : null}
-                <OverviewCardHeader title="Contact & Reach" />
-                {(
-                  [
-                    ['✉', 'Business email', model.email],
-                    ['📞', 'Phone', model.phone],
-                    ['⏱', 'Response time', model.responseTime],
-                    ['💬', 'Preferred contact', model.preferredContact],
-                    ['📺', 'Platforms', model.platforms.join(', ')],
-                  ] as const
-                ).map(([icon, label, value]) => (
-                  <div key={label} className="flex items-start gap-2 mb-3 last:mb-0">
-                    <div className="text-xs shrink-0">{icon}</div>
+              <div className="relative">
+                {editingHere('overview') ? (
+                  frame('overview')
+                ) : (
+                  <div className="relative bg-white border border-[#E8EDF2] rounded-[10px] p-[18px]">
+                    {pill('overview')}
+                    <OverviewCardHeader title="Creator Overview" />
+                    <div className="mb-3.5">
+                      <div className="text-[11.5px] font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-1">📄 Background &amp; Bio</div>
+                      <p className="text-[11px] text-[#4B5563] leading-relaxed m-0 whitespace-pre-wrap">
+                        {model.bio || (isStudio ? 'Add a bio.' : 'No bio yet.')}
+                      </p>
+                    </div>
+                    <div className="mb-3.5">
+                      <div className="text-[11.5px] font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-1">📁 Areas of Expertise</div>
+                      <p className="text-[11px] text-[#4B5563] leading-relaxed m-0">
+                        {model.bestForTags.length ? model.bestForTags.join(', ') : isStudio ? 'Add expertise topics.' : 'No expertise listed.'}
+                      </p>
+                    </div>
                     <div>
-                      <div className="text-[11px] font-bold text-[#1A1A2E]">{label}</div>
-                      <div className="text-[11px] text-[#4B5563]">
-                        {value || (isEditor ? 'Not set' : '—')}
-                      </div>
+                      <div className="text-[11.5px] font-bold text-[#1A1A2E] flex items-center gap-1.5 mb-1">▷ Content Platforms</div>
+                      <p className="text-[11px] text-[#4B5563] leading-relaxed m-0">
+                        {model.platforms.length ? model.platforms.join(', ') : isStudio ? 'Add the platforms you publish on.' : 'No platforms listed.'}
+                      </p>
                     </div>
+                    {isStudio ? <DerivedNote>Bio, expertise and platforms save together here. The bio also appears in your profile header.</DerivedNote> : null}
                   </div>
-                ))}
+                )}
+              </div>
+              <div className="relative">
+                {editingHere('contact') ? (
+                  frame('contact')
+                ) : (
+                  <div className="relative bg-white border border-[#E8EDF2] rounded-[10px] p-[18px]">
+                    {pill('contact')}
+                    <OverviewCardHeader title="Contact & Reach" />
+                    {(
+                      [
+                        ['✉', 'Business email', model.email],
+                        ['📞', 'Phone', model.phone],
+                        ['⏱', 'Response time', model.responseTime],
+                        ['💬', 'Preferred contact', model.preferredContact],
+                        ['📺', 'Platforms', model.platforms.join(', ')],
+                      ] as const
+                    ).map(([icon, label, value]) => (
+                      <div key={label} className="flex items-start gap-2 mb-3 last:mb-0">
+                        <div className="text-xs shrink-0">{icon}</div>
+                        <div>
+                          <div className="text-[11px] font-bold text-[#1A1A2E]">{label}</div>
+                          <div className="text-[11px] text-[#4B5563]">{value || (isStudio ? 'Not set' : '—')}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </section>
 
-            {/* Partnerships */}
-            <section className="bg-white border border-[#E8EDF2] rounded-[10px] p-6 relative">
-              {isEditor ? <EditChip onClick={() => onEditSection!('partnerships')} /> : null}
-              <OverviewCardHeader title="Partnerships & Collaborations" />
-              <div className="text-[10px] font-bold text-[#9AA0AC] mb-2">TOP BRAND PARTNERS</div>
-              {model.brandPartners.length ? (
-                <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5 mb-5">
-                  {model.brandPartners.map((bp) => (
-                    <div
-                      key={bp.name}
-                      className="border border-[#E5E7EB] rounded-md p-3 text-center text-[11px] font-extrabold"
-                      style={{ color: bp.color || '#1A1A2E' }}
-                    >
-                      {bp.name}
+            {/* Partnerships (editable) */}
+            <section className="relative">
+              {editingHere('partnerships') ? (
+                frame('partnerships')
+              ) : (
+                <div className="relative bg-white border border-[#E8EDF2] rounded-[10px] p-6">
+                  {pill('partnerships')}
+                  <OverviewCardHeader title="Partnerships & Collaborations" />
+                  <div className="text-[10px] font-bold text-[#9AA0AC] mb-2">TOP BRAND PARTNERS</div>
+                  {model.brandPartners.length ? (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5 mb-5">
+                      {model.brandPartners.map((bp, i) => (
+                        <div
+                          key={bp.brandId || `${bp.name}-${i}`}
+                          className="border border-[#E5E7EB] rounded-md p-3 text-center text-[11px] font-extrabold flex flex-col items-center gap-1.5"
+                          style={{ color: bp.color || '#1A1A2E' }}
+                        >
+                          {bp.logo ? (
+                            <img src={bp.logo} alt="" className="w-8 h-8 rounded object-cover" referrerPolicy="no-referrer" />
+                          ) : null}
+                          {bp.name}
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <div className="mb-5">
+                      <EmptyState message={isStudio ? 'No partnerships added' : 'No brand partners'} />
+                    </div>
+                  )}
+                  <div className="text-[10px] font-bold text-[#9AA0AC] mb-2">COLLABORATION TYPES</div>
+                  {model.collabTypes.length ? (
+                    <div className="flex flex-wrap gap-2">
+                      {model.collabTypes.map((ct) => (
+                        <span key={ct} className="bg-[#F4F7F9] text-[10.5px] font-semibold text-[#4B5563] px-3 py-1.5 rounded-full">
+                          {ct}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState message={isStudio ? 'Add collaboration types' : 'No collaboration types'} />
+                  )}
                 </div>
-              ) : (
-                <div className="mb-5">
-                  <EmptyState message={isEditor ? 'No partnerships added' : 'No brand partners'} />
-                </div>
-              )}
-              <div className="text-[10px] font-bold text-[#9AA0AC] mb-2">COLLABORATION TYPES</div>
-              {model.collabTypes.length ? (
-                <div className="flex flex-wrap gap-2">
-                  {model.collabTypes.map((ct) => (
-                    <span
-                      key={ct}
-                      className="bg-[#F4F7F9] text-[10.5px] font-semibold text-[#4B5563] px-3 py-1.5 rounded-full"
-                    >
-                      {ct}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <EmptyState message={isEditor ? 'Add collaboration types' : 'No collaboration types'} />
               )}
             </section>
 
-            {/* Community */}
+            {/* Community (derived) */}
             <section>
               <h2 className="text-sm font-extrabold text-[#1A1A2E] mb-3.5 m-0">What The Community Says</h2>
-              <EmptyState message="No reviews yet. Community reviews stay read-only here." />
+              <EmptyState message="No reviews yet." />
             </section>
           </>
         )}

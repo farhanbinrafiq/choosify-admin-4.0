@@ -145,6 +145,35 @@ export async function loadAdminUserByEmail(
   };
 }
 
+/**
+ * Look up a Choosify account by an already-normalized email, for Manual
+ * Order identity reconciliation. Returns the verification state so callers
+ * can distinguish "an account exists" from "a verified identity".
+ * `users` has no phone column — phone is never resolvable to a Consumer
+ * account here, so it can only ever be corroborating, never authoritative.
+ */
+export async function findAccountByNormalizedEmail(normalizedEmail: string): Promise<{
+  uid: string;
+  role: string;
+  email: string;
+  emailVerified: boolean;
+} | null> {
+  if (!normalizedEmail) return null;
+  const rows = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, normalizedEmail))
+    .limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    uid: row.id,
+    role: row.role,
+    email: row.email,
+    emailVerified: Boolean(row.emailVerified),
+  };
+}
+
 export async function upsertAdminUserProfile(input: {
   uid: string;
   email: string;

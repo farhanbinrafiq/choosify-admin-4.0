@@ -15,15 +15,16 @@ import {
 } from '../lib/storefrontCategories';
 import { refreshAccessToken } from '../services/authRefresh';
 
-export type UserRole = 
-  | 'super_admin' 
-  | 'admin' 
-  | 'seller' 
+export type UserRole =
+  | 'super_admin'
+  | 'admin'
+  | 'seller'
+  | 'verified_seller'
   | 'creator'
   | 'consumer'
-  | 'moderator' 
-  | 'finance_manager' 
-  | 'support_agent' 
+  | 'moderator'
+  | 'finance_manager'
+  | 'support_agent'
   | 'marketing_manager';
 
 export interface UserProfile {
@@ -64,7 +65,6 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   mustChangePassword: boolean;
-  login: (role: UserRole) => void;
   loginWithEmail: (email: string, password: string, fallbackRole?: UserRole) => Promise<UserRole>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   clearMustChangePassword: () => void;
@@ -96,7 +96,6 @@ interface AuthContextType {
     password: string;
   }) => Promise<{ role: UserRole; dashboardPath: string }>;
   logout: () => void;
-  switchRole: (role: UserRole) => void;
   // Brand Switching Context API for multi-brand sellers
   activeBrandId: string | null;
   setActiveBrandId: (id: string | null) => void;
@@ -120,63 +119,6 @@ interface AuthContextType {
   importCategories: (imported: CategoryType[]) => Promise<void>;
 }
 
-const mockProfiles: Record<UserRole, UserProfile> = {
-  super_admin: {
-    id: 'admin_001',
-    displayName: 'Abdur Rahman',
-    email: 'ar@choosify.com.bd',
-    role: 'super_admin',
-  },
-  admin: {
-    id: 'admin_002',
-    displayName: 'Tanvir Hossain',
-    email: 'tanvir@choosify.com.bd',
-    role: 'admin',
-  },
-  seller: {
-    id: 'seller_001',
-    displayName: 'Rahim Uddin',
-    email: 'rahim@aarong.com',
-    role: 'seller',
-  },
-  creator: {
-    id: 'creator_001',
-    displayName: 'Sumaiya Akter',
-    email: 'sumaiya@creators.bd',
-    role: 'creator',
-  },
-  consumer: {
-    id: 'consumer_001',
-    displayName: 'Farhan Bin Rafiq',
-    email: 'farhan@example.com',
-    role: 'consumer',
-  },
-  moderator: {
-    id: 'mod_001',
-    displayName: 'Afsana Mimi',
-    email: 'afsana@choosify.com.bd',
-    role: 'moderator',
-  },
-  finance_manager: {
-    id: 'fin_001',
-    displayName: 'Sajid Islam',
-    email: 'sajid@choosify.com.bd',
-    role: 'finance_manager',
-  },
-  support_agent: {
-    id: 'sup_001',
-    displayName: 'Kazi Farhan',
-    email: 'kazi@choosify.com.bd',
-    role: 'support_agent',
-  },
-  marketing_manager: {
-    id: 'mkt_001',
-    displayName: 'Nusrat Jahan',
-    email: 'nusrat@choosify.com.bd',
-    role: 'marketing_manager',
-  },
-};
-
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
 
 function toUserRole(role: string, fallback: UserRole = 'admin'): UserRole {
@@ -184,6 +126,7 @@ function toUserRole(role: string, fallback: UserRole = 'admin'): UserRole {
     'super_admin',
     'admin',
     'seller',
+    'verified_seller',
     'creator',
     'consumer',
     'moderator',
@@ -282,7 +225,6 @@ const AuthContext = createContext<AuthContextType>({
   profile: null, 
   loading: true,
   mustChangePassword: false,
-  login: () => {},
   loginWithEmail: async () => 'admin',
   changePassword: async () => {},
   clearMustChangePassword: () => {},
@@ -293,7 +235,6 @@ const AuthContext = createContext<AuthContextType>({
   }),
   registerSeller: async () => ({ role: 'seller', dashboardPath: '/seller/products' }),
   logout: () => {},
-  switchRole: () => {},
   activeBrandId: null,
   setActiveBrandId: () => {},
   sellerBrands: [],
@@ -347,8 +288,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           try {
             const remote = await resolveAuthProfile(token);
             if (!cancelled) {
-              // Real JWT session — never keep a TempRole mock key alongside it.
-              localStorage.removeItem('choosify_mock_role');
               setProfile({
                 id: remote.uid,
                 displayName: remote.displayName,
@@ -376,18 +315,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             // StrictMode: a cancelled mount must not erase a token still needed by the remount.
             if (!cancelled) {
               localStorage.removeItem(AUTH_TOKEN_KEY);
-              // Never resurrect mockProfiles after a failed real session.
-              localStorage.removeItem('choosify_mock_role');
               setProfile(null);
             }
             break;
           }
-        }
-      } else {
-        // TempRoleSwitcher-only path: no JWT, optional mock role for local QA.
-        const savedRole = localStorage.getItem('choosify_mock_role') as UserRole;
-        if (savedRole && mockProfiles[savedRole]) {
-          setProfile(mockProfiles[savedRole]);
         }
       }
 
@@ -466,16 +397,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [profile]);
 
-  const login = (role: UserRole) => {
-    // TempRoleSwitcher must not overlay a real JWT session.
-    if (localStorage.getItem(AUTH_TOKEN_KEY)) {
-      console.warn('[Auth] Ignoring TempRole login — real JWT session is active');
-      return;
-    }
-    setProfile(mockProfiles[role]);
-    localStorage.setItem('choosify_mock_role', role);
-  };
-
   const loginWithEmail = async (email: string, password: string, fallbackRole: UserRole = 'super_admin') => {
     console.info('[Auth] Login attempt', { email: email.trim().toLowerCase() });
 
@@ -511,8 +432,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     localStorage.setItem(AUTH_TOKEN_KEY, payload.accessToken);
-    // choosify_mock_role is TempRoleSwitcher-only — never share it with real auth.
-    localStorage.removeItem('choosify_mock_role');
     const role = toUserRole(payload.role || '', fallbackRole);
     let nextProfile: UserProfile = {
       id: payload.uid || '',
@@ -686,7 +605,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     console.info('[Auth] Logout');
     const hadToken = Boolean(localStorage.getItem(AUTH_TOKEN_KEY));
     setProfile(null);
-    localStorage.removeItem('choosify_mock_role');
     localStorage.removeItem('choosify_active_brand_id');
     localStorage.removeItem(AUTH_TOKEN_KEY);
     if (hadToken) {
@@ -694,16 +612,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('[Auth] Logout request failed', error);
       });
     }
-  };
-
-  const switchRole = (role: UserRole) => {
-    // TempRoleSwitcher must not replace a real authenticated profile.
-    if (localStorage.getItem(AUTH_TOKEN_KEY)) {
-      console.warn('[Auth] Ignoring TempRole switch — real JWT session is active');
-      return;
-    }
-    setProfile(mockProfiles[role]);
-    localStorage.setItem('choosify_mock_role', role);
   };
 
   const requestNewBrand = async (name: string, category: string) => {
@@ -947,14 +855,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       profile, 
       loading,
       mustChangePassword: profile?.changeNextLogin === true,
-      login,
       loginWithEmail,
       changePassword,
       clearMustChangePassword,
       applyAsPartner,
       registerSeller,
       logout,
-      switchRole,
       activeBrandId,
       setActiveBrandId,
       sellerBrands,

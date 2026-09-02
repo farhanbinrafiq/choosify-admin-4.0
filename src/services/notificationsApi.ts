@@ -2,8 +2,8 @@
  * In-app Notification Center client.
  * Hits the existing communication domain at `/api/notifications` (not `/api/v1`).
  *
- * TEMP: when no bearer token is present (e.g. TempRoleSwitcher mock sessions),
- * returns an empty identity-scoped feed instead of inventing demo notifications.
+ * When no bearer token is present (unauthenticated / pre-login), returns an
+ * empty identity-scoped feed instead of inventing demo notifications.
  * Real delivery/creation remains the communication domain sprint.
  */
 

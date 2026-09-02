@@ -45,15 +45,31 @@ async function login(email: string, password: string): Promise<{ token: string; 
 
 async function main() {
   const admin = await login(ADMIN_EMAIL, DEV_PASS);
+  // The manual_order conversation is verified as the SELLER participant — since
+  // IS-005 §7, staff no longer get blanket read of private commerce conversations
+  // (support/dispute only via an audited enter). The seller on the order is a
+  // real participant and always sees their own commerce thread.
+  const seller = await login('seller@choosify.com.bd', DEV_PASS).catch(() => null);
 
   // Use a real catalog product (proves the "no fictional SKU dependency" fix at
   // the API layer — the frontend fix is covered separately by tsc + manual UAT).
   // Fetch unauthenticated/public since GET /catalog/products auto-scopes to the
   // caller's own products when a non-admin token is attached, and admin needs a
   // product it can legitimately create a manual order for on any seller's behalf.
+  // Prefer a product owned by the seed seller (seller-scoped list) so the
+  // conversation is verifiable from a real participant token. Fall back to any
+  // public seller-owned product.
+  const sellerUid = seller?.uid || '';
+  let ownProducts: Array<{ id: string; brandId: string; sellerId?: string }> = [];
+  if (seller) {
+    const r = await fetch(`${V1}/catalog/products`, { headers: { Authorization: `Bearer ${seller.token}` } });
+    ownProducts = ((await r.json().catch(() => ({}))) as { data?: typeof ownProducts }).data || [];
+  }
   const productsRes = await fetch(`${V1}/catalog/products`);
   const productsBody = (await productsRes.json()) as { data?: Array<{ id: string; title: string; brandId: string; sellerId?: string }> };
-  const realProduct = (productsBody.data || []).find((p) => !!p.sellerId);
+  const realProduct =
+    ownProducts.find((p) => !!p.sellerId && p.sellerId === sellerUid && !!p.brandId) ||
+    (productsBody.data || []).find((p) => !!p.sellerId);
   assert(!!realProduct, 'a real catalog product exists to use in the manual order', productsBody.data?.length);
   if (!realProduct) throw new Error('cannot continue without a real product fixture');
 
@@ -90,12 +106,24 @@ async function main() {
     { orderId, hubCount: hubOrders.length },
   );
 
+  // Verify from a participant token (the seller). If the seed seller does not own
+  // the fixture product, fall back to an audited admin enter to read it.
+  const verifierToken =
+    seller && realProduct.sellerId === seller.uid ? seller.token : admin.token;
   const convRes = await fetch(`${V1}/conversations?contextType=manual_order`, {
-    headers: { Authorization: `Bearer ${admin.token}` },
+    headers: { Authorization: `Bearer ${verifierToken}` },
   });
   const convBody = (await convRes.json()) as { success?: boolean; data?: Array<{ id: string; orderId?: string; contextType?: string }> };
   assert(convRes.ok && convBody.success, 'GET /conversations?contextType=manual_order succeeds', convRes.status);
-  const linkedConv = (convBody.data || []).find((c) => c.orderId === orderId);
+  let linkedConv = (convBody.data || []).find((c) => c.orderId === orderId);
+  if (!linkedConv && verifierToken === admin.token) {
+    // staff has no blanket read now — reconcile + enter to find/read it
+    await fetch(`${V1}/messaging/reconcile-order-conversations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${admin.token}` },
+      body: '{}',
+    }).catch(() => {});
+  }
   assert(!!linkedConv, 'order conversation exists synchronously, no delay/reconcile needed', {
     orderId,
     conversationsReturned: convBody.data?.length,

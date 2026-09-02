@@ -20,16 +20,32 @@ const toNumber = (value: unknown, fallback = 0): number => {
 const toBoolean = (value: unknown, fallback = false): boolean => (typeof value === 'boolean' ? value : fallback);
 const toStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
-const toBrandPartners = (value: unknown): { name: string; color?: string }[] =>
-  Array.isArray(value)
+const toBrandPartners = (
+  value: unknown,
+): { name: string; color?: string; brandId?: string; logo?: string }[] => {
+  const logoOk = (v: unknown): string | undefined => {
+    const s = typeof v === 'string' ? v.trim() : '';
+    if (!s) return undefined;
+    if (s.startsWith('/') && !s.startsWith('//')) return s.slice(0, 2000);
+    return /^https?:\/\//i.test(s) && !/^\s*(javascript|data|vbscript|file):/i.test(s)
+      ? s.slice(0, 2000)
+      : undefined;
+  };
+  return Array.isArray(value)
     ? value
         .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
         .map((item) => ({
-          name: toString(item.name),
+          name: toString(item.name).slice(0, 120),
           color: toString(item.color) || undefined,
+          // Canonical Choosify brand reference when tagged from the directory.
+          brandId: toString(item.brandId).slice(0, 80) || undefined,
+          // Creator-uploaded logo for an off-directory collaboration.
+          logo: logoOk(item.logo),
         }))
         .filter((item) => item.name)
+        .slice(0, 24)
     : [];
+};
 
 export const slugify = (value: string): string =>
   value
@@ -38,6 +54,54 @@ export const slugify = (value: string): string =>
     .replace(/[^a-z0-9\s-]/g, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-');
+
+/** http(s) URL, or an app-relative path ("/spotlight/…", "/media/…"). Else ''. */
+const safeUrlOrPath = (value: unknown): string => {
+  const s = typeof value === 'string' ? value.trim() : '';
+  if (!s) return '';
+  if (s.startsWith('/') && !s.startsWith('//')) return s.slice(0, 2000);
+  return safeHttpUrl(s);
+};
+
+/** Creator-defined extra social links. Presence-aware (`[]` clears); max 8. */
+const normalizeCreatorCustomSocial = (
+  raw: unknown,
+  existing: Array<{ label: string; url: string }> | undefined,
+): Array<{ label: string; url: string }> => {
+  if (!Array.isArray(raw)) return existing ?? [];
+  return raw
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+    .map((r) => ({ label: clampStr(r.label, 40), url: safeHttpUrl(r.url) }))
+    .filter((r) => r.label && r.url)
+    .slice(0, 8);
+};
+
+/** Creator-curated Featured Content. Presence-aware (`[]` clears); max 12. */
+const normalizeCreatorFeatured = (
+  raw: unknown,
+  existing: CatalogCreator['featuredContent'],
+): NonNullable<CatalogCreator['featuredContent']> => {
+  if (!Array.isArray(raw)) return existing ?? [];
+  const KINDS = ['guide', 'video', 'reel', 'blog', 'link'];
+  return raw
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+    .map((r, i) => {
+      const source = clampStr(r.source, 12) === 'platform' ? ('platform' as const) : ('external' as const);
+      const kindRaw = clampStr(r.kind, 10);
+      return {
+        id: clampStr(r.id, 40) || `cfc-${i}`,
+        source,
+        kind: (KINDS.includes(kindRaw) ? kindRaw : source === 'platform' ? 'guide' : 'link') as
+          NonNullable<CatalogCreator['featuredContent']>[number]['kind'],
+        contentId: source === 'platform' ? clampStr(r.contentId, 80) || undefined : undefined,
+        title: clampStr(r.title, 160),
+        thumbnail: safeUrlOrPath(r.thumbnail),
+        url: safeUrlOrPath(r.url),
+      };
+    })
+    .filter((r) => r.title && r.url)
+    .slice(0, 12);
+};
 
 export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreator): CatalogCreator => {
   const raw = (payload ?? {}) as Record<string, unknown>;
@@ -48,6 +112,8 @@ export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreato
     raw.socialLinks && typeof raw.socialLinks === 'object'
       ? (raw.socialLinks as Record<string, unknown>)
       : null;
+  const customSocial = normalizeCreatorCustomSocial(socialRaw?.custom, existing?.socialLinks?.custom);
+  const featuredContent = normalizeCreatorFeatured(raw.featuredContent, existing?.featuredContent);
   return {
     id,
     slug: toString(raw.slug, existing?.slug ?? slugify(name || id)),
@@ -75,8 +141,10 @@ export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreato
             youtube: toString(socialRaw?.youtube, existing?.socialLinks?.youtube ?? '') || undefined,
             tiktok: toString(socialRaw?.tiktok, existing?.socialLinks?.tiktok ?? '') || undefined,
             linkedin: toString(socialRaw?.linkedin, existing?.socialLinks?.linkedin ?? '') || undefined,
+            ...(customSocial.length ? { custom: customSocial } : {}),
           }
         : undefined,
+    featuredContent: featuredContent.length ? featuredContent : undefined,
     brandPartners: toBrandPartners(raw.brandPartners).length
       ? toBrandPartners(raw.brandPartners)
       : existing?.brandPartners,
@@ -790,6 +858,63 @@ const normalizeStoreList = (
         .filter((v): v is RelatedStore => v !== null)
     : [];
 
+const GUIDE_TYPES = ['size', 'measurement', 'compatibility', 'fitment', 'feature', 'custom'] as const;
+
+/**
+ * Seller product guide (sizing / measurement / fitment / compatibility / feature).
+ * Presentation metadata only. `imageUrl` is URL-safety filtered; strings clamped;
+ * `guideType` constrained. Omitted from the payload ⇒ preserve `existing`. Legacy
+ * table fields (`rows` / `columnHeaders` / `unitLabel` / `htmlContent`) pass
+ * through so existing fashion size charts keep working.
+ */
+const normalizeSizeGuide = (
+  raw: unknown,
+  existing: CatalogProductDetail['sizeGuide'],
+): CatalogProductDetail['sizeGuide'] => {
+  if (!raw || typeof raw !== 'object') return existing;
+  const r = raw as Record<string, unknown>;
+  const guideTypeRaw = clampStr(r.guideType, 20).toLowerCase();
+  const contentTypeRaw = clampStr(r.type, 10).toLowerCase();
+  const imageUrl = safeHttpUrl(r.imageUrl) || undefined;
+  const rows = Array.isArray(r.rows)
+    ? (r.rows as Array<Record<string, unknown>>)
+        .filter((row) => row && typeof row === 'object')
+        .slice(0, 60)
+        .map((row) => {
+          const out: Record<string, string> = { size: clampStr(row.size, 40) };
+          for (const [k, v] of Object.entries(row)) {
+            if (k === 'size') continue;
+            out[k.slice(0, 40)] = clampStr(v, 40);
+          }
+          return out as { size: string; [m: string]: string };
+        })
+    : undefined;
+  const out: NonNullable<CatalogProductDetail['sizeGuide']> = {
+    enabled: toBoolean(r.enabled, false),
+    guideType: (GUIDE_TYPES as readonly string[]).includes(guideTypeRaw)
+      ? (guideTypeRaw as NonNullable<CatalogProductDetail['sizeGuide']>['guideType'])
+      : 'size',
+    label: clampStr(r.label, 40) || undefined,
+    type: ['table', 'image', 'html'].includes(contentTypeRaw)
+      ? (contentTypeRaw as 'table' | 'image' | 'html')
+      : imageUrl
+        ? 'image'
+        : rows && rows.length
+          ? 'table'
+          : undefined,
+    title: clampStr(r.title, 120) || undefined,
+    description: clampStr(r.description, 600) || undefined,
+    imageUrl,
+    htmlContent: clampStr(r.htmlContent, 8000) || undefined,
+    unitLabel: clampStr(r.unitLabel, 24) || undefined,
+    columnHeaders: Array.isArray(r.columnHeaders)
+      ? (r.columnHeaders as unknown[]).map((h) => clampStr(h, 40)).filter(Boolean).slice(0, 12)
+      : undefined,
+    rows: rows && rows.length ? rows : undefined,
+  };
+  return out;
+};
+
 export const normalizeProductDetailInput = (
   payload: unknown,
   productId: string,
@@ -899,10 +1024,7 @@ export const normalizeProductDetailInput = (
     seoTitle: toString(raw.seoTitle, existing?.seoTitle),
     seoDescription: toString(raw.seoDescription, existing?.seoDescription),
     seoKeywords: toString(raw.seoKeywords, existing?.seoKeywords),
-    sizeGuide:
-      raw.sizeGuide && typeof raw.sizeGuide === 'object'
-        ? (raw.sizeGuide as CatalogProductDetail['sizeGuide'])
-        : existing?.sizeGuide,
+    sizeGuide: normalizeSizeGuide(raw.sizeGuide, existing?.sizeGuide),
     updatedAt: nowIso(),
     enableSpecs: raw.enableSpecs !== undefined ? toBoolean(raw.enableSpecs) : existing?.enableSpecs,
     enableStoreComparison:

@@ -19,20 +19,29 @@ import {
   enterConversationAsAdmin,
   findActiveSupportConversationForUser,
   getConversationForActor,
+  listAdminSupportInbox,
   listConversationsForActor,
   listMessagesForActor,
+  markConversationRead,
+  openAdminSupportConversation,
   reconcileMissingOrderConversations,
   respondCounterOffer,
   searchConversationsForActor,
   sendMessage,
   resolveSupportTicket,
 } from './conversationService';
+import { isAdminEnterRole } from './conversationPermissions';
 import {
   assertMessagingPersistenceReady,
   getMessagingPersistenceMode,
   listSocialInbox,
 } from './conversationStore';
 import { conversationMemorySnapshotPath } from './conversationPersistence';
+import {
+  SUPPORT_TICKET_STATUSES,
+  type SupportTicketStatus,
+  type SupportTicketPriority,
+} from './types';
 
 export const conversationRouter = Router();
 
@@ -187,6 +196,16 @@ conversationRouter.post('/conversations/:id/messages', ...requireAuth, async (re
   }
 });
 
+conversationRouter.post('/conversations/:id/read', ...requireAuth, async (req, res) => {
+  try {
+    const result = await markConversationRead({ conversationId: req.params.id, actor: actorOf(req) });
+    flushIfMemoryDisk();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
 conversationRouter.post('/conversations/:id/counter-offers', ...requireAuth, async (req, res) => {
   try {
     const result = await createCounterOffer({
@@ -326,6 +345,168 @@ conversationRouter.get('/support/conversations', ...requireAuth, async (req, res
   try {
     const rows = await listConversationsForActor(actorOf(req), { contextType: 'support_ticket' });
     res.json({ success: true, data: rows });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+conversationRouter.post('/support/conversations/:id/read', ...requireAuth, async (req, res) => {
+  try {
+    const result = await markConversationRead({ conversationId: req.params.id, actor: actorOf(req) });
+    flushIfMemoryDisk();
+    res.json({ success: true, data: result });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+/** Choosify Support inbox — staff only. Enriched opener identity + audience + unread. */
+conversationRouter.get('/admin/support/conversations', ...requireAuth, async (req, res) => {
+  try {
+    const actor = actorOf(req);
+    if (!isAdminEnterRole(actor.role)) {
+      res.status(403).json({ success: false, error: 'Choosify staff only' });
+      return;
+    }
+    const audienceRaw = typeof req.query.audience === 'string' ? req.query.audience : '';
+    const audience =
+      audienceRaw === 'consumer' || audienceRaw === 'seller' || audienceRaw === 'creator'
+        ? audienceRaw
+        : undefined;
+    const statusRaw = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const status = (Object.values(SUPPORT_TICKET_STATUSES) as string[]).includes(statusRaw ?? '')
+      ? (statusRaw as SupportTicketStatus)
+      : undefined;
+    const priorityRaw = typeof req.query.priority === 'string' ? req.query.priority : undefined;
+    const priority = (['low', 'medium', 'high', 'urgent'] as const).includes(
+      priorityRaw as SupportTicketPriority,
+    )
+      ? (priorityRaw as SupportTicketPriority)
+      : undefined;
+    const assigneeId = typeof req.query.assigneeId === 'string' ? req.query.assigneeId : undefined;
+    const rows = await listAdminSupportInbox(actor, {
+      audience,
+      status,
+      priority,
+      assigneeId: assigneeId === 'me' ? actor.userId : assigneeId,
+    });
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+// ── Admin CRM / Support Desk — staff-only ticket controls ────────────────
+conversationRouter.patch('/admin/support/conversations/:id', ...requireAuth, async (req, res) => {
+  try {
+    const { updateSupportTicketCrm } = await import('./conversationService');
+    const ticket = await updateSupportTicketCrm({
+      actor: actorOf(req),
+      conversationId: req.params.id,
+      patch: {
+        status: req.body?.status,
+        priority: req.body?.priority,
+        assigneeId: req.body?.assigneeId === null ? null : req.body?.assigneeId,
+        department: req.body?.department === null ? null : req.body?.department,
+      },
+    });
+    flushIfMemoryDisk();
+    res.json({ success: true, data: ticket });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+conversationRouter.get('/admin/support/conversations/:id/notes', ...requireAuth, async (req, res) => {
+  try {
+    const { listSupportNotesForActor } = await import('./conversationService');
+    const rows = await listSupportNotesForActor(actorOf(req), req.params.id);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+conversationRouter.post('/admin/support/conversations/:id/notes', ...requireAuth, async (req, res) => {
+  try {
+    const { addSupportNote } = await import('./conversationService');
+    const note = await addSupportNote({
+      actor: actorOf(req),
+      conversationId: req.params.id,
+      body: String(req.body?.body || ''),
+    });
+    flushIfMemoryDisk();
+    res.status(201).json({ success: true, data: note });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+conversationRouter.get('/admin/support/conversations/:id/followups', ...requireAuth, async (req, res) => {
+  try {
+    const { listSupportFollowupsForActor } = await import('./conversationService');
+    const rows = await listSupportFollowupsForActor(actorOf(req), req.params.id);
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+conversationRouter.post('/admin/support/conversations/:id/followups', ...requireAuth, async (req, res) => {
+  try {
+    const { scheduleSupportFollowup } = await import('./conversationService');
+    const fu = await scheduleSupportFollowup({
+      actor: actorOf(req),
+      conversationId: req.params.id,
+      dueAt: String(req.body?.dueAt || ''),
+    });
+    flushIfMemoryDisk();
+    res.status(201).json({ success: true, data: fu });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+conversationRouter.post(
+  '/admin/support/conversations/:id/followups/:fid/cancel',
+  ...requireAuth,
+  async (req, res) => {
+    try {
+      const { cancelSupportFollowup } = await import('./conversationService');
+      const fu = await cancelSupportFollowup({
+        actor: actorOf(req),
+        conversationId: req.params.id,
+        followupId: req.params.fid,
+      });
+      flushIfMemoryDisk();
+      res.json({ success: true, data: fu });
+    } catch (error) {
+      handleError(res, error);
+    }
+  },
+);
+
+/** Admin/Support proactively opens or reuses a user's Choosify Support thread. */
+conversationRouter.post('/admin/support/conversations', ...requireAuth, async (req, res) => {
+  try {
+    const actor = actorOf(req);
+    if (!isAdminEnterRole(actor.role)) {
+      res.status(403).json({ success: false, error: 'Choosify staff only' });
+      return;
+    }
+    const targetUserId = String(req.body?.targetUserId || '').trim();
+    if (!targetUserId) {
+      res.status(400).json({ success: false, error: 'targetUserId is required' });
+      return;
+    }
+    const result = await openAdminSupportConversation({
+      adminActor: actor,
+      targetUserId,
+      subject: req.body?.subject ? String(req.body.subject) : undefined,
+      body: req.body?.body ? String(req.body.body) : undefined,
+    });
+    flushIfMemoryDisk();
+    res.status(result.created ? 201 : 200).json({ success: true, data: result });
   } catch (error) {
     handleError(res, error);
   }

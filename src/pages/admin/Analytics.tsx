@@ -18,7 +18,7 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar 
 } from 'recharts';
 import { useOrders } from '../../contexts/OrdersContext';
-import { operationsApi, type AnalyticsSummary } from '../../services/operationsApi';
+import { operationsApi, toAnalyticsSummary, type AnalyticsSummary } from '../../services/operationsApi';
 
 const defaultMockWeeklyData = [
   { name: 'Sun', users: 4000, sessions: 2400, sales: 120000, commission: 14000 },
@@ -53,7 +53,10 @@ export default function AnalyticsPage() {
   const [opsSummary, setOpsSummary] = useState<AnalyticsSummary | null>(null);
 
   useEffect(() => {
-    operationsApi.getAnalytics('30d').then(setOpsSummary).catch(() => setOpsSummary(null));
+    operationsApi
+      .getAnalytics('30d')
+      .then((result) => setOpsSummary(toAnalyticsSummary(result)))
+      .catch(() => setOpsSummary(null));
   }, []);
 
   const updateTab = (tab: string) => {

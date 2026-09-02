@@ -43,6 +43,7 @@ import {
   DollarSign,
   Share2,
   Award,
+  MessageCircleMore,
   Bell,
   RefreshCw,
   Sliders,
@@ -1072,8 +1073,8 @@ export default function UnifiedProfileShell() {
     }
     return (
       <div className="flex flex-col items-center justify-center min-h-[500px] text-app-text-primary">
-        <AlertTriangle className="w-12 h-12 text-[#F4631E] animate-bounce" />
-        <p className="mt-4 font-mono text-xs uppercase tracking-widest text-[#F4631E]">ERROR: ENTITY RESOLUTION FAILED</p>
+        <AlertTriangle className="w-12 h-12 text-[#FF5B00] animate-bounce" />
+        <p className="mt-4 font-mono text-xs uppercase tracking-widest text-[#FF5B00]">ERROR: ENTITY RESOLUTION FAILED</p>
         <Link to={typeKey === 'brand' ? '/admin/brand-studio' : '/admin/dashboard'} className="mt-6 px-4 py-2 bg-app-sidebar border border-app-border rounded-lg text-xs font-bold text-app-text-primary hover:bg-white/5 transition-all flex items-center gap-2">
           <ArrowLeft className="w-3.5 h-3.5" /> {typeKey === 'brand' ? 'Return To Brand Ledger' : 'Return To Platform Central'}
         </Link>
@@ -1149,9 +1150,36 @@ export default function UnifiedProfileShell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showLoginAsUser, searchParams, setSearchParams]);
 
+  const staffViewer = ['super_admin', 'admin', 'moderator', 'support_agent'].includes(
+    String(loggedInProfile?.role || ''),
+  );
+  const canMessageUser =
+    staffViewer && ['consumer', 'seller', 'creator'].includes(typeKey) && !isSelfProfile && Boolean(idKey);
+  const messageUserAction = async () => {
+    if (!idKey) return;
+    try {
+      const { messagingApi } = await import('../../../services/messagingApi');
+      const res = await messagingApi.startAdminSupportConversation({ targetUserId: idKey });
+      navigate(`/admin/messages?c=${encodeURIComponent(res.conversation.id)}`);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not open conversation', 'error');
+    }
+  };
+
+  const messageAction = canMessageUser
+    ? [
+        {
+          label: 'Message',
+          onClick: () => void messageUserAction(),
+          icon: <MessageCircleMore className="w-3.5 h-3.5" />,
+        },
+      ]
+    : [];
+
   const baseHeaderActions =
     typeKey === 'creator'
       ? [
+          ...messageAction,
           {
             label: 'Feature Creator',
             onClick: () => showToast(`Featured Creator: ${entityData.name} pushed to spotlight`, 'success'),
@@ -1166,7 +1194,7 @@ export default function UnifiedProfileShell() {
               icon: <CheckCircle className="w-3.5 h-3.5" />,
             },
           ]
-        : [];
+        : messageAction;
 
   const headerActions = showLoginAsUser
     ? [
@@ -1864,7 +1892,7 @@ export default function UnifiedProfileShell() {
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 font-sans">
                 <div className="bg-[#050512] border border-app-border p-5 rounded-[4px] relative group">
-                  <span className="px-1.5 py-0.5 bg-[#F4631E]/10 text-[#F4631E] rounded-[2px] text-[8px] font-black uppercase tracking-widest absolute top-4 right-4">Default</span>
+                  <span className="px-1.5 py-0.5 bg-[#FF5B00]/10 text-[#FF5B00] rounded-[2px] text-[8px] font-black uppercase tracking-widest absolute top-4 right-4">Default</span>
                   <div className="space-y-2">
                     <span className="text-[9px] text-app-text-secondary uppercase block font-bold">Default Shipping</span>
                     <textarea 
@@ -1917,7 +1945,7 @@ export default function UnifiedProfileShell() {
                         setCommunicationPref(p => ({ ...p, email: !p.email }));
                         showToast(`✓ Email notifications ${!communicationPref.email ? 'enabled' : 'disabled'}`);
                       }}
-                      className={`w-10 h-5.5 rounded-full p-1 transition-colors cursor-pointer${communicationPref.email ? 'bg-[#F4631E]' : 'bg-white/10'}`}
+                      className={`w-10 h-5.5 rounded-full p-1 transition-colors cursor-pointer${communicationPref.email ? 'bg-[#FF5B00]' : 'bg-white/10'}`}
                     >
                       <div className={`w-3.5 h-3.5 bg-white rounded-full transition-transform${communicationPref.email ? 'translate-x-4.5' : 'translate-x-0'}`} />
                     </button>
@@ -1930,7 +1958,7 @@ export default function UnifiedProfileShell() {
                         setCommunicationPref(p => ({ ...p, sms: !p.sms }));
                         showToast(`✓ SMS alerts ${!communicationPref.sms ? 'enabled' : 'disabled'}`);
                       }}
-                      className={`w-10 h-5.5 rounded-full p-1 transition-colors cursor-pointer${communicationPref.sms ? 'bg-[#F4631E]' : 'bg-white/10'}`}
+                      className={`w-10 h-5.5 rounded-full p-1 transition-colors cursor-pointer${communicationPref.sms ? 'bg-[#FF5B00]' : 'bg-white/10'}`}
                     >
                       <div className={`w-3.5 h-3.5 bg-white rounded-full transition-transform${communicationPref.sms ? 'translate-x-4.5' : 'translate-x-0'}`} />
                     </button>
@@ -2047,7 +2075,7 @@ export default function UnifiedProfileShell() {
                   }}
                   className={`text-xs font-bold px-4 py-2 rounded-[2px] transition-all cursor-pointer whitespace-nowrap${
                     orderStatusFilter === status
-                      ? 'bg-[#F4631E] text-white shadow font-sans'
+                      ? 'bg-[#FF5B00] text-white shadow font-sans'
                       : 'text-slate-400 hover:text-white hover:bg-white/5 font-sans'
                   }`}
                 >
@@ -2078,7 +2106,7 @@ export default function UnifiedProfileShell() {
                 .map((ord: any) => (
                   <div key={ord.id} className="grid grid-cols-12 gap-4 py-3.5 items-center hover:bg-white/5 transition-colors border-b border-app-border px-2 font-sans">
                     <div className="col-span-12 md:col-span-2">
-                      <Link to={`/upe/order/${ord.id}`} className="text-xs font-bold text-[#F4631E] hover:underline font-mono">
+                      <Link to={`/upe/order/${ord.id}`} className="text-xs font-bold text-[#FF5B00] hover:underline font-mono">
                         #{ord.id}
                       </Link>
                     </div>
@@ -2229,7 +2257,7 @@ export default function UnifiedProfileShell() {
                   </div>
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-app-text-secondary">Loyalty Level</span>
-                    <span className="text-[#F4631E] font-black font-sans uppercase">VIP Tier</span>
+                    <span className="text-[#FF5B00] font-black font-sans uppercase">VIP Tier</span>
                   </div>
                 </div>
               </div>
@@ -2320,7 +2348,7 @@ export default function UnifiedProfileShell() {
                       </div>
 
                       <div className="bg-white/5 border border-app-border p-3 rounded-[2px]">
-                        <span className="text-[8.5px] uppercase font-bold text-[#F4631E] block font-mono">Latest Activity Update</span>
+                        <span className="text-[8.5px] uppercase font-bold text-[#FF5B00] block font-mono">Latest Activity Update</span>
                         <p className="text-[11px] text-app-text-secondary mt-1 leading-snug">{b.lastActivity}</p>
                       </div>
                     </div>
@@ -2381,7 +2409,7 @@ export default function UnifiedProfileShell() {
                       <h4 className="text-xs font-bold text-app-text-primary block truncate leading-tight">{item.name}</h4>
                       
                       <div className="flex justify-between items-center pt-2">
-                        <span className="text-xs font-extrabold text-[#F4631E] font-mono">৳{item.price.toLocaleString()}</span>
+                        <span className="text-xs font-extrabold text-[#FF5B00] font-mono">৳{item.price.toLocaleString()}</span>
                         <span className="px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 rounded-[2px] text-[8px] font-mono font-bold">
                           {item.availability}
                         </span>
@@ -2452,7 +2480,7 @@ export default function UnifiedProfileShell() {
                     </div>
 
                     <div className="bg-white/5 border border-app-border rounded-[4px] p-3 mt-4 text-xs font-sans text-left">
-                      <span className="text-[9px] uppercase font-bold text-[#F4631E] tracking-wider block font-mono">Latest Published Content Guide</span>
+                      <span className="text-[9px] uppercase font-bold text-[#FF5B00] tracking-wider block font-mono">Latest Published Content Guide</span>
                       <p className="text-app-text-secondary font-medium leading-relaxed mt-1">"{creator.latestContent}"</p>
                     </div>
 
@@ -2590,7 +2618,7 @@ export default function UnifiedProfileShell() {
               {((entityData as any).chatHistory || []).map((chat: any, idx: number) => (
                 <div key={idx} className="p-3 bg-white/5 border border-app-border rounded text-app-text-secondary">
                   <div className="flex justify-between items-center mb-1">
-                    <span className="font-bold text-[#F4631E]">{chat.sender}</span>
+                    <span className="font-bold text-[#FF5B00]">{chat.sender}</span>
                     <span className="text-[9.5px] text-app-text-secondary">{chat.time}</span>
                   </div>
                   <p className="text-app-text-secondary mt-1 leading-relaxed">{chat.text}</p>
@@ -2725,7 +2753,7 @@ export default function UnifiedProfileShell() {
                         <tr key={idx} className="hover:bg-white/[0.01]">
                           <td className="px-4 py-3 font-bold text-app-text-primary">{ad.name}</td>
                           <td className="px-4 py-3 text-app-text-secondary">{ad.budget}</td>
-                          <td className="px-4 py-3 text-right text-[#F4631E]">{ad.spend}</td>
+                          <td className="px-4 py-3 text-right text-[#FF5B00]">{ad.spend}</td>
                           <td className="px-4 py-3 text-center">
                             <span className="px-2 py-0.5 rounded-[2px] bg-emerald-500/10 text-emerald-400 text-[9px] font-bold border border-emerald-500/20 uppercase font-mono">
                               {ad.status}
@@ -3105,7 +3133,7 @@ export default function UnifiedProfileShell() {
                 .map((ord: any) => (
                   <div key={ord.id} className="grid grid-cols-12 gap-4 py-3 items-center hover:bg-white/5 transition-colors border-b border-app-border px-2">
                     <div className="col-span-6 md:col-span-2">
-                      <Link to={`/upe/order/${ord.id}`} className="text-xs font-bold text-[#F4631E] hover:underline font-mono">
+                      <Link to={`/upe/order/${ord.id}`} className="text-xs font-bold text-[#FF5B00] hover:underline font-mono">
                         #{ord.id}
                       </Link>
                     </div>
@@ -3370,7 +3398,7 @@ export default function UnifiedProfileShell() {
                         <tr key={idx} className="hover:bg-white/[0.01]">
                           <td className="px-4 py-3 font-bold text-app-text-primary">{ad.name}</td>
                           <td className="px-4 py-3 text-app-text-secondary">{ad.budget}</td>
-                          <td className="px-4 py-3 text-right text-[#F4631E]">{ad.spend}</td>
+                          <td className="px-4 py-3 text-right text-[#FF5B00]">{ad.spend}</td>
                           <td className="px-4 py-3 text-center">
                             <span className={`px-2 py-0.5 rounded-[2px] text-[9px] font-bold border uppercase font-mono${
                               ad.status === 'Active' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
@@ -3417,7 +3445,7 @@ export default function UnifiedProfileShell() {
                   <h3 className="text-sm font-bold text-app-text-primary uppercase tracking-wider font-sans">Storefront Sales Campaigns, Deals & Coupons</h3>
                   <p className="text-[11px] text-app-text-secondary mt-1">Configure active buyer discounting incentives, limited countdown offers, and affiliate coupons.</p>
                 </div>
-                <button onClick={() => showToast('✓ Initiated creator affiliate discounting coupon form.')} className="px-3.5 py-1.5 bg-[#F4631E] hover:bg-orange-500 text-white rounded-[2px] text-xs font-bold transition-colors cursor-pointer">Create Deal</button>
+                <button onClick={() => showToast('✓ Initiated creator affiliate discounting coupon form.')} className="px-3.5 py-1.5 bg-[#FF5B00] hover:bg-orange-500 text-white rounded-[2px] text-xs font-bold transition-colors cursor-pointer">Create Deal</button>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-sans">
@@ -3535,7 +3563,7 @@ export default function UnifiedProfileShell() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-4">
-                  <h4 className="text-xs font-bold text-[#F4631E] uppercase tracking-wider">Notification Preferences</h4>
+                  <h4 className="text-xs font-bold text-[#FF5B00] uppercase tracking-wider">Notification Preferences</h4>
                   <div className="space-y-3">
                     <label className="flex items-center gap-3 bg-white/5 border border-app-border p-3 rounded cursor-pointer hover:bg-white/[0.08] transition-colors">
                       <input type="checkbox" defaultChecked className="rounded border-app-border text-app-accent focus:ring-0" />
@@ -3716,9 +3744,9 @@ export default function UnifiedProfileShell() {
               </div>
 
               {/* Creator Banner Visual Block */}
-              <div className="relative rounded overflow-hidden h-36 bg-gradient-to-r from-[#F4631E]/20 to-indigo-600/20 border border-app-border flex items-center justify-between p-6">
+              <div className="relative rounded overflow-hidden h-36 bg-gradient-to-r from-[#FF5B00]/20 to-indigo-600/20 border border-app-border flex items-center justify-between p-6">
                 <div className="space-y-2">
-                  <span className="text-[10px] uppercase font-bold font-mono text-[#F4631E] px-2 py-0.5 bg-[#F4631E]/10 border border-[#F4631E]/20 rounded-sm">Verified Creator Space</span>
+                  <span className="text-[10px] uppercase font-bold font-mono text-[#FF5B00] px-2 py-0.5 bg-[#FF5B00]/10 border border-[#FF5B00]/20 rounded-sm">Verified Creator Space</span>
                   <h4 className="text-lg font-black text-app-text-primary">{entityData.name} Showcase Banner</h4>
                   <p className="text-xs text-app-text-secondary">Curating the highest quality heritage fashion & weaves recommendations.</p>
                 </div>
@@ -3730,7 +3758,7 @@ export default function UnifiedProfileShell() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 font-sans">
                 <div className="space-y-2 text-xs">
-                  <span className="text-[10px] text-[#F4631E] uppercase block font-bold font-mono">Biography Pitch</span>
+                  <span className="text-[10px] text-[#FF5B00] uppercase block font-bold font-mono">Biography Pitch</span>
                   <p className="text-app-text-secondary leading-relaxed">
                     {creator?.persona || 'Bespoke review writer and lifestyle creator based in Dhaka, Bangladesh. Curates the finest Traditional Jamdani and Boutique dresses since 2022.'}
                   </p>
@@ -3754,7 +3782,7 @@ export default function UnifiedProfileShell() {
               </div>
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-md text-left font-sans">
                 <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Total Views</span>
-                <span className="text-base font-black text-[#F4631E] block mt-1">{creator?.totalViews || '45.2K'}</span>
+                <span className="text-base font-black text-[#FF5B00] block mt-1">{creator?.totalViews || '45.2K'}</span>
               </div>
               <div className="bg-app-card border border-app-border p-4 rounded-[4px] shadow-md text-left font-sans">
                 <span className="text-[10px] text-app-text-secondary uppercase block font-mono">Total Followers</span>
@@ -3970,7 +3998,7 @@ export default function UnifiedProfileShell() {
               {/* Community Rating */}
               <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-6">
                 <div className="border-b border-app-border pb-2">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-[#F4631E]">Community Rating Feedback</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-[#FF5B00]">Community Rating Feedback</h3>
                 </div>
 
                 <div className="flex items-center gap-6">
@@ -4015,7 +4043,7 @@ export default function UnifiedProfileShell() {
               {/* Engagement Metrics */}
               <div className="bg-app-card border border-app-border rounded-[4px] p-5 shadow-xl space-y-6">
                 <div className="border-b border-app-border pb-2">
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-[#F4631E]">Engagement Metrics</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-widest text-[#FF5B00]">Engagement Metrics</h3>
                 </div>
 
                 <div className="grid grid-cols-3 gap-4 text-xs text-center font-sans">
@@ -4061,7 +4089,7 @@ export default function UnifiedProfileShell() {
                 </div>
                 <div className="p-4 bg-white/5 border border-app-border rounded">
                   <span className="text-[10px] text-app-text-secondary uppercase block">Conversion Rate</span>
-                  <span className="text-base font-black text-[#F4631E] block mt-1">{creator?.conversionRate || '5.8%'} avg</span>
+                  <span className="text-base font-black text-[#FF5B00] block mt-1">{creator?.conversionRate || '5.8%'} avg</span>
                 </div>
                 <div className="p-4 bg-white/5 border border-app-border rounded">
                   <span className="text-[10px] text-app-text-secondary uppercase block">Revenue Generated</span>

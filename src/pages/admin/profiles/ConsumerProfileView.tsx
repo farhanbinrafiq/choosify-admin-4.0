@@ -5,6 +5,7 @@ import { useRbac } from '../../../contexts/RbacContext';
 import { useImpersonation } from '../../../contexts/ImpersonationContext';
 import { useContact } from '../../../contexts/ContactInteractionContext';
 import { Loader2, AlertTriangle, Phone, Mail, ArrowLeft, LogIn } from 'lucide-react';
+import { AdminMessageUserButton } from '../../../components/messaging/AdminMessageUserButton';
 
 // ============================================================================
 // Consumer Profile — the canonical /admin/consumers/:id surface.
@@ -215,7 +216,8 @@ export default function ConsumerProfileView() {
           <div style={S.h1}>Consumer Profile</div>
           <div style={S.sub}>Client account registry standard logs</div>
         </div>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+          {account?.uid ? <AdminMessageUserButton targetUserId={account.uid} /> : null}
           {showLoginAsUser && (
             <button onClick={requestLoginAs} style={{ ...S.hBtn, borderColor: ACCENT, color: ACCENT, background: ACCENT_WASH }}>
               <LogIn size={13} /> Login As User

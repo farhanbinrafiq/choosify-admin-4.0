@@ -18,6 +18,22 @@ export interface CatalogCreatorSocialLinks {
   youtube?: string;
   tiktok?: string;
   linkedin?: string;
+  /** Seller-defined extra links (Twitch, Threads, personal site, Discord, …).
+   *  `label` is the display name, `url` must be http(s). Max 8. */
+  custom?: Array<{ label: string; url: string }>;
+}
+
+/** One curated "Featured Content" card on a Creator profile. */
+export interface CatalogCreatorFeaturedItem {
+  id: string;
+  source: 'platform' | 'external';
+  kind: 'guide' | 'video' | 'reel' | 'blog' | 'link';
+  /** Canonical Guide/content id when source === 'platform'. */
+  contentId?: string;
+  title: string;
+  thumbnail: string;
+  /** Storefront href (platform) or external URL. */
+  url: string;
 }
 
 export interface CatalogCreator {
@@ -38,7 +54,7 @@ export interface CatalogCreator {
   bio: string;
   followers: Record<string, string>;
   socialLinks?: CatalogCreatorSocialLinks;
-  brandPartners?: { name: string; color?: string }[];
+  brandPartners?: { name: string; color?: string; brandId?: string; logo?: string }[];
   collabTypes?: string[];
   responseTime?: string;
   preferredContact?: string;
@@ -50,6 +66,9 @@ export interface CatalogCreator {
   videos: CatalogMediaItem[];
   reels: CatalogMediaItem[];
   blogs: CatalogMediaItem[];
+  /** Creator-curated Featured Content — own Choosify Guides + external links
+   *  with a custom thumbnail. Empty ⇒ fall back to newest videos/reels/blogs. */
+  featuredContent?: CatalogCreatorFeaturedItem[];
   status: 'draft' | 'live' | 'archived';
   /** Owning creator user id — creator workspace is scoped to this. */
   userId?: string;
@@ -377,8 +396,20 @@ export interface CatalogProductDetail {
   seoTitle?: string;
   seoDescription?: string;
   seoKeywords?: string;
+  /**
+   * Seller-authored informational sizing / measurement / fitment / compatibility /
+   * feature guide for the listing. Presentation metadata only — never affects
+   * variants, price, SKU, stock, availability or checkout.
+   *  - `guideType` drives the storefront CTA context ("View Size Guide",
+   *    "View Compatibility Guide", …); absent ⇒ 'size' (back-compat).
+   *  - `label` is the custom CTA label used when `guideType === 'custom'`.
+   *  - `type` is the CONTENT kind (image / table / html). `imageUrl` is the
+   *    seller-uploaded chart shown exactly as uploaded.
+   */
   sizeGuide?: {
     enabled: boolean;
+    guideType?: 'size' | 'measurement' | 'compatibility' | 'fitment' | 'feature' | 'custom';
+    label?: string;
     type?: 'table' | 'image' | 'html';
     title?: string;
     description?: string;

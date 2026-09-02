@@ -34,6 +34,9 @@ export function isPartnerIdentityApiPath(path: string, method: string): boolean 
   }
   if ((m === 'PATCH' || m === 'PUT') && /^\/api\/v1\/catalog\/brands\/[^/]+$/.test(p)) return true;
   if ((m === 'PATCH' || m === 'PUT') && /^\/api\/v1\/catalog\/creators\/[^/]+$/.test(p)) return true;
+  // Creator Studio version/snapshot history for a partner's OWN profile — the
+  // route handler still enforces creator ownership.
+  if (/^\/api\/v1\/catalog\/creator\/[^/]+\/(versions|draft)$/.test(p)) return true;
   if (m === 'POST' && p.startsWith('/api/v1/catalog/media')) return true;
   if (p.startsWith('/api/v1/operations/verifications')) return true;
   if (p.startsWith('/api/v1/operations/partner-applications')) return true;
@@ -47,6 +50,12 @@ export function isPartnerIdentityApiPath(path: string, method: string): boolean 
   if (/^\/api\/v1\/operations\/orders\/[^/]+\/cancel$/.test(p)) return true;
   if (p === '/api/v1/operations/platform-messages') return true;
   if (p.startsWith('/api/v1/support/')) return true;
+  // Canonical messaging: reading one's own conversations + threads, replying,
+  // and marking read are identity-level (a mid-review partner still receives
+  // manual orders / buyer messages). Conversation permission checks in the
+  // handler still enforce participant scope + the Seller two-branch rule.
+  if (m === 'GET' && (p === '/api/v1/conversations' || p === '/api/v1/conversations/search')) return true;
+  if (/^\/api\/v1\/conversations\/[^/]+(\/messages|\/read)?$/.test(p)) return true;
   if (m === 'GET' && p.startsWith('/api/v1/dashboard/nav-attention')) return true;
   if (m === 'GET' && (p.startsWith('/api/v1/notifications') || p.startsWith('/api/notifications'))) {
     return true;

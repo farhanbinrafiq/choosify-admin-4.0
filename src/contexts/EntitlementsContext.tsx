@@ -57,9 +57,8 @@ export const EntitlementsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (!token) {
-      // TempRoleSwitcher / mock session: no partner JWT, so no entitlement payload.
-      // Do NOT persist deny-all — that wiped Seller/Creator chrome on every QA switch.
-      // APIs still 401 without a bearer token.
+      // No partner JWT (unauthenticated / pre-login): no entitlement payload.
+      // Do NOT persist deny-all — APIs still 401 without a bearer token.
       setEntitlements({});
       setStatus('mock');
       setLoading(false);

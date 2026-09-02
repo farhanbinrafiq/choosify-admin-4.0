@@ -32,7 +32,7 @@ function doFetch(path: string, method: HttpMethod, body: unknown, token: string 
 
 async function request<T>(path: string, method: HttpMethod = 'GET', body?: unknown): Promise<T> {
   // Write routes require Firebase Bearer (authenticateRequest). Attach whenever
-  // present — public GETs/validate ignore it. Mock TempRoleSwitcher login has no
+  // present — public GETs/validate ignore it. An unauthenticated caller has no
   // token and must fail loudly on protected writes.
   const token = getStoredAccessToken();
   let response = await doFetch(path, method, body, token);
@@ -376,6 +376,84 @@ export interface RoleAnalyticsPayload {
   summary: AnalyticsSummary;
 }
 
+/**
+ * GET /operations/analytics is role-polymorphic: admin/staff get an
+ * AnalyticsSummary directly, seller/creator get a RoleAnalyticsPayload
+ * wrapper. Narrow on the discriminating `cards` array.
+ */
+export function isRoleAnalyticsPayload(
+  value: AnalyticsSummary | RoleAnalyticsPayload,
+): value is RoleAnalyticsPayload {
+  return Array.isArray((value as RoleAnalyticsPayload).cards);
+}
+
+/** Collapse the role-dependent analytics result down to the AnalyticsSummary. */
+export function toAnalyticsSummary(
+  value: AnalyticsSummary | RoleAnalyticsPayload,
+): AnalyticsSummary {
+  return isRoleAnalyticsPayload(value) ? value.summary : value;
+}
+
+/**
+ * Embedded structured-offer snapshots persisted on the System-B platform
+ * message (UnifiedMessage.bookingOffer / .orderOffer) and returned verbatim
+ * by GET /operations/platform-messages. The admin DTO previously dropped
+ * these fields — they are the same records the Buyer storefront renders.
+ * Kept as loose records: the canonical typed shape lives in the booking /
+ * manual-order stores; live status is re-resolved via listBookingRequests.
+ */
+export type OpsBookingOfferStatus =
+  | 'pending'
+  | 'accepted'
+  | 'declined'
+  | 'countered'
+  | 'buyer_accepted'
+  | 'buyer_declined'
+  | 'expired'
+  | 'payment_expired'
+  | 'paid';
+
+export interface OpsBookingOffer {
+  kind?: 'booking_offer';
+  requestId?: string;
+  version?: number;
+  listingId?: string;
+  listingTitle?: string;
+  listingImage?: string;
+  listingHref?: string;
+  sellerId?: string;
+  sellerName?: string;
+  buyerId?: string;
+  isService?: boolean;
+  serviceCategory?: string;
+  fields?: Record<string, string | number>;
+  notes?: string;
+  price?: number;
+  originalPrice?: number;
+  status?: OpsBookingOfferStatus;
+  createdAt?: string;
+  sellerRespondBy?: string;
+  buyerPayBy?: string;
+  declineReason?: string;
+  orderId?: string;
+}
+
+export interface OpsManualOrderOffer {
+  kind?: 'manual_order_offer';
+  offerId?: string;
+  orderId?: string;
+  status?: string;
+  sellerId?: string;
+  buyerId?: string;
+  overallTotal?: number;
+  currency?: string;
+  notes?: string;
+  rejectReason?: string;
+  items?: Array<{ name?: string; quantity?: number; price?: number; image?: string }>;
+  createdAt?: string;
+  expiresAt?: string;
+}
+
 export interface OpsPlatformMessage {
   id: string;
   conversationId: string;
@@ -384,6 +462,10 @@ export interface OpsPlatformMessage {
   content: { type: 'text' | 'image' | 'file'; body: string; mediaUrl?: string };
   direction: 'inbound' | 'outbound';
   timestamp: string;
+  /** Structured booking/product/service/counter card snapshot (see above). */
+  bookingOffer?: OpsBookingOffer;
+  /** Structured manual product-order offer card snapshot. */
+  orderOffer?: OpsManualOrderOffer;
 }
 
 export interface OpsPlatformConversation {
@@ -592,6 +674,105 @@ export const operationsApi = {
       patch,
     );
     return result.data;
+  },
+
+  // ── Canonical booking requests (/api/v1/booking/*) ────────────────────
+  // Seller-scoped: the accept/counter/decline routes derive sellerId from
+  // the authenticated session; GET filters by the sellerId/buyerId query.
+  // Used to re-resolve the *current* status of a bookingOffer snapshot
+  // embedded on a System-B platform message — no state is duplicated.
+  listBookingRequests: async (params: {
+    sellerId?: string;
+    buyerId?: string;
+    conversationId?: string;
+    status?: string;
+  }): Promise<OpsBookingOffer[]> => {
+    const qs = new URLSearchParams();
+    if (params.sellerId) qs.set('sellerId', params.sellerId);
+    if (params.buyerId) qs.set('buyerId', params.buyerId);
+    if (params.conversationId) qs.set('conversationId', params.conversationId);
+    if (params.status) qs.set('status', params.status);
+    const result = await request<{ data: OpsBookingOffer[] }>(
+      `/booking/requests?${qs.toString()}`,
+    );
+    return result.data;
+  },
+  getBookingRequest: async (requestId: string): Promise<OpsBookingOffer> => {
+    const result = await request<{ data: OpsBookingOffer }>(
+      `/booking/requests/${encodeURIComponent(requestId)}`,
+    );
+    return result.data;
+  },
+  acceptBookingRequest: async (
+    requestId: string,
+    sellerName?: string,
+  ): Promise<OpsBookingOffer> => {
+    const result = await request<{ data: OpsBookingOffer }>(
+      `/booking/requests/${encodeURIComponent(requestId)}/accept`,
+      'POST',
+      { sellerName },
+    );
+    return result.data;
+  },
+  declineBookingRequest: async (
+    requestId: string,
+    declineReason: string,
+    sellerName?: string,
+  ): Promise<OpsBookingOffer> => {
+    const result = await request<{ data: OpsBookingOffer }>(
+      `/booking/requests/${encodeURIComponent(requestId)}/decline`,
+      'POST',
+      { declineReason, sellerName },
+    );
+    return result.data;
+  },
+  counterBookingRequest: async (
+    requestId: string,
+    patch: { price?: number; fields?: Record<string, string | number>; notes?: string },
+    sellerName?: string,
+  ): Promise<OpsBookingOffer> => {
+    const result = await request<{ data: OpsBookingOffer }>(
+      `/booking/requests/${encodeURIComponent(requestId)}/counter`,
+      'POST',
+      { ...patch, sellerName },
+    );
+    return result.data;
+  },
+
+  /**
+   * Canonical Seller Manual Order — POST /operations/manual-offers.
+   * Native mode: pass `buyerId` (existing Choosify Buyer) → Offer Card in
+   * their Messages. External mode: omit buyerId, pass customerName + email +
+   * phone → server returns a secure `claim.url` for the customer.
+   */
+  createManualOffer: async (input: {
+    buyerId?: string;
+    customerName?: string;
+    email?: string;
+    phone?: string;
+    addressHint?: string;
+    conversationId?: string;
+    provenanceSource?:
+      | 'manual'
+      | 'external_whatsapp'
+      | 'external_facebook'
+      | 'external_instagram'
+      | 'external_offline';
+    deliveryTotal?: number;
+    notes?: string;
+    sellerName?: string;
+    buyerName?: string;
+    items: Array<{ productId: string; quantity: number; price: number; variantId?: string }>;
+  }): Promise<{
+    data: OpsManualOrderOffer;
+    claim?: { token: string; url: string; expiresAt?: string };
+  }> => {
+    const result = await request<{
+      success: boolean;
+      data: OpsManualOrderOffer;
+      claim?: { token: string; url: string; expiresAt?: string };
+    }>('/operations/manual-offers', 'POST', input);
+    return { data: result.data, claim: result.claim };
   },
 
   getFeatureFlags: async (): Promise<Record<string, boolean>> => {

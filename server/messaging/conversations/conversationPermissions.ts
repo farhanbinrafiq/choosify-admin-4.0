@@ -34,7 +34,45 @@ export function resolveSenderRole(role?: string): SenderRole {
   if (role === ROLES.SELLER || role === ROLES.VERIFIED_SELLER || role?.includes('seller')) {
     return role === 'seller_staff' ? 'seller_staff' : 'seller';
   }
+  // Creator is a first-class messaging identity (support-only in V1) — no longer
+  // silently coerced to 'consumer'.
+  if (role === ROLES.CREATOR) return 'creator';
   return 'consumer';
+}
+
+/** Support audience = which side opened/owns a Choosify Support conversation. */
+export function resolveSupportAudience(role?: string): 'consumer' | 'seller' | 'creator' {
+  const sr = resolveSenderRole(role);
+  if (sr === 'seller' || sr === 'seller_staff') return 'seller';
+  if (sr === 'creator') return 'creator';
+  return 'consumer';
+}
+
+/** Contexts an Admin/Support actor may read without an explicit audited enter. */
+const ADMIN_AUTO_READ_CONTEXTS = new Set<string>([
+  CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
+  CONVERSATION_CONTEXT_TYPES.EXTERNAL_SOCIAL,
+]);
+
+/**
+ * Rollback hatch: set MESSAGING_ADMIN_BLANKET_READ=true to restore the legacy
+ * behaviour where any Admin/Moderator/Support role could read EVERY canonical
+ * conversation (including private Buyer↔Seller commerce). Default is the safer
+ * scoped behaviour — support/external-social auto, commerce only after an
+ * audited AdminConversationEntry.
+ */
+function adminBlanketReadEnabled(): boolean {
+  return String(process.env.MESSAGING_ADMIN_BLANKET_READ || '').trim().toLowerCase() === 'true';
+}
+
+async function adminHasEnteredConversation(conversationId: string, adminId: string): Promise<boolean> {
+  try {
+    const { listAdminEntries } = await import('./conversationStore');
+    const entries = await listAdminEntries(conversationId);
+    return entries.some((e) => e.adminId === adminId);
+  } catch {
+    return false;
+  }
 }
 
 /** Forbidden marketplace pairs — IS-005 / BP-007. */
@@ -74,14 +112,31 @@ export function consumerInitiated(conv: CommerceConversation): boolean {
 }
 
 /**
- * Read access: participant, Brand owner/staff, or platform admin/moderator.
+ * Read access: participant, Brand owner/staff, or platform admin/support.
+ *
+ * Admin/Support auto-read is now SCOPED (IS-005 §7 fix): support_ticket and
+ * external_social only. Private commerce (order / manual_order / product_inquiry
+ * / service_request / booking) is readable by staff ONLY after an audited
+ * enterConversationAsAdmin — the deliberate dispute/investigation path. The
+ * MESSAGING_ADMIN_BLANKET_READ flag restores the old behaviour for rollback.
  */
 export async function assertCanReadConversation(
   conv: CommerceConversation,
   actor: MessagingActor,
 ): Promise<void> {
   if (!actor.userId) throw new CommerceError('Authentication required', 401);
-  if (isPlatformAdminRole(actor.role) || isAdminEnterRole(actor.role)) return;
+
+  const isStaff = isPlatformAdminRole(actor.role) || isAdminEnterRole(actor.role);
+  if (isStaff) {
+    if (adminBlanketReadEnabled()) return;
+    if (ADMIN_AUTO_READ_CONTEXTS.has(conv.contextType)) return;
+    if (await adminHasEnteredConversation(conv.id, actor.userId)) return;
+    throw new CommerceError(
+      'Private commerce conversation — enter the conversation (dispute/investigation) to read it',
+      403,
+    );
+  }
+
   if (conv.consumerId === actor.userId) return;
   if (conv.sellerId === actor.userId) return;
   if (conv.participants.some((p) => p.userId === actor.userId)) return;
@@ -125,6 +180,12 @@ export async function assertCanSendMessage(
       throw new CommerceError('Consumers may only message in their own conversations', 403);
     }
     return senderRole;
+  }
+
+  if (senderRole === 'creator') {
+    // V1: Creators only participate in their own Choosify Support thread (handled
+    // by the SUPPORT_TICKET branch above). No Buyer/Seller/Brand↔Creator messaging.
+    throw new CommerceError('Creators can only message Choosify Support in V1', 403);
   }
 
   // Seller / seller_staff

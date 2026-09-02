@@ -1,15 +1,28 @@
-import type { CatalogCreator, CatalogMediaItem } from '../../types/catalog';
+import type {
+  CatalogCreator,
+  CatalogCreatorFeaturedItem,
+  CatalogMediaItem,
+} from '../../types/catalog';
 
 export type CreatorEditorStatus = 'DRAFT' | 'LIVE' | 'ARCHIVED';
 
+/**
+ * Inline-editable Creator Studio sections. The canonical `bio` is edited ONCE,
+ * in `overview` (the identity block renders the same value read-only). Trust
+ * score, followers, verification, review counts and follower media counts are
+ * platform/relationship-derived and are never editable here.
+ */
 export type CreatorEditSection =
   | 'cover'
   | 'identity'
   | 'social'
-  | 'expertise'
+  | 'overview'
   | 'contact'
   | 'partnerships'
-  | 'overview';
+  | 'featured';
+
+export type CreatorBrandPartner = { name: string; color?: string; brandId?: string; logo?: string };
+export type CreatorFeaturedItem = CatalogCreatorFeaturedItem;
 
 export interface CreatorContentCard {
   id: string;
@@ -37,7 +50,7 @@ export interface CreatorEditorModel {
   phone: string;
   responseTime: string;
   preferredContact: string;
-  brandPartners: { name: string; color?: string }[];
+  brandPartners: CreatorBrandPartner[];
   collabTypes: string[];
   socialLinks: {
     facebook?: string;
@@ -45,7 +58,10 @@ export interface CreatorEditorModel {
     youtube?: string;
     linkedin?: string;
     tiktok?: string;
+    custom?: Array<{ label: string; url: string }>;
   };
+  /** Creator-curated Featured Content (own Guides + external links). */
+  featuredContent: CreatorFeaturedItem[];
   score: number;
   verified: boolean;
   status: CreatorEditorStatus;
@@ -102,6 +118,7 @@ export function createBlankCreatorModel(id = 'new'): CreatorEditorModel {
     brandPartners: [],
     collabTypes: [],
     socialLinks: {},
+    featuredContent: [],
     score: 0,
     verified: false,
     status: 'DRAFT',
@@ -134,7 +151,12 @@ export function mapCatalogCreatorToEditor(creator: CatalogCreator): CreatorEdito
     responseTime: creator.responseTime || '',
     preferredContact: creator.preferredContact || '',
     brandPartners: Array.isArray(creator.brandPartners)
-      ? creator.brandPartners.map((b) => ({ name: b.name, color: b.color }))
+      ? creator.brandPartners.map((b) => ({
+          name: b.name,
+          color: b.color,
+          brandId: b.brandId,
+          logo: b.logo,
+        }))
       : [],
     collabTypes: Array.isArray(creator.collabTypes) ? creator.collabTypes.map(String) : [],
     socialLinks: {
@@ -143,7 +165,13 @@ export function mapCatalogCreatorToEditor(creator: CatalogCreator): CreatorEdito
       youtube: creator.socialLinks?.youtube || '',
       linkedin: creator.socialLinks?.linkedin || '',
       tiktok: creator.socialLinks?.tiktok || '',
+      custom: Array.isArray(creator.socialLinks?.custom)
+        ? creator.socialLinks!.custom!.map((c) => ({ label: c.label, url: c.url }))
+        : [],
     },
+    featuredContent: Array.isArray(creator.featuredContent)
+      ? creator.featuredContent.map((f) => ({ ...f }))
+      : [],
     score: typeof creator.score === 'number' ? creator.score : 0,
     verified: !!creator.verifiedStatus,
     status,
@@ -170,7 +198,12 @@ export function editorModelToCreatorPayload(model: CreatorEditorModel): Partial<
     phone: model.phone || undefined,
     responseTime: model.responseTime || undefined,
     preferredContact: model.preferredContact || undefined,
-    brandPartners: model.brandPartners,
+    brandPartners: model.brandPartners.map((b) => ({
+      name: b.name,
+      ...(b.color ? { color: b.color } : {}),
+      ...(b.brandId ? { brandId: b.brandId } : {}),
+      ...(b.logo ? { logo: b.logo } : {}),
+    })),
     collabTypes: model.collabTypes,
     socialLinks: {
       facebook: model.socialLinks.facebook || undefined,
@@ -178,8 +211,32 @@ export function editorModelToCreatorPayload(model: CreatorEditorModel): Partial<
       youtube: model.socialLinks.youtube || undefined,
       linkedin: model.socialLinks.linkedin || undefined,
       tiktok: model.socialLinks.tiktok || undefined,
+      custom: (model.socialLinks.custom ?? [])
+        .map((c) => ({ label: (c.label || '').trim(), url: (c.url || '').trim() }))
+        .filter((c) => c.label && c.url),
     },
+    featuredContent: model.featuredContent
+      .map((f) => ({
+        id: f.id,
+        source: f.source,
+        kind: f.kind,
+        ...(f.contentId ? { contentId: f.contentId } : {}),
+        title: (f.title || '').trim(),
+        thumbnail: (f.thumbnail || '').trim(),
+        url: (f.url || '').trim(),
+      }))
+      .filter((f) => f.title && f.url),
     verifiedStatus: model.verified,
     status: model.status === 'LIVE' ? 'live' : model.status === 'ARCHIVED' ? 'archived' : 'draft',
   };
+}
+
+/**
+ * Payload for a section-level canonical PATCH. Same editable fields as
+ * `editorModelToCreatorPayload` minus `status` / `verifiedStatus` — lifecycle and
+ * verification are server-authoritative and never ride along with a profile edit.
+ */
+export function editorModelToCreatorSectionPatch(model: CreatorEditorModel): Partial<CatalogCreator> {
+  const { status: _status, verifiedStatus: _verified, ...rest } = editorModelToCreatorPayload(model);
+  return rest;
 }

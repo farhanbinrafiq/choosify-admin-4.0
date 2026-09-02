@@ -29,9 +29,13 @@ export function DashboardHeaderMessageButton({
   // rendered in both the migrated-page header (AdminWorkspaceLayout) and the
   // CmsMirror iframe's own header (CmsMirrorHost), so it needs to branch
   // itself rather than relying on a single shared page key.
-  const role = profile?.role;
-  const isPartnerRole = role === 'seller' || role === 'verified_seller' || role === 'creator';
-  const inboxPath = isPartnerRole ? '/admin/conversations' : PAGE_KEY_TO_PATH.messages || '/admin/messages';
+  const role = String(profile?.role || '');
+  const inboxPath =
+    role === 'seller' || role === 'verified_seller'
+      ? '/admin/conversations'
+      : role === 'creator'
+        ? PAGE_KEY_TO_PATH.partnerSupport || '/admin/support'
+        : PAGE_KEY_TO_PATH.messages || '/admin/messages';
 
   return (
     <button
@@ -44,7 +48,7 @@ export function DashboardHeaderMessageButton({
     >
       <MessageCircleMore size={19} strokeWidth={2} className="text-white transition-colors" aria-hidden />
       {unread > 0 ? (
-        <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 text-white text-[9px] font-bold bg-[#EB4501] rounded-full flex items-center justify-center leading-none">
+        <span className="absolute -top-1.5 -right-2 min-w-[16px] h-4 px-1 text-white text-[9px] font-bold bg-[#FF5B00] rounded-full flex items-center justify-center leading-none">
           {formatNavAttentionCount(unread)}
         </span>
       ) : null}

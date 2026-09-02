@@ -15,6 +15,8 @@ import type {
   CommerceMessage,
   SocialInboxConnection,
   SupportTicket,
+  SupportTicketNote,
+  SupportFollowup,
 } from './types';
 
 const state: {
@@ -24,6 +26,8 @@ const state: {
   socialInbox: SocialInboxConnection[];
   supportTickets: SupportTicket[];
   adminEntries: AdminConversationEntry[];
+  supportNotes: SupportTicketNote[];
+  supportFollowups: SupportFollowup[];
 } = {
   conversations: [],
   messages: [],
@@ -31,6 +35,8 @@ const state: {
   socialInbox: [],
   supportTickets: [],
   adminEntries: [],
+  supportNotes: [],
+  supportFollowups: [],
 };
 
 let hydrated = false;
@@ -45,6 +51,8 @@ function buildSnapshot(): ConversationMemorySnapshot {
     socialInbox: state.socialInbox,
     supportTickets: state.supportTickets,
     adminEntries: state.adminEntries,
+    supportNotes: state.supportNotes,
+    supportFollowups: state.supportFollowups,
   };
 }
 
@@ -72,6 +80,8 @@ export function ensureConversationMemoryHydrated(): boolean {
   state.socialInbox = (snapshot.socialInbox as SocialInboxConnection[]) || [];
   state.supportTickets = (snapshot.supportTickets as SupportTicket[]) || [];
   state.adminEntries = (snapshot.adminEntries as AdminConversationEntry[]) || [];
+  state.supportNotes = (snapshot.supportNotes as SupportTicketNote[]) || [];
+  state.supportFollowups = (snapshot.supportFollowups as SupportFollowup[]) || [];
   console.log(
     `[MessagingMemoryPersist] Hydrated (${state.conversations.length} conversations, ${state.messages.length} messages).`,
   );
@@ -166,6 +176,27 @@ export const conversationMemoryBackend = {
       ? state.adminEntries.filter((e) => e.conversationId === conversationId)
       : [...state.adminEntries];
   },
+  saveSupportNote: async (row: SupportTicketNote): Promise<SupportTicketNote> => {
+    ensureConversationMemoryHydrated();
+    return upsertById(state.supportNotes, row, (r) => r.id);
+  },
+  listSupportNotes: async (conversationId?: string): Promise<SupportTicketNote[]> => {
+    ensureConversationMemoryHydrated();
+    const rows = conversationId
+      ? state.supportNotes.filter((n) => n.conversationId === conversationId)
+      : [...state.supportNotes];
+    return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  },
+  saveSupportFollowup: async (row: SupportFollowup): Promise<SupportFollowup> => {
+    ensureConversationMemoryHydrated();
+    return upsertById(state.supportFollowups, row, (r) => r.id);
+  },
+  listSupportFollowups: async (conversationId?: string): Promise<SupportFollowup[]> => {
+    ensureConversationMemoryHydrated();
+    return conversationId
+      ? state.supportFollowups.filter((f) => f.conversationId === conversationId)
+      : [...state.supportFollowups];
+  },
   /** Test helper — wipe in-memory state (does not delete snapshot file). */
   __resetForTests: (): void => {
     state.conversations = [];
@@ -174,6 +205,8 @@ export const conversationMemoryBackend = {
     state.socialInbox = [];
     state.supportTickets = [];
     state.adminEntries = [];
+    state.supportNotes = [];
+    state.supportFollowups = [];
     hydrated = true;
     schedulePersist();
   },

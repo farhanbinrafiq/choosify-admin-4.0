@@ -123,6 +123,14 @@ export interface ProductEditorModel {
    */
   optionGroups: NonNullable<CatalogProductDetail['optionGroups']>;
   productVariants: NonNullable<CatalogProductDetail['productVariants']>;
+  /**
+   * Seller-uploaded informational Size / Measurement / Compatibility / Fitment /
+   * Feature guide for this listing (shown from the Options & Variants section).
+   * Presentation metadata — NEVER touches variants / price / SKU / stock /
+   * availability / checkout. `undefined` ⇒ the seller has not configured one and
+   * the save omits the key so any existing value is preserved server-side.
+   */
+  sizeGuide?: NonNullable<CatalogProductDetail['sizeGuide']>;
   publicReviews: Array<{ id: string; author: string; rating: number; comment: string }>;
   /**
    * Creator Reviews — seller-added shareable video-review links (YouTube /
@@ -459,6 +467,8 @@ export function mapCatalogProductToEditor(
       : [],
     optionGroups: Array.isArray(detail?.optionGroups) ? detail!.optionGroups : [],
     productVariants: Array.isArray(detail?.productVariants) ? detail!.productVariants : [],
+    sizeGuide:
+      detail?.sizeGuide && typeof detail.sizeGuide === 'object' ? detail.sizeGuide : undefined,
     publicReviews,
     creatorVideos,
     relatedInfoType,
@@ -581,6 +591,10 @@ export function editorModelToDetailPayload(model: ProductEditorModel): Partial<C
     // (a dimension toggled on but given no values) are not persisted.
     optionGroups: (model.optionGroups ?? []).filter((g) => (g.values?.length ?? 0) > 0),
     productVariants: model.productVariants ?? [],
+    // Only sent when the seller has actually configured a guide — otherwise the
+    // key is omitted so the server preserves any existing value. Informational
+    // only; never affects variants / price / SKU / stock / checkout.
+    ...(model.sizeGuide !== undefined ? { sizeGuide: model.sizeGuide } : {}),
     creatorContent: model.creatorVideos
       .filter((c) => (c.videoUrl || '').trim() || (c.title || '').trim() || (c.thumbnail || '').trim())
       .map((c, i) => ({

@@ -44,6 +44,7 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   disputes: '/admin/disputes',
   trustCenter: '/admin/trust-center',
   messages: '/admin/messages',
+  partnerSupport: '/admin/support',
   notifications: '/admin/notifications',
   finance: '/admin/analytics',
   myEarnings: '/admin/my-earnings',
@@ -102,6 +103,7 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/coupons')) return 'promoCodes';
   if (pathname.startsWith('/admin/reviews')) return 'reviews';
   if (pathname.startsWith('/admin/messages')) return 'messages';
+  if (pathname.startsWith('/admin/support')) return 'partnerSupport';
   if (pathname.startsWith('/admin/analytics')) return 'finance';
   if (pathname.startsWith('/admin/my-earnings')) return 'myEarnings';
   if (pathname.startsWith('/admin/fees-adjustments')) return 'feesAdjustments';
@@ -182,7 +184,7 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
     'adsDealsStudio',
     'creatorEconomy',
     'sellerCustomers',
-    'messages',
+    'partnerSupport',
     'notifications',
     'reviews',
     'finance',
@@ -321,7 +323,8 @@ export const PAGE_META: Record<string, [string, string]> = {
   websiteCmsStudio: ['Website Manager', 'Manage homepage banners, pages, and site content'],
   adsDealsStudio: ['Ads & Deals Studio', 'Manage promoted ads, deals, coupons, and paid placements'],
   contentStudio: ['Guide Management', 'Manage videos, reels, blogs, and live sessions'],
-  messages: ['Messages', 'Unified channels routing hub'],
+  messages: ['Choosify Support', 'Support conversations from Consumers, Sellers and Creators'],
+  partnerSupport: ['Messages', 'Message the Choosify team'],
   returnsRefunds: ['Returns & Refunds', 'Audit customer return complaints and process refunds'],
   warrantyClaims: ['Warranty Claims', 'Review and resolve customer warranty claims'],
   inventoryStock: ['Inventory & Stock', 'Real-time multi-channel inventory control'],
@@ -453,7 +456,7 @@ export const CREATOR_NAV_GROUPS: CmsNavGroup[] = [
   { title: 'TRUST & SAFETY', items: [navItem('reviews', 'Reviews')] },
   {
     title: 'COMMUNICATION',
-    items: [navItem('messages', 'Messages'), navItem('notifications', 'Notifications')],
+    items: [navItem('partnerSupport', 'Messages'), navItem('notifications', 'Notifications')],
   },
   {
     title: 'FINANCE & PAYOUTS',

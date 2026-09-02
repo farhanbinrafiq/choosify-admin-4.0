@@ -56,7 +56,7 @@ import {
   Bell,
   Percent,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { useAuth, UserRole } from '../contexts/AuthContext';
 import { useRbac } from '../contexts/RbacContext';
 import { useCMS } from '../contexts/CMSContext';
@@ -86,6 +86,32 @@ interface SearchResultItem {
   type: 'Order' | 'Brand' | 'Seller' | 'Consumer';
   path: string;
 }
+
+const SELLER_MENU: SidebarItem[] = [
+  { label: 'Seller Operations', type: 'label' },
+  { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
+  { label: 'Brand Management Studio', icon: Building2, path: '/admin/brand-studio' },
+  { label: 'Seller Profile', icon: Store, path: '/admin/brand-profile' },
+  { label: 'Orders Hub', icon: ListOrdered, path: '/admin/platform-orders', badge: 4 },
+  { label: 'My Customers', icon: Users, path: '/admin/customers' },
+  { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
+  { label: 'Promo Codes & Vouchers', icon: Ticket, path: '/admin/coupons' },
+  { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },
+  { label: 'Products', icon: Package, path: '/admin/products' },
+  { label: 'My Brand Studio', icon: Store, path: '/dashboard/content-studio/brands' },
+  { label: 'Messages', icon: MessageCircleMore, path: '/admin/conversations', badge: 2 },
+  { label: 'Reviews', icon: Star, path: '/admin/reviews' },
+  { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
+
+  { label: 'Logistics', type: 'label' },
+  { label: 'Shipment Console', icon: Send, path: '/admin/logistics/shipments' },
+  { label: 'Tracking Center', icon: MapPin, path: '/admin/logistics/tracking' },
+  { label: 'Shipping Labels', icon: FileText, path: '/admin/logistics/labels' },
+
+  { label: 'Finance', type: 'label' },
+  { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
+  { label: 'Settings', icon: Settings, path: '/admin/settings' },
+];
 
 const roleMenus: Record<UserRole, SidebarItem[]> = {
   super_admin: [
@@ -197,31 +223,9 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
     { label: 'Settings', type: 'label' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
   ],
-  seller: [
-    { label: 'Seller Operations', type: 'label' },
-    { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
-    { label: 'Brand Management Studio', icon: Building2, path: '/admin/brand-studio' },
-    { label: 'Seller Profile', icon: Store, path: '/admin/brand-profile' },
-    { label: 'Orders Hub', icon: ListOrdered, path: '/admin/platform-orders', badge: 4 },
-    { label: 'My Customers', icon: Users, path: '/admin/customers' },
-    { label: 'Returns & Refunds', icon: RefreshCw, path: '/admin/returns' },
-    { label: 'Promo Codes & Vouchers', icon: Ticket, path: '/admin/coupons' },
-    { label: 'Inventory & Stock', icon: Layers, path: '/admin/products?tab=alerts' },
-    { label: 'Products', icon: Package, path: '/admin/products' },
-    { label: 'My Brand Studio', icon: Store, path: '/dashboard/content-studio/brands' },
-    { label: 'Messages', icon: MessageCircleMore, path: '/admin/conversations', badge: 2 },
-    { label: 'Reviews', icon: Star, path: '/admin/reviews' },
-    { label: 'Analytics', icon: BarChart3, path: '/admin/analytics' },
-    
-    { label: 'Logistics', type: 'label' },
-    { label: 'Shipment Console', icon: Send, path: '/admin/logistics/shipments' },
-    { label: 'Tracking Center', icon: MapPin, path: '/admin/logistics/tracking' },
-    { label: 'Shipping Labels', icon: FileText, path: '/admin/logistics/labels' },
-
-    { label: 'Finance', type: 'label' },
-    { label: 'My Cashbook', icon: Wallet, path: '/admin/cashbook', badge: 'Private' },
-    { label: 'Settings', icon: Settings, path: '/admin/settings' },
-  ],
+  seller: SELLER_MENU,
+  // A verified seller uses the identical operational sidebar as a seller.
+  verified_seller: SELLER_MENU,
   creator: [
     { label: 'Creator Hub', type: 'label' },
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
@@ -286,7 +290,7 @@ const roleMenus: Record<UserRole, SidebarItem[]> = {
 };
 
 export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { profile, logout, switchRole, activeBrandId, setActiveBrandId, sellerBrands, allBrands, requestNewBrand } = useAuth();
+  const { profile, logout, activeBrandId, setActiveBrandId, sellerBrands, allBrands, requestNewBrand } = useAuth();
   const { canAccessPath } = useRbac();
   const { state: impersonation, exitImpersonation } = useImpersonation();
   const { cmsData } = useCMS();
@@ -295,7 +299,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const { getSizes, setSizes, setCollapsed } = useLayoutPreferences('sidebar');
   const savedSizes = getSizes();
   const currentWidthVal = savedSizes.length > 0 ? savedSizes[0] : 280;
-  const [showRoleSwitcher, setShowRoleSwitcher] = useState(false);
   const [expandedMenus, setExpandedMenus] = useState<Record<string, boolean>>({});
   const [isBrandsExpanded, setIsBrandsExpanded] = useState(true);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -412,12 +415,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
   const currentPageSubtitle = PAGE_SUBTITLES[location.pathname] || 'Manage and monitor this section';
   const sellerRelations = sellerBrands.filter(r => r.seller_user_id === profile?.id);
   const sellerBrandsList = allBrands.filter(b => sellerRelations.some(r => r.brand_id === b.id));
-
-  const handleSwitchRole = (role: UserRole) => {
-    switchRole(role);
-    setShowRoleSwitcher(false);
-    navigate('/admin/dashboard');
-  };
 
   useEffect(() => {
     if (!profile) return;
@@ -742,60 +739,6 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
           <Menu className="w-4 h-4" /> Show Navigation
         </button>
       )}
-      {/* Role Switcher Debug Panel */}
-      {((import.meta as any).env?.DEV) && (
-        <div className="fixed bottom-6 right-6 z-[60]">
-           <button 
-             onClick={() => setShowRoleSwitcher(!showRoleSwitcher)}
-             className="w-12 h-12 bg-app-accent text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all group"
-             title="Switch Role (Debug)"
-           >
-              <RefreshCw className={`w-5 h-5 ${showRoleSwitcher ? 'rotate-180' : ''} transition-transform duration-500`} />
-           </button>
-           
-           <AnimatePresence>
-             {showRoleSwitcher && (
-               <motion.div 
-                 initial={{ opacity: 0, scale: 0.8, y: 20 }}
-                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                 exit={{ opacity: 0, scale: 0.8, y: 20 }}
-                 className="absolute bottom-16 right-0 w-64 bg-app-card border border-app-border rounded-2xl p-4 shadow-2xl"
-               >
-                  <div className="text-[10px] font-bold text-app-text-secondary uppercase tracking-widest mb-3 px-2">Switch Account Role</div>
-                  <div className="space-y-1">
-                     {[
-                       'super_admin', 
-                       'admin',
-                       'moderator',
-                       'finance_manager',
-                       'support_agent',
-                       'marketing_manager',
-                       'seller', 
-                       'creator', 
-                     ].map((role) => (
-                       <button
-                         key={role}
-                         onClick={() => handleSwitchRole(role as UserRole)}
-                         className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-[10px] font-bold transition-all ${
-                           currentRole === role 
-                             ? 'bg-app-accent text-white' 
-                             : 'text-app-text-secondary hover:bg-white/5 hover:text-white'
-                         }`}
-                       >
-                         <span className="capitalize">{role.replace('_', ' ')}</span>
-                         {currentRole === role && <ChevronRight className="w-3 h-3" />}
-                       </button>
-                     ))}
-                  </div>
-                  <div className="mt-4 pt-3 border-t border-app-border text-[9px] text-app-text-secondary italic px-2">
-                     Role switching updates navigation & dashboard instantly for testing.
-                  </div>
-               </motion.div>
-             )}
-           </AnimatePresence>
-        </div>
-      )}
-
       {isSidebarOpen && (
         <div
           className="fixed inset-0 bg-black/60 z-[299] sm:hidden"
@@ -858,7 +801,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
              >
                <MessageCircleMore className="w-4 h-4 text-white" />
                {unreadTotal > 0 && (
-                 <span id="NotificationBadge" className="absolute -top-1 -right-1 bg-[#EF3C23] text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-[#000435] NotificationBadge">
+                 <span id="NotificationBadge" className="absolute -top-1 -right-1 bg-[#EF3C23] text-white text-[8px] font-black h-4 w-4 rounded-full flex items-center justify-center border border-[#18154C] NotificationBadge">
                    {unreadTotal}
                  </span>
                )}
@@ -867,7 +810,7 @@ export const AdminLayout: React.FC<{ children: React.ReactNode }> = ({ children 
              <div className="w-8 h-8 rounded-full glass-on-navy flex items-center justify-center">
                 <div className="relative">
                   <Bell className="w-4 h-4 text-white" />
-                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-app-accent rounded-full border-2 border-[#000435]" />
+                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-app-accent rounded-full border-2 border-[#18154C]" />
                 </div>
              </div>
 

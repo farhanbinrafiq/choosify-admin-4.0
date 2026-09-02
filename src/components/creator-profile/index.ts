@@ -1,1 +1,1 @@
-export { CreatorProfilePresentation } from './CreatorProfilePresentation';
+export { CreatorProfilePresentation, type CreatorStudioBridge } from './CreatorProfilePresentation';

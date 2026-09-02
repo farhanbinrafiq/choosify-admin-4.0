@@ -275,6 +275,43 @@ function stripPendingCreatorPublish(
   };
 }
 
+/**
+ * Platform-owned Creator fields a creator editing their OWN profile can never set
+ * via /catalog/creators/:id (score, followers, verification, featured flag,
+ * ownership). Staff (CMS_EDIT) writes are untouched. Applied on both PUT and
+ * PATCH before normalization so a forged body cannot inflate trust / metrics or
+ * transfer ownership. `status` stays here for the granted-creator publish path
+ * and is separately locked for pending creators by stripPendingCreatorPublish.
+ */
+function scopeCreatorSelfWrite(
+  req: Request,
+  existing:
+    | {
+        userId?: string;
+        score?: number;
+        followers?: Record<string, string>;
+        verifiedStatus?: boolean;
+        featuredFlag?: boolean;
+      }
+    | null
+    | undefined,
+  body: Record<string, unknown>,
+): Record<string, unknown> {
+  const isCreatorSelf =
+    userIsCreatorRole(req) &&
+    !!req.userId &&
+    !hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions);
+  if (!isCreatorSelf) return body;
+  return {
+    ...body,
+    userId: existing?.userId || req.userId,
+    score: existing?.score ?? 0,
+    followers: existing?.followers ?? {},
+    verifiedStatus: existing?.verifiedStatus ?? false,
+    featuredFlag: existing?.featuredFlag ?? false,
+  };
+}
+
 function rejectUnauthorizedMarketplaceAccessMutation(
   req: Request,
   res: { status: (code: number) => { json: (body: unknown) => void } },
@@ -539,6 +576,14 @@ async function assertCatalogDraftWriteAllowed(
   ) {
     return true;
   }
+
+  // A creator may snapshot / draft their OWN profile (Creator Studio version
+  // history) — same ownership boundary as requireCreatorStudioWrite.
+  if (entityType === 'creator' && userIsCreatorRole(req) && req.userId) {
+    const creator = await catalogStore.getCreator(entityId);
+    if (creator && creator.userId === req.userId) return true;
+  }
+
   res.status(403).json({ error: 'Not authorized to modify this catalog draft' });
   return false;
 }
@@ -2335,13 +2380,8 @@ const requireCreatorStudioWriteMw = [authenticateRequest, requirePartnerEntitlem
 catalogRouter.put('/catalog/creators/:id', ...requireCreatorStudioWriteMw, async (req, res) => {
   try {
     const existing = await catalogStore.getCreator(req.params.id);
-    const scoped =
-      userIsCreatorRole(req) &&
-      req.userId &&
-      !hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)
-        ? { ...req.body, userId: existing?.userId || req.userId }
-        : req.body;
-    const payload = stripPendingCreatorPublish(req, existing, scoped as Record<string, unknown>);
+    const scoped = scopeCreatorSelfWrite(req, existing, req.body as Record<string, unknown>);
+    const payload = stripPendingCreatorPublish(req, existing, scoped);
     const normalized = normalizeCreatorInput({ ...payload, id: req.params.id }, existing || undefined);
     const saved = await catalogStore.upsertCreator(normalized);
     res.json({ success: true, data: saved });
@@ -2357,13 +2397,8 @@ catalogRouter.patch('/catalog/creators/:id', ...requireCreatorStudioWriteMw, asy
       res.status(404).json({ error: 'Creator not found' });
       return;
     }
-    const scoped =
-      userIsCreatorRole(req) &&
-      req.userId &&
-      !hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)
-        ? { ...req.body, userId: existing.userId }
-        : req.body;
-    const payload = stripPendingCreatorPublish(req, existing, scoped as Record<string, unknown>);
+    const scoped = scopeCreatorSelfWrite(req, existing, req.body as Record<string, unknown>);
+    const payload = stripPendingCreatorPublish(req, existing, scoped);
     const normalized = normalizeCreatorInput({ ...existing, ...payload, id: req.params.id }, existing);
     const saved = await catalogStore.upsertCreator(normalized);
     res.json({ success: true, data: saved });
@@ -2825,6 +2860,51 @@ catalogRouter.post('/catalog/guides/:id/unpublish', ...requireGuideStudioWriteMw
     res.status(400).json({ error: validationErrorMessage(error, 'Failed to unpublish guide') });
   }
 });
+
+/**
+ * Creator Studio draft + snapshot history for a partner's OWN profile.
+ * Registered before the generic `/catalog/:entityType/:id/*` routes so a
+ * creator (who has neither PRODUCT_EDIT nor CMS_EDIT) can still record version
+ * history — `requireCreatorStudioWrite` enforces `CatalogCreator.userId ===
+ * req.userId`. Small deliberate duplication; the shared draft routes are left
+ * untouched (Product/Brand/Guide Studio stay regression-locked).
+ */
+catalogRouter.put(
+  '/catalog/creator/:id/draft',
+  authenticateRequest,
+  requireCreatorStudioWrite,
+  validate({ body: EntityDraftBodySchema }),
+  async (req, res) => {
+    try {
+      const saved = await draftStore.upsertDraft('creator', req.params.id, req.body.data, req.userId ?? 'unknown');
+      res.json({ success: true, data: saved });
+    } catch (error) {
+      res.status(400).json({ error: validationErrorMessage(error, 'Invalid draft payload') });
+    }
+  },
+);
+
+catalogRouter.post(
+  '/catalog/creator/:id/versions',
+  authenticateRequest,
+  requireCreatorStudioWrite,
+  validate({ body: EntityVersionBodySchema }),
+  async (req, res) => {
+    try {
+      const version = await draftStore.createVersion(
+        'creator',
+        req.params.id,
+        req.body.label,
+        req.body.snapshot,
+        req.userId ?? 'unknown',
+        req.user?.displayName,
+      );
+      res.status(201).json({ success: true, data: version });
+    } catch (error) {
+      res.status(400).json({ error: validationErrorMessage(error, 'Invalid version payload') });
+    }
+  },
+);
 
 catalogRouter.get(
   '/catalog/:entityType/:id/draft',

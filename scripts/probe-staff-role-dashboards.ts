@@ -1,9 +1,16 @@
 /**
  * Sprint 10 — staff role dashboard isolation UAT.
- * Confirms moderator / finance_manager / support_agent / marketing_manager
- * never receive the Admin Platform Command Center (no dedicated dashboard exists
- * for these roles yet, so they must fall into the safe "My Workspace" fail-closed
- * branch — not silently inherit admin visibility).
+ *
+ * finance_manager / support_agent / marketing_manager have NO canonical
+ * platform-analytics authorization (server/operationsRouter.ts `/operations/
+ * analytics` → 403 for them), so /admin/dashboard must fail closed into the
+ * WorkspaceFallback "My Workspace" surface — never the Admin Platform Command
+ * Center, and never an empty admin shell.
+ *
+ * moderator is DIFFERENT: the canonical permission model deliberately groups
+ * moderator with admin/super_admin in that same analytics route, so the role
+ * dispatcher (src/pages/admin/Dashboard.tsx) correctly gives moderator the
+ * Platform Command Center. That authorized access is asserted here, not removed.
  *
  * Usage: npm run test:staff-role-dashboards (or npx tsx scripts/probe-staff-role-dashboards.ts)
  */
@@ -31,8 +38,8 @@ const ADMIN_ONLY_MARKERS = [
   'Pending Payouts',
 ];
 
-const STAFF_ROLES: Array<{ email: string; role: string }> = [
-  { email: 'moderator@choosify.com.bd', role: 'moderator' },
+/** Roles with NO canonical platform-analytics authorization — must fail closed. */
+const FAIL_CLOSED_ROLES: Array<{ email: string; role: string }> = [
   { email: 'finance@choosify.com.bd', role: 'finance_manager' },
   { email: 'support@choosify.com.bd', role: 'support_agent' },
   { email: 'marketing@choosify.com.bd', role: 'marketing_manager' },
@@ -60,14 +67,31 @@ async function main() {
     return page.evaluate(() => document.body.innerText).catch(() => '');
   }
 
-  for (const { email, role } of STAFF_ROLES) {
+  for (const { email, role } of FAIL_CLOSED_ROLES) {
     const page = await login(email, DEV_PASSWORD);
     const txt = await dashText(page);
     for (const marker of ADMIN_ONLY_MARKERS) {
       assert(!txt.includes(marker), `${role} dashboard does NOT contain "${marker}"`);
     }
+    assert(
+      /My Workspace|storefront/i.test(txt),
+      `${role} lands on the fail-closed WorkspaceFallback`,
+    );
     const heading = txt.split('\n').find((l) => l.trim().length > 0) || '(empty)';
     console.log(`  -> ${role} first non-empty line: "${heading.trim().slice(0, 80)}"`);
+    await page.close();
+  }
+
+  // moderator IS canonically authorized for platform analytics — assert the
+  // dispatcher gives it the Platform Command Center (regression guard against a
+  // future change silently dropping that authorized access).
+  {
+    const page = await login('moderator@choosify.com.bd', DEV_PASSWORD);
+    const txt = await dashText(page);
+    assert(
+      txt.includes('Platform Command Center'),
+      'moderator retains canonically-authorized Platform Command Center access',
+    );
     await page.close();
   }
 

@@ -36,9 +36,10 @@ dotenv.config({ path: '.env' });
 if (existsSync('.env.local')) dotenv.config({ path: '.env.local', override: true });
 
 const base = process.env.PROBE_BASE_URL || 'http://localhost:3001/api/v1';
-const SELLER_EMAIL = process.env.PROBE_SELLER_EMAIL || 'variant-accept-202608291244@probe.local';
 const SELLER_PASSWORD = process.env.PROBE_SELLER_PASSWORD || 'Accept!2026xx';
-const SNEAKER_SLUG_RE = /acceptance-runner-sneaker/;
+// `seed:variant-acceptance` date-stamps every run, so derive the owning seller
+// from the newest fixture's slug tag instead of hard-coding one seed's date.
+const SNEAKER_SLUG_RE = /acceptance-runner-sneaker-(\d+)/;
 
 let failed = 0;
 function assert(cond: boolean, label: string, detail?: unknown) {
@@ -53,17 +54,7 @@ const j = (r: Response) => r.json().catch(() => ({}));
 async function main() {
   console.log('=== Product Studio save-integrity probe ===');
 
-  const login = (await j(
-    await fetch(`${base}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: SELLER_EMAIL, password: SELLER_PASSWORD }),
-    }),
-  )) as { accessToken?: string };
-  if (!login.accessToken) throw new Error('seller login failed');
-  const H = { Authorization: `Bearer ${login.accessToken}`, 'Content-Type': 'application/json' };
-
-  // locate the sneaker fixture (schema-bearing category)
+  // locate the newest sneaker fixture (schema-bearing category)
   const all: CatalogProduct[] = [];
   for (const off of [0, 100, 200, 300, 400, 500]) {
     const page = (await j(await fetch(`${base}/catalog/products?limit=100&offset=${off}`))) as {
@@ -75,7 +66,19 @@ async function main() {
     .filter((p) => SNEAKER_SLUG_RE.test(p.slug))
     .sort((a, b) => b.slug.localeCompare(a.slug))[0];
   if (!product) throw new Error('sneaker fixture not found — run npm run seed:variant-acceptance');
-  console.log('fixture:', product.id, product.slug, '· category', product.categoryId);
+  const tag = (product.slug.match(SNEAKER_SLUG_RE) || [])[1];
+  const sellerEmail = process.env.PROBE_SELLER_EMAIL || `variant-accept-${tag}@probe.local`;
+  console.log('fixture:', product.id, product.slug, '· category', product.categoryId, '· seller', sellerEmail);
+
+  const login = (await j(
+    await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: sellerEmail, password: SELLER_PASSWORD }),
+    }),
+  )) as { accessToken?: string };
+  if (!login.accessToken) throw new Error(`seller login failed for ${sellerEmail}`);
+  const H = { Authorization: `Bearer ${login.accessToken}`, 'Content-Type': 'application/json' };
 
   const getDetail = async () =>
     (await j(await fetch(`${base}/catalog/product-details/${product.id}`))) as CatalogProductDetail;

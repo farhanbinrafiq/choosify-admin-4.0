@@ -15,6 +15,8 @@ import {
   MESSAGING_MESSAGES,
   MESSAGING_SOCIAL_INBOX,
   MESSAGING_SUPPORT_TICKETS,
+  MESSAGING_SUPPORT_NOTES,
+  MESSAGING_SUPPORT_FOLLOWUPS,
 } from './conversationCollections';
 import type {
   AdminConversationEntry,
@@ -23,6 +25,8 @@ import type {
   CommerceMessage,
   SocialInboxConnection,
   SupportTicket,
+  SupportTicketNote,
+  SupportFollowup,
 } from './types';
 
 export const conversationFirestoreAdmin = {
@@ -144,5 +148,34 @@ export const conversationFirestoreAdmin = {
       .where('conversationId', '==', conversationId)
       .get();
     return snap.docs.map((d) => d.data() as AdminConversationEntry);
+  },
+
+  saveSupportNote: async (row: SupportTicketNote): Promise<SupportTicketNote> => {
+    await upsertDocumentById(MESSAGING_SUPPORT_NOTES, row.id, row);
+    return row;
+  },
+  listSupportNotes: async (conversationId?: string): Promise<SupportTicketNote[]> => {
+    if (!conversationId) return listCollection<SupportTicketNote>(MESSAGING_SUPPORT_NOTES);
+    const db = await requireAdminFirestore();
+    const snap = await db
+      .collection(MESSAGING_SUPPORT_NOTES)
+      .where('conversationId', '==', conversationId)
+      .get();
+    return snap.docs
+      .map((d) => d.data() as SupportTicketNote)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  },
+  saveSupportFollowup: async (row: SupportFollowup): Promise<SupportFollowup> => {
+    await upsertDocumentById(MESSAGING_SUPPORT_FOLLOWUPS, row.id, row);
+    return row;
+  },
+  listSupportFollowups: async (conversationId?: string): Promise<SupportFollowup[]> => {
+    if (!conversationId) return listCollection<SupportFollowup>(MESSAGING_SUPPORT_FOLLOWUPS);
+    const db = await requireAdminFirestore();
+    const snap = await db
+      .collection(MESSAGING_SUPPORT_FOLLOWUPS)
+      .where('conversationId', '==', conversationId)
+      .get();
+    return snap.docs.map((d) => d.data() as SupportFollowup);
   },
 };

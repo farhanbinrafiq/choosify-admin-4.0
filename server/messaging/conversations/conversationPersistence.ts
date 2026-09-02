@@ -10,6 +10,8 @@ export type ConversationMemorySnapshot = {
   socialInbox: unknown[];
   supportTickets: unknown[];
   adminEntries: unknown[];
+  supportNotes?: unknown[];
+  supportFollowups?: unknown[];
 };
 
 const DEFAULT_PATH = join(process.cwd(), '.data', 'messaging-memory-snapshot.json');

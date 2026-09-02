@@ -18,6 +18,8 @@ import type {
   CommerceMessage,
   SocialInboxConnection,
   SupportTicket,
+  SupportTicketNote,
+  SupportFollowup,
 } from './types';
 
 function isMessagingFirestoreRequested(): boolean {
@@ -159,4 +161,17 @@ export async function saveAdminEntry(row: AdminConversationEntry): Promise<Admin
 
 export async function listAdminEntries(conversationId?: string): Promise<AdminConversationEntry[]> {
   return (await requireBackend()).listAdminEntries(conversationId);
+}
+
+export async function saveSupportNote(row: SupportTicketNote): Promise<SupportTicketNote> {
+  return (await requireBackend()).saveSupportNote(row);
+}
+export async function listSupportNotes(conversationId?: string): Promise<SupportTicketNote[]> {
+  return (await requireBackend()).listSupportNotes(conversationId);
+}
+export async function saveSupportFollowup(row: SupportFollowup): Promise<SupportFollowup> {
+  return (await requireBackend()).saveSupportFollowup(row);
+}
+export async function listSupportFollowups(conversationId?: string): Promise<SupportFollowup[]> {
+  return (await requireBackend()).listSupportFollowups(conversationId);
 }

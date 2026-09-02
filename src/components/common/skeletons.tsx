@@ -90,7 +90,10 @@ export function SkeletonTableRow({ className }: SkeletonProps) {
 export function SkeletonProfileCard({ className }: SkeletonProps) {
   return (
     <div className={cn('rounded-xl border border-[#E8EDF2] bg-white overflow-hidden', className)} aria-hidden>
-      <div className="h-20 bg-gradient-to-r from-[#8B3A3E] via-[#3A1E22] to-[#1e2260] opacity-80" />
+      <div
+        className="h-20 opacity-80"
+        style={{ background: 'var(--choosify-gradient-command)' }}
+      />
       <div className="p-5 -mt-8">
         <SkeletonAvatar className="w-16 h-16 border-2 border-white mb-3" />
         <SkeletonText className="w-40 mb-2 h-4" />
@@ -124,11 +127,8 @@ export function DashboardSearchSkeleton({ className }: SkeletonProps) {
 export function DashboardHeaderSkeleton({ className }: SkeletonProps) {
   return (
     <div
-      className={cn(
-        'h-16 flex items-center gap-4 px-8',
-        'bg-[radial-gradient(900px_200px_at_15%_0%,hsla(6,86%,54%,0.16),transparent_70%),radial-gradient(700px_200px_at_90%_100%,hsla(6,86%,45%,0.12),transparent_70%),rgba(10,10,31,0.94)]',
-        className,
-      )}
+      className={cn('h-16 flex items-center gap-4 px-8', className)}
+      style={{ background: 'var(--choosify-header-gradient)' }}
       role="status"
       aria-busy="true"
       aria-label="Loading dashboard header"
@@ -169,14 +169,13 @@ export function AdminPageSkeleton({
           </div>
           <SkeletonBlock className="h-10 w-40 rounded-lg" />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 p-5 rounded-[20px] bg-gradient-to-br from-[#EF3C23]/10 to-[#000435]/5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 p-5 rounded-[20px] bg-gradient-to-br from-[#EF3C23]/10 to-[#18154C]/5">
           {Array.from({ length: 4 }).map((_, i) => (
             <div
               key={i}
               className="rounded-[18px] h-[127px] p-5 border border-white/10"
               style={{
-                background:
-                  'linear-gradient(100deg, #8B3A3E 0%, #5A2A2E 28%, #3A1E22 52%, #2a2858 82%, #1e2260 100%)',
+                background: 'var(--choosify-gradient-command)',
                 opacity: 0.55,
               }}
             >

@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Check, Heart, MapPin, MessageCircleMore, Pencil, Play, ShieldCheck, Star } from 'lucide-react';
 import type { ProductEditSection, ProductEditorModel } from '../../pages/admin/productEditorModel';
 import { classifyProductVideo, resolveCreatorThumbnail } from '../../lib/productVideo';
-import { AddonItemsView, RelatedInfoView, VariantSummaryView, WarrantyInfoView } from '../../pages/admin/productStudioSections';
+import { AddonItemsView, ProductGuideView, RelatedInfoView, VariantSummaryView, WarrantyInfoView } from '../../pages/admin/productStudioSections';
 import { mergeRelatedStores } from '../../../lib/vercel-catalog/relatedInfoMerge';
 
 /**
@@ -154,7 +154,7 @@ function DeliveryInfoView({ region, bullets }: { region?: string; bullets?: stri
     <div className="text-[12.5px] text-[#4B5563] leading-relaxed">
       <div className="text-[11px] font-extrabold text-[#9AA0AC] uppercase mb-2">Delivery Information</div>
       <div className="flex items-center gap-1.5 mb-1.5 text-[#1A1A2E] font-semibold">
-        <MapPin size={13} className="text-[#EB4501]" />
+        <MapPin size={13} className="text-[#FF5B00]" />
         {region || 'Bangladesh'}
       </div>
       <ul className="m-0 p-0 list-none space-y-1">
@@ -281,7 +281,7 @@ export function ProductDetailPresentation({
                           type="button"
                           onClick={() => setActiveMedia(i)}
                           className={`w-16 h-16 shrink-0 overflow-hidden border-2 relative bg-black/40 ${
-                            activeMedia === i ? 'border-[#EB4501]' : 'border-white/20'
+                            activeMedia === i ? 'border-[#FF5B00]' : 'border-white/20'
                           }`}
                         >
                           {m.kind === 'image' ? (
@@ -361,7 +361,7 @@ export function ProductDetailPresentation({
                 k="pricing"
                 view={
                   <div className="flex items-baseline gap-2.5">
-                    <div className="text-[28px] font-extrabold text-[#EB4501]">{'৳'}{price.toLocaleString()}</div>
+                    <div className="text-[28px] font-extrabold text-[#FF5B00]">{'৳'}{price.toLocaleString()}</div>
                     {original > 0 ? (
                       <>
                         <div className="text-[14px] text-[#9AA0AC] line-through">{'৳'}{original.toLocaleString()}</div>
@@ -375,11 +375,14 @@ export function ProductDetailPresentation({
               <SectionShell ctx={sctx}
                 k="options"
                 view={
-                  <VariantSummaryView
-                    optionGroups={model.optionGroups}
-                    productVariants={model.productVariants}
-                    isService={model.productType === 'service'}
-                  />
+                  <>
+                    <VariantSummaryView
+                      optionGroups={model.optionGroups}
+                      productVariants={model.productVariants}
+                      isService={model.productType === 'service'}
+                    />
+                    <ProductGuideView guide={model.sizeGuide} />
+                  </>
                 }
               />
             </div>
@@ -397,7 +400,7 @@ export function ProductDetailPresentation({
                 <button type="button" disabled={previewOnly} onClick={() => !previewOnly && setQty((q) => q + 1)}
                   className={buyerBtn('w-8 h-8 rounded-lg border border-[#E8EDF2] bg-[#F4F7F9] font-bold')}>+</button>
               </div>
-              <button type="button" disabled className={buyerBtn('w-full py-3 rounded-lg bg-[#EB4501] text-white text-[12.5px] font-extrabold disabled:opacity-50')}>
+              <button type="button" disabled className={buyerBtn('w-full py-3 rounded-lg bg-[#FF5B00] text-white text-[12.5px] font-extrabold disabled:opacity-50')}>
                 {isOut ? 'Out of Stock' : 'Add to Cart'}
               </button>
               <div className="grid grid-cols-3 gap-2">
@@ -435,7 +438,7 @@ export function ProductDetailPresentation({
             {SECTION_NAV.map((item) => (
               <button key={item.id} type="button" onClick={() => scrollTo(item.id)}
                 className={`shrink-0 px-4 sm:px-5 py-4 text-[12.5px] font-bold cursor-pointer whitespace-nowrap border-0 border-b-2 bg-transparent ${
-                  activeNav === item.id ? 'text-[#EB4501] border-[#EB4501]' : 'text-[#6B7280] border-transparent hover:text-[#1A1A2E]'
+                  activeNav === item.id ? 'text-[#FF5B00] border-[#FF5B00]' : 'text-[#6B7280] border-transparent hover:text-[#1A1A2E]'
                 }`}>
                 {item.label}
               </button>

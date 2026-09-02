@@ -392,6 +392,16 @@ export const catalogApi = {
     return result.data;
   },
   /**
+   * Section-level Creator Studio save. Server merges over the existing record and
+   * re-normalizes; platform-owned fields (score / followers / verifiedStatus /
+   * featuredFlag / userId) are stripped server-side for a creator editing their
+   * own profile. Never send `status` here — lifecycle uses setCreatorPublishStatus.
+   */
+  patchCreator: async (id: string, payload: Partial<CatalogCreator>): Promise<CatalogCreator> => {
+    const result = await request<{ data: CatalogCreator }>(`/catalog/creators/${id}`, 'PATCH', payload);
+    return result.data;
+  },
+  /**
    * Creators have no dedicated marketplace-access endpoint or reason/duration
    * tracking like brands — `status` itself is the marketplace gate
    * (resolvePartnerLifecycle() treats 'live' as granted). Uses PATCH so the

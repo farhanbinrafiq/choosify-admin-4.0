@@ -200,12 +200,11 @@ export function getRoleAnalytics(
       },
     );
   } else if (role === 'creator' && ownerId) {
-    cards.push(
-      { label: 'Your Guides', value: '0', sub: 'Use Guide Management for live counts' },
-      { label: 'Engagement', value: 'No data', sub: 'Unavailable until metrics exist' },
-      { label: 'Ads & Deals', value: 'Owned only', sub: 'See Ads & Deals Studio' },
-      { label: 'Earnings', value: 'Unavailable', sub: 'No invented figures' },
-    );
+    // No canonical Creator-attribution analytics exists (guides, engagement,
+    // earnings). The Creator dashboard reads canonical guide/profile data
+    // directly (GET /catalog/guides/manage, /catalog/creators) — this endpoint
+    // must not hand back fabricated placeholder KPI strings.
+    // cards stays [].
   } else {
     switch (role) {
       case 'finance_manager':
@@ -268,6 +267,11 @@ export function getRoleAnalytics(
             promoDiscount: 0,
             cod: 0,
           },
+          // A partner-scoped payload must never carry the platform-wide daily
+          // series — that would render as a "your orders" trend built from
+          // every seller's checkout. Partner dashboards build their own trend
+          // from actor-scoped orders instead.
+          daily: [],
           scoped: true,
           ownerId,
           activeBrandId: activeBrandId || null,

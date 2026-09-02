@@ -3,8 +3,8 @@ import { adsStore } from '../ads/adsStore';
 import { getNotificationCenterSummary } from '../communication/notificationService';
 import { listConversationsForActor } from '../messaging/conversations/conversationService';
 import {
+  listConversations as listAllConversations,
   listMessages,
-  listSupportTickets,
 } from '../messaging/conversations/conversationStore';
 import { moderationStore } from '../moderation/moderationStore';
 import { MODERATION_STATUSES } from '../moderation/moderationTypes';
@@ -25,8 +25,6 @@ const OPEN_RETURN_STATUSES = new Set([
 ]);
 
 const OPEN_VERIFICATION_STATUSES = new Set(['submitted', 'under review']);
-
-const OPEN_TICKET_STATUSES = new Set(['open', 'in_progress']);
 
 const MODERATION_OPEN = new Set<string>([
   MODERATION_STATUSES.PENDING,
@@ -66,6 +64,27 @@ function isCreator(role?: string): boolean {
 function isConsumer(role?: string): boolean {
   const r = String(role || '').toLowerCase();
   return r === 'consumer' || r === 'user';
+}
+
+/** Choosify Support inbox: support conversations with an unread user/system message for this staffer. */
+async function countAdminSupportUnread(adminId: string): Promise<number> {
+  if (!adminId) return 0;
+  const supportConvs = (await listAllConversations())
+    .filter((c) => c.contextType === 'support_ticket')
+    .slice(0, 200);
+  let n = 0;
+  for (const c of supportConvs) {
+    const msgs = await listMessages(c.id);
+    const hasUnread = msgs.some(
+      (m) =>
+        m.senderId !== adminId &&
+        m.senderRole !== 'admin' &&
+        m.senderRole !== 'system' &&
+        !(Array.isArray(m.readBy) ? m.readBy : []).includes(adminId),
+    );
+    if (hasUnread) n += 1;
+  }
+  return n;
 }
 
 async function countUnreadConversations(userId: string, role?: string): Promise<number> {
@@ -187,14 +206,14 @@ export async function buildNavAttention(actor: {
   }
 
   if (isPlatformAdmin(role) || isSupport(role)) {
-    const openTickets = (await listSupportTickets()).filter((t) =>
-      OPEN_TICKET_STATUSES.has(t.status),
-    ).length;
+    // Canonical: support conversations with an unread user/system message for
+    // this staffer (message readBy state) — not merely "ticket status is open".
+    const unreadSupport = await countAdminSupportUnread(userId);
     setCount(
       out,
       'messages',
-      openTickets,
-      qty(openTickets, 'support conversation needs action', 'support conversations need action'),
+      unreadSupport,
+      qty(unreadSupport, 'support conversation has unread messages', 'support conversations have unread messages'),
     );
   }
 

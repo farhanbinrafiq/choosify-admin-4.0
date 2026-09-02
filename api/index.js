@@ -985,6 +985,18 @@ async function loadAdminUserByEmail(email) {
     email: row.email || normalized
   };
 }
+async function findAccountByNormalizedEmail(normalizedEmail) {
+  if (!normalizedEmail) return null;
+  const rows = await db.select().from(users).where(eq(users.email, normalizedEmail)).limit(1);
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    uid: row.id,
+    role: row.role,
+    email: row.email,
+    emailVerified: Boolean(row.emailVerified)
+  };
+}
 var DOC_ID, useOperationsFirestore, DISK_SNAPSHOT_PATH;
 var init_operationsDb = __esm({
   "server/operations/operationsDb.ts"() {
@@ -2621,6 +2633,13 @@ var init_catalogFirestoreAdmin = __esm({
 });
 
 // lib/vercel-catalog/catalogStore.ts
+var catalogStore_exports = {};
+__export(catalogStore_exports, {
+  catalogStore: () => catalogStore2,
+  defaultHomepage: () => defaultHomepage,
+  ensureCatalogSeedData: () => ensureCatalogSeedData,
+  getCatalogPersistenceMode: () => getCatalogPersistenceMode
+});
 async function getAdminStore() {
   if (!adminStorePromise) {
     adminStorePromise = Promise.resolve().then(() => (init_catalogFirestoreAdmin(), catalogFirestoreAdmin_exports)).then((mod) => mod.firestoreAdminStore);
@@ -2891,6 +2910,36 @@ async function remove2(collectionName, id) {
   }
   return removeFromMemory(collectionName, id);
 }
+async function ensureCatalogSeedData() {
+  try {
+    if (useAdminFirestore) {
+      const admin = await getAdminStore();
+      const hasProducts = await admin.hasAnyProducts();
+      if (hasProducts) return;
+    } else {
+      const existing = await catalogStore.listProducts();
+      if (existing.length > 0) {
+        await catalogStore.upsertHomepage(await catalogStore.getHomepage());
+        return;
+      }
+    }
+  } catch (error2) {
+    console.warn("[Catalog Seed] Seed check failed, continuing with defaults.", error2);
+  }
+  await Promise.all([
+    ...defaultCategories().map((item) => catalogStore2.upsertCategory(item)),
+    ...defaultBrands().map((item) => catalogStore2.upsertBrand(item)),
+    ...defaultProducts().map((item) => catalogStore2.upsertProduct(item)),
+    ...defaultDeals().map((item) => catalogStore2.upsertDeal(item)),
+    ...defaultCreators().map((item) => catalogStore2.upsertCreator(item)),
+    ...defaultGuides().map((item) => catalogStore2.upsertGuide(item)),
+    ...defaultPlacements().map((item) => catalogStore2.upsertPlacement(item)),
+    ...defaultProductDetails().map((item) => catalogStore2.upsertProductDetail(item)),
+    catalogStore2.upsertHomepage(defaultHomepage()),
+    catalogStore2.upsertSiteConfig(defaultSiteConfig())
+  ]);
+  console.log(`[Catalog Seed] Seeded default catalog snapshot (${getCatalogPersistenceMode()}).`);
+}
 function getCatalogPersistenceMode() {
   return useAdminFirestore ? "firestore-admin" : "memory-disk";
 }
@@ -3000,7 +3049,7 @@ var init_catalogStore = __esm({
 });
 
 // lib/vercel-catalog/catalogEditorialContract.ts
-var nowIso6, toString, toNumber, toBoolean, toStringArray, toBrandPartners, slugify, normalizeCreatorInput, GUIDE_FORMATS, LIVE_STATUSES, LIVE_PLATFORMS, toGuideSections, toGuideLive, normalizeGuideInput, normalizePlacementInput, normalizeProductDetailInput, normalizeSeoEntryInput;
+var nowIso6, toString, toNumber, toBoolean, toStringArray, toBrandPartners, slugify, safeUrlOrPath, normalizeCreatorCustomSocial, normalizeCreatorFeatured, normalizeCreatorInput, GUIDE_FORMATS, GUIDE_MEDIA_TYPES, GUIDE_STATUSES, LIVE_STATUSES, LIVE_PLATFORMS, KNOWN_GUIDE_SECTION_IDS, strList, clampStr, highlightTagList, highlightTagMap, safeHttpUrl, GUIDE_SOCIAL_PLATFORMS, toNum, normalizeGuideSocialLinks, normalizeGuideExternalRefs, normalizeGuideLiveOffers, normalizeWinnerSectionData, normalizeKnownSectionData, legacyBrandIdsFromSections, resolveGuideBrandIds, normalizeGuideSections, toGuideLive, mergeStrArray, normalizeGuideInput, normalizePlacementInput, normalizeVariant, normalizeAddon, normalizeStoreEntry, normalizeStoreList, GUIDE_TYPES, normalizeSizeGuide, normalizeProductDetailInput, normalizeSeoEntryInput;
 var init_catalogEditorialContract = __esm({
   "lib/vercel-catalog/catalogEditorialContract.ts"() {
     nowIso6 = () => (/* @__PURE__ */ new Date()).toISOString();
@@ -3015,17 +3064,58 @@ var init_catalogEditorialContract = __esm({
     };
     toBoolean = (value, fallback = false) => typeof value === "boolean" ? value : fallback;
     toStringArray = (value) => Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
-    toBrandPartners = (value) => Array.isArray(value) ? value.filter((item) => !!item && typeof item === "object").map((item) => ({
-      name: toString(item.name),
-      color: toString(item.color) || void 0
-    })).filter((item) => item.name) : [];
+    toBrandPartners = (value) => {
+      const logoOk = (v) => {
+        const s = typeof v === "string" ? v.trim() : "";
+        if (!s) return void 0;
+        if (s.startsWith("/") && !s.startsWith("//")) return s.slice(0, 2e3);
+        return /^https?:\/\//i.test(s) && !/^\s*(javascript|data|vbscript|file):/i.test(s) ? s.slice(0, 2e3) : void 0;
+      };
+      return Array.isArray(value) ? value.filter((item) => !!item && typeof item === "object").map((item) => ({
+        name: toString(item.name).slice(0, 120),
+        color: toString(item.color) || void 0,
+        // Canonical Choosify brand reference when tagged from the directory.
+        brandId: toString(item.brandId).slice(0, 80) || void 0,
+        // Creator-uploaded logo for an off-directory collaboration.
+        logo: logoOk(item.logo)
+      })).filter((item) => item.name).slice(0, 24) : [];
+    };
     slugify = (value) => value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-");
+    safeUrlOrPath = (value) => {
+      const s = typeof value === "string" ? value.trim() : "";
+      if (!s) return "";
+      if (s.startsWith("/") && !s.startsWith("//")) return s.slice(0, 2e3);
+      return safeHttpUrl(s);
+    };
+    normalizeCreatorCustomSocial = (raw, existing) => {
+      if (!Array.isArray(raw)) return existing ?? [];
+      return raw.filter((r) => !!r && typeof r === "object").map((r) => ({ label: clampStr(r.label, 40), url: safeHttpUrl(r.url) })).filter((r) => r.label && r.url).slice(0, 8);
+    };
+    normalizeCreatorFeatured = (raw, existing) => {
+      if (!Array.isArray(raw)) return existing ?? [];
+      const KINDS = ["guide", "video", "reel", "blog", "link"];
+      return raw.filter((r) => !!r && typeof r === "object").map((r, i) => {
+        const source = clampStr(r.source, 12) === "platform" ? "platform" : "external";
+        const kindRaw = clampStr(r.kind, 10);
+        return {
+          id: clampStr(r.id, 40) || `cfc-${i}`,
+          source,
+          kind: KINDS.includes(kindRaw) ? kindRaw : source === "platform" ? "guide" : "link",
+          contentId: source === "platform" ? clampStr(r.contentId, 80) || void 0 : void 0,
+          title: clampStr(r.title, 160),
+          thumbnail: safeUrlOrPath(r.thumbnail),
+          url: safeUrlOrPath(r.url)
+        };
+      }).filter((r) => r.title && r.url).slice(0, 12);
+    };
     normalizeCreatorInput = (payload, existing) => {
       const raw = payload ?? {};
       const name = toString(raw.name, existing?.name ?? "Untitled Creator");
       const id = toString(raw.id, existing?.id ?? `creator-${Date.now()}`);
       const statusRaw = toString(raw.status, existing?.status ?? "live").toLowerCase();
       const socialRaw = raw.socialLinks && typeof raw.socialLinks === "object" ? raw.socialLinks : null;
+      const customSocial = normalizeCreatorCustomSocial(socialRaw?.custom, existing?.socialLinks?.custom);
+      const featuredContent = normalizeCreatorFeatured(raw.featuredContent, existing?.featuredContent);
       return {
         id,
         slug: toString(raw.slug, existing?.slug ?? slugify(name || id)),
@@ -3047,8 +3137,10 @@ var init_catalogEditorialContract = __esm({
           instagram: toString(socialRaw?.instagram, existing?.socialLinks?.instagram ?? "") || void 0,
           youtube: toString(socialRaw?.youtube, existing?.socialLinks?.youtube ?? "") || void 0,
           tiktok: toString(socialRaw?.tiktok, existing?.socialLinks?.tiktok ?? "") || void 0,
-          linkedin: toString(socialRaw?.linkedin, existing?.socialLinks?.linkedin ?? "") || void 0
+          linkedin: toString(socialRaw?.linkedin, existing?.socialLinks?.linkedin ?? "") || void 0,
+          ...customSocial.length ? { custom: customSocial } : {}
         } : void 0,
+        featuredContent: featuredContent.length ? featuredContent : void 0,
         brandPartners: toBrandPartners(raw.brandPartners).length ? toBrandPartners(raw.brandPartners) : existing?.brandPartners,
         collabTypes: toStringArray(raw.collabTypes).length ? toStringArray(raw.collabTypes) : existing?.collabTypes,
         responseTime: toString(raw.responseTime, existing?.responseTime ?? "") || void 0,
@@ -3068,17 +3160,262 @@ var init_catalogEditorialContract = __esm({
       };
     };
     GUIDE_FORMATS = ["buying_guide", "product_review", "comparison", "live", "tutorial", "tips"];
+    GUIDE_MEDIA_TYPES = ["article", "reels", "video", "shorts"];
+    GUIDE_STATUSES = ["draft", "live", "archived"];
     LIVE_STATUSES = ["live", "upcoming", "replay", "ended"];
     LIVE_PLATFORMS = ["youtube", "facebook", "tiktok", "instagram", "vimeo", "native"];
-    toGuideSections = (value) => {
-      if (!Array.isArray(value)) return void 0;
-      const sections = value.filter((item) => !!item && typeof item === "object").map((item, i) => ({
-        id: toString(item.id),
-        enabled: item.enabled !== false,
-        order: typeof item.order === "number" ? item.order : i,
-        data: item.data && typeof item.data === "object" ? item.data : void 0
-      })).filter((s) => s.id);
-      return sections.length ? sections : void 0;
+    KNOWN_GUIDE_SECTION_IDS = [
+      "winner",
+      "why_it_won",
+      "verdict",
+      "takeaways",
+      "items_mentioned",
+      "brands_mentioned",
+      "how_review_was_made",
+      "recommendations"
+    ];
+    strList = (value, cap = 60) => {
+      if (!Array.isArray(value)) return [];
+      const seen = /* @__PURE__ */ new Set();
+      const out = [];
+      for (const v of value) {
+        const s = typeof v === "string" ? v.trim() : typeof v === "number" ? String(v) : "";
+        if (!s || seen.has(s)) continue;
+        seen.add(s);
+        out.push(s);
+        if (out.length >= cap) break;
+      }
+      return out;
+    };
+    clampStr = (value, cap) => (typeof value === "string" ? value : "").trim().slice(0, cap);
+    highlightTagList = (value) => strList(value, 4).map((s) => s.replace(/^#+/, "").trim().slice(0, 24)).filter(Boolean).slice(0, 4);
+    highlightTagMap = (value) => {
+      if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+      const out = {};
+      for (const [k, v] of Object.entries(value)) {
+        const key = k.trim().slice(0, 80);
+        const tags = highlightTagList(v);
+        if (key && tags.length) out[key] = tags;
+      }
+      return out;
+    };
+    safeHttpUrl = (value) => {
+      const s = typeof value === "string" ? value.trim() : "";
+      if (!s) return "";
+      if (!/^https?:\/\//i.test(s)) return "";
+      if (/^\s*(javascript|data|vbscript|file):/i.test(s)) return "";
+      try {
+        new URL(s);
+        return s.slice(0, 2e3);
+      } catch {
+        return "";
+      }
+    };
+    GUIDE_SOCIAL_PLATFORMS = [
+      "youtube",
+      "facebook",
+      "tiktok",
+      "instagram",
+      "twitch",
+      "vimeo",
+      "other"
+    ];
+    toNum = (v) => {
+      if (typeof v === "number" && Number.isFinite(v)) return v;
+      if (typeof v === "string" && v.trim() && Number.isFinite(Number(v))) return Number(v);
+      return void 0;
+    };
+    normalizeGuideSocialLinks = (raw, existing) => {
+      if (!Array.isArray(raw)) return existing?.socialLinks;
+      const out = raw.filter((r) => !!r && typeof r === "object").map((r, i) => {
+        const platformRaw = clampStr(r.platform, 20).toLowerCase();
+        return {
+          id: clampStr(r.id, 40) || `gsl-${i}`,
+          platform: GUIDE_SOCIAL_PLATFORMS.includes(platformRaw) ? platformRaw : "other",
+          url: safeHttpUrl(r.url),
+          label: clampStr(r.label, 60) || void 0,
+          enabled: r.enabled !== false,
+          sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : i
+        };
+      }).filter((s) => s.url).sort((a, b) => a.sortOrder - b.sortOrder).slice(0, 12);
+      return out.length ? out : [];
+    };
+    normalizeGuideExternalRefs = (raw, existing) => {
+      if (!Array.isArray(raw)) return existing?.externalRefs;
+      const out = raw.filter((r) => !!r && typeof r === "object").map((r, i) => {
+        const kind = clampStr(r.kind, 12) === "brand" ? "brand" : "product";
+        return {
+          id: clampStr(r.id, 40) || `gxr-${i}`,
+          kind,
+          title: clampStr(r.title, 160),
+          imageUrl: safeHttpUrl(r.imageUrl) || void 0,
+          externalUrl: safeHttpUrl(r.externalUrl),
+          subtitle: clampStr(r.subtitle, 160) || void 0,
+          brandName: kind === "product" ? clampStr(r.brandName, 120) || void 0 : void 0,
+          commentary: clampStr(r.commentary, 600) || void 0,
+          sortOrder: typeof r.sortOrder === "number" ? r.sortOrder : i,
+          highlightTags: highlightTagList(r.highlightTags).length ? highlightTagList(r.highlightTags) : void 0
+        };
+      }).filter((r) => r.title && r.externalUrl).sort((a, b) => a.sortOrder - b.sortOrder).slice(0, 24);
+      return out.length ? out : [];
+    };
+    normalizeGuideLiveOffers = (raw, existing, productIds) => {
+      if (!Array.isArray(raw)) return existing?.liveOffers;
+      const tagged = new Set(productIds);
+      const out = raw.filter((r) => !!r && typeof r === "object").map((r, i) => {
+        const promoPrice = toNum(r.promoPrice);
+        const discountValue = toNum(r.discountValue);
+        const discountTypeRaw = clampStr(r.discountType, 10);
+        const discountType = discountTypeRaw === "percent" || discountTypeRaw === "amount" ? discountTypeRaw : void 0;
+        const startsAt = clampStr(r.startsAt, 40);
+        const endsAt = clampStr(r.endsAt, 40);
+        const entry = {
+          id: clampStr(r.id, 40) || `glo-${i}`,
+          productId: clampStr(r.productId, 80),
+          startsAt,
+          endsAt,
+          enabled: r.enabled !== false
+        };
+        if (typeof promoPrice === "number" && promoPrice >= 0) {
+          entry.promoPrice = Math.round(promoPrice * 100) / 100;
+        } else if (discountType && typeof discountValue === "number" && discountValue > 0) {
+          entry.discountType = discountType;
+          entry.discountValue = discountType === "percent" ? Math.min(90, discountValue) : discountValue;
+        }
+        return entry;
+      }).filter((o) => {
+        if (!o.productId || !tagged.has(o.productId)) return false;
+        const s = Date.parse(o.startsAt);
+        const e = Date.parse(o.endsAt);
+        if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return false;
+        return typeof o.promoPrice === "number" || o.discountType && typeof o.discountValue === "number";
+      }).slice(0, 24);
+      return out.length ? out : [];
+    };
+    normalizeWinnerSectionData = (data) => {
+      const ENTITY_TYPES = ["product", "brand", "external_product", "external_brand"];
+      const toRef = (v) => {
+        if (!v || typeof v !== "object") return void 0;
+        const r = v;
+        const et = clampStr(r.entityType, 20);
+        const eid = clampStr(r.entityId, 80);
+        if (!ENTITY_TYPES.includes(et) || !eid) return void 0;
+        return { entityType: et, entityId: eid };
+      };
+      let overall = toRef(data.overall);
+      if (!overall && Array.isArray(data.winnerIds) && data.winnerIds.length) {
+        const legacy = clampStr(data.winnerIds[0], 80);
+        if (legacy) overall = { entityType: "product", entityId: legacy };
+      }
+      const awards = Array.isArray(data.awards) ? data.awards.filter((a) => !!a && typeof a === "object").map((a, i) => {
+        const ref = toRef(a.ref);
+        return ref ? { id: clampStr(a.id, 40) || `award-${i}`, label: clampStr(a.label, 60), ref } : null;
+      }).filter((a) => !!a && !!a.label).slice(0, 10) : [];
+      return {
+        ...overall ? { overall } : {},
+        ...awards.length ? { awards } : {}
+      };
+    };
+    normalizeKnownSectionData = (id, data) => {
+      switch (id) {
+        case "winner":
+          return normalizeWinnerSectionData(data);
+        case "why_it_won":
+          return { whyWonChips: strList(data.whyWonChips, 12).map((s) => s.slice(0, 120)) };
+        case "verdict":
+          return {
+            bestFor: strList(data.bestFor, 20).map((s) => s.slice(0, 200)),
+            notFor: strList(data.notFor, 20).map((s) => s.slice(0, 200)),
+            whatWeLike: strList(data.whatWeLike, 20).map((s) => s.slice(0, 200)),
+            whatToConsider: strList(data.whatToConsider, 20).map((s) => s.slice(0, 200))
+          };
+        case "takeaways":
+          return {
+            takeawayTitle: clampStr(data.takeawayTitle, 200),
+            takeawayBody: clampStr(data.takeawayBody, 4e3)
+          };
+        case "items_mentioned":
+          return {
+            itemIds: strList(data.itemIds, 40),
+            topPickIds: strList(data.topPickIds, 12),
+            highlightTags: highlightTagMap(data.highlightTags)
+          };
+        case "brands_mentioned":
+          return { brandIds: strList(data.brandIds, 20), highlightTags: highlightTagMap(data.highlightTags) };
+        case "how_review_was_made":
+          return {
+            reviewMethodSteps: strList(data.reviewMethodSteps, 12).map((s) => s.slice(0, 240))
+          };
+        case "recommendations": {
+          const ENTITY_TYPES = ["product", "brand", "external_product", "external_brand"];
+          const picks = Array.isArray(data.picks) ? data.picks.filter((p) => !!p && typeof p === "object").map((p, i) => {
+            const ref = p.ref;
+            const et = clampStr(ref?.entityType, 20);
+            const eid = clampStr(ref?.entityId, 80);
+            if (!ENTITY_TYPES.includes(et) || !eid) return null;
+            return {
+              id: clampStr(p.id, 40) || `pick-${i}`,
+              label: clampStr(p.label, 60),
+              ref: { entityType: et, entityId: eid }
+            };
+          }).filter((p) => !!p && !!p.label).slice(0, 24) : [];
+          return { picks };
+        }
+        default:
+          return data;
+      }
+    };
+    legacyBrandIdsFromSections = (sections) => {
+      if (!Array.isArray(sections)) return void 0;
+      const bm = sections.find(
+        (s) => !!s && typeof s === "object" && s.id === "brands_mentioned"
+      );
+      const data = bm?.data;
+      return data && typeof data === "object" ? data.brandIds : void 0;
+    };
+    resolveGuideBrandIds = (raw, existing) => {
+      if (Array.isArray(raw.brandIds)) return strList(raw.brandIds, 20);
+      if (Array.isArray(existing?.brandIds)) return strList(existing.brandIds, 20);
+      const legacyIncoming = legacyBrandIdsFromSections(raw.sections);
+      if (Array.isArray(legacyIncoming)) return strList(legacyIncoming, 20);
+      const legacyStored = legacyBrandIdsFromSections(existing?.sections);
+      if (Array.isArray(legacyStored)) return strList(legacyStored, 20);
+      return [];
+    };
+    normalizeGuideSections = (rawSections, existing, brandIds) => {
+      const source = Array.isArray(rawSections) ? rawSections : existing?.sections ?? [];
+      const seen = /* @__PURE__ */ new Set();
+      const out = [];
+      source.filter((item) => !!item && typeof item === "object").forEach((item, i) => {
+        const id = toString(item.id).trim();
+        if (!id || seen.has(id)) return;
+        seen.add(id);
+        const dataIn = item.data && typeof item.data === "object" ? item.data : {};
+        const known = KNOWN_GUIDE_SECTION_IDS.includes(id);
+        out.push({
+          id,
+          enabled: item.enabled !== false,
+          order: typeof item.order === "number" ? item.order : i,
+          data: known ? normalizeKnownSectionData(id, dataIn) : dataIn
+        });
+      });
+      const bmIdx = out.findIndex((s) => s.id === "brands_mentioned");
+      const bmHighlights = bmIdx >= 0 && out[bmIdx].data && typeof out[bmIdx].data.highlightTags === "object" ? out[bmIdx].data.highlightTags : void 0;
+      if (brandIds.length) {
+        if (bmIdx >= 0) {
+          out[bmIdx] = { ...out[bmIdx], data: { brandIds, ...bmHighlights ? { highlightTags: bmHighlights } : {} } };
+        } else {
+          out.push({
+            id: "brands_mentioned",
+            enabled: true,
+            order: out.length,
+            data: { brandIds }
+          });
+        }
+      } else if (bmIdx >= 0) {
+        out[bmIdx] = { ...out[bmIdx], data: { brandIds: [], ...bmHighlights ? { highlightTags: bmHighlights } : {} } };
+      }
+      return out.length ? out : void 0;
     };
     toGuideLive = (value) => {
       if (!value || typeof value !== "object") return void 0;
@@ -3092,13 +3429,40 @@ var init_catalogEditorialContract = __esm({
         scheduledAt: toString(v.scheduledAt) || void 0
       };
     };
-    normalizeGuideInput = (payload, existing) => {
+    mergeStrArray = (raw, existingValue) => Array.isArray(raw) ? toStringArray(raw) : existingValue ?? [];
+    normalizeGuideInput = (payload, existing, context) => {
       const raw = payload ?? {};
       const title = toString(raw.title, existing?.title ?? "Untitled Guide");
       const id = toString(raw.id, existing?.id ?? `guide-${Date.now()}`);
       const typeRaw = toString(raw.type, existing?.type ?? "article").toLowerCase();
-      const statusRaw = toString(raw.status, existing?.status ?? "live").toLowerCase();
+      const statusRaw = toString(raw.status).toLowerCase();
       const formatRaw = toString(raw.format, existing?.format ?? "");
+      const status = context?.allowStatus && GUIDE_STATUSES.includes(statusRaw) ? statusRaw : existing?.status ?? "draft";
+      const brandIds = resolveGuideBrandIds(raw, existing);
+      const gallery = (() => {
+        const src = Array.isArray(raw.gallery) ? raw.gallery : Array.isArray(existing?.gallery) ? existing.gallery : existing?.image ? [existing.image] : [];
+        const seen = /* @__PURE__ */ new Set();
+        const out = [];
+        for (const v of src) {
+          const u = typeof v === "string" ? v.trim() : "";
+          if (!u || seen.has(u)) continue;
+          seen.add(u);
+          out.push(u);
+          if (out.length >= 12) break;
+        }
+        const rawImage = typeof raw.image === "string" ? raw.image.trim() : "";
+        if (rawImage) {
+          const rest = out.filter((u) => u !== rawImage);
+          return [rawImage, ...rest].slice(0, 12);
+        }
+        return out;
+      })();
+      const primaryImage = gallery[0] || (typeof raw.image === "string" ? raw.image.trim() : existing?.image ?? "");
+      const mergedProductIds = mergeStrArray(raw.productIds, existing?.productIds);
+      const publisherTypeRaw = toString(raw.publisherType, existing?.publisherType ?? "").toLowerCase();
+      const rawPublisherBrandId = toString(raw.publisherBrandId, existing?.publisherBrandId ?? "");
+      const publisherType = publisherTypeRaw === "brand" && rawPublisherBrandId ? "brand" : "creator";
+      const publisherBrandId = publisherType === "brand" ? rawPublisherBrandId : void 0;
       return {
         id,
         slug: toString(raw.slug, existing?.slug ?? slugify(title || id)),
@@ -3107,28 +3471,37 @@ var init_catalogEditorialContract = __esm({
         authorAvatar: toString(raw.authorAvatar, existing?.authorAvatar),
         category: toString(raw.category, existing?.category ?? "General"),
         excerpt: toString(raw.excerpt, existing?.excerpt),
-        image: toString(raw.image, existing?.image ?? ""),
+        image: primaryImage,
+        gallery: gallery.length ? gallery : void 0,
         videoUrl: toString(raw.videoUrl, existing?.videoUrl),
         duration: toString(raw.duration, existing?.duration),
-        type: typeRaw === "reels" || typeRaw === "video" || typeRaw === "shorts" ? typeRaw : "article",
+        type: GUIDE_MEDIA_TYPES.includes(typeRaw) ? typeRaw : "article",
         readTime: toString(raw.readTime, existing?.readTime ?? "5 MIN READ"),
         views: toString(raw.views, existing?.views ?? "0"),
         shares: toString(raw.shares, existing?.shares),
-        tags: toStringArray(raw.tags).length ? toStringArray(raw.tags) : existing?.tags ?? [],
-        creatorId: toString(raw.creatorId, existing?.creatorId),
-        productIds: toStringArray(raw.productIds).length ? toStringArray(raw.productIds) : existing?.productIds ?? [],
+        tags: mergeStrArray(raw.tags, existing?.tags),
+        // A brand-authored guide has no creator author identity.
+        creatorId: publisherType === "brand" ? void 0 : toString(raw.creatorId, existing?.creatorId),
+        publisherType,
+        publisherBrandId,
+        productIds: mergedProductIds,
+        brandIds,
+        body: toString(raw.body, existing?.body ?? "") || void 0,
+        socialLinks: normalizeGuideSocialLinks(raw.socialLinks, existing),
+        externalRefs: normalizeGuideExternalRefs(raw.externalRefs, existing),
+        liveOffers: normalizeGuideLiveOffers(raw.liveOffers, existing, mergedProductIds),
         verdict: toString(raw.verdict, existing?.verdict),
-        whatWeLike: toStringArray(raw.whatWeLike).length ? toStringArray(raw.whatWeLike) : existing?.whatWeLike ?? [],
-        whatToConsider: toStringArray(raw.whatToConsider).length ? toStringArray(raw.whatToConsider) : existing?.whatToConsider ?? [],
+        whatWeLike: mergeStrArray(raw.whatWeLike, existing?.whatWeLike),
+        whatToConsider: mergeStrArray(raw.whatToConsider, existing?.whatToConsider),
         seoTitle: toString(raw.seoTitle, existing?.seoTitle),
         seoDescription: toString(raw.seoDescription, existing?.seoDescription),
         seoKeywords: toString(raw.seoKeywords, existing?.seoKeywords),
         seoOgImage: toString(raw.seoOgImage, existing?.seoOgImage),
         seoCanonicalUrl: toString(raw.seoCanonicalUrl, existing?.seoCanonicalUrl),
-        status: statusRaw === "draft" || statusRaw === "archived" ? statusRaw : "live",
-        publishedAt: toString(raw.publishedAt, existing?.publishedAt ?? nowIso6()),
+        status,
+        publishedAt: existing?.publishedAt || (status === "live" ? nowIso6() : ""),
         updatedAt: nowIso6(),
-        sections: toGuideSections(raw.sections) ?? existing?.sections,
+        sections: normalizeGuideSections(raw.sections, existing, brandIds),
         format: GUIDE_FORMATS.includes(formatRaw) ? formatRaw : existing?.format,
         live: toGuideLive(raw.live) ?? existing?.live
       };
@@ -3157,30 +3530,180 @@ var init_catalogEditorialContract = __esm({
         updatedAt: nowIso6()
       };
     };
+    normalizeVariant = (raw, idx) => {
+      if (!raw || typeof raw !== "object") return null;
+      const r = raw;
+      const options = {};
+      if (r.options && typeof r.options === "object") {
+        for (const [k, v] of Object.entries(r.options)) {
+          if (k && k.trim() && (typeof v === "string" || typeof v === "number")) {
+            options[k.trim()] = String(v).trim();
+          }
+        }
+      }
+      const has = (v) => v !== void 0 && v !== null && String(v).trim() !== "";
+      const price = has(r.price) ? Math.max(0, toNumber(r.price)) : void 0;
+      const originalPrice = has(r.originalPrice) ? Math.max(0, toNumber(r.originalPrice)) : void 0;
+      if (typeof originalPrice === "number" && originalPrice > 0 && typeof price === "number" && originalPrice < price) {
+        throw new Error(
+          `Variant originalPrice (${originalPrice}) cannot be lower than variant price (${price}).`
+        );
+      }
+      const stock = has(r.stock) ? Math.max(0, Math.floor(toNumber(r.stock))) : void 0;
+      const images = toStringArray(r.images);
+      const enabledRaw = typeof r.enabled === "boolean" ? r.enabled : void 0;
+      const statusRaw = toString(r.status).toLowerCase();
+      const status = statusRaw === "inactive" ? "inactive" : statusRaw === "active" ? "active" : enabledRaw === false ? "inactive" : "active";
+      return {
+        id: toString(r.id) || `var-${Date.now()}-${idx}`,
+        sku: toString(r.sku),
+        ...price !== void 0 ? { price } : {},
+        ...originalPrice !== void 0 ? { originalPrice } : {},
+        ...stock !== void 0 ? { stock } : {},
+        options,
+        ...images.length ? { images } : {},
+        enabled: status === "active",
+        status
+      };
+    };
+    normalizeAddon = (raw, idx) => {
+      if (!raw || typeof raw !== "object") return null;
+      const r = raw;
+      const title = toString(r.title, toString(r.name)).trim();
+      if (!title) return null;
+      const description = toString(r.description).trim();
+      const badge = toString(r.badge).trim().slice(0, 40);
+      const hasMax = r.maxQuantity !== void 0 && r.maxQuantity !== null && String(r.maxQuantity).trim() !== "";
+      return {
+        id: toString(r.id) || `addon-${Date.now()}-${idx}`,
+        title,
+        ...description ? { description } : {},
+        price: Math.max(0, toNumber(r.price, 0)),
+        enabled: typeof r.enabled === "boolean" ? r.enabled : true,
+        sortOrder: r.sortOrder !== void 0 ? Math.floor(toNumber(r.sortOrder, idx)) : idx,
+        ...badge ? { badge } : {},
+        ...hasMax ? { maxQuantity: Math.max(1, Math.floor(toNumber(r.maxQuantity, 1))) } : {}
+      };
+    };
+    normalizeStoreEntry = (raw, idx, forcedSource) => {
+      if (!raw || typeof raw !== "object") return null;
+      const r = raw;
+      const storeName = toString(r.storeName, toString(r.name)).trim();
+      if (!storeName) return null;
+      const has = (v) => v !== void 0 && v !== null && String(v).trim() !== "";
+      const entry = {
+        id: toString(r.id) || `${forcedSource === "admin" ? "ap" : "sc"}-${Date.now()}-${idx}`,
+        storeName,
+        price: Math.max(0, toNumber(r.price, 0)),
+        availability: toString(r.availability).trim() || "See store",
+        ...has(r.storeRating) ? { storeRating: Math.max(0, Math.min(5, toNumber(r.storeRating))) } : {},
+        ...has(r.storeUrl) ? { storeUrl: toString(r.storeUrl).trim() } : {},
+        ...has(r.storeLocation) ? { storeLocation: toString(r.storeLocation).trim() } : {},
+        ...has(r.logoUrl) ? { logoUrl: toString(r.logoUrl).trim() } : {},
+        ...r.isFeatured === true ? { isFeatured: true } : {},
+        source: forcedSource
+      };
+      if (forcedSource === "admin") {
+        if (has(r.promoLabel)) entry.promoLabel = toString(r.promoLabel).trim().slice(0, 40);
+        if (has(r.priority)) entry.priority = Math.floor(toNumber(r.priority));
+        if (has(r.adRef)) entry.adRef = toString(r.adRef).trim().slice(0, 40);
+      }
+      return entry;
+    };
+    normalizeStoreList = (value, forcedSource) => Array.isArray(value) ? value.map((v, i) => normalizeStoreEntry(v, i, forcedSource)).filter((v) => v !== null) : [];
+    GUIDE_TYPES = ["size", "measurement", "compatibility", "fitment", "feature", "custom"];
+    normalizeSizeGuide = (raw, existing) => {
+      if (!raw || typeof raw !== "object") return existing;
+      const r = raw;
+      const guideTypeRaw = clampStr(r.guideType, 20).toLowerCase();
+      const contentTypeRaw = clampStr(r.type, 10).toLowerCase();
+      const imageUrl = safeHttpUrl(r.imageUrl) || void 0;
+      const rows = Array.isArray(r.rows) ? r.rows.filter((row) => row && typeof row === "object").slice(0, 60).map((row) => {
+        const out2 = { size: clampStr(row.size, 40) };
+        for (const [k, v] of Object.entries(row)) {
+          if (k === "size") continue;
+          out2[k.slice(0, 40)] = clampStr(v, 40);
+        }
+        return out2;
+      }) : void 0;
+      const out = {
+        enabled: toBoolean(r.enabled, false),
+        guideType: GUIDE_TYPES.includes(guideTypeRaw) ? guideTypeRaw : "size",
+        label: clampStr(r.label, 40) || void 0,
+        type: ["table", "image", "html"].includes(contentTypeRaw) ? contentTypeRaw : imageUrl ? "image" : rows && rows.length ? "table" : void 0,
+        title: clampStr(r.title, 120) || void 0,
+        description: clampStr(r.description, 600) || void 0,
+        imageUrl,
+        htmlContent: clampStr(r.htmlContent, 8e3) || void 0,
+        unitLabel: clampStr(r.unitLabel, 24) || void 0,
+        columnHeaders: Array.isArray(r.columnHeaders) ? r.columnHeaders.map((h) => clampStr(h, 40)).filter(Boolean).slice(0, 12) : void 0,
+        rows: rows && rows.length ? rows : void 0
+      };
+      return out;
+    };
     normalizeProductDetailInput = (payload, productId, existing) => {
       const raw = payload ?? {};
       const relatedInfoTypeRaw = toString(raw.relatedInfoType, existing?.relatedInfoType);
       return {
         productId,
-        relatedInfoType: relatedInfoTypeRaw === "price_across_stores" || relatedInfoTypeRaw === "whats_nearby" || relatedInfoTypeRaw === "before_your_visit" ? relatedInfoTypeRaw : existing?.relatedInfoType,
+        relatedInfoType: relatedInfoTypeRaw === "price_across_stores" || relatedInfoTypeRaw === "whats_nearby" || relatedInfoTypeRaw === "before_your_visit" || relatedInfoTypeRaw === "custom" ? relatedInfoTypeRaw : existing?.relatedInfoType,
+        customRelatedInfo: (() => {
+          const c = raw.customRelatedInfo;
+          if (c && typeof c === "object" && !Array.isArray(c)) {
+            const cc = c;
+            const title = toString(cc.title).trim().slice(0, 120);
+            const blocks = Array.isArray(cc.blocks) ? cc.blocks.filter((b) => !!b && typeof b === "object").map((b, i) => ({
+              id: toString(b.id) || `crb-${i}`,
+              heading: toString(b.heading).trim().slice(0, 80),
+              items: Array.isArray(b.items) ? b.items.map((x) => String(x).trim()).filter(Boolean).slice(0, 20) : []
+            })).filter((b) => b.heading || b.items.length).slice(0, 8) : [];
+            return title || blocks.length ? { ...title ? { title } : {}, blocks } : void 0;
+          }
+          return existing?.customRelatedInfo;
+        })(),
         priceAcrossStoresEnabled: raw.priceAcrossStoresEnabled !== void 0 ? toBoolean(raw.priceAcrossStoresEnabled) : existing?.priceAcrossStoresEnabled,
         whatsNearby: raw.whatsNearby && typeof raw.whatsNearby === "object" ? raw.whatsNearby : existing?.whatsNearby,
-        beforeYourVisit: raw.beforeYourVisit && typeof raw.beforeYourVisit === "object" ? raw.beforeYourVisit : existing?.beforeYourVisit,
+        beforeYourVisit: (() => {
+          const bv = raw.beforeYourVisit;
+          if (!bv || typeof bv !== "object" || Array.isArray(bv)) return existing?.beforeYourVisit;
+          const b = bv;
+          const out = {
+            parkingAvailability: toString(b.parkingAvailability) || void 0,
+            cancellationPolicy: toString(b.cancellationPolicy) || void 0,
+            whatToBring: toString(b.whatToBring) || void 0,
+            wheelchairAccess: toString(b.wheelchairAccess) || void 0,
+            insuranceAccepted: toString(b.insuranceAccepted) || void 0
+          };
+          if (Array.isArray(b.customFields)) {
+            const cf = b.customFields.filter((f) => !!f && typeof f === "object").map((f, i) => ({
+              id: toString(f.id) || `bvc-${i}`,
+              label: toString(f.label).trim().slice(0, 60),
+              value: toString(f.value).trim().slice(0, 400)
+            })).filter((f) => f.label || f.value).slice(0, 12);
+            if (cf.length) out.customFields = cf;
+          }
+          return out;
+        })(),
         about: toString(raw.about, existing?.about),
         specs: Array.isArray(raw.specs) ? raw.specs : existing?.specs ?? [],
         pros: toStringArray(raw.pros).length ? toStringArray(raw.pros) : existing?.pros ?? [],
         cons: toStringArray(raw.cons).length ? toStringArray(raw.cons) : existing?.cons ?? [],
         bestForTags: toStringArray(raw.bestForTags).length ? toStringArray(raw.bestForTags) : existing?.bestForTags ?? [],
-        storeComparisonList: Array.isArray(raw.storeComparisonList) ? raw.storeComparisonList : existing?.storeComparisonList ?? [],
+        // Seller-owned rows — every entry is pinned `source: 'seller'` so a payload
+        // can never smuggle in an admin/sponsored row here.
+        storeComparisonList: Array.isArray(raw.storeComparisonList) ? normalizeStoreList(raw.storeComparisonList, "seller") : existing?.storeComparisonList ?? [],
+        // Admin-owned promoted rows — independent list, always `source: 'admin'`.
+        adminPromotedStores: Array.isArray(raw.adminPromotedStores) ? normalizeStoreList(raw.adminPromotedStores, "admin") : existing?.adminPromotedStores,
+        relatedInfoLockedByAdmin: raw.relatedInfoLockedByAdmin !== void 0 ? toBoolean(raw.relatedInfoLockedByAdmin) : existing?.relatedInfoLockedByAdmin,
         physicalStores: Array.isArray(raw.physicalStores) ? raw.physicalStores : existing?.physicalStores ?? [],
         overviewBlocks: Array.isArray(raw.overviewBlocks) ? raw.overviewBlocks : existing?.overviewBlocks ?? [],
         optionGroups: Array.isArray(raw.optionGroups) ? raw.optionGroups : existing?.optionGroups ?? [],
-        productVariants: Array.isArray(raw.productVariants) ? raw.productVariants : existing?.productVariants ?? [],
+        productVariants: Array.isArray(raw.productVariants) ? raw.productVariants.map((v, i) => normalizeVariant(v, i)).filter((v) => v !== null) : existing?.productVariants ?? [],
         creatorContent: Array.isArray(raw.creatorContent) ? raw.creatorContent : existing?.creatorContent ?? [],
         seoTitle: toString(raw.seoTitle, existing?.seoTitle),
         seoDescription: toString(raw.seoDescription, existing?.seoDescription),
         seoKeywords: toString(raw.seoKeywords, existing?.seoKeywords),
-        sizeGuide: raw.sizeGuide && typeof raw.sizeGuide === "object" ? raw.sizeGuide : existing?.sizeGuide,
+        sizeGuide: normalizeSizeGuide(raw.sizeGuide, existing?.sizeGuide),
         updatedAt: nowIso6(),
         enableSpecs: raw.enableSpecs !== void 0 ? toBoolean(raw.enableSpecs) : existing?.enableSpecs,
         enableStoreComparison: raw.enableStoreComparison !== void 0 ? toBoolean(raw.enableStoreComparison) : existing?.enableStoreComparison,
@@ -3194,10 +3717,31 @@ var init_catalogEditorialContract = __esm({
         enableAdditionalSpecs: raw.enableAdditionalSpecs !== void 0 ? toBoolean(raw.enableAdditionalSpecs) : existing?.enableAdditionalSpecs,
         enablePublicReviews: raw.enablePublicReviews !== void 0 ? toBoolean(raw.enablePublicReviews) : existing?.enablePublicReviews,
         enableAddonItems: raw.enableAddonItems !== void 0 ? toBoolean(raw.enableAddonItems) : existing?.enableAddonItems,
+        enableDeliveryInfo: raw.enableDeliveryInfo !== void 0 ? toBoolean(raw.enableDeliveryInfo) : existing?.enableDeliveryInfo,
+        enableWarrantyInfo: raw.enableWarrantyInfo !== void 0 ? toBoolean(raw.enableWarrantyInfo) : existing?.enableWarrantyInfo,
+        deliveryInfo: (() => {
+          const di = raw.deliveryInfo;
+          if (di && typeof di === "object" && !Array.isArray(di)) {
+            const d = di;
+            const region = toString(d.region).trim();
+            const bullets = Array.isArray(d.bullets) ? d.bullets.map((b) => String(b).trim()).filter(Boolean).slice(0, 12) : [];
+            return region || bullets.length ? { ...region ? { region } : {}, bullets } : void 0;
+          }
+          return existing?.deliveryInfo;
+        })(),
+        afterSalesInfo: (() => {
+          const ai = raw.afterSalesInfo;
+          if (ai && typeof ai === "object" && !Array.isArray(ai)) {
+            const a = ai;
+            const bullets = Array.isArray(a.bullets) ? a.bullets.map((b) => String(b).trim()).filter(Boolean).slice(0, 12) : [];
+            return bullets.length ? { bullets } : void 0;
+          }
+          return existing?.afterSalesInfo;
+        })(),
         boxContents: Array.isArray(raw.boxContents) ? raw.boxContents : existing?.boxContents ?? [],
         additionalSpecs: Array.isArray(raw.additionalSpecs) ? raw.additionalSpecs : existing?.additionalSpecs ?? [],
         publicReviews: Array.isArray(raw.publicReviews) ? raw.publicReviews : existing?.publicReviews ?? [],
-        addonItems: Array.isArray(raw.addonItems) ? raw.addonItems : existing?.addonItems ?? []
+        addonItems: Array.isArray(raw.addonItems) ? raw.addonItems.map((a, i) => normalizeAddon(a, i)).filter((a) => a !== null).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)) : existing?.addonItems ?? []
       };
     };
     normalizeSeoEntryInput = (payload, idx) => {
@@ -3621,7 +4165,23 @@ var init_operationsStore = __esm({
         return rows;
       },
       getOrder: (id) => state4.orders.find((order) => order.id === id || order.orderId === id) ?? null,
+      /**
+       * QA2-001 fix: this used to unconditionally unshift(), so a duplicate
+       * orderId never overwrote the original in place -- it inserted a SECOND
+       * row with the same id/orderId. getOrder()'s find() always resolved to
+       * the newest (unshift prepends), which is what made it look like an
+       * in-place overwrite from the outside; listOrders() would have shown
+       * both rows. Now idempotent by orderId: an existing order is returned
+       * unchanged rather than duplicated. Protects every caller of this shared
+       * function (the client-facing POST /operations/orders route, plus
+       * bookingService.ts and checkoutService.ts, which generate their own
+       * orderId server-side and shouldn't collide, but are covered either way).
+       */
       createOrder: (payload) => {
+        const existing = state4.orders.find(
+          (order2) => order2.id === payload.orderId || order2.orderId === payload.orderId
+        );
+        if (existing) return existing;
         const order = {
           ...payload,
           id: payload.orderId,
@@ -4099,6 +4659,13 @@ var init_operationsStore = __esm({
 });
 
 // server/booking/bookingStore.ts
+var bookingStore_exports = {};
+__export(bookingStore_exports, {
+  getBookingRequest: () => getBookingRequest,
+  listBookingRequests: () => listBookingRequests,
+  listExpirableBookingRequests: () => listExpirableBookingRequests,
+  saveBookingRequest: () => saveBookingRequest
+});
 import { existsSync as existsSync5, mkdirSync as mkdirSync5, readFileSync as readFileSync5, writeFileSync as writeFileSync5 } from "node:fs";
 import { dirname as dirname5, join as join5 } from "node:path";
 function loadDiskSnapshot2() {
@@ -4607,7 +5174,16 @@ var init_productLifecycle = __esm({
 
 // server/catalogContract.ts
 import { z as z2 } from "zod";
-var nonEmpty, isoDate, nowIso8, slugify3, ensureUniqueSlug, toString2, toNumber2, toBoolean2, toStringArray2, categorySchema, brandSchema, productSchema, dealSchema, heroBannerSchema, dealsBannerSchema, sectionSchema, homepageSchema, existingOrNow, normalizeCategoryInput, normalizeBrandInput, normalizeProductInput, normalizeDealInput, normalizeHeroBannerInput, normalizeDealsBannerInput, normalizeSectionInput, normalizeHomepageInput, brandPostKindSchema, brandPostStatusSchema, brandPostSchema, normalizeBrandPostInput;
+function assertOriginalPriceNotBelowPrice(originalPrice, price, label = "Listing") {
+  const op = typeof originalPrice === "number" ? originalPrice : NaN;
+  const p = typeof price === "number" ? price : NaN;
+  if (Number.isFinite(op) && op > 0 && Number.isFinite(p) && op < p) {
+    throw new Error(
+      `${label} originalPrice (${op}) cannot be lower than price (${p}). Leave it blank for no MRP.`
+    );
+  }
+}
+var nonEmpty, isoDate, nowIso8, slugify3, ensureUniqueSlug, toString2, toNumber2, toBoolean2, toStringArray2, normalizeProductVideoUrl, categorySchema, brandSchema, productSchema, dealSchema, heroBannerSchema, dealsBannerSchema, sectionSchema, homepageSchema, existingOrNow, normalizeCategoryInput, normalizeBrandInput, normalizeProductInput, normalizeDealInput, normalizeHeroBannerInput, normalizeDealsBannerInput, normalizeSectionInput, normalizeHomepageInput, brandPostKindSchema, brandPostStatusSchema, brandPostSchema, normalizeBrandPostInput;
 var init_catalogContract = __esm({
   "server/catalogContract.ts"() {
     init_productLifecycle();
@@ -4640,6 +5216,28 @@ var init_catalogContract = __esm({
       if (!Array.isArray(value)) return [];
       return value.filter((item) => typeof item === "string" && item.length > 0);
     };
+    normalizeProductVideoUrl = (raw, existing) => {
+      if (raw === void 0 || raw === null) return existing || void 0;
+      const s = typeof raw === "string" ? raw.trim() : "";
+      if (!s) return void 0;
+      if (s.startsWith("/media/")) return s;
+      let url;
+      try {
+        url = new URL(s);
+      } catch {
+        throw new Error("Product video must be a valid absolute URL or an uploaded /media path.");
+      }
+      if (url.protocol !== "https:") {
+        throw new Error("Product video URL must use https.");
+      }
+      const host = url.hostname.replace(/^www\./, "").toLowerCase();
+      const isYouTube = host === "youtube.com" || host === "m.youtube.com" || host === "youtu.be" || host === "youtube-nocookie.com";
+      const isDirectFile = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(url.pathname);
+      if (!isYouTube && !isDirectFile) {
+        throw new Error("Unsupported product video URL. Use a YouTube link or a direct .mp4/.webm/.mov URL.");
+      }
+      return url.toString();
+    };
     categorySchema = z2.object({
       id: nonEmpty,
       slug: nonEmpty,
@@ -4667,14 +5265,37 @@ var init_catalogContract = __esm({
         instagram: z2.string().optional(),
         youtube: z2.string().optional(),
         tiktok: z2.string().optional(),
-        linkedin: z2.string().optional()
+        linkedin: z2.string().optional(),
+        custom: z2.array(z2.object({ label: z2.string(), url: z2.string() })).optional()
       }).optional(),
       story: z2.string().optional(),
+      storyBlocks: z2.array(
+        z2.object({
+          id: z2.string(),
+          heading: z2.string(),
+          body: z2.string(),
+          kind: z2.enum(["text", "link", "content"]).optional(),
+          url: z2.string().optional(),
+          thumbnail: z2.string().optional(),
+          contentId: z2.string().optional(),
+          mediaKind: z2.enum([
+            "youtube",
+            "youtube_shorts",
+            "instagram_reel",
+            "instagram_post",
+            "tiktok",
+            "facebook",
+            "other"
+          ]).optional()
+        })
+      ).optional(),
+      pinnedStoryContentIds: z2.array(z2.string()).optional(),
       /** HTTPS URL for brand story / creator-review embed on storefront */
       storyVideoUrl: z2.string().optional(),
       credentials: z2.string().optional(),
       overview: z2.object({
         address: z2.string().optional(),
+        mapLink: z2.string().optional(),
         email: z2.string().optional(),
         phone: z2.string().optional(),
         priceRange: z2.string().optional(),
@@ -4701,6 +5322,8 @@ var init_catalogContract = __esm({
           enabled: z2.boolean()
         })
       ).optional(),
+      pinnedProductIds: z2.array(z2.string()).optional(),
+      pinnedShowcaseProductIds: z2.array(z2.string()).optional(),
       verifiedStatus: z2.boolean(),
       claimStatus: z2.enum(["community", "pending", "verified"]),
       followers: z2.number().nonnegative(),
@@ -4730,6 +5353,7 @@ var init_catalogContract = __esm({
       categoryName: z2.string(),
       image: nonEmpty,
       gallery: z2.array(z2.string()),
+      videoUrl: z2.string().optional(),
       modeType: z2.literal("retail"),
       productType: z2.enum(["physical", "service"]).optional(),
       serviceCategory: z2.enum([
@@ -4759,6 +5383,8 @@ var init_catalogContract = __esm({
       price: z2.number().nonnegative(),
       originalPrice: z2.number().nonnegative().optional(),
       stock: z2.number().int(),
+      /** Optional seller-supplied product code / SKU / article number. Free-form. */
+      sku: z2.string().optional(),
       /** `live` = legacy Active; also accepts ES-005 states. */
       status: z2.enum(["draft", "live", "active", "out_of_stock", "suspended", "archived"]),
       warrantyMonths: z2.number().int().nonnegative().optional(),
@@ -4886,13 +5512,63 @@ var init_catalogContract = __esm({
           instagram: toString2(socialRaw?.instagram, existing?.socialLinks?.instagram ?? "") || void 0,
           youtube: toString2(socialRaw?.youtube, existing?.socialLinks?.youtube ?? "") || void 0,
           tiktok: toString2(socialRaw?.tiktok, existing?.socialLinks?.tiktok ?? "") || void 0,
-          linkedin: toString2(socialRaw?.linkedin, existing?.socialLinks?.linkedin ?? "") || void 0
+          linkedin: toString2(socialRaw?.linkedin, existing?.socialLinks?.linkedin ?? "") || void 0,
+          custom: (() => {
+            const src = Array.isArray(socialRaw?.custom) ? socialRaw.custom : socialRaw && "custom" in socialRaw ? [] : existing?.socialLinks?.custom;
+            if (!Array.isArray(src)) return void 0;
+            const rows = src.filter((r) => !!r && typeof r === "object").map((r) => ({
+              label: toString2(r.label).trim().slice(0, 40),
+              url: toString2(r.url).trim().slice(0, 500)
+            })).filter((r) => r.label && r.url).slice(0, 10);
+            return rows.length ? rows : void 0;
+          })()
         } : void 0,
         story: toString2(raw.story, existing?.story ?? "") || void 0,
+        storyBlocks: (() => {
+          if (!Array.isArray(raw.storyBlocks)) return existing?.storyBlocks;
+          return raw.storyBlocks.filter((b) => !!b && typeof b === "object").map((b, i) => {
+            const kindRaw = toString2(b.kind);
+            const kind = kindRaw === "link" || kindRaw === "content" ? kindRaw : "text";
+            const url = toString2(b.url).trim().slice(0, 500);
+            const thumbnail = toString2(b.thumbnail).trim().slice(0, 500);
+            const contentId = toString2(b.contentId).trim().slice(0, 80);
+            const mkRaw = toString2(b.mediaKind);
+            const MK = /* @__PURE__ */ new Set([
+              "youtube",
+              "youtube_shorts",
+              "instagram_reel",
+              "instagram_post",
+              "tiktok",
+              "facebook",
+              "other"
+            ]);
+            return {
+              id: toString2(b.id) || `sb-${i}`,
+              heading: toString2(b.heading).trim().slice(0, 120),
+              body: toString2(b.body).trim().slice(0, 4e3),
+              kind,
+              ...kind === "link" && url ? { url } : {},
+              ...kind === "link" && thumbnail ? { thumbnail } : {},
+              ...kind === "content" && contentId ? { contentId } : {},
+              ...MK.has(mkRaw) ? { mediaKind: mkRaw } : {}
+            };
+          }).filter(
+            (b) => b.kind === "text" && (b.heading || b.body) || b.kind === "link" && b.url || b.kind === "content" && b.contentId
+          ).slice(0, 16);
+        })(),
+        pinnedStoryContentIds: (() => {
+          const hasBlocks = Array.isArray(raw.storyBlocks);
+          const hasExplicit = Array.isArray(raw.pinnedStoryContentIds);
+          if (!hasBlocks && !hasExplicit) return existing?.pinnedStoryContentIds;
+          const explicit = hasExplicit ? raw.pinnedStoryContentIds.map((v) => toString2(v).trim()).filter(Boolean) : [];
+          const fromBlocks = hasBlocks ? raw.storyBlocks.filter((b) => !!b && typeof b === "object").filter((b) => toString2(b.kind) === "content").map((b) => toString2(b.contentId).trim()).filter(Boolean) : [];
+          return Array.from(/* @__PURE__ */ new Set([...explicit, ...fromBlocks])).slice(0, 16);
+        })(),
         storyVideoUrl: toString2(raw.storyVideoUrl, existing?.storyVideoUrl ?? "") || void 0,
         credentials: toString2(raw.credentials, existing?.credentials ?? "") || void 0,
         overview: overviewRaw || existing?.overview ? {
           address: toString2(overviewRaw?.address, existing?.overview?.address ?? "") || void 0,
+          mapLink: toString2(overviewRaw?.mapLink, existing?.overview?.mapLink ?? "") || void 0,
           email: toString2(overviewRaw?.email, existing?.overview?.email ?? "") || void 0,
           phone: toString2(overviewRaw?.phone, existing?.overview?.phone ?? "") || void 0,
           priceRange: toString2(overviewRaw?.priceRange, existing?.overview?.priceRange ?? "") || void 0,
@@ -4904,6 +5580,16 @@ var init_catalogContract = __esm({
         faq: Array.isArray(raw.faq) ? raw.faq : existing?.faq,
         stores: raw.stores && typeof raw.stores === "object" ? raw.stores : existing?.stores,
         promoCodes: Array.isArray(raw.promoCodes) ? raw.promoCodes : existing?.promoCodes,
+        pinnedProductIds: Array.isArray(raw.pinnedProductIds) ? Array.from(
+          new Set(
+            raw.pinnedProductIds.map((v) => toString2(v).trim()).filter(Boolean)
+          )
+        ).slice(0, 12) : existing?.pinnedProductIds,
+        pinnedShowcaseProductIds: Array.isArray(raw.pinnedShowcaseProductIds) ? Array.from(
+          new Set(
+            raw.pinnedShowcaseProductIds.map((v) => toString2(v).trim()).filter(Boolean)
+          )
+        ).slice(0, 24) : existing?.pinnedShowcaseProductIds,
         verifiedStatus: toBoolean2(raw.verifiedStatus, existing?.verifiedStatus ?? false),
         claimStatus: claimStatusRaw === "verified" || claimStatusRaw === "pending" ? claimStatusRaw : "community",
         followers: toNumber2(raw.followers, existing?.followers ?? 0),
@@ -4976,6 +5662,7 @@ var init_catalogContract = __esm({
         categoryName,
         image: toString2(raw.image, existing?.image ?? ""),
         gallery: toStringArray2(raw.gallery).length > 0 ? toStringArray2(raw.gallery) : existing?.gallery ?? [],
+        videoUrl: normalizeProductVideoUrl(raw.videoUrl, existing?.videoUrl),
         modeType: "retail",
         productType: (() => {
           const v = toString2(raw.productType, existing?.productType);
@@ -5016,6 +5703,7 @@ var init_catalogContract = __esm({
         originalPrice: raw.originalPrice !== void 0 ? toNumber2(raw.originalPrice) : existing?.originalPrice,
         stock,
         status,
+        sku: toString2(raw.sku, existing?.sku) || void 0,
         warrantyMonths: raw.warrantyMonths !== void 0 ? toNumber2(raw.warrantyMonths) : existing?.warrantyMonths,
         warrantyType: toString2(raw.warrantyType, existing?.warrantyType) || void 0,
         warrantyProvider: toString2(raw.warrantyProvider, existing?.warrantyProvider) || void 0,
@@ -5042,6 +5730,7 @@ var init_catalogContract = __esm({
         createdAt: existingOrNow(existing?.createdAt),
         updatedAt: nowIso8()
       };
+      assertOriginalPriceNotBelowPrice(normalized.originalPrice, normalized.price, "Product");
       return productSchema.parse(normalized);
     };
     normalizeDealInput = (payload, existing) => {
@@ -5203,7 +5892,7 @@ var init_catalogContract = __esm({
 });
 
 // lib/vercel-catalog/mediaUpload.ts
-import crypto2 from "node:crypto";
+import crypto3 from "node:crypto";
 async function uploadImageToCloudinary(input) {
   const cloudName = getCloudName();
   if (!cloudName) {
@@ -5224,7 +5913,7 @@ async function uploadImageToCloudinary(input) {
     const timestamp2 = Math.round(Date.now() / 1e3);
     const folder = "choosify/products";
     const paramsToSign = `folder=${folder}&timestamp=${timestamp2}`;
-    const signature = crypto2.createHash("sha1").update(paramsToSign + apiSecret).digest("hex");
+    const signature = crypto3.createHash("sha1").update(paramsToSign + apiSecret).digest("hex");
     form.append("api_key", apiKey);
     form.append("timestamp", String(timestamp2));
     form.append("signature", signature);
@@ -5268,7 +5957,7 @@ async function uploadDocumentToCloudinary(input) {
   } else if (apiKey && apiSecret) {
     const timestamp2 = Math.round(Date.now() / 1e3);
     const paramsToSign = `folder=${folder}&timestamp=${timestamp2}`;
-    const signature = crypto2.createHash("sha1").update(paramsToSign + apiSecret).digest("hex");
+    const signature = crypto3.createHash("sha1").update(paramsToSign + apiSecret).digest("hex");
     form.append("api_key", apiKey);
     form.append("timestamp", String(timestamp2));
     form.append("signature", signature);
@@ -5368,6 +6057,10 @@ function publicBaseUrl() {
   const configured = process.env.MEDIA_PUBLIC_BASE_URL?.trim();
   return (configured || "/media").replace(/\/$/, "");
 }
+function publicOrigin() {
+  const configured = process.env.MEDIA_PUBLIC_ORIGIN?.trim();
+  return configured ? configured.replace(/\/$/, "") : "";
+}
 function getMediaStaticMount() {
   return { root: publicStorageRoot(), urlPrefix: publicBaseUrl() };
 }
@@ -5391,7 +6084,7 @@ async function saveMediaFile(input) {
   await writeFile(absolutePath, input.buffer);
   return {
     relativePath,
-    publicUrl: visibility === "public" ? `${publicBaseUrl()}/${relativePath}` : void 0,
+    publicUrl: visibility === "public" ? `${publicOrigin()}${publicBaseUrl()}/${relativePath}` : void 0,
     sizeBytes: input.buffer.byteLength
   };
 }
@@ -6482,7 +7175,100 @@ async function syncProductStockFromInventory(productId) {
   });
   return saved;
 }
-var InventoryValidationError;
+async function withInventoryLock(key, fn) {
+  const prior = inventoryLocks.get(key) ?? Promise.resolve();
+  let release = () => {
+  };
+  const next = new Promise((resolve2) => {
+    release = resolve2;
+  });
+  inventoryLocks.set(key, prior.then(() => next));
+  await prior;
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (inventoryLocks.get(key) === next) inventoryLocks.delete(key);
+  }
+}
+async function reserveInventoryQuantity(input) {
+  const key = inventoryRecordId(input.productId, input.variantId);
+  return withInventoryLock(key, async () => {
+    const existing = await getInventoryRecord(input.productId, input.variantId);
+    if (!existing) {
+      const product = await catalogStore2.getProduct(input.productId);
+      const seedQty = Math.max(0, Math.floor(product?.stock ?? 0));
+      if (input.quantity > seedQty) {
+        return { ok: false, available: seedQty };
+      }
+      const record2 = await ensureInventoryRecord({
+        productId: input.productId,
+        variantId: input.variantId,
+        quantity: seedQty,
+        reservedQuantity: input.quantity
+      });
+      await syncProductStockFromInventory(input.productId);
+      return { ok: true, record: record2 };
+    }
+    if (input.quantity > existing.availableQuantity) {
+      return { ok: false, available: existing.availableQuantity };
+    }
+    const record = await adjustInventory({
+      productId: input.productId,
+      variantId: input.variantId,
+      reservedQuantity: existing.reservedQuantity + input.quantity
+    });
+    await syncProductStockFromInventory(input.productId);
+    return { ok: true, record };
+  });
+}
+async function releaseInventoryQuantity(input) {
+  const key = inventoryRecordId(input.productId, input.variantId);
+  return withInventoryLock(key, async () => {
+    const existing = await getInventoryRecord(input.productId, input.variantId);
+    if (!existing) return null;
+    const record = await adjustInventory({
+      productId: input.productId,
+      variantId: input.variantId,
+      reservedQuantity: Math.max(0, existing.reservedQuantity - input.quantity)
+    });
+    await syncProductStockFromInventory(input.productId);
+    return record;
+  });
+}
+async function consumeInventoryQuantity(input) {
+  const key = inventoryRecordId(input.productId, input.variantId);
+  return withInventoryLock(key, async () => {
+    const existing = await getInventoryRecord(input.productId, input.variantId);
+    if (!existing) return null;
+    const nextQuantity = Math.max(0, existing.quantity - input.quantity);
+    const nextReserved = Math.max(0, existing.reservedQuantity - input.quantity);
+    const record = await adjustInventory({
+      productId: input.productId,
+      variantId: input.variantId,
+      quantity: nextQuantity,
+      reservedQuantity: Math.min(nextReserved, nextQuantity)
+    });
+    await syncProductStockFromInventory(input.productId);
+    return record;
+  });
+}
+async function restockInventoryQuantity(input) {
+  const key = inventoryRecordId(input.productId, input.variantId);
+  return withInventoryLock(key, async () => {
+    const existing = await getInventoryRecord(input.productId, input.variantId);
+    if (!existing) return null;
+    const record = await adjustInventory({
+      productId: input.productId,
+      variantId: input.variantId,
+      quantity: existing.quantity + input.quantity,
+      reservedQuantity: existing.reservedQuantity
+    });
+    await syncProductStockFromInventory(input.productId);
+    return record;
+  });
+}
+var InventoryValidationError, inventoryLocks;
 var init_inventoryStore = __esm({
   "server/catalog/inventoryStore.ts"() {
     init_catalogStore();
@@ -6494,6 +7280,7 @@ var init_inventoryStore = __esm({
         this.name = "InventoryValidationError";
       }
     };
+    inventoryLocks = /* @__PURE__ */ new Map();
   }
 });
 
@@ -7284,10 +8071,12 @@ async function ensurePlatformOrderConversation(order) {
 async function submitPlatformMessage(payload) {
   const conversationId = `conv_platform_${payload.buyerId}`;
   const existing = await getConversation(conversationId);
+  const direction = payload.direction || "inbound";
+  const senderId = payload.senderId || payload.buyerId;
   const conversation = {
     conversationId,
     platform: "platform",
-    senderName: payload.userName,
+    senderName: direction === "inbound" ? payload.userName : existing?.senderName || payload.buyerId,
     lastMessage: payload.body,
     assignedAgent: existing?.assignedAgent || "agent_farhan",
     status: "open",
@@ -7299,15 +8088,16 @@ async function submitPlatformMessage(payload) {
     platform: "platform",
     platformMessageId: `plat_${Date.now()}`,
     conversationId,
-    senderId: payload.buyerId,
+    senderId,
     senderName: payload.userName,
     content: { type: "text", body: `${prefix}${payload.body}`.trim() },
-    direction: "inbound",
+    direction,
     status: "delivered",
     assignedAgent: conversation.assignedAgent,
     conversationStatus: conversation.status,
     timestamp: nowIso14(),
-    bookingOffer: payload.bookingOffer
+    bookingOffer: payload.bookingOffer,
+    orderOffer: payload.orderOffer
   };
   await saveConversation(conversation);
   await saveMessage(message);
@@ -7925,16 +8715,16 @@ var init_systemNotify = __esm({
 });
 
 // server/commerce/commercePersistence.ts
-import { existsSync as existsSync10, mkdirSync as mkdirSync10, readFileSync as readFileSync10, writeFileSync as writeFileSync10 } from "node:fs";
-import { dirname as dirname10, join as join11 } from "node:path";
+import { existsSync as existsSync11, mkdirSync as mkdirSync11, readFileSync as readFileSync11, writeFileSync as writeFileSync11 } from "node:fs";
+import { dirname as dirname11, join as join12 } from "node:path";
 function commerceMemorySnapshotPath() {
   return process.env.COMMERCE_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH4;
 }
 function loadCommerceMemorySnapshot() {
   const path = commerceMemorySnapshotPath();
-  if (!existsSync10(path)) return null;
+  if (!existsSync11(path)) return null;
   try {
-    const parsed = JSON.parse(readFileSync10(path, "utf8"));
+    const parsed = JSON.parse(readFileSync11(path, "utf8"));
     if (!parsed || parsed.version !== 1) return null;
     return parsed;
   } catch (error2) {
@@ -7944,31 +8734,31 @@ function loadCommerceMemorySnapshot() {
 }
 function scheduleCommerceMemoryPersist(build) {
   pendingBuild2 = build;
-  if (persistTimer7) clearTimeout(persistTimer7);
-  persistTimer7 = setTimeout(() => {
+  if (persistTimer8) clearTimeout(persistTimer8);
+  persistTimer8 = setTimeout(() => {
     flushCommerceMemoryPersist();
   }, 250);
 }
 function flushCommerceMemoryPersist() {
-  if (persistTimer7) {
-    clearTimeout(persistTimer7);
-    persistTimer7 = null;
+  if (persistTimer8) {
+    clearTimeout(persistTimer8);
+    persistTimer8 = null;
   }
   if (!pendingBuild2) return;
   try {
     const snapshot = pendingBuild2();
     const path = commerceMemorySnapshotPath();
-    mkdirSync10(dirname10(path), { recursive: true });
-    writeFileSync10(path, JSON.stringify(snapshot), "utf8");
+    mkdirSync11(dirname11(path), { recursive: true });
+    writeFileSync11(path, JSON.stringify(snapshot), "utf8");
   } catch (error2) {
     console.error("[CommerceMemoryPersist] Failed to save snapshot:", error2);
   }
 }
-var DEFAULT_PATH4, persistTimer7, pendingBuild2;
+var DEFAULT_PATH4, persistTimer8, pendingBuild2;
 var init_commercePersistence = __esm({
   "server/commerce/commercePersistence.ts"() {
-    DEFAULT_PATH4 = join11(process.cwd(), ".data", "commerce-memory-snapshot.json");
-    persistTimer7 = null;
+    DEFAULT_PATH4 = join12(process.cwd(), ".data", "commerce-memory-snapshot.json");
+    persistTimer8 = null;
     pendingBuild2 = null;
   }
 });
@@ -8457,8 +9247,56 @@ function nowIso16() {
 function newId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
+function variantIsActive(v) {
+  if (v.status) return v.status === "active";
+  return v.enabled !== false;
+}
+async function resolveVariantPricing(productId, variantId, basePrice, baseOriginalPrice) {
+  const detail = await catalogStore2.getProductDetail(productId);
+  const v = detail?.productVariants?.find((x) => x.id === variantId);
+  if (!v) return null;
+  return {
+    variantId,
+    sku: v.sku || void 0,
+    unitPrice: typeof v.price === "number" && v.price >= 0 ? v.price : basePrice,
+    originalUnitPrice: typeof v.originalPrice === "number" && v.originalPrice > 0 ? v.originalPrice : baseOriginalPrice,
+    active: variantIsActive(v),
+    options: v.options,
+    images: Array.isArray(v.images) && v.images.length ? v.images : void 0
+  };
+}
+async function resolveAddonsForProduct(productId, requested) {
+  if (!Array.isArray(requested) || requested.length === 0) return [];
+  const detail = await catalogStore2.getProductDetail(productId);
+  const defs = detail?.addonItems ?? [];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const r of requested) {
+    const id = String(r?.id ?? "").trim();
+    if (!id) throw new CommerceError("Add-on id is required", 400);
+    if (seen.has(id)) throw new CommerceError(`Duplicate add-on "${id}"`, 400);
+    seen.add(id);
+    const def = defs.find((a) => a.id === id);
+    if (!def) throw new CommerceError("Add-on does not belong to this product", 400);
+    if (def.enabled === false) throw new CommerceError(`Add-on "${def.title}" is not available`, 400);
+    const maxQ = typeof def.maxQuantity === "number" && def.maxQuantity >= 1 ? Math.floor(def.maxQuantity) : 1;
+    const q = Math.max(1, Math.floor(Number(r?.quantity ?? 1) || 1));
+    if (q > maxQ) {
+      throw new CommerceError(`Add-on "${def.title}" allows at most ${maxQ} per order`, 400);
+    }
+    const unitPrice = Math.max(0, typeof def.price === "number" ? def.price : 0);
+    out.push({ id: def.id, title: def.title, unitPrice, quantity: q, lineTotal: unitPrice * q });
+  }
+  return out;
+}
+function sumAddonLines(addons) {
+  return (addons ?? []).reduce((s, a) => s + a.lineTotal, 0);
+}
 function computeCartTotals(cart) {
-  const subtotal = cart.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+  const subtotal = cart.items.reduce(
+    (sum, item) => sum + item.unitPrice * item.quantity + sumAddonLines(item.addons),
+    0
+  );
   const discountTotal = 0;
   const deliveryTotal = cart.items.length ? DEFAULT_DELIVERY : 0;
   const taxTotal = 0;
@@ -8515,8 +9353,14 @@ async function assertProductEligible(productId, variantId) {
     if (!variant) {
       throw new CommerceError("Variant does not belong to this product", 400);
     }
+    if (!variantIsActive(variant)) {
+      throw new CommerceError("Selected variant is not available for purchase", 400);
+    }
   }
   return { product, brand, sellerId };
+}
+function usesPhysicalInventory(product) {
+  return product.productType !== "service";
 }
 async function assertInventoryAvailable(productId, quantity, variantId) {
   let record = await getInventoryRecord(productId, variantId);
@@ -8556,15 +9400,45 @@ async function addCartItem(consumerId, input) {
       input.listingId,
       input.variantId
     );
-    await assertInventoryAvailable(input.listingId, qty2, input.variantId);
+    let unitPrice = product.price;
+    let originalUnitPrice = product.originalPrice;
+    let variantSku;
+    if (input.variantId) {
+      const rv = await resolveVariantPricing(
+        product.id,
+        input.variantId,
+        product.price,
+        product.originalPrice
+      );
+      if (!rv) throw new CommerceError("Variant does not belong to this product", 400);
+      if (!rv.active) throw new CommerceError("Selected variant is not available for purchase", 400);
+      unitPrice = rv.unitPrice;
+      originalUnitPrice = rv.originalUnitPrice;
+      variantSku = rv.sku;
+    }
+    const resolvedAddons = await resolveAddonsForProduct(product.id, input.addons);
+    const physical = usesPhysicalInventory(product);
+    if (physical) {
+      await assertInventoryAvailable(input.listingId, qty2, input.variantId);
+    }
     const existing = cart.items.find(
       (i) => i.listingType === "product" && i.listingId === product.id && (i.variantId || "") === (input.variantId || "")
     );
     if (existing) {
       const nextQty = existing.quantity + qty2;
-      await assertInventoryAvailable(product.id, nextQty, input.variantId);
+      if (physical) await assertInventoryAvailable(product.id, nextQty, input.variantId);
       existing.quantity = nextQty;
-      existing.unitPrice = product.price;
+      existing.unitPrice = unitPrice;
+      existing.originalUnitPrice = originalUnitPrice;
+      existing.variantSku = variantSku;
+      if (Array.isArray(input.addons)) existing.addons = resolvedAddons;
+      if (input.guideOfferRef?.guideId) {
+        existing.guideOfferRef = {
+          guideId: input.guideOfferRef.guideId,
+          productId: input.guideOfferRef.productId || product.id
+        };
+      }
+      if (typeof input.expectedUnitPrice === "number") existing.expectedUnitPrice = input.expectedUnitPrice;
       existing.updatedAt = nowIso16();
     } else {
       const item = {
@@ -8572,12 +9446,22 @@ async function addCartItem(consumerId, input) {
         listingType: "product",
         listingId: product.id,
         variantId: input.variantId,
+        variantSku,
         quantity: qty2,
         title: product.title,
         brandId: product.brandId,
         brandName: brand.name || product.brandName,
         sellerId,
-        unitPrice: product.price,
+        unitPrice,
+        originalUnitPrice,
+        addons: resolvedAddons.length ? resolvedAddons : void 0,
+        ...input.guideOfferRef?.guideId ? {
+          guideOfferRef: {
+            guideId: input.guideOfferRef.guideId,
+            productId: input.guideOfferRef.productId || product.id
+          }
+        } : {},
+        ...typeof input.expectedUnitPrice === "number" ? { expectedUnitPrice: input.expectedUnitPrice } : {},
         currency: "BDT",
         image: product.image,
         selectedOptions: input.selectedOptions,
@@ -8641,7 +9525,10 @@ async function updateCartItemQuantity(consumerId, itemId, quantity) {
     cart.items = cart.items.filter((i) => i.id !== itemId);
   } else {
     if (item.listingType === "product") {
-      await assertInventoryAvailable(item.listingId, qty2, item.variantId);
+      const product = await catalogStore2.getProduct(item.listingId);
+      if (!product || usesPhysicalInventory(product)) {
+        await assertInventoryAvailable(item.listingId, qty2, item.variantId);
+      }
     }
     item.quantity = qty2;
     item.updatedAt = nowIso16();
@@ -8649,6 +9536,21 @@ async function updateCartItemQuantity(consumerId, itemId, quantity) {
   cart.updatedAt = nowIso16();
   const saved = await commerceStore.upsertCart(cart);
   emitCart("CartUpdated", saved.id, consumerId, { cartId: saved.id, itemId, quantity: qty2 });
+  return { cart: saved, totals: computeCartTotals(saved) };
+}
+async function updateCartItemAddons(consumerId, itemId, addons) {
+  const cart = await getOrCreateCart(consumerId);
+  const item = cart.items.find((i) => i.id === itemId);
+  if (!item) throw new CommerceError("Cart item not found", 404);
+  if (item.listingType !== "product") {
+    throw new CommerceError("Add-ons apply to product cart items only", 400);
+  }
+  const resolved = await resolveAddonsForProduct(item.listingId, addons);
+  item.addons = resolved.length ? resolved : void 0;
+  item.updatedAt = nowIso16();
+  cart.updatedAt = nowIso16();
+  const saved = await commerceStore.upsertCart(cart);
+  emitCart("CartUpdated", saved.id, consumerId, { cartId: saved.id, itemId, addons: resolved.length });
   return { cart: saved, totals: computeCartTotals(saved) };
 }
 async function removeCartItem(consumerId, itemId) {
@@ -8674,7 +9576,36 @@ async function refreshCartPrices(cart) {
   for (const item of cart.items) {
     if (item.listingType === "product") {
       const product = await catalogStore2.getProduct(item.listingId);
-      if (product) item.unitPrice = product.price;
+      if (product) {
+        item.unitPrice = product.price;
+        item.originalUnitPrice = product.originalPrice;
+        if (item.variantId) {
+          const rv = await resolveVariantPricing(
+            product.id,
+            item.variantId,
+            product.price,
+            product.originalPrice
+          );
+          if (rv) {
+            item.unitPrice = rv.unitPrice;
+            item.originalUnitPrice = rv.originalUnitPrice;
+            item.variantSku = rv.sku;
+          }
+        }
+        if (item.addons?.length) {
+          const still = [];
+          for (const a of item.addons) {
+            try {
+              const [re] = await resolveAddonsForProduct(product.id, [
+                { id: a.id, quantity: a.quantity }
+              ]);
+              if (re) still.push(re);
+            } catch {
+            }
+          }
+          item.addons = still.length ? still : void 0;
+        }
+      }
     } else {
       const service = await getService(item.listingId);
       if (service) item.unitPrice = service.price;
@@ -8695,9 +9626,11 @@ var init_cartService = __esm({
     init_eventBus();
     init_commerceStore();
     CommerceError = class extends Error {
-      constructor(message, statusCode = 400) {
+      constructor(message, statusCode = 400, opts) {
         super(message);
         this.statusCode = statusCode;
+        this.code = opts?.code;
+        this.details = opts?.details;
         this.name = "CommerceError";
       }
     };
@@ -9326,16 +10259,16 @@ var init_catalogStore2 = __esm({
 });
 
 // server/messaging/conversations/conversationPersistence.ts
-import { existsSync as existsSync11, mkdirSync as mkdirSync11, readFileSync as readFileSync11, writeFileSync as writeFileSync11 } from "node:fs";
-import { dirname as dirname11, join as join12 } from "node:path";
+import { existsSync as existsSync12, mkdirSync as mkdirSync12, readFileSync as readFileSync12, writeFileSync as writeFileSync12 } from "node:fs";
+import { dirname as dirname12, join as join13 } from "node:path";
 function conversationMemorySnapshotPath() {
   return process.env.MESSAGING_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH5;
 }
 function loadConversationMemorySnapshot() {
   const path = conversationMemorySnapshotPath();
-  if (!existsSync11(path)) return null;
+  if (!existsSync12(path)) return null;
   try {
-    const parsed = JSON.parse(readFileSync11(path, "utf8"));
+    const parsed = JSON.parse(readFileSync12(path, "utf8"));
     if (!parsed || parsed.version !== 1) return null;
     return parsed;
   } catch (error2) {
@@ -9345,31 +10278,31 @@ function loadConversationMemorySnapshot() {
 }
 function scheduleConversationMemoryPersist(build) {
   pendingBuild3 = build;
-  if (persistTimer8) clearTimeout(persistTimer8);
-  persistTimer8 = setTimeout(() => {
+  if (persistTimer9) clearTimeout(persistTimer9);
+  persistTimer9 = setTimeout(() => {
     flushConversationMemoryPersist();
   }, 250);
 }
 function flushConversationMemoryPersist() {
-  if (persistTimer8) {
-    clearTimeout(persistTimer8);
-    persistTimer8 = null;
+  if (persistTimer9) {
+    clearTimeout(persistTimer9);
+    persistTimer9 = null;
   }
   if (!pendingBuild3) return;
   try {
     const snapshot = pendingBuild3();
     const path = conversationMemorySnapshotPath();
-    mkdirSync11(dirname11(path), { recursive: true });
-    writeFileSync11(path, JSON.stringify(snapshot), "utf8");
+    mkdirSync12(dirname12(path), { recursive: true });
+    writeFileSync12(path, JSON.stringify(snapshot), "utf8");
   } catch (error2) {
     console.error("[MessagingMemoryPersist] Failed to save snapshot:", error2);
   }
 }
-var DEFAULT_PATH5, persistTimer8, pendingBuild3;
+var DEFAULT_PATH5, persistTimer9, pendingBuild3;
 var init_conversationPersistence = __esm({
   "server/messaging/conversations/conversationPersistence.ts"() {
-    DEFAULT_PATH5 = join12(process.cwd(), ".data", "messaging-memory-snapshot.json");
-    persistTimer8 = null;
+    DEFAULT_PATH5 = join13(process.cwd(), ".data", "messaging-memory-snapshot.json");
+    persistTimer9 = null;
     pendingBuild3 = null;
   }
 });
@@ -9384,7 +10317,9 @@ function buildSnapshot5() {
     attachments: state8.attachments,
     socialInbox: state8.socialInbox,
     supportTickets: state8.supportTickets,
-    adminEntries: state8.adminEntries
+    adminEntries: state8.adminEntries,
+    supportNotes: state8.supportNotes,
+    supportFollowups: state8.supportFollowups
   };
 }
 function schedulePersist6() {
@@ -9409,6 +10344,8 @@ function ensureConversationMemoryHydrated() {
   state8.socialInbox = snapshot.socialInbox || [];
   state8.supportTickets = snapshot.supportTickets || [];
   state8.adminEntries = snapshot.adminEntries || [];
+  state8.supportNotes = snapshot.supportNotes || [];
+  state8.supportFollowups = snapshot.supportFollowups || [];
   console.log(
     `[MessagingMemoryPersist] Hydrated (${state8.conversations.length} conversations, ${state8.messages.length} messages).`
   );
@@ -9431,7 +10368,9 @@ var init_conversationMemoryBackend = __esm({
       attachments: [],
       socialInbox: [],
       supportTickets: [],
-      adminEntries: []
+      adminEntries: [],
+      supportNotes: [],
+      supportFollowups: []
     };
     hydrated6 = false;
     conversationMemoryBackend = {
@@ -9507,6 +10446,23 @@ var init_conversationMemoryBackend = __esm({
         ensureConversationMemoryHydrated();
         return conversationId ? state8.adminEntries.filter((e) => e.conversationId === conversationId) : [...state8.adminEntries];
       },
+      saveSupportNote: async (row) => {
+        ensureConversationMemoryHydrated();
+        return upsertById2(state8.supportNotes, row, (r) => r.id);
+      },
+      listSupportNotes: async (conversationId) => {
+        ensureConversationMemoryHydrated();
+        const rows = conversationId ? state8.supportNotes.filter((n) => n.conversationId === conversationId) : [...state8.supportNotes];
+        return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      },
+      saveSupportFollowup: async (row) => {
+        ensureConversationMemoryHydrated();
+        return upsertById2(state8.supportFollowups, row, (r) => r.id);
+      },
+      listSupportFollowups: async (conversationId) => {
+        ensureConversationMemoryHydrated();
+        return conversationId ? state8.supportFollowups.filter((f) => f.conversationId === conversationId) : [...state8.supportFollowups];
+      },
       /** Test helper — wipe in-memory state (does not delete snapshot file). */
       __resetForTests: () => {
         state8.conversations = [];
@@ -9515,6 +10471,8 @@ var init_conversationMemoryBackend = __esm({
         state8.socialInbox = [];
         state8.supportTickets = [];
         state8.adminEntries = [];
+        state8.supportNotes = [];
+        state8.supportFollowups = [];
         hydrated6 = true;
         schedulePersist6();
       }
@@ -9523,7 +10481,7 @@ var init_conversationMemoryBackend = __esm({
 });
 
 // server/messaging/conversations/conversationCollections.ts
-var MESSAGING_CONVERSATIONS, MESSAGING_MESSAGES, MESSAGING_ATTACHMENTS, MESSAGING_SOCIAL_INBOX, MESSAGING_SUPPORT_TICKETS, MESSAGING_ADMIN_ENTRIES;
+var MESSAGING_CONVERSATIONS, MESSAGING_MESSAGES, MESSAGING_ATTACHMENTS, MESSAGING_SOCIAL_INBOX, MESSAGING_SUPPORT_TICKETS, MESSAGING_ADMIN_ENTRIES, MESSAGING_SUPPORT_NOTES, MESSAGING_SUPPORT_FOLLOWUPS;
 var init_conversationCollections = __esm({
   "server/messaging/conversations/conversationCollections.ts"() {
     MESSAGING_CONVERSATIONS = "messaging_conversations";
@@ -9532,6 +10490,8 @@ var init_conversationCollections = __esm({
     MESSAGING_SOCIAL_INBOX = "messaging_social_inbox";
     MESSAGING_SUPPORT_TICKETS = "messaging_support_tickets";
     MESSAGING_ADMIN_ENTRIES = "messaging_admin_entries";
+    MESSAGING_SUPPORT_NOTES = "messaging_support_notes";
+    MESSAGING_SUPPORT_FOLLOWUPS = "messaging_support_followups";
   }
 });
 
@@ -9625,12 +10585,60 @@ var init_conversationFirestoreAdmin = __esm({
         const db3 = await requireAdminFirestore();
         const snap = await db3.collection(MESSAGING_ADMIN_ENTRIES).where("conversationId", "==", conversationId).get();
         return snap.docs.map((d) => d.data());
+      },
+      saveSupportNote: async (row) => {
+        await upsertDocumentById(MESSAGING_SUPPORT_NOTES, row.id, row);
+        return row;
+      },
+      listSupportNotes: async (conversationId) => {
+        if (!conversationId) return listCollection(MESSAGING_SUPPORT_NOTES);
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(MESSAGING_SUPPORT_NOTES).where("conversationId", "==", conversationId).get();
+        return snap.docs.map((d) => d.data()).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+      },
+      saveSupportFollowup: async (row) => {
+        await upsertDocumentById(MESSAGING_SUPPORT_FOLLOWUPS, row.id, row);
+        return row;
+      },
+      listSupportFollowups: async (conversationId) => {
+        if (!conversationId) return listCollection(MESSAGING_SUPPORT_FOLLOWUPS);
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(MESSAGING_SUPPORT_FOLLOWUPS).where("conversationId", "==", conversationId).get();
+        return snap.docs.map((d) => d.data());
       }
     };
   }
 });
 
 // server/messaging/conversations/conversationStore.ts
+var conversationStore_exports = {};
+__export(conversationStore_exports, {
+  assertMessagingPersistenceReady: () => assertMessagingPersistenceReady,
+  getAttachment: () => getAttachment,
+  getConversation: () => getConversation2,
+  getConversationByReconcileKey: () => getConversationByReconcileKey,
+  getMessage: () => getMessage,
+  getMessageByExternalId: () => getMessageByExternalId,
+  getMessagingPersistenceMode: () => getMessagingPersistenceMode,
+  getSupportTicket: () => getSupportTicket,
+  listAdminEntries: () => listAdminEntries,
+  listAttachmentsForMessage: () => listAttachmentsForMessage,
+  listConversations: () => listConversations2,
+  listMessages: () => listMessages2,
+  listSocialInbox: () => listSocialInbox,
+  listSupportFollowups: () => listSupportFollowups,
+  listSupportNotes: () => listSupportNotes,
+  listSupportTickets: () => listSupportTickets,
+  resolveConversationStore: () => resolveConversationStore,
+  saveAdminEntry: () => saveAdminEntry,
+  saveAttachment: () => saveAttachment,
+  saveConversation: () => saveConversation2,
+  saveMessage: () => saveMessage2,
+  saveSocialInbox: () => saveSocialInbox,
+  saveSupportFollowup: () => saveSupportFollowup,
+  saveSupportNote: () => saveSupportNote,
+  saveSupportTicket: () => saveSupportTicket
+});
 function isMessagingFirestoreRequested() {
   const raw = process.env.MESSAGING_USE_FIRESTORE?.trim().toLowerCase();
   if (raw === "true") return true;
@@ -9659,6 +10667,13 @@ async function requireBackend() {
   }
   return conversationMemoryBackend;
 }
+function resolveConversationStore() {
+  assertMessagingPersistenceReady();
+  if (useAdminFirestore5) {
+    return conversationMemoryBackend;
+  }
+  return conversationMemoryBackend;
+}
 async function listConversations2() {
   return (await requireBackend()).listConversations();
 }
@@ -9674,6 +10689,9 @@ async function saveConversation2(row) {
 async function listMessages2(conversationId) {
   return (await requireBackend()).listMessages(conversationId);
 }
+async function getMessage(id) {
+  return (await requireBackend()).getMessage(id);
+}
 async function getMessageByExternalId(externalMessageId) {
   return (await requireBackend()).getMessageByExternalId(externalMessageId);
 }
@@ -9685,6 +10703,9 @@ async function saveAttachment(row) {
 }
 async function getAttachment(id) {
   return (await requireBackend()).getAttachment(id);
+}
+async function listAttachmentsForMessage(messageId) {
+  return (await requireBackend()).listAttachmentsForMessage(messageId);
 }
 async function saveSocialInbox(row) {
   return (await requireBackend()).saveSocialInbox(row);
@@ -9706,6 +10727,18 @@ async function saveAdminEntry(row) {
 }
 async function listAdminEntries(conversationId) {
   return (await requireBackend()).listAdminEntries(conversationId);
+}
+async function saveSupportNote(row) {
+  return (await requireBackend()).saveSupportNote(row);
+}
+async function listSupportNotes(conversationId) {
+  return (await requireBackend()).listSupportNotes(conversationId);
+}
+async function saveSupportFollowup(row) {
+  return (await requireBackend()).saveSupportFollowup(row);
+}
+async function listSupportFollowups(conversationId) {
+  return (await requireBackend()).listSupportFollowups(conversationId);
 }
 var firestoreRequested2, credentialsOk2, useAdminFirestore5;
 var init_conversationStore = __esm({
@@ -9735,9 +10768,10 @@ __export(types_exports, {
   CONVERSATION_CONTEXT_TYPES: () => CONVERSATION_CONTEXT_TYPES,
   CONVERSATION_STATUSES: () => CONVERSATION_STATUSES,
   MESSAGE_TYPES: () => MESSAGE_TYPES,
+  SUPPORT_DEPARTMENTS: () => SUPPORT_DEPARTMENTS,
   SUPPORT_TICKET_STATUSES: () => SUPPORT_TICKET_STATUSES
 });
-var CONVERSATION_CONTEXT_TYPES, CONVERSATION_STATUSES, MESSAGE_TYPES, SUPPORT_TICKET_STATUSES, ACTIVE_SUPPORT_TICKET_STATUSES, CLOSED_SUPPORT_TICKET_STATUSES;
+var CONVERSATION_CONTEXT_TYPES, CONVERSATION_STATUSES, MESSAGE_TYPES, SUPPORT_TICKET_STATUSES, ACTIVE_SUPPORT_TICKET_STATUSES, CLOSED_SUPPORT_TICKET_STATUSES, SUPPORT_DEPARTMENTS;
 var init_types2 = __esm({
   "server/messaging/conversations/types.ts"() {
     CONVERSATION_CONTEXT_TYPES = {
@@ -9767,17 +10801,30 @@ var init_types2 = __esm({
     SUPPORT_TICKET_STATUSES = {
       OPEN: "open",
       IN_PROGRESS: "in_progress",
+      /** Admin is waiting on information from the user. */
+      PENDING: "pending",
+      /** Admin scheduled a follow-up; the sweep flips this back to actionable at dueAt. */
+      NEED_FOLLOWUP: "need_followup",
       RESOLVED: "resolved",
       CLOSED: "closed"
     };
     ACTIVE_SUPPORT_TICKET_STATUSES = /* @__PURE__ */ new Set([
       SUPPORT_TICKET_STATUSES.OPEN,
-      SUPPORT_TICKET_STATUSES.IN_PROGRESS
+      SUPPORT_TICKET_STATUSES.IN_PROGRESS,
+      SUPPORT_TICKET_STATUSES.PENDING,
+      SUPPORT_TICKET_STATUSES.NEED_FOLLOWUP
     ]);
     CLOSED_SUPPORT_TICKET_STATUSES = /* @__PURE__ */ new Set([
       SUPPORT_TICKET_STATUSES.RESOLVED,
       SUPPORT_TICKET_STATUSES.CLOSED
     ]);
+    SUPPORT_DEPARTMENTS = [
+      "general_support",
+      "seller_operations",
+      "payments",
+      "creator_support",
+      "trust_safety"
+    ];
   }
 });
 
@@ -9846,7 +10893,26 @@ function resolveSenderRole(role) {
   if (role === ROLES.SELLER || role === ROLES.VERIFIED_SELLER || role?.includes("seller")) {
     return role === "seller_staff" ? "seller_staff" : "seller";
   }
+  if (role === ROLES.CREATOR) return "creator";
   return "consumer";
+}
+function resolveSupportAudience(role) {
+  const sr = resolveSenderRole(role);
+  if (sr === "seller" || sr === "seller_staff") return "seller";
+  if (sr === "creator") return "creator";
+  return "consumer";
+}
+function adminBlanketReadEnabled() {
+  return String(process.env.MESSAGING_ADMIN_BLANKET_READ || "").trim().toLowerCase() === "true";
+}
+async function adminHasEnteredConversation(conversationId, adminId) {
+  try {
+    const { listAdminEntries: listAdminEntries2 } = await Promise.resolve().then(() => (init_conversationStore(), conversationStore_exports));
+    const entries = await listAdminEntries2(conversationId);
+    return entries.some((e) => e.adminId === adminId);
+  } catch {
+    return false;
+  }
 }
 function assertAllowedParticipantPair(a, b) {
   const pair = /* @__PURE__ */ new Set([a, b]);
@@ -9873,7 +10939,16 @@ function consumerInitiated(conv) {
 }
 async function assertCanReadConversation(conv, actor) {
   if (!actor.userId) throw new CommerceError("Authentication required", 401);
-  if (isPlatformAdminRole(actor.role) || isAdminEnterRole(actor.role)) return;
+  const isStaff4 = isPlatformAdminRole(actor.role) || isAdminEnterRole(actor.role);
+  if (isStaff4) {
+    if (adminBlanketReadEnabled()) return;
+    if (ADMIN_AUTO_READ_CONTEXTS.has(conv.contextType)) return;
+    if (await adminHasEnteredConversation(conv.id, actor.userId)) return;
+    throw new CommerceError(
+      "Private commerce conversation \u2014 enter the conversation (dispute/investigation) to read it",
+      403
+    );
+  }
   if (conv.consumerId === actor.userId) return;
   if (conv.sellerId === actor.userId) return;
   if (conv.participants.some((p) => p.userId === actor.userId)) return;
@@ -9903,6 +10978,9 @@ async function assertCanSendMessage(conv, actor) {
     }
     return senderRole;
   }
+  if (senderRole === "creator") {
+    throw new CommerceError("Creators can only message Choosify Support in V1", 403);
+  }
   const owns = conv.sellerId === actor.userId || await sellerOwnsBrand(actor.userId, conv.brandId);
   if (!owns) {
     throw new CommerceError("Not authorized for this Brand conversation", 403);
@@ -9922,7 +11000,7 @@ function assertNotForbiddenDmCreate(opts) {
     throw new CommerceError("Consumer \u2194 Consumer messaging is forbidden", 403);
   }
 }
-var ADMIN_ENTER_ROLES;
+var ADMIN_ENTER_ROLES, ADMIN_AUTO_READ_CONTEXTS;
 var init_conversationPermissions = __esm({
   "server/messaging/conversations/conversationPermissions.ts"() {
     init_brandOwnership();
@@ -9934,6 +11012,10 @@ var init_conversationPermissions = __esm({
       ROLES.ADMIN,
       ROLES.MODERATOR,
       ROLES.SUPPORT_AGENT
+    ]);
+    ADMIN_AUTO_READ_CONTEXTS = /* @__PURE__ */ new Set([
+      CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
+      CONVERSATION_CONTEXT_TYPES.EXTERNAL_SOCIAL
     ]);
   }
 });
@@ -9999,8 +11081,10 @@ __export(conversationService_exports, {
   ACTIVE_SUPPORT_TICKET_STATUSES: () => ACTIVE_SUPPORT_TICKET_STATUSES,
   CLOSED_SUPPORT_TICKET_STATUSES: () => CLOSED_SUPPORT_TICKET_STATUSES,
   activeSupportReconcileKey: () => activeSupportReconcileKey,
+  addSupportNote: () => addSupportNote,
   applyOrderLifecycleToConversation: () => applyOrderLifecycleToConversation,
   bookingReconcileKey: () => bookingReconcileKey,
+  cancelSupportFollowup: () => cancelSupportFollowup,
   claimReconcileKey: () => claimReconcileKey,
   closedSupportReconcileKey: () => closedSupportReconcileKey,
   connectSocialInbox: () => connectSocialInbox,
@@ -10024,21 +11108,72 @@ __export(conversationService_exports, {
   inquiryReconcileKey: () => inquiryReconcileKey,
   isActiveSupportConversation: () => isActiveSupportConversation,
   listAdminEntries: () => listAdminEntries,
+  listAdminSupportInbox: () => listAdminSupportInbox,
   listConversationsForActor: () => listConversationsForActor,
   listMessagesForActor: () => listMessagesForActor,
   listSocialInbox: () => listSocialInbox,
+  listSupportFollowupsForActor: () => listSupportFollowupsForActor,
+  listSupportNotesForActor: () => listSupportNotesForActor,
   listSupportTickets: () => listSupportTickets,
   mapOrderSourceChannel: () => mapOrderSourceChannel,
   markClosed: () => markClosed,
+  markConversationRead: () => markConversationRead,
+  openAdminSupportConversation: () => openAdminSupportConversation,
   orderReconcileKey: () => orderReconcileKey,
   reconcileMissingOrderConversations: () => reconcileMissingOrderConversations,
+  resolveSupportTargetUser: () => resolveSupportTargetUser,
   resolveSupportTicket: () => resolveSupportTicket,
   respondCounterOffer: () => respondCounterOffer,
+  scheduleSupportFollowup: () => scheduleSupportFollowup,
   searchConversationsForActor: () => searchConversationsForActor,
   sendMessage: () => sendMessage,
-  supportReconcileKey: () => supportReconcileKey
+  supportReconcileKey: () => supportReconcileKey,
+  sweepDueFollowups: () => sweepDueFollowups,
+  toPublicSupportTicket: () => toPublicSupportTicket,
+  updateSupportTicketCrm: () => updateSupportTicketCrm
 });
 import { randomUUID as randomUUID10 } from "node:crypto";
+async function resolveSupportTargetUser(targetUserId) {
+  const id = String(targetUserId || "").trim();
+  if (!id) return null;
+  try {
+    const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
+    const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+    const { eq: eq16 } = await import("drizzle-orm");
+    const rows = await db3.select({
+      id: users2.id,
+      role: users2.role,
+      displayName: users2.displayName,
+      choosifyUserId: users2.choosifyUserId,
+      avatarUrl: users2.avatarUrl,
+      email: users2.email,
+      emailVerified: users2.emailVerified,
+      createdAt: users2.createdAt
+    }).from(users2).where(eq16(users2.id, id)).limit(1);
+    const u = rows[0];
+    if (!u) return null;
+    const senderRole = resolveSenderRole(u.role);
+    if (senderRole === "admin" || senderRole === "system") return null;
+    return {
+      id: u.id,
+      role: u.role,
+      senderRole,
+      audience: resolveSupportAudience(u.role),
+      displayName: u.displayName || "User",
+      choosifyUserId: u.choosifyUserId || void 0,
+      avatarUrl: u.avatarUrl || void 0,
+      email: u.email || void 0,
+      emailVerified: Boolean(u.emailVerified),
+      memberSince: u.createdAt ? new Date(u.createdAt).toISOString() : void 0
+    };
+  } catch (error2) {
+    Logger.warn("resolveSupportTargetUser failed", {
+      targetUserId: id,
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+    return null;
+  }
+}
 function nowIso18() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
@@ -10359,12 +11494,19 @@ async function sendMessage(input) {
   const conv = await getConversation2(input.conversationId);
   if (!conv) throw new CommerceError("Conversation not found", 404);
   const senderRole = await assertCanSendMessage(conv, input.actor);
-  if (senderRole === "admin" && input.requireAdminEntry !== false) {
+  const supportContext = conv.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET;
+  if (senderRole === "admin" && input.requireAdminEntry !== false && !supportContext) {
     const entries = await listAdminEntries(conv.id);
     const entered = entries.some((e) => e.adminId === input.actor.userId);
     if (!entered) {
       throw new CommerceError("Admin must enter the conversation before messaging", 403);
     }
+  }
+  if (senderRole === "admin" && supportContext) {
+    Logger.audit("messaging.support_staff_reply", {
+      conversationId: conv.id,
+      adminId: input.actor.userId
+    });
   }
   void input.clientSenderId;
   const body = String(input.body || "").trim();
@@ -10400,6 +11542,38 @@ async function sendMessage(input) {
         messageId: message.id
       });
     }
+  }
+  const isSupport2 = conv.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET;
+  const recipientIds = Array.from(
+    new Set(
+      (conv.participants || []).map((p) => p.userId).filter((uid) => Boolean(uid) && uid !== input.actor.userId)
+    )
+  );
+  for (const recipientId of recipientIds) {
+    try {
+      await notifyUser(recipientId, {
+        type: COMMUNICATION_TYPES.NOTIFICATION,
+        category: isSupport2 ? "system" : senderRole === "seller" ? "buyer" : "seller",
+        title: isSupport2 ? "Choosify Support replied" : "New message",
+        summary: body ? body.slice(0, 140) : "Sent an attachment.",
+        actionUrl: isSupport2 ? "/messages" : "/messages",
+        metadata: { conversationId: conv.id, messageId: message.id }
+      });
+    } catch (err) {
+      Logger.warn("sendMessage: notify recipient failed", {
+        conversationId: conv.id,
+        recipientId,
+        error: err instanceof Error ? err.message : String(err)
+      });
+    }
+  }
+  if (isSupport2 && senderRole !== "admin" && senderRole !== "system") {
+    await notifySupportStaffOfActivity(
+      conv,
+      `New ${conv.metadata?.audience || "user"} support reply`,
+      body
+    );
+    await onSupportUserReply(conv.id);
   }
   const refreshed = await getConversation2(conv.id) || conv;
   return { conversation: refreshed, message };
@@ -10668,6 +11842,160 @@ async function enterConversationAsAdmin(input) {
   });
   return { conversation: conv, entryId: entry.id };
 }
+async function openAdminSupportConversation(input) {
+  if (!input.adminActor?.userId) throw new CommerceError("Authentication required", 401);
+  if (!isAdminEnterRole(input.adminActor.role)) {
+    throw new CommerceError("Only Choosify staff may start a support conversation", 403);
+  }
+  const target = await resolveSupportTargetUser(input.targetUserId);
+  if (!target) throw new CommerceError("Target user not found", 404);
+  if (target.id === input.adminActor.userId) {
+    throw new CommerceError("Cannot start a support conversation with yourself", 400);
+  }
+  const body = input.body ? String(input.body).trim() : "";
+  const existing = await findActiveSupportConversationForUser(target.id);
+  let conversation;
+  let ticket;
+  let created2 = false;
+  if (existing) {
+    conversation = existing.conversation;
+    ticket = existing.ticket;
+    if (!ticket.audience) {
+      ticket = await saveSupportTicket({ ...ticket, audience: target.audience, updatedAt: nowIso18() });
+    }
+    if (conversation.metadata?.audience !== target.audience) {
+      conversation = await saveConversation2({
+        ...conversation,
+        metadata: { ...conversation.metadata, audience: target.audience },
+        updatedAt: conversation.updatedAt
+      });
+    }
+  } else {
+    const now = nowIso18();
+    const key = activeSupportReconcileKey(target.id);
+    const raced = await getConversationByReconcileKey(key);
+    if (raced && raced.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET) {
+      conversation = raced;
+      const tickets = await listSupportTickets();
+      ticket = tickets.find((t) => t.conversationId === raced.id && t.openerId === target.id) || await saveSupportTicket({
+        id: newId2("ticket"),
+        conversationId: raced.id,
+        openerId: target.id,
+        audience: target.audience,
+        subject: input.subject?.trim() || "Choosify Support",
+        status: SUPPORT_TICKET_STATUSES.OPEN,
+        createdAt: now,
+        updatedAt: now
+      });
+    } else {
+      const subject = input.subject?.trim() || "Message from Choosify";
+      conversation = await saveConversation2({
+        id: newId2("conv"),
+        contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
+        status: CONVERSATION_STATUSES.ACTIVE,
+        consumerId: target.id,
+        sellerId: "platform_support",
+        brandId: "platform_support",
+        sourceChannel: "platform",
+        participants: [{ userId: target.id, role: target.senderRole }],
+        createdAt: now,
+        updatedAt: now,
+        reconcileKey: key,
+        metadata: {
+          supportTicket: true,
+          subject,
+          openerId: target.id,
+          audience: target.audience,
+          initiatedByAdminId: input.adminActor.userId
+        }
+      });
+      ticket = await saveSupportTicket({
+        id: newId2("ticket"),
+        conversationId: conversation.id,
+        openerId: target.id,
+        audience: target.audience,
+        initiatedByAdminId: input.adminActor.userId,
+        subject,
+        status: SUPPORT_TICKET_STATUSES.OPEN,
+        createdAt: now,
+        updatedAt: now
+      });
+      created2 = true;
+      emitMessaging("ConversationCreated", conversation.id, input.adminActor.userId, {
+        conversationId: conversation.id,
+        supportTicketId: ticket.id,
+        audience: target.audience,
+        initiatedByAdminId: input.adminActor.userId,
+        contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET
+      });
+    }
+  }
+  await saveAdminEntry({
+    id: newId2("admin_entry"),
+    conversationId: conversation.id,
+    adminId: input.adminActor.userId,
+    reason: "admin_initiated_support",
+    createdAt: nowIso18()
+  });
+  Logger.audit("messaging.admin_initiated_support", {
+    conversationId: conversation.id,
+    adminId: input.adminActor.userId,
+    targetUserId: target.id,
+    targetRole: target.senderRole,
+    created: created2
+  });
+  let message = null;
+  if (body) {
+    message = await persistMessageInternal({
+      conversation,
+      senderId: input.adminActor.userId,
+      senderRole: "admin",
+      body,
+      messageType: MESSAGE_TYPES.TEXT
+    });
+    try {
+      await notifyUser(target.id, {
+        type: COMMUNICATION_TYPES.NOTIFICATION,
+        category: "system",
+        title: "Message from Choosify Support",
+        summary: body.slice(0, 140),
+        actionUrl: "/messages",
+        metadata: { conversationId: conversation.id, messageId: message.id }
+      });
+    } catch (err) {
+      Logger.warn("openAdminSupportConversation: notify target failed", {
+        conversationId: conversation.id,
+        error: err instanceof Error ? err.message : String(err)
+      });
+    }
+  }
+  const refreshed = await getConversation2(conversation.id) || conversation;
+  return { conversation: refreshed, ticket, message, created: created2, target };
+}
+async function markConversationRead(input) {
+  if (!input.actor?.userId) throw new CommerceError("Authentication required", 401);
+  const conv = await getConversation2(input.conversationId);
+  if (!conv) throw new CommerceError("Conversation not found", 404);
+  await assertCanReadConversation(conv, input.actor);
+  const messages = await listMessages2(conv.id);
+  let marked = 0;
+  for (const msg of messages) {
+    if (msg.senderId === input.actor.userId) continue;
+    const readBy = Array.isArray(msg.readBy) ? msg.readBy : [];
+    if (readBy.includes(input.actor.userId)) continue;
+    await saveMessage2({ ...msg, readBy: [...readBy, input.actor.userId] });
+    marked += 1;
+  }
+  return { conversationId: conv.id, marked };
+}
+function toPublicSupportTicket(ticket) {
+  const { priority, assigneeId, department, reopenedAt, ...pub } = ticket;
+  void priority;
+  void assigneeId;
+  void department;
+  void reopenedAt;
+  return pub;
+}
 async function findActiveSupportConversationForUser(userId) {
   if (!userId) return null;
   const byKey = await getConversationByReconcileKey(activeSupportReconcileKey(userId));
@@ -10675,7 +12003,7 @@ async function findActiveSupportConversationForUser(userId) {
     const tickets2 = await listSupportTickets();
     const ticket = tickets2.find((t) => t.conversationId === byKey.id && t.openerId === userId) || null;
     if (ticket && isActiveSupportConversation(ticket, byKey)) {
-      return { ticket, conversation: byKey };
+      return { ticket: toPublicSupportTicket(ticket), conversation: byKey };
     }
   }
   const tickets = await listSupportTickets();
@@ -10683,7 +12011,7 @@ async function findActiveSupportConversationForUser(userId) {
   for (const ticket of mine) {
     const conv = await getConversation2(ticket.conversationId);
     if (conv && isActiveSupportConversation(ticket, conv)) {
-      return { ticket, conversation: conv };
+      return { ticket: toPublicSupportTicket(ticket), conversation: conv };
     }
   }
   return null;
@@ -10729,9 +12057,11 @@ async function createSupportTicket(input) {
     const ticket2 = tickets.find((t) => t.conversationId === racedKey.id && t.openerId === input.actor.userId);
     if (ticket2 && isActiveSupportConversation(ticket2, racedKey)) {
       const messages = await listMessages2(racedKey.id);
-      return { ticket: ticket2, conversation: racedKey, message: messages[0] };
+      return { ticket: toPublicSupportTicket(ticket2), conversation: racedKey, message: messages[0] };
     }
   }
+  const openerSenderRole = resolveSenderRole(input.actor.role);
+  const audience = resolveSupportAudience(input.actor.role);
   const conversation = {
     id: newId2("conv"),
     contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
@@ -10740,19 +12070,18 @@ async function createSupportTicket(input) {
     sellerId: "platform_support",
     brandId: "platform_support",
     sourceChannel: "platform",
-    participants: [
-      { userId: input.actor.userId, role: resolveSenderRole(input.actor.role) }
-    ],
+    participants: [{ userId: input.actor.userId, role: openerSenderRole }],
     createdAt: now,
     updatedAt: now,
     reconcileKey: key,
-    metadata: { supportTicket: true, subject, openerId: input.actor.userId }
+    metadata: { supportTicket: true, subject, openerId: input.actor.userId, audience }
   };
   const savedConv = await saveConversation2(conversation);
   const ticket = await saveSupportTicket({
     id: ticketId,
     conversationId: savedConv.id,
     openerId: input.actor.userId,
+    audience,
     subject,
     status: SUPPORT_TICKET_STATUSES.OPEN,
     createdAt: now,
@@ -10761,16 +12090,35 @@ async function createSupportTicket(input) {
   const message = await persistMessageInternal({
     conversation: savedConv,
     senderId: input.actor.userId,
-    senderRole: resolveSenderRole(input.actor.role),
+    senderRole: openerSenderRole,
     body,
     messageType: MESSAGE_TYPES.TEXT
   });
   emitMessaging("ConversationCreated", savedConv.id, input.actor.userId, {
     conversationId: savedConv.id,
     supportTicketId: ticket.id,
+    audience,
     contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET
   });
-  return { ticket, conversation: savedConv, message };
+  await notifySupportStaffOfActivity(savedConv, `New ${audience} support request`, body);
+  return { ticket: toPublicSupportTicket(ticket), conversation: savedConv, message };
+}
+async function notifySupportStaffOfActivity(conv, title, preview) {
+  try {
+    await notifyRoles([...STAFF_SUPPORT_ROLES], {
+      type: COMMUNICATION_TYPES.NOTIFICATION,
+      category: "system",
+      title,
+      summary: preview ? preview.slice(0, 140) : "Open the support inbox.",
+      actionUrl: `/admin/messages?c=${conv.id}`,
+      metadata: { conversationId: conv.id, supportAudience: conv.metadata?.audience }
+    });
+  } catch (err) {
+    Logger.warn("notifySupportStaffOfActivity failed", {
+      conversationId: conv.id,
+      error: err instanceof Error ? err.message : String(err)
+    });
+  }
 }
 async function resolveSupportTicket(input) {
   if (!input.actor?.userId) throw new CommerceError("Authentication required", 401);
@@ -10805,18 +12153,240 @@ async function resolveSupportTicket(input) {
   });
   return { ticket: savedTicket, conversation: closedConv };
 }
+function assertSupportStaff(actor) {
+  if (!actor?.userId) throw new CommerceError("Authentication required", 401);
+  if (!isAdminEnterRole(actor.role)) throw new CommerceError("Choosify staff only", 403);
+}
+async function findTicketByConversation(conversationId) {
+  const t = (await listSupportTickets()).find((x) => x.conversationId === conversationId);
+  if (!t) throw new CommerceError("Support ticket not found", 404);
+  return t;
+}
+async function updateSupportTicketCrm(input) {
+  assertSupportStaff(input.actor);
+  const ticket = await findTicketByConversation(input.conversationId);
+  const now = nowIso18();
+  const next = { ...ticket, updatedAt: now };
+  if (input.patch.status && input.patch.status !== ticket.status) {
+    const allowed = Object.values(SUPPORT_TICKET_STATUSES);
+    if (!allowed.includes(input.patch.status)) {
+      throw new CommerceError(`Invalid status ${input.patch.status}`, 400);
+    }
+    next.status = input.patch.status;
+    if ((ticket.status === SUPPORT_TICKET_STATUSES.RESOLVED || ticket.status === SUPPORT_TICKET_STATUSES.CLOSED) && input.patch.status === SUPPORT_TICKET_STATUSES.OPEN) {
+      next.reopenedAt = now;
+    }
+  }
+  if (input.patch.priority) {
+    const pr = ["low", "medium", "high", "urgent"];
+    if (!pr.includes(input.patch.priority)) throw new CommerceError("Invalid priority", 400);
+    next.priority = input.patch.priority;
+  }
+  if (input.patch.assigneeId !== void 0) {
+    if (input.patch.assigneeId) {
+      const role = await resolveStaffRole(input.patch.assigneeId);
+      if (!role || !isAdminEnterRole(role)) {
+        throw new CommerceError("Assignee is not a Choosify staff account", 400);
+      }
+      next.assigneeId = input.patch.assigneeId;
+    } else {
+      next.assigneeId = void 0;
+    }
+  }
+  if (input.patch.department !== void 0) {
+    next.department = input.patch.department || void 0;
+  }
+  const saved = await saveSupportTicket(next);
+  Logger.audit("messaging.support_crm_update", {
+    conversationId: input.conversationId,
+    ticketId: saved.id,
+    adminId: input.actor.userId,
+    patch: input.patch
+  });
+  return saved;
+}
+async function resolveStaffRole(userId) {
+  try {
+    const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
+    const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+    const { eq: eq16 } = await import("drizzle-orm");
+    const rows = await db3.select({ role: users2.role }).from(users2).where(eq16(users2.id, userId)).limit(1);
+    return rows[0]?.role || null;
+  } catch {
+    return null;
+  }
+}
+async function addSupportNote(input) {
+  assertSupportStaff(input.actor);
+  const body = String(input.body || "").trim();
+  if (!body) throw new CommerceError("Note body is required", 400);
+  const ticket = await findTicketByConversation(input.conversationId);
+  const staff = await resolveStaffDisplay(input.actor.userId);
+  const note = {
+    id: newId2("snote"),
+    conversationId: input.conversationId,
+    ticketId: ticket.id,
+    authorId: input.actor.userId,
+    authorName: staff,
+    body,
+    createdAt: nowIso18()
+  };
+  const saved = await saveSupportNote(note);
+  Logger.audit("messaging.support_note_added", {
+    conversationId: input.conversationId,
+    noteId: saved.id,
+    adminId: input.actor.userId
+  });
+  return saved;
+}
+async function listSupportNotesForActor(actor, conversationId) {
+  assertSupportStaff(actor);
+  return listSupportNotes(conversationId);
+}
+async function resolveStaffDisplay(userId) {
+  try {
+    const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
+    const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+    const { eq: eq16 } = await import("drizzle-orm");
+    const rows = await db3.select({ displayName: users2.displayName, email: users2.email }).from(users2).where(eq16(users2.id, userId)).limit(1);
+    return rows[0]?.displayName || rows[0]?.email || "Choosify staff";
+  } catch {
+    return "Choosify staff";
+  }
+}
+async function scheduleSupportFollowup(input) {
+  assertSupportStaff(input.actor);
+  const due = Date.parse(input.dueAt);
+  if (Number.isNaN(due)) throw new CommerceError("dueAt must be a valid ISO date", 400);
+  const ticket = await findTicketByConversation(input.conversationId);
+  for (const f of await listSupportFollowups(input.conversationId)) {
+    if (f.status === "scheduled") {
+      await saveSupportFollowup({ ...f, status: "cancelled", cancelledAt: nowIso18(), cancelReason: "manual" });
+    }
+  }
+  const followup = {
+    id: newId2("sfu"),
+    conversationId: input.conversationId,
+    ticketId: ticket.id,
+    createdBy: input.actor.userId,
+    createdAt: nowIso18(),
+    dueAt: new Date(due).toISOString(),
+    status: "scheduled"
+  };
+  const saved = await saveSupportFollowup(followup);
+  await saveSupportTicket({
+    ...ticket,
+    status: SUPPORT_TICKET_STATUSES.NEED_FOLLOWUP,
+    updatedAt: nowIso18()
+  });
+  Logger.audit("messaging.support_followup_scheduled", {
+    conversationId: input.conversationId,
+    followupId: saved.id,
+    dueAt: saved.dueAt,
+    adminId: input.actor.userId
+  });
+  return saved;
+}
+async function listSupportFollowupsForActor(actor, conversationId) {
+  assertSupportStaff(actor);
+  return listSupportFollowups(conversationId);
+}
+async function cancelSupportFollowup(input) {
+  assertSupportStaff(input.actor);
+  const rows = await listSupportFollowups(input.conversationId);
+  const f = rows.find((x) => x.id === input.followupId);
+  if (!f) throw new CommerceError("Follow-up not found", 404);
+  if (f.status !== "scheduled") return f;
+  return saveSupportFollowup({ ...f, status: "cancelled", cancelledAt: nowIso18(), cancelReason: "manual" });
+}
+async function sweepDueFollowups() {
+  const now = Date.now();
+  const all = await listSupportFollowups();
+  let fired = 0;
+  for (const f of all) {
+    if (f.status !== "scheduled") continue;
+    if (Date.parse(f.dueAt) > now) continue;
+    await saveSupportFollowup({ ...f, status: "fired", firedAt: nowIso18() });
+    fired += 1;
+    try {
+      const ticket = (await listSupportTickets()).find((t) => t.id === f.ticketId);
+      if (ticket && !CLOSED_SUPPORT_TICKET_STATUSES.has(ticket.status)) {
+        await saveSupportTicket({
+          ...ticket,
+          status: SUPPORT_TICKET_STATUSES.NEED_FOLLOWUP,
+          updatedAt: nowIso18()
+        });
+      }
+      const conv = await getConversation2(f.conversationId);
+      if (conv) {
+        await notifyRoles([...STAFF_SUPPORT_ROLES], {
+          type: COMMUNICATION_TYPES.REMINDER,
+          category: "system",
+          title: "Support follow-up due",
+          summary: "A scheduled support follow-up is now due.",
+          actionUrl: `/admin/messages?c=${f.conversationId}`,
+          metadata: { conversationId: f.conversationId, followupId: f.id }
+        }).catch(() => void 0);
+      }
+    } catch (err) {
+      Logger.warn("sweepDueFollowups post-fire step failed", {
+        followupId: f.id,
+        error: err instanceof Error ? err.message : String(err)
+      });
+    }
+  }
+  return fired;
+}
+async function onSupportUserReply(conversationId) {
+  try {
+    const ticket = (await listSupportTickets()).find((t) => t.conversationId === conversationId);
+    if (!ticket) return;
+    const now = nowIso18();
+    for (const f of await listSupportFollowups(conversationId)) {
+      if (f.status === "scheduled") {
+        await saveSupportFollowup({ ...f, status: "cancelled", cancelledAt: now, cancelReason: "reply" });
+      }
+    }
+    if (ticket.status === SUPPORT_TICKET_STATUSES.RESOLVED || ticket.status === SUPPORT_TICKET_STATUSES.CLOSED) {
+      await saveSupportTicket({
+        ...ticket,
+        status: SUPPORT_TICKET_STATUSES.OPEN,
+        reopenedAt: now,
+        updatedAt: now
+      });
+      Logger.audit("messaging.support_reopened_by_reply", { conversationId, ticketId: ticket.id });
+    } else if (ticket.status === SUPPORT_TICKET_STATUSES.NEED_FOLLOWUP) {
+      await saveSupportTicket({ ...ticket, status: SUPPORT_TICKET_STATUSES.OPEN, updatedAt: now });
+    }
+  } catch (err) {
+    Logger.warn("onSupportUserReply failed", {
+      conversationId,
+      error: err instanceof Error ? err.message : String(err)
+    });
+  }
+}
 async function listConversationsForActor(actor, filters) {
   const all = await listConversations2();
+  const senderRole = resolveSenderRole(actor.role);
+  const isStaff4 = senderRole === "admin";
+  const enteredIds = isStaff4 ? new Set(
+    (await listAdminEntries()).filter((e) => e.adminId === actor.userId).map((e) => e.conversationId)
+  ) : /* @__PURE__ */ new Set();
   const out = [];
   for (const c of all) {
-    if (c.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET && resolveSenderRole(actor.role) === "seller") {
-      const isOwn = c.consumerId === actor.userId || c.participants.some((p) => p.userId === actor.userId);
-      if (!isOwn) continue;
-    }
-    try {
-      await assertCanReadConversation(c, actor);
-    } catch {
-      continue;
+    if (isStaff4) {
+      const autoReadable = c.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET || c.contextType === CONVERSATION_CONTEXT_TYPES.EXTERNAL_SOCIAL;
+      if (!autoReadable && !enteredIds.has(c.id)) continue;
+    } else {
+      if (c.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET && (senderRole === "seller" || senderRole === "seller_staff" || senderRole === "creator")) {
+        const isOwn = c.consumerId === actor.userId || c.participants.some((p) => p.userId === actor.userId);
+        if (!isOwn) continue;
+      }
+      try {
+        await assertCanReadConversation(c, actor);
+      } catch {
+        continue;
+      }
     }
     if (filters?.brandId && c.brandId !== filters.brandId) continue;
     if (filters?.contextType && c.contextType !== filters.contextType) continue;
@@ -10834,6 +12404,107 @@ async function getConversationForActor(id, actor) {
 async function listMessagesForActor(conversationId, actor) {
   await getConversationForActor(conversationId, actor);
   return listMessages2(conversationId);
+}
+async function listAdminSupportInbox(actor, filter) {
+  if (!isAdminEnterRole(actor.role)) {
+    throw new CommerceError("Choosify staff only", 403);
+  }
+  await sweepDueFollowups().catch(() => void 0);
+  const convs = (await listConversations2()).filter(
+    (c) => c.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET
+  );
+  const tickets = await listSupportTickets();
+  const ticketByConv = new Map(tickets.map((t) => [t.conversationId, t]));
+  const allNotes = await listSupportNotes();
+  const allFollowups = await listSupportFollowups();
+  const noteCountByConv = /* @__PURE__ */ new Map();
+  for (const n of allNotes) noteCountByConv.set(n.conversationId, (noteCountByConv.get(n.conversationId) || 0) + 1);
+  const dueByConv = /* @__PURE__ */ new Map();
+  for (const f of allFollowups) {
+    if (f.status === "scheduled") dueByConv.set(f.conversationId, f.dueAt);
+  }
+  const assigneeIds = Array.from(new Set(tickets.map((t) => t.assigneeId).filter(Boolean)));
+  const assigneeNames = /* @__PURE__ */ new Map();
+  await Promise.all(
+    assigneeIds.map(async (uid) => assigneeNames.set(uid, await resolveStaffDisplay(uid)))
+  );
+  const openerIds = Array.from(new Set(convs.map((c) => c.consumerId).filter(Boolean)));
+  const idMap = /* @__PURE__ */ new Map();
+  await Promise.all(
+    openerIds.map(async (uid) => {
+      const u = await resolveSupportTargetUser(uid);
+      if (u) idMap.set(uid, u);
+    })
+  );
+  let brands = [];
+  let creators = [];
+  try {
+    const { catalogStore: editorialCatalogStore } = await Promise.resolve().then(() => (init_catalogStore(), catalogStore_exports));
+    brands = await editorialCatalogStore.listBrands();
+    creators = await editorialCatalogStore.listCreators();
+  } catch {
+  }
+  let orderCountByBuyer = /* @__PURE__ */ new Map();
+  try {
+    const { operationsStore: operationsStore2 } = await Promise.resolve().then(() => (init_operationsStore(), operationsStore_exports));
+    for (const o of operationsStore2.listOrders()) {
+      orderCountByBuyer.set(o.buyerId, (orderCountByBuyer.get(o.buyerId) || 0) + 1);
+    }
+  } catch {
+    orderCountByBuyer = /* @__PURE__ */ new Map();
+  }
+  const rows = [];
+  for (const c of convs) {
+    const ticket = ticketByConv.get(c.id) || null;
+    const audience = ticket?.audience || c.metadata?.audience || idMap.get(c.consumerId)?.audience || "consumer";
+    if (filter?.audience && audience !== filter.audience) continue;
+    if (filter?.status && (ticket?.status || SUPPORT_TICKET_STATUSES.OPEN) !== filter.status) continue;
+    if (filter?.priority && ticket?.priority !== filter.priority) continue;
+    if (filter?.assigneeId && ticket?.assigneeId !== filter.assigneeId) continue;
+    const u = idMap.get(c.consumerId);
+    const roleLabel = audience === "seller" ? "Seller" : audience === "creator" ? "Creator" : "Consumer";
+    let contextLabel;
+    if (audience === "seller") {
+      contextLabel = brands.find((b) => b.sellerId === c.consumerId)?.name;
+    } else if (audience === "creator") {
+      const cr = creators.find((x) => x.userId === c.consumerId);
+      contextLabel = cr?.handle || cr?.name;
+    }
+    const msgs = await listMessages2(c.id);
+    const last = msgs[msgs.length - 1];
+    const unread = msgs.filter(
+      (m) => m.senderId !== actor.userId && m.senderRole !== "admin" && m.senderRole !== "system" && !(Array.isArray(m.readBy) ? m.readBy : []).includes(actor.userId)
+    ).length;
+    rows.push({
+      conversation: c,
+      ticket,
+      audience,
+      opener: {
+        id: c.consumerId,
+        displayName: u?.displayName || `User ${c.consumerId.slice(0, 8)}`,
+        choosifyUserId: u?.choosifyUserId,
+        avatarUrl: u?.avatarUrl,
+        roleLabel,
+        contextLabel,
+        email: u?.email,
+        emailVerified: u?.emailVerified,
+        memberSince: u?.memberSince,
+        totalOrders: orderCountByBuyer.get(c.consumerId) ?? 0
+      },
+      lastMessageAt: last?.createdAt || c.lastMessageAt,
+      lastMessagePreview: c.lastMessagePreview,
+      unread,
+      priority: ticket?.priority,
+      status: ticket?.status,
+      assigneeId: ticket?.assigneeId,
+      assigneeName: ticket?.assigneeId ? assigneeNames.get(ticket.assigneeId) : void 0,
+      department: ticket?.department,
+      reopenedAt: ticket?.reopenedAt,
+      noteCount: noteCountByConv.get(c.id) || 0,
+      followupDueAt: dueByConv.get(c.id)
+    });
+  }
+  return rows.sort((a, b) => (b.lastMessageAt || "").localeCompare(a.lastMessageAt || ""));
 }
 async function searchConversationsForActor(actor, q) {
   const needle = q.trim().toLowerCase();
@@ -10914,7 +12585,7 @@ async function ingestExternalMessageIdempotent(input) {
   });
   return { message, duplicate: false };
 }
-var COUNTER_OFFER_TTL_MS, MAX_ATTACHMENT_BYTES, ALLOWED_ATTACHMENT_TYPES;
+var STAFF_SUPPORT_ROLES, COUNTER_OFFER_TTL_MS, MAX_ATTACHMENT_BYTES, ALLOWED_ATTACHMENT_TYPES;
 var init_conversationService = __esm({
   "server/messaging/conversations/conversationService.ts"() {
     init_cartService();
@@ -10922,11 +12593,14 @@ var init_conversationService = __esm({
     init_catalogStore2();
     init_eventBus();
     init_logger();
+    init_systemNotify();
+    init_communicationTypes();
     init_conversationStore();
     init_conversationLifecycle();
     init_conversationPermissions();
     init_omniBridge();
     init_types2();
+    STAFF_SUPPORT_ROLES = ["admin", "super_admin", "support_agent"];
     COUNTER_OFFER_TTL_MS = 8 * 60 * 60 * 1e3;
     MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
     ALLOWED_ATTACHMENT_TYPES = /* @__PURE__ */ new Set([
@@ -11228,6 +12902,9 @@ __export(bookingService_exports, {
   resolvePartialPaymentSettings: () => resolvePartialPaymentSettings,
   sweepExpiredBookings: () => sweepExpiredBookings
 });
+function conversationActionUrl(buyerId) {
+  return `/messages/conv_platform_${buyerId}`;
+}
 function hoursFromNow(hours) {
   return new Date(Date.now() + hours * 60 * 60 * 1e3).toISOString();
 }
@@ -11255,6 +12932,12 @@ function buildOrderFromRequest(request, ts) {
         deliveryFee: 0,
         items: [
           {
+            // Every other order-creation path (recomputeOrderPricingServerSide
+            // in operationsRouter.ts) assigns itemId at creation; this one
+            // didn't, which silently made every booking-derived order
+            // impossible to mark delivered (findOrderItem matches on
+            // itemId). Same generation pattern as that path.
+            itemId: `item-${Date.now().toString(36)}-0`,
             productId: request.listingId,
             productTitle: request.listingTitle,
             quantity: 1,
@@ -11365,6 +13048,18 @@ async function createBookingRequest(input) {
   };
   if (!input.autoApprove) {
     await saveBookingRequest(base);
+    try {
+      await notifyUser(base.sellerId, {
+        type: "buyer_update",
+        category: "seller",
+        title: "New booking request",
+        summary: `${base.buyerName || "A buyer"} requested "${base.listingTitle}" for \u09F3${price.toLocaleString()}.`,
+        actionUrl: conversationActionUrl(base.buyerId),
+        metadata: { bookingRequestId: base.id }
+      });
+    } catch (err) {
+      console.warn("[Booking] Notify seller (new request) failed:", err);
+    }
     return { request: base, offer: toBookingOfferCard(base) };
   }
   const { order, buyerPayBy, orderId, invoiceId } = buildOrderFromRequest(base, ts);
@@ -11399,6 +13094,18 @@ async function createBookingRequest(input) {
     `${accepted.sellerName} has pre-approved instant booking for "${accepted.listingTitle}" \u2014 your request is already accepted. Complete payment within ${BOOKING_PAYMENT_WINDOW_HOURS} hours to confirm (order ${orderId}).`,
     orderId
   );
+  try {
+    await notifyUser(accepted.buyerId, {
+      type: "order_update",
+      category: "buyer",
+      title: "Booking accepted instantly",
+      summary: `${accepted.sellerName} pre-approved "${accepted.listingTitle}". Pay within ${BOOKING_PAYMENT_WINDOW_HOURS} hours to confirm.`,
+      actionUrl: conversationActionUrl(accepted.buyerId),
+      metadata: { bookingRequestId: accepted.id, orderId }
+    });
+  } catch (err) {
+    console.warn("[Booking] Notify buyer (auto-approved) failed:", err);
+  }
   return { request: accepted, offer: toBookingOfferCard(accepted), order };
 }
 async function acceptBookingRequest(id, actor) {
@@ -11441,6 +13148,18 @@ async function acceptBookingRequest(id, actor) {
     `${actor.sellerName || existing.sellerName} accepted your booking request for "${existing.listingTitle}". Complete payment within ${BOOKING_PAYMENT_WINDOW_HOURS} hours (order ${orderId}).`,
     orderId
   );
+  try {
+    await notifyUser(existing.buyerId, {
+      type: "order_update",
+      category: "buyer",
+      title: "Booking request accepted",
+      summary: `${actor.sellerName || existing.sellerName} accepted "${existing.listingTitle}". Pay within ${BOOKING_PAYMENT_WINDOW_HOURS} hours.`,
+      actionUrl: conversationActionUrl(existing.buyerId),
+      metadata: { bookingRequestId: existing.id, orderId }
+    });
+  } catch (err) {
+    console.warn("[Booking] Notify buyer (accepted) failed:", err);
+  }
   return { request: updated, offer: toBookingOfferCard(updated), order };
 }
 async function declineBookingRequest(id, actor, declineReason) {
@@ -11480,6 +13199,18 @@ async function declineBookingRequest(id, actor, declineReason) {
     existing.buyerName,
     `${actor.sellerName || existing.sellerName} declined your booking request for "${existing.listingTitle}": ${reason}`
   );
+  try {
+    await notifyUser(existing.buyerId, {
+      type: "order_update",
+      category: "buyer",
+      title: "Booking request declined",
+      summary: `${actor.sellerName || existing.sellerName} declined "${existing.listingTitle}": ${reason}`,
+      actionUrl: conversationActionUrl(existing.buyerId),
+      metadata: { bookingRequestId: existing.id }
+    });
+  } catch (err) {
+    console.warn("[Booking] Notify buyer (declined) failed:", err);
+  }
   return { request: updated, offer: toBookingOfferCard(updated) };
 }
 async function buyerDeclineBookingRequest(id, actor, declineReason) {
@@ -11519,6 +13250,18 @@ async function buyerDeclineBookingRequest(id, actor, declineReason) {
     `${existing.buyerName || "Buyer"} declined the booking offer for "${existing.listingTitle}"${reason ? `: ${reason}` : ""}.`,
     existing.orderId
   );
+  try {
+    await notifyUser(existing.sellerId, {
+      type: "buyer_update",
+      category: "seller",
+      title: existing.status === "countered" ? "Counter-offer rejected" : "Booking offer declined",
+      summary: `${existing.buyerName || "The buyer"} declined "${existing.listingTitle}"${reason ? `: ${reason}` : "."}`,
+      actionUrl: conversationActionUrl(existing.buyerId),
+      metadata: { bookingRequestId: existing.id }
+    });
+  } catch (err) {
+    console.warn("[Booking] Notify seller (buyer declined) failed:", err);
+  }
   return { request: updated, offer: toBookingOfferCard(updated) };
 }
 async function counterBookingRequest(id, actor, patch) {
@@ -11562,6 +13305,18 @@ async function counterBookingRequest(id, actor, patch) {
     existing.buyerName,
     `${actor.sellerName || existing.sellerName} sent a counter-offer of BDT ${price.toLocaleString()} for "${existing.listingTitle}". Respond within ${BOOKING_SELLER_RESPONSE_HOURS} hours.`
   );
+  try {
+    await notifyUser(existing.buyerId, {
+      type: "order_update",
+      category: "buyer",
+      title: "New counter-offer",
+      summary: `${actor.sellerName || existing.sellerName} countered "${existing.listingTitle}" at \u09F3${price.toLocaleString()}.`,
+      actionUrl: conversationActionUrl(existing.buyerId),
+      metadata: { bookingRequestId: existing.id, price }
+    });
+  } catch (err) {
+    console.warn("[Booking] Notify buyer (countered) failed:", err);
+  }
   return { request: updated, offer: toBookingOfferCard(updated) };
 }
 async function buyerAcceptCounter(id, actor) {
@@ -11594,6 +13349,18 @@ async function buyerAcceptCounter(id, actor) {
         ]
       };
       await saveBookingRequest(updated2);
+      try {
+        await notifyUser(existing.sellerId, {
+          type: "buyer_update",
+          category: "seller",
+          title: "Buyer accepted your offer",
+          summary: `${existing.buyerName || "The buyer"} accepted "${existing.listingTitle}" at \u09F3${existing.price.toLocaleString()}.`,
+          actionUrl: conversationActionUrl(existing.buyerId),
+          metadata: { bookingRequestId: existing.id, orderId: existing.orderId }
+        });
+      } catch (err) {
+        console.warn("[Booking] Notify seller (buyer accepted, reuse) failed:", err);
+      }
       return { request: updated2, offer: toBookingOfferCard(updated2), order: order2 };
     }
   }
@@ -11623,16 +13390,31 @@ async function buyerAcceptCounter(id, actor) {
     ]
   };
   await saveBookingRequest(updated);
+  try {
+    await notifyUser(existing.sellerId, {
+      type: "buyer_update",
+      category: "seller",
+      title: "Buyer accepted your counter-offer",
+      summary: `${existing.buyerName || "The buyer"} accepted "${existing.listingTitle}" at \u09F3${existing.price.toLocaleString()}.`,
+      actionUrl: conversationActionUrl(existing.buyerId),
+      metadata: { bookingRequestId: existing.id, orderId }
+    });
+  } catch (err) {
+    console.warn("[Booking] Notify seller (buyer accepted counter) failed:", err);
+  }
   return { request: updated, offer: toBookingOfferCard(updated), order };
 }
-async function markBookingPaid(id, orderId, paymentType = "full") {
+async function markBookingPaid(id, _orderId, paymentType = "full") {
   const existing = await getBookingRequest(id);
   if (!existing) throw new Error("Booking request not found");
+  if (existing.status !== "accepted" && existing.status !== "buyer_accepted") {
+    throw new Error(`Cannot confirm payment for booking in status ${existing.status}`);
+  }
   if (paymentType === "partial" && !existing.partialPaymentEnabled) {
     throw new Error("This listing does not offer partial payment");
   }
   const ts = nowIso19();
-  const resolvedOrderId = orderId || existing.orderId;
+  const resolvedOrderId = existing.orderId;
   if (resolvedOrderId) {
     if (paymentType === "partial" && existing.depositPercent) {
       const depositAmount = Math.round(existing.price * existing.depositPercent / 100);
@@ -11674,6 +13456,18 @@ async function markBookingPaid(id, orderId, paymentType = "full") {
     ]
   };
   await saveBookingRequest(updated);
+  try {
+    await notifyUser(existing.sellerId, {
+      type: "order_update",
+      category: "seller",
+      title: "Payment confirmed",
+      summary: `${existing.buyerName || "The buyer"} confirmed payment for "${existing.listingTitle}" (order ${resolvedOrderId}).`,
+      actionUrl: "/dashboard?tab=seller-orders",
+      metadata: { bookingRequestId: existing.id, orderId: resolvedOrderId }
+    });
+  } catch (err) {
+    console.warn("[Booking] Notify seller (paid) failed:", err);
+  }
   return { request: updated, offer: toBookingOfferCard(updated) };
 }
 async function sweepExpiredBookings(now = Date.now()) {
@@ -11781,6 +13575,7 @@ var init_bookingService = __esm({
     init_catalogStore2();
     init_bookingStore();
     init_platformMessagingBridge();
+    init_systemNotify();
     nowIso19 = () => (/* @__PURE__ */ new Date()).toISOString();
   }
 });
@@ -12028,16 +13823,16 @@ var init_sslcommerzProvider = __esm({
 });
 
 // server/payments/commercePaymentPersistence.ts
-import { existsSync as existsSync12, mkdirSync as mkdirSync12, readFileSync as readFileSync12, writeFileSync as writeFileSync12 } from "node:fs";
-import { dirname as dirname12, join as join13 } from "node:path";
+import { existsSync as existsSync13, mkdirSync as mkdirSync13, readFileSync as readFileSync13, writeFileSync as writeFileSync13 } from "node:fs";
+import { dirname as dirname13, join as join14 } from "node:path";
 function paymentsMemorySnapshotPath() {
   return process.env.PAYMENTS_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH6;
 }
 function loadPaymentsMemorySnapshot() {
   const path = paymentsMemorySnapshotPath();
-  if (!existsSync12(path)) return null;
+  if (!existsSync13(path)) return null;
   try {
-    const parsed = JSON.parse(readFileSync12(path, "utf8"));
+    const parsed = JSON.parse(readFileSync13(path, "utf8"));
     if (!parsed || parsed.version !== 1) return null;
     return parsed;
   } catch (error2) {
@@ -12047,31 +13842,31 @@ function loadPaymentsMemorySnapshot() {
 }
 function schedulePaymentsMemoryPersist(build) {
   pendingBuild4 = build;
-  if (persistTimer9) clearTimeout(persistTimer9);
-  persistTimer9 = setTimeout(() => {
+  if (persistTimer10) clearTimeout(persistTimer10);
+  persistTimer10 = setTimeout(() => {
     flushPaymentsMemoryPersist();
   }, 250);
 }
 function flushPaymentsMemoryPersist() {
-  if (persistTimer9) {
-    clearTimeout(persistTimer9);
-    persistTimer9 = null;
+  if (persistTimer10) {
+    clearTimeout(persistTimer10);
+    persistTimer10 = null;
   }
   if (!pendingBuild4) return;
   try {
     const snapshot = pendingBuild4();
     const path = paymentsMemorySnapshotPath();
-    mkdirSync12(dirname12(path), { recursive: true });
-    writeFileSync12(path, JSON.stringify(snapshot), "utf8");
+    mkdirSync13(dirname13(path), { recursive: true });
+    writeFileSync13(path, JSON.stringify(snapshot), "utf8");
   } catch (error2) {
     console.error("[PaymentsMemoryPersist] Failed to save snapshot:", error2);
   }
 }
-var DEFAULT_PATH6, persistTimer9, pendingBuild4;
+var DEFAULT_PATH6, persistTimer10, pendingBuild4;
 var init_commercePaymentPersistence = __esm({
   "server/payments/commercePaymentPersistence.ts"() {
-    DEFAULT_PATH6 = join13(process.cwd(), ".data", "payments-memory-snapshot.json");
-    persistTimer9 = null;
+    DEFAULT_PATH6 = join14(process.cwd(), ".data", "payments-memory-snapshot.json");
+    persistTimer10 = null;
     pendingBuild4 = null;
   }
 });
@@ -12398,16 +14193,16 @@ var init_escrowLifecycle = __esm({
 });
 
 // server/escrow/escrowPersistence.ts
-import { existsSync as existsSync13, mkdirSync as mkdirSync13, readFileSync as readFileSync13, writeFileSync as writeFileSync13 } from "node:fs";
-import { dirname as dirname13, join as join14 } from "node:path";
+import { existsSync as existsSync14, mkdirSync as mkdirSync14, readFileSync as readFileSync14, writeFileSync as writeFileSync14 } from "node:fs";
+import { dirname as dirname14, join as join15 } from "node:path";
 function escrowMemorySnapshotPath() {
   return process.env.ESCROW_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH7;
 }
 function loadEscrowMemorySnapshot() {
   const path = escrowMemorySnapshotPath();
-  if (!existsSync13(path)) return null;
+  if (!existsSync14(path)) return null;
   try {
-    const parsed = JSON.parse(readFileSync13(path, "utf8"));
+    const parsed = JSON.parse(readFileSync14(path, "utf8"));
     if (!parsed || parsed.version !== 1) return null;
     return parsed;
   } catch (error2) {
@@ -12417,31 +14212,31 @@ function loadEscrowMemorySnapshot() {
 }
 function scheduleEscrowMemoryPersist(build) {
   pendingBuild5 = build;
-  if (persistTimer10) clearTimeout(persistTimer10);
-  persistTimer10 = setTimeout(() => {
+  if (persistTimer11) clearTimeout(persistTimer11);
+  persistTimer11 = setTimeout(() => {
     flushEscrowMemoryPersist();
   }, 250);
 }
 function flushEscrowMemoryPersist() {
-  if (persistTimer10) {
-    clearTimeout(persistTimer10);
-    persistTimer10 = null;
+  if (persistTimer11) {
+    clearTimeout(persistTimer11);
+    persistTimer11 = null;
   }
   if (!pendingBuild5) return;
   try {
     const snapshot = pendingBuild5();
     const path = escrowMemorySnapshotPath();
-    mkdirSync13(dirname13(path), { recursive: true });
-    writeFileSync13(path, JSON.stringify(snapshot), "utf8");
+    mkdirSync14(dirname14(path), { recursive: true });
+    writeFileSync14(path, JSON.stringify(snapshot), "utf8");
   } catch (error2) {
     console.error("[EscrowMemoryPersist] Failed to save snapshot:", error2);
   }
 }
-var DEFAULT_PATH7, persistTimer10, pendingBuild5;
+var DEFAULT_PATH7, persistTimer11, pendingBuild5;
 var init_escrowPersistence = __esm({
   "server/escrow/escrowPersistence.ts"() {
-    DEFAULT_PATH7 = join14(process.cwd(), ".data", "escrow-memory-snapshot.json");
-    persistTimer10 = null;
+    DEFAULT_PATH7 = join15(process.cwd(), ".data", "escrow-memory-snapshot.json");
+    persistTimer11 = null;
     pendingBuild5 = null;
   }
 });
@@ -14802,13 +16597,13 @@ function getNodeVersion() {
   return process.version;
 }
 function getMemoryUsageSummary() {
-  const memory3 = process.memoryUsage();
+  const memory4 = process.memoryUsage();
   return {
-    rssBytes: memory3.rss,
-    heapTotalBytes: memory3.heapTotal,
-    heapUsedBytes: memory3.heapUsed,
-    externalBytes: memory3.external,
-    arrayBuffersBytes: memory3.arrayBuffers
+    rssBytes: memory4.rss,
+    heapTotalBytes: memory4.heapTotal,
+    heapUsedBytes: memory4.heapUsed,
+    externalBytes: memory4.external,
+    arrayBuffersBytes: memory4.arrayBuffers
   };
 }
 function getCpuUsageSummary() {
@@ -15645,6 +17440,7 @@ messagingRouter.get("/agents", ...requireOmniMessagingAccess, async (_req, res) 
 
 // server/logisticsRouter.ts
 import { Router as Router2 } from "express";
+import crypto2 from "crypto";
 
 // src/services/logistics/LogisticsService.ts
 init_firebase();
@@ -17446,8 +19242,57 @@ var WebhookNormalizer = class {
 
 // server/logisticsRouter.ts
 init_shipmentStore();
+
+// server/middleware/requireAdmin.ts
+init_roles();
+
+// server/middleware/authorization.ts
+function requireRole(requiredRole) {
+  return (req, res, next) => {
+    if (!req.userRole) {
+      sendAuthError(res, 401, AUTH_ERROR_CODES.UNAUTHORIZED, "Authentication required");
+      return;
+    }
+    if (!hasRole(req.userRole, requiredRole)) {
+      sendAuthError(res, 403, AUTH_ERROR_CODES.FORBIDDEN, "Insufficient role");
+      return;
+    }
+    next();
+  };
+}
+function requireAnyPermission(requiredPermissions) {
+  return (req, res, next) => {
+    if (!req.userRole) {
+      sendAuthError(res, 401, AUTH_ERROR_CODES.UNAUTHORIZED, "Authentication required");
+      return;
+    }
+    if (!hasAnyPermission(req.userRole, requiredPermissions, req.permissions)) {
+      sendAuthError(res, 403, AUTH_ERROR_CODES.FORBIDDEN, "Insufficient permissions");
+      return;
+    }
+    next();
+  };
+}
+
+// server/middleware/requireAdmin.ts
+var requireAdmin = requireRole(ROLES.ADMIN);
+
+// server/logisticsRouter.ts
 var router = Router2();
+function verifyWebhookSecret(req) {
+  const expected = process.env.LOGISTICS_WEBHOOK_SECRET;
+  if (!expected) return false;
+  const provided = req.headers["x-webhook-secret"];
+  if (typeof provided !== "string" || !provided) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  return a.length === b.length && crypto2.timingSafeEqual(a, b);
+}
 router.post("/webhooks/logistics/:courier", async (req, res) => {
+  if (!verifyWebhookSecret(req)) {
+    res.status(401).json({ success: false, message: "Missing or invalid webhook secret." });
+    return;
+  }
   const { courier } = req.params;
   const payload = req.body;
   console.log(`[LogisticsWebhookRouter] Received webhook from: ${courier}`);
@@ -17497,7 +19342,7 @@ router.post("/webhooks/logistics/:courier", async (req, res) => {
     });
   }
 });
-router.post("/logistics/simulate-webhook", async (req, res) => {
+router.post("/logistics/simulate-webhook", authenticateRequest, requireAdmin, async (req, res) => {
   const { courier, payload } = req.body;
   console.log(`[LogisticsWebhookSimulation] Simulating webhook for: ${courier}`);
   try {
@@ -18759,10 +20604,17 @@ function isPartnerIdentityApiPath(path, method) {
   }
   if ((m === "PATCH" || m === "PUT") && /^\/api\/v1\/catalog\/brands\/[^/]+$/.test(p)) return true;
   if ((m === "PATCH" || m === "PUT") && /^\/api\/v1\/catalog\/creators\/[^/]+$/.test(p)) return true;
+  if (/^\/api\/v1\/catalog\/creator\/[^/]+\/(versions|draft)$/.test(p)) return true;
   if (m === "POST" && p.startsWith("/api/v1/catalog/media")) return true;
   if (p.startsWith("/api/v1/operations/verifications")) return true;
   if (p.startsWith("/api/v1/operations/partner-applications")) return true;
+  if (p === "/api/v1/operations/orders") return true;
+  if (/^\/api\/v1\/operations\/orders\/[^/]+$/.test(p)) return true;
+  if (/^\/api\/v1\/operations\/orders\/[^/]+\/cancel$/.test(p)) return true;
+  if (p === "/api/v1/operations/platform-messages") return true;
   if (p.startsWith("/api/v1/support/")) return true;
+  if (m === "GET" && (p === "/api/v1/conversations" || p === "/api/v1/conversations/search")) return true;
+  if (/^\/api\/v1\/conversations\/[^/]+(\/messages|\/read)?$/.test(p)) return true;
   if (m === "GET" && p.startsWith("/api/v1/dashboard/nav-attention")) return true;
   if (m === "GET" && (p.startsWith("/api/v1/notifications") || p.startsWith("/api/notifications"))) {
     return true;
@@ -18804,7 +20656,8 @@ async function requirePartnerEntitlement(req, res, next) {
   const role = req.userRole || req.user?.role;
   const userId = req.userId || req.user?.uid;
   const path = req.originalUrl || req.url || "";
-  if (isPartnerIdentityApiPath(path, req.method || "GET")) {
+  const pathWithoutQuery = path.split("?")[0] || path;
+  if (isPartnerIdentityApiPath(pathWithoutQuery, req.method || "GET")) {
     try {
       const life = await resolvePartnerLifecycle({
         userId,
@@ -18829,34 +20682,6 @@ async function requirePartnerEntitlement(req, res, next) {
     code: "FEATURE_ENTITLEMENT_DENIED",
     featureKey: check.featureKey
   });
-}
-
-// server/middleware/authorization.ts
-function requireRole(requiredRole) {
-  return (req, res, next) => {
-    if (!req.userRole) {
-      sendAuthError(res, 401, AUTH_ERROR_CODES.UNAUTHORIZED, "Authentication required");
-      return;
-    }
-    if (!hasRole(req.userRole, requiredRole)) {
-      sendAuthError(res, 403, AUTH_ERROR_CODES.FORBIDDEN, "Insufficient role");
-      return;
-    }
-    next();
-  };
-}
-function requireAnyPermission(requiredPermissions) {
-  return (req, res, next) => {
-    if (!req.userRole) {
-      sendAuthError(res, 401, AUTH_ERROR_CODES.UNAUTHORIZED, "Authentication required");
-      return;
-    }
-    if (!hasAnyPermission(req.userRole, requiredPermissions, req.permissions)) {
-      sendAuthError(res, 403, AUTH_ERROR_CODES.FORBIDDEN, "Insufficient permissions");
-      return;
-    }
-    next();
-  };
 }
 
 // server/middleware/brandStudioAuth.ts
@@ -18941,6 +20766,77 @@ async function requireCreatorStudioWrite(req, res, next) {
     next();
   } catch {
     sendAuthError(res, 403, AUTH_ERROR_CODES.FORBIDDEN, "Insufficient permissions");
+  }
+}
+
+// server/middleware/guideStudioAuth.ts
+init_catalogStore();
+init_roles();
+init_brandOwnership();
+function isCreatorRole2(role) {
+  if (!role) return false;
+  return hasRole(role, ROLES.CREATOR);
+}
+function isSellerRole2(role) {
+  if (!role) return false;
+  const r = role;
+  return hasRole(r, ROLES.SELLER) || hasRole(r, ROLES.VERIFIED_SELLER);
+}
+async function userOwnsGuidePublisherBrand(userId, guide) {
+  if (!userId || guide?.publisherType !== "brand" || !guide.publisherBrandId) return false;
+  return sellerOwnsBrand(userId, guide.publisherBrandId);
+}
+async function creatorIdsForUser(userId) {
+  if (!userId) return [];
+  const creators = await catalogStore2.listCreators();
+  return creators.filter((c) => c.userId && c.userId === userId).map((c) => c.id);
+}
+async function primaryCreatorIdForUser(userId) {
+  const ids = await creatorIdsForUser(userId);
+  return ids[0] ?? null;
+}
+async function userOwnsGuide(userId, guide) {
+  if (!userId || !guide?.creatorId) return false;
+  const ids = await creatorIdsForUser(userId);
+  return ids.includes(guide.creatorId);
+}
+async function requireGuideStudioWrite(req, res, next) {
+  if (!req.userRole || !req.userId) {
+    sendAuthError(res, 401, AUTH_ERROR_CODES.UNAUTHORIZED, "Authentication required");
+    return;
+  }
+  if (hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)) {
+    next();
+    return;
+  }
+  const creator = isCreatorRole2(req.userRole);
+  const seller = isSellerRole2(req.userRole);
+  if (!creator && !seller) {
+    sendAuthError(res, 403, AUTH_ERROR_CODES.FORBIDDEN, "Insufficient permissions for Guide Studio");
+    return;
+  }
+  const guideId = typeof req.params.id === "string" ? req.params.id : "";
+  if (!guideId) {
+    next();
+    return;
+  }
+  try {
+    const guide = await catalogStore2.getGuide(guideId);
+    if (!guide) {
+      next();
+      return;
+    }
+    if (creator && await userOwnsGuide(req.userId, guide)) {
+      next();
+      return;
+    }
+    if (seller && await userOwnsGuidePublisherBrand(req.userId, guide)) {
+      next();
+      return;
+    }
+    sendAuthError(res, 403, AUTH_ERROR_CODES.FORBIDDEN, "Not authorized to modify this guide");
+  } catch {
+    sendAuthError(res, 403, AUTH_ERROR_CODES.FORBIDDEN, "Insufficient permissions for Guide Studio");
   }
 }
 
@@ -19900,23 +21796,41 @@ async function validateListingAgainstCategorySchema(input) {
   const variantByName = new Map(
     schema.filter((a) => a.variantEligible).map((a) => [a.name.toLowerCase(), a])
   );
-  const resolveVariantDim = (name) => {
-    const keySlug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-    return variantEligible.get(name) || variantEligible.get(keySlug) || variantByName.get(name.toLowerCase());
+  const slugOf = (name) => name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+  const resolveVariantDim = (name) => variantEligible.get(name) || variantEligible.get(slugOf(name)) || variantByName.get(name.toLowerCase());
+  const anyAttrByAlias = /* @__PURE__ */ new Map();
+  for (const a of schema) {
+    anyAttrByAlias.set(a.key, a);
+    anyAttrByAlias.set(slugOf(a.key), a);
+    anyAttrByAlias.set(a.name.toLowerCase(), a);
+  }
+  const resolveAnyAttr = (name) => anyAttrByAlias.get(name) || anyAttrByAlias.get(slugOf(name)) || anyAttrByAlias.get(name.toLowerCase());
+  const assertDimensionAllowed = (name, kind) => {
+    if (resolveVariantDim(name)) return;
+    const clash = resolveAnyAttr(name);
+    if (clash && !clash.variantEligible) {
+      throw new CategorySchemaError(
+        `${kind} "${name}" matches the descriptive attribute "${clash.name}" on this category and cannot be used as a variant dimension. Rename the custom dimension.`
+      );
+    }
   };
+  const declaredCustomValues = /* @__PURE__ */ new Map();
+  for (const group of input.optionGroups ?? []) {
+    const key = slugOf(group.name);
+    const set = declaredCustomValues.get(key) ?? /* @__PURE__ */ new Set();
+    for (const v of group.customValues ?? []) set.add(v);
+    declaredCustomValues.set(key, set);
+  }
+  const valueAllowedForDim = (dim, dimName, value) => dim.options.includes(value) || declaredCustomValues.get(slugOf(dimName))?.has(value) === true;
   if (input.optionGroups && input.optionGroups.length > 0) {
     for (const group of input.optionGroups) {
+      assertDimensionAllowed(group.name, "Option group");
       const dim = resolveVariantDim(group.name);
-      if (!dim) {
-        throw new CategorySchemaError(
-          `Option group "${group.name}" is not a variant-eligible attribute for this category`
-        );
-      }
-      if (dim.type === "select" || dim.type === "multi_select") {
+      if (dim && (dim.type === "select" || dim.type === "multi_select")) {
         for (const v of group.values ?? []) {
-          if (!dim.options.includes(v)) {
+          if (!valueAllowedForDim(dim, group.name, v)) {
             throw new CategorySchemaError(
-              `Variant value "${v}" is not allowed for dimension "${dim.name}"`
+              `Variant value "${v}" is not in the "${dim.name}" schema list. Add it as a custom value on the dimension to sell it.`
             );
           }
         }
@@ -19927,35 +21841,18 @@ async function validateListingAgainstCategorySchema(input) {
     for (const variant of input.productVariants) {
       const opts = variant.options ?? {};
       for (const optKey of Object.keys(opts)) {
+        assertDimensionAllowed(optKey, "Variant option");
         const dim = resolveVariantDim(optKey);
-        if (!dim) {
-          throw new CategorySchemaError(
-            `Variant option "${optKey}" is not a variant-eligible attribute for this category`
-          );
-        }
-        const val = opts[optKey];
-        if (dim.type === "select" || dim.type === "multi_select") {
-          if (!dim.options.includes(val)) {
+        if (dim && (dim.type === "select" || dim.type === "multi_select")) {
+          if (!valueAllowedForDim(dim, optKey, opts[optKey])) {
             throw new CategorySchemaError(
-              `Variant option value "${val}" is not allowed for "${dim.name}"`
+              `Variant option value "${opts[optKey]}" is not allowed for "${dim.name}".`
             );
           }
         }
       }
     }
   }
-}
-function attributesFromSpecs(specs, existing) {
-  const out = { ...existing ?? {} };
-  if (!specs) return out;
-  for (const row of specs) {
-    const key = String(row.key ?? "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-    if (!key) continue;
-    if (out[key] === void 0) {
-      out[key] = row.value ?? "";
-    }
-  }
-  return out;
 }
 
 // server/catalogRouter.ts
@@ -20081,6 +21978,18 @@ function stripPendingCreatorPublish(req, existing, payload) {
     verifiedStatus: existing?.verifiedStatus
   };
 }
+function scopeCreatorSelfWrite(req, existing, body) {
+  const isCreatorSelf = userIsCreatorRole(req) && !!req.userId && !hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions);
+  if (!isCreatorSelf) return body;
+  return {
+    ...body,
+    userId: existing?.userId || req.userId,
+    score: existing?.score ?? 0,
+    followers: existing?.followers ?? {},
+    verifiedStatus: existing?.verifiedStatus ?? false,
+    featuredFlag: existing?.featuredFlag ?? false
+  };
+}
 function rejectUnauthorizedMarketplaceAccessMutation(req, res, _existing) {
   if (hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions)) {
     return false;
@@ -20141,6 +22050,37 @@ function stampSellerOwnershipOnCreate(req, product) {
 function preserveProductOwnershipOnUpdate(req, existing, normalized) {
   if (userIsPlatformAdmin(req)) return normalized;
   return { ...normalized, sellerId: existing.sellerId };
+}
+var SELLER_RELATED_INFO_KEYS = [
+  "storeComparisonList",
+  "relatedInfoType",
+  "priceAcrossStoresEnabled",
+  "whatsNearby",
+  "beforeYourVisit",
+  "customRelatedInfo",
+  "enableStoreComparison",
+  "enablePhysicalStores"
+];
+function enforceRelatedInfoOwnership(req, existing, normalized) {
+  if (userIsPlatformAdmin(req)) return null;
+  normalized.adminPromotedStores = existing?.adminPromotedStores;
+  normalized.relatedInfoLockedByAdmin = existing?.relatedInfoLockedByAdmin;
+  if (existing?.relatedInfoLockedByAdmin === true) {
+    const norm = (v) => JSON.stringify(v ?? null);
+    const normRec = normalized;
+    const existRec = existing;
+    const attempted = SELLER_RELATED_INFO_KEYS.filter((k) => norm(normRec[k]) !== norm(existRec[k]));
+    if (attempted.length > 0) {
+      for (const k of SELLER_RELATED_INFO_KEYS) {
+        normRec[k] = existRec[k];
+      }
+      return {
+        status: 403,
+        error: "Related information for this product is currently managed by Choosify and cannot be edited."
+      };
+    }
+  }
+  return null;
 }
 function forbidUnlessOwnsProduct(req, res, product) {
   if (!product) {
@@ -20221,6 +22161,10 @@ async function assertCatalogDraftWriteAllowed(req, res, entityType, entityId) {
   }
   if (userIsPlatformAdmin(req) || hasPermission(req.userRole, PERMISSIONS.CMS_EDIT)) {
     return true;
+  }
+  if (entityType === "creator" && userIsCreatorRole(req) && req.userId) {
+    const creator = await catalogStore2.getCreator(entityId);
+    if (creator && creator.userId === req.userId) return true;
   }
   res.status(403).json({ error: "Not authorized to modify this catalog draft" });
   return false;
@@ -21819,7 +23763,7 @@ var requireCreatorStudioWriteMw = [authenticateRequest, requirePartnerEntitlemen
 catalogRouter.put("/catalog/creators/:id", ...requireCreatorStudioWriteMw, async (req, res) => {
   try {
     const existing = await catalogStore2.getCreator(req.params.id);
-    const scoped = userIsCreatorRole(req) && req.userId && !hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions) ? { ...req.body, userId: existing?.userId || req.userId } : req.body;
+    const scoped = scopeCreatorSelfWrite(req, existing, req.body);
     const payload = stripPendingCreatorPublish(req, existing, scoped);
     const normalized = normalizeCreatorInput({ ...payload, id: req.params.id }, existing || void 0);
     const saved = await catalogStore2.upsertCreator(normalized);
@@ -21835,7 +23779,7 @@ catalogRouter.patch("/catalog/creators/:id", ...requireCreatorStudioWriteMw, asy
       res.status(404).json({ error: "Creator not found" });
       return;
     }
-    const scoped = userIsCreatorRole(req) && req.userId && !hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions) ? { ...req.body, userId: existing.userId } : req.body;
+    const scoped = scopeCreatorSelfWrite(req, existing, req.body);
     const payload = stripPendingCreatorPublish(req, existing, scoped);
     const normalized = normalizeCreatorInput({ ...existing, ...payload, id: req.params.id }, existing);
     const saved = await catalogStore2.upsertCreator(normalized);
@@ -21844,59 +23788,361 @@ catalogRouter.patch("/catalog/creators/:id", ...requireCreatorStudioWriteMw, asy
     res.status(400).json({ error: validationErrorMessage(error2, "Invalid creator patch payload") });
   }
 });
-catalogRouter.get("/catalog/guides", async (req, res) => {
+var requireGuideStudioWriteMw = [authenticateRequest, requireGuideStudioWrite];
+var userIsGuideStaff = (req) => !!req.userRole && hasPermission(req.userRole, PERMISSIONS.CMS_EDIT, req.permissions);
+async function filterKnownProductIds(ids) {
+  if (!ids.length) return [];
+  const known = new Set((await catalogStore2.listProducts()).map((p) => p.id));
+  return ids.filter((id) => known.has(id));
+}
+async function filterKnownBrandIds(ids) {
+  if (!ids.length) return [];
+  const known = new Set((await catalogStore2.listBrands()).map((b) => b.id));
+  return ids.filter((id) => known.has(id));
+}
+var toGuideManageRow = (g, creatorNameById, brandNameById) => {
+  const publisherType = g.publisherType === "brand" ? "brand" : "creator";
+  return {
+    id: g.id,
+    slug: g.slug,
+    title: g.title,
+    type: g.type,
+    format: g.format,
+    status: g.status,
+    image: g.image || "",
+    contentReferenceId: g.contentReferenceId,
+    updatedAt: g.updatedAt || "",
+    publishedAt: g.publishedAt || "",
+    creatorId: g.creatorId,
+    publisherType,
+    publisherBrandId: g.publisherBrandId,
+    publisherName: publisherType === "brand" ? g.publisherBrandId ? brandNameById.get(g.publisherBrandId) : void 0 : g.creatorId ? creatorNameById.get(g.creatorId) : void 0,
+    productCount: Array.isArray(g.productIds) ? g.productIds.length : 0,
+    brandCount: Array.isArray(g.brandIds) ? g.brandIds.length : (g.sections ?? []).find((s) => s.id === "brands_mentioned")?.data?.brandIds?.length ?? 0
+  };
+};
+async function persistGuideStudioWrite(req, res, opts) {
+  const idParam = typeof req.params.id === "string" ? req.params.id : "";
+  const existing = idParam ? await catalogStore2.getGuide(idParam) : null;
+  if (opts.patch && idParam && !existing) {
+    res.status(404).json({ error: "Guide not found" });
+    return;
+  }
+  const body = { ...req.body ?? {} };
+  delete body.status;
+  delete body.publishedAt;
+  if (idParam) body.id = idParam;
+  const isStaff4 = userIsGuideStaff(req);
+  const bodyPublisherType = typeof body.publisherType === "string" ? body.publisherType : "";
+  const bodyPublisherBrandId = typeof body.publisherBrandId === "string" ? body.publisherBrandId.trim() : "";
+  const intendedPublisherType = bodyPublisherType === "brand" || bodyPublisherType === "creator" ? bodyPublisherType : existing?.publisherType ?? "creator";
+  const intendedPublisherBrandId = bodyPublisherBrandId || existing?.publisherBrandId || "";
+  if (intendedPublisherType === "brand") {
+    if (!intendedPublisherBrandId) {
+      res.status(400).json({ error: "publisherBrandId is required for a brand-authored guide" });
+      return;
+    }
+    const brandExists = !!await catalogStore2.getBrand(intendedPublisherBrandId);
+    if (!brandExists) {
+      res.status(400).json({ error: "publisherBrandId does not resolve to a real brand" });
+      return;
+    }
+    if (!isStaff4 && !await sellerOwnsBrand(req.userId, intendedPublisherBrandId)) {
+      res.status(403).json({ error: "Not authorized to publish as this brand" });
+      return;
+    }
+    body.publisherType = "brand";
+    body.publisherBrandId = intendedPublisherBrandId;
+    body.creatorId = "";
+  } else {
+    body.publisherType = "creator";
+    body.publisherBrandId = "";
+    if (!isStaff4) {
+      let creatorId = await primaryCreatorIdForUser(req.userId);
+      if (!creatorId) {
+        const { creators } = await ensureCreatorWorkspace(req.userId, {});
+        creatorId = creators[0]?.id ?? null;
+      }
+      if (!creatorId) {
+        res.status(403).json({ error: "No creator workspace for this account" });
+        return;
+      }
+      body.creatorId = creatorId;
+    } else if (existing && !("creatorId" in (req.body ?? {}))) {
+      body.creatorId = existing.creatorId;
+    }
+  }
+  const normalized = normalizeGuideInput(body, existing || void 0);
+  const status = existing ? normalized.status : "draft";
+  const validProductIds = await filterKnownProductIds(normalized.productIds);
+  const validBrandIds = await filterKnownBrandIds(normalized.brandIds ?? []);
+  let liveOffers = normalized.liveOffers ?? [];
+  if (liveOffers.length) {
+    if (normalized.publisherType !== "brand") {
+      res.status(403).json({
+        error: "Creator-authored guides cannot set promotional pricing yet",
+        code: "GUIDE_OFFER_AUTHOR_NOT_ALLOWED"
+      });
+      return;
+    }
+    const pubBrand = normalized.publisherBrandId ? await catalogStore2.getBrand(normalized.publisherBrandId) : null;
+    const brandSellerId = pubBrand?.sellerId;
+    const productById = new Map((await catalogStore2.listProducts()).map((p) => [p.id, p]));
+    liveOffers = liveOffers.filter((o) => {
+      if (!validProductIds.includes(o.productId)) return false;
+      if (isStaff4) return true;
+      const p = productById.get(o.productId);
+      return !!p && !!brandSellerId && p.sellerId === brandSellerId;
+    });
+    if (!liveOffers.length && (normalized.liveOffers ?? []).length) {
+      res.status(403).json({
+        error: "A brand-authored guide may only offer promotions on products it owns",
+        code: "GUIDE_OFFER_PRODUCT_NOT_OWNED"
+      });
+      return;
+    }
+  }
+  const externalIds = new Set((normalized.externalRefs ?? []).map((r) => r.id));
+  const refIsPresent = (ref) => {
+    if (ref.entityType === "product") return validProductIds.includes(ref.entityId);
+    if (ref.entityType === "brand") return validBrandIds.includes(ref.entityId);
+    return externalIds.has(ref.entityId);
+  };
+  const sections = (normalized.sections ?? []).map((s) => {
+    if (s.id === "brands_mentioned") {
+      const prev = s.data ?? {};
+      const highlightTags = prev.highlightTags && typeof prev.highlightTags === "object" ? prev.highlightTags : void 0;
+      return { ...s, data: { brandIds: validBrandIds, ...highlightTags ? { highlightTags } : {} } };
+    }
+    if (s.id === "winner") {
+      const data = s.data ?? {};
+      const overall = data.overall;
+      const awards = Array.isArray(data.awards) ? data.awards : [];
+      if (overall && !refIsPresent(overall)) {
+        throw new Error("Overall Winner must reference an entity already present in the guide");
+      }
+      const validAwards = awards.filter((a) => a.ref && refIsPresent(a.ref));
+      return {
+        ...s,
+        data: {
+          ...overall ? { overall } : {},
+          ...validAwards.length ? { awards: validAwards } : {}
+        }
+      };
+    }
+    if (s.id === "recommendations") {
+      const data = s.data ?? {};
+      const picks = Array.isArray(data.picks) ? data.picks : [];
+      const validPicks = picks.filter((p) => p.ref && refIsPresent(p.ref));
+      return { ...s, data: { picks: validPicks } };
+    }
+    return s;
+  });
+  const withRef = {
+    ...normalized,
+    status,
+    productIds: validProductIds,
+    brandIds: validBrandIds,
+    liveOffers: liveOffers.length ? liveOffers : void 0,
+    sections: sections.length ? sections : void 0,
+    contentReferenceId: existing?.contentReferenceId || await stampReferenceId("content", normalized, normalized.contentReferenceId) || normalized.contentReferenceId
+  };
+  const saved = await catalogStore2.upsertGuide(withRef);
+  res.json({ success: true, data: saved });
+}
+async function persistGuideLifecycle(req, res, nextStatus) {
+  const existing = await catalogStore2.getGuide(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: "Guide not found" });
+    return;
+  }
+  const normalized = normalizeGuideInput(
+    { ...existing, id: req.params.id, status: nextStatus },
+    existing,
+    { allowStatus: true }
+  );
+  const saved = await catalogStore2.upsertGuide({
+    ...normalized,
+    contentReferenceId: existing.contentReferenceId || normalized.contentReferenceId
+  });
+  if (nextStatus === "live" && saved.creatorId) {
+    try {
+      const creator = await catalogStore2.getCreator(saved.creatorId);
+      if (creator && creator.status === "draft") {
+        await catalogStore2.upsertCreator(
+          normalizeCreatorInput({ ...creator, status: "live" }, creator)
+        );
+      }
+    } catch {
+    }
+  }
+  res.json({ success: true, data: saved });
+}
+async function withGuidePublisherBrand(guides) {
+  const needed = guides.some((g) => g.publisherType === "brand" && g.publisherBrandId);
+  if (!needed) return guides;
+  const brandById = new Map((await catalogStore2.listBrands()).map((b) => [b.id, b]));
+  return guides.map((g) => {
+    if (g.publisherType === "brand" && g.publisherBrandId) {
+      const b = brandById.get(g.publisherBrandId);
+      if (b) {
+        return {
+          ...g,
+          publisherBrand: { id: b.id, name: b.name, logo: b.logo, slug: b.slug }
+        };
+      }
+    }
+    return g;
+  });
+}
+catalogRouter.get("/catalog/guides", async (_req, res) => {
   try {
-    const status = typeof req.query.status === "string" ? req.query.status : "live";
-    const guides = (await catalogStore2.listGuides()).filter((guide) => !status || guide.status === status);
-    res.json({ data: guides });
+    const guides = (await catalogStore2.listGuides()).filter((guide) => guide.status === "live");
+    res.json({ data: await withGuidePublisherBrand(guides) });
   } catch (error2) {
     res.status(500).json({ error: error2 instanceof Error ? error2.message : "Failed to list guides" });
   }
 });
-catalogRouter.get("/catalog/guides/:id", async (req, res) => {
+catalogRouter.get("/catalog/guides/manage", authenticateRequest, async (req, res) => {
+  try {
+    if (!req.userId || !req.userRole) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+    const isStaff4 = userIsGuideStaff(req);
+    const roleVal = req.userRole;
+    const isCreator2 = hasRole(roleVal, ROLES.CREATOR);
+    const isSeller2 = hasRole(roleVal, ROLES.SELLER) || hasRole(roleVal, ROLES.VERIFIED_SELLER);
+    if (!isStaff4 && !isCreator2 && !isSeller2) {
+      res.status(403).json({ error: "Not authorized to manage guides" });
+      return;
+    }
+    const statusQ = typeof req.query.status === "string" ? req.query.status : "all";
+    const all = await catalogStore2.listGuides();
+    const creators = await catalogStore2.listCreators();
+    const brands = await catalogStore2.listBrands();
+    const creatorNameById = new Map(creators.map((c) => [c.id, c.name]));
+    const brandNameById = new Map(brands.map((b) => [b.id, b.name]));
+    let guides = all;
+    if (!isStaff4) {
+      const myCreatorIds = new Set(await creatorIdsForUser(req.userId));
+      const myBrandIds = /* @__PURE__ */ new Set();
+      if (isSeller2) {
+        for (const b of brands) {
+          if (b.sellerId === req.userId) myBrandIds.add(b.id);
+        }
+      }
+      guides = guides.filter(
+        (g) => g.creatorId && myCreatorIds.has(g.creatorId) || g.publisherType === "brand" && g.publisherBrandId && myBrandIds.has(g.publisherBrandId)
+      );
+    }
+    if (statusQ === "draft" || statusQ === "live" || statusQ === "archived") {
+      guides = guides.filter((g) => g.status === statusQ);
+    }
+    const rows = guides.slice().sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || "")).map((g) => toGuideManageRow(g, creatorNameById, brandNameById));
+    const scope = isStaff4 ? "staff" : isCreator2 ? "creator" : "seller";
+    res.json({ data: rows, scope });
+  } catch (error2) {
+    res.status(500).json({ error: error2 instanceof Error ? error2.message : "Failed to list managed guides" });
+  }
+});
+catalogRouter.get("/catalog/guides/:id", softAuthenticateRequest, async (req, res) => {
   try {
     const guide = await catalogStore2.getGuide(req.params.id);
     if (!guide) {
       res.status(404).json({ error: "Guide not found" });
       return;
     }
-    res.json(guide);
+    if (guide.status !== "live") {
+      const isStaff4 = userIsGuideStaff(req);
+      const owns = req.userId ? await userOwnsGuide(req.userId, guide) || await userOwnsGuidePublisherBrand(req.userId, guide) : false;
+      if (!isStaff4 && !owns) {
+        res.status(404).json({ error: "Guide not found" });
+        return;
+      }
+    }
+    res.json((await withGuidePublisherBrand([guide]))[0]);
   } catch (error2) {
     res.status(500).json({ error: error2 instanceof Error ? error2.message : "Failed to get guide" });
   }
 });
-catalogRouter.put("/catalog/guides/:id", ...requireCmsWrite, async (req, res) => {
+catalogRouter.post("/catalog/guides", ...requireGuideStudioWriteMw, async (req, res) => {
   try {
-    const existing = await catalogStore2.getGuide(req.params.id);
-    const normalized = normalizeGuideInput({ ...req.body, id: req.params.id }, existing || void 0);
-    const withRef = {
-      ...normalized,
-      contentReferenceId: existing?.contentReferenceId || await stampReferenceId("content", normalized, normalized.contentReferenceId) || normalized.contentReferenceId
-    };
-    const saved = await catalogStore2.upsertGuide(withRef);
-    res.json({ success: true, data: saved });
+    await persistGuideStudioWrite(req, res, { patch: false });
   } catch (error2) {
     res.status(400).json({ error: validationErrorMessage(error2, "Invalid guide payload") });
   }
 });
-catalogRouter.patch("/catalog/guides/:id", ...requireCmsWrite, async (req, res) => {
+catalogRouter.put("/catalog/guides/:id", ...requireGuideStudioWriteMw, async (req, res) => {
   try {
-    const existing = await catalogStore2.getGuide(req.params.id);
-    if (!existing) {
-      res.status(404).json({ error: "Guide not found" });
-      return;
-    }
-    const normalized = normalizeGuideInput({ ...existing, ...req.body, id: req.params.id }, existing);
-    const withRef = {
-      ...normalized,
-      contentReferenceId: existing.contentReferenceId || await stampReferenceId("content", normalized, normalized.contentReferenceId) || normalized.contentReferenceId
-    };
-    const saved = await catalogStore2.upsertGuide(withRef);
-    res.json({ success: true, data: saved });
+    await persistGuideStudioWrite(req, res, { patch: false });
+  } catch (error2) {
+    res.status(400).json({ error: validationErrorMessage(error2, "Invalid guide payload") });
+  }
+});
+catalogRouter.patch("/catalog/guides/:id", ...requireGuideStudioWriteMw, async (req, res) => {
+  try {
+    await persistGuideStudioWrite(req, res, { patch: true });
   } catch (error2) {
     res.status(400).json({ error: validationErrorMessage(error2, "Invalid guide patch payload") });
   }
 });
+catalogRouter.post("/catalog/guides/:id/publish", ...requireGuideStudioWriteMw, async (req, res) => {
+  try {
+    await persistGuideLifecycle(req, res, "live");
+  } catch (error2) {
+    res.status(400).json({ error: validationErrorMessage(error2, "Failed to publish guide") });
+  }
+});
+catalogRouter.post("/catalog/guides/:id/archive", ...requireGuideStudioWriteMw, async (req, res) => {
+  try {
+    await persistGuideLifecycle(req, res, "archived");
+  } catch (error2) {
+    res.status(400).json({ error: validationErrorMessage(error2, "Failed to archive guide") });
+  }
+});
+catalogRouter.post("/catalog/guides/:id/unpublish", ...requireGuideStudioWriteMw, async (req, res) => {
+  try {
+    await persistGuideLifecycle(req, res, "draft");
+  } catch (error2) {
+    res.status(400).json({ error: validationErrorMessage(error2, "Failed to unpublish guide") });
+  }
+});
+catalogRouter.put(
+  "/catalog/creator/:id/draft",
+  authenticateRequest,
+  requireCreatorStudioWrite,
+  validate({ body: EntityDraftBodySchema }),
+  async (req, res) => {
+    try {
+      const saved = await draftStore.upsertDraft("creator", req.params.id, req.body.data, req.userId ?? "unknown");
+      res.json({ success: true, data: saved });
+    } catch (error2) {
+      res.status(400).json({ error: validationErrorMessage(error2, "Invalid draft payload") });
+    }
+  }
+);
+catalogRouter.post(
+  "/catalog/creator/:id/versions",
+  authenticateRequest,
+  requireCreatorStudioWrite,
+  validate({ body: EntityVersionBodySchema }),
+  async (req, res) => {
+    try {
+      const version = await draftStore.createVersion(
+        "creator",
+        req.params.id,
+        req.body.label,
+        req.body.snapshot,
+        req.userId ?? "unknown",
+        req.user?.displayName
+      );
+      res.status(201).json({ success: true, data: version });
+    } catch (error2) {
+      res.status(400).json({ error: validationErrorMessage(error2, "Invalid version payload") });
+    }
+  }
+);
 catalogRouter.get(
   "/catalog/:entityType/:id/draft",
   ...requireAuth,
@@ -22027,6 +24273,22 @@ catalogRouter.post("/catalog/media/upload", ...requireCatalogMedia, async (req, 
       res.json({ success: true, url: uploaded2.url, mediaId: uploaded2.mediaId });
       return;
     }
+    if (isVideoAttempt) {
+      const videoValidation = validateVideoUploadInput({ base64Data: data || "", mimeType, fileName });
+      if (videoValidation.ok === false) {
+        res.status(400).json({ error: videoValidation.error });
+        return;
+      }
+      const uploaded2 = await storeUploadedDocument({
+        category: resolvedCategory,
+        base64Data: data,
+        mimeType: videoValidation.mimeType,
+        fileName: videoValidation.fileName,
+        uploaderId
+      });
+      res.json({ success: true, url: uploaded2.url, mediaId: uploaded2.mediaId });
+      return;
+    }
     const validation = validateImageUploadInput({
       base64Data: data || "",
       mimeType,
@@ -22134,12 +24396,18 @@ catalogRouter.put("/catalog/product-details/:productId", ...requireProductEdit, 
       req.params.productId,
       existing || void 0
     );
+    {
+      const denied = enforceRelatedInfoOwnership(req, existing, normalized);
+      if (denied) {
+        res.status(denied.status).json({ error: denied.error });
+        return;
+      }
+    }
     try {
-      const attrs = product?.attributes || attributesFromSpecs(normalized.specs, product?.attributes);
       await validateListingAgainstCategorySchema({
         categoryId: product.categoryId,
         status: product.status,
-        attributes: attrs,
+        attributes: product?.attributes ?? {},
         optionGroups: normalized.optionGroups,
         productVariants: normalized.productVariants
       });
@@ -22151,6 +24419,7 @@ catalogRouter.put("/catalog/product-details/:productId", ...requireProductEdit, 
       throw error2;
     }
     const saved = await catalogStore2.upsertProductDetail(normalized);
+    const usesPhysicalInventory2 = product.productType !== "service";
     const prevIds = new Set((existing?.productVariants ?? []).map((v) => v.id));
     for (const variant of saved.productVariants ?? []) {
       if (!prevIds.has(variant.id)) {
@@ -22162,7 +24431,7 @@ catalogRouter.put("/catalog/product-details/:productId", ...requireProductEdit, 
           actor: req.userId || "anonymous",
           payload: { productId: product.id, variantId: variant.id, sku: variant.sku }
         });
-        if (typeof variant.stock === "number") {
+        if (usesPhysicalInventory2 && typeof variant.stock === "number") {
           await ensureInventoryRecord({
             productId: product.id,
             variantId: variant.id,
@@ -22181,7 +24450,9 @@ catalogRouter.put("/catalog/product-details/:productId", ...requireProductEdit, 
         });
       }
     }
-    await syncProductStockFromInventory(product.id);
+    if (usesPhysicalInventory2) {
+      await syncProductStockFromInventory(product.id);
+    }
     res.json({ success: true, data: saved });
   } catch (error2) {
     res.status(400).json({ error: validationErrorMessage(error2, "Invalid product detail payload") });
@@ -22201,12 +24472,18 @@ catalogRouter.patch("/catalog/product-details/:productId", ...requireProductEdit
       req.params.productId,
       existing
     );
+    {
+      const denied = enforceRelatedInfoOwnership(req, existing, normalized);
+      if (denied) {
+        res.status(denied.status).json({ error: denied.error });
+        return;
+      }
+    }
     try {
-      const attrs = product?.attributes || attributesFromSpecs(normalized.specs, product?.attributes);
       await validateListingAgainstCategorySchema({
         categoryId: product.categoryId,
         status: product.status,
-        attributes: attrs,
+        attributes: product?.attributes ?? {},
         optionGroups: normalized.optionGroups,
         productVariants: normalized.productVariants
       });
@@ -22234,6 +24511,55 @@ catalogRouter.patch("/catalog/product-details/:productId", ...requireProductEdit
     res.status(400).json({ error: validationErrorMessage(error2, "Invalid product detail patch payload") });
   }
 });
+catalogRouter.put(
+  "/catalog/product-details/:productId/related-info/admin",
+  authenticateRequest,
+  async (req, res) => {
+    try {
+      if (!userIsPlatformAdmin(req)) {
+        res.status(403).json({ error: "Admin role required to manage promoted related information." });
+        return;
+      }
+      const product = await catalogStore2.getProduct(req.params.productId);
+      if (!product) {
+        res.status(404).json({ error: "Product not found" });
+        return;
+      }
+      const existing = await catalogStore2.getProductDetail(req.params.productId);
+      if (!existing) {
+        res.status(404).json({ error: "Product detail not found" });
+        return;
+      }
+      const body = req.body ?? {};
+      const merged = normalizeProductDetailInput(
+        {
+          ...existing,
+          ..."adminPromotedStores" in body ? { adminPromotedStores: body.adminPromotedStores } : {},
+          ..."relatedInfoLockedByAdmin" in body ? { relatedInfoLockedByAdmin: body.relatedInfoLockedByAdmin } : {},
+          productId: req.params.productId
+        },
+        req.params.productId,
+        existing
+      );
+      const saved = await catalogStore2.upsertProductDetail(merged);
+      publishEvent({
+        eventName: "ProductRelatedInfoAdminUpdated",
+        domain: "Catalog",
+        producer: "catalogRouter",
+        aggregateId: product.id,
+        actor: req.userId || "admin",
+        payload: {
+          productId: product.id,
+          promotedCount: (saved.adminPromotedStores ?? []).length,
+          locked: saved.relatedInfoLockedByAdmin === true
+        }
+      });
+      res.json({ success: true, data: saved });
+    } catch (error2) {
+      res.status(400).json({ error: validationErrorMessage(error2, "Invalid promoted related-info payload") });
+    }
+  }
+);
 catalogRouter.get("/catalog/brand-posts", async (req, res) => {
   try {
     const posts = await catalogStore2.listBrandPosts();
@@ -22311,7 +24637,8 @@ catalogRouter.delete("/catalog/brand-posts/:id", ...requireCmsWrite, async (req,
 
 // server/operationsRouter.ts
 init_operationsStore();
-import { randomBytes as randomBytes2 } from "crypto";
+init_productLifecycle();
+import { randomBytes as randomBytes3 } from "crypto";
 import { Router as Router4 } from "express";
 
 // server/operations/couponValidator.ts
@@ -22530,7 +24857,8 @@ function getRoleAnalytics(role, rangeInput, options) {
   if (permissions.analytics) {
     quickLinks.push({ label: "Analytics", path: "/admin/analytics" });
   }
-  quickLinks.push({ label: "Messages", path: "/admin/messages" });
+  const isPartnerRole2 = role === "seller" || role === "verified_seller" || role === "creator";
+  quickLinks.push({ label: "Messages", path: isPartnerRole2 ? "/admin/conversations" : "/admin/messages" });
   const cards = [];
   const ownerId = options?.ownerId?.trim() || "";
   const activeBrandId = options?.activeBrandId || null;
@@ -22565,12 +24893,6 @@ function getRoleAnalytics(role, rangeInput, options) {
       }
     );
   } else if (role === "creator" && ownerId) {
-    cards.push(
-      { label: "Your Guides", value: "0", sub: "Use Guide Management for live counts" },
-      { label: "Engagement", value: "No data", sub: "Unavailable until metrics exist" },
-      { label: "Ads & Deals", value: "Owned only", sub: "See Ads & Deals Studio" },
-      { label: "Earnings", value: "Unavailable", sub: "No invented figures" }
-    );
   } else {
     switch (role) {
       case "finance_manager":
@@ -22630,6 +24952,11 @@ function getRoleAnalytics(role, rangeInput, options) {
       promoDiscount: 0,
       cod: 0
     },
+    // A partner-scoped payload must never carry the platform-wide daily
+    // series — that would render as a "your orders" trend built from
+    // every seller's checkout. Partner dashboards build their own trend
+    // from actor-scoped orders instead.
+    daily: [],
     scoped: true,
     ownerId,
     activeBrandId: activeBrandId || null
@@ -23389,9 +25716,106 @@ function evaluatePostOrderConversationExpiry(order, nowMs = Date.now()) {
 
 // server/operationsRouter.ts
 init_catalogStore();
+init_inventoryStore();
 init_serviceStore();
+
+// server/catalog/guideOfferService.ts
+init_catalogStore();
+init_productLifecycle();
+async function guideOfferWasPresent(guideId, productId) {
+  if (!guideId || !productId) return false;
+  const guide = await catalogStore2.getGuide(guideId);
+  return Boolean((guide?.liveOffers ?? []).some((o) => o.productId === productId));
+}
+async function resolveActiveGuideOffer(guideId, productId, basePrice, nowMs = Date.now(), hasVariant = false) {
+  if (!guideId || !productId) return null;
+  const guide = await catalogStore2.getGuide(guideId);
+  if (!guide || guide.status !== "live") return null;
+  if (!Array.isArray(guide.productIds) || !guide.productIds.includes(productId)) return null;
+  if (guide.publisherType !== "brand" || !guide.publisherBrandId) return null;
+  const [publisherBrand, product] = await Promise.all([
+    catalogStore2.getBrand(guide.publisherBrandId),
+    catalogStore2.getProduct(productId)
+  ]);
+  if (!product || !isProductLifecyclePubliclyListable(product.status)) return null;
+  if (!publisherBrand?.sellerId || product.sellerId !== publisherBrand.sellerId) return null;
+  const offer = (guide.liveOffers ?? []).find(
+    (o) => o.productId === productId && o.enabled !== false
+  );
+  if (!offer) return null;
+  const s = Date.parse(offer.startsAt);
+  const e = Date.parse(offer.endsAt);
+  if (!Number.isFinite(s) || !Number.isFinite(e)) return null;
+  if (nowMs < s || nowMs >= e) return null;
+  let price;
+  if (typeof offer.promoPrice === "number" && offer.promoPrice >= 0) {
+    if (hasVariant) return null;
+    price = offer.promoPrice;
+  } else if (offer.discountType && typeof offer.discountValue === "number") {
+    price = offer.discountType === "percent" ? basePrice * (1 - Math.min(90, offer.discountValue) / 100) : basePrice - offer.discountValue;
+  } else {
+    return null;
+  }
+  price = Math.max(0, Math.round(price * 100) / 100);
+  if (price >= basePrice) return null;
+  return { guideId, offerId: offer.id, unitPrice: price, basePrice };
+}
+
+// server/operationsRouter.ts
 init_catalogContract();
 init_catalogEditorialContract();
+
+// server/lib/identityNormalize.ts
+function normalizeEmail(raw) {
+  return String(raw || "").trim().toLowerCase();
+}
+function isPlausibleEmail(raw) {
+  const e = normalizeEmail(raw);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
+}
+function normalizeBdPhone(raw) {
+  let d = String(raw || "").replace(/[^\d]/g, "");
+  if (!d) return "";
+  if (d.startsWith("00")) d = d.slice(2);
+  if (d.startsWith("880")) d = d.slice(3);
+  if (d.length === 11 && d.startsWith("01")) return d;
+  if (d.length === 10 && d.startsWith("1")) return `0${d}`;
+  return "";
+}
+function isPlausibleBdPhone(raw) {
+  const p = normalizeBdPhone(raw);
+  return /^01[3-9]\d{8}$/.test(p);
+}
+
+// server/lib/claimToken.ts
+import { randomBytes as randomBytes2, createHash as createHash2, timingSafeEqual } from "node:crypto";
+var CLAIM_TOKEN_TTL_MS = Number(
+  process.env.MANUAL_OFFER_CLAIM_TTL_MS || 14 * 24 * 60 * 60 * 1e3
+);
+function generateClaimToken() {
+  return randomBytes2(32).toString("base64url");
+}
+function hashClaimToken(raw) {
+  return createHash2("sha256").update(String(raw), "utf8").digest("hex");
+}
+function claimTokenMatches(rawPresented, storedHash) {
+  if (!rawPresented || !storedHash) return false;
+  const a = Buffer.from(hashClaimToken(rawPresented), "hex");
+  const b = Buffer.from(storedHash, "hex");
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
+}
+function claimTokenExpiryIso(from = Date.now()) {
+  return new Date(from + CLAIM_TOKEN_TTL_MS).toISOString();
+}
+function isClaimExpired(expiresAtIso) {
+  if (!expiresAtIso) return true;
+  const t = Date.parse(expiresAtIso);
+  return Number.isNaN(t) || Date.now() > t;
+}
+
+// server/operationsRouter.ts
+init_operationsDb();
 
 // server/profileStatusFacts.ts
 init_catalogStore();
@@ -23634,9 +26058,116 @@ init_notificationService();
 init_systemNotify();
 init_communicationTypes();
 init_eventBus();
+
+// server/operations/manualOrderOfferStore.ts
+init_firestoreAdmin();
+init_queryHelpers();
+import { existsSync as existsSync10, mkdirSync as mkdirSync10, readFileSync as readFileSync10, writeFileSync as writeFileSync10 } from "node:fs";
+import { dirname as dirname10, join as join11 } from "node:path";
+var memory3 = /* @__PURE__ */ new Map();
+var backend3 = null;
+var DISK_SNAPSHOT_PATH4 = process.env.MANUAL_ORDER_OFFER_MEMORY_SNAPSHOT_PATH?.trim() || join11(process.cwd(), ".data", "manual-order-offer-memory-snapshot.json");
+function loadDiskSnapshot3() {
+  if (!existsSync10(DISK_SNAPSHOT_PATH4)) return;
+  try {
+    const rows = JSON.parse(readFileSync10(DISK_SNAPSHOT_PATH4, "utf8"));
+    for (const row of rows) memory3.set(row.id, row);
+    console.log(`[ManualOrderOfferStore] Hydrated ${rows.length} offer(s) from disk snapshot.`);
+  } catch (error2) {
+    console.warn("[ManualOrderOfferStore] Failed to load disk snapshot:", error2);
+  }
+}
+var persistTimer7 = null;
+function scheduleDiskPersist2() {
+  if (persistTimer7) clearTimeout(persistTimer7);
+  persistTimer7 = setTimeout(() => {
+    try {
+      mkdirSync10(dirname10(DISK_SNAPSHOT_PATH4), { recursive: true });
+      writeFileSync10(DISK_SNAPSHOT_PATH4, JSON.stringify([...memory3.values()]), "utf8");
+    } catch (error2) {
+      console.error("[ManualOrderOfferStore] Failed to save disk snapshot:", error2);
+    }
+  }, 300);
+}
+async function resolveBackend3() {
+  if (backend3) return backend3;
+  const adminDb2 = await getAdminFirestore();
+  backend3 = adminDb2 ? "admin" : "memory";
+  if (backend3 === "memory") loadDiskSnapshot3();
+  console.log(`[ManualOrderOfferStore] Using ${backend3} backend`);
+  return backend3;
+}
+async function saveManualOrderOffer(offer) {
+  const mode = await resolveBackend3();
+  if (mode === "memory") {
+    memory3.set(offer.id, offer);
+    scheduleDiskPersist2();
+    return offer;
+  }
+  const db3 = await getAdminFirestore();
+  await db3.collection("manual_order_offers").doc(offer.id).set(offer, { merge: true });
+  return offer;
+}
+async function getManualOrderOffer(id) {
+  const mode = await resolveBackend3();
+  if (mode === "memory") {
+    return memory3.get(id) ?? null;
+  }
+  return getDocumentById("manual_order_offers", id);
+}
+async function listManualOrderOffers(filters) {
+  const mode = await resolveBackend3();
+  let rows;
+  if (mode === "memory") {
+    rows = [...memory3.values()];
+  } else {
+    const db3 = await getAdminFirestore();
+    const snap = await db3.collection("manual_order_offers").limit(500).get();
+    rows = snap.docs.map((doc3) => doc3.data());
+  }
+  if (filters?.sellerId) {
+    rows = rows.filter((r) => r.sellerId === filters.sellerId);
+  }
+  if (filters?.buyerId) {
+    rows = rows.filter((r) => r.buyerId === filters.buyerId);
+  }
+  if (filters?.conversationId) {
+    rows = rows.filter((r) => r.conversationId === filters.conversationId);
+  }
+  if (filters?.status) {
+    const statuses = Array.isArray(filters.status) ? filters.status : [filters.status];
+    rows = rows.filter((r) => statuses.includes(r.status));
+  }
+  return rows.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+// shared/manualOrder/manualOrderTypes.ts
+function toManualOrderOfferCard(offer) {
+  return {
+    kind: "manual_order_offer",
+    offerId: offer.id,
+    conversationId: offer.conversationId,
+    sellerId: offer.sellerId,
+    sellerName: offer.sellerName,
+    buyerId: offer.buyerId,
+    buyerName: offer.buyerName,
+    items: offer.items,
+    notes: offer.notes,
+    subtotal: offer.subtotal,
+    deliveryTotal: offer.deliveryTotal,
+    overallTotal: offer.overallTotal,
+    currency: offer.currency,
+    status: offer.status,
+    createdAt: offer.createdAt,
+    orderId: offer.orderId,
+    rejectReason: offer.rejectReason
+  };
+}
+
+// server/operationsRouter.ts
 var operationsRouter = Router4();
 var requireAuth2 = [authenticateRequest, requirePartnerEntitlement, requireMarketplaceAccess];
-var requireAdmin = [authenticateRequest, requireRole(ROLES.ADMIN)];
+var requireAdmin2 = [authenticateRequest, requireRole(ROLES.ADMIN)];
 var requireModerator2 = [authenticateRequest, requireModerator];
 function userCanManageCoupons(req) {
   const role = req.userRole;
@@ -23685,6 +26216,15 @@ function userCanCreateManualOrder(req) {
   return Boolean(role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER)));
 }
 var FLAT_DELIVERY_FEE_PER_SELLER = 120;
+var OrderPricingError = class extends Error {
+  constructor(message, statusCode = 400, opts) {
+    super(message);
+    this.name = "OrderPricingError";
+    this.statusCode = statusCode;
+    this.code = opts?.code;
+    this.details = opts?.details;
+  }
+};
 async function recomputeOrderPricingServerSide(body) {
   const rawSubOrders = Array.isArray(body.subOrders) ? body.subOrders : [];
   let subtotal = 0;
@@ -23704,11 +26244,58 @@ async function recomputeOrderPricingServerSide(body) {
           let realPrice = 0;
           let realTitle = typeof item.productTitle === "string" ? item.productTitle : "";
           let warrantySnapshot = {};
+          const rawGuideOfferRef = item.guideOfferRef && typeof item.guideOfferRef === "object" ? item.guideOfferRef : null;
+          const guideOfferGuideId = rawGuideOfferRef ? toIdString(rawGuideOfferRef.guideId) : "";
+          const guideOfferProductId = rawGuideOfferRef ? toIdString(rawGuideOfferRef.productId) || productId : "";
+          const expectedUnitPrice = typeof item.expectedUnitPrice === "number" && Number.isFinite(item.expectedUnitPrice) ? item.expectedUnitPrice : void 0;
+          let guideOfferSnapshot;
           if (productId) {
             const product = await catalogStore2.getProduct(productId);
             if (!product) throw new Error(`Product ${productId} no longer exists`);
+            if (!isProductLifecyclePubliclyListable(product.status)) {
+              throw new Error(
+                `"${product.title}" is no longer available for purchase (status: ${normalizeProductLifecycle(product.status)}).`
+              );
+            }
             realPrice = product.price;
             realTitle = product.title;
+            if (guideOfferGuideId && guideOfferProductId === productId) {
+              const lineHasVariant = Boolean(
+                typeof item.variantId === "string" && item.variantId || typeof item.variantSku === "string" && item.variantSku
+              );
+              const resolved = await resolveActiveGuideOffer(
+                guideOfferGuideId,
+                productId,
+                product.price,
+                Date.now(),
+                lineHasVariant
+              );
+              if (resolved) {
+                realPrice = resolved.unitPrice;
+                guideOfferSnapshot = {
+                  guideId: resolved.guideId,
+                  offerId: resolved.offerId,
+                  basePrice: resolved.basePrice
+                };
+              }
+              if (typeof expectedUnitPrice === "number" && Math.abs(expectedUnitPrice - realPrice) > 1e-3) {
+                const wasPresent = await guideOfferWasPresent(guideOfferGuideId, productId);
+                throw new OrderPricingError(
+                  wasPresent ? `The LIVE offer for "${product.title}" has changed or expired. The current price is \u09F3${realPrice.toLocaleString()}. Please review the updated total before continuing.` : `The price for "${product.title}" has changed. The current price is \u09F3${realPrice.toLocaleString()}. Please review the updated total before continuing.`,
+                  409,
+                  {
+                    code: "GUIDE_OFFER_PRICE_CHANGED",
+                    details: {
+                      productId,
+                      expectedUnitPrice,
+                      actualUnitPrice: realPrice,
+                      guideOfferActive: Boolean(resolved),
+                      offerWasPresent: wasPresent
+                    }
+                  }
+                );
+              }
+            }
             if (product.warrantyMonths && product.warrantyMonths > 0) {
               const startsAt = (/* @__PURE__ */ new Date()).toISOString();
               const expiresAt = new Date(
@@ -23726,13 +26313,27 @@ async function recomputeOrderPricingServerSide(body) {
           } else if (serviceId) {
             const service = await getService(serviceId);
             if (!service) throw new Error(`Service ${serviceId} no longer exists`);
+            if (!isProductLifecyclePubliclyListable(service.status)) {
+              throw new Error(
+                `"${service.title}" is no longer available for booking (status: ${normalizeProductLifecycle(service.status)}).`
+              );
+            }
             realPrice = service.price;
             realTitle = service.title;
           } else {
             throw new Error("Order item is missing productId/serviceId");
           }
           subtotal += realPrice * quantity;
-          return { ...item, itemId, ...warrantySnapshot, price: realPrice, productTitle: realTitle, quantity };
+          const { expectedUnitPrice: _dropExpected, ...cleanItem } = item;
+          return {
+            ...cleanItem,
+            itemId,
+            ...warrantySnapshot,
+            price: realPrice,
+            productTitle: realTitle,
+            quantity,
+            ...guideOfferSnapshot ? { guideOffer: guideOfferSnapshot } : {}
+          };
         })
       );
       const hasProduct = items.some(
@@ -23761,9 +26362,9 @@ async function recomputeOrderPricingServerSide(body) {
   const overallTotal = Math.max(0, subtotal + deliveryTotal - promoDiscount);
   return { subOrders: recomputedSubOrders, subtotal, deliveryTotal, overallTotal, promoDiscount };
 }
-var CLAIM_TOKEN_TTL_MS = Number(process.env.ORDER_CLAIM_TOKEN_TTL_MS || 7 * 24 * 60 * 60 * 1e3);
+var CLAIM_TOKEN_TTL_MS2 = Number(process.env.ORDER_CLAIM_TOKEN_TTL_MS || 7 * 24 * 60 * 60 * 1e3);
 function generateOrderClaimToken() {
-  return randomBytes2(32).toString("hex");
+  return randomBytes3(32).toString("hex");
 }
 function buildClaimConfirmUrl(token) {
   const base = (process.env.CHOOSIFY_WEB_URL || process.env.VITE_CHOOSIFY_WEB_URL || "http://localhost:5173").replace(/\/$/, "");
@@ -23799,25 +26400,25 @@ function userCanUpdateShipment(req, shipmentOrderId) {
   const subs = order.subOrders || [];
   return subs.some((sub) => sub.sellerId === req.userId);
 }
+async function userCanReplyToBuyerConversation(req, buyerId) {
+  if (userIsStaff(req)) return true;
+  const role = req.userRole;
+  if (!(role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER) || hasRole(role, ROLES.CREATOR)))) {
+    return false;
+  }
+  if (!req.userId || !buyerId) return false;
+  if (operationsStore.listOrders({ buyerId, sellerId: req.userId }).length > 0) return true;
+  const offers = await listManualOrderOffers({ buyerId, sellerId: req.userId });
+  if (offers.length > 0) return true;
+  const { listBookingRequests: listBookingRequests2 } = await Promise.resolve().then(() => (init_bookingStore(), bookingStore_exports));
+  const bookings = await listBookingRequests2({ buyerId, sellerId: req.userId });
+  return bookings.length > 0;
+}
 function userCanViewShipment(req, shipment) {
   if (userIsStaff(req)) return true;
   if (!req.userId) return false;
   if (shipment.buyerId === req.userId) return true;
   return userCanUpdateShipment(req, shipment.orderId);
-}
-function userHasPurchasedProductForReview(userId, productId) {
-  if (!userId || !productId || productId === "unknown") return false;
-  return operationsStore.listOrders().some((order) => {
-    if (order.buyerId !== userId) return false;
-    if (order.status === "cancelled") return false;
-    const subs = order.subOrders || [];
-    const deliveredItem = subs.some(
-      (sub) => (sub.trackingStatus === "delivered" || order.status === "completed") && (sub.items || []).some((item) => String(item.productId) === String(productId))
-    );
-    if (deliveredItem) return true;
-    const flatItems = order.items || [];
-    return order.status === "completed" && flatItems.some((item) => String(item.productId) === String(productId));
-  });
 }
 function userCanModerateOrEditReview(req, review) {
   if (userIsStaff(req)) return true;
@@ -23924,6 +26525,9 @@ function userCanListReviews(req, filter) {
   const userId = req.userId;
   if (!userId) return false;
   if (filter.userId) return filter.userId === userId;
+  if (filter.sellerId && role && (hasRole(role, ROLES.SELLER) || hasRole(role, ROLES.VERIFIED_SELLER) || hasRole(role, ROLES.CREATOR))) {
+    return filter.sellerId === userId;
+  }
   return false;
 }
 function toExpiryOrder(order) {
@@ -23996,6 +26600,7 @@ operationsRouter.get("/operations/orders/:id", ...requireAuth2, (req, res) => {
   res.json({ data: order });
 });
 operationsRouter.post("/operations/orders", ...requireAuth2, async (req, res) => {
+  let reservedInventoryLines = [];
   try {
     const body = req.body;
     if (!body.orderId) {
@@ -24018,12 +26623,16 @@ operationsRouter.post("/operations/orders", ...requireAuth2, async (req, res) =>
       }
       buyerId = req.userId;
     }
+    if (operationsStore.getOrder(body.orderId)) {
+      res.status(409).json({ error: "Order already exists" });
+      return;
+    }
     const status = body.status === "pending_payment" || body.status === "confirmed" || body.status === "cancelled" || body.status === "completed" ? body.status : "active";
     let claimToken;
     let claimTokenExpiresAt;
     if (wantsManual) {
       claimToken = generateOrderClaimToken();
-      claimTokenExpiresAt = new Date(Date.now() + CLAIM_TOKEN_TTL_MS).toISOString();
+      claimTokenExpiresAt = new Date(Date.now() + CLAIM_TOKEN_TTL_MS2).toISOString();
     }
     let pricing;
     if (wantsManual) {
@@ -24038,12 +26647,61 @@ operationsRouter.post("/operations/orders", ...requireAuth2, async (req, res) =>
       try {
         pricing = await recomputeOrderPricingServerSide(body);
       } catch (err) {
+        if (err instanceof OrderPricingError) {
+          res.status(err.statusCode).json({
+            error: err.message,
+            ...err.code ? { code: err.code } : {},
+            ...err.details ? { details: err.details } : {}
+          });
+          return;
+        }
         res.status(400).json({
           error: err instanceof Error ? err.message : "Unable to validate order items"
         });
         return;
       }
     }
+    if (!wantsManual) {
+      if (operationsStore.getOrder(body.orderId)) {
+        res.status(409).json({ error: "Order already exists" });
+        return;
+      }
+      const required = /* @__PURE__ */ new Map();
+      for (const sub of pricing.subOrders) {
+        for (const item of sub.items || []) {
+          const productId = typeof item.productId === "string" || typeof item.productId === "number" ? String(item.productId).trim() : "";
+          if (!productId) continue;
+          const variantId = typeof item.variantId === "string" ? item.variantId : void 0;
+          const key = `${productId}::${variantId || ""}`;
+          const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+          const existing = required.get(key);
+          required.set(key, { productId, variantId, quantity: (existing?.quantity || 0) + quantity });
+        }
+      }
+      for (const line of required.values()) {
+        const result = await reserveInventoryQuantity(line);
+        if (result.ok === true) {
+          reservedInventoryLines.push(line);
+          continue;
+        }
+        const insufficientResult = result;
+        for (const r of reservedInventoryLines) {
+          await releaseInventoryQuantity(r).catch((err) => {
+            console.error("[Order] Failed to release inventory after a later line failed reservation:", err);
+          });
+        }
+        reservedInventoryLines = [];
+        res.status(409).json({
+          error: `Insufficient stock for one or more items`,
+          code: "INSUFFICIENT_STOCK",
+          productId: line.productId,
+          requestedQuantity: line.quantity,
+          availableQuantity: insufficientResult.available
+        });
+        return;
+      }
+    }
+    const createdAtValue = body.createdAt || (/* @__PURE__ */ new Date()).toISOString();
     const saved = operationsStore.createOrder({
       orderId: body.orderId,
       buyerId,
@@ -24053,6 +26711,7 @@ operationsRouter.post("/operations/orders", ...requireAuth2, async (req, res) =>
       subtotal: pricing.subtotal,
       deliveryTotal: pricing.deliveryTotal,
       subOrders: pricing.subOrders,
+      inventoryReserved: reservedInventoryLines.length > 0 ? true : void 0,
       promoCode: body.promoCode,
       promoDiscount: pricing.promoDiscount,
       promoType: body.promoType,
@@ -24067,7 +26726,7 @@ operationsRouter.post("/operations/orders", ...requireAuth2, async (req, res) =>
       paymentDueAt: body.paymentDueAt,
       paidAt: body.paidAt,
       invoiceGeneratedAt: body.invoiceGeneratedAt,
-      createdAt: body.createdAt || (/* @__PURE__ */ new Date()).toISOString(),
+      createdAt: createdAtValue,
       isManual: wantsManual || void 0,
       platformSource: body.platformSource,
       claimToken,
@@ -24086,6 +26745,14 @@ operationsRouter.post("/operations/orders", ...requireAuth2, async (req, res) =>
       paidAmount: body.paidAmount,
       paymentValidatedAt: body.paymentValidatedAt
     });
+    if (reservedInventoryLines.length > 0 && saved.createdAt !== createdAtValue) {
+      for (const r of reservedInventoryLines) {
+        await releaseInventoryQuantity(r).catch((err) => {
+          console.error("[Order] Failed to release inventory after losing a duplicate-orderId race:", err);
+        });
+      }
+      reservedInventoryLines = [];
+    }
     if (body.promoCode && pricing.promoDiscount) {
       const coupon = operationsStore.getCouponByCode(body.promoCode);
       if (coupon) {
@@ -24107,6 +26774,27 @@ operationsRouter.post("/operations/orders", ...requireAuth2, async (req, res) =>
       await ensurePlatformOrderConversation(saved);
     } catch (err) {
       console.warn("[Order] Platform conversation bridge failed:", err);
+    }
+    if (saved.status !== "pending_payment") {
+      const sellerIds = Array.from(
+        new Set(
+          (saved.subOrders || []).map((sub) => sub.sellerId).filter((id) => Boolean(id))
+        )
+      );
+      for (const sellerId of sellerIds) {
+        try {
+          await notifyUser(sellerId, {
+            type: COMMUNICATION_TYPES.ORDER_UPDATE,
+            category: "seller",
+            title: "New order received",
+            summary: `Order ${saved.orderId} placed \u2014 \u09F3${Number(saved.overallTotal || 0).toLocaleString()}.`,
+            actionUrl: "/dashboard?tab=seller-orders",
+            metadata: { orderId: saved.orderId }
+          });
+        } catch (err) {
+          console.warn("[Order] Notify seller (new order) failed:", err);
+        }
+      }
     }
     let confirmOrderUrl;
     if (saved.claimToken && req.userId) {
@@ -24136,6 +26824,13 @@ operationsRouter.post("/operations/orders", ...requireAuth2, async (req, res) =>
       confirmOrderUrl
     });
   } catch (error2) {
+    if (reservedInventoryLines.length > 0) {
+      for (const r of reservedInventoryLines) {
+        await releaseInventoryQuantity(r).catch((err) => {
+          console.error("[Order] Failed to release inventory after order creation failed:", err);
+        });
+      }
+    }
     res.status(400).json({ error: error2 instanceof Error ? error2.message : "Invalid order payload" });
   }
 });
@@ -24226,7 +26921,7 @@ operationsRouter.patch("/operations/orders/:id", ...requireAuth2, (req, res) => 
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
-operationsRouter.post("/operations/orders/:id/cancel", ...requireAuth2, (req, res) => {
+operationsRouter.post("/operations/orders/:id/cancel", ...requireAuth2, async (req, res) => {
   const reason = String(req.body?.reason || req.body?.cancelReason || "").trim();
   if (!reason) {
     res.status(400).json({ error: "reason is required" });
@@ -24273,18 +26968,50 @@ operationsRouter.post("/operations/orders/:id/cancel", ...requireAuth2, (req, re
     });
     return;
   }
+  if (existing.inventoryReserved) {
+    const items = subs.flatMap((sub) => sub.items || []);
+    for (const item of items) {
+      const productId = typeof item.productId === "string" || typeof item.productId === "number" ? String(item.productId).trim() : "";
+      if (!productId) continue;
+      const variantId = typeof item.variantId === "string" ? item.variantId : void 0;
+      const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+      await releaseInventoryQuantity({ productId, variantId, quantity }).catch((err) => {
+        console.error("[Order] Failed to release inventory on cancel:", err);
+      });
+    }
+  }
   const ts = (/* @__PURE__ */ new Date()).toISOString();
   const saved = operationsStore.updateOrder(req.params.id, {
     status: "cancelled",
     cancelledAt: ts,
     cancelReason: reason,
-    cancelledBy: "buyer"
+    cancelledBy: "buyer",
+    inventoryReserved: false
   });
   if (!saved) {
     res.status(404).json({ error: "Order not found" });
     return;
   }
   scheduleOperationsPersist();
+  const cancelSellerIds = Array.from(
+    new Set(
+      (saved.subOrders || []).map((sub) => sub.sellerId).filter((id) => Boolean(id))
+    )
+  );
+  for (const sellerId of cancelSellerIds) {
+    try {
+      await notifyUser(sellerId, {
+        type: COMMUNICATION_TYPES.ORDER_UPDATE,
+        category: "seller",
+        title: "Order cancelled",
+        summary: `Order ${saved.orderId} was cancelled by the buyer: ${reason}`,
+        actionUrl: "/dashboard?tab=seller-orders",
+        metadata: { orderId: saved.orderId }
+      });
+    } catch (err) {
+      console.warn("[Order] Notify seller (cancelled) failed:", err);
+    }
+  }
   res.json({ success: true, data: saved });
 });
 operationsRouter.post("/operations/orders/:id/items/:itemId/mark-delivered", ...requireAuth2, async (req, res) => {
@@ -24302,15 +27029,24 @@ operationsRouter.post("/operations/orders/:id/items/:itemId/mark-delivered", ...
   let authorized = userIsStaff(req);
   if (!authorized && req.userId && located.sub.sellerId === req.userId) authorized = true;
   if (!authorized && req.userId) {
-    const productId = String(located.item.productId || "").trim();
-    if (productId) {
-      const product = await catalogStore2.getProduct(productId);
+    const productId2 = String(located.item.productId || "").trim();
+    if (productId2) {
+      const product = await catalogStore2.getProduct(productId2);
       if (product?.sellerId === req.userId) authorized = true;
     }
   }
   if (!authorized) {
     res.status(403).json({ error: "Not authorized to update this order item" });
     return;
+  }
+  const productId = String(located.item.productId || "").trim();
+  const alreadyConsumed = Boolean(located.item.inventoryConsumed);
+  if (productId && !alreadyConsumed) {
+    const variantId = typeof located.item.variantId === "string" ? located.item.variantId : void 0;
+    const quantity = Math.max(1, Math.floor(Number(located.item.quantity) || 1));
+    await consumeInventoryQuantity({ productId, variantId, quantity }).catch((err) => {
+      console.error("[Order] Failed to consume inventory on mark-delivered:", err);
+    });
   }
   const deliveredAt = (/* @__PURE__ */ new Date()).toISOString();
   const nextSubs = subs.map((sub) => {
@@ -24322,18 +27058,657 @@ operationsRouter.post("/operations/orders/:id/items/:itemId/mark-delivered", ...
       trackingStatus: "delivered",
       items: items.map((it) => {
         if (it.itemId !== req.params.itemId) return it;
+        const consumedFlag = productId ? { inventoryConsumed: true } : {};
         const warrantyMonths = Number(it.warrantyMonthsAtPurchase) || 0;
-        if (!warrantyMonths) return { ...it, deliveredAt };
+        if (!warrantyMonths) return { ...it, ...consumedFlag, deliveredAt };
         const expiresAt = new Date(
           Date.now() + warrantyMonths * 30 * 24 * 60 * 60 * 1e3
         ).toISOString();
-        return { ...it, deliveredAt, warrantyStartsAt: deliveredAt, warrantyExpiresAt: expiresAt };
+        return { ...it, ...consumedFlag, deliveredAt, warrantyStartsAt: deliveredAt, warrantyExpiresAt: expiresAt };
       })
     };
   });
   const saved = operationsStore.updateOrder(req.params.id, { subOrders: nextSubs });
   scheduleOperationsPersist();
+  try {
+    const allItemsDelivered = nextSubs.every(
+      (sub) => (sub.items || []).every((it) => Boolean(it.deliveredAt))
+    );
+    if (allItemsDelivered) {
+      const shipment = shipmentStore.getShipmentByOrderId(req.params.id);
+      if (shipment && shipment.status !== "delivered") {
+        shipmentStore.updateShipment(shipment.id, {
+          status: "delivered",
+          trackingEvents: [
+            {
+              id: `evt_${Date.now()}`,
+              timestamp: deliveredAt,
+              status: "delivered",
+              location: shipment.region || "Dhaka",
+              description: `Marked delivered via order fulfillment (item ${req.params.itemId}).`
+            },
+            ...shipment.trackingEvents
+          ]
+        });
+      }
+    }
+  } catch (err) {
+    console.error("[Order] Failed to sync shipment status on mark-delivered:", err);
+  }
+  if (existing.buyerId) {
+    try {
+      await notifyUser(existing.buyerId, {
+        type: COMMUNICATION_TYPES.ORDER_UPDATE,
+        category: "buyer",
+        title: "Order delivered",
+        summary: `${String(located.item.productTitle || "Your item")} from order ${existing.orderId} was marked delivered.`,
+        actionUrl: "/profile/orders",
+        metadata: { orderId: existing.orderId, itemId: req.params.itemId }
+      });
+    } catch (err) {
+      console.warn("[Order] Notify buyer (delivered) failed:", err);
+    }
+  }
   res.json({ success: true, data: saved });
+});
+function makeManualOfferInvoiceId() {
+  return `INV-${Math.floor(1e5 + Math.random() * 9e5)}`;
+}
+operationsRouter.post("/operations/manual-offers", ...requireAuth2, async (req, res) => {
+  try {
+    if (!userCanCreateManualOrder(req)) {
+      res.status(403).json({ error: "Not authorized to create manual order offers" });
+      return;
+    }
+    const body = req.body || {};
+    const rawItems = Array.isArray(body.items) ? body.items : [];
+    if (rawItems.length === 0) {
+      res.status(400).json({ error: "At least one item is required" });
+      return;
+    }
+    if (!req.userId) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+    const staff = userIsStaff(req);
+    const nativeBuyerId = String(body.buyerId || "").trim();
+    const isExternal = !nativeBuyerId;
+    const extName = String(body.customerName || body.buyerName || "").trim();
+    const extEmailRaw = String(body.email || "").trim();
+    const extPhoneRaw = String(body.phone || "").trim();
+    let intendedCustomer;
+    if (isExternal) {
+      if (!extName || !extEmailRaw || !extPhoneRaw) {
+        res.status(400).json({
+          error: "An external Manual Order requires customer name, email and phone.",
+          code: "EXTERNAL_CUSTOMER_FIELDS_REQUIRED"
+        });
+        return;
+      }
+      if (!isPlausibleEmail(extEmailRaw)) {
+        res.status(400).json({ error: "That email address looks invalid.", code: "INVALID_EMAIL" });
+        return;
+      }
+      if (!isPlausibleBdPhone(extPhoneRaw)) {
+        res.status(400).json({ error: "That phone number is not a valid Bangladesh mobile number.", code: "INVALID_PHONE" });
+        return;
+      }
+      const normalizedEmail = normalizeEmail(extEmailRaw);
+      const normalizedPhone = normalizeBdPhone(extPhoneRaw);
+      const existingAccount = await findAccountByNormalizedEmail(normalizedEmail).catch(() => null);
+      intendedCustomer = {
+        name: extName,
+        normalizedEmail,
+        normalizedPhone,
+        matchedConsumerId: existingAccount && existingAccount.role === "user" ? existingAccount.uid : void 0,
+        addressHint: typeof body.addressHint === "string" && body.addressHint.trim() ? body.addressHint.trim() : void 0
+      };
+    }
+    const buyerId = nativeBuyerId;
+    const sellerId = staff && body.sellerId ? String(body.sellerId).trim() : req.userId;
+    const validatedItems = [];
+    let subtotal = 0;
+    for (const raw of rawItems) {
+      const productId = String(raw.productId || "").trim();
+      if (!productId) {
+        res.status(400).json({ error: "Each item requires a productId" });
+        return;
+      }
+      const quantity = Math.max(1, Math.floor(Number(raw.quantity) || 1));
+      const price = Number(raw.price);
+      if (!Number.isFinite(price) || price <= 0) {
+        res.status(400).json({ error: `Invalid price for product ${productId}` });
+        return;
+      }
+      let productType = "physical";
+      let productTitle = "";
+      let image;
+      let ownerId;
+      const product = await catalogStore2.getProduct(productId);
+      if (product) {
+        if (!isProductLifecyclePubliclyListable(product.status)) {
+          res.status(400).json({
+            error: `"${product.title}" is no longer available (status: ${normalizeProductLifecycle(product.status)}) and cannot be offered.`
+          });
+          return;
+        }
+        productTitle = product.title;
+        image = product.image;
+        ownerId = product.sellerId;
+      } else {
+        const service = await getService(productId);
+        if (!service) {
+          res.status(404).json({ error: `Product or service ${productId} not found` });
+          return;
+        }
+        if (!isProductLifecyclePubliclyListable(service.status)) {
+          res.status(400).json({
+            error: `"${service.title}" is no longer available (status: ${normalizeProductLifecycle(service.status)}) and cannot be offered.`
+          });
+          return;
+        }
+        productType = "service";
+        productTitle = service.title;
+        image = service.image;
+        ownerId = service.sellerId;
+      }
+      if (!staff && ownerId !== sellerId) {
+        res.status(403).json({ error: `Not authorized to offer ${productId} \u2014 you do not own it` });
+        return;
+      }
+      validatedItems.push({
+        productId,
+        productTitle,
+        variantId: typeof raw.variantId === "string" ? raw.variantId : void 0,
+        quantity,
+        price,
+        productType,
+        image
+      });
+      subtotal += price * quantity;
+    }
+    const deliveryTotal = Math.max(0, Number(body.deliveryTotal) || 0);
+    const overallTotal = subtotal + deliveryTotal;
+    const ts = (/* @__PURE__ */ new Date()).toISOString();
+    const provSourceRaw = String(body.provenanceSource || body.source || "").trim();
+    const PROV_SOURCES = /* @__PURE__ */ new Set([
+      "manual",
+      "external_whatsapp",
+      "external_facebook",
+      "external_instagram",
+      "external_offline"
+    ]);
+    const provenanceSource = PROV_SOURCES.has(provSourceRaw) ? provSourceRaw : isExternal ? "external_offline" : "manual";
+    const metaConversationId = typeof body.conversationId === "string" && body.conversationId.trim() ? body.conversationId.trim() : isExternal ? `meta:${sellerId}:${Date.now()}` : `conv_platform_${buyerId}`;
+    let rawClaimToken;
+    let claimTokenHash;
+    let claimTokenExpiresAt;
+    if (isExternal) {
+      rawClaimToken = generateClaimToken();
+      claimTokenHash = hashClaimToken(rawClaimToken);
+      claimTokenExpiresAt = claimTokenExpiryIso();
+    }
+    const offer = {
+      id: `MOF-${Date.now()}`,
+      kind: "manual_order_offer",
+      conversationId: metaConversationId,
+      sellerId,
+      sellerName: typeof body.sellerName === "string" ? body.sellerName : req.user?.displayName,
+      buyerId,
+      buyerName: isExternal ? intendedCustomer?.name : typeof body.buyerName === "string" ? body.buyerName : void 0,
+      items: validatedItems,
+      notes: typeof body.notes === "string" ? body.notes : void 0,
+      subtotal,
+      deliveryTotal,
+      overallTotal,
+      currency: "BDT",
+      status: isExternal ? "awaiting_buyer_claim" : "pending",
+      createdAt: ts,
+      updatedAt: ts,
+      ...isExternal ? { intendedCustomer, claimTokenHash, claimTokenExpiresAt } : {},
+      provenance: { source: provenanceSource, conversationId: metaConversationId }
+    };
+    await saveManualOrderOffer(offer);
+    const itemSummary = validatedItems.map((it) => `${it.productTitle} x${it.quantity}`).join(", ");
+    if (!isExternal) {
+      try {
+        await submitPlatformMessage({
+          buyerId,
+          userName: offer.sellerName || "Seller",
+          body: `New order offer: ${itemSummary} \u2014 \u09F3${overallTotal.toLocaleString()}`,
+          orderOffer: toManualOrderOfferCard(offer)
+        });
+      } catch (err) {
+        console.warn("[ManualOrderOffer] Failed to post offer message:", err);
+      }
+      try {
+        await notifyUser(buyerId, {
+          type: COMMUNICATION_TYPES.SELLER_UPDATE,
+          category: "buyer",
+          title: "New order offer",
+          summary: `${offer.sellerName || "A seller"} sent you an offer: ${itemSummary} \u2014 \u09F3${overallTotal.toLocaleString()}.`,
+          actionUrl: `/messages/conv_platform_${buyerId}`,
+          metadata: { offerId: offer.id }
+        });
+      } catch (err) {
+        console.warn("[ManualOrderOffer] Notify buyer (new offer) failed:", err);
+      }
+      res.status(201).json({ success: true, data: toManualOrderOfferCard(offer) });
+      return;
+    }
+    const webBase3 = (process.env.CHOOSIFY_WEB_URL || process.env.VITE_CHOOSIFY_WEB_URL || "http://localhost:5173").replace(/\/$/, "");
+    res.status(201).json({
+      success: true,
+      data: toManualOrderOfferCard(offer),
+      claim: {
+        token: rawClaimToken,
+        url: `${webBase3}/orders/confirm/${encodeURIComponent(rawClaimToken)}`,
+        expiresAt: claimTokenExpiresAt
+      }
+    });
+  } catch (error2) {
+    res.status(400).json({ error: error2 instanceof Error ? error2.message : "Failed to create offer" });
+  }
+});
+operationsRouter.get("/operations/manual-offers/:id", ...requireAuth2, async (req, res) => {
+  const existing = await getManualOrderOffer(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: "Offer not found" });
+    return;
+  }
+  if (!userIsStaff(req) && req.userId !== existing.sellerId && req.userId !== existing.buyerId) {
+    res.status(403).json({ error: "Not authorized to view this offer" });
+    return;
+  }
+  res.json({ success: true, data: toManualOrderOfferCard(existing) });
+});
+var ManualOfferFinalizeError = class extends Error {
+  constructor(statusCode, message, body) {
+    super(message);
+    this.statusCode = statusCode;
+    this.body = body;
+  }
+};
+async function finalizeManualOrderOffer(existing, buyer) {
+  for (const item of existing.items) {
+    const entity = item.productType === "service" ? await getService(item.productId) : await catalogStore2.getProduct(item.productId);
+    if (!entity) {
+      throw new ManualOfferFinalizeError(
+        400,
+        `"${item.productTitle}" no longer exists and cannot be purchased.`
+      );
+    }
+    if (!isProductLifecyclePubliclyListable(entity.status)) {
+      throw new ManualOfferFinalizeError(
+        400,
+        `"${item.productTitle}" is no longer available (status: ${normalizeProductLifecycle(entity.status)}) and cannot be purchased.`
+      );
+    }
+  }
+  const orderId = `MOF-ORDER-${existing.id}`;
+  const alreadyCreated = operationsStore.getOrder(orderId);
+  if (alreadyCreated) {
+    return {
+      offer: {
+        ...existing,
+        status: "accepted",
+        orderId,
+        buyerId: existing.buyerId || buyer.buyerId
+      },
+      order: alreadyCreated
+    };
+  }
+  const required = /* @__PURE__ */ new Map();
+  for (const item of existing.items) {
+    if (item.productType === "service") continue;
+    const key = `${item.productId}::${item.variantId || ""}`;
+    const prior = required.get(key);
+    required.set(key, {
+      productId: item.productId,
+      variantId: item.variantId,
+      quantity: (prior?.quantity || 0) + item.quantity
+    });
+  }
+  const reservedInventoryLines = [];
+  for (const line of required.values()) {
+    const result = await reserveInventoryQuantity(line);
+    if (result.ok === true) {
+      reservedInventoryLines.push(line);
+      continue;
+    }
+    for (const r of reservedInventoryLines) {
+      await releaseInventoryQuantity(r).catch((err) => {
+        console.error("[ManualOrderOffer] Failed to release inventory after a later line failed reservation:", err);
+      });
+    }
+    throw new ManualOfferFinalizeError(409, "Insufficient stock for one or more items", {
+      error: "Insufficient stock for one or more items",
+      code: "INSUFFICIENT_STOCK",
+      productId: line.productId,
+      requestedQuantity: line.quantity,
+      availableQuantity: result.available
+    });
+  }
+  if (operationsStore.getOrder(orderId)) {
+    for (const r of reservedInventoryLines) {
+      await releaseInventoryQuantity(r).catch(() => void 0);
+    }
+    return {
+      offer: {
+        ...existing,
+        status: "accepted",
+        orderId,
+        buyerId: existing.buyerId || buyer.buyerId
+      },
+      order: operationsStore.getOrder(orderId)
+    };
+  }
+  const ts = (/* @__PURE__ */ new Date()).toISOString();
+  const orderItems = await Promise.all(
+    existing.items.map(async (it, idx) => {
+      let warrantySnapshot = {};
+      if (it.productType !== "service") {
+        const product = await catalogStore2.getProduct(it.productId).catch(() => null);
+        if (product?.warrantyMonths && product.warrantyMonths > 0) {
+          const expiresAt = new Date(
+            Date.now() + product.warrantyMonths * 30 * 24 * 60 * 60 * 1e3
+          ).toISOString();
+          warrantySnapshot = {
+            warrantyMonthsAtPurchase: product.warrantyMonths,
+            warrantyTypeAtPurchase: product.warrantyType,
+            warrantyProviderAtPurchase: product.warrantyProvider,
+            warrantyTermsSnapshot: product.warrantyTerms,
+            warrantyStartsAt: ts,
+            warrantyExpiresAt: expiresAt
+          };
+        }
+      }
+      return {
+        itemId: `item-${Date.now().toString(36)}-${idx}`,
+        productId: it.productId,
+        productTitle: it.productTitle,
+        variantId: it.variantId,
+        quantity: it.quantity,
+        price: it.price,
+        productType: it.productType,
+        ...warrantySnapshot
+      };
+    })
+  );
+  const order = operationsStore.createOrder({
+    orderId,
+    buyerId: buyer.buyerId,
+    isCOD: true,
+    isSplit: false,
+    overallTotal: existing.overallTotal,
+    subtotal: existing.subtotal,
+    deliveryTotal: existing.deliveryTotal,
+    subOrders: [
+      {
+        sellerId: existing.sellerId,
+        sellerBusinessName: existing.sellerName || "",
+        items: orderItems,
+        deliveryFee: existing.deliveryTotal,
+        invoiceId: makeManualOfferInvoiceId(),
+        trackingStatus: "pending"
+      }
+    ],
+    inventoryReserved: reservedInventoryLines.length > 0 ? true : void 0,
+    paymentMethod: "cod",
+    status: "confirmed",
+    // Provenance retained through conversion — a claimed Meta order stays a Meta order.
+    platformSource: PROVENANCE_TO_PLATFORM_SOURCE[existing.provenance?.source || "manual"],
+    isManual: true,
+    createdAt: ts
+  });
+  if (order.status !== "pending_payment") {
+    shipmentStore.createFromOrder(order);
+  }
+  scheduleOperationsPersist();
+  try {
+    await ensurePlatformOrderConversation(order);
+  } catch (err) {
+    console.warn("[ManualOrderOffer] Platform conversation bridge failed:", err);
+  }
+  const updated = {
+    ...existing,
+    status: "accepted",
+    orderId,
+    buyerId: buyer.buyerId,
+    buyerName: buyer.buyerName || existing.buyerName,
+    claimedByUserId: existing.intendedCustomer ? buyer.buyerId : existing.claimedByUserId,
+    claimedAt: existing.intendedCustomer ? ts : existing.claimedAt,
+    updatedAt: ts
+  };
+  await saveManualOrderOffer(updated);
+  try {
+    await notifyUser(existing.sellerId, {
+      type: COMMUNICATION_TYPES.BUYER_UPDATE,
+      category: "seller",
+      title: "Order offer accepted",
+      summary: `${updated.buyerName || "The customer"} confirmed your offer \u2014 order ${orderId} created.`,
+      actionUrl: "/dashboard?tab=seller-orders",
+      metadata: { offerId: existing.id, orderId }
+    });
+  } catch (err) {
+    console.warn("[ManualOrderOffer] Notify seller (accepted) failed:", err);
+  }
+  return { offer: updated, order };
+}
+var PROVENANCE_TO_PLATFORM_SOURCE = {
+  manual: "Offline",
+  external_offline: "Offline",
+  external_whatsapp: "WhatsApp",
+  external_facebook: "Facebook",
+  external_instagram: "Instagram"
+};
+operationsRouter.post("/operations/manual-offers/:id/accept", ...requireAuth2, async (req, res) => {
+  const existing = await getManualOrderOffer(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: "Offer not found" });
+    return;
+  }
+  if (!req.userId || existing.buyerId !== req.userId) {
+    res.status(403).json({ error: "Only the buyer can accept this offer" });
+    return;
+  }
+  if (existing.status !== "pending") {
+    res.status(400).json({ error: `Cannot accept offer in status ${existing.status}` });
+    return;
+  }
+  try {
+    const { offer, order } = await finalizeManualOrderOffer(existing, {
+      buyerId: req.userId,
+      buyerName: existing.buyerName || req.user?.displayName
+    });
+    res.json({ success: true, data: toManualOrderOfferCard(offer), order });
+  } catch (err) {
+    if (err instanceof ManualOfferFinalizeError) {
+      res.status(err.statusCode).json(err.body || { error: err.message });
+      return;
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : "Failed to accept offer" });
+  }
+});
+operationsRouter.get("/operations/manual-offers/claim/:token", async (req, res) => {
+  try {
+    const hash = hashClaimToken(req.params.token);
+    const offers = await listManualOrderOffers();
+    const offer = offers.find((o) => o.claimTokenHash && o.claimTokenHash === hash);
+    if (!offer) {
+      res.status(404).json({ error: "This order link is invalid." });
+      return;
+    }
+    if (isClaimExpired(offer.claimTokenExpiresAt) && offer.status === "awaiting_buyer_claim") {
+      res.status(410).json({ error: "This order link has expired.", code: "CLAIM_EXPIRED" });
+      return;
+    }
+    const card = toManualOrderOfferCard(offer);
+    res.json({
+      data: {
+        offerId: card.offerId,
+        sellerName: card.sellerName,
+        items: card.items,
+        subtotal: card.subtotal,
+        deliveryTotal: card.deliveryTotal,
+        overallTotal: card.overallTotal,
+        currency: card.currency,
+        status: card.status,
+        createdAt: card.createdAt,
+        orderId: card.orderId,
+        provenanceSource: offer.provenance?.source,
+        intendedCustomerName: offer.intendedCustomer?.name,
+        addressHint: offer.intendedCustomer?.addressHint,
+        claimTokenExpiresAt: offer.claimTokenExpiresAt,
+        alreadyClaimed: Boolean(offer.claimedByUserId)
+      }
+    });
+  } catch (error2) {
+    res.status(500).json({ error: error2 instanceof Error ? error2.message : "Lookup failed" });
+  }
+});
+operationsRouter.post(
+  "/operations/manual-offers/claim/:token/confirm",
+  ...requireAuth2,
+  async (req, res) => {
+    const rawToken = req.params.token;
+    const abuse = recordClaimConfirmAttempt(req.ip, rawToken);
+    if (abuse.thresholdExceeded) {
+      res.status(429).json({ error: "Too many confirmation attempts. Please try again later." });
+      return;
+    }
+    if (!req.userId) {
+      res.status(401).json({ error: "Authentication required" });
+      return;
+    }
+    const hash = hashClaimToken(rawToken);
+    const offers = await listManualOrderOffers();
+    const existing = offers.find((o) => o.claimTokenHash && claimTokenMatches(rawToken, o.claimTokenHash) && o.claimTokenHash === hash);
+    if (!existing) {
+      res.status(404).json({ error: "This order link is invalid." });
+      return;
+    }
+    if (existing.claimedByUserId && existing.claimedByUserId === req.userId && existing.orderId) {
+      const order = operationsStore.getOrder(existing.orderId);
+      res.json({ success: true, data: toManualOrderOfferCard(existing), order: order || null });
+      return;
+    }
+    if (existing.claimedByUserId && existing.claimedByUserId !== req.userId) {
+      res.status(409).json({ error: "This order has already been confirmed by another account.", code: "ALREADY_CLAIMED" });
+      return;
+    }
+    if (existing.status === "rejected") {
+      res.status(409).json({ error: "This order was declined and can no longer be confirmed.", code: "OFFER_REJECTED" });
+      return;
+    }
+    if (existing.status !== "awaiting_buyer_claim") {
+      res.status(400).json({ error: `Cannot claim an offer in status ${existing.status}` });
+      return;
+    }
+    if (isClaimExpired(existing.claimTokenExpiresAt)) {
+      const ts = (/* @__PURE__ */ new Date()).toISOString();
+      await saveManualOrderOffer({ ...existing, status: "expired", updatedAt: ts });
+      res.status(410).json({ error: "This order link has expired.", code: "CLAIM_EXPIRED" });
+      return;
+    }
+    const intended = existing.intendedCustomer;
+    if (!intended) {
+      res.status(400).json({ error: "This offer has no external customer to reconcile." });
+      return;
+    }
+    const authEmailNorm = normalizeEmail(req.user?.email || "");
+    const authAccount = await findAccountByNormalizedEmail(authEmailNorm).catch(() => null);
+    const emailIdentityVerified = !!authAccount && authAccount.uid === req.userId && authAccount.emailVerified === true && req.user?.emailVerified === true;
+    if (!emailIdentityVerified) {
+      res.status(403).json({
+        error: "Confirm your email address on your Choosify account, then reopen this order link.",
+        code: "IDENTITY_NOT_VERIFIED"
+      });
+      return;
+    }
+    if (authEmailNorm !== intended.normalizedEmail) {
+      res.status(403).json({
+        error: "This order was created for a different email address and cannot be claimed by this account.",
+        code: "IDENTITY_MISMATCH"
+      });
+      return;
+    }
+    if (String(req.body?.action || "").toLowerCase() === "decline") {
+      const tsD = (/* @__PURE__ */ new Date()).toISOString();
+      const declined = {
+        ...existing,
+        status: "rejected",
+        rejectReason: typeof req.body?.reason === "string" ? req.body.reason.trim() || void 0 : void 0,
+        claimedByUserId: req.userId,
+        claimedAt: tsD,
+        updatedAt: tsD
+      };
+      await saveManualOrderOffer(declined);
+      try {
+        await notifyUser(existing.sellerId, {
+          type: COMMUNICATION_TYPES.BUYER_UPDATE,
+          category: "seller",
+          title: "Order offer declined",
+          summary: `${intended.name} declined the prepared order.`,
+          actionUrl: "/dashboard?tab=seller-orders",
+          metadata: { offerId: existing.id }
+        });
+      } catch {
+      }
+      res.json({ success: true, data: toManualOrderOfferCard(declined), order: null });
+      return;
+    }
+    try {
+      const { offer, order } = await finalizeManualOrderOffer(
+        { ...existing, status: "pending" },
+        { buyerId: req.userId, buyerName: req.user?.displayName || intended.name }
+      );
+      res.json({ success: true, data: toManualOrderOfferCard(offer), order });
+    } catch (err) {
+      if (err instanceof ManualOfferFinalizeError) {
+        res.status(err.statusCode).json(err.body || { error: err.message });
+        return;
+      }
+      res.status(500).json({ error: err instanceof Error ? err.message : "Failed to confirm order" });
+    }
+  }
+);
+operationsRouter.post("/operations/manual-offers/:id/reject", ...requireAuth2, async (req, res) => {
+  const existing = await getManualOrderOffer(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: "Offer not found" });
+    return;
+  }
+  if (!req.userId || existing.buyerId !== req.userId) {
+    res.status(403).json({ error: "Only the buyer can reject this offer" });
+    return;
+  }
+  if (existing.status !== "pending") {
+    res.status(400).json({ error: `Cannot reject offer in status ${existing.status}` });
+    return;
+  }
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+  const ts = (/* @__PURE__ */ new Date()).toISOString();
+  const updated = {
+    ...existing,
+    status: "rejected",
+    rejectReason: reason || void 0,
+    updatedAt: ts
+  };
+  await saveManualOrderOffer(updated);
+  try {
+    await notifyUser(existing.sellerId, {
+      type: COMMUNICATION_TYPES.BUYER_UPDATE,
+      category: "seller",
+      title: "Order offer rejected",
+      summary: `${existing.buyerName || "The buyer"} rejected your offer${reason ? `: ${reason}` : "."}`,
+      actionUrl: `/messages/conv_platform_${existing.buyerId}`,
+      metadata: { offerId: existing.id }
+    });
+  } catch (err) {
+    console.warn("[ManualOrderOffer] Notify seller (rejected) failed:", err);
+  }
+  res.json({ success: true, data: toManualOrderOfferCard(updated) });
 });
 operationsRouter.get("/operations/returns", ...requireAuth2, (req, res) => {
   let buyerId = typeof req.query.buyerId === "string" ? req.query.buyerId : void 0;
@@ -24366,51 +27741,73 @@ operationsRouter.get("/operations/returns/:id", ...requireAuth2, (req, res) => {
   }
   res.json({ data: row });
 });
-operationsRouter.post("/operations/returns", ...requireAuth2, (req, res) => {
+operationsRouter.post("/operations/returns", ...requireAuth2, async (req, res) => {
   const body = req.body;
   const orderId = String(body.orderId || "").trim();
-  const buyerId = String(body.buyerId || "").trim();
-  const sellerId = String(body.sellerId || "").trim();
+  const itemId = String(body.itemId || "").trim();
   const reason = body.reason;
   const description = String(body.description || "").trim();
-  if (!orderId || !buyerId || !sellerId || !reason || !description) {
+  if (!orderId || !itemId || !reason || !description) {
     res.status(400).json({
-      error: "orderId, buyerId, sellerId, reason, and description are required"
+      error: "orderId, itemId, reason, and description are required"
     });
     return;
   }
-  if (!req.userId || buyerId !== req.userId) {
-    res.status(403).json({ error: "buyerId must match the authenticated user" });
+  if (!req.userId) {
+    res.status(401).json({ error: "Authentication required" });
     return;
   }
+  const order = operationsStore.getOrder(orderId);
+  if (!order) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+  if (order.buyerId !== req.userId) {
+    res.status(403).json({ error: "Not authorized to request a return for this order" });
+    return;
+  }
+  const located = findOrderItem(order, itemId);
+  if (!located) {
+    res.status(404).json({ error: "Order item not found" });
+    return;
+  }
+  const delivered = located.sub.trackingStatus === "delivered" || order.status === "completed";
+  if (!delivered) {
+    res.status(400).json({ error: "This item has not been delivered yet" });
+    return;
+  }
+  const sellerId = String(located.sub.sellerId || "");
   const saved = operationsStore.createReturn({
     orderId,
-    itemId: String(body.itemId || "").trim(),
-    initiatedBy: body.initiatedBy === "admin" ? "admin" : "customer",
+    itemId,
+    initiatedBy: "customer",
     reason,
     description,
     evidencePhotos: Array.isArray(body.evidencePhotos) ? body.evidencePhotos : [],
-    status: body.status || "initiated",
-    refundStatus: body.refundStatus || "pending",
-    notes: Array.isArray(body.notes) ? body.notes : [],
+    status: "initiated",
+    refundStatus: "pending",
+    notes: [],
     sellerId,
-    buyerId,
-    ...body.id ? { id: body.id } : {},
-    ...body.approvalDecision ? { approvalDecision: body.approvalDecision } : {},
-    ...body.approvalReason ? { approvalReason: body.approvalReason } : {},
-    ...body.approvedAt ? { approvedAt: body.approvedAt } : {},
-    ...body.approvedBy ? { approvedBy: body.approvedBy } : {},
-    ...typeof body.refundAmount === "number" ? { refundAmount: body.refundAmount } : {},
-    ...body.returnTrackingId ? { returnTrackingId: body.returnTrackingId } : {},
-    ...body.returnCourier ? { returnCourier: body.returnCourier } : {},
-    ...body.pickupDate ? { pickupDate: body.pickupDate } : {},
-    ...body.deliveryDate ? { deliveryDate: body.deliveryDate } : {},
-    ...body.disputeId ? { disputeId: body.disputeId } : {}
+    buyerId: req.userId
   });
   scheduleOperationsPersist();
+  if (sellerId) {
+    try {
+      await notifyUser(sellerId, {
+        type: COMMUNICATION_TYPES.ORDER_UPDATE,
+        category: "seller",
+        title: "New return request",
+        summary: `${String(located.item.productTitle || "An item")} from order ${orderId} \u2014 reason: ${reason}.`,
+        actionUrl: "/dashboard?tab=seller-orders",
+        metadata: { orderId, returnId: saved.id }
+      });
+    } catch (err) {
+      console.warn("[Returns] Notify seller (new return) failed:", err);
+    }
+  }
   res.status(201).json({ success: true, data: saved });
 });
-operationsRouter.patch("/operations/returns/:id/approve", ...requireAuth2, (req, res) => {
+operationsRouter.patch("/operations/returns/:id/approve", ...requireAuth2, async (req, res) => {
   const existing = operationsStore.getReturn(req.params.id);
   if (!existing) {
     res.status(404).json({ error: "Return not found" });
@@ -24418,6 +27815,10 @@ operationsRouter.patch("/operations/returns/:id/approve", ...requireAuth2, (req,
   }
   if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
     res.status(403).json({ error: "Not authorized to approve this return" });
+    return;
+  }
+  if (existing.status !== "initiated") {
+    res.status(409).json({ error: `Return is already ${existing.status}; cannot approve again.` });
     return;
   }
   const refundAmount = Number(req.body?.refundAmount);
@@ -24439,9 +27840,21 @@ operationsRouter.patch("/operations/returns/:id/approve", ...requireAuth2, (req,
     notes: adminNotes
   });
   scheduleOperationsPersist();
+  try {
+    await notifyUser(existing.buyerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: "buyer",
+      title: "Return approved",
+      summary: `Your return for order ${existing.orderId} was approved \u2014 refund of \u09F3${refundAmount.toLocaleString()}.`,
+      actionUrl: "/dashboard?tab=my-returns",
+      metadata: { orderId: existing.orderId, returnId: existing.id }
+    });
+  } catch (err) {
+    console.warn("[Returns] Notify buyer (approved) failed:", err);
+  }
   res.json({ success: true, data: saved });
 });
-operationsRouter.patch("/operations/returns/:id/reject", ...requireAuth2, (req, res) => {
+operationsRouter.patch("/operations/returns/:id/reject", ...requireAuth2, async (req, res) => {
   const existing = operationsStore.getReturn(req.params.id);
   if (!existing) {
     res.status(404).json({ error: "Return not found" });
@@ -24449,6 +27862,10 @@ operationsRouter.patch("/operations/returns/:id/reject", ...requireAuth2, (req, 
   }
   if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
     res.status(403).json({ error: "Not authorized to reject this return" });
+    return;
+  }
+  if (existing.status !== "initiated") {
+    res.status(409).json({ error: `Return is already ${existing.status}; cannot reject again.` });
     return;
   }
   const reason = String(req.body?.reason || "").trim();
@@ -24468,6 +27885,18 @@ operationsRouter.patch("/operations/returns/:id/reject", ...requireAuth2, (req, 
     notes: adminNotes
   });
   scheduleOperationsPersist();
+  try {
+    await notifyUser(existing.buyerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: "buyer",
+      title: "Return rejected",
+      summary: `Your return for order ${existing.orderId} was rejected: ${reason}`,
+      actionUrl: "/dashboard?tab=my-returns",
+      metadata: { orderId: existing.orderId, returnId: existing.id }
+    });
+  } catch (err) {
+    console.warn("[Returns] Notify buyer (rejected) failed:", err);
+  }
   res.json({ success: true, data: saved });
 });
 operationsRouter.patch("/operations/returns/:id/refund", ...requireAuth2, (req, res) => {
@@ -24478,6 +27907,10 @@ operationsRouter.patch("/operations/returns/:id/refund", ...requireAuth2, (req, 
   }
   if (!userCanManageReturnAsSellerOrAdmin(req, existing)) {
     res.status(403).json({ error: "Not authorized to process this refund" });
+    return;
+  }
+  if (existing.status !== "approved") {
+    res.status(409).json({ error: `Return is ${existing.status}, not approved; cannot process refund.` });
     return;
   }
   const adminNotes = [...existing.notes];
@@ -24747,6 +28180,7 @@ operationsRouter.post("/operations/warranty-claims", ...requireAuth2, async (req
       } catch {
       }
     }
+    let claimConversationId;
     try {
       const { ensureClaimConversation: ensureClaimConversation2 } = await Promise.resolve().then(() => (init_conversationService(), conversationService_exports));
       const { conversation } = await ensureClaimConversation2({
@@ -24757,6 +28191,7 @@ operationsRouter.post("/operations/warranty-claims", ...requireAuth2, async (req
         brandId,
         actor: req.userId
       });
+      claimConversationId = conversation.id;
       operationsStore.updateWarrantyClaim(saved.id, { conversationId: conversation.id });
       scheduleOperationsPersist();
     } catch (err) {
@@ -24764,6 +28199,18 @@ operationsRouter.post("/operations/warranty-claims", ...requireAuth2, async (req
         claimId: saved.id,
         error: err instanceof Error ? err.message : String(err)
       });
+    }
+    try {
+      await notifyUser(sellerId, {
+        type: COMMUNICATION_TYPES.ORDER_UPDATE,
+        category: "seller",
+        title: "New warranty claim",
+        summary: `${String(item.productTitle || "An item")} from order ${orderId} \u2014 ${issueType.replace(/_/g, " ")}.`,
+        actionUrl: claimConversationId ? `/messages/${claimConversationId}` : "/dashboard?tab=seller-orders",
+        metadata: { orderId, claimId: saved.id }
+      });
+    } catch (err) {
+      console.warn("[Warranty] Notify seller (new claim) failed:", err);
     }
     res.status(201).json({ success: true, data: operationsStore.getWarrantyClaim(saved.id) || saved });
   } catch (error2) {
@@ -24839,7 +28286,7 @@ operationsRouter.patch("/operations/warranty-claims/:id/provide-info", ...requir
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
-operationsRouter.patch("/operations/warranty-claims/:id/approve", ...requireAuth2, (req, res) => {
+operationsRouter.patch("/operations/warranty-claims/:id/approve", ...requireAuth2, async (req, res) => {
   const existing = operationsStore.getWarrantyClaim(req.params.id);
   if (!existing) {
     res.status(404).json({ error: "Warranty claim not found" });
@@ -24855,9 +28302,21 @@ operationsRouter.patch("/operations/warranty-claims/:id/approve", ...requireAuth
     ...sellerResponse ? { sellerResponse } : {}
   });
   scheduleOperationsPersist();
+  try {
+    await notifyUser(existing.consumerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: "buyer",
+      title: "Warranty claim approved",
+      summary: `Your warranty claim for order ${existing.orderId} was approved.`,
+      actionUrl: existing.conversationId ? `/messages/${existing.conversationId}` : "/dashboard?tab=my-warranty",
+      metadata: { orderId: existing.orderId, claimId: existing.id }
+    });
+  } catch (err) {
+    console.warn("[Warranty] Notify buyer (approved) failed:", err);
+  }
   res.json({ success: true, data: saved });
 });
-operationsRouter.patch("/operations/warranty-claims/:id/reject", ...requireAuth2, (req, res) => {
+operationsRouter.patch("/operations/warranty-claims/:id/reject", ...requireAuth2, async (req, res) => {
   const existing = operationsStore.getWarrantyClaim(req.params.id);
   if (!existing) {
     res.status(404).json({ error: "Warranty claim not found" });
@@ -24878,6 +28337,18 @@ operationsRouter.patch("/operations/warranty-claims/:id/reject", ...requireAuth2
     resolvedAt: (/* @__PURE__ */ new Date()).toISOString()
   });
   scheduleOperationsPersist();
+  try {
+    await notifyUser(existing.consumerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: "buyer",
+      title: "Warranty claim rejected",
+      summary: `Your warranty claim for order ${existing.orderId} was rejected: ${sellerResponse}`,
+      actionUrl: existing.conversationId ? `/messages/${existing.conversationId}` : "/dashboard?tab=my-warranty",
+      metadata: { orderId: existing.orderId, claimId: existing.id }
+    });
+  } catch (err) {
+    console.warn("[Warranty] Notify buyer (rejected) failed:", err);
+  }
   res.json({ success: true, data: saved });
 });
 operationsRouter.patch("/operations/warranty-claims/:id/service-status", ...requireAuth2, (req, res) => {
@@ -24898,7 +28369,7 @@ operationsRouter.patch("/operations/warranty-claims/:id/service-status", ...requ
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
-operationsRouter.patch("/operations/warranty-claims/:id/resolve", ...requireAuth2, (req, res) => {
+operationsRouter.patch("/operations/warranty-claims/:id/resolve", ...requireAuth2, async (req, res) => {
   const existing = operationsStore.getWarrantyClaim(req.params.id);
   if (!existing) {
     res.status(404).json({ error: "Warranty claim not found" });
@@ -24919,6 +28390,18 @@ operationsRouter.patch("/operations/warranty-claims/:id/resolve", ...requireAuth
     resolvedAt: (/* @__PURE__ */ new Date()).toISOString()
   });
   scheduleOperationsPersist();
+  try {
+    await notifyUser(existing.consumerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: "buyer",
+      title: "Warranty claim resolved",
+      summary: `Your warranty claim for order ${existing.orderId} was resolved: ${resolutionNotes}`,
+      actionUrl: existing.conversationId ? `/messages/${existing.conversationId}` : "/dashboard?tab=my-warranty",
+      metadata: { orderId: existing.orderId, claimId: existing.id }
+    });
+  } catch (err) {
+    console.warn("[Warranty] Notify buyer (resolved) failed:", err);
+  }
   res.json({ success: true, data: saved });
 });
 operationsRouter.patch("/operations/warranty-claims/:id/cancel", ...requireAuth2, (req, res) => {
@@ -25011,7 +28494,7 @@ operationsRouter.delete("/operations/coupons/:id", ...requireAuth2, (req, res) =
 operationsRouter.get("/operations/fee-charges", (_req, res) => {
   res.json({ data: operationsStore.listFeeCharges() });
 });
-operationsRouter.post("/operations/fee-charges", ...requireAdmin, (req, res) => {
+operationsRouter.post("/operations/fee-charges", ...requireAdmin2, (req, res) => {
   const body = req.body;
   if (!body.name?.trim()) {
     res.status(400).json({ error: "Fee/charge name is required" });
@@ -25035,7 +28518,7 @@ operationsRouter.post("/operations/fee-charges", ...requireAdmin, (req, res) => 
   scheduleOperationsPersist();
   res.status(201).json({ success: true, data: saved });
 });
-operationsRouter.patch("/operations/fee-charges/:id", ...requireAdmin, (req, res) => {
+operationsRouter.patch("/operations/fee-charges/:id", ...requireAdmin2, (req, res) => {
   const existing = operationsStore.getFeeCharge(req.params.id);
   if (!existing) {
     res.status(404).json({ error: "Fee/charge rule not found" });
@@ -25045,7 +28528,7 @@ operationsRouter.patch("/operations/fee-charges/:id", ...requireAdmin, (req, res
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
-operationsRouter.delete("/operations/fee-charges/:id", ...requireAdmin, (req, res) => {
+operationsRouter.delete("/operations/fee-charges/:id", ...requireAdmin2, (req, res) => {
   const ok = operationsStore.deleteFeeCharge(req.params.id);
   if (!ok) {
     res.status(404).json({ error: "Fee/charge rule not found" });
@@ -25057,7 +28540,7 @@ operationsRouter.delete("/operations/fee-charges/:id", ...requireAdmin, (req, re
 operationsRouter.get("/operations/payment-options", (_req, res) => {
   res.json({ data: operationsStore.getPaymentOptionsConfig() });
 });
-operationsRouter.put("/operations/payment-options", ...requireAdmin, (req, res) => {
+operationsRouter.put("/operations/payment-options", ...requireAdmin2, (req, res) => {
   const body = req.body;
   if (body.minDepositPercent !== void 0 && body.maxDepositPercent !== void 0 && Number(body.minDepositPercent) > Number(body.maxDepositPercent)) {
     res.status(400).json({ error: "Minimum deposit percent cannot exceed maximum deposit percent" });
@@ -25086,24 +28569,34 @@ operationsRouter.post(
     res.json(result);
   }
 );
-operationsRouter.get("/operations/reviews", ...requireAuth2, (req, res) => {
+operationsRouter.get("/operations/reviews", ...requireAuth2, async (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : "";
   const productId = typeof req.query.productId === "string" ? req.query.productId : "";
   let userId = typeof req.query.userId === "string" ? req.query.userId : void 0;
-  if (!userCanListReviews(req, { userId })) {
-    if (!userId && req.userId && !userIsStaff(req) && !(req.userRole && hasRole(req.userRole, ROLES.MODERATOR))) {
+  const sellerId = typeof req.query.sellerId === "string" ? req.query.sellerId : void 0;
+  if (!userCanListReviews(req, { userId, sellerId })) {
+    if (!userId && !sellerId && req.userId && !userIsStaff(req) && !(req.userRole && hasRole(req.userRole, ROLES.MODERATOR))) {
       userId = req.userId;
     }
-    if (!userCanListReviews(req, { userId })) {
+    if (!userCanListReviews(req, { userId, sellerId })) {
       res.status(403).json({ error: "Not authorized to list these reviews" });
       return;
     }
   }
-  const reviews = operationsStore.listReviews({
+  let reviews = operationsStore.listReviews({
     status: status || void 0,
     productId: productId || void 0,
     userId: userId || void 0
   });
+  if (sellerId) {
+    const ownedFlags = await Promise.all(
+      reviews.map(async (r) => {
+        const product = await catalogStore2.getProduct(r.productId).catch(() => null);
+        return product?.sellerId === sellerId;
+      })
+    );
+    reviews = reviews.filter((_, i) => ownedFlags[i]);
+  }
   res.json({ data: reviews });
 });
 operationsRouter.get("/operations/reviews/public", (req, res) => {
@@ -25137,17 +28630,43 @@ operationsRouter.post("/operations/reviews", ...requireAuth2, (req, res) => {
     res.status(400).json({ error: "productTitle, rating, and comment are required" });
     return;
   }
-  const productId = body.productId || "unknown";
+  const orderId = String(body.orderId || "").trim();
+  const orderItemId = String(body.orderItemId || "").trim();
+  if (!orderId || !orderItemId) {
+    res.status(400).json({ error: "orderId and orderItemId are required" });
+    return;
+  }
   const userId = req.userId;
-  if (!userHasPurchasedProductForReview(userId, productId)) {
-    res.status(403).json({
-      error: "A completed/delivered purchase of this product is required to leave a review"
-    });
+  const order = operationsStore.getOrder(orderId);
+  if (!order) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+  if (order.buyerId !== userId) {
+    res.status(403).json({ error: "Not authorized to review this order" });
+    return;
+  }
+  const located = findOrderItem(order, orderItemId);
+  if (!located) {
+    res.status(404).json({ error: "Order item not found" });
+    return;
+  }
+  const delivered = located.sub.trackingStatus === "delivered" || order.status === "completed";
+  if (!delivered) {
+    res.status(400).json({ error: "This item has not been delivered yet" });
+    return;
+  }
+  const productId = String(located.item.productId || body.productId || "unknown");
+  const existingReview = operationsStore.listReviews({ userId }).find((r) => r.orderId === orderId && r.orderItemId === orderItemId);
+  if (existingReview) {
+    res.status(200).json({ success: true, data: existingReview, reused: true });
     return;
   }
   const saved = operationsStore.createReview({
     userId,
     userName: body.userName || "Anonymous",
+    orderId,
+    orderItemId,
     productId,
     productTitle: body.productTitle,
     brandName: body.brandName || "",
@@ -25157,6 +28676,15 @@ operationsRouter.post("/operations/reviews", ...requireAuth2, (req, res) => {
     photos: Array.isArray(body.photos) ? body.photos.filter((p) => typeof p === "string").slice(0, 6) : []
   });
   scheduleOperationsPersist();
+  if (located.sub.sellerId) {
+    notifyUser(String(located.sub.sellerId), {
+      type: COMMUNICATION_TYPES.SELLER_UPDATE,
+      category: "seller",
+      title: "New product review",
+      summary: `${saved.userName} left a ${saved.rating}-star review on ${saved.productTitle}.`,
+      actionUrl: "/admin/reviews"
+    }).catch((err) => Logger.error("notifyUser failed (review created)", { error: String(err) }));
+  }
   res.status(201).json({ success: true, data: saved });
 });
 operationsRouter.patch("/operations/reviews/:id", ...requireAuth2, (req, res) => {
@@ -25176,12 +28704,22 @@ operationsRouter.patch("/operations/reviews/:id", ...requireAuth2, (req, res) =>
     patch.status = normalizeReviewStatus(String(patch.status));
   }
   delete patch.userId;
+  const statusChanged = Boolean(patch.status) && patch.status !== existing.status;
   const saved = operationsStore.updateReview(req.params.id, patch);
   if (!saved) {
     res.status(404).json({ error: "Review not found" });
     return;
   }
   scheduleOperationsPersist();
+  if (statusChanged && saved.userId && saved.userId !== req.userId) {
+    notifyUser(saved.userId, {
+      type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+      category: "buyer",
+      title: "Your review was updated",
+      summary: `Your review of ${saved.productTitle} is now "${saved.status}".`,
+      actionUrl: "/dashboard?tab=my-reviews"
+    }).catch((err) => Logger.error("notifyUser failed (review moderated)", { error: String(err) }));
+  }
   res.json({ success: true, data: saved });
 });
 operationsRouter.delete("/operations/reviews/:id", ...requireAuth2, (req, res) => {
@@ -25227,7 +28765,7 @@ operationsRouter.post("/operations/leads", (req, res) => {
   });
   res.status(201).json({ success: true, data: saved });
 });
-operationsRouter.patch("/operations/leads/:id", ...requireAdmin, (req, res) => {
+operationsRouter.patch("/operations/leads/:id", ...requireAdmin2, (req, res) => {
   const saved = operationsStore.updateLead(req.params.id, req.body);
   if (!saved) {
     res.status(404).json({ error: "Lead not found" });
@@ -25249,7 +28787,7 @@ operationsRouter.get("/operations/jobs/public/:idOrSlug", (req, res) => {
 operationsRouter.get("/operations/jobs", (_req, res) => {
   res.json({ data: operationsStore.listJobPostings() });
 });
-operationsRouter.post("/operations/jobs", ...requireAdmin, (req, res) => {
+operationsRouter.post("/operations/jobs", ...requireAdmin2, (req, res) => {
   const body = req.body;
   if (!body.title?.trim() || !body.department?.trim() || !body.location?.trim()) {
     res.status(400).json({ error: "title, department, and location are required" });
@@ -25272,7 +28810,7 @@ operationsRouter.post("/operations/jobs", ...requireAdmin, (req, res) => {
   scheduleOperationsPersist();
   res.status(201).json({ success: true, data: saved });
 });
-operationsRouter.patch("/operations/jobs/:id", ...requireAdmin, (req, res) => {
+operationsRouter.patch("/operations/jobs/:id", ...requireAdmin2, (req, res) => {
   const saved = operationsStore.updateJobPosting(req.params.id, req.body);
   if (!saved) {
     res.status(404).json({ error: "Job posting not found" });
@@ -25281,7 +28819,7 @@ operationsRouter.patch("/operations/jobs/:id", ...requireAdmin, (req, res) => {
   scheduleOperationsPersist();
   res.json({ success: true, data: saved });
 });
-operationsRouter.delete("/operations/jobs/:id", ...requireAdmin, (req, res) => {
+operationsRouter.delete("/operations/jobs/:id", ...requireAdmin2, (req, res) => {
   const ok = operationsStore.deleteJobPosting(req.params.id);
   if (!ok) {
     res.status(404).json({ error: "Job posting not found" });
@@ -25290,7 +28828,7 @@ operationsRouter.delete("/operations/jobs/:id", ...requireAdmin, (req, res) => {
   scheduleOperationsPersist();
   res.json({ success: true });
 });
-operationsRouter.get("/operations/job-applications", ...requireAdmin, (req, res) => {
+operationsRouter.get("/operations/job-applications", ...requireAdmin2, (req, res) => {
   const jobId = typeof req.query.jobId === "string" ? req.query.jobId : void 0;
   res.json({ data: operationsStore.listJobApplications(jobId) });
 });
@@ -25318,7 +28856,7 @@ operationsRouter.post("/operations/job-applications", (req, res) => {
   scheduleOperationsPersist();
   res.status(201).json({ success: true, data: saved });
 });
-operationsRouter.patch("/operations/job-applications/:id", ...requireAdmin, (req, res) => {
+operationsRouter.patch("/operations/job-applications/:id", ...requireAdmin2, (req, res) => {
   const saved = operationsStore.updateJobApplication(req.params.id, req.body);
   if (!saved) {
     res.status(404).json({ error: "Application not found" });
@@ -25356,7 +28894,7 @@ operationsRouter.post("/operations/media/upload-resume", async (req, res) => {
 operationsRouter.get("/operations/permissions", (_req, res) => {
   res.json({ permissions: operationsStore.getPermissions(), defaults: DEFAULT_ROLE_PERMISSIONS });
 });
-operationsRouter.put("/operations/permissions", ...requireAdmin, (req, res) => {
+operationsRouter.put("/operations/permissions", ...requireAdmin2, (req, res) => {
   const permissions = req.body?.permissions;
   if (!permissions || typeof permissions !== "object") {
     res.status(400).json({ error: "permissions object is required" });
@@ -25513,6 +29051,7 @@ operationsRouter.get("/operations/shipments/:id", ...requireAuth2, (req, res) =>
   }
   res.json({ data: shipment });
 });
+var SHIPMENT_PATCH_ALLOWED_KEYS = ["courier", "trackingNumber"];
 operationsRouter.patch("/operations/shipments/:id", ...requireAuth2, (req, res) => {
   const existing = shipmentStore.getShipment(req.params.id);
   if (!existing) {
@@ -25523,7 +29062,32 @@ operationsRouter.patch("/operations/shipments/:id", ...requireAuth2, (req, res) 
     res.status(403).json({ error: "Not authorized to update this shipment" });
     return;
   }
-  const saved = shipmentStore.updateShipment(req.params.id, req.body);
+  const rawBody = req.body && typeof req.body === "object" ? req.body : {};
+  const rejected = Object.keys(rawBody).filter(
+    (key) => !SHIPMENT_PATCH_ALLOWED_KEYS.includes(key)
+  );
+  if (rejected.length > 0) {
+    res.status(400).json({
+      error: "One or more fields are not allowed on this endpoint",
+      rejected,
+      allowed: [...SHIPMENT_PATCH_ALLOWED_KEYS]
+    });
+    return;
+  }
+  const patch = {};
+  for (const key of SHIPMENT_PATCH_ALLOWED_KEYS) {
+    if (Object.prototype.hasOwnProperty.call(rawBody, key)) {
+      patch[key] = rawBody[key];
+    }
+  }
+  if (Object.keys(patch).length === 0) {
+    res.status(400).json({
+      error: "No updatable fields provided",
+      allowed: [...SHIPMENT_PATCH_ALLOWED_KEYS]
+    });
+    return;
+  }
+  const saved = shipmentStore.updateShipment(req.params.id, patch);
   if (!saved) {
     res.status(404).json({ error: "Shipment not found" });
     return;
@@ -25546,13 +29110,13 @@ operationsRouter.get("/operations/platform-messages", ...requireAuth2, async (re
     const ownConversation = req.userId ? `conv_platform_${req.userId}` : "";
     const isOwnInbox = Boolean(req.userId && conversationId === ownConversation);
     const requestedUserId = userId || (conversationId.startsWith("conv_platform_") ? conversationId.slice("conv_platform_".length) : "");
-    if (userId && userId !== req.userId && !userIsStaff(req)) {
-      res.status(403).json({ error: "Not authorized to list these messages" });
-      return;
-    }
-    if (!isOwnInbox && !(requestedUserId && requestedUserId === req.userId) && !userIsStaff(req)) {
-      res.status(403).json({ error: "Not authorized to list these messages" });
-      return;
+    const isOwnRequest = requestedUserId && requestedUserId === req.userId;
+    if (!isOwnInbox && !isOwnRequest && !userIsStaff(req)) {
+      const canReadAsRelated = requestedUserId && await userCanReplyToBuyerConversation(req, requestedUserId);
+      if (!canReadAsRelated) {
+        res.status(403).json({ error: "Not authorized to list these messages" });
+        return;
+      }
     }
     const { listMessages: listMessages3 } = await Promise.resolve().then(() => (init_omniStore(), omniStore_exports));
     const messages = await listMessages3(conversationId);
@@ -25570,13 +29134,24 @@ operationsRouter.post("/operations/platform-messages", ...requireAuth2, async (r
       res.status(400).json({ error: "buyerId and body are required" });
       return;
     }
-    const effectiveBuyerId = userIsStaff(req) ? buyerId?.trim() || req.userId || "" : req.userId || "";
-    if (!effectiveBuyerId) {
-      res.status(400).json({ error: "buyerId and body are required" });
+    const requestedBuyerId = buyerId?.trim();
+    const isSelfPost = !requestedBuyerId || requestedBuyerId === req.userId;
+    let effectiveBuyerId;
+    let isReplyFromOther = false;
+    if (isSelfPost) {
+      effectiveBuyerId = req.userId || "";
+    } else if (userIsStaff(req)) {
+      effectiveBuyerId = requestedBuyerId;
+      isReplyFromOther = true;
+    } else if (await userCanReplyToBuyerConversation(req, requestedBuyerId)) {
+      effectiveBuyerId = requestedBuyerId;
+      isReplyFromOther = true;
+    } else {
+      res.status(403).json({ error: "Not authorized to post as another user" });
       return;
     }
-    if (!userIsStaff(req) && buyerId?.trim() && buyerId.trim() !== effectiveBuyerId) {
-      res.status(403).json({ error: "Not authorized to post as another user" });
+    if (!effectiveBuyerId) {
+      res.status(400).json({ error: "buyerId and body are required" });
       return;
     }
     const skipExpiry = Boolean(bookingOffer) || Boolean(isComplaint);
@@ -25623,8 +29198,36 @@ operationsRouter.post("/operations/platform-messages", ...requireAuth2, async (r
       userName: userName?.trim() || effectiveBuyerId,
       body: `${complaintPrefix}${body.trim()}`,
       orderId: orderId?.trim(),
-      bookingOffer: attachedOffer
+      bookingOffer: attachedOffer,
+      senderId: isReplyFromOther ? req.userId : void 0,
+      direction: isReplyFromOther ? "outbound" : void 0
     });
+    const conversationActionUrl2 = `/messages/conv_platform_${effectiveBuyerId}`;
+    if (isReplyFromOther) {
+      notifyUser(effectiveBuyerId, {
+        type: COMMUNICATION_TYPES.BUYER_UPDATE,
+        category: "buyer",
+        priority: "normal",
+        title: "New message",
+        summary: `${userName?.trim() || "A seller"} sent you a message.`,
+        actionUrl: conversationActionUrl2,
+        channels: [DELIVERY_CHANNELS.IN_APP]
+      }).catch((err) => Logger.error("notifyUser failed (new message, buyer)", { error: String(err) }));
+    } else if (!isComplaint && !bookingOffer) {
+      const relatedOrderSellerIds = operationsStore.listOrders({ buyerId: effectiveBuyerId }).flatMap((o) => (o.subOrders || []).map((s) => s.sellerId)).filter((id) => Boolean(id));
+      const uniqueSellerIds = Array.from(new Set(relatedOrderSellerIds));
+      for (const sellerId2 of uniqueSellerIds) {
+        notifyUser(sellerId2, {
+          type: COMMUNICATION_TYPES.SELLER_UPDATE,
+          category: "seller",
+          priority: "normal",
+          title: "New message",
+          summary: `${userName?.trim() || "A buyer"} sent you a message.`,
+          actionUrl: conversationActionUrl2,
+          channels: [DELIVERY_CHANNELS.IN_APP]
+        }).catch((err) => Logger.error("notifyUser failed (new message, seller)", { error: String(err) }));
+      }
+    }
     res.status(201).json({ success: true, data: result });
   } catch (error2) {
     res.status(500).json({ error: error2 instanceof Error ? error2.message : "Failed to submit message" });
@@ -25665,7 +29268,7 @@ operationsRouter.get("/operations/shipments/track/:orderId", ...requireAuth2, (r
 operationsRouter.get("/operations/feature-flags", (_req, res) => {
   res.json({ flags: operationsStore.getFeatureFlags() });
 });
-operationsRouter.put("/operations/feature-flags", ...requireAdmin, (req, res) => {
+operationsRouter.put("/operations/feature-flags", ...requireAdmin2, (req, res) => {
   const flags = req.body?.flags;
   if (!flags || typeof flags !== "object") {
     res.status(400).json({ error: "flags object is required" });
@@ -25675,7 +29278,13 @@ operationsRouter.put("/operations/feature-flags", ...requireAdmin, (req, res) =>
   scheduleOperationsPersist();
   res.json({ success: true, flags: saved });
 });
-operationsRouter.get("/operations/users", async (_req, res) => {
+operationsRouter.get("/operations/users", authenticateRequest, async (req, res) => {
+  if (!userIsStaff(req)) {
+    res.status(403).json({ error: "Not authorized" });
+    return;
+  }
+  const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+  const wantMessagingContext = req.query.context === "messaging";
   try {
     const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
     const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
@@ -25685,6 +29294,7 @@ operationsRouter.get("/operations/users", async (_req, res) => {
       displayName: users2.displayName,
       role: users2.role,
       choosifyUserId: users2.choosifyUserId,
+      avatarUrl: users2.avatarUrl,
       createdAt: users2.createdAt
     }).from(users2);
     const mapRole = (role) => {
@@ -25695,27 +29305,58 @@ operationsRouter.get("/operations/users", async (_req, res) => {
       return "Consumer";
     };
     const initials = (name) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("") || "U";
+    let brandBySeller = /* @__PURE__ */ new Map();
+    let creatorByUser = /* @__PURE__ */ new Map();
+    if (wantMessagingContext) {
+      try {
+        const [brands, creators] = await Promise.all([
+          catalogStore2.listBrands().catch(() => []),
+          catalogStore2.listCreators().catch(() => [])
+        ]);
+        brandBySeller = new Map(
+          brands.filter((b) => b.sellerId && b.name).map((b) => [b.sellerId, b.name])
+        );
+        creatorByUser = new Map(
+          creators.filter((c) => c.userId).map((c) => [c.userId, c.handle || c.name || ""])
+        );
+      } catch {
+      }
+    }
     const labels = await batchAccountPrimaryLabels(
       rows.map((u) => ({ id: u.id, role: u.role, email: u.email }))
     );
-    const authUsers = rows.map((u) => {
+    let authUsers = rows.map((u) => {
       const name = u.displayName || u.email || "User";
       const joined = u.createdAt ? String(u.createdAt).slice(0, 10) : "\u2014";
+      const roleLabel = mapRole(u.role);
       return {
         id: u.id,
         name,
         email: u.email,
-        role: mapRole(u.role),
+        role: roleLabel,
         status: labels.get(u.id) || "Active",
         joined,
         active: joined,
         initials: initials(name),
         trustScore: 85,
         behaviorSegment: "Retail Shopper",
-        choosifyUserId: u.choosifyUserId || void 0
+        choosifyUserId: u.choosifyUserId || void 0,
+        avatarUrl: u.avatarUrl || void 0,
+        contextLabel: roleLabel === "Seller" ? brandBySeller.get(u.id) : roleLabel === "Creator" ? creatorByUser.get(u.id) : void 0
       };
     });
-    if (authUsers.length) {
+    if (q) {
+      const needle = q.toLowerCase();
+      const cfidNeedle = needle.replace(/\s+/g, "");
+      authUsers = authUsers.map((u) => {
+        const cfid = String(u.choosifyUserId || "").toLowerCase();
+        const exact = cfid && cfid === cfidNeedle ? 3 : 0;
+        const cfidHit = cfid.includes(cfidNeedle) ? 2 : 0;
+        const textHit = String(u.name).toLowerCase().includes(needle) || String(u.email).toLowerCase().includes(needle) ? 1 : 0;
+        return { u, score: exact || cfidHit || textHit };
+      }).filter((x) => x.score > 0).sort((a, b) => b.score - a.score || a.u.name.localeCompare(b.u.name)).slice(0, 25).map((x) => x.u);
+    }
+    if (authUsers.length || q) {
       res.json({ data: authUsers });
       return;
     }
@@ -25749,7 +29390,7 @@ operationsRouter.post("/operations/seller-offers", (req, res) => {
   });
   res.status(201).json({ success: true, data: saved });
 });
-operationsRouter.patch("/operations/seller-offers/:id", ...requireAdmin, (req, res) => {
+operationsRouter.patch("/operations/seller-offers/:id", ...requireAdmin2, (req, res) => {
   const saved = operationsStore.updateSellerOffer(req.params.id, req.body);
   if (!saved) {
     res.status(404).json({ error: "Seller offer not found" });
@@ -26145,6 +29786,15 @@ operationsRouter.patch("/operations/verifications/:id/review", ...requireModerat
       actorId: req.userId,
       verificationId: existing.id
     });
+    if (existing.submitted_by) {
+      notifyUser(existing.submitted_by, {
+        type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+        category: "seller",
+        title: "More information needed for your verification",
+        summary: feedback,
+        actionUrl: "/admin/brand-verification"
+      }).catch((err) => Logger.error("notifyUser failed (verification info requested)", { error: String(err) }));
+    }
     res.json({ success: true, data: saved2 });
     return;
   }
@@ -26208,6 +29858,15 @@ operationsRouter.patch("/operations/verifications/:id/review", ...requireModerat
     decision: finalStatus,
     submittedBy: existing.submitted_by
   });
+  if (existing.submitted_by) {
+    notifyUser(existing.submitted_by, {
+      type: COMMUNICATION_TYPES.MODERATION_UPDATE,
+      category: "seller",
+      title: decision === "approved" ? "Verification approved" : "Verification rejected",
+      summary: feedback,
+      actionUrl: "/admin/brand-verification"
+    }).catch((err) => Logger.error("notifyUser failed (verification reviewed)", { error: String(err) }));
+  }
   res.json({
     success: true,
     data: saved,
@@ -26225,18 +29884,28 @@ init_bookingFieldConfig();
 init_bookingTypes();
 init_operationsStore();
 init_operationsPersistence();
+import { Router as Router5 } from "express";
+init_roles();
 init_bookingStore();
 init_bookingService();
-import { Router as Router5 } from "express";
 var bookingRouter = Router5();
+function userIsStaff2(req) {
+  const role = req.userRole;
+  if (!role) return false;
+  return hasRole(role, ROLES.SUPER_ADMIN) || hasRole(role, ROLES.ADMIN) || hasRole(role, ROLES.SUPPORT_AGENT) || hasRole(role, ROLES.MODERATOR);
+}
 bookingRouter.get("/booking/field-config", (_req, res) => {
   res.json({ success: true, data: getBookingFieldConfigPayload() });
 });
 bookingRouter.get("/booking/seller-settings/:sellerId", (req, res) => {
   res.json({ success: true, data: operationsStore.getSellerBookingSettings(req.params.sellerId) });
 });
-bookingRouter.patch("/booking/seller-settings/:sellerId", (req, res) => {
+bookingRouter.patch("/booking/seller-settings/:sellerId", authenticateRequest, (req, res) => {
   try {
+    if (!userIsStaff2(req) && req.userId !== req.params.sellerId) {
+      res.status(403).json({ error: "Not authorized to update this seller's booking settings" });
+      return;
+    }
     const { autoApproveBookingsDefault } = req.body || {};
     if (typeof autoApproveBookingsDefault !== "boolean") {
       res.status(400).json({ error: "autoApproveBookingsDefault (boolean) is required" });
@@ -26251,11 +29920,26 @@ bookingRouter.patch("/booking/seller-settings/:sellerId", (req, res) => {
     res.status(400).json({ error: error2 instanceof Error ? error2.message : "Failed to update seller booking settings" });
   }
 });
-bookingRouter.get("/booking/requests", async (req, res) => {
+bookingRouter.get("/booking/requests", authenticateRequest, async (req, res) => {
   try {
+    const staff = userIsStaff2(req);
+    const requestedSellerId = typeof req.query.sellerId === "string" ? req.query.sellerId : void 0;
+    const requestedBuyerId = typeof req.query.buyerId === "string" ? req.query.buyerId : void 0;
+    if (!staff && !requestedSellerId && !requestedBuyerId) {
+      res.status(400).json({ error: "sellerId or buyerId is required" });
+      return;
+    }
+    if (!staff && requestedSellerId && requestedSellerId !== req.userId) {
+      res.status(403).json({ error: "Not authorized to list this seller's booking requests" });
+      return;
+    }
+    if (!staff && requestedBuyerId && requestedBuyerId !== req.userId) {
+      res.status(403).json({ error: "Not authorized to list this buyer's booking requests" });
+      return;
+    }
     const rows = await listBookingRequests({
-      sellerId: typeof req.query.sellerId === "string" ? req.query.sellerId : void 0,
-      buyerId: typeof req.query.buyerId === "string" ? req.query.buyerId : void 0,
+      sellerId: requestedSellerId,
+      buyerId: requestedBuyerId,
       conversationId: typeof req.query.conversationId === "string" ? req.query.conversationId : void 0,
       status: typeof req.query.status === "string" ? req.query.status : void 0
     });
@@ -26268,11 +29952,15 @@ bookingRouter.get("/booking/requests", async (req, res) => {
     res.status(500).json({ error: error2 instanceof Error ? error2.message : "Failed to list booking requests" });
   }
 });
-bookingRouter.get("/booking/requests/:id", async (req, res) => {
+bookingRouter.get("/booking/requests/:id", authenticateRequest, async (req, res) => {
   try {
     const request = await getBookingRequest(req.params.id);
     if (!request) {
       res.status(404).json({ error: "Booking request not found" });
+      return;
+    }
+    if (!userIsStaff2(req) && req.userId !== request.sellerId && req.userId !== request.buyerId) {
+      res.status(403).json({ error: "Not authorized to view this booking request" });
       return;
     }
     await sweepExpiredBookings();
@@ -26282,11 +29970,15 @@ bookingRouter.get("/booking/requests/:id", async (req, res) => {
     res.status(500).json({ error: error2 instanceof Error ? error2.message : "Failed to load booking request" });
   }
 });
-bookingRouter.post("/booking/requests", async (req, res) => {
+bookingRouter.post("/booking/requests", authenticateRequest, async (req, res) => {
   try {
     const body = req.body || {};
     if (!body.listingId || !body.buyerId || !body.sellerId) {
       res.status(400).json({ error: "listingId, buyerId, and sellerId are required" });
+      return;
+    }
+    if (!userIsStaff2(req) && req.userId !== String(body.buyerId)) {
+      res.status(403).json({ error: "Not authorized to create a booking request for another buyer" });
       return;
     }
     const listingId = String(body.listingId);
@@ -26322,9 +30014,10 @@ bookingRouter.post("/booking/requests", async (req, res) => {
     res.status(400).json({ error: error2 instanceof Error ? error2.message : "Failed to create booking request" });
   }
 });
-bookingRouter.post("/booking/requests/:id/accept", async (req, res) => {
+bookingRouter.post("/booking/requests/:id/accept", authenticateRequest, async (req, res) => {
   try {
-    const sellerId = String(req.body?.sellerId || "");
+    const staff = userIsStaff2(req);
+    const sellerId = String((staff ? req.body?.sellerId : void 0) || req.userId || "");
     if (!sellerId) {
       res.status(400).json({ error: "sellerId is required" });
       return;
@@ -26338,9 +30031,10 @@ bookingRouter.post("/booking/requests/:id/accept", async (req, res) => {
     res.status(400).json({ error: error2 instanceof Error ? error2.message : "Failed to accept booking" });
   }
 });
-bookingRouter.post("/booking/requests/:id/decline", async (req, res) => {
+bookingRouter.post("/booking/requests/:id/decline", authenticateRequest, async (req, res) => {
   try {
-    const sellerId = String(req.body?.sellerId || "");
+    const staff = userIsStaff2(req);
+    const sellerId = String((staff ? req.body?.sellerId : void 0) || req.userId || "");
     const declineReason = String(req.body?.declineReason || "");
     if (!sellerId) {
       res.status(400).json({ error: "sellerId is required" });
@@ -26360,9 +30054,10 @@ bookingRouter.post("/booking/requests/:id/decline", async (req, res) => {
     res.status(400).json({ error: error2 instanceof Error ? error2.message : "Failed to decline booking" });
   }
 });
-bookingRouter.post("/booking/requests/:id/counter", async (req, res) => {
+bookingRouter.post("/booking/requests/:id/counter", authenticateRequest, async (req, res) => {
   try {
-    const sellerId = String(req.body?.sellerId || "");
+    const staff = userIsStaff2(req);
+    const sellerId = String((staff ? req.body?.sellerId : void 0) || req.userId || "");
     if (!sellerId) {
       res.status(400).json({ error: "sellerId is required" });
       return;
@@ -26381,9 +30076,10 @@ bookingRouter.post("/booking/requests/:id/counter", async (req, res) => {
     res.status(400).json({ error: error2 instanceof Error ? error2.message : "Failed to counter booking" });
   }
 });
-bookingRouter.post("/booking/requests/:id/buyer-accept", async (req, res) => {
+bookingRouter.post("/booking/requests/:id/buyer-accept", authenticateRequest, async (req, res) => {
   try {
-    const buyerId = String(req.body?.buyerId || "");
+    const staff = userIsStaff2(req);
+    const buyerId = String((staff ? req.body?.buyerId : void 0) || req.userId || "");
     if (!buyerId) {
       res.status(400).json({ error: "buyerId is required" });
       return;
@@ -26394,9 +30090,10 @@ bookingRouter.post("/booking/requests/:id/buyer-accept", async (req, res) => {
     res.status(400).json({ error: error2 instanceof Error ? error2.message : "Failed to accept counter-offer" });
   }
 });
-bookingRouter.post("/booking/requests/:id/buyer-decline", async (req, res) => {
+bookingRouter.post("/booking/requests/:id/buyer-decline", authenticateRequest, async (req, res) => {
   try {
-    const buyerId = String(req.body?.buyerId || "");
+    const staff = userIsStaff2(req);
+    const buyerId = String((staff ? req.body?.buyerId : void 0) || req.userId || "");
     if (!buyerId) {
       res.status(400).json({ error: "buyerId is required" });
       return;
@@ -26408,8 +30105,17 @@ bookingRouter.post("/booking/requests/:id/buyer-decline", async (req, res) => {
     res.status(400).json({ error: error2 instanceof Error ? error2.message : "Failed to decline offer" });
   }
 });
-bookingRouter.post("/booking/requests/:id/mark-paid", async (req, res) => {
+bookingRouter.post("/booking/requests/:id/mark-paid", authenticateRequest, async (req, res) => {
   try {
+    const existing = await getBookingRequest(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: "Booking request not found" });
+      return;
+    }
+    if (!userIsStaff2(req) && req.userId !== existing.buyerId) {
+      res.status(403).json({ error: "Not authorized to confirm payment for this booking" });
+      return;
+    }
     const paymentType = req.body?.paymentType === "partial" ? "partial" : "full";
     const result = await markBookingPaid(req.params.id, req.body?.orderId, paymentType);
     res.json({ success: true, data: result.offer, request: result.request });
@@ -26451,7 +30157,7 @@ bookingRouter.get("/booking/expire", async (req, res) => {
 });
 
 // server/authRouter.ts
-import { randomBytes as randomBytes4, randomUUID as randomUUID11 } from "node:crypto";
+import { randomBytes as randomBytes5, randomUUID as randomUUID11 } from "node:crypto";
 import { Router as Router6 } from "express";
 import { eq as eq12 } from "drizzle-orm";
 init_jwtTokens();
@@ -26459,20 +30165,20 @@ init_jwtTokens();
 // server/auth/authTokens.ts
 init_client();
 init_schema();
-import { createHash as createHash2, randomBytes as randomBytes3 } from "node:crypto";
+import { createHash as createHash3, randomBytes as randomBytes4 } from "node:crypto";
 import { and as and5, eq as eq11, isNull as isNull2 } from "drizzle-orm";
 var EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1e3;
 var PASSWORD_RESET_TTL_MS = 60 * 60 * 1e3;
 function hashToken(raw) {
   const pepper = process.env.JWT_REFRESH_SECRET?.trim() || "";
-  return createHash2("sha256").update(`${pepper}:${raw}`).digest("hex");
+  return createHash3("sha256").update(`${pepper}:${raw}`).digest("hex");
 }
 function ttlForType(type) {
   return type === "password_reset" ? PASSWORD_RESET_TTL_MS : EMAIL_VERIFICATION_TTL_MS;
 }
 async function issueAuthToken(userId, type) {
   await db.update(authTokens).set({ consumedAt: /* @__PURE__ */ new Date() }).where(and5(eq11(authTokens.userId, userId), eq11(authTokens.type, type), isNull2(authTokens.consumedAt)));
-  const rawToken = randomBytes3(32).toString("hex");
+  const rawToken = randomBytes4(32).toString("hex");
   const expiresAt = new Date(Date.now() + ttlForType(type));
   await db.insert(authTokens).values({
     userId,
@@ -26610,7 +30316,7 @@ init_roles();
 init_eventBus();
 var authRouter = Router6();
 var requireAuth3 = [authenticateRequest];
-var requireAdmin2 = [authenticateRequest, requireRole(ROLES.ADMIN)];
+var requireAdmin3 = [authenticateRequest, requireRole(ROLES.ADMIN)];
 authRouter.get("/auth/seller-status", async (req, res) => {
   const email = String(req.query.email || "").trim().toLowerCase();
   if (!email || !email.includes("@")) {
@@ -27523,7 +31229,7 @@ authRouter.post("/auth/change-password", ...requireAuth3, async (req, res) => {
     res.status(500).json({ success: false, error: "Unable to change password" });
   }
 });
-authRouter.post("/auth/admin/password-reset-assist", ...requireAdmin2, async (req, res) => {
+authRouter.post("/auth/admin/password-reset-assist", ...requireAdmin3, async (req, res) => {
   const actorId3 = req.userId || req.user?.uid || "";
   const userId = String(req.body?.userId || "").trim();
   const mode = String(req.body?.mode || "temp").trim();
@@ -27543,7 +31249,7 @@ authRouter.post("/auth/admin/password-reset-assist", ...requireAdmin2, async (re
       return;
     }
     if (mode === "link") {
-      const token = randomBytes4(24).toString("hex");
+      const token = randomBytes5(24).toString("hex");
       const resetLink = `/auth/reset-password?uid=${encodeURIComponent(userId)}&token=${token}`;
       upsertUserProfileExtras({
         userId,
@@ -27566,7 +31272,7 @@ authRouter.post("/auth/admin/password-reset-assist", ...requireAdmin2, async (re
       });
       return;
     }
-    const tempPassword = `Tmp_${randomBytes4(9).toString("base64url")}`;
+    const tempPassword = `Tmp_${randomBytes5(9).toString("base64url")}`;
     const passwordHash = await hashPassword(tempPassword);
     const now = /* @__PURE__ */ new Date();
     await db.update(users).set({ passwordHash, updatedAt: now }).where(eq12(users.id, userId));
@@ -27597,7 +31303,7 @@ authRouter.post("/auth/admin/password-reset-assist", ...requireAdmin2, async (re
     res.status(500).json({ success: false, error: "Unable to assist password reset" });
   }
 });
-authRouter.get("/auth/users/by-choosify-id/:choosifyUserId", ...requireAdmin2, async (req, res) => {
+authRouter.get("/auth/users/by-choosify-id/:choosifyUserId", ...requireAdmin3, async (req, res) => {
   try {
     const raw = String(req.params.choosifyUserId || "").trim();
     const canonical = normalizeChoosifyUserIdQuery(raw);
@@ -27634,7 +31340,7 @@ authRouter.get("/auth/users/by-choosify-id/:choosifyUserId", ...requireAdmin2, a
     res.status(500).json({ success: false, error: "Lookup failed" });
   }
 });
-authRouter.get("/auth/users/search", ...requireAdmin2, async (req, res) => {
+authRouter.get("/auth/users/search", ...requireAdmin3, async (req, res) => {
   try {
     const q = String(req.query.choosifyUserId || req.query.q || "").trim();
     if (!q) {
@@ -27665,7 +31371,7 @@ authRouter.get("/auth/users/search", ...requireAdmin2, async (req, res) => {
     res.status(500).json({ success: false, error: "Search failed" });
   }
 });
-authRouter.get("/auth/users/directory", ...requireAdmin2, async (_req, res) => {
+authRouter.get("/auth/users/directory", ...requireAdmin3, async (_req, res) => {
   try {
     const rows = await db.select({
       uid: users.id,
@@ -27682,7 +31388,7 @@ authRouter.get("/auth/users/directory", ...requireAdmin2, async (_req, res) => {
     res.status(500).json({ success: false, error: "Directory lookup failed" });
   }
 });
-authRouter.get("/auth/users/:userId", ...requireAdmin2, async (req, res) => {
+authRouter.get("/auth/users/:userId", ...requireAdmin3, async (req, res) => {
   try {
     const userId = String(req.params.userId || "").trim();
     if (!userId || userId.length < 8) {
@@ -27720,7 +31426,7 @@ authRouter.get("/auth/users/:userId", ...requireAdmin2, async (req, res) => {
     res.status(500).json({ success: false, error: "Lookup failed" });
   }
 });
-authRouter.post("/auth/admin/backfill-choosify-user-ids", ...requireAdmin2, async (req, res) => {
+authRouter.post("/auth/admin/backfill-choosify-user-ids", ...requireAdmin3, async (req, res) => {
   try {
     const result = await backfillChoosifyUserIds();
     Logger.audit("auth.choosify_user_id_backfill", {
@@ -28251,14 +31957,11 @@ async function releaseOrderReservations(order) {
     return { ...order, inventoryReserved: false };
   }
   for (const item of order.items.filter((i) => i.listingType === "product")) {
-    const record = await getInventoryRecord(item.listingId, item.variantId);
-    if (!record) continue;
-    await adjustInventory({
+    await releaseInventoryQuantity({
       productId: item.listingId,
       variantId: item.variantId,
-      reservedQuantity: Math.max(0, record.reservedQuantity - item.quantity)
+      quantity: item.quantity
     });
-    await syncProductStockFromInventory(item.listingId);
   }
   return { ...order, inventoryReserved: false };
 }
@@ -28323,15 +32026,11 @@ function assertPaymentAllowsConfirm(order) {
 async function restockConsumedInventory(order) {
   if (!order.inventoryConsumed) return order;
   for (const item of order.items.filter((i) => i.listingType === "product")) {
-    const record = await getInventoryRecord(item.listingId, item.variantId);
-    if (!record) continue;
-    await adjustInventory({
+    await restockInventoryQuantity({
       productId: item.listingId,
       variantId: item.variantId,
-      quantity: record.quantity + item.quantity,
-      reservedQuantity: record.reservedQuantity
+      quantity: item.quantity
     });
-    await syncProductStockFromInventory(item.listingId);
   }
   return { ...order, inventoryConsumed: false, inventoryReserved: false };
 }
@@ -28340,17 +32039,20 @@ async function consumeOrderInventory(order) {
     return { ...order, inventoryConsumed: true, inventoryReserved: false };
   }
   for (const item of order.items.filter((i) => i.listingType === "product")) {
-    const record = await getInventoryRecord(item.listingId, item.variantId);
-    if (!record) continue;
-    const nextQty = Math.max(0, record.quantity - item.quantity);
-    const nextReserved = order.inventoryReserved ? Math.max(0, record.reservedQuantity - item.quantity) : record.reservedQuantity;
-    await adjustInventory({
-      productId: item.listingId,
-      variantId: item.variantId,
-      quantity: nextQty,
-      reservedQuantity: Math.min(nextReserved, nextQty)
+    const key = inventoryRecordId(item.listingId, item.variantId);
+    await withInventoryLock(key, async () => {
+      const record = await getInventoryRecord(item.listingId, item.variantId);
+      if (!record) return;
+      const nextQty = Math.max(0, record.quantity - item.quantity);
+      const nextReserved = order.inventoryReserved ? Math.max(0, record.reservedQuantity - item.quantity) : record.reservedQuantity;
+      await adjustInventory({
+        productId: item.listingId,
+        variantId: item.variantId,
+        quantity: nextQty,
+        reservedQuantity: Math.min(nextReserved, nextQty)
+      });
+      await syncProductStockFromInventory(item.listingId);
     });
-    await syncProductStockFromInventory(item.listingId);
   }
   return { ...order, inventoryConsumed: true, inventoryReserved: false };
 }
@@ -30441,17 +34143,17 @@ function assertSafeMediaUrl(url, field = "mediaUrl") {
 }
 
 // server/ads/adsPersistence.ts
-import { existsSync as existsSync14, mkdirSync as mkdirSync14, readFileSync as readFileSync14, writeFileSync as writeFileSync14 } from "node:fs";
-import { dirname as dirname14, join as join15 } from "node:path";
-var DEFAULT_PATH8 = join15(process.cwd(), ".data", "ads-memory-snapshot.json");
+import { existsSync as existsSync15, mkdirSync as mkdirSync15, readFileSync as readFileSync15, writeFileSync as writeFileSync15 } from "node:fs";
+import { dirname as dirname15, join as join16 } from "node:path";
+var DEFAULT_PATH8 = join16(process.cwd(), ".data", "ads-memory-snapshot.json");
 function adsMemorySnapshotPath() {
   return process.env.ADS_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH8;
 }
 function loadAdsMemorySnapshot() {
   const path = adsMemorySnapshotPath();
-  if (!existsSync14(path)) return null;
+  if (!existsSync15(path)) return null;
   try {
-    const parsed = JSON.parse(readFileSync14(path, "utf8"));
+    const parsed = JSON.parse(readFileSync15(path, "utf8"));
     if (!parsed || parsed.version !== 1) return null;
     return parsed;
   } catch (error2) {
@@ -30459,26 +34161,26 @@ function loadAdsMemorySnapshot() {
     return null;
   }
 }
-var persistTimer11 = null;
+var persistTimer12 = null;
 var pendingBuild6 = null;
 function scheduleAdsMemoryPersist(build) {
   pendingBuild6 = build;
-  if (persistTimer11) clearTimeout(persistTimer11);
-  persistTimer11 = setTimeout(() => {
+  if (persistTimer12) clearTimeout(persistTimer12);
+  persistTimer12 = setTimeout(() => {
     flushAdsMemoryPersist();
   }, 250);
 }
 function flushAdsMemoryPersist() {
-  if (persistTimer11) {
-    clearTimeout(persistTimer11);
-    persistTimer11 = null;
+  if (persistTimer12) {
+    clearTimeout(persistTimer12);
+    persistTimer12 = null;
   }
   if (!pendingBuild6) return;
   try {
     const snapshot = pendingBuild6();
     const path = adsMemorySnapshotPath();
-    mkdirSync14(dirname14(path), { recursive: true });
-    writeFileSync14(path, JSON.stringify(snapshot), "utf8");
+    mkdirSync15(dirname15(path), { recursive: true });
+    writeFileSync15(path, JSON.stringify(snapshot), "utf8");
   } catch (error2) {
     console.error("[AdsMemoryPersist] Failed to save snapshot:", error2);
   }
@@ -31185,7 +34887,7 @@ async function getAdForActor(id, actor) {
 // server/ads/adsRouter.ts
 var adsRouter = Router10();
 var requireAuth7 = [authenticateRequest, requirePartnerEntitlement, requireMarketplaceAccess];
-var requireAdmin3 = [authenticateRequest, requireRole(ROLES.ADMIN)];
+var requireAdmin4 = [authenticateRequest, requireRole(ROLES.ADMIN)];
 function actorOf2(req) {
   return {
     userId: req.userId || req.user?.uid || "",
@@ -31321,7 +35023,7 @@ adsRouter.post("/ads/:id/submit", ...requireAuth7, async (req, res) => {
     handleError3(res, error2);
   }
 });
-adsRouter.post("/ads/:id/pause", ...requireAdmin3, async (req, res) => {
+adsRouter.post("/ads/:id/pause", ...requireAdmin4, async (req, res) => {
   try {
     const data = await pauseAd(req.params.id, actorOf2(req));
     res.json({ success: true, data });
@@ -31329,7 +35031,7 @@ adsRouter.post("/ads/:id/pause", ...requireAdmin3, async (req, res) => {
     handleError3(res, error2);
   }
 });
-adsRouter.post("/ads/:id/disable", ...requireAdmin3, async (req, res) => {
+adsRouter.post("/ads/:id/disable", ...requireAdmin4, async (req, res) => {
   try {
     const data = await archiveAd(req.params.id, actorOf2(req));
     res.json({ success: true, data });
@@ -31378,7 +35080,7 @@ adsRouter.post("/ads/promotions", ...requireAuth7, async (req, res) => {
     handleError3(res, error2);
   }
 });
-adsRouter.post("/ads/promotions/:id/approve", ...requireAdmin3, async (req, res) => {
+adsRouter.post("/ads/promotions/:id/approve", ...requireAdmin4, async (req, res) => {
   try {
     const data = await approveAd(req.params.id, actorOf2(req), { publish: true });
     res.json({ success: true, data });
@@ -31386,7 +35088,7 @@ adsRouter.post("/ads/promotions/:id/approve", ...requireAdmin3, async (req, res)
     handleError3(res, error2);
   }
 });
-adsRouter.post("/ads/promotions/:id/reject", ...requireAdmin3, async (req, res) => {
+adsRouter.post("/ads/promotions/:id/reject", ...requireAdmin4, async (req, res) => {
   try {
     const reason = req.body?.reason ? String(req.body.reason) : void 0;
     const data = await rejectAd(req.params.id, actorOf2(req), reason);
@@ -31435,7 +35137,7 @@ adsRouter.post("/ads/banners", ...requireAuth7, async (req, res) => {
     handleError3(res, error2);
   }
 });
-adsRouter.post("/ads/banners/:id/approve", ...requireAdmin3, async (req, res) => {
+adsRouter.post("/ads/banners/:id/approve", ...requireAdmin4, async (req, res) => {
   try {
     const data = await approveAd(req.params.id, actorOf2(req), { publish: true });
     res.json({ success: true, data });
@@ -31443,7 +35145,7 @@ adsRouter.post("/ads/banners/:id/approve", ...requireAdmin3, async (req, res) =>
     handleError3(res, error2);
   }
 });
-adsRouter.post("/ads/banners/:id/reject", ...requireAdmin3, async (req, res) => {
+adsRouter.post("/ads/banners/:id/reject", ...requireAdmin4, async (req, res) => {
   try {
     const reason = req.body?.reason ? String(req.body.reason) : void 0;
     const data = await rejectAd(req.params.id, actorOf2(req), reason);
@@ -31452,7 +35154,7 @@ adsRouter.post("/ads/banners/:id/reject", ...requireAdmin3, async (req, res) => 
     handleError3(res, error2);
   }
 });
-adsRouter.get("/ads/admin/queue", ...requireAdmin3, async (req, res) => {
+adsRouter.get("/ads/admin/queue", ...requireAdmin4, async (req, res) => {
   try {
     const data = await listAdminQueue(actorOf2(req));
     res.json({ success: true, data });
@@ -31480,10 +35182,10 @@ init_commerceStore();
 init_operationsStore();
 
 // server/cashbook/cashbookStore.ts
-import { existsSync as existsSync15, mkdirSync as mkdirSync15, readFileSync as readFileSync15, writeFileSync as writeFileSync15 } from "node:fs";
-import { dirname as dirname15, join as join16 } from "node:path";
+import { existsSync as existsSync16, mkdirSync as mkdirSync16, readFileSync as readFileSync16, writeFileSync as writeFileSync16 } from "node:fs";
+import { dirname as dirname16, join as join17 } from "node:path";
 import { randomUUID as randomUUID15 } from "node:crypto";
-var DEFAULT_PATH9 = join16(process.cwd(), ".data", "cashbook-memory-snapshot.json");
+var DEFAULT_PATH9 = join17(process.cwd(), ".data", "cashbook-memory-snapshot.json");
 function snapshotPath2() {
   return process.env.CASHBOOK_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH9;
 }
@@ -31492,23 +35194,23 @@ var state12 = {
   entries: []
 };
 var hydrated10 = false;
-var persistTimer12 = null;
+var persistTimer13 = null;
 function nowIso24() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
 function schedulePersist10() {
-  if (persistTimer12) clearTimeout(persistTimer12);
-  persistTimer12 = setTimeout(() => {
+  if (persistTimer13) clearTimeout(persistTimer13);
+  persistTimer13 = setTimeout(() => {
     try {
       const path = snapshotPath2();
-      mkdirSync15(dirname15(path), { recursive: true });
+      mkdirSync16(dirname16(path), { recursive: true });
       const snap = {
         version: 1,
         savedAt: nowIso24(),
         books: state12.books,
         entries: state12.entries
       };
-      writeFileSync15(path, JSON.stringify(snap), "utf8");
+      writeFileSync16(path, JSON.stringify(snap), "utf8");
     } catch (error2) {
       console.error("[CashbookMemoryPersist] Failed to save:", error2);
     }
@@ -31518,9 +35220,9 @@ function ensureCashbookHydrated() {
   if (hydrated10) return;
   hydrated10 = true;
   const path = snapshotPath2();
-  if (!existsSync15(path)) return;
+  if (!existsSync16(path)) return;
   try {
-    const parsed = JSON.parse(readFileSync15(path, "utf8"));
+    const parsed = JSON.parse(readFileSync16(path, "utf8"));
     if (parsed?.version !== 1) return;
     state12.books = Array.isArray(parsed.books) ? parsed.books : [];
     state12.entries = Array.isArray(parsed.entries) ? parsed.entries : [];
@@ -32011,24 +35713,24 @@ init_commercePaymentStore();
 init_commercePaymentMemoryBackend();
 init_escrowStore();
 init_escrowMemoryBackend();
-import { existsSync as existsSync16, readFileSync as readFileSync16, writeFileSync as writeFileSync16 } from "node:fs";
-import { join as join17 } from "node:path";
+import { existsSync as existsSync17, readFileSync as readFileSync17, writeFileSync as writeFileSync17 } from "node:fs";
+import { join as join18 } from "node:path";
 init_conversationStore();
 init_referenceIdService();
 function cashbookSnapshotPath() {
-  return process.env.CASHBOOK_MEMORY_SNAPSHOT_PATH?.trim() || join17(process.cwd(), ".data", "cashbook-memory-snapshot.json");
+  return process.env.CASHBOOK_MEMORY_SNAPSHOT_PATH?.trim() || join18(process.cwd(), ".data", "cashbook-memory-snapshot.json");
 }
 async function patchCashbookRef(bookId, refId) {
   ensureCashbookHydrated();
   const path = cashbookSnapshotPath();
-  if (!existsSync16(path)) return;
+  if (!existsSync17(path)) return;
   try {
-    const snap = JSON.parse(readFileSync16(path, "utf8"));
+    const snap = JSON.parse(readFileSync17(path, "utf8"));
     const book = (snap.books || []).find((b) => b.id === bookId);
     if (book && !book.cashbookReferenceId) {
       book.cashbookReferenceId = refId;
       snap.savedAt = (/* @__PURE__ */ new Date()).toISOString();
-      writeFileSync16(path, JSON.stringify(snap), "utf8");
+      writeFileSync17(path, JSON.stringify(snap), "utf8");
     }
   } catch {
   }
@@ -32151,9 +35853,9 @@ async function backfillAllReferenceIds() {
   let refundRows = [];
   let returnRows = [];
   try {
-    const path = join17(process.cwd(), ".data", "escrow-memory-snapshot.json");
-    if (existsSync16(path)) {
-      const snap = JSON.parse(readFileSync16(path, "utf8"));
+    const path = join18(process.cwd(), ".data", "escrow-memory-snapshot.json");
+    if (existsSync17(path)) {
+      const snap = JSON.parse(readFileSync17(path, "utf8"));
       if (snap.escrows?.length) escrowRows = snap.escrows;
       if (snap.refunds?.length) refundRows = snap.refunds;
       if (snap.returns?.length) returnRows = snap.returns;
@@ -32263,8 +35965,8 @@ async function backfillAllReferenceIds() {
   let books = [];
   try {
     const path = cashbookSnapshotPath();
-    if (existsSync16(path)) {
-      const snap = JSON.parse(readFileSync16(path, "utf8"));
+    if (existsSync17(path)) {
+      const snap = JSON.parse(readFileSync17(path, "utf8"));
       books = snap.books || [];
     }
   } catch {
@@ -32565,18 +36267,78 @@ async function revalidateCartItem(item) {
     if (!isProductPubliclyEligible(product, brand) && lifecycle !== "active") {
       throw new CommerceError(`Product "${product.title}" is not eligible for checkout`);
     }
-    let record = await getInventoryRecord(product.id, item.variantId);
-    if (!record) {
-      const all = await listInventoryForProduct(product.id);
-      record = all.find((r) => !r.variantId) || null;
+    item.unitPrice = product.price;
+    item.originalUnitPrice = product.originalPrice;
+    if (item.variantId) {
+      const rv = await resolveVariantPricing(
+        product.id,
+        item.variantId,
+        product.price,
+        product.originalPrice
+      );
+      if (!rv) throw new CommerceError(`Variant no longer exists for "${product.title}"`);
+      if (!rv.active) {
+        throw new CommerceError(`Selected variant of "${product.title}" is no longer available`);
+      }
+      item.unitPrice = rv.unitPrice;
+      item.originalUnitPrice = rv.originalUnitPrice;
+      item.variantSku = rv.sku;
     }
-    const available = record?.availableQuantity ?? product.stock ?? 0;
-    if (item.quantity > available) {
+    const canonicalUnitPrice = item.unitPrice;
+    item.guideOfferApplied = void 0;
+    if (item.guideOfferRef?.guideId && item.guideOfferRef.productId === item.listingId) {
+      const resolved = await resolveActiveGuideOffer(
+        item.guideOfferRef.guideId,
+        item.listingId,
+        canonicalUnitPrice,
+        Date.now(),
+        Boolean(item.variantId)
+      );
+      if (resolved) {
+        item.unitPrice = resolved.unitPrice;
+        item.guideOfferApplied = {
+          guideId: resolved.guideId,
+          offerId: resolved.offerId,
+          basePrice: resolved.basePrice
+        };
+      } else {
+        item.guideOfferRef = void 0;
+      }
+    }
+    if (typeof item.expectedUnitPrice === "number" && Math.abs(item.expectedUnitPrice - item.unitPrice) > 1e-3) {
       throw new CommerceError(
-        `Insufficient stock for "${product.title}": need ${item.quantity}, available ${available}`
+        `The price for "${product.title}" changed since you added it. Please review the updated total.`,
+        409,
+        {
+          code: "GUIDE_OFFER_PRICE_CHANGED",
+          details: {
+            productId: item.listingId,
+            expectedUnitPrice: item.expectedUnitPrice,
+            actualUnitPrice: item.unitPrice,
+            guideOfferActive: Boolean(item.guideOfferApplied)
+          }
+        }
       );
     }
-    item.unitPrice = product.price;
+    if (item.addons?.length) {
+      item.addons = await resolveAddonsForProduct(
+        product.id,
+        item.addons.map((a) => ({ id: a.id, quantity: a.quantity }))
+      );
+    }
+    if (product.productType !== "service") {
+      let record = await getInventoryRecord(product.id, item.variantId);
+      if (!record) {
+        const all = await listInventoryForProduct(product.id);
+        record = all.find((r) => !r.variantId) || null;
+      }
+      const available = record?.availableQuantity ?? product.stock ?? 0;
+      if (item.quantity > available) {
+        throw new CommerceError(
+          `Insufficient stock for "${product.title}": need ${item.quantity}, available ${available}`
+        );
+      }
+    }
     item.sellerId = product.sellerId || brand.sellerId || item.sellerId;
     item.brandId = product.brandId;
     item.brandName = brand.name || product.brandName;
@@ -32601,19 +36363,30 @@ async function revalidateCartItem(item) {
 }
 function toSnapshot(item) {
   const finalUnitPrice = item.unitPrice;
+  const addons = item.addons?.length ? item.addons.map((a) => ({ ...a })) : void 0;
+  const addonsTot = sumAddonLines(addons);
+  const offerBase = item.guideOfferApplied?.basePrice;
+  const mrp = typeof item.originalUnitPrice === "number" && item.originalUnitPrice > item.unitPrice ? item.originalUnitPrice : void 0;
+  const original = typeof offerBase === "number" && offerBase > item.unitPrice ? Math.max(offerBase, mrp ?? 0) : mrp;
   return {
     listingType: item.listingType,
     listingId: item.listingId,
     variantId: item.variantId,
+    sku: item.variantSku,
     title: item.title,
     brandId: item.brandId,
     brandName: item.brandName,
     sellerId: item.sellerId,
     quantity: item.quantity,
     unitPrice: item.unitPrice,
-    discount: 0,
+    originalUnitPrice: original,
+    // `discount` = (reference price − charged price) for display only.
+    discount: original ? Math.max(0, original - item.unitPrice) : 0,
     finalUnitPrice,
-    lineTotal: finalUnitPrice * item.quantity,
+    ...item.guideOfferApplied ? { guideOffer: item.guideOfferApplied } : {},
+    addons,
+    addonsTotal: addons ? addonsTot : void 0,
+    lineTotal: finalUnitPrice * item.quantity + addonsTot,
     currency: item.currency || "BDT",
     selectedOptions: item.selectedOptions
   };
@@ -32629,32 +36402,14 @@ function groupByBrand(items) {
   return map;
 }
 async function reserveProductInventory(item) {
-  let record = await getInventoryRecord(item.listingId, item.variantId);
-  if (!record) {
-    const all = await listInventoryForProduct(item.listingId);
-    record = all.find((r) => !r.variantId) || null;
+  const result = await reserveInventoryQuantity({
+    productId: item.listingId,
+    variantId: item.variantId,
+    quantity: item.quantity
+  });
+  if (!result.ok) {
+    throw new CommerceError(`Cannot reserve inventory for "${item.title}"`);
   }
-  if (!record) {
-    const product = await catalogStore2.getProduct(item.listingId);
-    const qty2 = product?.stock ?? 0;
-    await adjustInventory({
-      productId: item.listingId,
-      variantId: item.variantId,
-      quantity: qty2,
-      reservedQuantity: item.quantity
-    });
-  } else {
-    const nextReserved = record.reservedQuantity + item.quantity;
-    if (nextReserved > record.quantity) {
-      throw new CommerceError(`Cannot reserve inventory for "${item.title}"`);
-    }
-    await adjustInventory({
-      productId: item.listingId,
-      variantId: item.variantId,
-      reservedQuantity: nextReserved
-    });
-  }
-  await syncProductStockFromInventory(item.listingId);
   return {
     productId: item.listingId,
     variantId: item.variantId,
@@ -32664,14 +36419,7 @@ async function reserveProductInventory(item) {
 async function releaseReservations(reservations) {
   for (const r of reservations) {
     try {
-      const record = await getInventoryRecord(r.productId, r.variantId);
-      if (!record) continue;
-      await adjustInventory({
-        productId: r.productId,
-        variantId: r.variantId,
-        reservedQuantity: Math.max(0, record.reservedQuantity - r.quantity)
-      });
-      await syncProductStockFromInventory(r.productId);
+      await releaseInventoryQuantity(r);
     } catch (error2) {
       console.error("[Commerce] Failed to release inventory reservation after checkout failure:", error2);
     }
@@ -32773,8 +36521,12 @@ async function executeCheckout(input) {
       const sellerId = items[0].sellerId;
       const brandName = items[0].brandName;
       const hasService = items.some((i) => i.listingType === "service");
+      let reservedAnyPhysical = false;
       for (const item of items.filter((i) => i.listingType === "product")) {
+        const p = await catalogStore2.getProduct(item.listingId);
+        if (p?.productType === "service") continue;
         reservations.push(await reserveProductInventory(item));
+        reservedAnyPhysical = true;
       }
       const order = {
         id: newId6("cord"),
@@ -32794,7 +36546,7 @@ async function executeCheckout(input) {
         taxTotal: 0,
         grandTotal: subtotal,
         shipping: input.shipping,
-        inventoryReserved: items.some((i) => i.listingType === "product"),
+        inventoryReserved: reservedAnyPhysical,
         inventoryConsumed: false,
         createdAt: nowIso25(),
         updatedAt: nowIso25()
@@ -33125,7 +36877,12 @@ function actorRole2(req) {
 }
 function handleCommerceError(res, error2) {
   if (error2 instanceof CommerceError) {
-    res.status(error2.statusCode).json({ success: false, error: error2.message });
+    res.status(error2.statusCode).json({
+      success: false,
+      error: error2.message,
+      ...error2.code ? { code: error2.code } : {},
+      ...error2.details ? { details: error2.details } : {}
+    });
     return;
   }
   console.error("[Commerce]", error2);
@@ -33174,7 +36931,13 @@ commerceRouter.post("/cart/items", ...requireAuth10, async (req, res) => {
       requestedAt: body.requestedAt ? String(body.requestedAt) : void 0,
       serviceArea: body.serviceArea ? String(body.serviceArea) : void 0,
       notes: body.notes ? String(body.notes) : void 0,
-      selectedOptions: body.selectedOptions
+      selectedOptions: body.selectedOptions,
+      addons: Array.isArray(body.addons) ? body.addons : void 0,
+      guideOfferRef: body.guideOfferRef && typeof body.guideOfferRef === "object" ? {
+        guideId: String(body.guideOfferRef.guideId || ""),
+        productId: String(body.guideOfferRef.productId || listingId)
+      } : void 0,
+      expectedUnitPrice: typeof body.expectedUnitPrice === "number" ? body.expectedUnitPrice : void 0
     });
     res.status(201).json({ success: true, data: result.cart, totals: result.totals });
   } catch (error2) {
@@ -33189,6 +36952,15 @@ commerceRouter.patch("/cart/items/:id", ...requireAuth10, async (req, res) => {
       return;
     }
     const result = await updateCartItemQuantity(actorId2(req), req.params.id, quantity);
+    res.json({ success: true, data: result.cart, totals: result.totals });
+  } catch (error2) {
+    handleCommerceError(res, error2);
+  }
+});
+commerceRouter.patch("/cart/items/:id/addons", ...requireAuth10, async (req, res) => {
+  try {
+    const addons = Array.isArray(req.body?.addons) ? req.body.addons : [];
+    const result = await updateCartItemAddons(actorId2(req), req.params.id, addons);
     res.json({ success: true, data: result.cart, totals: result.totals });
   } catch (error2) {
     handleCommerceError(res, error2);
@@ -33458,8 +37230,10 @@ import { Router as Router14 } from "express";
 init_logger();
 init_conversationMemoryBackend();
 init_conversationService();
+init_conversationPermissions();
 init_conversationStore();
 init_conversationPersistence();
+init_types2();
 var conversationRouter = Router14();
 function flushIfMemoryDisk() {
   if (getMessagingPersistenceMode() === "memory-disk") {
@@ -33588,6 +37362,15 @@ conversationRouter.post("/conversations/:id/messages", ...requireAuth11, async (
     });
     flushIfMemoryDisk();
     res.status(201).json({ success: true, data: result });
+  } catch (error2) {
+    handleError5(res, error2);
+  }
+});
+conversationRouter.post("/conversations/:id/read", ...requireAuth11, async (req, res) => {
+  try {
+    const result = await markConversationRead({ conversationId: req.params.id, actor: actorOf5(req) });
+    flushIfMemoryDisk();
+    res.json({ success: true, data: result });
   } catch (error2) {
     handleError5(res, error2);
   }
@@ -33722,6 +37505,149 @@ conversationRouter.get("/support/conversations", ...requireAuth11, async (req, r
   try {
     const rows = await listConversationsForActor(actorOf5(req), { contextType: "support_ticket" });
     res.json({ success: true, data: rows });
+  } catch (error2) {
+    handleError5(res, error2);
+  }
+});
+conversationRouter.post("/support/conversations/:id/read", ...requireAuth11, async (req, res) => {
+  try {
+    const result = await markConversationRead({ conversationId: req.params.id, actor: actorOf5(req) });
+    flushIfMemoryDisk();
+    res.json({ success: true, data: result });
+  } catch (error2) {
+    handleError5(res, error2);
+  }
+});
+conversationRouter.get("/admin/support/conversations", ...requireAuth11, async (req, res) => {
+  try {
+    const actor = actorOf5(req);
+    if (!isAdminEnterRole(actor.role)) {
+      res.status(403).json({ success: false, error: "Choosify staff only" });
+      return;
+    }
+    const audienceRaw = typeof req.query.audience === "string" ? req.query.audience : "";
+    const audience = audienceRaw === "consumer" || audienceRaw === "seller" || audienceRaw === "creator" ? audienceRaw : void 0;
+    const statusRaw = typeof req.query.status === "string" ? req.query.status : void 0;
+    const status = Object.values(SUPPORT_TICKET_STATUSES).includes(statusRaw ?? "") ? statusRaw : void 0;
+    const priorityRaw = typeof req.query.priority === "string" ? req.query.priority : void 0;
+    const priority = ["low", "medium", "high", "urgent"].includes(
+      priorityRaw
+    ) ? priorityRaw : void 0;
+    const assigneeId = typeof req.query.assigneeId === "string" ? req.query.assigneeId : void 0;
+    const rows = await listAdminSupportInbox(actor, {
+      audience,
+      status,
+      priority,
+      assigneeId: assigneeId === "me" ? actor.userId : assigneeId
+    });
+    res.json({ success: true, data: rows });
+  } catch (error2) {
+    handleError5(res, error2);
+  }
+});
+conversationRouter.patch("/admin/support/conversations/:id", ...requireAuth11, async (req, res) => {
+  try {
+    const { updateSupportTicketCrm: updateSupportTicketCrm2 } = await Promise.resolve().then(() => (init_conversationService(), conversationService_exports));
+    const ticket = await updateSupportTicketCrm2({
+      actor: actorOf5(req),
+      conversationId: req.params.id,
+      patch: {
+        status: req.body?.status,
+        priority: req.body?.priority,
+        assigneeId: req.body?.assigneeId === null ? null : req.body?.assigneeId,
+        department: req.body?.department === null ? null : req.body?.department
+      }
+    });
+    flushIfMemoryDisk();
+    res.json({ success: true, data: ticket });
+  } catch (error2) {
+    handleError5(res, error2);
+  }
+});
+conversationRouter.get("/admin/support/conversations/:id/notes", ...requireAuth11, async (req, res) => {
+  try {
+    const { listSupportNotesForActor: listSupportNotesForActor2 } = await Promise.resolve().then(() => (init_conversationService(), conversationService_exports));
+    const rows = await listSupportNotesForActor2(actorOf5(req), req.params.id);
+    res.json({ success: true, data: rows });
+  } catch (error2) {
+    handleError5(res, error2);
+  }
+});
+conversationRouter.post("/admin/support/conversations/:id/notes", ...requireAuth11, async (req, res) => {
+  try {
+    const { addSupportNote: addSupportNote2 } = await Promise.resolve().then(() => (init_conversationService(), conversationService_exports));
+    const note = await addSupportNote2({
+      actor: actorOf5(req),
+      conversationId: req.params.id,
+      body: String(req.body?.body || "")
+    });
+    flushIfMemoryDisk();
+    res.status(201).json({ success: true, data: note });
+  } catch (error2) {
+    handleError5(res, error2);
+  }
+});
+conversationRouter.get("/admin/support/conversations/:id/followups", ...requireAuth11, async (req, res) => {
+  try {
+    const { listSupportFollowupsForActor: listSupportFollowupsForActor2 } = await Promise.resolve().then(() => (init_conversationService(), conversationService_exports));
+    const rows = await listSupportFollowupsForActor2(actorOf5(req), req.params.id);
+    res.json({ success: true, data: rows });
+  } catch (error2) {
+    handleError5(res, error2);
+  }
+});
+conversationRouter.post("/admin/support/conversations/:id/followups", ...requireAuth11, async (req, res) => {
+  try {
+    const { scheduleSupportFollowup: scheduleSupportFollowup2 } = await Promise.resolve().then(() => (init_conversationService(), conversationService_exports));
+    const fu = await scheduleSupportFollowup2({
+      actor: actorOf5(req),
+      conversationId: req.params.id,
+      dueAt: String(req.body?.dueAt || "")
+    });
+    flushIfMemoryDisk();
+    res.status(201).json({ success: true, data: fu });
+  } catch (error2) {
+    handleError5(res, error2);
+  }
+});
+conversationRouter.post(
+  "/admin/support/conversations/:id/followups/:fid/cancel",
+  ...requireAuth11,
+  async (req, res) => {
+    try {
+      const { cancelSupportFollowup: cancelSupportFollowup2 } = await Promise.resolve().then(() => (init_conversationService(), conversationService_exports));
+      const fu = await cancelSupportFollowup2({
+        actor: actorOf5(req),
+        conversationId: req.params.id,
+        followupId: req.params.fid
+      });
+      flushIfMemoryDisk();
+      res.json({ success: true, data: fu });
+    } catch (error2) {
+      handleError5(res, error2);
+    }
+  }
+);
+conversationRouter.post("/admin/support/conversations", ...requireAuth11, async (req, res) => {
+  try {
+    const actor = actorOf5(req);
+    if (!isAdminEnterRole(actor.role)) {
+      res.status(403).json({ success: false, error: "Choosify staff only" });
+      return;
+    }
+    const targetUserId = String(req.body?.targetUserId || "").trim();
+    if (!targetUserId) {
+      res.status(400).json({ success: false, error: "targetUserId is required" });
+      return;
+    }
+    const result = await openAdminSupportConversation({
+      adminActor: actor,
+      targetUserId,
+      subject: req.body?.subject ? String(req.body.subject) : void 0,
+      body: req.body?.body ? String(req.body.body) : void 0
+    });
+    flushIfMemoryDisk();
+    res.status(result.created ? 201 : 200).json({ success: true, data: result });
   } catch (error2) {
     handleError5(res, error2);
   }
@@ -35225,7 +39151,7 @@ async function getCommunicationPlatformStatus() {
 // server/communication/communicationRouter.ts
 var communicationRouter = Router18();
 var requireAuth12 = [authenticateRequest, requirePartnerEntitlement, requireMarketplaceAccess];
-var requireAdmin4 = [authenticateRequest, requireRole(ROLES.ADMIN)];
+var requireAdmin5 = [authenticateRequest, requireRole(ROLES.ADMIN)];
 function parseBool(value) {
   if (value === "true") return true;
   if (value === "false") return false;
@@ -35332,14 +39258,14 @@ communicationRouter.delete("/notifications/:id", ...requireAuth12, async (req, r
   if (!deleted) return res.status(404).json({ success: false, error: "Notification not found" });
   return success(res, { deleted: true });
 });
-communicationRouter.get("/admin/notifications", ...requireAdmin4, async (req, res) => {
+communicationRouter.get("/admin/notifications", ...requireAdmin5, async (req, res) => {
   const userId = typeof req.query.userId === "string" ? req.query.userId : void 0;
   const filter = buildFilter(req, userId);
   if (!filter.limit) filter.limit = 50;
   if (filter.offset === void 0) filter.offset = 0;
   return success(res, { items: await listNotifications(filter), filter });
 });
-communicationRouter.post("/admin/notifications", ...requireAdmin4, async (req, res) => {
+communicationRouter.post("/admin/notifications", ...requireAdmin5, async (req, res) => {
   const body = req.body || {};
   if (!body.userId || !body.title || !body.type || !body.category) {
     return res.status(400).json({ success: false, error: "userId, title, type, and category are required" });
@@ -35347,10 +39273,10 @@ communicationRouter.post("/admin/notifications", ...requireAdmin4, async (req, r
   const notification = await createNotification(body, req);
   return created(res, notification);
 });
-communicationRouter.get("/admin/broadcasts", ...requireAdmin4, (_req, res) => {
+communicationRouter.get("/admin/broadcasts", ...requireAdmin5, (_req, res) => {
   return success(res, { items: listBroadcasts() });
 });
-communicationRouter.post("/admin/broadcasts", ...requireAdmin4, async (req, res) => {
+communicationRouter.post("/admin/broadcasts", ...requireAdmin5, async (req, res) => {
   const body = req.body || {};
   if (!body.title || !body.body || !body.broadcastType) {
     return res.status(400).json({ success: false, error: "title, body, and broadcastType are required" });
@@ -35364,22 +39290,22 @@ communicationRouter.post("/admin/broadcasts", ...requireAdmin4, async (req, res)
   );
   return created(res, broadcast);
 });
-communicationRouter.post("/admin/broadcasts/:id/send", ...requireAdmin4, async (req, res) => {
+communicationRouter.post("/admin/broadcasts/:id/send", ...requireAdmin5, async (req, res) => {
   const broadcast = await sendBroadcast(req.params.id, req);
   if (!broadcast) return res.status(404).json({ success: false, error: "Broadcast not found" });
   return success(res, broadcast);
 });
-communicationRouter.patch("/admin/broadcasts/:id", ...requireAdmin4, (req, res) => {
+communicationRouter.patch("/admin/broadcasts/:id", ...requireAdmin5, (req, res) => {
   const updated = updateBroadcast(req.params.id, req.body || {});
   if (!updated) return res.status(404).json({ success: false, error: "Broadcast not found" });
   return success(res, updated);
 });
-communicationRouter.get("/admin/broadcasts/:id", ...requireAdmin4, (req, res) => {
+communicationRouter.get("/admin/broadcasts/:id", ...requireAdmin5, (req, res) => {
   const broadcast = getBroadcast(req.params.id);
   if (!broadcast) return res.status(404).json({ success: false, error: "Broadcast not found" });
   return success(res, broadcast);
 });
-communicationRouter.get("/admin/communication", ...requireAdmin4, async (_req, res) => {
+communicationRouter.get("/admin/communication", ...requireAdmin5, async (_req, res) => {
   return success(res, await getCommunicationPlatformStatus());
 });
 
@@ -36639,6 +40565,7 @@ var PAGE_KEY_TO_PATH = {
   disputes: "/admin/disputes",
   trustCenter: "/admin/trust-center",
   messages: "/admin/messages",
+  partnerSupport: "/admin/support",
   notifications: "/admin/notifications",
   finance: "/admin/analytics",
   myEarnings: "/admin/my-earnings",
@@ -36655,7 +40582,17 @@ var PAGE_KEY_TO_PATH = {
   websiteCmsStudio: "/admin/website-cms",
   settings: "/admin/settings",
   adminProfile: "/admin/profile",
-  featureAccess: "/admin/feature-access"
+  featureAccess: "/admin/feature-access",
+  // Sprint 12: real Operations-backed pages for sellers/creators, kept as
+  // their own page keys rather than reusing 'orders'/'messages' -- those
+  // keys' canonical path (this map) still needs to point admin/staff at the
+  // legacy CmsMirror-hosted /admin/orders and /admin/messages screens
+  // unchanged (see App.tsx route comment); reusing the key here would have
+  // silently redirected the CMS-mirror sidebar's own "Orders Hub"/
+  // "Messages" links straight back to those legacy pages instead of
+  // through to the new ones.
+  platformOrders: "/admin/platform-orders",
+  sellerConversations: "/admin/conversations"
 };
 var PATH_TO_PAGE_KEY = Object.fromEntries(
   Object.entries(PAGE_KEY_TO_PATH).map(([k, v]) => [v, k])
@@ -36670,12 +40607,12 @@ var ROLE_ALLOWED_PAGE_KEYS = {
     "products",
     "contentStudio",
     "adsDealsStudio",
-    "orders",
+    "platformOrders",
     "sellerCustomers",
     "returnsRefunds",
     "warrantyClaims",
     "promoCodes",
-    "messages",
+    "sellerConversations",
     "notifications",
     "reviews",
     "finance",
@@ -36698,7 +40635,7 @@ var ROLE_ALLOWED_PAGE_KEYS = {
     "adsDealsStudio",
     "creatorEconomy",
     "sellerCustomers",
-    "messages",
+    "partnerSupport",
     "notifications",
     "reviews",
     "finance",
@@ -36826,13 +40763,16 @@ var PAGE_META = {
   consumerProfile: ["My Profile", "Your consumer account, orders preference, and security settings"],
   deals: ["Deals", "Promotions and discounts"],
   orders: ["Orders Hub", "Track and fulfill customer orders"],
+  platformOrders: ["Orders Hub", "Orders placed against your products"],
+  sellerConversations: ["Messages", "Conversations with your buyers"],
   customers: ["Consumer Management", "View and manage customer accounts"],
   settings: ["Settings", "Store configuration"],
   adminProfile: ["Admin Profile", "Account, security, RBAC scope, and preferences"],
   websiteCmsStudio: ["Website Manager", "Manage homepage banners, pages, and site content"],
   adsDealsStudio: ["Ads & Deals Studio", "Manage promoted ads, deals, coupons, and paid placements"],
   contentStudio: ["Guide Management", "Manage videos, reels, blogs, and live sessions"],
-  messages: ["Messages", "Unified channels routing hub"],
+  messages: ["Choosify Support", "Support conversations from Consumers, Sellers and Creators"],
+  partnerSupport: ["Messages", "Message the Choosify team"],
   returnsRefunds: ["Returns & Refunds", "Audit customer return complaints and process refunds"],
   warrantyClaims: ["Warranty Claims", "Review and resolve customer warranty claims"],
   inventoryStock: ["Inventory & Stock", "Real-time multi-channel inventory control"],
@@ -36903,7 +40843,7 @@ var SELLER_NAV_GROUPS = [
   {
     title: "COMMERCE",
     items: [
-      navItem("orders", "Orders Hub"),
+      navItem("platformOrders", "Orders Hub"),
       navItem("sellerCustomers", "My Customers"),
       navItem("returnsRefunds", "Returns & Refunds"),
       navItem("warrantyClaims", "Warranty Claims"),
@@ -36921,7 +40861,7 @@ var SELLER_NAV_GROUPS = [
   { title: "TRUST & SAFETY", items: [navItem("reviews", "Reviews")] },
   {
     title: "COMMUNICATION",
-    items: [navItem("messages", "Messages"), navItem("notifications", "Notifications")]
+    items: [navItem("sellerConversations", "Messages"), navItem("notifications", "Notifications")]
   },
   {
     title: "FINANCE & PAYOUTS",
@@ -36956,7 +40896,7 @@ var CREATOR_NAV_GROUPS = [
   { title: "TRUST & SAFETY", items: [navItem("reviews", "Reviews")] },
   {
     title: "COMMUNICATION",
-    items: [navItem("messages", "Messages"), navItem("notifications", "Notifications")]
+    items: [navItem("partnerSupport", "Messages"), navItem("notifications", "Notifications")]
   },
   {
     title: "FINANCE & PAYOUTS",
@@ -36987,11 +40927,11 @@ function isStaffRole(role) {
   const r = (role || "").toLowerCase();
   return r === "admin" || r === "super_admin" || r === "superadmin" || r === "moderator" || r === "finance_manager" || r === "support_agent" || r === "marketing_manager";
 }
-function isSellerRole2(role) {
+function isSellerRole3(role) {
   const r = (role || "").toLowerCase();
   return r === "seller" || r === "verified_seller";
 }
-function isCreatorRole2(role) {
+function isCreatorRole3(role) {
   const r = (role || "").toLowerCase();
   return r === "creator";
 }
@@ -37150,7 +41090,7 @@ async function searchDashboardForActor(params) {
     const userHits = await searchUsersForStaff(lower, limitPerGroup);
     for (const item of userHits) push(item);
   }
-  if (staff || isSellerRole2(actor.role)) {
+  if (staff || isSellerRole3(actor.role)) {
     const orders = await commerceStore.listOrders();
     const scoped = staff ? orders : orders.filter((o) => o.sellerId === actor.userId);
     const orderNeedle = lower;
@@ -37174,7 +41114,7 @@ async function searchDashboardForActor(params) {
       if ((groupsMap.get("Orders")?.length ?? 0) >= limitPerGroup) break;
     }
   }
-  if (staff || isSellerRole2(actor.role)) {
+  if (staff || isSellerRole3(actor.role)) {
     const products = await catalogStore2.listProducts();
     const scopedProducts = staff ? products : products.filter((p) => p.sellerId === actor.userId);
     for (const p of scopedProducts) {
@@ -37212,12 +41152,12 @@ async function searchDashboardForActor(params) {
       if (groupsMap.get("Brands")?.length >= limitPerGroup) break;
     }
   }
-  if (staff || isCreatorRole2(actor.role) || isSellerRole2(actor.role)) {
+  if (staff || isCreatorRole3(actor.role) || isSellerRole3(actor.role)) {
     const guides = await catalogStore2.listGuides();
-    const scopedGuides = staff ? guides : isCreatorRole2(actor.role) ? guides.filter((g) => g.creatorId === actor.userId) : /* @__PURE__ */ (() => {
+    const scopedGuides = staff ? guides : isCreatorRole3(actor.role) ? guides.filter((g) => g.creatorId === actor.userId) : /* @__PURE__ */ (() => {
       return null;
     })();
-    if (!staff && isSellerRole2(actor.role)) {
+    if (!staff && isSellerRole3(actor.role)) {
       const products = await catalogStore2.listProducts();
       const sellerProductIds = new Set(products.filter((p) => p.sellerId === actor.userId).map((p) => p.id));
       const filtered = guides.filter((g) => (g.productIds || []).some((pid) => sellerProductIds.has(pid)));
@@ -37256,7 +41196,7 @@ async function searchDashboardForActor(params) {
       }
     }
   }
-  if (staff || isSellerRole2(actor.role) || isCreatorRole2(actor.role)) {
+  if (staff || isSellerRole3(actor.role) || isCreatorRole3(actor.role)) {
     if (!staff) {
       const ownerId = actor.userId;
       const customers = await listMyCustomersForOwner(ownerId);
@@ -37278,7 +41218,7 @@ async function searchDashboardForActor(params) {
       }
     }
   }
-  if (isSellerRole2(actor.role) || isCreatorRole2(actor.role) || staff) {
+  if (isSellerRole3(actor.role) || isCreatorRole3(actor.role) || staff) {
     const books = listCashbooksForOwner(actor.userId);
     for (const book of books) {
       const hay = `${book.name} ${book.icon}`.toLowerCase();
@@ -37300,7 +41240,7 @@ async function searchDashboardForActor(params) {
     const pageHits = searchDashboardPages(actor.role, lower, limitPerGroup);
     for (const item of pageHits) push(item);
   }
-  if (staff || isSellerRole2(actor.role) || isCreatorRole2(actor.role)) {
+  if (staff || isSellerRole3(actor.role) || isCreatorRole3(actor.role)) {
     const ads = await adsStore.listAds();
     const scopedAds = staff ? ads : ads.filter((a) => a.ownerId === actor.userId);
     for (const a of scopedAds) {
@@ -37345,7 +41285,7 @@ async function searchDashboardForActor(params) {
       if (groupsMap.get("Coupons")?.length >= limitPerGroup) break;
     }
   }
-  if (staff || isSellerRole2(actor.role)) {
+  if (staff || isSellerRole3(actor.role)) {
     const returns = operationsStore.listReturns({ sellerId: staff ? void 0 : actor.userId });
     for (const r of returns) {
       const hay = `${r.id} ${r.orderId || ""} ${r.itemId || ""} ${r.reason || ""} ${r.description || ""} ${r.status || ""}`.toLowerCase();
@@ -37659,7 +41599,7 @@ var featureRequestStore = {
 init_systemNotify();
 var entitlementsRouter = Router24();
 var requireAuth14 = [authenticateRequest];
-var requireAdmin5 = [authenticateRequest, requireRole(ROLES.ADMIN)];
+var requireAdmin6 = [authenticateRequest, requireRole(ROLES.ADMIN)];
 entitlementsRouter.get("/entitlements/me", ...requireAuth14, async (req, res) => {
   const role = req.userRole || req.user?.role;
   const userId = req.userId || req.user?.uid;
@@ -37678,7 +41618,7 @@ entitlementsRouter.get("/entitlements/me", ...requireAuth14, async (req, res) =>
     })
   });
 });
-entitlementsRouter.get("/entitlements/admin", ...requireAdmin5, async (_req, res) => {
+entitlementsRouter.get("/entitlements/admin", ...requireAdmin6, async (_req, res) => {
   const snapshot = await entitlementStore.snapshot();
   res.json({
     success: true,
@@ -37690,7 +41630,7 @@ entitlementsRouter.get("/entitlements/admin", ...requireAdmin5, async (_req, res
     note: "Disabling a feature blocks access only. Feature-owned business data is never deleted."
   });
 });
-entitlementsRouter.put("/entitlements/admin/role-defaults", ...requireAdmin5, async (req, res) => {
+entitlementsRouter.put("/entitlements/admin/role-defaults", ...requireAdmin6, async (req, res) => {
   const role = String(req.body?.role || "").toLowerCase();
   if (role !== "seller" && role !== "creator") {
     res.status(400).json({ success: false, error: "role must be seller or creator" });
@@ -37711,7 +41651,7 @@ entitlementsRouter.put("/entitlements/admin/role-defaults", ...requireAdmin5, as
     });
   }
 });
-entitlementsRouter.patch("/entitlements/admin/role-defaults/:role/:featureKey", ...requireAdmin5, async (req, res) => {
+entitlementsRouter.patch("/entitlements/admin/role-defaults/:role/:featureKey", ...requireAdmin6, async (req, res) => {
   const role = String(req.params.role || "").toLowerCase();
   const featureKey = String(req.params.featureKey || "");
   if (role !== "seller" && role !== "creator") {
@@ -37737,12 +41677,12 @@ entitlementsRouter.patch("/entitlements/admin/role-defaults/:role/:featureKey", 
     });
   }
 });
-entitlementsRouter.get("/entitlements/admin/plans", ...requireAdmin5, async (req, res) => {
+entitlementsRouter.get("/entitlements/admin/plans", ...requireAdmin6, async (req, res) => {
   const role = typeof req.query.role === "string" ? req.query.role : void 0;
   const list = await planStore.listPlans(role);
   res.json({ success: true, plans: list });
 });
-entitlementsRouter.post("/entitlements/admin/plans", ...requireAdmin5, async (req, res) => {
+entitlementsRouter.post("/entitlements/admin/plans", ...requireAdmin6, async (req, res) => {
   const body = req.body;
   const role = String(body.role || "").toLowerCase();
   if (role !== "seller" && role !== "creator") {
@@ -37757,7 +41697,7 @@ entitlementsRouter.post("/entitlements/admin/plans", ...requireAdmin5, async (re
   const created2 = await planStore.createPlan({ role, name, priceLabel: body.priceLabel, sortOrder: body.sortOrder });
   res.status(201).json({ success: true, plan: created2 });
 });
-entitlementsRouter.patch("/entitlements/admin/plans/:id", ...requireAdmin5, async (req, res) => {
+entitlementsRouter.patch("/entitlements/admin/plans/:id", ...requireAdmin6, async (req, res) => {
   const body = req.body;
   const updated = await planStore.updatePlan(req.params.id, body);
   if (!updated) {
@@ -37768,7 +41708,7 @@ entitlementsRouter.patch("/entitlements/admin/plans/:id", ...requireAdmin5, asyn
 });
 entitlementsRouter.patch(
   "/entitlements/admin/plan-defaults/:planId/:featureKey",
-  ...requireAdmin5,
+  ...requireAdmin6,
   async (req, res) => {
     const { planId, featureKey } = req.params;
     const plan = await planStore.getPlan(planId);
@@ -37785,7 +41725,7 @@ entitlementsRouter.patch(
     res.json({ success: true, note: "Access toggled only \u2014 existing feature data is preserved." });
   }
 );
-entitlementsRouter.post("/entitlements/admin/accounts/:userId/plan", ...requireAdmin5, async (req, res) => {
+entitlementsRouter.post("/entitlements/admin/accounts/:userId/plan", ...requireAdmin6, async (req, res) => {
   const body = req.body;
   const planId = String(body.planId || "");
   if (!planId) {
@@ -37807,7 +41747,7 @@ entitlementsRouter.post("/entitlements/admin/accounts/:userId/plan", ...requireA
     });
   }
 });
-entitlementsRouter.get("/entitlements/admin/accounts/:userId/plan", ...requireAdmin5, async (req, res) => {
+entitlementsRouter.get("/entitlements/admin/accounts/:userId/plan", ...requireAdmin6, async (req, res) => {
   const accountPlan = await planStore.getAccountPlan(req.params.userId);
   res.json({ success: true, accountPlan });
 });
@@ -37855,12 +41795,12 @@ entitlementsRouter.get("/entitlements/feature-requests/mine", ...requireAuth14, 
   const list = await featureRequestStore.list({ userId });
   res.json({ success: true, featureRequests: list });
 });
-entitlementsRouter.get("/entitlements/admin/feature-requests", ...requireAdmin5, async (req, res) => {
+entitlementsRouter.get("/entitlements/admin/feature-requests", ...requireAdmin6, async (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : void 0;
   const list = await featureRequestStore.list({ status });
   res.json({ success: true, featureRequests: list });
 });
-entitlementsRouter.patch("/entitlements/admin/feature-requests/:id", ...requireAdmin5, async (req, res) => {
+entitlementsRouter.patch("/entitlements/admin/feature-requests/:id", ...requireAdmin6, async (req, res) => {
   const body = req.body;
   const status = body.status;
   if (status !== "approved" && status !== "declined" && status !== "contacted") {
@@ -37904,7 +41844,7 @@ init_partnerApplicationStore();
 init_partnerApplicationService();
 init_logger();
 var partnerApplicationRouter = Router25();
-var requireAdmin6 = [authenticateRequest, requireRole(ROLES.ADMIN)];
+var requireAdmin7 = [authenticateRequest, requireRole(ROLES.ADMIN)];
 var REJECTED_APPLY_FIELDS = [
   "role",
   "roles",
@@ -38017,7 +41957,7 @@ partnerApplicationRouter.post(
     }
   }
 );
-partnerApplicationRouter.get("/operations/partner-applications", ...requireAdmin6, async (req, res) => {
+partnerApplicationRouter.get("/operations/partner-applications", ...requireAdmin7, async (req, res) => {
   const status = typeof req.query.status === "string" ? req.query.status : void 0;
   const rows = await partnerApplicationStore.list(
     status === "pending" || status === "approved" || status === "rejected" ? status : void 0
@@ -38029,7 +41969,7 @@ partnerApplicationRouter.get("/operations/partner-applications", ...requireAdmin
 });
 partnerApplicationRouter.post(
   "/operations/partner-applications/:id/approve",
-  ...requireAdmin6,
+  ...requireAdmin7,
   async (req, res) => {
     try {
       const updated = await approvePartnerApplication({
@@ -38049,7 +41989,7 @@ partnerApplicationRouter.post(
 );
 partnerApplicationRouter.post(
   "/operations/partner-applications/:id/reject",
-  ...requireAdmin6,
+  ...requireAdmin7,
   async (req, res) => {
     try {
       const updated = await rejectPartnerApplication({
@@ -38069,7 +42009,7 @@ partnerApplicationRouter.post(
 );
 partnerApplicationRouter.post(
   "/operations/partner-applications/:id/resubmit",
-  ...requireAdmin6,
+  ...requireAdmin7,
   async (req, res) => {
     try {
       const updated = await requestPartnerResubmission({
@@ -38089,7 +42029,7 @@ partnerApplicationRouter.post(
 );
 partnerApplicationRouter.patch(
   "/operations/partner-applications/:id/notes",
-  ...requireAdmin6,
+  ...requireAdmin7,
   async (req, res) => {
     try {
       const updated = await savePartnerAdminNotes({
@@ -38128,7 +42068,6 @@ var OPEN_RETURN_STATUSES = /* @__PURE__ */ new Set([
   "dispute"
 ]);
 var OPEN_VERIFICATION_STATUSES = /* @__PURE__ */ new Set(["submitted", "under review"]);
-var OPEN_TICKET_STATUSES = /* @__PURE__ */ new Set(["open", "in_progress"]);
 var MODERATION_OPEN = /* @__PURE__ */ new Set([
   MODERATION_STATUSES.PENDING,
   MODERATION_STATUSES.NEEDS_REVIEW,
@@ -38159,6 +42098,19 @@ function isCreator(role) {
 function isConsumer(role) {
   const r = String(role || "").toLowerCase();
   return r === "consumer" || r === "user";
+}
+async function countAdminSupportUnread(adminId) {
+  if (!adminId) return 0;
+  const supportConvs = (await listConversations2()).filter((c) => c.contextType === "support_ticket").slice(0, 200);
+  let n = 0;
+  for (const c of supportConvs) {
+    const msgs = await listMessages2(c.id);
+    const hasUnread = msgs.some(
+      (m) => m.senderId !== adminId && m.senderRole !== "admin" && m.senderRole !== "system" && !(Array.isArray(m.readBy) ? m.readBy : []).includes(adminId)
+    );
+    if (hasUnread) n += 1;
+  }
+  return n;
 }
 async function countUnreadConversations(userId, role) {
   if (!userId) return 0;
@@ -38255,14 +42207,12 @@ async function buildNavAttention(actor) {
     );
   }
   if (isPlatformAdmin2(role) || isSupport(role)) {
-    const openTickets = (await listSupportTickets()).filter(
-      (t) => OPEN_TICKET_STATUSES.has(t.status)
-    ).length;
+    const unreadSupport = await countAdminSupportUnread(userId);
     setCount(
       out,
       "messages",
-      openTickets,
-      qty(openTickets, "support conversation needs action", "support conversations need action")
+      unreadSupport,
+      qty(unreadSupport, "support conversation has unread messages", "support conversations have unread messages")
     );
   }
   if (isSeller(role) && userId) {
@@ -38409,10 +42359,10 @@ navAttentionRouter.get("/dashboard/nav-attention", authenticateRequest, async (r
 // server/entitlements/entitlementPersistence.ts
 init_client();
 init_schema();
-import { existsSync as existsSync17, readFileSync as readFileSync17 } from "node:fs";
-import { join as join18 } from "node:path";
+import { existsSync as existsSync18, readFileSync as readFileSync18 } from "node:fs";
+import { join as join19 } from "node:path";
 import { eq as eq15 } from "drizzle-orm";
-var DEFAULT_PATH10 = join18(process.cwd(), ".data", "partner-entitlements-snapshot.json");
+var DEFAULT_PATH10 = join19(process.cwd(), ".data", "partner-entitlements-snapshot.json");
 function snapshotPath3() {
   return process.env.PARTNER_ENTITLEMENTS_SNAPSHOT_PATH?.trim() || DEFAULT_PATH10;
 }
@@ -38481,9 +42431,9 @@ async function backfillEntitlements(state14) {
 }
 async function backfillLegacyPartnerEntitlementsSnapshot() {
   const path = snapshotPath3();
-  if (!existsSync17(path)) return;
+  if (!existsSync18(path)) return;
   try {
-    const parsed = JSON.parse(readFileSync17(path, "utf8"));
+    const parsed = JSON.parse(readFileSync18(path, "utf8"));
     if (parsed?.version !== 1) return;
     const appsImported = await backfillPartnerApplications(parsed.partnerApplications || []);
     const entitlementsImported = await backfillEntitlements(parsed.entitlements || { roleDefaults: { seller: {}, creator: {} }, planDefaults: {}, accountOverrides: {} });

@@ -7,7 +7,6 @@ import { EntitlementsProvider, useEntitlements } from './contexts/EntitlementsCo
 import { AdminLayout } from './components/AdminLayout';
 import { AdminWorkspaceLayout } from './components/Layout/AdminWorkspaceLayout';
 import { CmsMirrorHost } from './cms-mirror/CmsMirrorHost';
-import { TempRoleSwitcher } from './components/TempRoleSwitcher';
 import { OrdersProvider } from './contexts/OrdersContext';
 import { ReturnsProvider } from './contexts/ReturnsContext';
 import { TrustProvider } from './contexts/TrustContext';
@@ -59,7 +58,10 @@ const CommunitySubmissions = lazy(() => import('./pages/admin/CommunitySubmissio
 const Payouts = lazy(() => import('./pages/admin/Payouts'));
 const Analytics = lazy(() => import('./pages/admin/Analytics'));
 const Moderation = lazy(() => import('./pages/admin/Moderation'));
-const Messages = lazy(() => import('./pages/admin/Messages'));
+const MessagesInbox = lazy(() => import('./pages/admin/MessagesInbox'));
+const PartnerSupportInbox = lazy(() =>
+  import('./components/messaging/PartnerSupportInbox').then((m) => ({ default: m.PartnerSupportInbox })),
+);
 const ProductStudio = lazy(() => import('./pages/admin/ProductStudio'));
 const BrandDetails = lazy(() => import('./pages/admin/BrandDetails'));
 const DealsBannersStudio = lazy(() => import('./pages/admin/DealsBannersStudio'));
@@ -230,6 +232,42 @@ const GuideVisualBuilderRoleGate: React.FC<{ children: React.ReactNode }> = ({ c
   }
   if (!profile) return <Navigate to="/login" replace />;
   if (!GUIDE_STUDIO_ALLOWED_ROLES.has(profile.role)) {
+    return <Navigate to="/admin/dashboard" replace />;
+  }
+  return <>{children}</>;
+};
+
+/** Choosify Support inbox (/admin/messages) — Choosify staff only. */
+const SUPPORT_STAFF_ROLES = new Set(['super_admin', 'admin', 'moderator', 'support_agent']);
+const MessagesInboxRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile, loading } = useAuth();
+  if (loading) return null;
+  if (!profile) return <Navigate to="/login" replace />;
+  const role = String(profile.role);
+  if (SUPPORT_STAFF_ROLES.has(role)) return <>{children}</>;
+  // Partners' own support inbox lives at /admin/support; everyone else → dashboard.
+  if (role === 'seller' || role === 'verified_seller') {
+    return <Navigate to="/admin/conversations?tab=support" replace />;
+  }
+  if (role === 'creator') return <Navigate to="/admin/support" replace />;
+  return <Navigate to="/admin/dashboard" replace />;
+};
+
+/** Partner "Choosify Support" inbox (/admin/support) — creator + seller (+ staff preview). */
+const PARTNER_SUPPORT_ROLES = new Set([
+  'creator',
+  'seller',
+  'verified_seller',
+  'super_admin',
+  'admin',
+  'moderator',
+  'support_agent',
+]);
+const PartnerSupportRoleGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { profile, loading } = useAuth();
+  if (loading) return null;
+  if (!profile) return <Navigate to="/login" replace />;
+  if (!PARTNER_SUPPORT_ROLES.has(profile.role)) {
     return <Navigate to="/admin/dashboard" replace />;
   }
   return <>{children}</>;
@@ -563,7 +601,6 @@ export default function App() {
               <CreatorProvider>
               <ReviewModerationProvider>
               <DisputeProvider>
-              {import.meta.env.DEV && <TempRoleSwitcher />}
               <ErrorBoundary>
               <Routes>
             <Route path="/login" element={<LoginRoute />} />
@@ -958,9 +995,8 @@ export default function App() {
               }
             />
             {/*
-              Real buyer<->seller conversation thread for seller/creator accounts
-              (SellerConversations.tsx, GET/POST /operations/platform-messages).
-              /admin/messages stays on CmsMirrorHost for staff -- untouched.
+              Seller Inbox — Customers (System B /operations/platform-messages,
+              unchanged behaviour) + Choosify Support tab (canonical System A).
             */}
             <Route
               path="/admin/conversations"
@@ -973,6 +1009,39 @@ export default function App() {
                       </Suspense>
                     </AdminWorkspaceLayout>
                   </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            {/*
+              Choosify Support inbox for staff (canonical System A). Replaces the
+              CmsMirror mock at /admin/messages — registered ahead of /admin/*.
+            */}
+            <Route
+              path="/admin/messages"
+              element={
+                <ProtectedRoute>
+                  <MessagesInboxRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <MessagesInbox />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </MessagesInboxRoleGate>
+                </ProtectedRoute>
+              }
+            />
+            {/* Partner (Creator / Seller) own Choosify Support inbox — System A support-only. */}
+            <Route
+              path="/admin/support"
+              element={
+                <ProtectedRoute>
+                  <PartnerSupportRoleGate>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <PartnerSupportInbox />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </PartnerSupportRoleGate>
                 </ProtectedRoute>
               }
             />

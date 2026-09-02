@@ -25,6 +25,7 @@ import {
   CreatorReviewsEditor,
   HashtagsEditor,
   OverviewBlocksEditor,
+  ProductGuideEditor,
   RelatedInfoEditor,
   SpecRowsEditor,
   VariantMatrixEditor,
@@ -922,19 +923,26 @@ export default function ProductEditStudio() {
         );
       case 'options':
         return (
-          <VariantMatrixEditor
-            optionGroups={d.optionGroups}
-            productVariants={d.productVariants}
-            variantDimensions={
-              !d.categoryId
-                ? []
-                : categorySchema && categorySchema.forId === d.categoryId
-                  ? categorySchema.dims
-                  : null
-            }
-            isService={draftIsService}
-            onChange={(next) => patch({ optionGroups: next.optionGroups, productVariants: next.productVariants })}
-          />
+          <>
+            <VariantMatrixEditor
+              optionGroups={d.optionGroups}
+              productVariants={d.productVariants}
+              variantDimensions={
+                !d.categoryId
+                  ? []
+                  : categorySchema && categorySchema.forId === d.categoryId
+                    ? categorySchema.dims
+                    : null
+              }
+              isService={draftIsService}
+              onChange={(next) => patch({ optionGroups: next.optionGroups, productVariants: next.productVariants })}
+            />
+            <ProductGuideEditor
+              guide={d.sizeGuide}
+              onChange={(next) => patch({ sizeGuide: next })}
+              onToast={triggerToast}
+            />
+          </>
         );
       case 'addons':
         return (

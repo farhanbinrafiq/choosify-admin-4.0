@@ -47,6 +47,20 @@ import { resolveActiveGuideOffer, guideOfferWasPresent } from './catalog/guideOf
 import { normalizeBrandInput } from './catalogContract';
 import { normalizeCreatorInput } from '../lib/vercel-catalog/catalogEditorialContract';
 import { recordSuspiciousRequest, recordClaimConfirmAttempt } from './lib/abuseProtection';
+import {
+  normalizeEmail,
+  normalizeBdPhone,
+  isPlausibleEmail,
+  isPlausibleBdPhone,
+} from './lib/identityNormalize';
+import {
+  generateClaimToken,
+  hashClaimToken,
+  claimTokenMatches,
+  claimTokenExpiryIso,
+  isClaimExpired,
+} from './lib/claimToken';
+import { findAccountByNormalizedEmail } from './operations/operationsDb';
 import { batchAccountPrimaryLabels } from './profileStatusFacts';
 import { Logger } from './lib/logger';
 import { createNotification } from './communication/notificationService';
@@ -1486,10 +1500,9 @@ operationsRouter.post('/operations/manual-offers', ...requireAuth, async (req, r
       return;
     }
     const body = req.body || {};
-    const buyerId = String(body.buyerId || '').trim();
     const rawItems = Array.isArray(body.items) ? body.items : [];
-    if (!buyerId || rawItems.length === 0) {
-      res.status(400).json({ error: 'buyerId and at least one item are required' });
+    if (rawItems.length === 0) {
+      res.status(400).json({ error: 'At least one item is required' });
       return;
     }
     if (!req.userId) {
@@ -1497,6 +1510,52 @@ operationsRouter.post('/operations/manual-offers', ...requireAuth, async (req, r
       return;
     }
     const staff = userIsStaff(req);
+
+    // Two customer modes:
+    //  (a) native  — an existing Choosify Buyer (body.buyerId). Offer card
+    //      appears in their System-B conversation; they Accept/Reject.
+    //  (b) external — a Meta/offline customer with no account yet. Requires
+    //      name + email + phone; server generates a secure claim link.
+    const nativeBuyerId = String(body.buyerId || '').trim();
+    const isExternal = !nativeBuyerId;
+
+    const extName = String(body.customerName || body.buyerName || '').trim();
+    const extEmailRaw = String(body.email || '').trim();
+    const extPhoneRaw = String(body.phone || '').trim();
+    let intendedCustomer: import('../shared/manualOrder/manualOrderTypes').ManualOrderIntendedCustomer | undefined;
+    if (isExternal) {
+      if (!extName || !extEmailRaw || !extPhoneRaw) {
+        res.status(400).json({
+          error: 'An external Manual Order requires customer name, email and phone.',
+          code: 'EXTERNAL_CUSTOMER_FIELDS_REQUIRED',
+        });
+        return;
+      }
+      if (!isPlausibleEmail(extEmailRaw)) {
+        res.status(400).json({ error: 'That email address looks invalid.', code: 'INVALID_EMAIL' });
+        return;
+      }
+      if (!isPlausibleBdPhone(extPhoneRaw)) {
+        res.status(400).json({ error: 'That phone number is not a valid Bangladesh mobile number.', code: 'INVALID_PHONE' });
+        return;
+      }
+      const normalizedEmail = normalizeEmail(extEmailRaw);
+      const normalizedPhone = normalizeBdPhone(extPhoneRaw);
+      // Advisory only: does a Choosify account already use this email?
+      const existingAccount = await findAccountByNormalizedEmail(normalizedEmail).catch(() => null);
+      intendedCustomer = {
+        name: extName,
+        normalizedEmail,
+        normalizedPhone,
+        matchedConsumerId:
+          existingAccount && existingAccount.role === 'user' ? existingAccount.uid : undefined,
+        addressHint:
+          typeof body.addressHint === 'string' && body.addressHint.trim()
+            ? body.addressHint.trim()
+            : undefined,
+      };
+    }
+    const buyerId = nativeBuyerId;
     // Non-staff sellers may only offer as themselves — never another seller's identity.
     const sellerId = staff && body.sellerId ? String(body.sellerId).trim() : req.userId;
 
@@ -1567,51 +1626,106 @@ operationsRouter.post('/operations/manual-offers', ...requireAuth, async (req, r
     const deliveryTotal = Math.max(0, Number(body.deliveryTotal) || 0);
     const overallTotal = subtotal + deliveryTotal;
     const ts = new Date().toISOString();
+
+    const provSourceRaw = String(body.provenanceSource || body.source || '').trim();
+    const PROV_SOURCES = new Set([
+      'manual',
+      'external_whatsapp',
+      'external_facebook',
+      'external_instagram',
+      'external_offline',
+    ]);
+    const provenanceSource = PROV_SOURCES.has(provSourceRaw)
+      ? (provSourceRaw as import('../shared/manualOrder/manualOrderTypes').ManualOrderProvenanceSource)
+      : isExternal
+        ? 'external_offline'
+        : 'manual';
+    const metaConversationId =
+      typeof body.conversationId === 'string' && body.conversationId.trim()
+        ? body.conversationId.trim()
+        : isExternal
+          ? `meta:${sellerId}:${Date.now()}`
+          : `conv_platform_${buyerId}`;
+
+    let rawClaimToken: string | undefined;
+    let claimTokenHash: string | undefined;
+    let claimTokenExpiresAt: string | undefined;
+    if (isExternal) {
+      rawClaimToken = generateClaimToken();
+      claimTokenHash = hashClaimToken(rawClaimToken);
+      claimTokenExpiresAt = claimTokenExpiryIso();
+    }
+
     const offer: ManualOrderOffer = {
       id: `MOF-${Date.now()}`,
       kind: 'manual_order_offer',
-      conversationId: `conv_platform_${buyerId}`,
+      conversationId: metaConversationId,
       sellerId,
       sellerName: typeof body.sellerName === 'string' ? body.sellerName : req.user?.displayName,
       buyerId,
-      buyerName: typeof body.buyerName === 'string' ? body.buyerName : undefined,
+      buyerName: isExternal ? intendedCustomer?.name : (typeof body.buyerName === 'string' ? body.buyerName : undefined),
       items: validatedItems,
       notes: typeof body.notes === 'string' ? body.notes : undefined,
       subtotal,
       deliveryTotal,
       overallTotal,
       currency: 'BDT',
-      status: 'pending',
+      status: isExternal ? 'awaiting_buyer_claim' : 'pending',
       createdAt: ts,
       updatedAt: ts,
+      ...(isExternal
+        ? { intendedCustomer, claimTokenHash, claimTokenExpiresAt }
+        : {}),
+      provenance: { source: provenanceSource, conversationId: metaConversationId },
     };
     await saveManualOrderOffer(offer);
 
     const itemSummary = validatedItems.map((it) => `${it.productTitle} x${it.quantity}`).join(', ');
-    try {
-      await submitPlatformMessage({
-        buyerId,
-        userName: offer.sellerName || 'Seller',
-        body: `New order offer: ${itemSummary} — ৳${overallTotal.toLocaleString()}`,
-        orderOffer: toManualOrderOfferCard(offer) as unknown as Record<string, unknown>,
-      });
-    } catch (err) {
-      console.warn('[ManualOrderOffer] Failed to post offer message:', err);
-    }
-    try {
-      await notifyUser(buyerId, {
-        type: COMMUNICATION_TYPES.SELLER_UPDATE,
-        category: 'buyer',
-        title: 'New order offer',
-        summary: `${offer.sellerName || 'A seller'} sent you an offer: ${itemSummary} — ৳${overallTotal.toLocaleString()}.`,
-        actionUrl: `/messages/conv_platform_${buyerId}`,
-        metadata: { offerId: offer.id },
-      });
-    } catch (err) {
-      console.warn('[ManualOrderOffer] Notify buyer (new offer) failed:', err);
+
+    if (!isExternal) {
+      // Native flow — post the Offer Card into the Buyer's System-B thread + notify.
+      try {
+        await submitPlatformMessage({
+          buyerId,
+          userName: offer.sellerName || 'Seller',
+          body: `New order offer: ${itemSummary} — ৳${overallTotal.toLocaleString()}`,
+          orderOffer: toManualOrderOfferCard(offer) as unknown as Record<string, unknown>,
+        });
+      } catch (err) {
+        console.warn('[ManualOrderOffer] Failed to post offer message:', err);
+      }
+      try {
+        await notifyUser(buyerId, {
+          type: COMMUNICATION_TYPES.SELLER_UPDATE,
+          category: 'buyer',
+          title: 'New order offer',
+          summary: `${offer.sellerName || 'A seller'} sent you an offer: ${itemSummary} — ৳${overallTotal.toLocaleString()}.`,
+          actionUrl: `/messages/conv_platform_${buyerId}`,
+          metadata: { offerId: offer.id },
+        });
+      } catch (err) {
+        console.warn('[ManualOrderOffer] Notify buyer (new offer) failed:', err);
+      }
+      res.status(201).json({ success: true, data: toManualOrderOfferCard(offer) });
+      return;
     }
 
-    res.status(201).json({ success: true, data: toManualOrderOfferCard(offer) });
+    // External flow — return the one-time raw claim token + URL. This is the
+    // ONLY place the raw token is ever emitted; it is not stored in plaintext.
+    const webBase = (
+      process.env.CHOOSIFY_WEB_URL ||
+      process.env.VITE_CHOOSIFY_WEB_URL ||
+      'http://localhost:5173'
+    ).replace(/\/$/, '');
+    res.status(201).json({
+      success: true,
+      data: toManualOrderOfferCard(offer),
+      claim: {
+        token: rawClaimToken,
+        url: `${webBase}/orders/confirm/${encodeURIComponent(rawClaimToken!)}`,
+        expiresAt: claimTokenExpiresAt,
+      },
+    });
   } catch (error) {
     res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to create offer' });
   }
@@ -1630,50 +1744,60 @@ operationsRouter.get('/operations/manual-offers/:id', ...requireAuth, async (req
   res.json({ success: true, data: toManualOrderOfferCard(existing) });
 });
 
-operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, async (req, res) => {
-  const existing = await getManualOrderOffer(req.params.id);
-  if (!existing) {
-    res.status(404).json({ error: 'Offer not found' });
-    return;
+/** Typed failure from finalizeManualOrderOffer so both the /accept and the
+ *  external /claim/:token/confirm routes translate it to the same HTTP shape. */
+class ManualOfferFinalizeError extends Error {
+  constructor(
+    public statusCode: number,
+    message: string,
+    public body?: Record<string, unknown>,
+  ) {
+    super(message);
   }
-  if (!req.userId || existing.buyerId !== req.userId) {
-    res.status(403).json({ error: 'Only the buyer can accept this offer' });
-    return;
-  }
-  if (existing.status !== 'pending') {
-    res.status(400).json({ error: `Cannot accept offer in status ${existing.status}` });
-    return;
-  }
+}
 
-  // Re-verify every item is still purchasable at acceptance time -- the
-  // seller/admin may have archived/suspended it after the offer was sent but
-  // before the buyer accepted.
+/**
+ * Materialize a pending ManualOrderOffer into a canonical Operations order
+ * for `buyer`. Shared by the native buyer /accept path and the external
+ * customer /claim/:token/confirm path — one order engine, one code path.
+ * Idempotent by the deterministic `MOF-ORDER-<offerId>` id.
+ */
+async function finalizeManualOrderOffer(
+  existing: ManualOrderOffer,
+  buyer: { buyerId: string; buyerName?: string },
+): Promise<{ offer: ManualOrderOffer; order: ReturnType<typeof operationsStore.createOrder> }> {
+  // Re-verify every item is still purchasable at acceptance time.
   for (const item of existing.items) {
     const entity =
       item.productType === 'service'
         ? await getService(item.productId)
         : await catalogStore.getProduct(item.productId);
     if (!entity) {
-      res.status(400).json({ error: `"${item.productTitle}" no longer exists and cannot be purchased.` });
-      return;
+      throw new ManualOfferFinalizeError(
+        400,
+        `"${item.productTitle}" no longer exists and cannot be purchased.`,
+      );
     }
     if (!isProductLifecyclePubliclyListable(entity.status)) {
-      res.status(400).json({
-        error: `"${item.productTitle}" is no longer available (status: ${normalizeProductLifecycle(entity.status)}) and cannot be purchased.`,
-      });
-      return;
+      throw new ManualOfferFinalizeError(
+        400,
+        `"${item.productTitle}" is no longer available (status: ${normalizeProductLifecycle(entity.status)}) and cannot be purchased.`,
+      );
     }
   }
 
   const orderId = `MOF-ORDER-${existing.id}`;
   const alreadyCreated = operationsStore.getOrder(orderId);
   if (alreadyCreated) {
-    res.json({
-      success: true,
-      data: toManualOrderOfferCard({ ...existing, status: 'accepted', orderId }),
+    return {
+      offer: {
+        ...existing,
+        status: 'accepted',
+        orderId,
+        buyerId: existing.buyerId || buyer.buyerId,
+      },
       order: alreadyCreated,
-    });
-    return;
+    };
   }
 
   const required = new Map<string, { productId: string; variantId?: string; quantity: number }>();
@@ -1688,7 +1812,7 @@ operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, as
     });
   }
 
-  let reservedInventoryLines: Array<{ productId: string; variantId?: string; quantity: number }> = [];
+  const reservedInventoryLines: Array<{ productId: string; variantId?: string; quantity: number }> = [];
   for (const line of required.values()) {
     const result = await reserveInventoryQuantity(line);
     if (result.ok === true) {
@@ -1700,37 +1824,32 @@ operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, as
         console.error('[ManualOrderOffer] Failed to release inventory after a later line failed reservation:', err);
       });
     }
-    const insufficientResult: { ok: false; available: number } = result;
-    res.status(409).json({
+    throw new ManualOfferFinalizeError(409, 'Insufficient stock for one or more items', {
       error: 'Insufficient stock for one or more items',
       code: 'INSUFFICIENT_STOCK',
       productId: line.productId,
       requestedQuantity: line.quantity,
-      availableQuantity: insufficientResult.available,
+      availableQuantity: (result as { ok: false; available: number }).available,
     });
-    return;
   }
 
-  // Re-check right before creating — narrows (does not fully close, same
-  // residual window already accepted elsewhere in this file, e.g. QA3-001)
-  // the race between the reservation awaits above and this write.
+  // Re-check right before creating — narrows the reserve→write race.
   if (operationsStore.getOrder(orderId)) {
     for (const r of reservedInventoryLines) {
       await releaseInventoryQuantity(r).catch(() => undefined);
     }
-    const raced = operationsStore.getOrder(orderId)!;
-    res.json({
-      success: true,
-      data: toManualOrderOfferCard({ ...existing, status: 'accepted', orderId }),
-      order: raced,
-    });
-    return;
+    return {
+      offer: {
+        ...existing,
+        status: 'accepted',
+        orderId,
+        buyerId: existing.buyerId || buyer.buyerId,
+      },
+      order: operationsStore.getOrder(orderId)!,
+    };
   }
 
-  // Warranty terms are snapshotted from the product AT THE MOMENT OF
-  // PURCHASE (acceptance, for this flow), same rule POST /operations/orders
-  // already applies — a seller later editing the product's warranty config
-  // must never change what a past buyer is entitled to.
+  // Warranty terms are snapshotted at the moment of purchase (acceptance).
   const ts = new Date().toISOString();
   const orderItems = await Promise.all(
     existing.items.map(async (it, idx) => {
@@ -1765,7 +1884,7 @@ operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, as
   );
   const order = operationsStore.createOrder({
     orderId,
-    buyerId: req.userId,
+    buyerId: buyer.buyerId,
     isCOD: true,
     isSplit: false,
     overallTotal: existing.overallTotal,
@@ -1784,6 +1903,9 @@ operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, as
     inventoryReserved: reservedInventoryLines.length > 0 ? true : undefined,
     paymentMethod: 'cod',
     status: 'confirmed',
+    // Provenance retained through conversion — a claimed Meta order stays a Meta order.
+    platformSource: PROVENANCE_TO_PLATFORM_SOURCE[existing.provenance?.source || 'manual'],
+    isManual: true,
     createdAt: ts,
   });
 
@@ -1797,7 +1919,16 @@ operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, as
     console.warn('[ManualOrderOffer] Platform conversation bridge failed:', err);
   }
 
-  const updated: ManualOrderOffer = { ...existing, status: 'accepted', orderId, updatedAt: ts };
+  const updated: ManualOrderOffer = {
+    ...existing,
+    status: 'accepted',
+    orderId,
+    buyerId: buyer.buyerId,
+    buyerName: buyer.buyerName || existing.buyerName,
+    claimedByUserId: existing.intendedCustomer ? buyer.buyerId : existing.claimedByUserId,
+    claimedAt: existing.intendedCustomer ? ts : existing.claimedAt,
+    updatedAt: ts,
+  };
   await saveManualOrderOffer(updated);
 
   try {
@@ -1805,7 +1936,7 @@ operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, as
       type: COMMUNICATION_TYPES.BUYER_UPDATE,
       category: 'seller',
       title: 'Order offer accepted',
-      summary: `${existing.buyerName || 'The buyer'} accepted your offer — order ${orderId} created.`,
+      summary: `${updated.buyerName || 'The customer'} confirmed your offer — order ${orderId} created.`,
       actionUrl: '/dashboard?tab=seller-orders',
       metadata: { offerId: existing.id, orderId },
     });
@@ -1813,8 +1944,229 @@ operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, as
     console.warn('[ManualOrderOffer] Notify seller (accepted) failed:', err);
   }
 
-  res.json({ success: true, data: toManualOrderOfferCard(updated), order });
+  return { offer: updated, order };
+}
+
+const PROVENANCE_TO_PLATFORM_SOURCE: Record<string, 'WhatsApp' | 'Facebook' | 'Instagram' | 'Offline'> = {
+  manual: 'Offline',
+  external_offline: 'Offline',
+  external_whatsapp: 'WhatsApp',
+  external_facebook: 'Facebook',
+  external_instagram: 'Instagram',
+};
+
+operationsRouter.post('/operations/manual-offers/:id/accept', ...requireAuth, async (req, res) => {
+  const existing = await getManualOrderOffer(req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Offer not found' });
+    return;
+  }
+  if (!req.userId || existing.buyerId !== req.userId) {
+    res.status(403).json({ error: 'Only the buyer can accept this offer' });
+    return;
+  }
+  if (existing.status !== 'pending') {
+    res.status(400).json({ error: `Cannot accept offer in status ${existing.status}` });
+    return;
+  }
+  try {
+    const { offer, order } = await finalizeManualOrderOffer(existing, {
+      buyerId: req.userId,
+      buyerName: existing.buyerName || req.user?.displayName,
+    });
+    res.json({ success: true, data: toManualOrderOfferCard(offer), order });
+  } catch (err) {
+    if (err instanceof ManualOfferFinalizeError) {
+      res.status(err.statusCode).json(err.body || { error: err.message });
+      return;
+    }
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to accept offer' });
+  }
 });
+
+// ─── External customer claim (no Choosify account required to receive the link) ──
+// Reuses the security model of /operations/orders/claim/:token: opaque
+// high-entropy token, SHA-256 stored server-side, expiry, public preview
+// only, authenticated confirmation, server stamps buyerId, rate limited,
+// idempotent. The token identifies the pending claim; authentication + a
+// VERIFIED matching identity authorizes ownership — two separate concepts.
+
+/** PUBLIC preview — no PII beyond what the customer already provided. */
+operationsRouter.get('/operations/manual-offers/claim/:token', async (req, res) => {
+  try {
+    const hash = hashClaimToken(req.params.token);
+    const offers = await listManualOrderOffers();
+    const offer = offers.find((o) => o.claimTokenHash && o.claimTokenHash === hash);
+    if (!offer) {
+      res.status(404).json({ error: 'This order link is invalid.' });
+      return;
+    }
+    if (isClaimExpired(offer.claimTokenExpiresAt) && offer.status === 'awaiting_buyer_claim') {
+      res.status(410).json({ error: 'This order link has expired.', code: 'CLAIM_EXPIRED' });
+      return;
+    }
+    const card = toManualOrderOfferCard(offer);
+    res.json({
+      data: {
+        offerId: card.offerId,
+        sellerName: card.sellerName,
+        items: card.items,
+        subtotal: card.subtotal,
+        deliveryTotal: card.deliveryTotal,
+        overallTotal: card.overallTotal,
+        currency: card.currency,
+        status: card.status,
+        createdAt: card.createdAt,
+        orderId: card.orderId,
+        provenanceSource: offer.provenance?.source,
+        intendedCustomerName: offer.intendedCustomer?.name,
+        addressHint: offer.intendedCustomer?.addressHint,
+        claimTokenExpiresAt: offer.claimTokenExpiresAt,
+        alreadyClaimed: Boolean(offer.claimedByUserId),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Lookup failed' });
+  }
+});
+
+/** AUTHENTICATED confirm — server binds ownership; the frontend never sends buyerId. */
+operationsRouter.post(
+  '/operations/manual-offers/claim/:token/confirm',
+  ...requireAuth,
+  async (req, res) => {
+    const rawToken = req.params.token;
+    const abuse = recordClaimConfirmAttempt(req.ip, rawToken);
+    if (abuse.thresholdExceeded) {
+      res.status(429).json({ error: 'Too many confirmation attempts. Please try again later.' });
+      return;
+    }
+    if (!req.userId) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+
+    const hash = hashClaimToken(rawToken);
+    const offers = await listManualOrderOffers();
+    const existing = offers.find((o) => o.claimTokenHash && claimTokenMatches(rawToken, o.claimTokenHash) && o.claimTokenHash === hash);
+    if (!existing) {
+      res.status(404).json({ error: 'This order link is invalid.' });
+      return;
+    }
+
+    // Idempotency: already claimed by THIS user → return the existing order.
+    if (existing.claimedByUserId && existing.claimedByUserId === req.userId && existing.orderId) {
+      const order = operationsStore.getOrder(existing.orderId);
+      res.json({ success: true, data: toManualOrderOfferCard(existing), order: order || null });
+      return;
+    }
+    if (existing.claimedByUserId && existing.claimedByUserId !== req.userId) {
+      res.status(409).json({ error: 'This order has already been confirmed by another account.', code: 'ALREADY_CLAIMED' });
+      return;
+    }
+    if (existing.status === 'rejected') {
+      res.status(409).json({ error: 'This order was declined and can no longer be confirmed.', code: 'OFFER_REJECTED' });
+      return;
+    }
+    if (existing.status !== 'awaiting_buyer_claim') {
+      res.status(400).json({ error: `Cannot claim an offer in status ${existing.status}` });
+      return;
+    }
+    if (isClaimExpired(existing.claimTokenExpiresAt)) {
+      const ts = new Date().toISOString();
+      await saveManualOrderOffer({ ...existing, status: 'expired', updatedAt: ts });
+      res.status(410).json({ error: 'This order link has expired.', code: 'CLAIM_EXPIRED' });
+      return;
+    }
+
+    // ── Identity verification ──────────────────────────────────────────
+    // Choosify verifies EMAIL (authTokens 'email_verification' + users.emailVerified).
+    // There is NO phone verification anywhere — phone is corroborating only.
+    const intended = existing.intendedCustomer;
+    if (!intended) {
+      res.status(400).json({ error: 'This offer has no external customer to reconcile.' });
+      return;
+    }
+    const authEmailNorm = normalizeEmail(req.user?.email || '');
+    // Source-of-truth verification state from the DB (a JWT claim can be stale).
+    const authAccount = await findAccountByNormalizedEmail(authEmailNorm).catch(() => null);
+
+    const emailIdentityVerified =
+      !!authAccount &&
+      authAccount.uid === req.userId &&
+      authAccount.emailVerified === true &&
+      req.user?.emailVerified === true;
+
+    if (!emailIdentityVerified) {
+      res.status(403).json({
+        error:
+          'Confirm your email address on your Choosify account, then reopen this order link.',
+        code: 'IDENTITY_NOT_VERIFIED',
+      });
+      return;
+    }
+    if (authEmailNorm !== intended.normalizedEmail) {
+      // Wrong authenticated account — possessing the raw link is not enough.
+      res.status(403).json({
+        error:
+          'This order was created for a different email address and cannot be claimed by this account.',
+        code: 'IDENTITY_MISMATCH',
+      });
+      return;
+    }
+
+    // Identity-conflict guard: `users` has NO phone column, so a phone can
+    // never resolve to a Consumer account today — there is nothing to
+    // contradict the verified-email match. If a phone-on-account model is
+    // added later, resolve intended.normalizedPhone and return
+    // 409 IDENTITY_CONFLICT when it maps to a different uid than req.userId.
+
+    // Customer explicitly declines from the review page.
+    if (String((req.body as { action?: string })?.action || '').toLowerCase() === 'decline') {
+      const tsD = new Date().toISOString();
+      const declined: ManualOrderOffer = {
+        ...existing,
+        status: 'rejected',
+        rejectReason:
+          typeof (req.body as { reason?: string })?.reason === 'string'
+            ? (req.body as { reason: string }).reason.trim() || undefined
+            : undefined,
+        claimedByUserId: req.userId,
+        claimedAt: tsD,
+        updatedAt: tsD,
+      };
+      await saveManualOrderOffer(declined);
+      try {
+        await notifyUser(existing.sellerId, {
+          type: COMMUNICATION_TYPES.BUYER_UPDATE,
+          category: 'seller',
+          title: 'Order offer declined',
+          summary: `${intended.name} declined the prepared order.`,
+          actionUrl: '/dashboard?tab=seller-orders',
+          metadata: { offerId: existing.id },
+        });
+      } catch {
+        /* non-fatal */
+      }
+      res.json({ success: true, data: toManualOrderOfferCard(declined), order: null });
+      return;
+    }
+
+    try {
+      const { offer, order } = await finalizeManualOrderOffer(
+        { ...existing, status: 'pending' },
+        { buyerId: req.userId, buyerName: req.user?.displayName || intended.name },
+      );
+      res.json({ success: true, data: toManualOrderOfferCard(offer), order });
+    } catch (err) {
+      if (err instanceof ManualOfferFinalizeError) {
+        res.status(err.statusCode).json(err.body || { error: err.message });
+        return;
+      }
+      res.status(500).json({ error: err instanceof Error ? err.message : 'Failed to confirm order' });
+    }
+  },
+);
 
 operationsRouter.post('/operations/manual-offers/:id/reject', ...requireAuth, async (req, res) => {
   const existing = await getManualOrderOffer(req.params.id);
@@ -3817,6 +4169,10 @@ operationsRouter.get('/operations/users', authenticateRequest, async (req, res) 
     res.status(403).json({ error: 'Not authorized' });
     return;
   }
+  // Optional staff directory search: exact CFID match ranks first, then a
+  // case-insensitive contains on CFID / name / email. Server-side only.
+  const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  const wantMessagingContext = req.query.context === 'messaging';
   try {
     const { db } = await import('./db/client');
     const { users } = await import('./db/schema');
@@ -3827,6 +4183,7 @@ operationsRouter.get('/operations/users', authenticateRequest, async (req, res) 
         displayName: users.displayName,
         role: users.role,
         choosifyUserId: users.choosifyUserId,
+        avatarUrl: users.avatarUrl,
         createdAt: users.createdAt,
       })
       .from(users);
@@ -3847,18 +4204,45 @@ operationsRouter.get('/operations/users', authenticateRequest, async (req, res) 
         .map((part) => part[0]?.toUpperCase() || '')
         .join('') || 'U';
 
+    // Seller business / creator handle context for the messaging contact picker.
+    let brandBySeller = new Map<string, string>();
+    let creatorByUser = new Map<string, string>();
+    if (wantMessagingContext) {
+      try {
+        const [brands, creators] = await Promise.all([
+          catalogStore.listBrands().catch(() => [] as Array<{ sellerId?: string; name?: string }>),
+          catalogStore
+            .listCreators()
+            .catch(() => [] as Array<{ userId?: string; name?: string; handle?: string }>),
+        ]);
+        brandBySeller = new Map(
+          (brands as Array<{ sellerId?: string; name?: string }>)
+            .filter((b) => b.sellerId && b.name)
+            .map((b) => [b.sellerId as string, b.name as string]),
+        );
+        creatorByUser = new Map(
+          (creators as Array<{ userId?: string; name?: string; handle?: string }>)
+            .filter((c) => c.userId)
+            .map((c) => [c.userId as string, c.handle || c.name || '']),
+        );
+      } catch {
+        /* optional */
+      }
+    }
+
     const labels = await batchAccountPrimaryLabels(
       rows.map((u) => ({ id: u.id, role: u.role, email: u.email })),
     );
 
-    const authUsers = rows.map((u) => {
+    let authUsers = rows.map((u) => {
       const name = u.displayName || u.email || 'User';
       const joined = u.createdAt ? String(u.createdAt).slice(0, 10) : '—';
+      const roleLabel = mapRole(u.role);
       return {
         id: u.id,
         name,
         email: u.email,
-        role: mapRole(u.role),
+        role: roleLabel,
         status: labels.get(u.id) || 'Active',
         joined,
         active: joined,
@@ -3866,10 +4250,38 @@ operationsRouter.get('/operations/users', authenticateRequest, async (req, res) 
         trustScore: 85,
         behaviorSegment: 'Retail Shopper',
         choosifyUserId: u.choosifyUserId || undefined,
+        avatarUrl: u.avatarUrl || undefined,
+        contextLabel:
+          roleLabel === 'Seller'
+            ? brandBySeller.get(u.id)
+            : roleLabel === 'Creator'
+              ? creatorByUser.get(u.id)
+              : undefined,
       };
     });
 
-    if (authUsers.length) {
+    if (q) {
+      const needle = q.toLowerCase();
+      const cfidNeedle = needle.replace(/\s+/g, '');
+      authUsers = authUsers
+        .map((u) => {
+          const cfid = String(u.choosifyUserId || '').toLowerCase();
+          const exact = cfid && cfid === cfidNeedle ? 3 : 0;
+          const cfidHit = cfid.includes(cfidNeedle) ? 2 : 0;
+          const textHit =
+            String(u.name).toLowerCase().includes(needle) ||
+            String(u.email).toLowerCase().includes(needle)
+              ? 1
+              : 0;
+          return { u, score: exact || cfidHit || textHit };
+        })
+        .filter((x) => x.score > 0)
+        .sort((a, b) => b.score - a.score || a.u.name.localeCompare(b.u.name))
+        .slice(0, 25)
+        .map((x) => x.u);
+    }
+
+    if (authUsers.length || q) {
       res.json({ data: authUsers });
       return;
     }

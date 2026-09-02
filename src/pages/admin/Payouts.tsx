@@ -11,7 +11,7 @@ import {
   Loader2,
   Info,
 } from 'lucide-react';
-import { operationsApi } from '../../services/operationsApi';
+import { operationsApi, toAnalyticsSummary } from '../../services/operationsApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { useCashBook } from '../../contexts/CashBookContext';
 import { Tabs, TabItem } from '../../components/ui/Tabs';
@@ -77,7 +77,7 @@ export const Payouts = () => {
     operationsApi
       .getAnalytics('30d')
       .then((summary) => {
-        setPlatformRevenue(summary.orders.revenue);
+        setPlatformRevenue(toAnalyticsSummary(summary).orders.revenue);
       })
       .catch(() => setPlatformRevenue(null));
   }, []);
@@ -437,7 +437,7 @@ export const Payouts = () => {
 
       {/* Floating Toast */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-[600] bg-[#1A1A2E] border border-[#F97316]/30 p-4 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold text-white">
+        <div className="fixed bottom-6 right-6 z-[600] bg-[#1A1A2E] border border-[#FF5B00]/30 p-4 rounded-xl shadow-2xl flex items-center gap-3 text-xs font-bold text-white">
           <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
           <span>{toast}</span>
         </div>

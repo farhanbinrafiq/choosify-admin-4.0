@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, CSSProperties } from 'react';
 import { resolveCreatorThumbnail } from '../../lib/productVideo';
-import { uploadCreatorImage } from '../../services/mediaUpload';
+import { uploadCreatorImage, uploadProductImages } from '../../services/mediaUpload';
 import {
   checkCategorySchemaCompatibility,
   generateCombinations,
@@ -19,7 +19,25 @@ import {
   type RelatedInfoType,
   type SchemaVariantDimension,
 } from './productEditorModel';
-import type { RelatedStoreEntry } from '../../types/catalog';
+import type { CatalogProductDetail, RelatedStoreEntry } from '../../types/catalog';
+
+type ProductGuide = NonNullable<CatalogProductDetail['sizeGuide']>;
+
+const GUIDE_TYPE_OPTIONS: Array<{ value: NonNullable<ProductGuide['guideType']>; label: string; cta: string }> = [
+  { value: 'size', label: 'Size guide', cta: 'View Size Guide' },
+  { value: 'measurement', label: 'Measurement guide', cta: 'View Measurement Guide' },
+  { value: 'compatibility', label: 'Compatibility guide', cta: 'View Compatibility Guide' },
+  { value: 'fitment', label: 'Fitment guide', cta: 'View Fitment Guide' },
+  { value: 'feature', label: 'Feature guide', cta: 'View Feature Guide' },
+  { value: 'custom', label: 'Custom label…', cta: 'View Guide' },
+];
+
+/** Storefront CTA label for a product guide (matches Choosify-Web productGuideCtaLabel). */
+export function productGuideCtaLabel(g?: Partial<ProductGuide> | null): string {
+  const t = g?.guideType || 'size';
+  if (t === 'custom') return (g?.label || '').trim() || 'View Guide';
+  return GUIDE_TYPE_OPTIONS.find((o) => o.value === t)?.cta || 'View Guide';
+}
 
 type OverviewBlock = ProductEditorModel['overviewBlocks'][number];
 type CreatorVideo = ProductEditorModel['creatorVideos'][number];
@@ -523,6 +541,182 @@ export function VariantSummaryView({
           <span>Price {minP === maxP ? `৳${minP.toLocaleString()}` : `৳${minP.toLocaleString()} – ৳${maxP.toLocaleString()}`}</span>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+// ─────────────── Product Guide (size / measurement / fitment / …) ─────────────
+// Informational seller-uploaded chart. NEVER touches variants / price / SKU /
+// stock / availability / checkout. Lives inside the Options & Variants section.
+
+const guideIsActive = (g?: ProductGuide | null): boolean =>
+  !!g && g.enabled !== false && !!(g.imageUrl?.trim() || g.description?.trim() || (g.rows?.length ?? 0) > 0);
+
+export function ProductGuideView({ guide }: { guide?: ProductGuide | null }) {
+  if (!guideIsActive(guide)) return null;
+  const g = guide!;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 10, paddingTop: 10, borderTop: '1px dashed #E8EDF2' }}>
+      {g.imageUrl ? (
+        <div style={{ width: 40, height: 40, borderRadius: 8, overflow: 'hidden', border: '1px solid #E8EDF2', background: '#F9FAFB', flexShrink: 0 }}>
+          <img src={g.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
+        </div>
+      ) : null}
+      <span style={{ fontSize: 11.5, fontWeight: 800, color: ACCENT, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        ↗ {productGuideCtaLabel(g).toUpperCase()}
+      </span>
+      <span style={{ fontSize: 10.5, color: '#9CA3AF' }}>shown to buyers beside the variant picker</span>
+    </div>
+  );
+}
+
+export function ProductGuideEditor({
+  guide,
+  onChange,
+  onToast,
+}: {
+  guide?: ProductGuide;
+  onChange: (next: ProductGuide) => void;
+  onToast: (m: string) => void;
+}) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const active = !!guide && guide.enabled !== false;
+  const g: ProductGuide = guide ?? { enabled: false, guideType: 'size', type: 'image' };
+  const patch = (p: Partial<ProductGuide>) => onChange({ ...g, ...p });
+
+  const upload = async (files: FileList | File[] | null) => {
+    const file = Array.from(files ?? []).find((f) => f.type.startsWith('image/'));
+    if (!file) { onToast('Choose a JPG or PNG image.'); return; }
+    setBusy(true);
+    try {
+      const [url] = await uploadProductImages([file]);
+      patch({ imageUrl: url, type: 'image', enabled: true });
+      onToast('Guide image uploaded.');
+    } catch (err) {
+      const blob = URL.createObjectURL(file);
+      patch({ imageUrl: blob, type: 'image', enabled: true });
+      onToast(err instanceof Error ? `${err.message} — shown as an UNSAVED local preview.` : 'Upload failed — UNSAVED local preview.');
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  if (!active) {
+    return (
+      <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #E8EDF2' }}>
+        <div style={x.label}>Size / Measurement / Compatibility Guide</div>
+        <p style={{ ...x.note, margin: '0 0 8px' }}>
+          Optional. Upload your own chart image so buyers can understand your real measurements /
+          compatibility before choosing a variant. Informational only — it never changes prices,
+          stock or the variants themselves.
+        </p>
+        <button type="button" style={x.ghostBtn} onClick={() => onChange({ enabled: true, guideType: 'size', type: 'image' })}>
+          ＋ Add a guide
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #E8EDF2', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={x.label}>Size / Measurement / Compatibility Guide</div>
+        <button
+          type="button"
+          style={{ ...x.ghostBtn, color: '#DC2626', borderColor: '#FECACA' }}
+          onClick={() => onChange({ enabled: false })}
+        >
+          Remove guide
+        </button>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+        <div>
+          <div style={x.label}>Guide type</div>
+          <select
+            style={x.input as CSSProperties}
+            value={g.guideType || 'size'}
+            onChange={(e) => patch({ guideType: e.target.value as ProductGuide['guideType'] })}
+          >
+            {GUIDE_TYPE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          <div style={{ ...x.note, marginTop: 4 }}>Buyer sees: <b>{productGuideCtaLabel(g)}</b></div>
+        </div>
+        {g.guideType === 'custom' ? (
+          <div>
+            <div style={x.label}>Custom CTA label</div>
+            <input
+              style={x.input as CSSProperties}
+              value={g.label ?? ''}
+              maxLength={40}
+              placeholder="e.g. View Fit & Care Guide"
+              onChange={(e) => patch({ label: e.target.value })}
+            />
+          </div>
+        ) : null}
+      </div>
+
+      <div>
+        <div style={x.label}>Guide image</div>
+        <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => void upload(e.target.files)} />
+        {g.imageUrl ? (
+          <div style={{ position: 'relative', maxWidth: 320, border: '1px solid #E8EDF2', borderRadius: 10, overflow: 'hidden', background: '#F9FAFB' }}>
+            <img src={g.imageUrl} alt="Guide" style={{ display: 'block', width: '100%', maxHeight: 240, objectFit: 'contain', background: '#fff' }} referrerPolicy="no-referrer" />
+            <div style={{ display: 'flex', gap: 8, padding: 8 }}>
+              <button type="button" style={x.ghostBtn} disabled={busy} onClick={() => fileRef.current?.click()}>
+                {busy ? 'Uploading…' : 'Replace image'}
+              </button>
+              <button type="button" style={{ ...x.ghostBtn, color: '#DC2626' }} onClick={() => patch({ imageUrl: undefined })}>
+                Remove image
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => !busy && fileRef.current?.click()}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => { e.preventDefault(); void upload(e.dataTransfer.files); }}
+            style={{ border: '2px dashed #E5E7EB', borderRadius: 10, padding: '22px 12px', textAlign: 'center', color: '#9CA3AF', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', background: '#fff' }}
+          >
+            {busy ? 'Uploading…' : 'Drop a chart image or click to upload (JPG / PNG)'}
+          </div>
+        )}
+        <div style={{ ...x.note, marginTop: 4 }}>Shown to the buyer exactly as uploaded, in a pop-up viewer — no measurements are added or altered.</div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
+        <div>
+          <div style={x.label}>Title (optional)</div>
+          <input
+            style={x.input as CSSProperties}
+            value={g.title ?? ''}
+            maxLength={120}
+            placeholder="e.g. Men's Panjabi — Chest & Length"
+            onChange={(e) => patch({ title: e.target.value })}
+          />
+        </div>
+        <div>
+          <div style={x.label}>Short description (optional)</div>
+          <textarea
+            style={{ ...(x.input as CSSProperties), height: 60, padding: '8px 10px', resize: 'vertical' }}
+            value={g.description ?? ''}
+            maxLength={600}
+            placeholder="e.g. Measured flat, in inches. Allow ~1 inch ease for a relaxed fit."
+            onChange={(e) => patch({ description: e.target.value })}
+          />
+        </div>
+      </div>
+
+      <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 700, color: '#374151' }}>
+        <input type="checkbox" checked={g.enabled !== false} onChange={(e) => patch({ enabled: e.target.checked })} />
+        Show this guide on the storefront
+      </label>
     </div>
   );
 }

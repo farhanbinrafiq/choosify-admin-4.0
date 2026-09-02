@@ -8,7 +8,7 @@ import { commerceStore } from '../../commerce/commerceStore';
 import { catalogStore } from '../../catalogStore';
 import { publishEvent } from '../../events/eventBus';
 import { Logger } from '../../lib/logger';
-import { notifyUser } from '../../communication/systemNotify';
+import { notifyUser, notifyRoles } from '../../communication/systemNotify';
 import { COMMUNICATION_TYPES } from '../../communication/communicationTypes';
 import {
   getConversationByReconcileKey,
@@ -27,6 +27,10 @@ import {
   saveSupportTicket,
   getAttachment,
   getSupportTicket,
+  saveSupportNote,
+  listSupportNotes,
+  saveSupportFollowup,
+  listSupportFollowups,
 } from './conversationStore';
 import {
   markClosed,
@@ -40,6 +44,7 @@ import {
   consumerInitiated,
   isAdminEnterRole,
   resolveSenderRole,
+  resolveSupportAudience,
   type MessagingActor,
 } from './conversationPermissions';
 import { mirrorConversationToOmni, mirrorMessageToOmni } from './omniBridge';
@@ -57,9 +62,80 @@ import {
   type SenderRole,
   type SocialInboxConnection,
   type SourceChannel,
+  type SupportAudience,
   type SupportTicket,
   type SupportTicketStatus,
+  type SupportTicketNote,
+  type SupportFollowup,
+  type SupportTicketPriority,
+  type SupportDepartment,
 } from './types';
+
+const STAFF_SUPPORT_ROLES = ['admin', 'super_admin', 'support_agent'] as const;
+
+/** Canonical target-user resolution for Admin-initiated support (never trusts client role). */
+export type SupportTargetUser = {
+  id: string;
+  role: string;
+  senderRole: SenderRole;
+  audience: SupportAudience;
+  displayName: string;
+  choosifyUserId?: string;
+  avatarUrl?: string;
+  /** CRM snapshot — canonical fields only; phone is NOT on `users` so it is never surfaced here. */
+  email?: string;
+  emailVerified?: boolean;
+  memberSince?: string;
+};
+
+export async function resolveSupportTargetUser(
+  targetUserId: string,
+): Promise<SupportTargetUser | null> {
+  const id = String(targetUserId || '').trim();
+  if (!id) return null;
+  try {
+    const { db } = await import('../../db/client');
+    const { users } = await import('../../db/schema');
+    const { eq } = await import('drizzle-orm');
+    const rows = await db
+      .select({
+        id: users.id,
+        role: users.role,
+        displayName: users.displayName,
+        choosifyUserId: users.choosifyUserId,
+        avatarUrl: users.avatarUrl,
+        email: users.email,
+        emailVerified: users.emailVerified,
+        createdAt: users.createdAt,
+      })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+    const u = rows[0];
+    if (!u) return null;
+    const senderRole = resolveSenderRole(u.role);
+    // System-only identities are never a valid support target.
+    if (senderRole === 'admin' || senderRole === 'system') return null;
+    return {
+      id: u.id,
+      role: u.role,
+      senderRole,
+      audience: resolveSupportAudience(u.role),
+      displayName: u.displayName || 'User',
+      choosifyUserId: u.choosifyUserId || undefined,
+      avatarUrl: u.avatarUrl || undefined,
+      email: u.email || undefined,
+      emailVerified: Boolean(u.emailVerified),
+      memberSince: u.createdAt ? new Date(u.createdAt).toISOString() : undefined,
+    };
+  } catch (error) {
+    Logger.warn('resolveSupportTargetUser failed', {
+      targetUserId: id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
 
 const COUNTER_OFFER_TTL_MS = 8 * 60 * 60 * 1000; // IS-005 §26 — 8 hours
 const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
@@ -532,12 +608,21 @@ export async function sendMessage(input: {
 
   const senderRole = await assertCanSendMessage(conv, input.actor);
 
-  if (senderRole === 'admin' && input.requireAdminEntry !== false) {
+  // Choosify Support is the staff's job — no separate "enter" ceremony to reply
+  // to a support ticket. Private commerce still requires an audited enter.
+  const supportContext = conv.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET;
+  if (senderRole === 'admin' && input.requireAdminEntry !== false && !supportContext) {
     const entries = await listAdminEntries(conv.id);
     const entered = entries.some((e) => e.adminId === input.actor.userId);
     if (!entered) {
       throw new CommerceError('Admin must enter the conversation before messaging', 403);
     }
+  }
+  if (senderRole === 'admin' && supportContext) {
+    Logger.audit('messaging.support_staff_reply', {
+      conversationId: conv.id,
+      adminId: input.actor.userId,
+    });
   }
 
   // Client-authoritative senderId is ignored (server uses authenticated actor).
@@ -583,6 +668,7 @@ export async function sendMessage(input: {
     }
   }
 
+  const isSupport = conv.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET;
   const recipientIds = Array.from(
     new Set(
       (conv.participants || [])
@@ -594,10 +680,10 @@ export async function sendMessage(input: {
     try {
       await notifyUser(recipientId, {
         type: COMMUNICATION_TYPES.NOTIFICATION,
-        category: senderRole === 'seller' ? 'buyer' : 'seller',
-        title: 'New message',
+        category: isSupport ? 'system' : senderRole === 'seller' ? 'buyer' : 'seller',
+        title: isSupport ? 'Choosify Support replied' : 'New message',
         summary: body ? body.slice(0, 140) : 'Sent an attachment.',
-        actionUrl: '/messages',
+        actionUrl: isSupport ? '/messages' : '/messages',
         metadata: { conversationId: conv.id, messageId: message.id },
       });
     } catch (err) {
@@ -607,6 +693,17 @@ export async function sendMessage(input: {
         error: err instanceof Error ? err.message : String(err),
       });
     }
+  }
+
+  // Support-ticket reply from a user (not staff) → alert Choosify support staff,
+  // auto-cancel any scheduled follow-up, and reopen a resolved/closed ticket.
+  if (isSupport && senderRole !== 'admin' && senderRole !== 'system') {
+    await notifySupportStaffOfActivity(
+      conv,
+      `New ${(conv.metadata?.audience as string) || 'user'} support reply`,
+      body,
+    );
+    await onSupportUserReply(conv.id);
   }
 
   const refreshed = (await getConversation(conv.id)) || conv;
@@ -958,6 +1055,206 @@ export async function enterConversationAsAdmin(input: {
   return { conversation: conv, entryId: entry.id };
 }
 
+/**
+ * Admin/Support proactively opens (or reuses) a user's Choosify Support thread.
+ * Same canonical support relationship — NOT a separate DM engine. The target
+ * role/audience/CFID are resolved SERVER-SIDE from `targetUserId`; any client
+ * supplied role/identity is ignored. Reuses `support:active:<targetUserId>` so
+ * a profile-originated open and an inbox-search open resolve to one thread.
+ */
+export async function openAdminSupportConversation(input: {
+  adminActor: MessagingActor;
+  targetUserId: string;
+  subject?: string;
+  body?: string;
+}): Promise<{
+  conversation: CommerceConversation;
+  ticket: SupportTicket;
+  message: CommerceMessage | null;
+  created: boolean;
+  target: SupportTargetUser;
+}> {
+  if (!input.adminActor?.userId) throw new CommerceError('Authentication required', 401);
+  if (!isAdminEnterRole(input.adminActor.role)) {
+    throw new CommerceError('Only Choosify staff may start a support conversation', 403);
+  }
+  const target = await resolveSupportTargetUser(input.targetUserId);
+  if (!target) throw new CommerceError('Target user not found', 404);
+  if (target.id === input.adminActor.userId) {
+    throw new CommerceError('Cannot start a support conversation with yourself', 400);
+  }
+
+  const body = input.body ? String(input.body).trim() : '';
+
+  // Reuse the target's one active support thread if it exists.
+  const existing = await findActiveSupportConversationForUser(target.id);
+  let conversation: CommerceConversation;
+  let ticket: SupportTicket;
+  let created = false;
+
+  if (existing) {
+    conversation = existing.conversation;
+    ticket = existing.ticket;
+    // Backfill audience on legacy tickets/conversations.
+    if (!ticket.audience) {
+      ticket = await saveSupportTicket({ ...ticket, audience: target.audience, updatedAt: nowIso() });
+    }
+    if (conversation.metadata?.audience !== target.audience) {
+      conversation = await saveConversation({
+        ...conversation,
+        metadata: { ...conversation.metadata, audience: target.audience },
+        updatedAt: conversation.updatedAt,
+      });
+    }
+  } else {
+    const now = nowIso();
+    const key = activeSupportReconcileKey(target.id);
+    const raced = await getConversationByReconcileKey(key);
+    if (raced && raced.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET) {
+      conversation = raced;
+      const tickets = await listSupportTickets();
+      ticket =
+        tickets.find((t) => t.conversationId === raced.id && t.openerId === target.id) ||
+        (await saveSupportTicket({
+          id: newId('ticket'),
+          conversationId: raced.id,
+          openerId: target.id,
+          audience: target.audience,
+          subject: input.subject?.trim() || 'Choosify Support',
+          status: SUPPORT_TICKET_STATUSES.OPEN,
+          createdAt: now,
+          updatedAt: now,
+        }));
+    } else {
+      const subject = input.subject?.trim() || 'Message from Choosify';
+      conversation = await saveConversation({
+        id: newId('conv'),
+        contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
+        status: CONVERSATION_STATUSES.ACTIVE,
+        consumerId: target.id,
+        sellerId: 'platform_support',
+        brandId: 'platform_support',
+        sourceChannel: 'platform',
+        participants: [{ userId: target.id, role: target.senderRole }],
+        createdAt: now,
+        updatedAt: now,
+        reconcileKey: key,
+        metadata: {
+          supportTicket: true,
+          subject,
+          openerId: target.id,
+          audience: target.audience,
+          initiatedByAdminId: input.adminActor.userId,
+        },
+      });
+      ticket = await saveSupportTicket({
+        id: newId('ticket'),
+        conversationId: conversation.id,
+        openerId: target.id,
+        audience: target.audience,
+        initiatedByAdminId: input.adminActor.userId,
+        subject,
+        status: SUPPORT_TICKET_STATUSES.OPEN,
+        createdAt: now,
+        updatedAt: now,
+      });
+      created = true;
+      emitMessaging('ConversationCreated', conversation.id, input.adminActor.userId, {
+        conversationId: conversation.id,
+        supportTicketId: ticket.id,
+        audience: target.audience,
+        initiatedByAdminId: input.adminActor.userId,
+        contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
+      });
+    }
+  }
+
+  // Record the audited staff entry (also satisfies the admin-send gate).
+  await saveAdminEntry({
+    id: newId('admin_entry'),
+    conversationId: conversation.id,
+    adminId: input.adminActor.userId,
+    reason: 'admin_initiated_support',
+    createdAt: nowIso(),
+  });
+  Logger.audit('messaging.admin_initiated_support', {
+    conversationId: conversation.id,
+    adminId: input.adminActor.userId,
+    targetUserId: target.id,
+    targetRole: target.senderRole,
+    created,
+  });
+
+  let message: CommerceMessage | null = null;
+  if (body) {
+    message = await persistMessageInternal({
+      conversation,
+      senderId: input.adminActor.userId,
+      senderRole: 'admin',
+      body,
+      messageType: MESSAGE_TYPES.TEXT,
+    });
+    try {
+      await notifyUser(target.id, {
+        type: COMMUNICATION_TYPES.NOTIFICATION,
+        category: 'system',
+        title: 'Message from Choosify Support',
+        summary: body.slice(0, 140),
+        actionUrl: '/messages',
+        metadata: { conversationId: conversation.id, messageId: message.id },
+      });
+    } catch (err) {
+      Logger.warn('openAdminSupportConversation: notify target failed', {
+        conversationId: conversation.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  const refreshed = (await getConversation(conversation.id)) || conversation;
+  return { conversation: refreshed, ticket, message, created, target };
+}
+
+/**
+ * Mark a conversation read for the authenticated actor. Server determines the
+ * actor; you can never mark messages read as someone else. Only messages NOT
+ * sent by the actor and not already in `readBy` are stamped.
+ */
+export async function markConversationRead(input: {
+  conversationId: string;
+  actor: MessagingActor;
+}): Promise<{ conversationId: string; marked: number }> {
+  if (!input.actor?.userId) throw new CommerceError('Authentication required', 401);
+  const conv = await getConversation(input.conversationId);
+  if (!conv) throw new CommerceError('Conversation not found', 404);
+  await assertCanReadConversation(conv, input.actor);
+
+  const messages = await listMessages(conv.id);
+  let marked = 0;
+  for (const msg of messages) {
+    if (msg.senderId === input.actor.userId) continue;
+    const readBy = Array.isArray(msg.readBy) ? msg.readBy : [];
+    if (readBy.includes(input.actor.userId)) continue;
+    await saveMessage({ ...msg, readBy: [...readBy, input.actor.userId] });
+    marked += 1;
+  }
+  return { conversationId: conv.id, marked };
+}
+
+/**
+ * Strip staff-only CRM metadata from a ticket before it reaches a
+ * consumer/seller/creator-facing endpoint. Priority, assignee, department,
+ * reopenedAt are Support-Desk internal — never in a non-staff contract.
+ */
+export function toPublicSupportTicket(ticket: SupportTicket): SupportTicket {
+  const { priority, assigneeId, department, reopenedAt, ...pub } = ticket;
+  void priority;
+  void assigneeId;
+  void department;
+  void reopenedAt;
+  return pub as SupportTicket;
+}
+
 export async function findActiveSupportConversationForUser(
   userId: string,
 ): Promise<{ ticket: SupportTicket; conversation: CommerceConversation } | null> {
@@ -967,7 +1264,7 @@ export async function findActiveSupportConversationForUser(
     const tickets = await listSupportTickets();
     const ticket = tickets.find((t) => t.conversationId === byKey.id && t.openerId === userId) || null;
     if (ticket && isActiveSupportConversation(ticket, byKey)) {
-      return { ticket, conversation: byKey };
+      return { ticket: toPublicSupportTicket(ticket), conversation: byKey };
     }
   }
   const tickets = await listSupportTickets();
@@ -975,7 +1272,7 @@ export async function findActiveSupportConversationForUser(
   for (const ticket of mine) {
     const conv = await getConversation(ticket.conversationId);
     if (conv && isActiveSupportConversation(ticket, conv)) {
-      return { ticket, conversation: conv };
+      return { ticket: toPublicSupportTicket(ticket), conversation: conv };
     }
   }
   return null;
@@ -1043,10 +1340,12 @@ export async function createSupportTicket(input: {
     const ticket = tickets.find((t) => t.conversationId === racedKey.id && t.openerId === input.actor.userId);
     if (ticket && isActiveSupportConversation(ticket, racedKey)) {
       const messages = await listMessages(racedKey.id);
-      return { ticket, conversation: racedKey, message: messages[0] };
+      return { ticket: toPublicSupportTicket(ticket), conversation: racedKey, message: messages[0] };
     }
   }
 
+  const openerSenderRole = resolveSenderRole(input.actor.role);
+  const audience = resolveSupportAudience(input.actor.role);
   const conversation: CommerceConversation = {
     id: newId('conv'),
     contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
@@ -1055,19 +1354,18 @@ export async function createSupportTicket(input: {
     sellerId: 'platform_support',
     brandId: 'platform_support',
     sourceChannel: 'platform',
-    participants: [
-      { userId: input.actor.userId, role: resolveSenderRole(input.actor.role) },
-    ],
+    participants: [{ userId: input.actor.userId, role: openerSenderRole }],
     createdAt: now,
     updatedAt: now,
     reconcileKey: key,
-    metadata: { supportTicket: true, subject, openerId: input.actor.userId },
+    metadata: { supportTicket: true, subject, openerId: input.actor.userId, audience },
   };
   const savedConv = await saveConversation(conversation);
   const ticket = await saveSupportTicket({
     id: ticketId,
     conversationId: savedConv.id,
     openerId: input.actor.userId,
+    audience,
     subject,
     status: SUPPORT_TICKET_STATUSES.OPEN,
     createdAt: now,
@@ -1076,16 +1374,41 @@ export async function createSupportTicket(input: {
   const message = await persistMessageInternal({
     conversation: savedConv,
     senderId: input.actor.userId,
-    senderRole: resolveSenderRole(input.actor.role),
+    senderRole: openerSenderRole,
     body,
     messageType: MESSAGE_TYPES.TEXT,
   });
   emitMessaging('ConversationCreated', savedConv.id, input.actor.userId, {
     conversationId: savedConv.id,
     supportTicketId: ticket.id,
+    audience,
     contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
   });
-  return { ticket, conversation: savedConv, message };
+  await notifySupportStaffOfActivity(savedConv, `New ${audience} support request`, body);
+  return { ticket: toPublicSupportTicket(ticket), conversation: savedConv, message };
+}
+
+/** Notify Choosify support staff once each about new support activity (no duplicates). */
+async function notifySupportStaffOfActivity(
+  conv: CommerceConversation,
+  title: string,
+  preview: string,
+): Promise<void> {
+  try {
+    await notifyRoles([...STAFF_SUPPORT_ROLES], {
+      type: COMMUNICATION_TYPES.NOTIFICATION,
+      category: 'system',
+      title,
+      summary: preview ? preview.slice(0, 140) : 'Open the support inbox.',
+      actionUrl: `/admin/messages?c=${conv.id}`,
+      metadata: { conversationId: conv.id, supportAudience: conv.metadata?.audience },
+    });
+  } catch (err) {
+    Logger.warn('notifySupportStaffOfActivity failed', {
+      conversationId: conv.id,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 export async function resolveSupportTicket(input: {
@@ -1132,27 +1455,335 @@ export async function resolveSupportTicket(input: {
   return { ticket: savedTicket, conversation: closedConv };
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// Admin CRM / Support Desk — persisted status, priority, assignment,
+// internal notes, follow-ups. All mutations are staff-only. None of this
+// metadata is ever returned by a consumer/seller/creator endpoint.
+// ═══════════════════════════════════════════════════════════════════════
+
+function assertSupportStaff(actor: MessagingActor): void {
+  if (!actor?.userId) throw new CommerceError('Authentication required', 401);
+  if (!isAdminEnterRole(actor.role)) throw new CommerceError('Choosify staff only', 403);
+}
+
+async function findTicketByConversation(conversationId: string): Promise<SupportTicket> {
+  const t = (await listSupportTickets()).find((x) => x.conversationId === conversationId);
+  if (!t) throw new CommerceError('Support ticket not found', 404);
+  return t;
+}
+
+/** Staff mutate status / priority / assignee / department. Reopen = status:'open' + reopenedAt. */
+export async function updateSupportTicketCrm(input: {
+  actor: MessagingActor;
+  conversationId: string;
+  patch: {
+    status?: SupportTicketStatus;
+    priority?: SupportTicketPriority;
+    assigneeId?: string | null;
+    department?: SupportDepartment | null;
+  };
+}): Promise<SupportTicket> {
+  assertSupportStaff(input.actor);
+  const ticket = await findTicketByConversation(input.conversationId);
+  const now = nowIso();
+  const next: SupportTicket = { ...ticket, updatedAt: now };
+
+  if (input.patch.status && input.patch.status !== ticket.status) {
+    // Guard the state machine — only known statuses.
+    const allowed = Object.values(SUPPORT_TICKET_STATUSES) as string[];
+    if (!allowed.includes(input.patch.status)) {
+      throw new CommerceError(`Invalid status ${input.patch.status}`, 400);
+    }
+    next.status = input.patch.status;
+    if (
+      (ticket.status === SUPPORT_TICKET_STATUSES.RESOLVED ||
+        ticket.status === SUPPORT_TICKET_STATUSES.CLOSED) &&
+      input.patch.status === SUPPORT_TICKET_STATUSES.OPEN
+    ) {
+      next.reopenedAt = now;
+    }
+  }
+  if (input.patch.priority) {
+    const pr: SupportTicketPriority[] = ['low', 'medium', 'high', 'urgent'];
+    if (!pr.includes(input.patch.priority)) throw new CommerceError('Invalid priority', 400);
+    next.priority = input.patch.priority;
+  }
+  if (input.patch.assigneeId !== undefined) {
+    if (input.patch.assigneeId) {
+      // Assignee must reference a real Choosify staff account.
+      const role = await resolveStaffRole(input.patch.assigneeId);
+      if (!role || !isAdminEnterRole(role)) {
+        throw new CommerceError('Assignee is not a Choosify staff account', 400);
+      }
+      next.assigneeId = input.patch.assigneeId;
+    } else {
+      next.assigneeId = undefined;
+    }
+  }
+  if (input.patch.department !== undefined) {
+    next.department = input.patch.department || undefined;
+  }
+
+  const saved = await saveSupportTicket(next);
+  Logger.audit('messaging.support_crm_update', {
+    conversationId: input.conversationId,
+    ticketId: saved.id,
+    adminId: input.actor.userId,
+    patch: input.patch,
+  });
+  return saved;
+}
+
+async function resolveStaffRole(userId: string): Promise<string | null> {
+  try {
+    const { db } = await import('../../db/client');
+    const { users } = await import('../../db/schema');
+    const { eq } = await import('drizzle-orm');
+    const rows = await db.select({ role: users.role }).from(users).where(eq(users.id, userId)).limit(1);
+    return rows[0]?.role || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function addSupportNote(input: {
+  actor: MessagingActor;
+  conversationId: string;
+  body: string;
+}): Promise<SupportTicketNote> {
+  assertSupportStaff(input.actor);
+  const body = String(input.body || '').trim();
+  if (!body) throw new CommerceError('Note body is required', 400);
+  const ticket = await findTicketByConversation(input.conversationId);
+  const staff = await resolveStaffDisplay(input.actor.userId);
+  const note: SupportTicketNote = {
+    id: newId('snote'),
+    conversationId: input.conversationId,
+    ticketId: ticket.id,
+    authorId: input.actor.userId,
+    authorName: staff,
+    body,
+    createdAt: nowIso(),
+  };
+  const saved = await saveSupportNote(note);
+  Logger.audit('messaging.support_note_added', {
+    conversationId: input.conversationId,
+    noteId: saved.id,
+    adminId: input.actor.userId,
+  });
+  return saved;
+}
+
+export async function listSupportNotesForActor(
+  actor: MessagingActor,
+  conversationId: string,
+): Promise<SupportTicketNote[]> {
+  assertSupportStaff(actor);
+  return listSupportNotes(conversationId);
+}
+
+async function resolveStaffDisplay(userId: string): Promise<string> {
+  try {
+    const { db } = await import('../../db/client');
+    const { users } = await import('../../db/schema');
+    const { eq } = await import('drizzle-orm');
+    const rows = await db
+      .select({ displayName: users.displayName, email: users.email })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    return rows[0]?.displayName || rows[0]?.email || 'Choosify staff';
+  } catch {
+    return 'Choosify staff';
+  }
+}
+
+export async function scheduleSupportFollowup(input: {
+  actor: MessagingActor;
+  conversationId: string;
+  dueAt: string;
+}): Promise<SupportFollowup> {
+  assertSupportStaff(input.actor);
+  const due = Date.parse(input.dueAt);
+  if (Number.isNaN(due)) throw new CommerceError('dueAt must be a valid ISO date', 400);
+  const ticket = await findTicketByConversation(input.conversationId);
+  // Cancel any existing scheduled follow-up for this conversation first.
+  for (const f of await listSupportFollowups(input.conversationId)) {
+    if (f.status === 'scheduled') {
+      await saveSupportFollowup({ ...f, status: 'cancelled', cancelledAt: nowIso(), cancelReason: 'manual' });
+    }
+  }
+  const followup: SupportFollowup = {
+    id: newId('sfu'),
+    conversationId: input.conversationId,
+    ticketId: ticket.id,
+    createdBy: input.actor.userId,
+    createdAt: nowIso(),
+    dueAt: new Date(due).toISOString(),
+    status: 'scheduled',
+  };
+  const saved = await saveSupportFollowup(followup);
+  await saveSupportTicket({
+    ...ticket,
+    status: SUPPORT_TICKET_STATUSES.NEED_FOLLOWUP,
+    updatedAt: nowIso(),
+  });
+  Logger.audit('messaging.support_followup_scheduled', {
+    conversationId: input.conversationId,
+    followupId: saved.id,
+    dueAt: saved.dueAt,
+    adminId: input.actor.userId,
+  });
+  return saved;
+}
+
+export async function listSupportFollowupsForActor(
+  actor: MessagingActor,
+  conversationId: string,
+): Promise<SupportFollowup[]> {
+  assertSupportStaff(actor);
+  return listSupportFollowups(conversationId);
+}
+
+export async function cancelSupportFollowup(input: {
+  actor: MessagingActor;
+  conversationId: string;
+  followupId: string;
+}): Promise<SupportFollowup> {
+  assertSupportStaff(input.actor);
+  const rows = await listSupportFollowups(input.conversationId);
+  const f = rows.find((x) => x.id === input.followupId);
+  if (!f) throw new CommerceError('Follow-up not found', 404);
+  if (f.status !== 'scheduled') return f;
+  return saveSupportFollowup({ ...f, status: 'cancelled', cancelledAt: nowIso(), cancelReason: 'manual' });
+}
+
+/**
+ * Lazy sweep — invoked from listAdminSupportInbox (mirrors the booking-expiry
+ * "cron / lazy sweep" pattern). Idempotent, restart-safe, backed by persisted
+ * dueAt: a follow-up only fires once (guarded by status:'scheduled'→'fired').
+ * NEVER messages the customer; only flips the ticket into the actionable
+ * queue and raises an internal staff attention item.
+ */
+export async function sweepDueFollowups(): Promise<number> {
+  const now = Date.now();
+  const all = await listSupportFollowups();
+  let fired = 0;
+  for (const f of all) {
+    if (f.status !== 'scheduled') continue;
+    if (Date.parse(f.dueAt) > now) continue;
+    await saveSupportFollowup({ ...f, status: 'fired', firedAt: nowIso() });
+    fired += 1;
+    try {
+      const ticket = (await listSupportTickets()).find((t) => t.id === f.ticketId);
+      if (ticket && !CLOSED_SUPPORT_TICKET_STATUSES.has(ticket.status)) {
+        await saveSupportTicket({
+          ...ticket,
+          status: SUPPORT_TICKET_STATUSES.NEED_FOLLOWUP,
+          updatedAt: nowIso(),
+        });
+      }
+      const conv = await getConversation(f.conversationId);
+      if (conv) {
+        await notifyRoles([...STAFF_SUPPORT_ROLES], {
+          type: COMMUNICATION_TYPES.REMINDER,
+          category: 'system',
+          title: 'Support follow-up due',
+          summary: 'A scheduled support follow-up is now due.',
+          actionUrl: `/admin/messages?c=${f.conversationId}`,
+          metadata: { conversationId: f.conversationId, followupId: f.id },
+        }).catch(() => undefined);
+      }
+    } catch (err) {
+      Logger.warn('sweepDueFollowups post-fire step failed', {
+        followupId: f.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return fired;
+}
+
+/**
+ * Called from the canonical message-send path when a NON-staff participant
+ * replies on a support conversation. Auto-cancels any scheduled follow-up
+ * and returns a resolved/closed ticket to the actionable queue (open +
+ * reopenedAt). Runs server-side — no dependency on an Admin browser.
+ */
+async function onSupportUserReply(conversationId: string): Promise<void> {
+  try {
+    const ticket = (await listSupportTickets()).find((t) => t.conversationId === conversationId);
+    if (!ticket) return;
+    const now = nowIso();
+    for (const f of await listSupportFollowups(conversationId)) {
+      if (f.status === 'scheduled') {
+        await saveSupportFollowup({ ...f, status: 'cancelled', cancelledAt: now, cancelReason: 'reply' });
+      }
+    }
+    if (
+      ticket.status === SUPPORT_TICKET_STATUSES.RESOLVED ||
+      ticket.status === SUPPORT_TICKET_STATUSES.CLOSED
+    ) {
+      await saveSupportTicket({
+        ...ticket,
+        status: SUPPORT_TICKET_STATUSES.OPEN,
+        reopenedAt: now,
+        updatedAt: now,
+      });
+      Logger.audit('messaging.support_reopened_by_reply', { conversationId, ticketId: ticket.id });
+    } else if (ticket.status === SUPPORT_TICKET_STATUSES.NEED_FOLLOWUP) {
+      await saveSupportTicket({ ...ticket, status: SUPPORT_TICKET_STATUSES.OPEN, updatedAt: now });
+    }
+  } catch (err) {
+    Logger.warn('onSupportUserReply failed', {
+      conversationId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 export async function listConversationsForActor(
   actor: MessagingActor,
   filters?: { brandId?: string; contextType?: string; sourceChannel?: string },
 ): Promise<CommerceConversation[]> {
   const all = await listConversations();
+  const senderRole = resolveSenderRole(actor.role);
+  const isStaff = senderRole === 'admin';
+
+  // Staff no longer see every private commerce conversation in a list (IS-005 §7):
+  // support_ticket + external_social auto, plus any conversation they have an
+  // audited entry on. Fetch entries once instead of an assert-per-row.
+  const enteredIds = isStaff
+    ? new Set(
+        (await listAdminEntries())
+          .filter((e) => e.adminId === actor.userId)
+          .map((e) => e.conversationId),
+      )
+    : new Set<string>();
+
   const out: CommerceConversation[] = [];
   for (const c of all) {
-    // Support tickets stay off the seller commerce inbox unless this seller opened them.
-    if (
-      c.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET &&
-      resolveSenderRole(actor.role) === 'seller'
-    ) {
-      const isOwn =
-        c.consumerId === actor.userId ||
-        c.participants.some((p) => p.userId === actor.userId);
-      if (!isOwn) continue;
-    }
-    try {
-      await assertCanReadConversation(c, actor);
-    } catch {
-      continue;
+    if (isStaff) {
+      const autoReadable =
+        c.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET ||
+        c.contextType === CONVERSATION_CONTEXT_TYPES.EXTERNAL_SOCIAL;
+      if (!autoReadable && !enteredIds.has(c.id)) continue;
+    } else {
+      // Support tickets stay off the seller/creator commerce inbox unless they opened them.
+      if (
+        c.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET &&
+        (senderRole === 'seller' || senderRole === 'seller_staff' || senderRole === 'creator')
+      ) {
+        const isOwn =
+          c.consumerId === actor.userId ||
+          c.participants.some((p) => p.userId === actor.userId);
+        if (!isOwn) continue;
+      }
+      try {
+        await assertCanReadConversation(c, actor);
+      } catch {
+        continue;
+      }
     }
     if (filters?.brandId && c.brandId !== filters.brandId) continue;
     if (filters?.contextType && c.contextType !== filters.contextType) continue;
@@ -1178,6 +1809,172 @@ export async function listMessagesForActor(
 ): Promise<CommerceMessage[]> {
   await getConversationForActor(conversationId, actor);
   return listMessages(conversationId);
+}
+
+export type AdminSupportInboxRow = {
+  conversation: CommerceConversation;
+  ticket: SupportTicket | null;
+  audience: SupportAudience;
+  opener: {
+    id: string;
+    displayName: string;
+    choosifyUserId?: string;
+    avatarUrl?: string;
+    roleLabel: 'Consumer' | 'Seller' | 'Creator';
+    contextLabel?: string;
+    email?: string;
+    emailVerified?: boolean;
+    memberSince?: string;
+    totalOrders?: number;
+  };
+  lastMessageAt?: string;
+  lastMessagePreview?: string;
+  unread: number;
+  // CRM (staff-only — this whole endpoint is staff-gated)
+  priority?: SupportTicketPriority;
+  status?: SupportTicketStatus;
+  assigneeId?: string;
+  assigneeName?: string;
+  department?: SupportDepartment;
+  reopenedAt?: string;
+  noteCount: number;
+  followupDueAt?: string;
+};
+
+/**
+ * Enriched Choosify Support inbox for staff — every support_ticket conversation
+ * with resolved opener identity, audience, and unread-for-this-admin count.
+ */
+export async function listAdminSupportInbox(
+  actor: MessagingActor,
+  filter?: {
+    audience?: SupportAudience;
+    status?: SupportTicketStatus;
+    priority?: SupportTicketPriority;
+    assigneeId?: string;
+  },
+): Promise<AdminSupportInboxRow[]> {
+  if (!isAdminEnterRole(actor.role)) {
+    throw new CommerceError('Choosify staff only', 403);
+  }
+  // Lazy sweep — production-safe, idempotent, restart-safe (no background timer).
+  await sweepDueFollowups().catch(() => undefined);
+
+  const convs = (await listConversations()).filter(
+    (c) => c.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
+  );
+  const tickets = await listSupportTickets();
+  const ticketByConv = new Map(tickets.map((t) => [t.conversationId, t]));
+  const allNotes = await listSupportNotes();
+  const allFollowups = await listSupportFollowups();
+  const noteCountByConv = new Map<string, number>();
+  for (const n of allNotes) noteCountByConv.set(n.conversationId, (noteCountByConv.get(n.conversationId) || 0) + 1);
+  const dueByConv = new Map<string, string>();
+  for (const f of allFollowups) {
+    if (f.status === 'scheduled') dueByConv.set(f.conversationId, f.dueAt);
+  }
+  const assigneeIds = Array.from(new Set(tickets.map((t) => t.assigneeId).filter(Boolean))) as string[];
+  const assigneeNames = new Map<string, string>();
+  await Promise.all(
+    assigneeIds.map(async (uid) => assigneeNames.set(uid, await resolveStaffDisplay(uid))),
+  );
+
+  const openerIds = Array.from(new Set(convs.map((c) => c.consumerId).filter(Boolean)));
+  const idMap = new Map<string, SupportTargetUser>();
+  await Promise.all(
+    openerIds.map(async (uid) => {
+      const u = await resolveSupportTargetUser(uid);
+      if (u) idMap.set(uid, u);
+    }),
+  );
+  // Optional seller/creator display context (business / handle).
+  let brands: Array<{ sellerId?: string; name?: string }> = [];
+  let creators: Array<{ userId?: string; name?: string; handle?: string }> = [];
+  try {
+    const { catalogStore: editorialCatalogStore } = await import(
+      '../../../lib/vercel-catalog/catalogStore'
+    );
+    brands = (await editorialCatalogStore.listBrands()) as never;
+    creators = (await editorialCatalogStore.listCreators()) as never;
+  } catch {
+    /* optional */
+  }
+
+  // Best-effort order counts for the CRM snapshot (canonical, cheap).
+  let orderCountByBuyer = new Map<string, number>();
+  try {
+    const { operationsStore } = await import('../../operations/operationsStore');
+    for (const o of operationsStore.listOrders()) {
+      orderCountByBuyer.set(o.buyerId, (orderCountByBuyer.get(o.buyerId) || 0) + 1);
+    }
+  } catch {
+    orderCountByBuyer = new Map();
+  }
+
+  const rows: AdminSupportInboxRow[] = [];
+  for (const c of convs) {
+    const ticket = ticketByConv.get(c.id) || null;
+    const audience =
+      (ticket?.audience as SupportAudience) ||
+      (c.metadata?.audience as SupportAudience) ||
+      idMap.get(c.consumerId)?.audience ||
+      'consumer';
+    if (filter?.audience && audience !== filter.audience) continue;
+    if (filter?.status && (ticket?.status || SUPPORT_TICKET_STATUSES.OPEN) !== filter.status) continue;
+    if (filter?.priority && ticket?.priority !== filter.priority) continue;
+    if (filter?.assigneeId && ticket?.assigneeId !== filter.assigneeId) continue;
+
+    const u = idMap.get(c.consumerId);
+    const roleLabel =
+      audience === 'seller' ? 'Seller' : audience === 'creator' ? 'Creator' : 'Consumer';
+    let contextLabel: string | undefined;
+    if (audience === 'seller') {
+      contextLabel = brands.find((b) => b.sellerId === c.consumerId)?.name;
+    } else if (audience === 'creator') {
+      const cr = creators.find((x) => x.userId === c.consumerId);
+      contextLabel = cr?.handle || cr?.name;
+    }
+
+    const msgs = await listMessages(c.id);
+    const last = msgs[msgs.length - 1];
+    const unread = msgs.filter(
+      (m) =>
+        m.senderId !== actor.userId &&
+        m.senderRole !== 'admin' &&
+        m.senderRole !== 'system' &&
+        !(Array.isArray(m.readBy) ? m.readBy : []).includes(actor.userId),
+    ).length;
+
+    rows.push({
+      conversation: c,
+      ticket,
+      audience,
+      opener: {
+        id: c.consumerId,
+        displayName: u?.displayName || `User ${c.consumerId.slice(0, 8)}`,
+        choosifyUserId: u?.choosifyUserId,
+        avatarUrl: u?.avatarUrl,
+        roleLabel,
+        contextLabel,
+        email: u?.email,
+        emailVerified: u?.emailVerified,
+        memberSince: u?.memberSince,
+        totalOrders: orderCountByBuyer.get(c.consumerId) ?? 0,
+      },
+      lastMessageAt: last?.createdAt || c.lastMessageAt,
+      lastMessagePreview: c.lastMessagePreview,
+      unread,
+      priority: ticket?.priority,
+      status: ticket?.status,
+      assigneeId: ticket?.assigneeId,
+      assigneeName: ticket?.assigneeId ? assigneeNames.get(ticket.assigneeId) : undefined,
+      department: ticket?.department,
+      reopenedAt: ticket?.reopenedAt,
+      noteCount: noteCountByConv.get(c.id) || 0,
+      followupDueAt: dueByConv.get(c.id),
+    });
+  }
+  return rows.sort((a, b) => (b.lastMessageAt || '').localeCompare(a.lastMessageAt || ''));
 }
 
 export async function searchConversationsForActor(
