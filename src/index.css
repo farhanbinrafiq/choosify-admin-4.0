@@ -1574,8 +1574,8 @@ form.choosify-navbar-hero-search {
 
 .global-search-shell__cta {
   color: #ffffff !important;
-  background: var(--choosify-orange) !important;
-  background-image: none !important;
+  background: var(--choosify-gradient-warm) !important;
+  background-image: var(--choosify-gradient-warm) !important;
   font-weight: 800 !important;
 }
 
@@ -1584,7 +1584,8 @@ form.choosify-navbar-hero-search {
 }
 
 .global-search-shell__cta:hover {
-  background: var(--choosify-red) !important;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--choosify-red) 86%, #000) 0%, color-mix(in srgb, var(--choosify-orange) 86%, #000) 100%) !important;
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--choosify-red) 86%, #000) 0%, color-mix(in srgb, var(--choosify-orange) 86%, #000) 100%) !important;
   color: #ffffff !important;
 }
 
@@ -1602,31 +1603,43 @@ form.choosify-navbar-hero-search {
   border: none;
 }
 
-/* Solid primary CTAs → logo-orange brand button gradient (EMI excluded) */
+/* Every solid brand-orange button/link → the signature warm gradient
+   (parity with the Partner-signup "Submit Partner Application" CTA).
+   Alpha tint variants (bg-…/10) and Emi are excluded. */
 html:not(.dark) button[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
 html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
+html:not(.dark) [role="button"][class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
 html:not(.dark) button[class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]),
 html:not(.dark) a[class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]),
-html:not(.dark) button[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
-html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]),
+html:not(.dark) [role="button"][class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]),
 html:not(.dark) button[class*="bg-orange-500"]:not([class*="bg-orange-500/"]),
 html:not(.dark) a[class*="bg-orange-500"]:not([class*="bg-orange-500/"]),
+html:not(.dark) button[class*="bg-orange-primary"]:not([class*="bg-orange-primary/"]),
+html:not(.dark) a[class*="bg-orange-primary"]:not([class*="bg-orange-primary/"]),
+html:not(.dark) button[class*="bg-orange-deep"]:not([class*="bg-orange-deep/"]),
+html:not(.dark) a[class*="bg-orange-deep"]:not([class*="bg-orange-deep/"]),
 html:not(.dark) button[class*="bg-app-accent"]:not([class*="bg-app-accent/"]),
-html:not(.dark) a[class*="bg-app-accent"]:not([class*="bg-app-accent/"]) {
-  background: var(--gradient-orange-button) !important;
-  background-image: var(--gradient-orange-button) !important;
+html:not(.dark) a[class*="bg-app-accent"]:not([class*="bg-app-accent/"]),
+html:not(.dark) [role="button"][class*="bg-app-accent"]:not([class*="bg-app-accent/"]) {
+  background: var(--choosify-gradient-warm) !important;
+  background-image: var(--choosify-gradient-warm) !important;
   color: #fff !important;
 }
 html:not(.dark) button[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover,
 html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover,
+html:not(.dark) [role="button"][class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover,
 html:not(.dark) button[class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]):hover,
 html:not(.dark) a[class*="bg-[#EF3C23]"]:not([class*="bg-[#EF3C23]/"]):hover,
-html:not(.dark) button[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover,
-html:not(.dark) a[class*="bg-[#FF5B00]"]:not([class*="bg-[#FF5B00]/"]):hover,
 html:not(.dark) button[class*="bg-orange-500"]:not([class*="bg-orange-500/"]):hover,
-html:not(.dark) a[class*="bg-orange-500"]:not([class*="bg-orange-500/"]):hover {
-  background: linear-gradient(90deg, #b02b16 0%, #d4331b 100%) !important;
-  background-image: linear-gradient(90deg, #b02b16 0%, #d4331b 100%) !important;
+html:not(.dark) a[class*="bg-orange-500"]:not([class*="bg-orange-500/"]):hover,
+html:not(.dark) button[class*="bg-orange-primary"]:not([class*="bg-orange-primary/"]):hover,
+html:not(.dark) a[class*="bg-orange-primary"]:not([class*="bg-orange-primary/"]):hover,
+html:not(.dark) button[class*="bg-orange-deep"]:not([class*="bg-orange-deep/"]):hover,
+html:not(.dark) a[class*="bg-orange-deep"]:not([class*="bg-orange-deep/"]):hover,
+html:not(.dark) button[class*="bg-app-accent"]:not([class*="bg-app-accent/"]):hover,
+html:not(.dark) a[class*="bg-app-accent"]:not([class*="bg-app-accent/"]):hover {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--choosify-red) 86%, #000) 0%, color-mix(in srgb, var(--choosify-orange) 86%, #000) 100%) !important;
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--choosify-red) 86%, #000) 0%, color-mix(in srgb, var(--choosify-orange) 86%, #000) 100%) !important;
 }
 
 /* ============================================================
