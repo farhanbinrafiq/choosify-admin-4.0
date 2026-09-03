@@ -1,916 +1,1800 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useLocation, useNavigate, Link } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
-import { useCashBook } from '../../contexts/CashBookContext';
-import { useOrders } from '../../contexts/OrdersContext';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  Wallet,
+  AlertTriangle,
+  ArrowDownLeft,
   ArrowUpRight,
+  ChevronLeft,
+  Eye,
+  FileSpreadsheet,
+  Info,
+  Loader2,
+  Pencil,
+  Plus,
+  RefreshCw,
   Search,
   Trash2,
-  ChevronLeft,
-  Plus,
-  FileSpreadsheet,
-  AlertTriangle,
+  Wallet,
   X,
-  Loader2,
-  RefreshCw,
-  Info,
-  TrendingUp,
-  FileText,
-  CheckCircle2,
 } from 'lucide-react';
+import { useAuth } from '../../contexts/AuthContext';
+import { useCashBook } from '../../contexts/CashBookContext';
+import { operationsApi, type CommerceOrderLite } from '../../services/operationsApi';
+import type { CashbookEntry, CashbookListItem } from '../../services/cashbookApi';
+import { S, ACCENT, formatCurrency, formatDay } from './orderHubChrome';
+import {
+  CASHBOOK_CATEGORIES,
+  CASHBOOK_COLOR_CHOICES,
+  CASHBOOK_ICON_CHOICES,
+  CASHBOOK_PAYMENT_MODES,
+  aggregateBooks,
+  cashbookLedgerPath,
+  isImportEligibleStatus,
+  orderFlagLabel,
+  withRunningBalance,
+} from './cashbookModel';
 
-const EMOJI_CHOICES = ['📒', '🛒', '🛍️', '💼', '🧵', '🎥', '✨', '📦', '🏦', '🎨'];
-const COLOR_CHOICES = ['#FF5B00', '#10B981', '#3B82F6', '#6366F1', '#EC4899', '#8B5CF6', '#14B8A6', '#64748B'];
+// ── design tokens — the genuine Cashbook reference radius language:
+//    cards & panels 10 · controls (buttons/inputs) 8 · modals 16 · chips 6 ──
+const R = { card: 10, panel: 10, control: 8, modal: 16, chip: 6 };
+const CASH_IN = '#16A34A';
+const CASH_OUT = '#DC2626';
+const BORDER = '#E8EDF2';
+const MUTED = '#9CA3AF';
 
 type ToastState = { message: string; type: 'success' | 'danger' | 'info' } | null;
 
+function money(n?: number): string {
+  return formatCurrency(Math.abs(Number(n || 0)));
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 export default function CashBookHub() {
   const { profile } = useAuth();
-  const { orders } = useOrders();
-  const location = useLocation();
   const navigate = useNavigate();
   const { bookId } = useParams<{ bookId?: string }>();
+  const [sp] = useSearchParams();
 
   const role = (profile?.role || '').toLowerCase();
   const isAdmin = role === 'admin' || role === 'super_admin' || role === 'superadmin';
+  const myUid = String(profile?.id || '');
 
-  const {
-    cashbooks,
-    cashbooksLoading,
-    cashbooksError,
-    refreshCashbooks,
-    bookDetail,
-    bookDetailLoading,
-    bookDetailError,
-    loadCashbookDetail,
-    clearCashbookDetail,
-    createCashbook,
-    importOrders,
-    deleteEntry,
-    financeSummary,
-    financeSummaryLoading,
-    financeSummaryError,
-    loadFinanceSummary,
-  } = useCashBook();
+  const cb = useCashBook();
 
   const [toast, setToast] = useState<ToastState>(null);
-  const triggerToast = (message: string, type: 'success' | 'danger' | 'info' = 'success') => {
+  const showToast = (message: string, type: 'success' | 'danger' | 'info' = 'success') => {
     setToast({ message, type });
-    setTimeout(() => setToast(null), 4000);
+    window.setTimeout(() => setToast(null), 4200);
   };
 
-  const isReportsView = location.pathname.endsWith('/reports');
-  const isDetailView = !isReportsView && Boolean(bookId) && bookId !== 'reports';
+  // route → which layer
+  const reportsView = sp.get('view') === 'reports';
+  const oversightSellerId = sp.get('seller') || '';
+  const ledgerOwnerId = sp.get('owner') || '';
+  const isLedger = Boolean(bookId) && !reportsView;
 
-  // Non-admin actors (seller/creator) load their own cashbook list + finance summary on mount.
+  // ── data loading ────────────────────────────────────────────────────
   useEffect(() => {
-    if (!isAdmin) {
-      refreshCashbooks();
-      loadFinanceSummary();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAdmin]);
-
-  useEffect(() => {
-    if (isDetailView && bookId) {
-      loadCashbookDetail(bookId);
+    if (isLedger) return;
+    if (isAdmin) {
+      if (oversightSellerId) cb.loadOversightSeller(oversightSellerId);
+      else cb.loadOversight();
     } else {
-      clearCashbookDetail();
+      cb.refreshCashbooks();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isDetailView, bookId]);
+  }, [isAdmin, oversightSellerId, isLedger]);
 
-  // ---- Admin: Seller/Creator finance inspector (the only real cross-user capability) ----
-  const [inspectSellerId, setInspectSellerId] = useState('');
-  const handleInspectSeller = (e: React.FormEvent) => {
-    e.preventDefault();
-    const id = inspectSellerId.trim();
-    if (!id) {
-      triggerToast('Enter a seller/creator user ID to inspect', 'danger');
-      return;
+  useEffect(() => {
+    if (isLedger && bookId) {
+      cb.loadCashbookDetail(bookId, isAdmin ? ledgerOwnerId || undefined : undefined);
+    } else {
+      cb.clearCashbookDetail();
     }
-    loadFinanceSummary(id);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLedger, bookId, ledgerOwnerId]);
 
-  // ---- New Book modal (seller/creator only — blocked server-side for admin) ----
-  const [isNewBookModalOpen, setIsNewBookModalOpen] = useState(false);
-  const [newBookName, setNewBookName] = useState('');
-  const [newBookEmoji, setNewBookEmoji] = useState(EMOJI_CHOICES[0]);
-  const [newBookColor, setNewBookColor] = useState(COLOR_CHOICES[0]);
-  const [creatingBook, setCreatingBook] = useState(false);
-
-  const handleCreateBook = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newBookName.trim()) {
-      triggerToast('Please enter a book name', 'danger');
-      return;
-    }
-    setCreatingBook(true);
-    try {
-      const book = await createCashbook(newBookName.trim(), newBookEmoji, newBookColor);
-      triggerToast(`Created cashbook "${book.name}"`, 'success');
-      setIsNewBookModalOpen(false);
-      setNewBookName('');
-      setNewBookEmoji(EMOJI_CHOICES[0]);
-      setNewBookColor(COLOR_CHOICES[0]);
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Failed to create cashbook', 'danger');
-    } finally {
-      setCreatingBook(false);
-    }
-  };
-
-  // ---- Import Orders modal — the ONLY way entries get into a cashbook. ----
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [importTargetBookId, setImportTargetBookId] = useState<string>('');
-  const [importNewBookName, setImportNewBookName] = useState('Platform Sales Ledger');
-  const [importSearch, setImportSearch] = useState('');
-  const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
-  const [importing, setImporting] = useState(false);
-
-  const openImportModal = () => {
-    setImportTargetBookId(cashbooks[0]?.id || '');
-    setSelectedOrderIds(new Set());
-    setImportSearch('');
-    setIsImportModalOpen(true);
-  };
-
-  const importableOrders = useMemo(() => {
-    const q = importSearch.trim().toLowerCase();
-    return (orders || []).filter((o) => {
-      if (!q) return true;
-      return (
-        o.id.toLowerCase().includes(q) ||
-        (o.customer?.name || '').toLowerCase().includes(q) ||
-        (o.product?.name || '').toLowerCase().includes(q)
-      );
-    });
-  }, [orders, importSearch]);
-
-  const toggleOrderSelected = (id: string) => {
-    setSelectedOrderIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleImportOrders = async () => {
-    if (selectedOrderIds.size === 0) {
-      triggerToast('Select at least one order to import', 'danger');
-      return;
-    }
-    setImporting(true);
-    try {
-      const items = Array.from(selectedOrderIds).map((orderId) => ({ orderId }));
-      const params = importTargetBookId
-        ? { bookId: importTargetBookId, items }
-        : { newBookName: (importNewBookName || 'Platform Sales Ledger').trim() || 'Platform Sales Ledger', newBookIcon: '📦', items };
-      const result = await importOrders(params);
-      const parts = [`${result.imported} line item(s) imported`];
-      if (result.skipped) parts.push(`${result.skipped} already imported`);
-      if (result.failed) parts.push(`${result.failed} not owned by you`);
-      triggerToast(parts.join(', ') + '.', result.imported > 0 ? 'success' : 'info');
-      setIsImportModalOpen(false);
-      navigate(`/admin/cashbook/${result.book.id}`);
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Failed to import orders', 'danger');
-    } finally {
-      setImporting(false);
-    }
-  };
-
-  // ---- Delete entry ----
-  const [deletingEntryId, setDeletingEntryId] = useState<string | null>(null);
-  const [confirmDeleteEntryId, setConfirmDeleteEntryId] = useState<string | null>(null);
-
-  const handleDeleteEntry = async (entryId: string) => {
-    setDeletingEntryId(entryId);
-    try {
-      await deleteEntry(entryId);
-      triggerToast('Entry deleted.', 'info');
-    } catch (error) {
-      triggerToast(error instanceof Error ? error.message : 'Failed to delete entry', 'danger');
-    } finally {
-      setDeletingEntryId(null);
-      setConfirmDeleteEntryId(null);
-    }
-  };
-
-  // ---- Aggregate stats for the dashboard (sums of real per-book summaries the API returned) ----
-  const aggregated = useMemo(() => {
-    return cashbooks.reduce(
-      (acc, b) => {
-        acc.totalRevenue += b.summary.totalRevenue;
-        acc.totalItems += b.summary.totalItems;
-        acc.entryCount += b.summary.entryCount;
-        return acc;
-      },
-      { totalRevenue: 0, totalItems: 0, entryCount: 0 },
-    );
-  }, [cashbooks]);
-
+  // ── render switch ──────────────────────────────────────────────────
   return (
-    <div className="flex-1 w-full min-h-screen bg-app-bg text-app-text-primary p-6 transition-all relative font-sans leading-relaxed">
-      {/* Toast */}
-      {toast && (
-        <div
-          className={`fixed top-8 right-8 z-[100] flex items-center gap-3 px-5 py-4 border rounded-[5px] shadow-2xl transition-all duration-300 ${
-            toast.type === 'success'
-              ? 'bg-green-50 border-[#22C55E]/25 text-[#22C55E]'
-              : toast.type === 'danger'
-              ? 'bg-red-50 border-[#EF4444]/25 text-[#EF4444]'
-              : 'bg-blue-50 border-blue-200 text-blue-700'
-          }`}
-        >
-          <div className="text-sm font-bold flex-1 max-w-sm">{toast.message}</div>
-          <button onClick={() => setToast(null)} className="opacity-60 hover:opacity-100 border-0 bg-transparent cursor-pointer">
-            <X className="w-4 h-4 shrink-0" />
-          </button>
-        </div>
+    <div style={{ padding: 24, minHeight: '100%', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
+
+      {!isLedger && !reportsView && isAdmin && !oversightSellerId && (
+        <OversightIndexView cb={cb} navigate={navigate} />
       )}
-
-      {/* =========================================
-          VIEW 1 — DASHBOARD (Admin inspector or My Books)
-          ========================================= */}
-      {!isDetailView && !isReportsView && (
-        <div className="space-y-6">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-5 border-b border-app-border pb-6">
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-2xl font-black text-app-text-primary tracking-tight">{isAdmin ? 'Cashbook Hub' : 'My Cashbook'}</h1>
-                <span className="text-[10px] uppercase font-black tracking-widest px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">
-                  {role || 'guest'}
-                </span>
-              </div>
-              <p className="text-xs text-app-text-secondary mt-1.5">
-                {isAdmin
-                  ? 'Inspect a seller or creator’s real payout summary.'
-                  : 'Real cashbooks built from your imported order lines.'}
-              </p>
-            </div>
-
-            {!isAdmin && (
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  onClick={() => refreshCashbooks()}
-                  className="px-3 py-2 border border-app-border bg-white text-app-text-secondary hover:bg-slate-50 text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${cashbooksLoading ? 'animate-spin' : ''}`} />
-                  Refresh
-                </button>
-                <button
-                  onClick={openImportModal}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer shadow-md border-0"
-                >
-                  <FileSpreadsheet className="w-3.5 h-3.5" />
-                  Import Orders
-                </button>
-                <button
-                  onClick={() => setIsNewBookModalOpen(true)}
-                  className="px-4 py-2 bg-app-accent text-white hover:bg-[#EF3C23] text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer shadow-md border-0"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  New Book
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Admin: real cross-user capability is finance/summary + adjustments, scoped to one seller at a time */}
-          {isAdmin && (
-            <div className="bg-app-card border border-app-border rounded-[5px] p-6 shadow-sm space-y-5">
-              <div className="flex items-start gap-2 text-xs text-app-text-secondary bg-slate-50 border border-app-border rounded-[5px] p-3">
-                <Info className="w-4 h-4 shrink-0 mt-0.5 text-app-accent" />
-                <p>
-                  The Cashbook API has no endpoint for admins to browse or list another user&apos;s cashbooks/entries — cashbooks are
-                  strictly self-owned. The only real cross-user capability admins have is viewing a specific seller or creator&apos;s
-                  finance summary below.
-                </p>
-              </div>
-
-              <form onSubmit={handleInspectSeller} className="flex flex-wrap items-end gap-3">
-                <div className="flex-1 min-w-[220px]">
-                  <label className="text-[10px] font-black text-app-text-muted uppercase tracking-wider block mb-1.5">
-                    Seller / Creator User ID
-                  </label>
-                  <input
-                    type="text"
-                    value={inspectSellerId}
-                    onChange={(e) => setInspectSellerId(e.target.value)}
-                    placeholder="e.g. seller_a1b2c3"
-                    className="w-full px-3 py-2 text-xs border border-app-border rounded-[5px] bg-white text-app-text-primary focus:outline-none focus:border-app-accent"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={financeSummaryLoading}
-                  className="px-5 py-2 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EF3C23] disabled:opacity-60 cursor-pointer border-0 flex items-center gap-1.5"
-                >
-                  {financeSummaryLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
-                  Inspect
-                </button>
-              </form>
-
-              {financeSummaryError && (
-                <div className="flex items-center gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-[5px] p-3">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  {financeSummaryError}
-                </div>
-              )}
-
-              {financeSummary && !financeSummaryError && <FinanceSummaryPanel summary={financeSummary} />}
-            </div>
-          )}
-
-          {!isAdmin && (
-            <>
-              {/* Stat cards from real, already-fetched per-book summaries */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-                <div className="bg-app-card border border-app-border rounded-[5px] p-5 shadow-sm">
-                  <div className="flex justify-between items-center text-app-text-muted">
-                    <span className="text-xs font-bold uppercase tracking-wider">Total Revenue Imported</span>
-                    <div className="p-1.5 bg-[#F0FDF4] text-[#22C55E] rounded-[5px]">
-                      <ArrowUpRight className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div className="text-2xl font-black text-app-text-primary tracking-tight mt-2">
-                    ৳{aggregated.totalRevenue.toLocaleString()}
-                  </div>
-                  <div className="text-[10px] text-app-text-muted mt-2">Across all your cashbooks</div>
-                </div>
-                <div className="bg-app-card border border-app-border rounded-[5px] p-5 shadow-sm">
-                  <div className="flex justify-between items-center text-app-text-muted">
-                    <span className="text-xs font-bold uppercase tracking-wider">Line Items</span>
-                    <div className="p-1.5 bg-orange-100 text-app-accent rounded-[5px]">
-                      <FileText className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div className="text-2xl font-black text-app-text-primary tracking-tight mt-2">{aggregated.entryCount}</div>
-                  <div className="text-[10px] text-app-text-muted mt-2">Imported order lines</div>
-                </div>
-                <div className="bg-app-card border border-app-border rounded-[5px] p-5 shadow-sm">
-                  <div className="flex justify-between items-center text-app-text-muted">
-                    <span className="text-xs font-bold uppercase tracking-wider">Total Books</span>
-                    <div className="p-1.5 bg-blue-100 text-blue-600 rounded-[5px]">
-                      <Wallet className="w-4 h-4" />
-                    </div>
-                  </div>
-                  <div className="text-2xl font-black text-app-text-primary tracking-tight mt-2">{cashbooks.length}</div>
-                  <div className="text-[10px] text-app-text-muted mt-2">
-                    <Link to="/admin/cashbook/reports" className="text-app-accent hover:underline">
-                      View Reports →
-                    </Link>
-                  </div>
-                </div>
-              </div>
-
-              <div className="bg-app-card border border-app-border rounded-[5px] p-6 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-app-border pb-5 mb-5">
-                  <h2 className="text-base font-black text-app-text-primary flex items-center gap-2">
-                    My Books
-                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-app-text-secondary">{cashbooks.length}</span>
-                  </h2>
-                </div>
-
-                {cashbooksError && (
-                  <div className="flex items-center justify-between gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-[5px] p-3 mb-4">
-                    <span className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 shrink-0" />
-                      {cashbooksError}
-                    </span>
-                    <button onClick={() => refreshCashbooks()} className="font-bold underline cursor-pointer border-0 bg-transparent text-red-600">
-                      Retry
-                    </button>
-                  </div>
-                )}
-
-                {cashbooksLoading && cashbooks.length === 0 ? (
-                  <div className="py-16 text-center text-app-text-muted text-sm flex flex-col items-center gap-2">
-                    <Loader2 className="w-6 h-6 animate-spin" />
-                    Loading your cashbooks…
-                  </div>
-                ) : cashbooks.length === 0 && !cashbooksError ? (
-                  <div className="py-16 text-center">
-                    <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center mx-auto text-3xl">📭</div>
-                    <h3 className="text-sm font-bold text-app-text-primary mt-4">No Cashbooks Yet</h3>
-                    <p className="text-xs text-app-text-muted mt-1.5 max-w-md mx-auto">
-                      Create a book, then import your delivered order lines into it to start tracking real revenue.
-                    </p>
-                    <button
-                      onClick={() => setIsNewBookModalOpen(true)}
-                      className="mt-4 px-5 py-2 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EF3C23] cursor-pointer border-0"
-                    >
-                      + Create Your First Book
-                    </button>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                    {cashbooks.map((book) => (
-                      <Link
-                        key={book.id}
-                        to={`/admin/cashbook/${book.id}`}
-                        className="border border-app-border rounded-[5px] overflow-hidden flex flex-col justify-between transition-all hover:shadow-lg bg-white no-underline"
-                        style={{ borderTop: `4px solid ${book.color}` }}
-                      >
-                        <div className="p-5 flex-1">
-                          <div className="flex justify-between items-start">
-                            <span className="text-3xl p-1 bg-slate-50 border border-slate-100 rounded-[5px] inline-block">{book.icon}</span>
-                            <span className="text-[10px] text-app-text-muted font-bold block text-right">
-                              {new Date(book.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
-                            </span>
-                          </div>
-                          <h3 className="text-sm font-black text-app-text-primary mt-3 truncate" title={book.name}>
-                            {book.name}
-                          </h3>
-                          {book.cashbookReferenceId && (
-                            <div className="text-[9px] text-app-text-muted font-mono mt-0.5">{book.cashbookReferenceId}</div>
-                          )}
-                          <div className="text-[10px] text-app-text-muted font-black mt-2 flex items-center gap-1 uppercase">
-                            <FileText className="w-3.5 h-3.5" />
-                            {book.summary.entryCount} Entries
-                          </div>
-                        </div>
-                        <div className="px-5 py-3 bg-slate-50 border-t border-app-border">
-                          <div className="text-[10px] text-app-text-muted font-bold uppercase">Revenue Imported</div>
-                          <div className="text-lg font-black text-app-text-primary">৳{book.summary.totalRevenue.toLocaleString()}</div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+      {!isLedger && !reportsView && isAdmin && oversightSellerId && (
+        <OversightSellerView cb={cb} navigate={navigate} sellerId={oversightSellerId} />
       )}
-
-      {/* =========================================
-          VIEW 2 — BOOK DETAIL
-          ========================================= */}
-      {isDetailView && (
-        <div className="space-y-6">
-          <div className="flex items-center gap-4 border-b border-app-border pb-6">
-            <button
-              onClick={() => navigate('/admin/cashbook')}
-              className="p-2 border border-app-border bg-white text-app-text-secondary hover:bg-slate-100 rounded-[5px] transition-all shrink-0 cursor-pointer"
-            >
-              <ChevronLeft className="w-4 h-4 text-app-accent shrink-0" />
-            </button>
-            {bookDetail && (
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl">{bookDetail.book.icon}</span>
-                  <h1 className="text-xl font-black text-app-text-primary tracking-tight">{bookDetail.book.name}</h1>
-                </div>
-                {bookDetail.book.cashbookReferenceId && (
-                  <p className="text-xs text-app-text-secondary mt-1 font-mono">{bookDetail.book.cashbookReferenceId}</p>
-                )}
-              </div>
-            )}
-          </div>
-
-          {bookDetailLoading && (
-            <div className="py-16 text-center text-app-text-muted text-sm flex flex-col items-center gap-2">
-              <Loader2 className="w-6 h-6 animate-spin" />
-              Loading cashbook…
-            </div>
-          )}
-
-          {bookDetailError && !bookDetailLoading && (
-            <div className="flex items-center justify-between gap-2 text-xs text-red-600 bg-red-50 border border-red-200 rounded-[5px] p-4">
-              <span className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0" />
-                {bookDetailError}
-              </span>
-              <button
-                onClick={() => bookId && loadCashbookDetail(bookId)}
-                className="font-bold underline cursor-pointer border-0 bg-transparent text-red-600"
-              >
-                Retry
-              </button>
-            </div>
-          )}
-
-          {bookDetail && !bookDetailLoading && (
-            <>
-              <div className="grid grid-cols-1 lg:grid-cols-4 gap-5">
-                <SummaryCard label="Revenue" value={`৳${bookDetail.summary.totalRevenue.toLocaleString()}`} />
-                <SummaryCard label="Orders" value={String(bookDetail.summary.totalSales)} />
-                <SummaryCard label="Items" value={String(bookDetail.summary.totalItems)} />
-                <SummaryCard label="Avg. Order Value" value={`৳${bookDetail.summary.averageOrderValue.toLocaleString()}`} />
-              </div>
-
-              <div className="bg-app-card border border-app-border rounded-[5px] p-6 shadow-sm">
-                <div className="flex items-center justify-between gap-4 border-b border-app-border pb-5 mb-5">
-                  <h2 className="text-base font-black text-app-text-primary">
-                    Entries
-                    <span className="ml-2 text-xs px-2.5 py-0.5 rounded-full bg-slate-100 text-app-text-secondary">
-                      {bookDetail.entries.length}
-                    </span>
-                  </h2>
-                  {!isAdmin && (
-                    <button
-                      onClick={openImportModal}
-                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-bold rounded-[5px] transition-all flex items-center gap-1.5 cursor-pointer shadow-sm border-0"
-                    >
-                      <FileSpreadsheet className="w-3.5 h-3.5" />
-                      Import More Orders
-                    </button>
-                  )}
-                </div>
-
-                <div className="mb-4 flex items-start gap-2 text-[11px] text-app-text-muted bg-slate-50 border border-app-border rounded-[5px] p-3">
-                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-app-accent" />
-                  Entries are always imported from real order lines you sold — there is no manual entry creation. Deleting an entry
-                  only removes it from this reporting ledger; it never changes the underlying order, payment, or escrow record.
-                </div>
-
-                {bookDetail.entries.length === 0 ? (
-                  <div className="py-12 text-center text-app-text-muted text-xs">No entries in this book yet.</div>
-                ) : (
-                  <div className="overflow-x-auto -mx-2 px-2">
-                    <table className="w-full text-left border-collapse min-w-[720px]">
-                      <thead className="bg-slate-50 border-b border-app-border text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">
-                        <tr>
-                          <th className="p-3">Item</th>
-                          <th className="p-3">Order</th>
-                          <th className="p-3">Qty</th>
-                          <th className="p-3">Unit Price</th>
-                          <th className="p-3">Amount</th>
-                          <th className="p-3">Order Date</th>
-                          <th className="p-3">Status</th>
-                          <th className="p-3 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-app-border text-[12px]">
-                        {bookDetail.entries.map((entry) => (
-                          <tr key={entry.entryId} className="hover:bg-slate-50/50">
-                            <td className="p-3">
-                              <div className="font-bold text-app-text-primary">{entry.productTitle || entry.description}</div>
-                              {entry.category && <div className="text-[10px] text-app-text-muted">{entry.category}</div>}
-                            </td>
-                            <td className="p-3 text-app-text-secondary font-mono text-[11px]">{entry.orderId || '—'}</td>
-                            <td className="p-3 text-app-text-secondary">{entry.quantity ?? '—'}</td>
-                            <td className="p-3 text-app-text-secondary">
-                              {typeof entry.unitPrice === 'number' ? `৳${entry.unitPrice.toLocaleString()}` : '—'}
-                            </td>
-                            <td className="p-3 font-black text-app-text-primary">৳{entry.amount.toLocaleString()}</td>
-                            <td className="p-3 text-app-text-muted text-[11px]">
-                              {entry.orderDate ? new Date(entry.orderDate).toLocaleDateString() : '—'}
-                            </td>
-                            <td className="p-3 text-app-text-muted text-[11px]">{entry.orderStatus || '—'}</td>
-                            <td className="p-3 text-right">
-                              <button
-                                onClick={() => setConfirmDeleteEntryId(entry.entryId)}
-                                disabled={deletingEntryId === entry.entryId}
-                                className="p-1.5 text-app-text-secondary hover:text-red-500 hover:bg-red-50 rounded transition-all cursor-pointer border-0 bg-transparent disabled:opacity-50"
-                                title="Delete entry"
-                              >
-                                {deletingEntryId === entry.entryId ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
+      {!isLedger && !reportsView && !isAdmin && (
+        <SellerHubView cb={cb} navigate={navigate} showToast={showToast} myUid={myUid} />
       )}
-
-      {/* =========================================
-          VIEW 3 — REPORTS (aggregate of already-fetched real per-book summaries)
-          ========================================= */}
-      {isReportsView && (
-        <div className="space-y-6">
-          <div className="flex items-center gap-4 border-b border-app-border pb-6">
-            <button
-              onClick={() => navigate('/admin/cashbook')}
-              className="p-2 border border-app-border bg-white text-app-text-secondary hover:bg-slate-100 rounded-[5px] transition-all shrink-0 cursor-pointer"
-            >
-              <ChevronLeft className="w-4 h-4 text-app-accent shrink-0" />
-            </button>
-            <h1 className="text-xl font-black text-app-text-primary tracking-tight">Cashbook Reports</h1>
-          </div>
-
-          {isAdmin ? (
-            <div className="bg-app-card border border-app-border rounded-[5px] p-6 text-sm text-app-text-secondary">
-              Reports aggregate a single account&apos;s own cashbooks. Use the Cashbook Hub&apos;s seller/creator inspector to view a
-              specific user&apos;s finance summary instead.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-              <SummaryCard label="Total Revenue Imported" value={`৳${aggregated.totalRevenue.toLocaleString()}`} icon={<TrendingUp className="w-4 h-4" />} />
-              <SummaryCard label="Total Line Items" value={String(aggregated.entryCount)} icon={<FileText className="w-4 h-4" />} />
-              <SummaryCard label="Total Books" value={String(cashbooks.length)} icon={<Wallet className="w-4 h-4" />} />
-            </div>
-          )}
-
-          {!isAdmin && (
-            <div className="bg-app-card border border-app-border rounded-[5px] p-6 shadow-sm">
-              <h2 className="text-base font-black text-app-text-primary mb-4">Per-Book Breakdown</h2>
-              {cashbooks.length === 0 ? (
-                <div className="text-xs text-app-text-muted">No cashbooks yet.</div>
-              ) : (
-                <table className="w-full text-left border-collapse">
-                  <thead className="bg-slate-50 border-b border-app-border text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">
-                    <tr>
-                      <th className="p-3">Book</th>
-                      <th className="p-3">Orders</th>
-                      <th className="p-3">Items</th>
-                      <th className="p-3">Entries</th>
-                      <th className="p-3 text-right">Revenue</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-app-border text-[12px]">
-                    {cashbooks.map((b) => (
-                      <tr key={b.id}>
-                        <td className="p-3 font-bold text-app-text-primary">
-                          {b.icon} {b.name}
-                        </td>
-                        <td className="p-3 text-app-text-secondary">{b.summary.totalSales}</td>
-                        <td className="p-3 text-app-text-secondary">{b.summary.totalItems}</td>
-                        <td className="p-3 text-app-text-secondary">{b.summary.entryCount}</td>
-                        <td className="p-3 text-right font-black">৳{b.summary.totalRevenue.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ---- New Book Modal ---- */}
-      {isNewBookModalOpen && (
-        <div className="fixed inset-0 z-[90] bg-black/40 flex items-center justify-center p-4" onClick={() => !creatingBook && setIsNewBookModalOpen(false)}>
-          <form
-            onClick={(e) => e.stopPropagation()}
-            onSubmit={handleCreateBook}
-            className="bg-white rounded-[5px] shadow-2xl w-full max-w-md p-6 space-y-4"
-          >
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black text-app-text-primary">Create New Cashbook</h3>
-              <button type="button" onClick={() => setIsNewBookModalOpen(false)} className="border-0 bg-transparent cursor-pointer text-app-text-muted">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-app-text-muted uppercase tracking-wider block mb-1.5">Book Name</label>
-              <input
-                autoFocus
-                value={newBookName}
-                onChange={(e) => setNewBookName(e.target.value)}
-                placeholder="e.g. Outlet Sales Ledger"
-                className="w-full px-3 py-2 text-xs border border-app-border rounded-[5px] bg-white text-app-text-primary focus:outline-none focus:border-app-accent"
-              />
-            </div>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <label className="text-[10px] font-black text-app-text-muted uppercase tracking-wider block mb-1.5">Icon</label>
-                <div className="flex flex-wrap gap-1.5">
-                  {EMOJI_CHOICES.map((em) => (
-                    <button
-                      type="button"
-                      key={em}
-                      onClick={() => setNewBookEmoji(em)}
-                      className={`w-8 h-8 rounded-[5px] border text-base flex items-center justify-center cursor-pointer ${
-                        newBookEmoji === em ? 'border-app-accent bg-orange-50' : 'border-app-border bg-white'
-                      }`}
-                    >
-                      {em}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-app-text-muted uppercase tracking-wider block mb-1.5">Color</label>
-              <div className="flex flex-wrap gap-1.5">
-                {COLOR_CHOICES.map((c) => (
-                  <button
-                    type="button"
-                    key={c}
-                    onClick={() => setNewBookColor(c)}
-                    className={`w-7 h-7 rounded-full border-2 cursor-pointer ${newBookColor === c ? 'border-app-text-primary' : 'border-transparent'}`}
-                    style={{ backgroundColor: c }}
-                  />
-                ))}
-              </div>
-            </div>
-            <button
-              type="submit"
-              disabled={creatingBook}
-              className="w-full py-2.5 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EF3C23] disabled:opacity-60 cursor-pointer border-0 flex items-center justify-center gap-2"
-            >
-              {creatingBook && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              Create Book
-            </button>
-          </form>
-        </div>
-      )}
-
-      {/* ---- Import Orders Modal ---- */}
-      {isImportModalOpen && (
-        <div className="fixed inset-0 z-[90] bg-black/40 flex items-center justify-center p-4" onClick={() => !importing && setIsImportModalOpen(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-[5px] shadow-2xl w-full max-w-2xl p-6 space-y-4 max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black text-app-text-primary">Import Orders Into Cashbook</h3>
-              <button type="button" onClick={() => setIsImportModalOpen(false)} className="border-0 bg-transparent cursor-pointer text-app-text-muted">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="flex flex-wrap gap-3 items-end">
-              <div className="flex-1 min-w-[180px]">
-                <label className="text-[10px] font-black text-app-text-muted uppercase tracking-wider block mb-1.5">Target Book</label>
-                <select
-                  value={importTargetBookId}
-                  onChange={(e) => setImportTargetBookId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs border border-app-border rounded-[5px] bg-white text-app-text-primary focus:outline-none"
-                >
-                  <option value="">+ Create New Book</option>
-                  {cashbooks.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.icon} {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {!importTargetBookId && (
-                <div className="flex-1 min-w-[180px]">
-                  <label className="text-[10px] font-black text-app-text-muted uppercase tracking-wider block mb-1.5">New Book Name</label>
-                  <input
-                    value={importNewBookName}
-                    onChange={(e) => setImportNewBookName(e.target.value)}
-                    className="w-full px-3 py-2 text-xs border border-app-border rounded-[5px] bg-white text-app-text-primary focus:outline-none"
-                  />
-                </div>
-              )}
-            </div>
-
-            <div className="relative">
-              <span className="absolute left-3 top-2.5 opacity-60">
-                <Search className="w-4 h-4" />
-              </span>
-              <input
-                value={importSearch}
-                onChange={(e) => setImportSearch(e.target.value)}
-                placeholder="Search orders by ID, buyer, or product…"
-                className="w-full pl-9 pr-4 py-2 text-xs border border-app-border rounded-[5px] bg-white text-app-text-primary focus:outline-none"
-              />
-            </div>
-
-            <div className="text-[11px] text-app-text-muted flex items-start gap-2 bg-slate-50 border border-app-border rounded-[5px] p-3">
-              <Info className="w-3.5 h-3.5 shrink-0 mt-0.5 text-app-accent" />
-              Only order lines you actually sold will be imported — the server checks ownership. Anything not yours is reported back
-              as not-imported rather than silently added.
-            </div>
-
-            <div className="flex-1 overflow-y-auto border border-app-border rounded-[5px] divide-y divide-app-border">
-              {importableOrders.length === 0 ? (
-                <div className="p-6 text-center text-xs text-app-text-muted">No orders match your search.</div>
-              ) : (
-                importableOrders.map((o) => (
-                  <label key={o.id} className="flex items-center gap-3 p-3 text-xs cursor-pointer hover:bg-slate-50">
-                    <input type="checkbox" checked={selectedOrderIds.has(o.id)} onChange={() => toggleOrderSelected(o.id)} />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-bold text-app-text-primary truncate">{o.product?.name || 'Order item'}</div>
-                      <div className="text-[10px] text-app-text-muted">
-                        {o.id} · {o.customer?.name || 'Unknown buyer'} · {o.timestamp ? new Date(o.timestamp).toLocaleDateString() : ''}
-                      </div>
-                    </div>
-                    <div className="font-black text-app-text-primary">৳{(o.total_payable ?? o.product?.price ?? 0).toLocaleString()}</div>
-                  </label>
-                ))
-              )}
-            </div>
-
-            <div className="flex items-center justify-between pt-2 border-t border-app-border">
-              <span className="text-[11px] text-app-text-muted font-bold">{selectedOrderIds.size} selected</span>
-              <button
-                onClick={handleImportOrders}
-                disabled={importing || selectedOrderIds.size === 0}
-                className="px-5 py-2 bg-app-accent text-white text-xs font-black rounded-[5px] hover:bg-[#EF3C23] disabled:opacity-60 cursor-pointer border-0 flex items-center gap-2"
-              >
-                {importing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                Import Selected
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ---- Delete Entry Confirm ---- */}
-      {confirmDeleteEntryId && (
-        <div className="fixed inset-0 z-[90] bg-black/40 flex items-center justify-center p-4" onClick={() => setConfirmDeleteEntryId(null)}>
-          <div onClick={(e) => e.stopPropagation()} className="bg-white rounded-[5px] shadow-2xl w-full max-w-sm p-6 space-y-4">
-            <div className="flex items-center gap-2 text-red-600">
-              <AlertTriangle className="w-5 h-5" />
-              <h3 className="text-sm font-black">Delete this entry?</h3>
-            </div>
-            <p className="text-xs text-app-text-secondary">
-              This removes it from your cashbook ledger only. It does not affect the underlying order, payment, or escrow record.
-            </p>
-            <div className="flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmDeleteEntryId(null)}
-                className="px-4 py-2 text-xs font-bold text-app-text-secondary hover:text-app-text-primary cursor-pointer border-0 bg-transparent"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={() => confirmDeleteEntryId && handleDeleteEntry(confirmDeleteEntryId)}
-                disabled={deletingEntryId === confirmDeleteEntryId}
-                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-xs font-black rounded-[5px] cursor-pointer border-0 flex items-center gap-2 disabled:opacity-60"
-              >
-                {deletingEntryId === confirmDeleteEntryId && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
+      {reportsView && !isAdmin && <ReportsView cb={cb} navigate={navigate} />}
+      {isLedger && (
+        <LedgerView
+          cb={cb}
+          navigate={navigate}
+          readOnly={isAdmin}
+          backTo={isAdmin ? `/admin/cashbook?seller=${encodeURIComponent(ledgerOwnerId)}` : '/admin/cashbook'}
+          showToast={showToast}
+        />
       )}
     </div>
   );
 }
 
-function SummaryCard({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+// ── shared bits ──────────────────────────────────────────────────────
+
+function Toast({ toast, onClose }: { toast: NonNullable<ToastState>; onClose: () => void }) {
+  const c =
+    toast.type === 'success'
+      ? { bg: '#F0FDF4', bd: 'rgba(22,163,74,0.3)', fg: CASH_IN }
+      : toast.type === 'danger'
+        ? { bg: '#FEF2F2', bd: 'rgba(220,38,38,0.3)', fg: CASH_OUT }
+        : { bg: '#EFF6FF', bd: '#BFDBFE', fg: '#2563EB' };
   return (
-    <div className="bg-app-card border border-app-border rounded-[5px] p-5 shadow-sm">
-      <div className="flex justify-between items-center text-app-text-muted">
-        <span className="text-[10px] font-black uppercase tracking-wider">{label}</span>
-        {icon && <div className="p-1.5 bg-orange-100 text-app-accent rounded-[5px]">{icon}</div>}
-      </div>
-      <div className="text-xl font-black text-app-text-primary tracking-tight mt-2">{value}</div>
+    <div
+      style={{
+        position: 'fixed',
+        top: 24,
+        right: 24,
+        zIndex: 100,
+        display: 'flex',
+        gap: 12,
+        alignItems: 'center',
+        padding: '14px 16px',
+        borderRadius: R.control,
+        background: c.bg,
+        border: `1px solid ${c.bd}`,
+        color: c.fg,
+        boxShadow: '0 16px 40px rgba(0,0,0,0.14)',
+        maxWidth: 420,
+      }}
+    >
+      <div style={{ fontSize: 12.5, fontWeight: 700, flex: 1 }}>{toast.message}</div>
+      <button
+        type="button"
+        onClick={onClose}
+        style={{ border: 'none', background: 'none', cursor: 'pointer', color: c.fg, opacity: 0.7 }}
+      >
+        <X style={{ width: 15, height: 15 }} />
+      </button>
     </div>
   );
 }
 
-function FinanceSummaryPanel({
-  summary,
+function Kpi({
+  label,
+  value,
+  tone,
+  icon,
+  hint,
 }: {
-  summary: import('../../services/cashbookApi').FinanceSummary;
+  label: string;
+  value: string;
+  tone?: 'in' | 'out' | 'net';
+  icon?: React.ReactNode;
+  hint?: string;
+}) {
+  const color = tone === 'in' ? CASH_IN : tone === 'out' ? CASH_OUT : tone === 'net' ? ACCENT : '#111827';
+  return (
+    <div style={{ ...S.card, borderRadius: R.card, padding: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ ...S.microLabel }}>{label}</span>
+        {icon && <span style={{ color, opacity: 0.85 }}>{icon}</span>}
+      </div>
+      <div style={{ fontSize: 19, fontWeight: 800, marginTop: 8, color }}>{value}</div>
+      {hint && <div style={{ fontSize: 10, color: MUTED, marginTop: 4 }}>{hint}</div>}
+    </div>
+  );
+}
+
+/** The genuine Cashbook folder/card — used for Seller books AND Admin brand/seller folders. */
+function FolderCard({
+  icon,
+  color,
+  title,
+  subtitle,
+  reference,
+  moneyIn,
+  moneyOut,
+  net,
+  countLabel,
+  updatedAt,
+  onOpen,
+  actions,
+}: {
+  icon: string;
+  color: string;
+  title: string;
+  subtitle?: string;
+  reference?: string;
+  moneyIn: number;
+  moneyOut: number;
+  net: number;
+  countLabel: string;
+  updatedAt?: string;
+  onOpen: () => void;
+  actions?: React.ReactNode;
 }) {
   return (
-    <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard label="Lifetime Earnings" value={`৳${summary.lifetimeEarnings.toLocaleString()}`} />
-        <SummaryCard label="Available Balance" value={`৳${summary.availableBalance.toLocaleString()}`} />
-        <SummaryCard label="Pending Approval" value={`৳${summary.pendingApproval.toLocaleString()}`} />
-        <SummaryCard label="Escrow Held" value={`৳${summary.escrowHeld.toLocaleString()}`} />
-        <SummaryCard label="Choosify Commission" value={`৳${summary.choosifyCommission.toLocaleString()} (${summary.choosifyCommissionPercent}%)`} />
-        <SummaryCard label="Other Adjustments" value={`৳${summary.otherAdjustments.toLocaleString()}`} />
-        <SummaryCard label="Net Withdrawable" value={`৳${summary.netWithdrawable.toLocaleString()}`} icon={<CheckCircle2 className="w-4 h-4" />} />
-        <SummaryCard label="Currency" value={summary.currency} />
+    <div
+      role="button"
+      tabIndex={0}
+      aria-label={title}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onOpen();
+        }
+      }}
+      style={{
+        ...S.card,
+        borderRadius: R.card,
+        borderTop: `3px solid ${color}`,
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        cursor: 'pointer',
+        transition: 'box-shadow .15s ease, transform .15s ease',
+      }}
+      onClick={onOpen}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = '0 14px 32px rgba(17,24,39,0.10)';
+        e.currentTarget.style.transform = 'translateY(-2px)';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = 'none';
+        e.currentTarget.style.transform = 'none';
+      }}
+    >
+      <div style={{ padding: 16, flex: 1 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <span
+            style={{
+              fontSize: 24,
+              lineHeight: 1,
+              padding: 8,
+              background: '#F9FAFB',
+              border: `1px solid ${BORDER}`,
+              borderRadius: R.control,
+            }}
+          >
+            {icon}
+          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            {updatedAt && (
+              <span style={{ fontSize: 10, color: MUTED, fontWeight: 700 }}>{formatDay(updatedAt)}</span>
+            )}
+            {actions}
+          </div>
+        </div>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: '#111827', marginTop: 12 }} title={title}>
+          {title}
+        </div>
+        {subtitle && <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{subtitle}</div>}
+        {reference && (
+          <div style={{ fontSize: 9.5, color: MUTED, fontFamily: 'monospace', marginTop: 3 }}>{reference}</div>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 10 }}>
+          <span style={S.microLabel}>{countLabel}</span>
+          <span style={{ fontSize: 10, fontWeight: 800, color: ACCENT }}>Open →</span>
+        </div>
       </div>
-      <p className="text-[11px] text-app-text-muted italic">{summary.commissionNote}</p>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr 1fr',
+          borderTop: `1px solid ${BORDER}`,
+          background: '#F9FAFB',
+        }}
+      >
+        <MiniStat label="Inflow" value={money(moneyIn)} color={CASH_IN} />
+        <MiniStat label="Outflow" value={money(moneyOut)} color={CASH_OUT} border />
+        <MiniStat label="Net" value={money(net)} color={net < 0 ? CASH_OUT : ACCENT} border />
+      </div>
+    </div>
+  );
+}
 
-      <div>
-        <h3 className="text-xs font-black text-app-text-primary uppercase tracking-wider mb-2">Adjustments</h3>
-        {summary.adjustments.length === 0 ? (
-          <div className="text-xs text-app-text-muted">No adjustments on record for this seller.</div>
+function MiniStat({ label, value, color, border }: { label: string; value: string; color: string; border?: boolean }) {
+  return (
+    <div style={{ padding: '10px 12px', borderLeft: border ? `1px solid ${BORDER}` : undefined }}>
+      <div style={{ fontSize: 8.5, fontWeight: 800, color: MUTED, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 12.5, fontWeight: 800, color, marginTop: 3 }}>{value}</div>
+    </div>
+  );
+}
+
+function HeaderBtn({
+  onClick,
+  children,
+  emphasis,
+  disabled,
+}: {
+  onClick: () => void;
+  children: React.ReactNode;
+  emphasis?: 'accent' | 'blue';
+  disabled?: boolean;
+}) {
+  const bg = emphasis === 'accent' ? ACCENT : emphasis === 'blue' ? '#2563EB' : '#fff';
+  const fg = emphasis ? '#fff' : '#374151';
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 6,
+        height: 36,
+        padding: '0 14px',
+        borderRadius: R.control,
+        border: emphasis ? 'none' : `1px solid ${BORDER}`,
+        background: bg,
+        color: fg,
+        fontSize: 11,
+        fontWeight: 800,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.6 : 1,
+        boxShadow: emphasis ? '0 6px 16px rgba(0,0,0,0.12)' : 'none',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ErrorRow({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        gap: 10,
+        padding: 12,
+        borderRadius: R.panel,
+        background: '#FEF2F2',
+        border: '1px solid rgba(220,38,38,0.25)',
+        color: CASH_OUT,
+        fontSize: 12,
+        fontWeight: 600,
+      }}
+    >
+      <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+        <AlertTriangle style={{ width: 15, height: 15 }} /> {message}
+      </span>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          style={{ border: 'none', background: 'none', color: CASH_OUT, fontWeight: 800, textDecoration: 'underline', cursor: 'pointer' }}
+        >
+          Retry
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Loading({ label }: { label: string }) {
+  return (
+    <div style={{ padding: 60, textAlign: 'center', color: MUTED, fontSize: 13, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+      <Loader2 style={{ width: 22, height: 22 }} className="animate-spin" />
+      {label}
+    </div>
+  );
+}
+
+function EmptyBooks({ onCreate }: { onCreate: () => void }) {
+  return (
+    <div style={{ padding: 60, textAlign: 'center' }}>
+      <div style={{ fontSize: 34 }}>📭</div>
+      <div style={{ fontSize: 13, fontWeight: 800, color: '#111827', marginTop: 12 }}>No cashbooks yet</div>
+      <div style={{ fontSize: 12, color: MUTED, marginTop: 6, maxWidth: 420, marginInline: 'auto' }}>
+        Create a book, then record Cash In / Cash Out or import your delivered order lines to start tracking real
+        money movement.
+      </div>
+      <button
+        type="button"
+        onClick={onCreate}
+        style={{
+          marginTop: 16,
+          height: 38,
+          padding: '0 18px',
+          borderRadius: R.control,
+          border: 'none',
+          background: ACCENT,
+          color: '#fff',
+          fontSize: 12,
+          fontWeight: 800,
+          cursor: 'pointer',
+        }}
+      >
+        + Create your first book
+      </button>
+    </div>
+  );
+}
+
+// ═══════════════════════════ SELLER HUB (Layer 1) ═════════════════════
+type CbApi = ReturnType<typeof useCashBook>;
+
+function SellerHubView({
+  cb,
+  navigate,
+  showToast,
+  myUid,
+}: {
+  cb: CbApi;
+  navigate: (to: string) => void;
+  showToast: (m: string, t?: 'success' | 'danger' | 'info') => void;
+  myUid: string;
+}) {
+  const [newBookOpen, setNewBookOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const agg = useMemo(() => aggregateBooks(cb.cashbooks), [cb.cashbooks]);
+
+  return (
+    <>
+      {/* header */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          gap: 16,
+          flexWrap: 'wrap',
+          borderBottom: `1px solid ${BORDER}`,
+          paddingBottom: 18,
+        }}
+      >
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.01em', margin: 0 }}>My Cashbook</h1>
+            <span
+              style={{
+                fontSize: 9,
+                fontWeight: 800,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                padding: '3px 10px',
+                borderRadius: 999,
+                background: 'rgba(37,99,235,0.10)',
+                color: '#2563EB',
+              }}
+            >
+              Seller / Creator · Private
+            </span>
+          </div>
+          <p style={{ fontSize: 12, color: '#6B7280', marginTop: 6, marginBottom: 0 }}>
+            Your private books — manual Cash In / Cash Out plus imported order revenue. Only visible to you.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          <HeaderBtn onClick={() => cb.refreshCashbooks()}>
+            <RefreshCw style={{ width: 13, height: 13 }} className={cb.cashbooksLoading ? 'animate-spin' : ''} /> Refresh
+          </HeaderBtn>
+          <HeaderBtn onClick={() => setImportOpen(true)} emphasis="blue">
+            <FileSpreadsheet style={{ width: 13, height: 13 }} /> Import Orders
+          </HeaderBtn>
+          <HeaderBtn onClick={() => setNewBookOpen(true)} emphasis="accent">
+            <Plus style={{ width: 13, height: 13 }} /> New Book
+          </HeaderBtn>
+        </div>
+      </div>
+
+      {/* KPI strip */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14 }}>
+        <Kpi label="Total Cash In" tone="in" value={formatCurrency(agg.moneyIn)} icon={<ArrowUpRight style={{ width: 16, height: 16 }} />} />
+        <Kpi label="Total Cash Out" tone="out" value={formatCurrency(agg.moneyOut)} icon={<ArrowDownLeft style={{ width: 16, height: 16 }} />} />
+        <Kpi label="Net Balance" tone="net" value={formatCurrency(agg.net)} icon={<Wallet style={{ width: 16, height: 16 }} />} />
+        <Kpi label="Total Books" value={String(cb.cashbooks.length)} hint="Tap a book to open its ledger" />
+      </div>
+
+      {/* books */}
+      <div style={{ ...S.card, borderRadius: R.card, padding: 18 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderBottom: `1px solid ${BORDER}`,
+            paddingBottom: 14,
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ fontSize: 14, fontWeight: 800 }}>
+            My Books <span style={{ color: MUTED, fontWeight: 700 }}>{cb.cashbooks.length}</span>
+          </div>
+          <a
+            href="/admin/cashbook?view=reports"
+            onClick={(e) => {
+              e.preventDefault();
+              navigate('/admin/cashbook?view=reports');
+            }}
+            style={{ fontSize: 11, fontWeight: 800, color: ACCENT, textDecoration: 'none' }}
+          >
+            View reports →
+          </a>
+        </div>
+
+        {cb.cashbooksError && <ErrorRow message={cb.cashbooksError} onRetry={() => cb.refreshCashbooks()} />}
+        {cb.cashbooksLoading && cb.cashbooks.length === 0 ? (
+          <Loading label="Loading your cashbooks…" />
+        ) : cb.cashbooks.length === 0 && !cb.cashbooksError ? (
+          <EmptyBooks onCreate={() => setNewBookOpen(true)} />
         ) : (
-          <table className="w-full text-left border-collapse">
-            <thead className="bg-slate-50 border-b border-app-border text-[10px] font-bold text-app-text-secondary uppercase tracking-widest">
-              <tr>
-                <th className="p-2">Date</th>
-                <th className="p-2">Type</th>
-                <th className="p-2">Reference</th>
-                <th className="p-2">Description</th>
-                <th className="p-2 text-right">Debit</th>
-                <th className="p-2 text-right">Credit</th>
-                <th className="p-2">Status</th>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
+            {cb.cashbooks.map((b) => (
+              <FolderCard
+                key={b.id}
+                icon={b.icon}
+                color={b.color}
+                title={b.name}
+                reference={b.cashbookReferenceId}
+                updatedAt={b.updatedAt}
+                moneyIn={b.summary.moneyIn}
+                moneyOut={b.summary.moneyOut}
+                net={b.summary.net}
+                countLabel={`${b.summary.entryCount} entr${b.summary.entryCount === 1 ? 'y' : 'ies'} · ${b.summary.importedCount} imported`}
+                onOpen={() => navigate(cashbookLedgerPath(b.id))}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      {newBookOpen && (
+        <NewBookModal
+          onClose={() => setNewBookOpen(false)}
+          onCreate={async (name, icon, color) => {
+            try {
+              const book = await cb.createCashbook(name, icon, color);
+              showToast(`Created “${book.name}”`);
+              setNewBookOpen(false);
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : 'Failed to create book', 'danger');
+            }
+          }}
+        />
+      )}
+      {importOpen && (
+        <ImportOrdersModal
+          books={cb.cashbooks}
+          myUid={myUid}
+          onClose={() => setImportOpen(false)}
+          onImport={cb.importOrders}
+          afterImport={(bookId) => {
+            setImportOpen(false);
+            navigate(cashbookLedgerPath(bookId));
+          }}
+          showToast={showToast}
+        />
+      )}
+    </>
+  );
+}
+
+// ═══════════════════════════ LEDGER (Layer 2) ════════════════════════
+
+function LedgerView({
+  cb,
+  navigate,
+  readOnly,
+  backTo,
+  showToast,
+}: {
+  cb: CbApi;
+  navigate: (to: string) => void;
+  readOnly: boolean;
+  backTo: string;
+  showToast: (m: string, t?: 'success' | 'danger' | 'info') => void;
+}) {
+  const detail = cb.bookDetail;
+  const [search, setSearch] = useState('');
+  const [entryModal, setEntryModal] = useState<null | { mode: 'cashIn' | 'cashOut' | 'edit'; entry?: CashbookEntry }>(null);
+  const [auditEntry, setAuditEntry] = useState<CashbookEntry | null>(null);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [confirmDeleteBook, setConfirmDeleteBook] = useState(false);
+  const [confirmDeleteEntry, setConfirmDeleteEntry] = useState<CashbookEntry | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const all = withRunningBalance(detail?.entries || []);
+    if (!q) return all;
+    return all.filter(({ entry }) =>
+      [entry.description, entry.contact, entry.category, entry.productTitle, entry.orderId, entry.paymentMode]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q)),
+    );
+  }, [detail?.entries, search]);
+
+  if (cb.bookDetailLoading) return <Loading label="Loading cashbook…" />;
+  if (cb.bookDetailError)
+    return (
+      <>
+        <BackBar label="All books" onBack={() => navigate(backTo)} />
+        <ErrorRow message={cb.bookDetailError} onRetry={() => detail && cb.loadCashbookDetail(detail.book.id)} />
+      </>
+    );
+  if (!detail) {
+    return (
+      <>
+        <BackBar label="All books" onBack={() => navigate(backTo)} />
+        <ErrorRow message="Cashbook not found or not available to you." />
+      </>
+    );
+  }
+
+  const s = detail.summary;
+
+  const doEntry = async (input: Parameters<CbApi['addManualEntry']>[1]) => {
+    setBusy(true);
+    try {
+      if (entryModal?.mode === 'edit' && entryModal.entry) {
+        await cb.updateEntry(entryModal.entry.entryId, input);
+        showToast('Entry updated.');
+      } else {
+        await cb.addManualEntry(detail.book.id, input);
+        showToast(`${input.direction === 'out' ? 'Cash out' : 'Cash in'} recorded.`);
+      }
+      setEntryModal(null);
+      setAuditEntry(null);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Failed to save entry', 'danger');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', borderBottom: `1px solid ${BORDER}`, paddingBottom: 16 }}>
+        <button
+          type="button"
+          onClick={() => navigate(backTo)}
+          style={{ height: 34, padding: '0 12px', borderRadius: R.control, border: `1px solid ${BORDER}`, background: '#fff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#374151' }}
+        >
+          <ChevronLeft style={{ width: 14, height: 14, color: ACCENT }} /> All Books
+        </button>
+        <span style={{ fontSize: 22 }}>{detail.book.icon}</span>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>{detail.book.name}</div>
+          {detail.book.cashbookReferenceId && (
+            <div style={{ fontSize: 10.5, color: MUTED, fontFamily: 'monospace' }}>{detail.book.cashbookReferenceId}</div>
+          )}
+        </div>
+        <div style={{ flex: 1 }} />
+        {readOnly ? (
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 10.5,
+              fontWeight: 800,
+              letterSpacing: '0.04em',
+              textTransform: 'uppercase',
+              padding: '6px 12px',
+              borderRadius: 999,
+              background: 'rgba(180,83,9,0.12)',
+              color: '#B45309',
+            }}
+          >
+            <Eye style={{ width: 13, height: 13 }} /> Read-only · Managed by Seller
+          </span>
+        ) : (
+          <>
+            <HeaderBtn onClick={() => setRenameOpen(true)}>
+              <Pencil style={{ width: 12, height: 12 }} /> Rename
+            </HeaderBtn>
+            <HeaderBtn onClick={() => setConfirmDeleteBook(true)}>
+              <Trash2 style={{ width: 12, height: 12 }} /> Delete book
+            </HeaderBtn>
+          </>
+        )}
+      </div>
+
+      {/* KPIs */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+        <Kpi label="Total Inflow" tone="in" value={formatCurrency(s.moneyIn)} hint="Cash in from sales, imports & manual" />
+        <Kpi label="Total Outflow" tone="out" value={formatCurrency(s.moneyOut)} hint="Expenses, refunds & adjustments" />
+        <Kpi label="Net Ledger Balance" tone="net" value={formatCurrency(s.net)} hint={`${s.importedCount} imported · ${s.manualCount} manual`} />
+      </div>
+
+      {/* toolbar */}
+      <div style={{ ...S.card, borderRadius: `${R.panel}px ${R.panel}px 0 0`, borderBottom: 'none', padding: '12px 14px', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 220 }}>
+          <Search style={{ width: 14, height: 14, position: 'absolute', left: 12, top: 12, color: MUTED }} />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search remarks, contact, order #, category…"
+            style={{ ...S.input, width: '100%', paddingLeft: 34 }}
+          />
+        </div>
+        {!readOnly && (
+          <>
+            <button
+              type="button"
+              onClick={() => setEntryModal({ mode: 'cashIn' })}
+              style={{ height: 38, padding: '0 16px', borderRadius: R.control, border: 'none', background: CASH_IN, color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <ArrowUpRight style={{ width: 13, height: 13 }} /> + Cash In
+            </button>
+            <button
+              type="button"
+              onClick={() => setEntryModal({ mode: 'cashOut' })}
+              style={{ height: 38, padding: '0 16px', borderRadius: R.control, border: 'none', background: CASH_OUT, color: '#fff', fontSize: 11, fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+            >
+              <ArrowDownLeft style={{ width: 13, height: 13 }} /> − Cash Out
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* ledger */}
+      <div style={{ ...S.card, borderRadius: `0 0 ${R.panel}px ${R.panel}px`, overflowX: 'auto' }}>
+        <table style={{ width: '100%', minWidth: 820, borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ background: '#F9FAFB' }}>
+              {['Date & Time', 'Details / Contact', 'Category', 'Payment Mode', 'Inflow (+/−)', 'Running Balance'].map((h) => (
+                <th key={h} style={thStyle}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ entry, running }) => {
+              const isCredit = entry.amount >= 0;
+              const flagged = entry.orderChanged && (entry.orderFlags || []).length > 0;
+              return (
+                <tr
+                  key={entry.entryId}
+                  onClick={() => setAuditEntry(entry)}
+                  style={{ borderTop: `1px solid #F1F3F5`, cursor: 'pointer' }}
+                >
+                  <td style={tdStyle}>
+                    <div style={{ fontWeight: 700 }}>{formatDay(entry.entryDate || entry.orderDate || entry.createdAt)}</div>
+                    <div style={{ fontSize: 10, color: MUTED }}>{entry.entryTime || new Date(entry.createdAt).toLocaleTimeString()}</div>
+                  </td>
+                  <td style={tdStyle}>
+                    <div style={{ fontWeight: 700 }}>{entry.productTitle || entry.description || '—'}</div>
+                    <div style={{ fontSize: 10, display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 2 }}>
+                      {entry.contact && <span style={{ color: ACCENT, fontWeight: 700 }}>● {entry.contact}</span>}
+                      {entry.source === 'order_import' && entry.orderId && (
+                        <span
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/admin/platform-orders/${encodeURIComponent(entry.orderId!)}`);
+                          }}
+                          style={{ color: '#2563EB', fontWeight: 700, textDecoration: 'underline', cursor: 'pointer' }}
+                        >
+                          Order #{entry.orderId}
+                        </span>
+                      )}
+                      <span style={{ color: MUTED, fontWeight: 700 }}>{entry.source === 'order_import' ? 'Imported' : 'Manual'}</span>
+                      {flagged &&
+                        (entry.orderFlags || []).map((f) => (
+                          <span
+                            key={f}
+                            style={{ background: 'rgba(220,38,38,0.10)', color: CASH_OUT, fontWeight: 800, padding: '1px 7px', borderRadius: R.chip }}
+                          >
+                            ⚠ {orderFlagLabel(f)}
+                          </span>
+                        ))}
+                    </div>
+                  </td>
+                  <td style={tdStyle}>
+                    {entry.category ? (
+                      <span style={{ background: '#F3F4F6', color: '#374151', fontSize: 9.5, fontWeight: 700, padding: '3px 9px', borderRadius: R.chip }}>
+                        {entry.category}
+                      </span>
+                    ) : (
+                      <span style={{ color: MUTED }}>—</span>
+                    )}
+                  </td>
+                  <td style={{ ...tdStyle, color: MUTED }}>{entry.paymentMode || '—'}</td>
+                  <td style={{ ...tdStyle, fontWeight: 800, color: isCredit ? CASH_IN : CASH_OUT }}>
+                    {isCredit ? '+' : '−'} {money(entry.amount)}
+                  </td>
+                  <td style={{ ...tdStyle, fontWeight: 800, color: running < 0 ? CASH_OUT : '#111827' }}>{money(running)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {rows.length === 0 && (
+          <div style={{ textAlign: 'center', color: MUTED, fontStyle: 'italic', fontSize: 12, padding: 30 }}>
+            {search ? 'No entries match your search.' : 'No entries logged yet.'}
+          </div>
+        )}
+      </div>
+
+      <div style={{ textAlign: 'center', color: '#B45309', fontSize: 11, fontWeight: 600 }}>
+        {readOnly
+          ? '🔎 Oversight view — this ledger is managed by the seller and cannot be edited here.'
+          : '🔒 Only visible to you — imported order entries are immutable history; manual entries can be edited.'}
+      </div>
+
+      {/* ── modals ── */}
+      {entryModal && !readOnly && (
+        <EntryModal
+          mode={entryModal.mode}
+          entry={entryModal.entry}
+          busy={busy}
+          onClose={() => setEntryModal(null)}
+          onSave={doEntry}
+        />
+      )}
+      {auditEntry && (
+        <AuditModal
+          entry={auditEntry}
+          readOnly={readOnly}
+          onClose={() => setAuditEntry(null)}
+          onEdit={() => {
+            if (auditEntry.source !== 'manual') {
+              showToast('Imported order entries are immutable history.', 'info');
+              return;
+            }
+            setEntryModal({ mode: 'edit', entry: auditEntry });
+            setAuditEntry(null);
+          }}
+          onDelete={() => {
+            setConfirmDeleteEntry(auditEntry);
+            setAuditEntry(null);
+          }}
+        />
+      )}
+      {renameOpen && !readOnly && (
+        <RenameModal
+          current={detail.book.name}
+          onClose={() => setRenameOpen(false)}
+          onSave={async (name) => {
+            try {
+              await cb.renameCashbook(detail.book.id, name);
+              showToast('Book renamed.');
+              setRenameOpen(false);
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : 'Rename failed', 'danger');
+            }
+          }}
+        />
+      )}
+      {confirmDeleteBook && !readOnly && (
+        <DeleteBookModal
+          name={detail.book.name}
+          entriesCount={detail.entries.length}
+          onClose={() => setConfirmDeleteBook(false)}
+          onConfirm={async () => {
+            try {
+              await cb.deleteCashbook(detail.book.id);
+              showToast('Cashbook deleted.', 'info');
+              navigate(backTo);
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : 'Delete failed', 'danger');
+            }
+          }}
+        />
+      )}
+      {confirmDeleteEntry && !readOnly && (
+        <ConfirmModal
+          title="Delete this entry?"
+          body={
+            confirmDeleteEntry.source === 'order_import'
+              ? 'This imported order line will be removed from this ledger only. It never changes the order, payment or escrow record.'
+              : 'This manual entry will be permanently removed from this ledger.'
+          }
+          confirmLabel="Delete"
+          danger
+          onClose={() => setConfirmDeleteEntry(null)}
+          onConfirm={async () => {
+            try {
+              await cb.deleteEntry(confirmDeleteEntry.entryId);
+              showToast('Entry deleted.', 'info');
+              setConfirmDeleteEntry(null);
+            } catch (e) {
+              showToast(e instanceof Error ? e.message : 'Delete failed', 'danger');
+            }
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+function BackBar({ label, onBack }: { label: string; onBack: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onBack}
+      style={{ alignSelf: 'flex-start', height: 34, padding: '0 12px', borderRadius: R.control, border: `1px solid ${BORDER}`, background: '#fff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 800, color: '#374151' }}
+    >
+      <ChevronLeft style={{ width: 14, height: 14, color: ACCENT }} /> {label}
+    </button>
+  );
+}
+
+const thStyle: React.CSSProperties = {
+  padding: 12,
+  textAlign: 'left',
+  fontSize: 9.5,
+  fontWeight: 800,
+  color: '#6B7280',
+  textTransform: 'uppercase',
+  letterSpacing: '0.06em',
+  borderBottom: `1px solid ${BORDER}`,
+};
+const tdStyle: React.CSSProperties = { padding: 12, fontSize: 12, color: '#374151', verticalAlign: 'top' };
+
+// ═══════════════════════════ REPORTS ════════════════════════════════
+
+function ReportsView({ cb, navigate }: { cb: CbApi; navigate: (to: string) => void }) {
+  const agg = useMemo(() => aggregateBooks(cb.cashbooks), [cb.cashbooks]);
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, borderBottom: `1px solid ${BORDER}`, paddingBottom: 16 }}>
+        <BackBar label="Back" onBack={() => navigate('/admin/cashbook')} />
+        <h1 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Cashbook Reports</h1>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 14 }}>
+        <Kpi label="Total Cash In" tone="in" value={formatCurrency(agg.moneyIn)} />
+        <Kpi label="Total Cash Out" tone="out" value={formatCurrency(agg.moneyOut)} />
+        <Kpi label="Net Balance" tone="net" value={formatCurrency(agg.net)} />
+        <Kpi label="Total Books" value={String(cb.cashbooks.length)} />
+      </div>
+      <div style={{ ...S.card, borderRadius: R.card, padding: 18 }}>
+        <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 14 }}>Per-book breakdown</div>
+        {cb.cashbooks.length === 0 ? (
+          <div style={{ fontSize: 12, color: MUTED }}>No cashbooks yet.</div>
+        ) : (
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ background: '#F9FAFB' }}>
+                {['Book', 'Entries', 'Imported', 'Cash In', 'Cash Out', 'Net'].map((h) => (
+                  <th key={h} style={thStyle}>
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-app-border text-[12px]">
-              {summary.adjustments.map((a) => (
-                <tr key={a.id}>
-                  <td className="p-2 text-app-text-muted text-[11px]">{new Date(a.date).toLocaleDateString()}</td>
-                  <td className="p-2 text-app-text-primary font-bold">{a.type}</td>
-                  <td className="p-2 font-mono text-[11px] text-app-text-secondary">{a.reference}</td>
-                  <td className="p-2 text-app-text-secondary">{a.description}</td>
-                  <td className="p-2 text-right text-red-600 font-bold">{a.debit ? `৳${a.debit.toLocaleString()}` : '—'}</td>
-                  <td className="p-2 text-right text-green-600 font-bold">{a.credit ? `৳${a.credit.toLocaleString()}` : '—'}</td>
-                  <td className="p-2 text-app-text-muted text-[11px]">{a.status}</td>
+            <tbody>
+              {cb.cashbooks.map((b) => (
+                <tr key={b.id} style={{ borderTop: `1px solid #F1F3F5`, cursor: 'pointer' }} onClick={() => navigate(cashbookLedgerPath(b.id))}>
+                  <td style={tdStyle}>
+                    {b.icon} <strong>{b.name}</strong>
+                  </td>
+                  <td style={tdStyle}>{b.summary.entryCount}</td>
+                  <td style={tdStyle}>{b.summary.importedCount}</td>
+                  <td style={{ ...tdStyle, color: CASH_IN, fontWeight: 800 }}>{money(b.summary.moneyIn)}</td>
+                  <td style={{ ...tdStyle, color: CASH_OUT, fontWeight: 800 }}>{money(b.summary.moneyOut)}</td>
+                  <td style={{ ...tdStyle, fontWeight: 800 }}>{money(b.summary.net)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
+    </>
+  );
+}
+
+// ═══════════════════════════ ADMIN OVERSIGHT ════════════════════════
+
+function OversightIndexView({ cb, navigate }: { cb: CbApi; navigate: (to: string) => void }) {
+  const owners = cb.oversight?.owners || [];
+  return (
+    <>
+      <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 18 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+          <h1 style={{ fontSize: 22, fontWeight: 800, margin: 0 }}>Cashbook Oversight</h1>
+          <span
+            style={{
+              fontSize: 9,
+              fontWeight: 800,
+              letterSpacing: '0.08em',
+              textTransform: 'uppercase',
+              padding: '3px 10px',
+              borderRadius: 999,
+              background: 'rgba(180,83,9,0.12)',
+              color: '#B45309',
+            }}
+          >
+            Read-only
+          </span>
+        </div>
+        <p style={{ fontSize: 12, color: '#6B7280', marginTop: 6, marginBottom: 0 }}>
+          Browse a seller or creator, open their cashbooks, and inspect ledgers. Staff cannot create, edit, import or
+          delete anything here.
+        </p>
+      </div>
+
+      {cb.oversightError && <ErrorRow message={cb.oversightError} onRetry={() => cb.loadOversight()} />}
+      {cb.oversightLoading && owners.length === 0 ? (
+        <Loading label="Loading cashbook owners…" />
+      ) : owners.length === 0 ? (
+        <div style={{ ...S.card, borderRadius: R.card, padding: 40, textAlign: 'center', color: MUTED, fontSize: 13 }}>
+          No seller or creator has created a cashbook yet.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+          {owners.map((o) => {
+            const headline = o.brandName || o.accountName || o.displayName || o.email || `Account ${o.ownerUserId.slice(0, 8)}…`;
+            const secondary = [
+              o.brandName ? o.accountName || o.displayName : undefined,
+              o.role,
+              o.choosifyUserId,
+              (o.brandNames && o.brandNames.length > 1) ? `+${o.brandNames.length - 1} more brand${o.brandNames.length > 2 ? 's' : ''}` : undefined,
+            ].filter(Boolean).join(' · ') || undefined;
+            return (
+              <FolderCard
+                key={o.ownerUserId}
+                icon="🏬"
+                color="#18154C"
+                title={headline}
+                subtitle={secondary}
+                reference={o.email}
+                updatedAt={o.updatedAt}
+                moneyIn={o.moneyIn}
+                moneyOut={o.moneyOut}
+                net={o.moneyIn - o.moneyOut}
+                countLabel={`${o.bookCount} book${o.bookCount === 1 ? '' : 's'} · ${o.entryCount} entries`}
+                onOpen={() => navigate(`/admin/cashbook?seller=${encodeURIComponent(o.ownerUserId)}`)}
+              />
+            );
+          })}
+        </div>
+      )}
+    </>
+  );
+}
+
+function OversightSellerView({
+  cb,
+  navigate,
+  sellerId,
+}: {
+  cb: CbApi;
+  navigate: (to: string) => void;
+  sellerId: string;
+}) {
+  const data = cb.oversightSeller;
+  const books = data?.books || [];
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', borderBottom: `1px solid ${BORDER}`, paddingBottom: 16 }}>
+        <BackBar label="All sellers" onBack={() => navigate('/admin/cashbook')} />
+        <div>
+          <div style={{ fontSize: 11, color: MUTED, fontWeight: 700 }}>Cashbook Oversight /</div>
+          <div style={{ fontSize: 16, fontWeight: 800 }}>
+            {data?.brandName || data?.accountName || sellerId}
+          </div>
+          {(data?.brandName || data?.accountName) && (
+            <div style={{ fontSize: 10.5, color: MUTED }}>
+              {[data?.brandName ? data?.accountName : undefined, sellerId].filter(Boolean).join(' · ')}
+            </div>
+          )}
+        </div>
+        <div style={{ flex: 1 }} />
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 10.5,
+            fontWeight: 800,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            padding: '6px 12px',
+            borderRadius: 999,
+            background: 'rgba(180,83,9,0.12)',
+            color: '#B45309',
+          }}
+        >
+          <Eye style={{ width: 13, height: 13 }} /> Read-only · Managed by Seller
+        </span>
+      </div>
+
+      {cb.oversightError && <ErrorRow message={cb.oversightError} onRetry={() => cb.loadOversightSeller(sellerId)} />}
+      {cb.oversightLoading && books.length === 0 ? (
+        <Loading label="Loading this seller's cashbooks…" />
+      ) : books.length === 0 ? (
+        <div style={{ ...S.card, borderRadius: R.card, padding: 40, textAlign: 'center', color: MUTED, fontSize: 13 }}>
+          This seller has no cashbooks.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
+          {books.map((b: CashbookListItem) => (
+            <FolderCard
+              key={b.id}
+              icon={b.icon}
+              color={b.color}
+              title={b.name}
+              reference={b.cashbookReferenceId}
+              updatedAt={b.updatedAt}
+              moneyIn={b.summary.moneyIn}
+              moneyOut={b.summary.moneyOut}
+              net={b.summary.net}
+              countLabel={`${b.summary.entryCount} entries · ${b.summary.importedCount} imported`}
+              onOpen={() =>
+                navigate(`${cashbookLedgerPath(b.id)}?owner=${encodeURIComponent(sellerId)}`)
+              }
+            />
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+// ═══════════════════════════ MODALS ═════════════════════════════════
+
+function Backdrop({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, zIndex: 90 }}
+    >
+      <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: R.modal, boxShadow: '0 30px 80px rgba(0,0,0,0.3)', width: 'min(720px, 100%)', maxHeight: '86vh', overflow: 'auto' }}>
+        {children}
+      </div>
     </div>
   );
 }
+
+function fieldLabel(t: string) {
+  return <div style={{ fontSize: 9.5, fontWeight: 800, color: MUTED, letterSpacing: '0.03em', textTransform: 'uppercase', marginBottom: 6 }}>{t}</div>;
+}
+
+function NewBookModal({
+  onClose,
+  onCreate,
+}: {
+  onClose: () => void;
+  onCreate: (name: string, icon: string, color: string) => void;
+}) {
+  const [name, setName] = useState('');
+  const [icon, setIcon] = useState(CASHBOOK_ICON_CHOICES[0]);
+  const [color, setColor] = useState(CASHBOOK_COLOR_CHOICES[0]);
+  return (
+    <Backdrop onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) onCreate(name.trim(), icon, color);
+        }}
+        style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 440 }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 800 }}>Create new cashbook</div>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED }}>
+            <X style={{ width: 16, height: 16 }} />
+          </button>
+        </div>
+        <div>
+          {fieldLabel('Book name')}
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Outlet Sales Ledger" style={{ ...S.input, width: '100%' }} />
+        </div>
+        <div>
+          {fieldLabel('Icon')}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {CASHBOOK_ICON_CHOICES.map((em) => (
+              <button
+                key={em}
+                type="button"
+                onClick={() => setIcon(em)}
+                style={{ width: 34, height: 34, borderRadius: R.control, border: `1px solid ${icon === em ? ACCENT : BORDER}`, background: icon === em ? 'rgba(255,91,0,0.08)' : '#fff', fontSize: 16, cursor: 'pointer' }}
+              >
+                {em}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          {fieldLabel('Colour')}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {CASHBOOK_COLOR_CHOICES.map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setColor(c)}
+                style={{ width: 26, height: 26, borderRadius: 999, border: `2px solid ${color === c ? '#111827' : 'transparent'}`, background: c, cursor: 'pointer' }}
+              />
+            ))}
+          </div>
+        </div>
+        <button type="submit" style={{ height: 40, borderRadius: R.control, border: 'none', background: ACCENT, color: '#fff', fontSize: 12, fontWeight: 800, cursor: 'pointer' }}>
+          Create book
+        </button>
+      </form>
+    </Backdrop>
+  );
+}
+
+function RenameModal({ current, onClose, onSave }: { current: string; onClose: () => void; onSave: (n: string) => void }) {
+  const [name, setName] = useState(current);
+  return (
+    <Backdrop onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim() && name.trim() !== current) onSave(name.trim());
+          else onClose();
+        }}
+        style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 420 }}
+      >
+        <div style={{ fontSize: 14, fontWeight: 800 }}>Rename cashbook</div>
+        <input autoFocus value={name} onChange={(e) => setName(e.target.value)} style={{ ...S.input, width: '100%' }} />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" onClick={onClose} style={ghostBtn}>
+            Cancel
+          </button>
+          <button type="submit" style={{ ...primaryBtn }}>
+            Save
+          </button>
+        </div>
+      </form>
+    </Backdrop>
+  );
+}
+
+function DeleteBookModal({
+  name,
+  entriesCount,
+  onClose,
+  onConfirm,
+}: {
+  name: string;
+  entriesCount: number;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const [confirmText, setConfirmText] = useState('');
+  const match = confirmText === name;
+  return (
+    <Backdrop onClose={onClose}>
+      <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 460 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 13, fontWeight: 800, color: '#991B1B' }}>⚠ Delete “{name}”?</span>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#991B1B', fontWeight: 700 }}>
+            ✕ Cancel
+          </button>
+        </div>
+        <div style={{ fontSize: 12, color: '#7F1D1D' }}>
+          This permanently removes the book and its {entriesCount} ledger entr{entriesCount === 1 ? 'y' : 'ies'}. It does
+          not touch any order, payment or escrow record. Type the book name to authorise.
+        </div>
+        <input
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder={name}
+          style={{ ...S.input, width: '100%', borderColor: '#FCA5A5' }}
+        />
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" onClick={onClose} style={ghostBtn}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!match}
+            onClick={onConfirm}
+            style={{ ...primaryBtn, background: match ? '#DC2626' : '#FCA5A5', cursor: match ? 'pointer' : 'not-allowed' }}
+          >
+            Delete book
+          </button>
+        </div>
+      </div>
+    </Backdrop>
+  );
+}
+
+function ConfirmModal({
+  title,
+  body,
+  confirmLabel,
+  danger,
+  onClose,
+  onConfirm,
+}: {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  danger?: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Backdrop onClose={onClose}>
+      <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14, maxWidth: 400 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: danger ? '#991B1B' : '#111827' }}>{title}</div>
+        <div style={{ fontSize: 12, color: '#6B7280' }}>{body}</div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" onClick={onClose} style={ghostBtn}>
+            Cancel
+          </button>
+          <button type="button" onClick={onConfirm} style={{ ...primaryBtn, background: danger ? '#DC2626' : ACCENT }}>
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </Backdrop>
+  );
+}
+
+function EntryModal({
+  mode,
+  entry,
+  busy,
+  onClose,
+  onSave,
+}: {
+  mode: 'cashIn' | 'cashOut' | 'edit';
+  entry?: CashbookEntry;
+  busy: boolean;
+  onClose: () => void;
+  onSave: (input: {
+    direction: 'in' | 'out';
+    amount: number;
+    description?: string;
+    category?: string;
+    contact?: string;
+    paymentMode?: string;
+    docRef?: string;
+    entryDate?: string;
+    entryTime?: string;
+  }) => void;
+}) {
+  const editingOut = mode === 'edit' ? (entry?.amount ?? 0) < 0 : mode === 'cashOut';
+  const [amount, setAmount] = useState(entry ? String(Math.abs(entry.amount)) : '');
+  const [contact, setContact] = useState(entry?.contact || '');
+  const [remarks, setRemarks] = useState(entry?.description || '');
+  const [docRef, setDocRef] = useState(entry?.docRef || '');
+  const [category, setCategory] = useState(entry?.category || (editingOut ? 'Utilities' : 'Sales'));
+  const [paymentMode, setPaymentMode] = useState(entry?.paymentMode || CASHBOOK_PAYMENT_MODES[0]);
+  const [entryDate, setEntryDate] = useState(entry?.entryDate || new Date().toISOString().slice(0, 10));
+  const [entryTime, setEntryTime] = useState(entry?.entryTime || '');
+  const dir: 'in' | 'out' = editingOut ? 'out' : 'in';
+  const accent = editingOut ? CASH_OUT : CASH_IN;
+
+  return (
+    <Backdrop onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const amt = Number(amount);
+          if (!Number.isFinite(amt) || amt <= 0) return;
+          onSave({
+            direction: dir,
+            amount: amt,
+            description: remarks,
+            category,
+            contact,
+            paymentMode,
+            docRef,
+            entryDate,
+            entryTime,
+          });
+        }}
+        style={{ padding: 24 }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 800, color: accent }}>
+            {mode === 'edit' ? '✎ Edit entry' : editingOut ? '● − Add Cash Out (expense record)' : '● + Add Cash In (income record)'}
+          </span>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED }}>
+            <X style={{ width: 16, height: 16 }} />
+          </button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
+          <div>
+            {fieldLabel('Amount (BDT)')}
+            <input autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" inputMode="decimal" style={{ ...S.input, width: '100%', marginBottom: 14 }} />
+            {fieldLabel('Contact name (supplier / customer)')}
+            <input value={contact} onChange={(e) => setContact(e.target.value)} placeholder="e.g. Apex Hub, Tangail Cotton…" style={{ ...S.input, width: '100%', marginBottom: 14 }} />
+            {fieldLabel('Remarks / transaction description')}
+            <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Billing receipts, references…" style={{ ...S.input, width: '100%', minHeight: 70, padding: 10, resize: 'none', height: 'auto', marginBottom: 14 }} />
+            {fieldLabel('Document / invoice reference')}
+            <input value={docRef} onChange={(e) => setDocRef(e.target.value)} placeholder="Filename or invoice code…" style={{ ...S.input, width: '100%' }} />
+          </div>
+          <div>
+            {fieldLabel('Classification category')}
+            <select value={category} onChange={(e) => setCategory(e.target.value)} style={{ ...S.input, width: '100%', marginBottom: 14 }}>
+              {CASHBOOK_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            {fieldLabel('Payment mode')}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 14 }}>
+              {CASHBOOK_PAYMENT_MODES.map((pm) => (
+                <button
+                  key={pm}
+                  type="button"
+                  onClick={() => setPaymentMode(pm)}
+                  style={{ padding: 9, borderRadius: R.control, border: `1px solid ${pm === paymentMode ? ACCENT : BORDER}`, background: '#fff', color: pm === paymentMode ? ACCENT : '#374151', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  {pm}
+                </button>
+              ))}
+            </div>
+            {fieldLabel('Billing record date')}
+            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} style={{ ...S.input, width: '100%', marginBottom: 14 }} />
+            {fieldLabel('Time stamp (optional)')}
+            <input value={entryTime} onChange={(e) => setEntryTime(e.target.value)} placeholder="e.g. 09:25 PM" style={{ ...S.input, width: '100%' }} />
+          </div>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 18, borderTop: `1px solid #F1F3F5`, paddingTop: 16 }}>
+          <button type="button" onClick={onClose} style={ghostBtn}>
+            Cancel
+          </button>
+          <button type="submit" disabled={busy} style={{ ...primaryBtn, opacity: busy ? 0.6 : 1 }}>
+            {busy && <Loader2 style={{ width: 13, height: 13 }} className="animate-spin" />} {mode === 'edit' ? 'Save changes' : 'Save entry'}
+          </button>
+        </div>
+      </form>
+    </Backdrop>
+  );
+}
+
+function AuditModal({
+  entry,
+  readOnly,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  entry: CashbookEntry;
+  readOnly: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const isCredit = entry.amount >= 0;
+  const imported = entry.source === 'order_import';
+  return (
+    <Backdrop onClose={onClose}>
+      <div style={{ padding: 24, maxWidth: 560 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 800 }}>📋 Entry detail</span>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED }}>
+            <X style={{ width: 16, height: 16 }} />
+          </button>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+          <div>
+            {fieldLabel('Classification')}
+            <div style={{ fontSize: 13, fontWeight: 800 }}>{isCredit ? 'CASH IN' : 'CASH OUT'} · {imported ? 'Imported order' : 'Manual'}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            {fieldLabel('Amount BDT')}
+            <div style={{ fontSize: 16, fontWeight: 800, color: isCredit ? CASH_IN : CASH_OUT }}>
+              {isCredit ? '+' : '−'} {money(entry.amount)}
+            </div>
+          </div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+          <Field k="Contact" v={entry.contact || '—'} />
+          <Field k="Payment channel" v={entry.paymentMode || '—'} />
+          <Field k="Category" v={entry.category || '—'} />
+          <Field k="Recorded" v={`${formatDay(entry.entryDate || entry.orderDate || entry.createdAt)} ${entry.entryTime || ''}`} />
+          {imported && <Field k="Order" v={entry.orderId ? `#${entry.orderId}` : '—'} />}
+          {imported && <Field k="Qty × Unit" v={`${entry.quantity ?? '—'} × ${money(entry.unitPrice)}`} />}
+          {imported && entry.sourceOrderStatusAtImport && <Field k="Status at import" v={entry.sourceOrderStatusAtImport} />}
+          {imported && entry.liveOrderStatus && <Field k="Order status now" v={entry.liveOrderStatus} />}
+        </div>
+        {entry.description && (
+          <div style={{ ...S.inset, borderRadius: R.panel, padding: 12, marginBottom: 14 }}>
+            {fieldLabel('Remarks & descriptions')}
+            <div style={{ fontSize: 12, color: '#374151' }}>{entry.description}</div>
+          </div>
+        )}
+        {entry.docRef && (
+          <div style={{ ...S.inset, borderRadius: R.panel, padding: '10px 12px', marginBottom: 14, fontSize: 12, fontWeight: 700 }}>📄 {entry.docRef}</div>
+        )}
+        {imported && (entry.orderFlags || []).length > 0 && (
+          <div style={{ background: '#FEF2F2', border: '1px solid rgba(220,38,38,0.25)', borderRadius: R.panel, padding: 12, marginBottom: 14, fontSize: 11.5, color: '#991B1B', fontWeight: 600 }}>
+            ⚠ {(entry.orderFlags || []).map(orderFlagLabel).join(' · ')}. The original imported amount is kept as history —
+            record a separate compensating Cash Out if a refund actually occurred.
+          </div>
+        )}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: `1px solid #F1F3F5`, paddingTop: 16 }}>
+          {!readOnly && (
+            <>
+              <button
+                type="button"
+                onClick={onEdit}
+                disabled={imported}
+                title={imported ? 'Imported entries are immutable history' : undefined}
+                style={{ ...ghostBtn, opacity: imported ? 0.5 : 1, cursor: imported ? 'not-allowed' : 'pointer' }}
+              >
+                <Pencil style={{ width: 12, height: 12 }} /> Edit record
+              </button>
+              <button type="button" onClick={onDelete} style={{ ...ghostBtn, background: '#FEF2F2', color: CASH_OUT, borderColor: 'transparent' }}>
+                <Trash2 style={{ width: 12, height: 12 }} /> Delete record
+              </button>
+            </>
+          )}
+          {readOnly && <span style={{ fontSize: 11, color: MUTED, fontStyle: 'italic' }}>Read-only — managed by the seller.</span>}
+        </div>
+      </div>
+    </Backdrop>
+  );
+}
+
+function Field({ k, v }: { k: string; v: string }) {
+  return (
+    <div>
+      {fieldLabel(k)}
+      <div style={{ fontSize: 12, fontWeight: 700, color: '#374151' }}>{v}</div>
+    </div>
+  );
+}
+
+// ── Import Orders modal — same interaction as before, canonical data underneath ──
+function ImportOrdersModal({
+  books,
+  myUid,
+  onClose,
+  onImport,
+  afterImport,
+  showToast,
+}: {
+  books: CashbookListItem[];
+  myUid: string;
+  onClose: () => void;
+  onImport: CbApi['importOrders'];
+  afterImport: (bookId: string) => void;
+  showToast: (m: string, t?: 'success' | 'danger' | 'info') => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [rows, setRows] = useState<Array<{ orderNumber: string; status: string; date?: string; amount: number }>>([]);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [targetBookId, setTargetBookId] = useState<string>(books[0]?.id || '');
+  const [newBookName, setNewBookName] = useState('Imported Sales Ledger');
+  const [importing, setImporting] = useState(false);
+  const idemRef = useRef<string>(cryptoRandom());
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const [ops, commerce] = await Promise.all([
+          operationsApi.listOrders(myUid ? { sellerId: myUid } : undefined),
+          operationsApi.listCommerceOrders('seller').catch(() => [] as CommerceOrderLite[]),
+        ]);
+        const statusByNumber = new Map<string, string>(
+          commerce.map((c) => [c.orderNumber, c.status] as [string, string]),
+        );
+        const eligible = ops
+          .map((o) => {
+            const commerceStatus = statusByNumber.get(o.orderId);
+            const status = commerceStatus || o.status;
+            const subs = (o.subOrders || []) as Array<{ sellerId?: string; items?: Array<{ lineTotal?: number; total?: number }> }>;
+            const amount = subs
+              .filter((sub) => !myUid || sub.sellerId === myUid)
+              .reduce((a, sub) => a + (sub.items || []).reduce((x, it) => x + Number(it.lineTotal ?? it.total ?? 0), 0), 0);
+            return { orderNumber: o.orderId, status, date: o.updatedAt || o.createdAt, amount, commerceStatus, opsStatus: o.status };
+          })
+          .filter((r) => isImportEligibleStatus(r.commerceStatus) || r.opsStatus === 'completed')
+          .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+        if (!cancelled) setRows(eligible.map(({ orderNumber, status, date, amount }) => ({ orderNumber, status, date, amount })));
+      } catch (e) {
+        if (!cancelled) showToast(e instanceof Error ? e.message : 'Failed to load orders', 'danger');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [myUid, showToast]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) => r.orderNumber.toLowerCase().includes(q) || r.status.toLowerCase().includes(q));
+  }, [rows, search]);
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const allVisibleSelected = filtered.length > 0 && filtered.every((r) => selected.has(r.orderNumber));
+  const selectAll = () => setSelected(new Set(filtered.map((r) => r.orderNumber)));
+  const clearAll = () => setSelected(new Set());
+  const selLinkStyle: React.CSSProperties = {
+    border: 'none',
+    background: 'none',
+    color: ACCENT,
+    fontSize: 11,
+    fontWeight: 800,
+    cursor: 'pointer',
+    padding: 0,
+  };
+
+  const runImport = async () => {
+    if (selected.size === 0) return;
+    setImporting(true);
+    try {
+      const items = [...selected].map((orderId) => ({ orderId }));
+      const params = targetBookId
+        ? { bookId: targetBookId, items, idempotencyKey: idemRef.current }
+        : { newBookName: (newBookName || 'Imported Sales Ledger').trim(), newBookIcon: '📦', items, idempotencyKey: idemRef.current };
+      const result = await onImport(params);
+      const parts = [`${result.imported} line item(s) imported`];
+      if (result.skipped) parts.push(`${result.skipped} already imported`);
+      if (result.failed) parts.push(`${result.failed} not eligible`);
+      if (result.rejected?.length) parts.push(`${result.rejected.length} order(s) excluded`);
+      showToast(parts.join(' · ') + '.', result.imported > 0 ? 'success' : 'info');
+      afterImport(result.book.id);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Import failed', 'danger');
+      idemRef.current = cryptoRandom();
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  return (
+    <Backdrop onClose={onClose}>
+      <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontSize: 14, fontWeight: 800 }}>Import orders into a cashbook</div>
+          <button type="button" onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: MUTED }}>
+            <X style={{ width: 16, height: 16 }} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            {fieldLabel('Destination book')}
+            <select value={targetBookId} onChange={(e) => setTargetBookId(e.target.value)} style={{ ...S.input, width: '100%' }}>
+              <option value="">+ Create new book</option>
+              {books.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.icon} {b.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          {!targetBookId && (
+            <div style={{ flex: 1, minWidth: 200 }}>
+              {fieldLabel('New book name')}
+              <input value={newBookName} onChange={(e) => setNewBookName(e.target.value)} style={{ ...S.input, width: '100%' }} />
+            </div>
+          )}
+        </div>
+
+        <div style={{ position: 'relative' }}>
+          <Search style={{ width: 14, height: 14, position: 'absolute', left: 12, top: 12, color: MUTED }} />
+          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search by order number or status…" style={{ ...S.input, width: '100%', paddingLeft: 34 }} />
+        </div>
+
+        <div style={{ ...S.inset, borderRadius: R.panel, padding: 12, fontSize: 11, color: '#6B7280', display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+          <Info style={{ width: 14, height: 14, color: ACCENT, flexShrink: 0, marginTop: 1 }} />
+          Only <strong>delivered / completed</strong> orders are shown. The server imports just your own line-item value —
+          never the whole-order total — and a line already imported into any of your books is skipped.
+        </div>
+
+        {/* selection toolbar — individual checkboxes plus mark-all / clear */}
+        {!loading && filtered.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 11, fontWeight: 800, color: '#374151' }}>
+              {selected.size} of {filtered.length} selected
+            </span>
+            <div style={{ flex: 1 }} />
+            <button type="button" onClick={selectAll} disabled={allVisibleSelected} style={{ ...selLinkStyle, opacity: allVisibleSelected ? 0.4 : 1, cursor: allVisibleSelected ? 'default' : 'pointer' }}>
+              Select all ({filtered.length})
+            </button>
+            <span style={{ color: BORDER }}>|</span>
+            <button type="button" onClick={clearAll} disabled={selected.size === 0} style={{ ...selLinkStyle, color: selected.size === 0 ? MUTED : CASH_OUT, opacity: selected.size === 0 ? 0.5 : 1, cursor: selected.size === 0 ? 'default' : 'pointer' }}>
+              Clear
+            </button>
+          </div>
+        )}
+
+        <div style={{ border: `1px solid ${BORDER}`, borderRadius: R.panel, maxHeight: 320, overflowY: 'auto' }}>
+          {loading ? (
+            <Loading label="Loading eligible orders…" />
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: 30, textAlign: 'center', fontSize: 12, color: MUTED }}>No delivered / completed orders to import.</div>
+          ) : (
+            <>
+              <label style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 12px', borderBottom: `1px solid ${BORDER}`, fontSize: 11, fontWeight: 800, color: '#6B7280', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={allVisibleSelected}
+                  onChange={() => (allVisibleSelected ? clearAll() : selectAll())}
+                />
+                Select all visible ({filtered.length})
+              </label>
+              {filtered.map((r) => (
+                <label
+                  key={r.orderNumber}
+                  style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '10px 12px', borderBottom: `1px solid #F1F3F5`, fontSize: 12, cursor: 'pointer' }}
+                >
+                  <input type="checkbox" checked={selected.has(r.orderNumber)} onChange={() => toggle(r.orderNumber)} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700 }}>Order #{r.orderNumber}</div>
+                    <div style={{ fontSize: 10, color: MUTED, textTransform: 'capitalize' }}>
+                      {r.status} · {formatDay(r.date)}
+                    </div>
+                  </div>
+                  <div style={{ fontWeight: 800 }}>{r.amount > 0 ? money(r.amount) : '—'}</div>
+                </label>
+              ))}
+            </>
+          )}
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1px solid ${BORDER}`, paddingTop: 12 }}>
+          <span style={{ fontSize: 11, color: MUTED, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+            {selected.size} selected
+            {selected.size > 0 && (
+              <button type="button" onClick={clearAll} style={{ ...selLinkStyle, color: CASH_OUT }}>
+                Clear
+              </button>
+            )}
+          </span>
+          <button
+            type="button"
+            disabled={importing || selected.size === 0}
+            onClick={runImport}
+            style={{ ...primaryBtn, opacity: importing || selected.size === 0 ? 0.5 : 1, cursor: importing || selected.size === 0 ? 'not-allowed' : 'pointer' }}
+          >
+            {importing && <Loader2 style={{ width: 13, height: 13 }} className="animate-spin" />} Import selected
+          </button>
+        </div>
+      </div>
+    </Backdrop>
+  );
+}
+
+function cryptoRandom(): string {
+  try {
+    return (crypto as Crypto & { randomUUID?: () => string }).randomUUID?.() || String(Date.now()) + Math.random();
+  } catch {
+    return String(Date.now()) + Math.random();
+  }
+}
+
+const ghostBtn: React.CSSProperties = {
+  height: 38,
+  padding: '0 16px',
+  borderRadius: R.control,
+  border: `1px solid ${BORDER}`,
+  background: '#fff',
+  color: '#374151',
+  fontSize: 12,
+  fontWeight: 800,
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+};
+const primaryBtn: React.CSSProperties = {
+  height: 38,
+  padding: '0 18px',
+  borderRadius: R.control,
+  border: 'none',
+  background: ACCENT,
+  color: '#fff',
+  fontSize: 12,
+  fontWeight: 800,
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
+};

@@ -1278,8 +1278,31 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            {/*
+              Cashbook (Sprint 15). ONE React hub. `/admin/cashbook` is the
+              primary hub (seller books grid / admin brand→seller oversight,
+              `?view=reports` and `?seller=` as query state). `/admin/cashbook/
+              :bookId` is that book's ledger (`?owner=` set for staff read-only
+              oversight). Both explicit routes sit AHEAD of the `/admin/*`
+              CmsMirror catch-all so a selected book never falls through to the
+              legacy mock. Back / All Books → `/admin/cashbook` (no hash nav).
+            */}
             <Route
               path="/admin/cashbook"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <CashBookHub />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/cashbook/:bookId"
               element={
                 <ProtectedRoute>
                   <RoleGuard>

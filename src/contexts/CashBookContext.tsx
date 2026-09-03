@@ -1,50 +1,64 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
-import { useAuth } from './AuthContext';
+import React, { createContext, useCallback, useContext, useState } from 'react';
 import {
   cashbookApi,
-  type CashbookListItem,
-  type CashbookDetail,
   type CashbookBook,
+  type CashbookDetail,
   type CashbookImportResult,
+  type CashbookListItem,
+  type CashbookOversightIndex,
+  type CashbookOversightSeller,
   type FinanceSummary,
+  type ManualEntryInput,
 } from '../services/cashbookApi';
 
 /**
- * CashBookContext — real API-backed cashbook + finance data.
+ * CashBookContext — real API-backed cashbook data. Every action maps 1:1 to a
+ * canonical endpoint (server/cashbook/cashbookRouter.ts); nothing here is
+ * computed/estimated on the client. No localStorage, no mock.
  *
- * The backend (server/cashbook/cashbookRouter.ts) is strictly seller/creator
- * payout-oriented: a cashbook only ever contains entries imported from
- * authoritative Order lines. There is NO endpoint to create an arbitrary
- * manual entry, edit an entry, lock a book, or delete a whole book — so this
- * context does not expose those actions. Anything it exposes maps 1:1 to a
- * real endpoint; nothing here is computed/estimated on the client.
+ * Sprint 15: adds manual Cash In/Out + edit, rename/delete book, staff
+ * read-only oversight, and idempotent Order-Hub import. Admin/Super Admin are
+ * blocked from every mutation at the API layer — the UI simply never renders
+ * those controls in the oversight view.
  */
 
 interface CashBookContextType {
-  // My cashbooks (owned by the authenticated actor — no cross-user listing exists)
   cashbooks: CashbookListItem[];
   cashbooksLoading: boolean;
   cashbooksError: string | null;
   refreshCashbooks: () => Promise<void>;
 
-  // Detail of one book, loaded on demand
   bookDetail: CashbookDetail | null;
   bookDetailLoading: boolean;
   bookDetailError: string | null;
   loadCashbookDetail: (bookId: string, ownerUserId?: string) => Promise<void>;
   clearCashbookDetail: () => void;
 
-  // Mutations — all throw on failure; callers must catch and report.
+  // seller/creator mutations — all throw on failure; callers catch + report
   createCashbook: (name: string, icon?: string, color?: string) => Promise<CashbookBook>;
+  renameCashbook: (bookId: string, name: string) => Promise<CashbookBook>;
+  deleteCashbook: (bookId: string) => Promise<void>;
+  addManualEntry: (bookId: string, input: ManualEntryInput) => Promise<void>;
+  updateEntry: (entryId: string, input: Partial<ManualEntryInput>) => Promise<void>;
+  deleteEntry: (entryId: string) => Promise<void>;
   importOrders: (params: {
     bookId?: string;
     newBookName?: string;
     newBookIcon?: string;
+    newBookColor?: string;
+    idempotencyKey?: string;
     items: Array<{ orderId: string; orderItemKey?: string }>;
   }) => Promise<CashbookImportResult>;
-  deleteEntry: (entryId: string) => Promise<void>;
 
-  // Finance summary (admin may pass sellerId to inspect a specific seller/creator)
+  // staff read-only oversight
+  oversight: CashbookOversightIndex | null;
+  oversightLoading: boolean;
+  oversightError: string | null;
+  loadOversight: (sellerId?: string) => Promise<void>;
+  oversightSeller: CashbookOversightSeller | null;
+  loadOversightSeller: (sellerId: string) => Promise<void>;
+
+  // finance summary (Escrow-derived payout breakdown — separate concern)
   financeSummary: FinanceSummary | null;
   financeSummaryLoading: boolean;
   financeSummaryError: string | null;
@@ -54,14 +68,12 @@ interface CashBookContextType {
 const CashBookContext = createContext<CashBookContextType | undefined>(undefined);
 
 export const useCashBook = () => {
-  const context = useContext(CashBookContext);
-  if (!context) throw new Error('useCashBook must be used within a CashBookProvider');
-  return context;
+  const ctx = useContext(CashBookContext);
+  if (!ctx) throw new Error('useCashBook must be used within a CashBookProvider');
+  return ctx;
 };
 
 export const CashBookProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  useAuth(); // kept for parity with other providers / future actor-aware calls
-
   const [cashbooks, setCashbooks] = useState<CashbookListItem[]>([]);
   const [cashbooksLoading, setCashbooksLoading] = useState(false);
   const [cashbooksError, setCashbooksError] = useState<string | null>(null);
@@ -69,6 +81,11 @@ export const CashBookProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const [bookDetail, setBookDetail] = useState<CashbookDetail | null>(null);
   const [bookDetailLoading, setBookDetailLoading] = useState(false);
   const [bookDetailError, setBookDetailError] = useState<string | null>(null);
+
+  const [oversight, setOversight] = useState<CashbookOversightIndex | null>(null);
+  const [oversightLoading, setOversightLoading] = useState(false);
+  const [oversightError, setOversightError] = useState<string | null>(null);
+  const [oversightSeller, setOversightSeller] = useState<CashbookOversightSeller | null>(null);
 
   const [financeSummary, setFinanceSummary] = useState<FinanceSummary | null>(null);
   const [financeSummaryLoading, setFinanceSummaryLoading] = useState(false);
@@ -78,8 +95,7 @@ export const CashBookProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setCashbooksLoading(true);
     setCashbooksError(null);
     try {
-      const rows = await cashbookApi.listCashbooks();
-      setCashbooks(rows);
+      setCashbooks(await cashbookApi.listCashbooks());
     } catch (error) {
       setCashbooksError(error instanceof Error ? error.message : 'Failed to load cashbooks');
     } finally {
@@ -91,8 +107,7 @@ export const CashBookProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setBookDetailLoading(true);
     setBookDetailError(null);
     try {
-      const detail = await cashbookApi.getCashbookDetail(bookId, ownerUserId);
-      setBookDetail(detail);
+      setBookDetail(await cashbookApi.getCashbookDetail(bookId, ownerUserId));
     } catch (error) {
       setBookDetail(null);
       setBookDetailError(error instanceof Error ? error.message : 'Failed to load cashbook');
@@ -108,19 +123,75 @@ export const CashBookProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const createCashbook = useCallback(async (name: string, icon?: string, color?: string) => {
     const book = await cashbookApi.createCashbook({ name, icon, color });
-    setCashbooks((prev) => [{ ...book, summary: { totalSales: 0, totalRevenue: 0, netRevenue: 0, totalItems: 0, averageOrderValue: 0, entryCount: 0 } }, ...prev]);
+    await refreshCashbooks();
     return book;
-  }, []);
+  }, [refreshCashbooks]);
+
+  const renameCashbook = useCallback(
+    async (bookId: string, name: string) => {
+      const book = await cashbookApi.renameCashbook(bookId, name);
+      await refreshCashbooks();
+      setBookDetail((prev) => (prev && prev.book.id === bookId ? { ...prev, book } : prev));
+      return book;
+    },
+    [refreshCashbooks],
+  );
+
+  const deleteCashbook = useCallback(
+    async (bookId: string) => {
+      await cashbookApi.deleteCashbook(bookId);
+      setBookDetail((prev) => (prev && prev.book.id === bookId ? null : prev));
+      await refreshCashbooks();
+    },
+    [refreshCashbooks],
+  );
+
+  const reloadDetailAndList = useCallback(
+    async (bookId: string) => {
+      await Promise.allSettled([
+        cashbookApi.getCashbookDetail(bookId).then(setBookDetail).catch(() => {}),
+        refreshCashbooks(),
+      ]);
+    },
+    [refreshCashbooks],
+  );
+
+  const addManualEntry = useCallback(
+    async (bookId: string, input: ManualEntryInput) => {
+      await cashbookApi.createManualEntry(bookId, input);
+      await reloadDetailAndList(bookId);
+    },
+    [reloadDetailAndList],
+  );
+
+  const updateEntry = useCallback(
+    async (entryId: string, input: Partial<ManualEntryInput>) => {
+      const updated = await cashbookApi.updateEntry(entryId, input);
+      await reloadDetailAndList(updated.bookId);
+    },
+    [reloadDetailAndList],
+  );
+
+  const deleteEntry = useCallback(
+    async (entryId: string) => {
+      await cashbookApi.deleteCashbookEntry(entryId);
+      const bookId = bookDetail?.book.id;
+      if (bookId) await reloadDetailAndList(bookId);
+      else await refreshCashbooks();
+    },
+    [bookDetail?.book.id, reloadDetailAndList, refreshCashbooks],
+  );
 
   const importOrders = useCallback(
     async (params: {
       bookId?: string;
       newBookName?: string;
       newBookIcon?: string;
+      newBookColor?: string;
+      idempotencyKey?: string;
       items: Array<{ orderId: string; orderItemKey?: string }>;
     }) => {
       const result = await cashbookApi.importOrdersToCashbook(params);
-      // Refresh the list so summaries reflect the newly imported lines.
       await refreshCashbooks();
       if (bookDetail && bookDetail.book.id === result.book.id) {
         await loadCashbookDetail(result.book.id);
@@ -130,41 +201,39 @@ export const CashBookProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     [refreshCashbooks, loadCashbookDetail, bookDetail],
   );
 
-  const deleteEntry = useCallback(
-    async (entryId: string) => {
-      await cashbookApi.deleteCashbookEntry(entryId);
-      setBookDetail((prev) => {
-        if (!prev) return prev;
-        const entries = prev.entries.filter((e) => e.entryId !== entryId);
-        const sales = entries.filter((e) => e.amount > 0);
-        const totalRevenue = sales.reduce((a, e) => a + e.amount, 0);
-        const totalItems = sales.reduce((a, e) => a + (e.quantity || 1), 0);
-        const orderIds = new Set(sales.map((e) => e.orderId).filter(Boolean));
-        return {
-          ...prev,
-          entries,
-          summary: {
-            totalSales: orderIds.size,
-            totalRevenue,
-            netRevenue: totalRevenue,
-            totalItems,
-            averageOrderValue: orderIds.size ? Math.round(totalRevenue / orderIds.size) : 0,
-            entryCount: entries.length,
-          },
-        };
-      });
-      // Book-level totals in the dashboard list are also stale now.
-      refreshCashbooks().catch(() => {});
-    },
-    [refreshCashbooks],
-  );
+  const loadOversight = useCallback(async (sellerId?: string) => {
+    setOversightLoading(true);
+    setOversightError(null);
+    try {
+      const data = await cashbookApi.getCashbookOversight(sellerId);
+      if ('owners' in data) setOversight(data);
+    } catch (error) {
+      setOversight(null);
+      setOversightError(error instanceof Error ? error.message : 'Failed to load oversight');
+    } finally {
+      setOversightLoading(false);
+    }
+  }, []);
+
+  const loadOversightSeller = useCallback(async (sellerId: string) => {
+    setOversightLoading(true);
+    setOversightError(null);
+    try {
+      const data = await cashbookApi.getCashbookOversight(sellerId);
+      if ('books' in data) setOversightSeller(data);
+    } catch (error) {
+      setOversightSeller(null);
+      setOversightError(error instanceof Error ? error.message : 'Failed to load seller cashbooks');
+    } finally {
+      setOversightLoading(false);
+    }
+  }, []);
 
   const loadFinanceSummary = useCallback(async (sellerId?: string) => {
     setFinanceSummaryLoading(true);
     setFinanceSummaryError(null);
     try {
-      const summary = await cashbookApi.getFinanceSummary(sellerId);
-      setFinanceSummary(summary);
+      setFinanceSummary(await cashbookApi.getFinanceSummary(sellerId));
     } catch (error) {
       setFinanceSummary(null);
       setFinanceSummaryError(error instanceof Error ? error.message : 'Failed to load finance summary');
@@ -186,8 +255,18 @@ export const CashBookProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         loadCashbookDetail,
         clearCashbookDetail,
         createCashbook,
-        importOrders,
+        renameCashbook,
+        deleteCashbook,
+        addManualEntry,
+        updateEntry,
         deleteEntry,
+        importOrders,
+        oversight,
+        oversightLoading,
+        oversightError,
+        loadOversight,
+        oversightSeller,
+        loadOversightSeller,
         financeSummary,
         financeSummaryLoading,
         financeSummaryError,

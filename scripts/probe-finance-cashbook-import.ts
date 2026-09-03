@@ -1,5 +1,7 @@
 /**
  * Probe: Finance summary + Order→Cashbook import (category split, dedupe, cancel safety).
+ * Sprint 15: dedupe is now GLOBAL per owner via `sourceImportKey` — the same
+ * order line can no longer be re-imported into a second book.
  * Run: npx tsx scripts/probe-finance-cashbook-import.ts
  */
 import { resolveSettlementCommission } from '../server/escrow/commissionPolicy';
@@ -48,6 +50,7 @@ async function main() {
     ...Array.from({ length: 4 }, (_, i) => ({
       orderId: `ord_a_${i}`,
       orderItemKey: `ord_a_${i}:phone:${i}`,
+      sourceImportKey: `order:ord_a_${i}:${owner}:lst_phone_${i}:${i}`,
       listingId: `lst_phone_${i}`,
       productTitle: `Phone ${i}`,
       brandId: 'brand_e',
@@ -63,6 +66,7 @@ async function main() {
     ...Array.from({ length: 3 }, (_, i) => ({
       orderId: `ord_b_${i}`,
       orderItemKey: `ord_b_${i}:shirt:${i}`,
+      sourceImportKey: `order:ord_b_${i}:${owner}:lst_shirt_${i}:${i}`,
       listingId: `lst_shirt_${i}`,
       productTitle: `Shirt ${i}`,
       brandId: 'brand_f',
@@ -78,6 +82,7 @@ async function main() {
     ...Array.from({ length: 3 }, (_, i) => ({
       orderId: `ord_c_${i}`,
       orderItemKey: `ord_c_${i}:blender:${i}`,
+      sourceImportKey: `order:ord_c_${i}:${owner}:lst_blend_${i}:${i}`,
       listingId: `lst_blend_${i}`,
       productTitle: `Blender ${i}`,
       brandId: 'brand_h',
@@ -116,10 +121,17 @@ async function main() {
   assert(dup.imported === 0 && dup.skipped === 4, 'duplicate skip in same book');
   console.log('PASS duplicate skip');
 
-  // 5) Same item allowed in second book (overlap analysis)
+  // 5) GLOBAL dedupe — the same order line CANNOT enter a second book
   const overlap = importResolvedLines(fashion.id, owner, [lines[0]]);
-  assert(overlap.imported === 1, 'same item can enter another cashbook');
-  console.log('PASS cross-book overlap allowed');
+  assert(
+    overlap.imported === 0 && overlap.skipped === 1,
+    'same order line is globally deduped across books',
+  );
+  assert(
+    overlap.details[0]?.existingBookId === electronics.id,
+    'skip reports the book that already holds the line',
+  );
+  console.log('PASS global cross-book dedupe');
 
   // 6) Create named book — no Untitled
   const named = createCashbook({ ownerUserId: owner, name: 'August Electronics Sales' });

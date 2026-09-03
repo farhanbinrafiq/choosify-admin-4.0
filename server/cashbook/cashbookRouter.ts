@@ -5,11 +5,16 @@ import { requireMarketplaceAccess } from '../entitlements/marketplaceAccessMiddl
 import { CommerceError } from '../commerce/cartService';
 import { Logger } from '../lib/logger';
 import {
+  createManualCashbookEntry,
   createMyCashbook,
+  deleteMyCashbook,
   deleteMyCashbookEntry,
   getMyCashbookDetail,
   importOrdersToCashbook,
+  listCashbookOversight,
   listMyCashbooks,
+  renameMyCashbook,
+  updateManualCashbookEntry,
 } from './cashbookService';
 import { getFinanceSummaryForActor } from './financeSummaryService';
 
@@ -28,9 +33,19 @@ function actorOf(req: {
   };
 }
 
+function isAdminRole(role?: string): boolean {
+  const r = (role || '').toLowerCase();
+  return r === 'admin' || r === 'super_admin' || r === 'superadmin';
+}
+
 function handleError(res: import('express').Response, error: unknown): void {
   if (error instanceof CommerceError) {
-    res.status(error.statusCode).json({ success: false, error: error.message });
+    const body: Record<string, unknown> = { success: false, error: error.message };
+    const details = (error as { details?: unknown }).details;
+    if (details !== undefined) body.details = details;
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === 'string') body.code = code;
+    res.status(error.statusCode).json(body);
     return;
   }
   if (error instanceof Error && error.message === 'Book Name is required') {
@@ -46,14 +61,13 @@ function handleError(res: import('express').Response, error: unknown): void {
   });
 }
 
-/** Current payout breakdown for authenticated Seller/Creator (or Admin inspecting sellerId). */
+// ── finance summary (Escrow-derived payout breakdown — separate concern) ──
+
 cashbookRouter.get('/finance/summary', ...requireAuth, async (req, res) => {
   try {
     const actor = actorOf(req);
-    const role = (actor.role || '').toLowerCase();
-    const isAdmin = role === 'admin' || role === 'super_admin' || role === 'superadmin';
     const sellerId =
-      isAdmin && typeof req.query.sellerId === 'string' && req.query.sellerId.trim()
+      isAdminRole(actor.role) && typeof req.query.sellerId === 'string' && req.query.sellerId.trim()
         ? req.query.sellerId.trim()
         : actor.userId;
     const currency = typeof req.query.currency === 'string' ? req.query.currency : 'BDT';
@@ -67,10 +81,8 @@ cashbookRouter.get('/finance/summary', ...requireAuth, async (req, res) => {
 cashbookRouter.get('/finance/adjustments', ...requireAuth, async (req, res) => {
   try {
     const actor = actorOf(req);
-    const role = (actor.role || '').toLowerCase();
-    const isAdmin = role === 'admin' || role === 'super_admin' || role === 'superadmin';
     const sellerId =
-      isAdmin && typeof req.query.sellerId === 'string' && req.query.sellerId.trim()
+      isAdminRole(actor.role) && typeof req.query.sellerId === 'string' && req.query.sellerId.trim()
         ? req.query.sellerId.trim()
         : actor.userId;
     const summary = await getFinanceSummaryForActor(sellerId, actor, 'BDT');
@@ -79,6 +91,20 @@ cashbookRouter.get('/finance/adjustments', ...requireAuth, async (req, res) => {
     handleError(res, error);
   }
 });
+
+// ── staff READ-ONLY oversight — MUST be declared before /cashbooks/:bookId ──
+
+cashbookRouter.get('/cashbooks/oversight', ...requireAuth, async (req, res) => {
+  try {
+    const sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
+    const data = await listCashbookOversight(actorOf(req), sellerId);
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+// ── seller/creator cashbooks ──────────────────────────────────────────
 
 cashbookRouter.get('/cashbooks', ...requireAuth, async (req, res) => {
   try {
@@ -102,6 +128,32 @@ cashbookRouter.post('/cashbooks', ...requireAuth, async (req, res) => {
   }
 });
 
+cashbookRouter.post('/cashbooks/import-orders', ...requireAuth, async (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const headerKey = req.headers['idempotency-key'];
+    const data = await importOrdersToCashbook(actorOf(req), {
+      bookId: typeof req.body?.bookId === 'string' ? req.body.bookId : undefined,
+      newBookName: typeof req.body?.newBookName === 'string' ? req.body.newBookName : undefined,
+      newBookIcon: typeof req.body?.newBookIcon === 'string' ? req.body.newBookIcon : undefined,
+      newBookColor: typeof req.body?.newBookColor === 'string' ? req.body.newBookColor : undefined,
+      idempotencyKey:
+        (typeof headerKey === 'string' && headerKey) ||
+        (typeof req.body?.idempotencyKey === 'string' ? req.body.idempotencyKey : undefined) ||
+        undefined,
+      items: items
+        .map((it: { orderId?: string; orderItemKey?: string }) => ({
+          orderId: String(it.orderId || ''),
+          orderItemKey: it.orderItemKey ? String(it.orderItemKey) : undefined,
+        }))
+        .filter((it: { orderId: string }) => Boolean(it.orderId)),
+    });
+    res.status(201).json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
 cashbookRouter.get('/cashbooks/:bookId', ...requireAuth, async (req, res) => {
   try {
     const ownerUserId =
@@ -113,19 +165,62 @@ cashbookRouter.get('/cashbooks/:bookId', ...requireAuth, async (req, res) => {
   }
 });
 
-cashbookRouter.post('/cashbooks/import-orders', ...requireAuth, async (req, res) => {
+cashbookRouter.patch('/cashbooks/:bookId', ...requireAuth, async (req, res) => {
   try {
-    const items = Array.isArray(req.body?.items) ? req.body.items : [];
-    const data = await importOrdersToCashbook(actorOf(req), {
-      bookId: typeof req.body?.bookId === 'string' ? req.body.bookId : undefined,
-      newBookName: typeof req.body?.newBookName === 'string' ? req.body.newBookName : undefined,
-      newBookIcon: typeof req.body?.newBookIcon === 'string' ? req.body.newBookIcon : undefined,
-      items: items.map((it: { orderId?: string; orderItemKey?: string }) => ({
-        orderId: String(it.orderId || ''),
-        orderItemKey: it.orderItemKey ? String(it.orderItemKey) : undefined,
-      })).filter((it: { orderId: string }) => Boolean(it.orderId)),
+    const book = await renameMyCashbook(actorOf(req), req.params.bookId, String(req.body?.name || ''));
+    res.json({ success: true, data: book });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+cashbookRouter.delete('/cashbooks/:bookId', ...requireAuth, async (req, res) => {
+  try {
+    const data = await deleteMyCashbook(actorOf(req), req.params.bookId);
+    res.json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+// ── manual entries ───────────────────────────────────────────────────
+
+cashbookRouter.post('/cashbooks/:bookId/entries', ...requireAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const data = await createManualCashbookEntry(actorOf(req), req.params.bookId, {
+      direction: b.direction === 'out' ? 'out' : 'in',
+      amount: Number(b.amount),
+      description: typeof b.description === 'string' ? b.description : b.remarks,
+      category: typeof b.category === 'string' ? b.category : undefined,
+      contact: typeof b.contact === 'string' ? b.contact : undefined,
+      paymentMode: typeof b.paymentMode === 'string' ? b.paymentMode : undefined,
+      docRef: typeof b.docRef === 'string' ? b.docRef : b.doc,
+      entryDate: typeof b.entryDate === 'string' ? b.entryDate : undefined,
+      entryTime: typeof b.entryTime === 'string' ? b.entryTime : undefined,
+      linkedOrderId: typeof b.linkedOrderId === 'string' ? b.linkedOrderId : undefined,
     });
     res.status(201).json({ success: true, data });
+  } catch (error) {
+    handleError(res, error);
+  }
+});
+
+cashbookRouter.patch('/cashbooks/entries/:entryId', ...requireAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const data = await updateManualCashbookEntry(actorOf(req), req.params.entryId, {
+      direction: b.direction === 'out' ? 'out' : b.direction === 'in' ? 'in' : undefined,
+      amount: b.amount !== undefined ? Number(b.amount) : undefined,
+      description: typeof b.description === 'string' ? b.description : b.remarks,
+      category: typeof b.category === 'string' ? b.category : undefined,
+      contact: typeof b.contact === 'string' ? b.contact : undefined,
+      paymentMode: typeof b.paymentMode === 'string' ? b.paymentMode : undefined,
+      docRef: typeof b.docRef === 'string' ? b.docRef : b.doc,
+      entryDate: typeof b.entryDate === 'string' ? b.entryDate : undefined,
+      entryTime: typeof b.entryTime === 'string' ? b.entryTime : undefined,
+    });
+    res.json({ success: true, data });
   } catch (error) {
     handleError(res, error);
   }

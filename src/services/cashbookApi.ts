@@ -2,19 +2,16 @@
  * Client wrapper for the real Cashbook / Finance backend.
  * Mounted at /api/v1 by server/cashbook/cashbookRouter.ts.
  *
- * Important real-backend constraints (do not build UI that assumes otherwise):
- * - Cashbooks are seller/creator-owned. `listCashbooks` always returns books
- *   owned by the *authenticated actor* — there is no "list all sellers'
- *   cashbooks" endpoint for admins.
- * - Entries only ever come from importing authoritative Order lines
- *   (`importOrdersToCashbook`). There is NO endpoint to create an arbitrary
- *   manual entry, edit an entry, lock/unlock a book, or delete a whole book.
- * - `createCashbook` / `importOrdersToCashbook` are blocked server-side for
- *   admin/super_admin actors (403) — those actions are seller/creator only.
- * - Admins may inspect a specific seller/creator's data via the `sellerId`
- *   (finance endpoints) or `ownerUserId` (cashbook detail) query params, but
- *   cannot delete another user's entries — deletion is always scoped to the
- *   authenticated actor's own userId server-side.
+ * Real-backend contract (Sprint 15 rebuild):
+ * - Cashbooks are seller/creator-owned. Ownership is ALWAYS the authenticated
+ *   actor; no request field widens it.
+ * - Entries are `order_import` (immutable snapshot of a delivered/completed
+ *   seller-owned order line, deduped globally per owner via `sourceImportKey`)
+ *   OR `manual` (seller Cash In / Cash Out — editable).
+ * - Seller/creator only: create/rename/delete book, add/edit/delete entry,
+ *   import orders. All are 403 for admin/super_admin at the API layer.
+ * - Staff get READ-ONLY oversight: `getCashbookOversight()` (owner index or one
+ *   seller's books) and `getCashbookDetail(bookId, ownerUserId)` — no mutation.
  */
 
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
@@ -34,9 +31,15 @@ function parseErrorMessage(rawError: string, status: number): string {
   return rawError;
 }
 
-async function request<T>(path: string, method: HttpMethod = 'GET', body?: unknown): Promise<T> {
+async function request<T>(
+  path: string,
+  method: HttpMethod = 'GET',
+  body?: unknown,
+  extraHeaders?: Record<string, string>,
+): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...(extraHeaders || {}),
   };
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
   if (token) {
@@ -70,6 +73,12 @@ export interface CashbookBook {
 }
 
 export interface CashbookSummary {
+  moneyIn: number;
+  moneyOut: number;
+  net: number;
+  importedCount: number;
+  manualCount: number;
+  // kept for backward compatibility
   totalSales: number;
   totalRevenue: number;
   netRevenue: number;
@@ -89,12 +98,26 @@ export interface CashbookEntry {
   bookId: string;
   ownerUserId: string;
   source: CashbookEntrySource;
+  /** Signed: Cash In positive, Cash Out negative. */
   amount: number;
   currency: string;
   description: string;
   category?: string;
+  // manual fields
+  contact?: string;
+  paymentMode?: string;
+  docRef?: string;
+  entryDate?: string;
+  entryTime?: string;
+  linkedOrderId?: string;
+  // order-import fields (immutable)
   orderId?: string;
   orderItemKey?: string;
+  sourceImportKey?: string;
+  sourceType?: 'order';
+  sourceSellerId?: string;
+  sourceSubOrderId?: string;
+  sourceOrderStatusAtImport?: string;
   listingId?: string;
   productTitle?: string;
   brandId?: string;
@@ -104,6 +127,10 @@ export interface CashbookEntry {
   lineTotal?: number;
   orderDate?: string;
   orderStatus?: string;
+  // read-time enrichment (never mutates the stored entry)
+  liveOrderStatus?: string;
+  orderFlags?: string[];
+  orderChanged?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -112,6 +139,51 @@ export interface CashbookDetail {
   book: CashbookBook;
   summary: CashbookSummary;
   entries: CashbookEntry[];
+  /** true when the viewer is staff (oversight) — the UI must render no controls. */
+  readOnly?: boolean;
+}
+
+export interface CashbookOversightOwner {
+  ownerUserId: string;
+  /** Headline label: the owner's brand name where one exists. */
+  brandName?: string;
+  brandNames?: string[];
+  /** Seller / account identity — secondary label. */
+  accountName?: string;
+  displayName?: string;
+  email?: string;
+  choosifyUserId?: string;
+  role?: string;
+  bookCount: number;
+  entryCount: number;
+  moneyIn: number;
+  moneyOut: number;
+  updatedAt?: string;
+}
+
+export interface CashbookOversightIndex {
+  owners: CashbookOversightOwner[];
+}
+
+export interface CashbookOversightSeller {
+  sellerId: string;
+  accountName?: string;
+  brandName?: string;
+  brandNames?: string[];
+  books: CashbookListItem[];
+}
+
+export interface ManualEntryInput {
+  direction: 'in' | 'out';
+  amount: number;
+  description?: string;
+  category?: string;
+  contact?: string;
+  paymentMode?: string;
+  docRef?: string;
+  entryDate?: string;
+  entryTime?: string;
+  linkedOrderId?: string;
 }
 
 export interface CashbookImportDetailRow {
@@ -121,12 +193,20 @@ export interface CashbookImportDetailRow {
   reason?: string;
 }
 
+export interface CashbookImportRejection {
+  orderId: string;
+  reason: string;
+}
+
 export interface CashbookImportResult {
   imported: number;
   skipped: number;
   failed: number;
   book: CashbookBook;
   details: CashbookImportDetailRow[];
+  rejected?: CashbookImportRejection[];
+  createdBook?: boolean;
+  reused?: boolean;
 }
 
 export interface CashbookDeleteEntryResult {
@@ -176,26 +256,87 @@ export const cashbookApi = {
     return result.data;
   },
 
-  /** `ownerUserId` is honored only when the caller is staff (admin inspecting a seller/creator). */
+  /** Rename a book you own. 403 for admin/super_admin. */
+  renameCashbook: async (bookId: string, name: string): Promise<CashbookBook> => {
+    const result = await request<{ data: CashbookBook }>(
+      `/cashbooks/${encodeURIComponent(bookId)}`,
+      'PATCH',
+      { name },
+    );
+    return result.data;
+  },
+
+  /** Delete a book you own (cascades its entries). 403 for admin/super_admin. */
+  deleteCashbook: async (bookId: string): Promise<{ deleted: boolean; removedEntries: number }> => {
+    const result = await request<{ data: { deleted: boolean; removedEntries: number } }>(
+      `/cashbooks/${encodeURIComponent(bookId)}`,
+      'DELETE',
+    );
+    return result.data;
+  },
+
+  /** `ownerUserId` is honored only when the caller is staff (oversight). */
   getCashbookDetail: async (bookId: string, ownerUserId?: string): Promise<CashbookDetail> => {
     const q = ownerUserId ? `?ownerUserId=${encodeURIComponent(ownerUserId)}` : '';
     const result = await request<{ data: CashbookDetail }>(`/cashbooks/${encodeURIComponent(bookId)}${q}`);
     return result.data;
   },
 
+  /** Staff-only READ-ONLY oversight. Without `sellerId` → owner index; with → that seller's books. */
+  getCashbookOversight: async (
+    sellerId?: string,
+  ): Promise<CashbookOversightIndex | CashbookOversightSeller> => {
+    const q = sellerId ? `?sellerId=${encodeURIComponent(sellerId)}` : '';
+    const result = await request<{ data: CashbookOversightIndex | CashbookOversightSeller }>(
+      `/cashbooks/oversight${q}`,
+    );
+    return result.data;
+  },
+
   /**
-   * Imports authoritative Order lines the actor owns as seller into a cashbook
-   * (existing `bookId`, or a `newBookName` to create one). Blocked server-side
-   * (403) for admin/super_admin actors. Items not owned by the actor are
-   * reported back as "failed" in `details` rather than silently dropped.
+   * Imports the actor's own DELIVERED / COMPLETED order lines (server-enforced)
+   * into a cashbook — existing `bookId`, or `newBookName` to create one
+   * atomically. Blocked (403) for admin/super_admin. Pass a stable
+   * `idempotencyKey` so a double-click / retry cannot create a duplicate book.
    */
   importOrdersToCashbook: async (payload: {
     bookId?: string;
     newBookName?: string;
     newBookIcon?: string;
+    newBookColor?: string;
+    idempotencyKey?: string;
     items: Array<{ orderId: string; orderItemKey?: string }>;
   }): Promise<CashbookImportResult> => {
-    const result = await request<{ data: CashbookImportResult }>('/cashbooks/import-orders', 'POST', payload);
+    const { idempotencyKey, ...body } = payload;
+    const result = await request<{ data: CashbookImportResult }>(
+      '/cashbooks/import-orders',
+      'POST',
+      body,
+      idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+    );
+    return result.data;
+  },
+
+  /** Add a manual Cash In / Cash Out entry to a book you own. 403 for staff. */
+  createManualEntry: async (bookId: string, input: ManualEntryInput): Promise<CashbookEntry> => {
+    const result = await request<{ data: CashbookEntry }>(
+      `/cashbooks/${encodeURIComponent(bookId)}/entries`,
+      'POST',
+      input,
+    );
+    return result.data;
+  },
+
+  /** Edit a MANUAL entry (imported entries are immutable → 409). 403 for staff. */
+  updateEntry: async (
+    entryId: string,
+    input: Partial<ManualEntryInput>,
+  ): Promise<CashbookEntry> => {
+    const result = await request<{ data: CashbookEntry }>(
+      `/cashbooks/entries/${encodeURIComponent(entryId)}`,
+      'PATCH',
+      input,
+    );
     return result.data;
   },
 
