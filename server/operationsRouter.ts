@@ -18,6 +18,7 @@ import type {
   OpsReturnStatus,
   OpsReview,
   OpsStorefrontOrder,
+  OpsOrderInternalNote,
   OpsVerificationDocument,
   OpsVerificationRequest,
   OpsWarrantyClaim,
@@ -40,7 +41,6 @@ import { catalogStore } from '../lib/vercel-catalog/catalogStore';
 import {
   reserveInventoryQuantity,
   releaseInventoryQuantity,
-  consumeInventoryQuantity,
 } from './catalog/inventoryStore';
 import { getService } from './catalog/serviceStore';
 import { resolveActiveGuideOffer, guideOfferWasPresent } from './catalog/guideOfferService';
@@ -1381,95 +1381,87 @@ operationsRouter.post('/operations/orders/:id/items/:itemId/mark-delivered', ...
     return;
   }
 
-  // QA3-001: convert this item's reservation into consumed stock (the legacy
-  // path has no separate "packed"/"dispatched" step -- Sprint 3 confirmed
-  // trackingStatus is set to 'delivered' in exactly one place in the whole
-  // server, this endpoint -- so this is the only fulfillment-progressed
-  // signal available; mirrors the Commerce engine's reserved->consumed
-  // conversion at Packed). Idempotent via the item's own inventoryConsumed
-  // flag so repeated mark-delivered calls never double-decrement. Service
-  // lines (no productId) never touch inventory.
-  const productId = String(located.item.productId || '').trim();
-  const alreadyConsumed = Boolean(located.item.inventoryConsumed);
-  if (productId && !alreadyConsumed) {
-    const variantId = typeof located.item.variantId === 'string' ? located.item.variantId : undefined;
-    const quantity = Math.max(1, Math.floor(Number(located.item.quantity) || 1));
-    await consumeInventoryQuantity({ productId, variantId, quantity }).catch((err) => {
-      console.error('[Order] Failed to consume inventory on mark-delivered:', err);
-    });
+  // Canonical delivery settlement (Sprint 14). One convergence point shared with
+  // the lifecycle "Mark delivered" CTA and the courier webhook: sets this item's
+  // deliveredAt (+ warranty window), consumes its reservation ONLY for
+  // Operations-only orders (a Commerce checkout order already consumed at
+  // Packed — no double-decrement), marks the sub-order delivered when all its
+  // items are, and — only once EVERY applicable item is delivered — flips the
+  // OpsShipment to `delivered`, advances the linked Commerce order
+  // shipped → delivered, and posts the single buyer "delivered" event.
+  // Partial delivery never settles the whole order. Idempotent.
+  const { settleOrderItemDelivered } = await import('./operations/deliverySettlement');
+  const settlement = await settleOrderItemDelivered(
+    req.params.id,
+    req.params.itemId,
+    userIsStaff(req) ? 'admin' : 'per_item_manual',
+    { actorId: req.userId },
+  );
+  if (!settlement.ok) {
+    res
+      .status(settlement.reason === 'item_not_found' ? 404 : 409)
+      .json({ error: settlement.reason === 'item_not_found' ? 'Order item not found' : 'Delivery could not be settled' });
+    return;
   }
 
-  const deliveredAt = new Date().toISOString();
-  const nextSubs = subs.map((sub) => {
-    const items = sub.items || [];
-    const hasItem = items.some((it) => it.itemId === req.params.itemId);
-    if (!hasItem) return sub;
-    return {
-      ...sub,
-      trackingStatus: 'delivered',
-      items: items.map((it) => {
-        if (it.itemId !== req.params.itemId) return it;
-        const consumedFlag = productId ? { inventoryConsumed: true } : {};
-        const warrantyMonths = Number(it.warrantyMonthsAtPurchase) || 0;
-        if (!warrantyMonths) return { ...it, ...consumedFlag, deliveredAt };
-        const expiresAt = new Date(
-          Date.now() + warrantyMonths * 30 * 24 * 60 * 60 * 1000,
-        ).toISOString();
-        return { ...it, ...consumedFlag, deliveredAt, warrantyStartsAt: deliveredAt, warrantyExpiresAt: expiresAt };
-      }),
-    };
-  });
-
-  const saved = operationsStore.updateOrder(req.params.id, { subOrders: nextSubs });
-  scheduleOperationsPersist();
-
-  // Sync the order's shipment only once every item in every sub-order has
-  // its own deliveredAt (product AND service lines both get deliveredAt
-  // unconditionally above) -- a multi-seller order shares one shipment, so
-  // marking a single item delivered must not flip it early while other
-  // sellers' items are still outstanding.
-  try {
-    const allItemsDelivered = nextSubs.every((sub) =>
-      (sub.items || []).every((it) => Boolean((it as Record<string, unknown>).deliveredAt)),
-    );
-    if (allItemsDelivered) {
-      const shipment = shipmentStore.getShipmentByOrderId(req.params.id);
-      if (shipment && shipment.status !== 'delivered') {
-        shipmentStore.updateShipment(shipment.id, {
-          status: 'delivered',
-          trackingEvents: [
-            {
-              id: `evt_${Date.now()}`,
-              timestamp: deliveredAt,
-              status: 'delivered',
-              location: shipment.region || 'Dhaka',
-              description: `Marked delivered via order fulfillment (item ${req.params.itemId}).`,
-            },
-            ...shipment.trackingEvents,
-          ],
-        });
-      }
-    }
-  } catch (err) {
-    console.error('[Order] Failed to sync shipment status on mark-delivered:', err);
-  }
-
-  if (existing.buyerId) {
-    try {
-      await notifyUser(existing.buyerId, {
-        type: COMMUNICATION_TYPES.ORDER_UPDATE,
-        category: 'buyer',
-        title: 'Order delivered',
-        summary: `${String(located.item.productTitle || 'Your item')} from order ${existing.orderId} was marked delivered.`,
-        actionUrl: '/profile/orders',
-        metadata: { orderId: existing.orderId, itemId: req.params.itemId },
-      });
-    } catch (err) {
-      console.warn('[Order] Notify buyer (delivered) failed:', err);
-    }
-  }
-
+  const saved = operationsStore.getOrder(req.params.id);
   res.json({ success: true, data: saved });
+});
+
+/**
+ * Order internal notes (Sprint 14) — staff-only operational log on one order.
+ * STRICT boundary: readable/writable ONLY by platform staff
+ * (super_admin / admin / support_agent / moderator / finance_manager). A seller
+ * — even one who owns a sub-order on this order — is 403'd. Notes are never
+ * exposed to the buyer and are never written to any System-B / support
+ * conversation. Append-only: no edit, no delete route. Stored on the order in
+ * the operations JSON snapshot (additive `internalNotes[]`).
+ */
+operationsRouter.get('/operations/orders/:id/notes', ...requireAuth, (req, res) => {
+  const order = operationsStore.getOrder(req.params.id);
+  if (!order) {
+    res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+  if (!userIsStaff(req)) {
+    res.status(403).json({ error: 'Internal order notes are staff-only' });
+    return;
+  }
+  res.json({ data: (order.internalNotes || []) as OpsOrderInternalNote[] });
+});
+
+operationsRouter.post('/operations/orders/:id/notes', ...requireAuth, (req, res) => {
+  const order = operationsStore.getOrder(req.params.id);
+  if (!order) {
+    res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+  if (!userIsStaff(req)) {
+    res.status(403).json({ error: 'Internal order notes are staff-only' });
+    return;
+  }
+  const body = String((req.body as { body?: unknown })?.body || '').trim();
+  if (!body) {
+    res.status(400).json({ error: 'body is required' });
+    return;
+  }
+  if (body.length > 4000) {
+    res.status(400).json({ error: 'Note is too long (max 4000 characters)' });
+    return;
+  }
+  const note: OpsOrderInternalNote = {
+    id: `note_${randomBytes(8).toString('hex')}`,
+    orderId: order.orderId,
+    authorId: req.userId || 'unknown',
+    authorName: String((req.body as { authorName?: unknown })?.authorName || '').trim() || 'Staff',
+    authorRole: String(req.userRole || 'staff'),
+    body,
+    createdAt: new Date().toISOString(),
+  };
+  const next = [...((order.internalNotes || []) as OpsOrderInternalNote[]), note];
+  const saved = operationsStore.updateOrder(order.id, { internalNotes: next });
+  scheduleOperationsPersist();
+  res.status(201).json({ data: (saved?.internalNotes || next) as OpsOrderInternalNote[], note });
 });
 
 // ─── Manual order offers (Sprint 10) ───────────────────────────────────────────
@@ -2214,6 +2206,7 @@ operationsRouter.get('/operations/returns', ...requireAuth, (req, res) => {
   let buyerId = typeof req.query.buyerId === 'string' ? req.query.buyerId : undefined;
   let sellerId = typeof req.query.sellerId === 'string' ? req.query.sellerId : undefined;
   const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+  const orderId = typeof req.query.orderId === 'string' ? req.query.orderId : undefined;
 
   if (!userCanListReturns(req, { buyerId, sellerId })) {
     // Sellers with no filter → scope to their own sellerId
@@ -2235,7 +2228,7 @@ operationsRouter.get('/operations/returns', ...requireAuth, (req, res) => {
     }
   }
 
-  const rows = operationsStore.listReturns({ buyerId, sellerId, status });
+  const rows = operationsStore.listReturns({ buyerId, sellerId, status, orderId });
   res.json({ data: rows });
 });
 

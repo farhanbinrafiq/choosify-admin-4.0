@@ -875,13 +875,16 @@ export const operationsStore = {
     return updated;
   },
 
-  listReturns: (filter?: { buyerId?: string; sellerId?: string; status?: string }) => {
+  listReturns: (filter?: { buyerId?: string; sellerId?: string; status?: string; orderId?: string }) => {
     let rows = [...state.returns].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     if (filter?.buyerId) {
       rows = rows.filter((row) => row.buyerId === filter.buyerId);
     }
     if (filter?.sellerId) {
       rows = rows.filter((row) => row.sellerId === filter.sellerId);
+    }
+    if (filter?.orderId) {
+      rows = rows.filter((row) => row.orderId === filter.orderId);
     }
     if (filter?.status) {
       rows = rows.filter((row) => row.status.toLowerCase() === filter.status!.toLowerCase());

@@ -1,6 +1,8 @@
 import { Address, Contact, CourierInfo } from './courier';
 
-export type ShipmentStatus = 
+export type ShipmentStatus =
+  | 'awaiting_dispatch'
+  | 'dispatched'
   | 'pending_pickup'
   | 'picked_up'
   | 'in_transit'

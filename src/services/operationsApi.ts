@@ -90,6 +90,8 @@ export interface OpsOrderItem {
 export interface OpsSubOrder {
   sellerId: string;
   sellerBusinessName?: string;
+  /** Brand the seller fulfilled this slice under (set by the checkout mirror). */
+  brandId?: string;
   invoiceId?: string;
   deliveryFee: number;
   /**
@@ -146,6 +148,40 @@ export interface OpsStorefrontOrder {
   paymentDueAt?: string;
   /** COD orders only -- delivery fee prepaid online at checkout; product amount stays due at the doorstep. */
   codDeliveryFeePaid?: boolean;
+}
+
+/** Staff-only internal note on an order (GET/POST /operations/orders/:id/notes). */
+export interface OpsOrderInternalNote {
+  id: string;
+  orderId: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  body: string;
+  createdAt: string;
+}
+
+/**
+ * The canonical Commerce order behind an Operations orderId (1:1 by
+ * orderNumber). Only the fields the Order Hub lifecycle panel needs — the full
+ * shape lives in server/commerce/types.ts CommerceOrder.
+ */
+export interface CommerceOrderLite {
+  id: string;
+  orderNumber: string;
+  status: 'pending' | 'confirmed' | 'packed' | 'shipped' | 'delivered' | 'completed' | 'cancelled';
+  sellerId: string;
+  consumerId: string;
+  brandId?: string;
+  source?: string;
+  paymentMethod?: string;
+  paymentStatus?: string;
+  cancelReason?: string;
+  cancelledBy?: string;
+  cancelledAt?: string;
+  statusBeforeCancel?: string;
+  updatedAt?: string;
+  items?: Array<{ listingType?: string }>;
 }
 
 export interface OpsCouponRule {
@@ -294,6 +330,8 @@ export type PermissionKey =
 
 // Mirrors server/operations/shipmentStore.ts OpsShipmentStatus exactly.
 export type OpsShipmentStatus =
+  | 'awaiting_dispatch'
+  | 'dispatched'
   | 'pending_pickup'
   | 'picked_up'
   | 'in_transit'
@@ -301,6 +339,15 @@ export type OpsShipmentStatus =
   | 'failed_delivery'
   | 'returned'
   | 'cancelled';
+
+/** Shipment statuses that are canonical evidence the parcel physically progressed. */
+export const SHIPMENT_MOVEMENT_STATUSES: readonly OpsShipmentStatus[] = [
+  'picked_up',
+  'in_transit',
+  'delivered',
+  'failed_delivery',
+  'returned',
+];
 
 export interface OpsShipment {
   id: string;
@@ -324,6 +371,12 @@ export interface OpsShipment {
     location: string;
     description: string;
   }[];
+  /** Dispatch Details (Sprint 14) — set only on a real successful dispatch. */
+  fulfillmentMethod?: 'courier' | 'seller_delivery' | 'pickup';
+  dispatchedAt?: string;
+  trackingUrl?: string;
+  estimatedDelivery?: string;
+  dispatchNote?: string;
 }
 
 /**
@@ -501,6 +554,135 @@ export const operationsApi = {
     const result = await request<{ data: OpsStorefrontOrder }>(
       `/operations/orders/${encodeURIComponent(orderId)}/items/${encodeURIComponent(itemId)}/mark-delivered`,
       'POST',
+    );
+    return result.data;
+  },
+
+  /** Staff-only order internal notes. A seller call 403s (surfaces as an error). */
+  listOrderNotes: async (orderId: string): Promise<OpsOrderInternalNote[]> => {
+    const result = await request<{ data: OpsOrderInternalNote[] }>(
+      `/operations/orders/${encodeURIComponent(orderId)}/notes`,
+    );
+    return result.data;
+  },
+  addOrderNote: async (
+    orderId: string,
+    body: string,
+    authorName?: string,
+  ): Promise<OpsOrderInternalNote[]> => {
+    const result = await request<{ data: OpsOrderInternalNote[] }>(
+      `/operations/orders/${encodeURIComponent(orderId)}/notes`,
+      'POST',
+      { body, authorName },
+    );
+    return result.data;
+  },
+
+  // ── Canonical order lifecycle (Commerce FSM) ────────────────────────────
+  // The rich order lifecycle (pending → confirmed → packed → shipped →
+  // delivered → completed, + cancel) lives in the Commerce engine
+  // (server/commerce/orderService.ts). Operations orders mirror its status.
+  // These resolve + drive that canonical FSM; the server owns every
+  // transition/role/ownership/idempotency rule.
+  /**
+   * The role-scoped Commerce order list (rich lifecycle status), joined to the
+   * Operations orders by orderNumber for the Order Hub workflow tabs. Server
+   * scopes: admin/staff → platform-wide; seller → its own (`as=seller`). A
+   * forged `as`/id cannot widen — same boundary as GET /operations/orders.
+   */
+  listCommerceOrders: async (mode: 'admin' | 'seller'): Promise<CommerceOrderLite[]> => {
+    const path = mode === 'seller' ? '/orders?as=seller' : '/orders';
+    try {
+      const result = await request<{ data: CommerceOrderLite[] }>(path);
+      return Array.isArray(result.data) ? result.data : [];
+    } catch {
+      return [];
+    }
+  },
+  getCommerceOrderByNumber: async (orderId: string): Promise<CommerceOrderLite | null> => {
+    try {
+      const result = await request<{ data: CommerceOrderLite }>(
+        `/orders/by-number/${encodeURIComponent(orderId)}`,
+      );
+      return result.data;
+    } catch (err) {
+      // 404 = this Operations order has no Commerce lifecycle record (booking / legacy).
+      if (err instanceof Error && /\(404\)|not found|No commerce order/i.test(err.message)) return null;
+      throw err;
+    }
+  },
+  transitionCommerceOrder: async (
+    commerceOrderId: string,
+    status: CommerceOrderLite['status'],
+  ): Promise<CommerceOrderLite> => {
+    const result = await request<{ data: { order: CommerceOrderLite } }>(
+      `/orders/${encodeURIComponent(commerceOrderId)}/transition`,
+      'POST',
+      { status },
+    );
+    return result.data.order;
+  },
+  cancelCommerceOrder: async (
+    commerceOrderId: string,
+    reason: string,
+  ): Promise<CommerceOrderLite> => {
+    const result = await request<{ data: CommerceOrderLite }>(
+      `/orders/${encodeURIComponent(commerceOrderId)}/cancel`,
+      'POST',
+      { reason },
+    );
+    return result.data;
+  },
+  /** Controlled correction: confirmed → pending only. Server validates eligibility. */
+  returnCommerceOrderToPending: async (
+    commerceOrderId: string,
+    reason: string,
+  ): Promise<CommerceOrderLite> => {
+    const result = await request<{ data: CommerceOrderLite }>(
+      `/orders/${encodeURIComponent(commerceOrderId)}/return-to-pending`,
+      'POST',
+      { reason },
+    );
+    return result.data;
+  },
+
+  /**
+   * Dispatch Details gate: Processing/Packed → Dispatched. Writes the canonical
+   * OpsShipment then advances the lifecycle. A 400 with { code:'DISPATCH_VALIDATION',
+   * details:{field:msg} } means the form is incomplete and the order did NOT move.
+   */
+  dispatchCommerceOrder: async (
+    commerceOrderId: string,
+    body: {
+      fulfillmentMethod: 'courier' | 'seller_delivery' | 'pickup';
+      courier?: string;
+      trackingNumber?: string;
+      trackingUrl?: string;
+      estimatedDelivery?: string;
+      dispatchNote?: string;
+    },
+  ): Promise<{ order: CommerceOrderLite; shipment: OpsShipment; reused: boolean }> => {
+    const result = await request<{ data: { order: CommerceOrderLite; shipment: OpsShipment; reused: boolean } }>(
+      `/orders/${encodeURIComponent(commerceOrderId)}/dispatch`,
+      'POST',
+      body,
+    );
+    return result.data;
+  },
+
+  /**
+   * Administrative Status Correction (staff-only). Allowed targets per state:
+   * confirmed→pending · packed→confirmed|pending · shipped→packed (pre-movement).
+   */
+  adminCorrectCommerceOrder: async (
+    commerceOrderId: string,
+    toStatus: 'pending' | 'confirmed' | 'packed',
+    reason: string,
+  ): Promise<{ order: CommerceOrderLite; from: string; to: string }> => {
+    const result = await request<{ data: { order: CommerceOrderLite; from: string; to: string } }>(
+      `/orders/${encodeURIComponent(commerceOrderId)}/admin-correct`,
+      'POST',
+      { toStatus, reason },
     );
     return result.data;
   },
@@ -800,11 +982,13 @@ export const operationsApi = {
     buyerId?: string;
     sellerId?: string;
     status?: string;
+    orderId?: string;
   }): Promise<import('../contexts/ReturnsContext').ReturnRequest[]> => {
     const params = new URLSearchParams();
     if (filter?.buyerId) params.set('buyerId', filter.buyerId);
     if (filter?.sellerId) params.set('sellerId', filter.sellerId);
     if (filter?.status) params.set('status', filter.status);
+    if (filter?.orderId) params.set('orderId', filter.orderId);
     const qs = params.toString();
     const result = await request<{ data: import('../contexts/ReturnsContext').ReturnRequest[] }>(
       `/operations/returns${qs ? `?${qs}` : ''}`,

@@ -70,11 +70,12 @@ const LeadsInboxPage = lazy(() => import('./pages/admin/LeadsInbox'));
 const JobPostingsPage = lazy(() => import('./pages/admin/JobPostings'));
 const SellerOffersPage = lazy(() => import('./pages/admin/SellerOffers'));
 const PlatformOrdersPage = lazy(() => import('./pages/admin/PlatformOrders'));
+const OrderDetailsPage = lazy(() => import('./pages/admin/OrderDetails'));
 const SellerConversations = lazy(() => import('./pages/admin/SellerConversations'));
 const AdsSponsorsPage = lazy(() => import('./pages/admin/AdsSponsors'));
 const SponsoredPromotionsPage = lazy(() => import('./pages/admin/SponsoredPromotions'));
 import OrdersOverview from './pages/admin/OrdersOverview';
-const SellerCustomers = lazy(() => import('./pages/admin/SellerCustomers'));
+const SellerMyCustomers = lazy(() => import('./pages/admin/SellerMyCustomers'));
 const InvoiceView = lazy(() => import('./pages/admin/InvoiceView').then(m => ({ default: m.InvoiceView })));
 const OperationsInvoiceView = lazy(() => import('./pages/admin/OperationsInvoiceView').then(m => ({ default: m.OperationsInvoiceView })));
 
@@ -961,11 +962,57 @@ export default function App() {
             />
 
             {/*
-              Order Hub (/admin/orders): approved CmsMirror management presentation.
-              Commerce Order API remains SoT via cms-mirror hydrate + studio-profile-api.
-              Do NOT host Order Hub in Orders.tsx/AdminLayout (Sprint 6 visual regression).
-              Invoice + overview/platform React routes kept for deep-links; not Order Hub chrome.
+              Order Hub — canonical shared React surface (Option B, Sprint 14).
+              Both Admin (/admin/orders) and Seller (/admin/platform-orders) now
+              render the SAME role-aware React <PlatformOrdersPage>, backed by the
+              canonical Operations order engine (server/operationsRouter.ts). This
+              retires the legacy CmsMirror-hosted "Orders Hub" iframe screen: the
+              CMS-mirror sidebar's "Orders Hub" link (page key `orders` →
+              /admin/orders) now lands here instead of the iframe.
+              RoleGuard keeps /admin/orders admin-only (seller's key is
+              `platformOrders`) and /admin/platform-orders open to both.
+              Rollback: remove the /admin/orders route below; it falls back to
+              CmsMirrorHost via the /admin/* catch-all.
+              Invoice + overview React routes unchanged.
+
+              Hybrid detail UX (Sprint 14 correction): the Order Hub card opens a
+              concise Quick View <Modal>; "Manage" / the Order ID / "Open Full
+              Details" navigate to the full <OrderDetailsPage> at
+              /admin/orders/:orderId (staff) or /admin/platform-orders/:orderId
+              (seller). Authorization is NOT route-dependent — OrderDetailsPage
+              reads via the canonical Operations API and the server 403s a caller
+              who does not own the order, whichever path was used. resolveAdmin-
+              PageKey maps both detail paths back to the Order Hub nav key so the
+              sidebar item stays active; browser Back returns to the Hub.
             */}
+            <Route
+              path="/admin/orders"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <PlatformOrdersPage />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/orders/:orderId"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <OrderDetailsPage />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
             <Route
               path="/admin/orders-overview"
               element={
@@ -988,6 +1035,48 @@ export default function App() {
                     <AdminWorkspaceLayout>
                       <Suspense fallback={routeSuspenseFallback}>
                         <PlatformOrdersPage />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/platform-orders/:orderId"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <OrderDetailsPage />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            {/*
+              Seller / Creator "My Customers" (/admin/customers, page key
+              `sellerCustomers`) — canonical React customer directory
+              (Option B/D, Sprint 14). Backed by the EXISTING canonical route
+              GET /catalog/workspace/{seller,creator}/customers
+              (server/catalogRouter.ts → listMyCustomersForOwner): a
+              server-owner-scoped projection of the partner's own Operations
+              orders + accepted/paid bookings. NOT the global Consumer DB
+              (/admin/consumers → <Consumers/>), NOT the retired
+              SellerCustomers.tsx prototype. RoleGuard exposes `sellerCustomers`
+              to seller / verified_seller / creator (and admin — who sees an
+              empty own-identity scope).
+              Rollback: remove this route; the path falls back to CmsMirrorHost.
+            */}
+            <Route
+              path="/admin/customers"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <SellerMyCustomers />
                       </Suspense>
                     </AdminWorkspaceLayout>
                   </RoleGuard>

@@ -23,13 +23,17 @@ import {
   createManualOrder,
   executeCheckout,
   getCheckoutForConsumer,
+  getOrderByNumberForActor,
   getOrderForActor,
   listOrdersForActor,
 } from './commerce/checkoutService';
 import {
+  adminCorrectOrderStatus,
   cancelOrder,
+  dispatchOrder,
   getShipmentForActor,
   listOrdersGroupedByCheckout,
+  returnOrderToPending,
   transitionOrder,
 } from './commerce/orderService';
 import { commerceStore, getCommercePersistenceMode } from './commerce/commerceStore';
@@ -249,6 +253,28 @@ commerceRouter.get('/orders', ...requireAuth, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/v1/orders/by-number/:orderNumber — resolve the canonical Commerce
+ * order (rich lifecycle FSM) behind an Operations `orderId`. Read-only,
+ * actor-scoped. 404 when the Operations order has no Commerce counterpart
+ * (pure booking / legacy) — the Order Hub then hides its lifecycle panel.
+ */
+commerceRouter.get('/orders/by-number/:orderNumber', ...requireAuth, async (req, res) => {
+  try {
+    const order = await getOrderByNumberForActor(req.params.orderNumber, {
+      userId: actorId(req),
+      role: actorRole(req),
+    });
+    if (!order) {
+      res.status(404).json({ success: false, error: 'No commerce order for this number' });
+      return;
+    }
+    res.json({ success: true, data: order });
+  } catch (error) {
+    handleCommerceError(res, error);
+  }
+});
+
 /** POST /api/v1/orders/:id/transition — Confirm/Pack/Ship/Deliver/Complete */
 commerceRouter.post('/orders/:id/transition', ...requireAuth, async (req, res) => {
   try {
@@ -269,6 +295,84 @@ commerceRouter.post('/orders/:id/transition', ...requireAuth, async (req, res) =
       success: true,
       data: { order: result.order, shipment: result.shipment, reused: result.reused },
     });
+  } catch (error) {
+    handleCommerceError(res, error);
+  }
+});
+
+/**
+ * POST /api/v1/orders/:id/dispatch — Processing/Packed → Dispatched, gated by
+ * a Dispatch Details payload. Writes the canonical OpsShipment FIRST, then
+ * advances the lifecycle; on failure nothing advances. Idempotent (a replay
+ * returns the current state with no side effects). DISPATCHED ≠ IN TRANSIT.
+ * Body: { fulfillmentMethod, courier?, trackingNumber?, trackingUrl?,
+ *         estimatedDelivery?, dispatchNote? }
+ */
+commerceRouter.post('/orders/:id/dispatch', ...requireAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const result = await dispatchOrder({
+      orderId: req.params.id,
+      actor: { userId: actorId(req), role: actorRole(req), brandId: b.brandId ? String(b.brandId) : undefined },
+      fulfillmentMethod: b.fulfillmentMethod,
+      courier: b.courier ? String(b.courier) : undefined,
+      trackingNumber: b.trackingNumber ? String(b.trackingNumber) : undefined,
+      trackingUrl: b.trackingUrl ? String(b.trackingUrl) : undefined,
+      estimatedDelivery: b.estimatedDelivery ? String(b.estimatedDelivery) : undefined,
+      dispatchNote: b.dispatchNote ? String(b.dispatchNote) : undefined,
+      idempotencyKey:
+        typeof req.headers['idempotency-key'] === 'string'
+          ? (req.headers['idempotency-key'] as string)
+          : b.idempotencyKey
+            ? String(b.idempotencyKey)
+            : undefined,
+    });
+    res.json({ success: true, data: { order: result.order, shipment: result.shipment, reused: result.reused } });
+  } catch (error) {
+    handleCommerceError(res, error);
+  }
+});
+
+/**
+ * POST /api/v1/orders/:id/admin-correct — Administrative Status Correction.
+ * Staff-only. Allowed ONLY: confirmed→pending, packed→confirmed|pending,
+ * shipped→packed (before proven courier movement). Reason required. Preserves
+ * history + emits OrderStatusCorrected. 409 + zero mutation when the
+ * inventory/shipment side-effects cannot be made consistent.
+ * Body: { toStatus: 'pending'|'confirmed'|'packed', reason: string }
+ */
+commerceRouter.post('/orders/:id/admin-correct', ...requireAuth, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const result = await adminCorrectOrderStatus({
+      orderId: req.params.id,
+      toStatus: b.toStatus,
+      reason: String(b.reason || ''),
+      actor: { userId: actorId(req), role: actorRole(req) },
+    });
+    res.json({ success: true, data: { order: result.order, from: result.from, to: result.to } });
+  } catch (error) {
+    handleCommerceError(res, error);
+  }
+});
+
+/**
+ * POST /api/v1/orders/:id/return-to-pending — controlled "undo acceptance".
+ * confirmed → pending ONLY, server-validated eligibility. NOT a generic setter.
+ */
+commerceRouter.post('/orders/:id/return-to-pending', ...requireAuth, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = await returnOrderToPending({
+      orderId: req.params.id,
+      reason: body.reason ? String(body.reason) : undefined,
+      actor: {
+        userId: actorId(req),
+        role: actorRole(req),
+        brandId: body.brandId ? String(body.brandId) : undefined,
+      },
+    });
+    res.json({ success: true, data: result.order });
   } catch (error) {
     handleCommerceError(res, error);
   }

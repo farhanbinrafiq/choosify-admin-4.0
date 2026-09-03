@@ -229,6 +229,15 @@ export type CommerceOrder = {
   cancelReason?: string;
   cancelledAt?: string;
   statusBeforeCancel?: CommerceOrderStatus;
+  /**
+   * Sprint 14 — explicit "undo an accidental acceptance" correction
+   * (confirmed → pending only; see returnOrderToPending in orderService.ts).
+   * A state correction, not a history rewrite — the prior acceptance stays in
+   * the event log (OrderConfirmed) and these fields record who/when/why.
+   */
+  returnedToPendingAt?: string;
+  returnedToPendingBy?: CommerceCancelActor;
+  returnedToPendingReason?: string;
   createdAt: string;
   updatedAt: string;
 };

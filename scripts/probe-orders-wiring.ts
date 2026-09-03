@@ -35,11 +35,22 @@ async function main() {
   assert(ctx.includes('commerceAuthoritative') && ctx.includes('commerceApi.listOrders'), '2. OrdersContext loads Commerce API');
   assert(!ctx.includes('mergePlatformOrders'), '3. operations merge no longer authoritative path');
   const app = readFileSync(join(process.cwd(), 'src/App.tsx'), 'utf8');
+  // Sprint 14: /admin/orders and the Seller Order Hub (/admin/platform-orders)
+  // are the SAME role-aware React surface (<PlatformOrdersPage>), with the full
+  // Order Details page (<OrderDetailsPage>) at the :orderId sub-routes. This
+  // retired the legacy CmsMirror-hosted "Orders Hub" iframe AND the Gen-1
+  // Orders.tsx cutover. The /admin/* CmsMirror catch-all is retained as the
+  // documented rollback path (remove the explicit routes → falls back).
   assert(
     app.includes('path="/admin/*"') &&
       app.includes('AdminAreaEntry') &&
-      !app.includes('path="/admin/orders"'),
-    '4. /admin/orders uses approved CmsMirror host (not Orders.tsx cutover)',
+      app.includes('path="/admin/orders"') &&
+      app.includes('path="/admin/orders/:orderId"') &&
+      app.includes('path="/admin/platform-orders/:orderId"') &&
+      app.includes('<PlatformOrdersPage />') &&
+      app.includes('<OrderDetailsPage />') &&
+      !existsSync(join(process.cwd(), 'src/pages/admin/Orders.tsx')),
+    '4. /admin/orders + Seller Order Hub use the approved shared React Order Hub (PlatformOrders + OrderDetails); CmsMirror catch-all retained as fallback',
   );
   assert(
     app.includes('BrandStudioHomeEntry') &&

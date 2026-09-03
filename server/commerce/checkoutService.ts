@@ -18,6 +18,7 @@ import {
 import { getService } from '../catalog/serviceStore';
 import { resolveActiveGuideOffer } from '../catalog/guideOfferService';
 import { operationsStore } from '../operations/operationsStore';
+import { shipmentStore } from '../operations/shipmentStore';
 import { publishEvent } from '../events/eventBus';
 import { commerceStore } from './commerceStore';
 import {
@@ -292,7 +293,7 @@ function emitCommerce(eventName: string, aggregateId: string, actor: string, pay
 
 function mirrorToOperations(order: CommerceOrder, consumerId: string): void {
   try {
-    operationsStore.createOrder({
+    const mirrored = operationsStore.createOrder({
       orderId: order.orderNumber,
       buyerId: consumerId,
       isCOD: false,
@@ -304,7 +305,16 @@ function mirrorToOperations(order: CommerceOrder, consumerId: string): void {
         {
           sellerId: order.sellerId,
           brandId: order.brandId,
-          items: order.items,
+          // Sprint 14: give every mirrored line a STABLE itemId so the per-item
+          // "Mark Delivered" endpoint works for real storefront-checkout orders
+          // (previously only manual-offer orders carried one). A CommerceOrder's
+          // `items` array is written once at checkout and never mutated by any
+          // lifecycle transition, so `${orderNumber}-i${index}` is immutable for
+          // the life of the order.
+          items: order.items.map((it, index) => ({
+            ...it,
+            itemId: `${order.orderNumber}-i${index}`,
+          })),
           total: order.grandTotal,
         },
       ],
@@ -336,6 +346,11 @@ function mirrorToOperations(order: CommerceOrder, consumerId: string): void {
       claimTokenExpiresAt: order.claimTokenExpiresAt,
       createdAt: order.createdAt,
     });
+    // Sprint 14: every real order gets a canonical Operations shipment record
+    // at creation — status `awaiting_dispatch`, NO courier / tracking — so the
+    // Order Hub / buyer tracking read one consistent record and the dispatch
+    // flow has something to write. (Manual-offer + claim paths already do this.)
+    if (mirrored) shipmentStore.createFromOrder(mirrored);
   } catch (error) {
     console.warn('[Commerce] Failed to mirror order into operationsStore:', error);
   }
@@ -809,6 +824,32 @@ export async function getOrderForActor(
 ): Promise<CommerceOrder> {
   const order = await commerceStore.getOrder(orderId);
   if (!order) throw new CommerceError('Order not found', 404);
+  const isAdmin =
+    actor.role === 'admin' || actor.role === 'super_admin' || actor.role === 'moderator';
+  if (isAdmin) return order;
+  if (order.consumerId === actor.userId) return order;
+  if (order.sellerId === actor.userId) return order;
+  throw new CommerceError('Not authorized to view this order', 403);
+}
+
+/**
+ * Sprint 14 — resolve the canonical Commerce order behind an Operations
+ * `orderId` (== CommerceOrder.orderNumber, set 1:1 by mirrorToOperations at
+ * checkout / manual-order creation). READ-ONLY; same actor-scoping as
+ * getOrderForActor (admin/moderator → any; otherwise consumer or seller of
+ * that order). Returns null when no Commerce order carries that number
+ * (e.g. a pure booking / legacy Operations-only order) so the caller can show
+ * an honest "lifecycle not available for this order type" state.
+ */
+export async function getOrderByNumberForActor(
+  orderNumber: string,
+  actor: { userId: string; role?: string },
+): Promise<CommerceOrder | null> {
+  const wanted = String(orderNumber || '').trim();
+  if (!wanted) return null;
+  const all = await commerceStore.listOrders();
+  const order = all.find((o) => o.orderNumber === wanted) || null;
+  if (!order) return null;
   const isAdmin =
     actor.role === 'admin' || actor.role === 'super_admin' || actor.role === 'moderator';
   if (isAdmin) return order;

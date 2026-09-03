@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { ArrowLeft, Printer, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { operationsApi } from '../../services/operationsApi';
@@ -17,11 +17,23 @@ import type { OpsStorefrontOrder, OpsSubOrder } from '../../services/operationsA
 export function OperationsInvoiceView() {
   const { orderId, sellerId } = useParams<{ orderId: string; sellerId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { profile } = useAuth();
 
   const [order, setOrder] = useState<OpsStorefrontOrder | null>(null);
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [loadError, setLoadError] = useState<string | null>(null);
+  const autoPrinted = useRef(false);
+
+  // Order Hub "Print" opens this page with ?autoprint=1 → fire the browser
+  // print dialog once the invoice has rendered (Save-as-PDF lives there too).
+  useEffect(() => {
+    if (loadState !== 'ready' || autoPrinted.current) return;
+    if (searchParams.get('autoprint') !== '1') return;
+    autoPrinted.current = true;
+    const t = setTimeout(() => window.print(), 400);
+    return () => clearTimeout(t);
+  }, [loadState, searchParams]);
 
   useEffect(() => {
     if (!orderId) return;

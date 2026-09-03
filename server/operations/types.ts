@@ -125,6 +125,23 @@ export interface OpsStorefrontOrder {
   claimTokenExpiresAt?: string;
   claimedAt?: string;
   claimedByName?: string;
+  /**
+   * Sprint 14 — staff-only internal operational notes on this order. Append-only
+   * (POST /operations/orders/:id/notes; staff roles only — never a seller, never
+   * the buyer, never mirrored to any System-B conversation). Additive field,
+   * persisted in the operations JSON snapshot; absent on orders created before it.
+   */
+  internalNotes?: OpsOrderInternalNote[];
+}
+
+export interface OpsOrderInternalNote {
+  id: string;
+  orderId: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  body: string;
+  createdAt: string;
 }
 
 export type OpsReviewStatus =

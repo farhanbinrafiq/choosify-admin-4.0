@@ -115,7 +115,64 @@ async function request<T>(path: string, method: HttpMethod = 'GET', body?: unkno
   return response.json() as Promise<T>;
 }
 
+/**
+ * Seller / Creator "My Customers" — the canonical privacy-limited customer row
+ * returned by GET /catalog/workspace/{seller,creator}/customers. Server always
+ * scopes to the authenticated owner (a partner can never widen it). No phone,
+ * no address, no KYC — see server/catalog/sellerWorkspace.ts SellerCustomerRow.
+ */
+export interface WorkspaceCustomerOrderLine {
+  id: string;
+  product: string;
+  price: number;
+  status: string;
+  date: string;
+  qty?: number;
+  bill?: string;
+  carrier?: string;
+}
+export interface WorkspaceCustomerRow {
+  id: string;
+  name: string;
+  email: string;
+  choosifyUserId: string | null;
+  segment: string;
+  totalOrders: number;
+  totalSpend: number;
+  lastPurchase: string;
+  flagged: boolean;
+  orders: WorkspaceCustomerOrderLine[];
+  reviews: Array<{ id: string; productName: string; rating: number; comment: string; date: string }>;
+}
+
 export const catalogApi = {
+  /**
+   * Owner-scoped customer directory. `owner: 'creator'` hits the creator route;
+   * anything else (seller / verified_seller / admin-own-identity) hits the
+   * seller route. The server never trusts a client-supplied owner id.
+   */
+  listMyCustomers: async (owner: 'seller' | 'creator' = 'seller'): Promise<WorkspaceCustomerRow[]> => {
+    const path =
+      owner === 'creator'
+        ? '/catalog/workspace/creator/customers'
+        : '/catalog/workspace/seller/customers';
+    const result = await request<{ data: WorkspaceCustomerRow[] }>(path);
+    return result.data;
+  },
+  getMyCustomer: async (
+    customerId: string,
+    owner: 'seller' | 'creator' = 'seller',
+  ): Promise<WorkspaceCustomerRow> => {
+    const base =
+      owner === 'creator'
+        ? '/catalog/workspace/creator/customers'
+        : '/catalog/workspace/seller/customers';
+    const result = await request<{ data: WorkspaceCustomerRow }>(
+      `${base}/${encodeURIComponent(customerId)}`,
+    );
+    return result.data;
+  },
+
   listProducts: async (params?: {
     brandId?: string;
     status?: string;

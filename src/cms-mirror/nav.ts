@@ -91,6 +91,9 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/brand-studio')) return 'brands';
   if (pathname.startsWith('/admin/sellers') || pathname.startsWith('/admin/brand-profiles')) return 'brands';
   if (pathname.startsWith('/admin/products')) return 'products';
+  // Order Hub detail routes (/admin/platform-orders/:id, /admin/orders/:id) keep
+  // the Order Hub sidebar item active while inside the full Order Details page.
+  if (pathname.startsWith('/admin/platform-orders')) return 'platformOrders';
   if (pathname.startsWith('/admin/orders')) return 'orders';
   if (pathname.startsWith('/admin/creator-profile')) return 'creatorProfile';
   if (pathname.startsWith('/admin/consumer-profile')) return 'consumerProfile';
@@ -314,8 +317,8 @@ export const PAGE_META: Record<string, [string, string]> = {
   creatorProfile: ['Creator Profile', 'Your creator account, verification, and profile settings'],
   consumerProfile: ['My Profile', 'Your consumer account, orders preference, and security settings'],
   deals: ['Deals', 'Promotions and discounts'],
-  orders: ['Orders Hub', 'Track and fulfill customer orders'],
-  platformOrders: ['Orders Hub', 'Orders placed against your products'],
+  orders: ['Order Hub', 'Platform-wide operational order management'],
+  platformOrders: ['Order Hub', 'Orders and fulfillment for your business'],
   sellerConversations: ['Messages', 'Conversations with your buyers'],
   customers: ['Consumer Management', 'View and manage customer accounts'],
   settings: ['Settings', 'Store configuration'],
@@ -352,7 +355,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   ],
   sellerCustomers: [
     'My Customers',
-    'Buyers you have served through orders and bookings',
+    'Customers who have purchased from your business',
   ],
   moderationCenter: ['Moderation Center', 'Flagged content awaiting review'],
   disputes: ['Disputes', 'Buyer/seller disputes requiring resolution'],

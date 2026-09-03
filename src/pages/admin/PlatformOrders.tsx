@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Package,
   RefreshCw,
   Search,
   ExternalLink,
@@ -10,79 +9,621 @@ import {
   Loader2,
   Truck,
   MessageSquare,
+  ArrowRight,
+  SlidersHorizontal,
 } from 'lucide-react';
-import { operationsApi, type OpsStorefrontOrder, type OpsShipment } from '../../services/operationsApi';
+import {
+  operationsApi,
+  type OpsStorefrontOrder,
+  type OpsShipment,
+  type CommerceOrderLite,
+} from '../../services/operationsApi';
 import { useAuth } from '../../contexts/AuthContext';
-import type { ReturnRequest } from '../../contexts/ReturnsContext';
-import { GlassCard } from '../../components/ui/GlassCard';
-import { DataTable, DataTableColumn } from '../../components/ui/DataTable';
+import {
+  ACCENT,
+  ACCENT_WASH,
+  S,
+  formatCurrency,
+  formatDate,
+  formatDay,
+  lifecycleBadgeStyle,
+  paymentBadgeStyle,
+  paymentBadgeText,
+  chipStyle,
+  actionBtnStyle,
+  ORDER_HUB_CSS,
+  ProductIdentityLink,
+  useOrderedItemThumbs,
+} from './orderHubChrome';
 import { Modal } from '../../components/ui/Modal';
+import {
+  resolveOrderHubViewer,
+  orderHubStats,
+  ORDER_STATUS_TABS,
+  orderMatchesTab,
+  tabCounts,
+  orderSearchMatches,
+  visibleSubOrders,
+  visibleOrderValue,
+  otherSellerCount,
+  isMultiSeller,
+  derivedFulfillment,
+  buildOperationsTimeline,
+  orderDetailsPath,
+  conversationDeepLink,
+  deriveHubStatus,
+  fulfillmentStatusLabel,
+  type OrderHubViewer,
+  type OrderHubContext,
+  type OrderHubFilters,
+  type OrderHubFilterKey,
+  filterCapabilities,
+  activeFilterCount,
+  EMPTY_FILTERS,
+  filtersFromSearchParams,
+  applyFiltersToSearchParams,
+  buildFilterDictionaries,
+  orderMatchesFilters,
+} from './orderHubModel';
 
 /**
- * Admin platform Order hub — real Operations order engine (Sprint 11 rewrite).
- * Previously this screen read from the legacy, effectively-dead Commerce
- * engine (5 synthetic orders, no real customers) via commerceApi. It now
- * reads/actions the canonical Operations orders that every real Choosify-Web
- * checkout and booking actually creates (server/operationsRouter.ts,
- * server/operations/operationsStore.ts).
+ * Order Hub — the shared, role-aware React surface for /admin/orders (staff)
+ * and /admin/platform-orders (seller). Backed ONLY by the canonical Operations
+ * + Commerce APIs; the server owns every authorization decision.
+ *
+ * Sprint 14:
+ *  - Hybrid detail UX: card body / "Quick View" → <Modal>; Order ID / "Manage"
+ *    / "Open Full Details" → full <OrderDetailsPage> (router state carries the
+ *    loaded row for instant paint).
+ *  - Workflow tabs are the REAL operational lifecycle, not overlapping filters:
+ *    a freshly placed order is "Pending" and is NOT counted in "Active Orders"
+ *    (deriveHubStatus / isActiveOrder in orderHubModel). The Hub joins the
+ *    Operations orders to the Commerce lifecycle + shipment + returns lists,
+ *    all role-scoped by their own servers.
+ *  - Role-aware Advanced Filters (one shared model, capabilities per role),
+ *    AND semantics, Apply / Reset, active-count, query-string state that
+ *    survives navigation to Full Details and Back. KPIs + tab counts react to
+ *    the non-status filters.
+ *  - Seller money: only the value attributable to its own sub-orders.
  */
 
-const CHOOSIFY_WEB_URL = 'https://choosify.bd';
-
 type ToastState = { kind: 'success' | 'error'; message: string } | null;
+type Row = { order: OpsStorefrontOrder; ctx: OrderHubContext };
 
-function formatCurrency(n?: number): string {
-  return `৳ ${Number(n || 0).toLocaleString()}`;
+// ── order card ──────────────────────────────────────────────────────────────
+function OrderCard({ row, viewer, onQuickView }: { row: Row; viewer: OrderHubViewer; onQuickView: (r: Row) => void }) {
+  const { order, ctx } = row;
+  const subs = visibleSubOrders(order, viewer);
+  const items = subs.flatMap((s) => s.items || []);
+  const others = otherSellerCount(order, viewer);
+  const invoiceSub = subs.find((s) => s.invoiceId && s.sellerId);
+  const value = visibleOrderValue(order, viewer);
+  const fullPath = orderDetailsPath(viewer, order.orderId);
+  const lc = deriveHubStatus(order, ctx);
+
+  return (
+    <div style={{ ...S.card, padding: '18px 20px' }}>
+      <div
+        style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 10, marginBottom: 14 }}
+      >
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Link to={fullPath} state={{ order }} style={{ fontSize: 13.5, fontWeight: 800, color: ACCENT, textDecoration: 'none' }}>
+              {order.orderId}
+            </Link>
+            <span style={lifecycleBadgeStyle(lc)}>{fulfillmentStatusLabel(lc, ctx.shipment)}</span>
+            <span style={paymentBadgeStyle(order)}>{paymentBadgeText(order)}</span>
+            {order.isCOD && <span style={chipStyle()}>COD</span>}
+            {isMultiSeller(order) && <span style={chipStyle()}>Split</span>}
+            {ctx.hasReturn && <span style={{ ...chipStyle(), background: 'rgba(220,38,38,0.10)', color: '#DC2626' }}>Return</span>}
+            {order.isManual && <span style={chipStyle()}>{order.platformSource ? `Manual · ${order.platformSource}` : 'Manual'}</span>}
+          </div>
+          <div style={{ fontSize: 10.5, color: '#9CA3AF', fontWeight: 600, marginTop: 4 }}>
+            Placed {formatDate(order.createdAt)} · Updated {formatDate(order.updatedAt)}
+            {ctx.shipment?.courier ? ` · ${ctx.shipment.courier}` : ''}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {invoiceSub && (
+            <Link to={`/admin/invoice/op/${order.orderId}/${invoiceSub.sellerId}`} style={actionBtnStyle(false)}>
+              📄 Invoice
+            </Link>
+          )}
+          <Link to={conversationDeepLink(order.buyerId)} style={actionBtnStyle(false)}>
+            💬 Conversation
+          </Link>
+          <button type="button" onClick={() => onQuickView(row)} style={actionBtnStyle(false)}>
+            Quick View
+          </button>
+          <Link to={fullPath} state={{ order }} style={actionBtnStyle(true)}>
+            Manage
+          </Link>
+        </div>
+      </div>
+
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => onQuickView(row)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') onQuickView(row);
+        }}
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 20, cursor: 'pointer' }}
+      >
+        <div>
+          <div style={{ ...S.microLabel, marginBottom: 8 }}>
+            {viewer.mode === 'seller' ? 'Your ordered products' : 'Ordered products'}
+          </div>
+          {items.length === 0 ? (
+            <div style={{ fontSize: 11, color: '#9CA3AF', fontStyle: 'italic', fontWeight: 600 }}>
+              No line items in your scope for this order.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {items.slice(0, 4).map((it) => (
+                <div key={it.itemId} style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 6, background: 'linear-gradient(135deg,#E8EDF2,#F1F3F5)', flexShrink: 0 }} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{it.productTitle}</div>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: ACCENT }}>
+                      {formatCurrency(it.price)} · Qty {it.quantity}
+                    </div>
+                    <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>
+                      {it.productType || 'physical'}
+                      {it.variantId ? ` · variant ${it.variantId}` : ''}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {items.length > 4 && (
+                <div style={{ fontSize: 10.5, color: '#9CA3AF', fontWeight: 700 }}>+{items.length - 4} more item(s)</div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div style={{ ...S.microLabel, marginBottom: 8 }}>Receiver</div>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                background: '#EFF6FF',
+                color: '#2563EB',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 800,
+                fontSize: 11,
+                flexShrink: 0,
+              }}
+            >
+              {(order.shipping?.fullName || order.buyerId || '?').charAt(0).toUpperCase()}
+            </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{order.shipping?.fullName || order.buyerId}</div>
+              <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>{order.shipping?.region || '—'}</div>
+              <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>Buyer ID: {order.buyerId}</div>
+            </div>
+          </div>
+          {order.shipping?.deliveryNotes && (
+            <div style={{ marginTop: 8, ...S.inset, padding: '8px 10px', fontSize: 11, color: '#374151', fontWeight: 600 }}>
+              💬 {order.shipping.deliveryNotes}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <div style={{ ...S.microLabel, marginBottom: 8 }}>Warehousing &amp; courier logistics</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {ctx.shipment && (
+              <div style={{ ...S.inset, padding: '10px 12px' }}>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: '#111827' }}>{ctx.shipment.courier || 'Courier pending'}</div>
+                <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 700, marginTop: 2 }}>
+                  {ctx.shipment.status.toUpperCase()}
+                  {ctx.shipment.trackingNumber ? ` · ${ctx.shipment.trackingNumber}` : ''}
+                </div>
+              </div>
+            )}
+            {subs.map((s, i) => (
+              <div key={`${s.sellerId}-${i}`} style={{ ...S.inset, padding: '10px 12px' }}>
+                <div style={{ fontSize: 11.5, fontWeight: 800, color: '#111827' }}>{s.sellerBusinessName || s.sellerId || 'Sub-order'}</div>
+                <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 700, marginTop: 2 }}>
+                  Tracking: {(s.trackingStatus || 'pending').toUpperCase()} · Delivery fee {formatCurrency(s.deliveryFee)}
+                </div>
+              </div>
+            ))}
+            {!ctx.shipment && subs.length === 0 && (
+              <div style={{ fontSize: 11, color: '#9CA3AF', fontStyle: 'italic', fontWeight: 600 }}>
+                No shipment handler assigned yet.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {(order.cancelledAt || order.cancelReason) && (
+        <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #F1F3F5' }}>
+          <div style={{ ...S.microLabel, color: '#DC2626', marginBottom: 8 }}>
+            {lc === 'rejected' ? 'Rejection notes' : 'Cancellation notes'}
+          </div>
+          <div style={{ background: '#FEF2F2', color: '#991B1B', borderRadius: 6, padding: '8px 12px', fontSize: 11, fontWeight: 600 }}>
+            {order.cancelReason || 'Order cancelled.'}
+            {order.cancelledBy ? ` · by ${order.cancelledBy}` : ''}
+            {order.cancelledAt ? ` · ${formatDate(order.cancelledAt)}` : ''}
+          </div>
+        </div>
+      )}
+
+      <div
+        style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'baseline', gap: 12, marginTop: 12, paddingTop: 12, borderTop: '1px solid #F1F3F5' }}
+      >
+        {viewer.mode === 'seller' && others > 0 && (
+          <span style={{ fontSize: 9.5, color: '#9CA3AF', fontWeight: 700 }}>
+            Shared order · {others} other seller{others > 1 ? 's' : ''}
+          </span>
+        )}
+        <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>
+          {viewer.mode === 'seller' ? 'Your items value' : 'Order total'}:
+        </span>
+        <span style={{ fontSize: 14, fontWeight: 800, color: '#111827' }}>{formatCurrency(value)}</span>
+      </div>
+    </div>
+  );
 }
 
-function formatDate(iso?: string): string {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '—';
-  return d.toLocaleString();
-}
-
-function sellerNamesLabel(order: OpsStorefrontOrder): string {
-  const names = (order.subOrders || [])
-    .map((s) => s.sellerBusinessName || s.sellerId)
-    .filter((n): n is string => Boolean(n));
-  if (names.length === 0) return '—';
-  if (names.length === 1) return names[0];
-  return `${names[0]} +${names.length - 1} more`;
-}
-
-function statusBadgeClass(status: string): string {
-  switch (status) {
-    case 'completed':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-    case 'cancelled':
-      return 'bg-rose-50 text-rose-700 border-rose-200';
-    case 'confirmed':
-    case 'active':
-      return 'bg-blue-50 text-blue-700 border-blue-200';
-    case 'pending_payment':
-      return 'bg-amber-50 text-amber-700 border-amber-200';
-    default:
-      return 'bg-slate-50 text-slate-700 border-slate-200';
+// ── Quick View modal ────────────────────────────────────────────────────────
+function QuickViewBody({
+  row,
+  viewer,
+  loading,
+  error,
+  shipment,
+  shipmentChecked,
+  markingItemId,
+  onMarkDelivered,
+  onOpenFull,
+}: {
+  row: Row | null;
+  viewer: OrderHubViewer;
+  loading: boolean;
+  error: string | null;
+  shipment: OpsShipment | null;
+  shipmentChecked: boolean;
+  markingItemId: string | null;
+  onMarkDelivered: (orderId: string, itemId: string) => void;
+  onOpenFull: () => void;
+}) {
+  const qvThumbs = useOrderedItemThumbs(
+    (row?.order.subOrders || []).flatMap((s) => s.items || []),
+  );
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#9CA3AF', fontSize: 13, padding: '32px 0', justifyContent: 'center' }}>
+        <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" /> Loading order…
+      </div>
+    );
   }
+  if (error || !row) {
+    return (
+      <div style={{ color: '#DC2626', fontSize: 12, display: 'flex', gap: 8, padding: '16px 0' }}>
+        <AlertCircle style={{ width: 16, height: 16 }} /> {error || 'Order not available.'}
+      </div>
+    );
+  }
+
+  const { order } = row;
+  const ctx: OrderHubContext = { ...row.ctx, shipment: shipment ?? row.ctx.shipment };
+  const subs = visibleSubOrders(order, viewer);
+  const timeline = buildOperationsTimeline(order, viewer);
+  const others = otherSellerCount(order, viewer);
+  const value = visibleOrderValue(order, viewer);
+  const lc = deriveHubStatus(order, ctx);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+        <span style={lifecycleBadgeStyle(lc)}>{fulfillmentStatusLabel(lc, ctx.shipment)}</span>
+        <span style={paymentBadgeStyle(order)}>{paymentBadgeText(order)}</span>
+        {order.isCOD && <span style={chipStyle()}>COD</span>}
+        {isMultiSeller(order) && <span style={chipStyle()}>Split</span>}
+        <span style={{ fontSize: 10.5, color: '#9CA3AF', fontWeight: 600 }}>
+          Placed {formatDate(order.createdAt)} · Updated {formatDate(order.updatedAt)}
+        </span>
+      </div>
+
+      <div style={{ ...S.inset, padding: '12px 14px', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        {timeline.map((step) => (
+          <div key={step.key} style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 90 }}>
+            <div
+              style={{
+                width: 18,
+                height: 18,
+                borderRadius: '50%',
+                background: step.done ? ACCENT : '#E8EDF2',
+                color: step.done ? '#fff' : '#9CA3AF',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 9,
+                fontWeight: 800,
+                flexShrink: 0,
+              }}
+            >
+              {step.done ? '✓' : ''}
+            </div>
+            <span style={{ fontSize: 10, fontWeight: 800, color: step.done ? '#111827' : '#9CA3AF' }}>{step.label}</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ ...S.card, padding: 12 }}>
+        <div style={{ ...S.microLabel, marginBottom: 6 }}>Customer</div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: '#111827' }}>{order.shipping?.fullName || order.buyerId}</div>
+        <div style={{ fontSize: 10.5, color: '#9CA3AF', fontWeight: 600 }}>
+          {order.shipping?.region ? `${order.shipping.region} · ` : ''}Buyer ID: {order.buyerId}
+        </div>
+        {order.shipping?.phone && <div style={{ fontSize: 10.5, color: '#9CA3AF', fontWeight: 600 }}>{order.shipping.phone}</div>}
+      </div>
+
+      <div style={{ ...S.card, padding: 12 }}>
+        <div style={{ ...S.microLabel, marginBottom: 8 }}>
+          {viewer.mode === 'seller' ? 'Your ordered products' : 'Ordered products'}
+        </div>
+        {subs.flatMap((s) => s.items || []).length === 0 ? (
+          <div style={{ fontSize: 11, color: '#9CA3AF', fontStyle: 'italic', fontWeight: 600 }}>No line items in your scope.</div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {subs.map((sub) =>
+              (sub.items || []).map((item) => {
+                const isDelivered = Boolean(item.deliveredAt);
+                const isMarking = markingItemId === item.itemId;
+                return (
+                  <div key={item.itemId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, fontSize: 12 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <ProductIdentityLink
+                        size="md"
+                        productId={item.productId}
+                        title={item.productTitle}
+                        imageUrl={qvThumbs.get(String(item.productId || ''))}
+                        meta={`Qty ${item.quantity} · ${formatCurrency(item.price)} · ${sub.sellerBusinessName || 'seller'}`}
+                      />
+                    </div>
+                    {isDelivered ? (
+                      <span
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#16A34A', fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', whiteSpace: 'nowrap' }}
+                      >
+                        <CheckCircle2 style={{ width: 12, height: 12 }} /> {formatDay(item.deliveredAt)}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isMarking}
+                        onClick={() => onMarkDelivered(order.orderId, item.itemId)}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          background: '#16A34A',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: 6,
+                          padding: '6px 10px',
+                          fontSize: 9.5,
+                          fontWeight: 800,
+                          textTransform: 'uppercase',
+                          cursor: isMarking ? 'not-allowed' : 'pointer',
+                          opacity: isMarking ? 0.6 : 1,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {isMarking ? <Loader2 style={{ width: 11, height: 11 }} className="animate-spin" /> : <CheckCircle2 style={{ width: 11, height: 11 }} />}
+                        Mark Delivered
+                      </button>
+                    )}
+                  </div>
+                );
+              }),
+            )}
+          </div>
+        )}
+      </div>
+
+      <div style={{ ...S.inset, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{ fontSize: 11, color: '#6B7280', fontWeight: 700 }}>
+          {viewer.mode === 'seller' ? 'Your items value' : 'Order total'}
+          {viewer.mode === 'seller' && others > 0 ? ` · shared with ${others} other seller${others > 1 ? 's' : ''}` : ''}
+        </span>
+        <span style={{ fontSize: 15, fontWeight: 800, color: '#111827' }}>{formatCurrency(value)}</span>
+      </div>
+
+      <div style={{ ...S.card, padding: 12 }}>
+        <div style={{ ...S.microLabel, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Truck style={{ width: 12, height: 12 }} /> Shipment
+        </div>
+        {!shipmentChecked && !row.ctx.shipment && <div style={{ fontSize: 11, color: '#9CA3AF' }}>Checking shipment…</div>}
+        {shipmentChecked && !ctx.shipment && <div style={{ fontSize: 11, color: '#9CA3AF' }}>No shipment record yet.</div>}
+        {ctx.shipment && (
+          <div style={{ fontSize: 11.5, color: '#374151', fontWeight: 600, display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div>
+              Courier: <b>{ctx.shipment.courier || '—'}</b> · Tracking #: <b>{ctx.shipment.trackingNumber || '—'}</b>
+            </div>
+            <div>
+              State: <b style={{ textTransform: 'uppercase' }}>{ctx.shipment.status}</b>
+            </div>
+          </div>
+        )}
+        <div style={{ fontSize: 9.5, color: '#9CA3AF', fontWeight: 600, marginTop: 6 }}>
+          Lifecycle transitions, courier / tracking edits and checkpoint history live in Full Details.
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <Link to={conversationDeepLink(order.buyerId)} style={actionBtnStyle(false)}>
+          <MessageSquare style={{ width: 13, height: 13 }} /> Conversation
+        </Link>
+        <Link to="/admin/logistics/shipments" style={actionBtnStyle(false)}>
+          <Truck style={{ width: 13, height: 13 }} /> Fulfillment
+        </Link>
+        <button type="button" onClick={onOpenFull} style={{ ...actionBtnStyle(true), marginLeft: 'auto', fontSize: 11.5, padding: '9px 16px' }}>
+          Open Full Details <ArrowRight style={{ width: 13, height: 13 }} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── advanced filter panel ───────────────────────────────────────────────────
+const SELECT_OPTIONS: Partial<Record<OrderHubFilterKey, Array<{ value: string; label: string }>>> = {
+  paymentMethod: [
+    { value: 'cod', label: 'Cash on delivery' },
+    { value: 'online', label: 'Online' },
+    { value: 'credit', label: 'Credit' },
+  ],
+  paymentStatus: [
+    { value: 'unpaid', label: 'Unpaid' },
+    { value: 'pending', label: 'Pending' },
+    { value: 'paid', label: 'Paid' },
+    { value: 'failed', label: 'Failed' },
+    { value: 'cancelled', label: 'Cancelled' },
+  ],
+  fulfillment: [
+    { value: 'awaiting', label: 'Awaiting delivery' },
+    { value: 'partial', label: 'Partially delivered' },
+    { value: 'delivered', label: 'All delivered' },
+  ],
+  source: [
+    { value: 'platform', label: 'Platform checkout' },
+    { value: 'manual', label: 'Manual order' },
+    { value: 'whatsapp', label: 'WhatsApp' },
+    { value: 'facebook', label: 'Facebook' },
+    { value: 'instagram', label: 'Instagram' },
+    { value: 'offline', label: 'Offline' },
+    { value: 'sslcommerz', label: 'SSLCommerz' },
+  ],
+  cod: [
+    { value: 'cod', label: 'COD orders' },
+    { value: 'non_cod', label: 'Non-COD orders' },
+    { value: 'cod_unpaid', label: 'COD — unconfirmed' },
+    { value: 'cod_prepaid', label: 'COD — delivery prepaid' },
+  ],
+  hasReturn: [
+    { value: 'yes', label: 'Has a return' },
+    { value: 'no', label: 'No return' },
+  ],
+  invoice: [
+    { value: 'issued', label: 'Invoice issued' },
+    { value: 'none', label: 'No invoice' },
+  ],
+};
+
+const FILTER_LABELS: Record<OrderHubFilterKey, string> = {
+  seller: 'Seller / merchant',
+  brand: 'Brand',
+  region: 'BD division / region',
+  paymentMethod: 'Payment method',
+  paymentStatus: 'Payment status',
+  fulfillment: 'Fulfillment state',
+  courier: 'Courier',
+  source: 'Order source / gateway',
+  cod: 'COD state',
+  hasReturn: 'Returns / issues',
+  invoice: 'Invoice status',
+  dateFrom: 'Logged from',
+  dateTo: 'Logged to',
+};
+
+function FilterField({
+  fkey,
+  value,
+  onChange,
+  dictionaries,
+}: {
+  fkey: OrderHubFilterKey;
+  value: string;
+  onChange: (v: string) => void;
+  dictionaries: ReturnType<typeof buildFilterDictionaries>;
+}) {
+  const label = <div style={{ ...S.microLabel, marginBottom: 5 }}>{FILTER_LABELS[fkey]}</div>;
+  const selStyle: React.CSSProperties = {
+    width: '100%',
+    boxSizing: 'border-box',
+    height: 34,
+    borderRadius: 7,
+    border: '1px solid #E8EDF2',
+    padding: '0 8px',
+    fontSize: 11,
+    color: '#111827',
+    background: '#fff',
+  };
+  if (fkey === 'dateFrom' || fkey === 'dateTo') {
+    return (
+      <div>
+        {label}
+        <input type="date" value={value} onChange={(e) => onChange(e.target.value)} style={selStyle} />
+      </div>
+    );
+  }
+  let opts: Array<{ value: string; label: string }> = SELECT_OPTIONS[fkey] || [];
+  if (fkey === 'seller') opts = dictionaries.sellers;
+  if (fkey === 'brand') opts = dictionaries.brands;
+  if (fkey === 'region') opts = dictionaries.regions;
+  if (fkey === 'courier') opts = dictionaries.couriers;
+  return (
+    <div>
+      {label}
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={selStyle}>
+        <option value="">Any</option>
+        {opts.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 }
 
 export default function PlatformOrdersPage() {
+  const { profile, allBrands } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const viewer = useMemo(() => resolveOrderHubViewer(profile), [profile]);
+
+  const { filters: urlFilters, tab: urlTab } = useMemo(
+    () => filtersFromSearchParams(searchParams),
+    [searchParams],
+  );
+  const [draftFilters, setDraftFilters] = useState<OrderHubFilters>(urlFilters);
+  const [panelOpen, setPanelOpen] = useState(activeFilterCount(urlFilters) > 0);
+  useEffect(() => {
+    setDraftFilters(urlFilters);
+  }, [urlFilters]);
+
+  const setTab = (tab: string) => setSearchParams(applyFiltersToSearchParams(searchParams, urlFilters, tab), { replace: false });
+  const applyFilters = () => {
+    setSearchParams(applyFiltersToSearchParams(searchParams, draftFilters, urlTab), { replace: false });
+  };
+  const resetFilters = () => {
+    setDraftFilters(EMPTY_FILTERS);
+    setSearchParams(applyFiltersToSearchParams(searchParams, EMPTY_FILTERS, urlTab), { replace: false });
+  };
+
   const [orders, setOrders] = useState<OpsStorefrontOrder[]>([]);
+  const [commerceByNumber, setCommerceByNumber] = useState<Map<string, CommerceOrderLite>>(new Map());
+  const [shipmentByOrder, setShipmentByOrder] = useState<Map<string, OpsShipment>>(new Map());
+  const [returnOrderIds, setReturnOrderIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
-  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
-  const [detailOrder, setDetailOrder] = useState<OpsStorefrontOrder | null>(null);
+  const [selected, setSelected] = useState<Row | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
-
-  const [shipment, setShipment] = useState<OpsShipment | null>(null);
-  const [shipmentChecked, setShipmentChecked] = useState(false);
-
-  const [linkedReturns, setLinkedReturns] = useState<ReturnRequest[]>([]);
-
+  const [qvShipment, setQvShipment] = useState<OpsShipment | null>(null);
+  const [qvShipmentChecked, setQvShipmentChecked] = useState(false);
   const [markingItemId, setMarkingItemId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
 
@@ -91,91 +632,112 @@ export default function PlatformOrdersPage() {
     setTimeout(() => setToast(null), 3500);
   }, []);
 
-  const { profile } = useAuth();
-  const isSeller = profile?.role === 'seller' || profile?.role === 'verified_seller';
-
-  const loadOrders = useCallback(async () => {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     setError(null);
-    try {
-      const rows = await operationsApi.listOrders();
-      setOrders(rows);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load platform orders');
-    } finally {
-      setLoading(false);
+    const [opsR, commerceR, shipR, retR] = await Promise.allSettled([
+      operationsApi.listOrders(),
+      operationsApi.listCommerceOrders(viewer.mode),
+      operationsApi.listShipments(),
+      operationsApi.listReturns(
+        viewer.mode === 'seller' && viewer.sellerId ? { sellerId: viewer.sellerId } : undefined,
+      ),
+    ]);
+    if (opsR.status === 'fulfilled') setOrders(opsR.value);
+    else setError(opsR.reason instanceof Error ? opsR.reason.message : 'Failed to load orders');
+
+    if (commerceR.status === 'fulfilled') {
+      const m = new Map<string, CommerceOrderLite>();
+      for (const c of commerceR.value) if (c.orderNumber) m.set(c.orderNumber, c);
+      setCommerceByNumber(m);
     }
-  }, []);
+    if (shipR.status === 'fulfilled') {
+      const m = new Map<string, OpsShipment>();
+      for (const s of shipR.value) if (s.orderId) m.set(s.orderId, s);
+      setShipmentByOrder(m);
+    }
+    if (retR.status === 'fulfilled') setReturnOrderIds(new Set(retR.value.map((r) => r.orderId)));
+    setLoading(false);
+  }, [viewer.mode, viewer.sellerId]);
 
   useEffect(() => {
-    void loadOrders();
-  }, [loadOrders]);
+    void loadAll();
+  }, [loadAll]);
 
-  const filteredOrders = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return orders;
-    return orders.filter(
-      (o) => o.orderId.toLowerCase().includes(q) || (o.buyerId || '').toLowerCase().includes(q),
-    );
-  }, [orders, search]);
+  const rows: Row[] = useMemo(
+    () =>
+      orders.map((order) => ({
+        order,
+        ctx: {
+          commerce: commerceByNumber.get(order.orderId) ?? null,
+          shipment: shipmentByOrder.get(order.orderId) ?? null,
+          hasReturn: returnOrderIds.has(order.orderId),
+        },
+      })),
+    [orders, commerceByNumber, shipmentByOrder, returnOrderIds],
+  );
+
+  const ownedBrands = useMemo(
+    () => (allBrands || []).map((b) => ({ id: b.id, name: b.name })),
+    [allBrands],
+  );
+  const dictionaries = useMemo(
+    () => buildFilterDictionaries(rows, viewer.mode === 'seller' ? ownedBrands : undefined),
+    [rows, viewer.mode, ownedBrands],
+  );
+
+  // narrowed by the non-status advanced filters → KPIs + tab counts + list base
+  const narrowed = useMemo(
+    () => rows.filter((r) => orderMatchesFilters(r.order, r.ctx, urlFilters, viewer)),
+    [rows, urlFilters, viewer],
+  );
+  const stats = useMemo(() => orderHubStats(narrowed), [narrowed]);
+  const counts = useMemo(() => tabCounts(narrowed), [narrowed]);
+  const visible = useMemo(
+    () =>
+      narrowed
+        .filter((r) => orderMatchesTab(r.order, urlTab, r.ctx))
+        .filter((r) => orderSearchMatches(r.order, search, viewer)),
+    [narrowed, urlTab, search, viewer],
+  );
+
+  const caps = useMemo(() => filterCapabilities(viewer), [viewer]);
+  const appliedCount = activeFilterCount(urlFilters);
+  const dirty = JSON.stringify(draftFilters) !== JSON.stringify(urlFilters);
 
   const closeModal = useCallback(() => {
-    setSelectedOrderId(null);
-    setDetailOrder(null);
+    setSelected(null);
     setDetailError(null);
-    setShipment(null);
-    setShipmentChecked(false);
-    setLinkedReturns([]);
+    setQvShipment(null);
+    setQvShipmentChecked(false);
   }, []);
 
-  const loadDetail = useCallback(async (orderId: string) => {
-    setDetailLoading(true);
-    setDetailError(null);
-    setShipment(null);
-    setShipmentChecked(false);
-    setLinkedReturns([]);
-
-    let order: OpsStorefrontOrder;
-    try {
-      order = await operationsApi.getOrder(orderId);
-      setDetailOrder(order);
-    } catch (err) {
-      setDetailError(err instanceof Error ? err.message : 'Failed to load order');
-      setDetailLoading(false);
-      return;
-    }
+  const openQuickView = (row: Row) => {
+    setSelected(row);
     setDetailLoading(false);
-
-    // A 404/error here just means no shipment exists yet — not a real error state.
-    try {
-      const found = await operationsApi.getShipment(orderId);
-      setShipment(found);
-    } catch {
-      setShipment(null);
-    } finally {
-      setShipmentChecked(true);
+    setDetailError(null);
+    setQvShipment(row.ctx.shipment ?? null);
+    setQvShipmentChecked(Boolean(row.ctx.shipment));
+    // background: freshen order + shipment
+    void operationsApi
+      .getOrder(row.order.orderId)
+      .then((fresh) => setSelected((cur) => (cur && cur.order.orderId === fresh.orderId ? { ...cur, order: fresh } : cur)))
+      .catch(() => {});
+    if (!row.ctx.shipment) {
+      void operationsApi
+        .getShipment(row.order.orderId)
+        .then((s) => setQvShipment(s))
+        .catch(() => setQvShipment(null))
+        .finally(() => setQvShipmentChecked(true));
     }
-
-    // No orderId filter on the returns endpoint — staff sees everything, filter client-side.
-    try {
-      const all = await operationsApi.listReturns();
-      setLinkedReturns(all.filter((r) => r.orderId === order.orderId));
-    } catch {
-      setLinkedReturns([]);
-    }
-  }, []);
-
-  const openOrder = (orderId: string) => {
-    setSelectedOrderId(orderId);
-    void loadDetail(orderId);
   };
 
   const handleMarkDelivered = async (orderId: string, itemId: string) => {
     setMarkingItemId(itemId);
     try {
       const updated = await operationsApi.markOrderItemDelivered(orderId, itemId);
-      setDetailOrder(updated);
       setOrders((prev) => prev.map((o) => (o.orderId === updated.orderId ? updated : o)));
+      setSelected((cur) => (cur && cur.order.orderId === updated.orderId ? { ...cur, order: updated } : cur));
       showToast('success', 'Item marked delivered.');
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Failed to mark item delivered');
@@ -184,434 +746,262 @@ export default function PlatformOrdersPage() {
     }
   };
 
-  const columns: DataTableColumn<OpsStorefrontOrder>[] = [
-    {
-      key: 'order',
-      header: 'Order ID',
-      render: (order) => (
-        <button
-          type="button"
-          onClick={() => openOrder(order.orderId)}
-          className="font-extrabold text-app-accent text-[12px] hover:underline cursor-pointer"
-        >
-          {order.orderId}
-        </button>
-      ),
-      sortValue: (order) => order.orderId,
-    },
-    {
-      key: 'buyer',
-      header: 'Buyer',
-      render: (order) => (
-        <div>
-          <div className="font-semibold text-app-text-secondary text-[12px]">
-            {order.shipping?.fullName || order.buyerId}
-          </div>
-          {order.shipping?.fullName && (
-            <div className="text-[10px] text-app-text-muted">{order.buyerId}</div>
-          )}
-        </div>
-      ),
-      sortValue: (order) => order.buyerId,
-    },
-    {
-      key: 'sellers',
-      header: 'Seller(s)',
-      render: (order) => (
-        <span className="font-semibold text-app-text-secondary text-[12px]">{sellerNamesLabel(order)}</span>
-      ),
-    },
-    {
-      key: 'total',
-      header: 'Total',
-      render: (order) => (
-        <span className="font-extrabold text-app-text-primary text-[12px]">
-          {formatCurrency(order.overallTotal)}
-        </span>
-      ),
-      sortValue: (order) => Number(order.overallTotal || 0),
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (order) => (
-        <span
-          className={`inline-block px-2 py-0.5 rounded-md border text-[10px] font-bold uppercase tracking-wide ${statusBadgeClass(order.status)}`}
-        >
-          {order.status.replace('_', ' ')}
-        </span>
-      ),
-      sortValue: (order) => order.status,
-    },
-    {
-      key: 'payment',
-      header: 'Payment',
-      render: (order) => (
-        <div>
-          <div className="font-semibold text-app-text-secondary text-[12px] capitalize">
-            {order.paymentMethod || '—'}
-          </div>
-          <div className="text-[10px] text-app-text-muted capitalize">{order.paymentStatus || '—'}</div>
-        </div>
-      ),
-    },
-    {
-      key: 'created',
-      header: 'Created',
-      render: (order) => (
-        <span className="font-semibold text-app-text-secondary text-[12px]">{formatDate(order.createdAt)}</span>
-      ),
-      sortValue: (order) => order.createdAt,
-    },
-  ];
-
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-app-accent/10 border border-app-accent/20">
-            <Package className="w-5 h-5 text-app-accent" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <style>{ORDER_HUB_CSS}</style>
+      {/* operational header */}
+      <div
+        style={{ ...S.card, padding: '20px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 14 }}
+      >
+        <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+          <div
+            style={{ width: 38, height: 38, borderRadius: 10, background: ACCENT_WASH, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 16 }}
+          >
+            ☰
           </div>
           <div>
-            <h1 className="text-xl font-black text-app-text-primary tracking-tight">
-              {isSeller ? 'Orders Hub' : 'Platform Orders'}
-            </h1>
-            <p className="text-xs text-app-text-secondary">
-              {isSeller ? 'Orders placed against your products' : "Live Operations order engine — the platform's real order data"}
-            </p>
+            <div style={{ fontSize: 15.5, fontWeight: 800, color: '#111827' }}>Order Hub</div>
+            <div style={{ fontSize: 12, color: '#6B7280', fontWeight: 600, marginTop: 2 }}>
+              {viewer.mode === 'seller'
+                ? 'Orders and fulfillment for your business — real workflow lifecycle, courier tracking, customer handoff.'
+                : 'Platform-wide operational order management — real lifecycle queue, logistics, and history.'}
+            </div>
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => void loadOrders()}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-app-border text-[10px] font-black uppercase tracking-wider text-app-text-secondary hover:text-app-text-primary"
-        >
-          <RefreshCw className="w-3.5 h-3.5" /> Refresh
-        </button>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          {stats.map((st) => (
+            <div key={st.key} style={{ border: '1px solid #E8EDF2', borderRadius: 8, padding: '8px 14px', textAlign: 'center', minWidth: 92 }}>
+              <div style={{ fontSize: 9, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.04em' }}>{st.label}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, marginTop: 2, color: st.color }}>{st.value}</div>
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={() => void loadAll()}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              background: '#fff',
+              border: '1px solid #E8EDF2',
+              borderRadius: 8,
+              padding: '9px 12px',
+              fontSize: 10,
+              fontWeight: 800,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: '#374151',
+              cursor: 'pointer',
+            }}
+          >
+            <RefreshCw style={{ width: 13, height: 13 }} /> Refresh
+          </button>
+        </div>
       </div>
 
-      <GlassCard className="p-4">
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-app-text-muted" />
+      {/* workflow status strip */}
+      <div style={{ ...S.card, display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', overflowX: 'auto' }}>
+        {ORDER_STATUS_TABS.map((t, i) => {
+          const active = t.key === urlTab;
+          return (
+            <React.Fragment key={t.key}>
+              {(i === 1 || t.key === 'all') && <div style={{ width: 1, alignSelf: 'stretch', background: '#E8EDF2', flex: '0 0 auto' }} />}
+              <button
+                type="button"
+                onClick={() => setTab(t.key)}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  border: 'none',
+                  borderRadius: 7,
+                  padding: '7px 12px',
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  letterSpacing: '0.03em',
+                  textTransform: 'uppercase',
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  background: active ? ACCENT : '#F9FAFB',
+                  color: active ? '#fff' : '#374151',
+                }}
+              >
+                <span>{t.icon}</span>
+                {t.label}
+                <span style={{ color: active ? 'rgba(255,255,255,0.85)' : '#9CA3AF' }}>{counts[t.key] ?? 0}</span>
+              </button>
+            </React.Fragment>
+          );
+        })}
+      </div>
+
+      {/* search + advanced filter toggle */}
+      <div style={{ ...S.card, display: 'flex', gap: 10, padding: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ position: 'relative', flex: 1, minWidth: 240 }}>
+          <Search style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, color: '#9CA3AF' }} />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by Order ID or Buyer ID…"
-            className="w-full pl-9 pr-3 py-2 rounded-xl border border-app-border text-[12px] text-app-text-primary bg-white focus:outline-none focus:ring-2 focus:ring-app-accent/30"
+            placeholder="Search within results — Order ID, customer, phone, seller, invoice, product…"
+            style={{ ...S.input, width: '100%', paddingLeft: 34 }}
           />
         </div>
-      </GlassCard>
+        <button
+          type="button"
+          onClick={() => setPanelOpen((v) => !v)}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            background: appliedCount > 0 ? ACCENT_WASH : '#fff',
+            border: `1px solid ${appliedCount > 0 ? 'color-mix(in srgb, var(--cms-accent) 35%, transparent)' : '#E8EDF2'}`,
+            color: appliedCount > 0 ? '#C2410C' : '#374151',
+            borderRadius: 8,
+            padding: '9px 14px',
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: '0.03em',
+            textTransform: 'uppercase',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <SlidersHorizontal style={{ width: 13, height: 13 }} /> Advanced Filters ({appliedCount})
+        </button>
+        <span style={{ fontSize: 10.5, fontWeight: 800, color: '#9CA3AF', letterSpacing: '0.04em' }}>{visible.length} SHOWN</span>
+      </div>
 
-      <GlassCard>
-        {loading && <p className="text-xs text-app-text-muted p-4">Loading orders…</p>}
-        {error && (
-          <p className="text-xs text-rose-500 p-4 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4" /> {error}
-          </p>
-        )}
-        {!loading && !error && (
-          <DataTable
-            columns={columns}
-            rows={filteredOrders}
-            getRowId={(o) => o.orderId}
-            emptyMessage="No Operations orders found."
-          />
-        )}
-      </GlassCard>
-
-      <Modal
-        isOpen={Boolean(selectedOrderId)}
-        onClose={closeModal}
-        title={selectedOrderId ? `Order ${selectedOrderId}` : undefined}
-        maxWidth="max-w-3xl"
-      >
-        {detailLoading && (
-          <div className="flex items-center gap-2 text-app-text-muted text-sm py-8 justify-center">
-            <Loader2 className="w-4 h-4 animate-spin" /> Loading order…
-          </div>
-        )}
-        {detailError && (
-          <p className="text-xs text-rose-500 flex items-center gap-2 py-4">
-            <AlertCircle className="w-4 h-4" /> {detailError}
-          </p>
-        )}
-        {!detailLoading && !detailError && detailOrder && (
-          <div className="space-y-6">
-            {/* Header / status */}
-            <div className="flex flex-wrap items-center gap-3">
-              <span
-                className={`inline-block px-2.5 py-1 rounded-md border text-[10px] font-bold uppercase tracking-wide ${statusBadgeClass(detailOrder.status)}`}
+      {/* advanced filter panel */}
+      {panelOpen && (
+        <div style={{ ...S.card, padding: 16 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+            <span style={{ fontSize: 11.5, fontWeight: 800, color: ACCENT, letterSpacing: '0.03em' }}>
+              ADVANCED ORDER FILTERS{viewer.mode === 'seller' ? ' — YOUR BUSINESS' : ' — PLATFORM'}
+            </span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={resetFilters}
+                style={{ background: '#fff', border: '1px solid #E8EDF2', borderRadius: 7, padding: '7px 14px', fontSize: 10.5, fontWeight: 800, color: '#374151', cursor: 'pointer' }}
               >
-                {detailOrder.status.replace('_', ' ')}
-              </span>
-              <span className="text-[11px] text-app-text-muted">Created {formatDate(detailOrder.createdAt)}</span>
-              <span className="text-[11px] text-app-text-muted">Updated {formatDate(detailOrder.updatedAt)}</span>
-            </div>
-
-            {(detailOrder.cancelledAt || detailOrder.cancelReason) && (
-              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-[12px] text-rose-700">
-                <div className="font-bold uppercase tracking-wide text-[10px] mb-1">Cancellation</div>
-                <div>Cancelled at: {formatDate(detailOrder.cancelledAt)}</div>
-                {detailOrder.cancelledBy && <div>Cancelled by: {detailOrder.cancelledBy}</div>}
-                {detailOrder.cancelReason && <div>Reason: {detailOrder.cancelReason}</div>}
-              </div>
-            )}
-
-            {/* Buyer */}
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-app-text-muted mb-2">Buyer</div>
-              <GlassCard hoverLift={false} className="p-3 text-[12px] space-y-1">
-                <div>
-                  <span className="text-app-text-muted">Buyer ID: </span>
-                  <span className="font-semibold text-app-text-primary">{detailOrder.buyerId}</span>
-                </div>
-                {detailOrder.shipping && (
-                  <>
-                    <div>
-                      <span className="text-app-text-muted">Name: </span>
-                      <span className="font-semibold text-app-text-primary">{detailOrder.shipping.fullName}</span>
-                    </div>
-                    <div>
-                      <span className="text-app-text-muted">Phone: </span>
-                      <span className="font-semibold text-app-text-primary">{detailOrder.shipping.phone}</span>
-                    </div>
-                    <div>
-                      <span className="text-app-text-muted">Address: </span>
-                      <span className="font-semibold text-app-text-primary">
-                        {detailOrder.shipping.address}, {detailOrder.shipping.region}
-                      </span>
-                    </div>
-                    {detailOrder.shipping.deliveryNotes && (
-                      <div>
-                        <span className="text-app-text-muted">Notes: </span>
-                        <span className="font-semibold text-app-text-primary">
-                          {detailOrder.shipping.deliveryNotes}
-                        </span>
-                      </div>
-                    )}
-                  </>
-                )}
-                <div className="pt-1">
-                  <a
-                    href={`${CHOOSIFY_WEB_URL}/messages/conv_platform_${encodeURIComponent(detailOrder.buyerId)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-app-accent font-bold text-[11px] hover:underline"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" /> View conversation
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                </div>
-              </GlassCard>
-            </div>
-
-            {/* Sub-orders / items */}
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-app-text-muted mb-2">
-                Sub-orders
-              </div>
-              <div className="space-y-3">
-                {(detailOrder.subOrders || []).map((sub, subIdx) => (
-                  <GlassCard hoverLift={false} key={`${sub.sellerId}-${subIdx}`} className="p-3 space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="font-bold text-[12px] text-app-text-primary">
-                        {sub.sellerBusinessName || sub.sellerId}
-                      </div>
-                      <div className="flex items-center gap-3 text-[10px] text-app-text-muted">
-                        {sub.invoiceId && (
-                          <Link
-                            to={`/admin/invoice/op/${detailOrder.orderId}/${sub.sellerId}`}
-                            className="text-app-accent font-bold hover:underline"
-                          >
-                            Invoice: {sub.invoiceId}
-                          </Link>
-                        )}
-                        <span>Delivery fee: {formatCurrency(sub.deliveryFee)}</span>
-                        <span className="uppercase font-bold">{sub.trackingStatus || 'pending'}</span>
-                      </div>
-                    </div>
-                    <div className="divide-y divide-app-border">
-                      {(sub.items || []).map((item) => {
-                        const isDelivered = Boolean(item.deliveredAt);
-                        const isMarking = markingItemId === item.itemId;
-                        return (
-                          <div
-                            key={item.itemId}
-                            className="py-2 flex flex-wrap items-center justify-between gap-2 text-[12px]"
-                          >
-                            <div>
-                              <div className="font-semibold text-app-text-primary">{item.productTitle}</div>
-                              <div className="text-[10px] text-app-text-muted">
-                                Qty {item.quantity} · {formatCurrency(item.price)} ·{' '}
-                                {item.productType || 'physical'}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {isDelivered ? (
-                                <span className="inline-flex items-center gap-1 text-emerald-700 text-[10px] font-bold uppercase">
-                                  <CheckCircle2 className="w-3.5 h-3.5" /> Delivered {formatDate(item.deliveredAt)}
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled={isMarking}
-                                  onClick={() => void handleMarkDelivered(detailOrder.orderId, item.itemId)}
-                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-app-accent text-white text-[10px] font-bold uppercase tracking-wide disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
-                                >
-                                  {isMarking ? (
-                                    <Loader2 className="w-3 h-3 animate-spin" />
-                                  ) : (
-                                    <CheckCircle2 className="w-3 h-3" />
-                                  )}
-                                  Mark Delivered
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </GlassCard>
-                ))}
-              </div>
-            </div>
-
-            {/* Payment */}
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-app-text-muted mb-2">Payment</div>
-              <GlassCard hoverLift={false} className="p-3 text-[12px] space-y-1">
-                <div>
-                  <span className="text-app-text-muted">Method: </span>
-                  <span className="font-semibold text-app-text-primary capitalize">
-                    {detailOrder.paymentMethod || '—'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-app-text-muted">Status: </span>
-                  <span className="font-semibold text-app-text-primary capitalize">
-                    {detailOrder.paymentStatus || '—'}
-                  </span>
-                </div>
-                {typeof detailOrder.paidAmount === 'number' && (
-                  <div>
-                    <span className="text-app-text-muted">Paid amount: </span>
-                    <span className="font-semibold text-app-text-primary">
-                      {formatCurrency(detailOrder.paidAmount)}
-                    </span>
-                  </div>
-                )}
-                {detailOrder.paidAt && (
-                  <div>
-                    <span className="text-app-text-muted">Paid at: </span>
-                    <span className="font-semibold text-app-text-primary">{formatDate(detailOrder.paidAt)}</span>
-                  </div>
-                )}
-                {detailOrder.paymentDueAt && !detailOrder.paidAt && (
-                  <div>
-                    <span className="text-app-text-muted">Payment due: </span>
-                    <span className="font-semibold text-app-text-primary">
-                      {formatDate(detailOrder.paymentDueAt)}
-                    </span>
-                  </div>
-                )}
-                <div className="pt-1 font-extrabold text-app-text-primary">
-                  Total: {formatCurrency(detailOrder.overallTotal)}
-                </div>
-              </GlassCard>
-            </div>
-
-            {/* Shipment / tracking */}
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-app-text-muted mb-2 flex items-center gap-1.5">
-                <Truck className="w-3.5 h-3.5" /> Shipment
-              </div>
-              <GlassCard hoverLift={false} className="p-3 text-[12px] space-y-2">
-                {!shipmentChecked && (
-                  <div className="flex items-center gap-2 text-app-text-muted">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Checking shipment…
-                  </div>
-                )}
-                {shipmentChecked && !shipment && (
-                  <div className="text-app-text-muted">No shipment record.</div>
-                )}
-                {shipmentChecked && shipment && (
-                  <>
-                    <div>
-                      <span className="text-app-text-muted">Courier: </span>
-                      <span className="font-semibold text-app-text-primary">{shipment.courier || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-app-text-muted">Tracking #: </span>
-                      <span className="font-semibold text-app-text-primary">{shipment.trackingNumber || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-app-text-muted">Status: </span>
-                      <span className="font-semibold text-app-text-primary uppercase">{shipment.status}</span>
-                    </div>
-                    {shipment.trackingEvents && shipment.trackingEvents.length > 0 && (
-                      <div className="pt-1">
-                        <div className="text-[10px] font-bold uppercase tracking-wide text-app-text-muted mb-1">
-                          Checkpoint history
-                        </div>
-                        <div className="space-y-1 max-h-40 overflow-y-auto custom-scrollbar">
-                          {shipment.trackingEvents.map((ev) => (
-                            <div key={ev.id} className="flex justify-between gap-2 text-[11px]">
-                              <span className="text-app-text-primary font-semibold">{ev.description}</span>
-                              <span className="text-app-text-muted whitespace-nowrap">{formatDate(ev.timestamp)}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </GlassCard>
-            </div>
-
-            {/* Linked returns */}
-            <div>
-              <div className="text-[10px] font-black uppercase tracking-wider text-app-text-muted mb-2">
-                Linked returns
-              </div>
-              <GlassCard hoverLift={false} className="p-3 text-[12px] space-y-2">
-                {linkedReturns.length === 0 ? (
-                  <div className="text-app-text-muted">No return requests for this order.</div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {linkedReturns.map((r) => (
-                      <div key={r.id} className="flex justify-between gap-2">
-                        <span className="font-semibold text-app-text-primary capitalize">
-                          {r.reason.replace(/_/g, ' ')}
-                        </span>
-                        <span className="uppercase font-bold text-app-text-muted">{r.status}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <Link
-                  to="/admin/returns"
-                  className="inline-flex items-center gap-1.5 text-app-accent font-bold text-[11px] hover:underline"
-                >
-                  Go to Returns &amp; Refunds <ExternalLink className="w-3 h-3" />
-                </Link>
-              </GlassCard>
+                RESET FILTERS
+              </button>
+              <button
+                type="button"
+                onClick={applyFilters}
+                disabled={!dirty}
+                style={{
+                  background: dirty ? ACCENT : '#E8EDF2',
+                  color: dirty ? '#fff' : '#9CA3AF',
+                  border: 'none',
+                  borderRadius: 7,
+                  padding: '7px 16px',
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  cursor: dirty ? 'pointer' : 'not-allowed',
+                }}
+              >
+                APPLY FILTERS
+              </button>
             </div>
           </div>
-        )}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px 14px' }}>
+            {caps.map((fkey) => (
+              <FilterField
+                key={fkey}
+                fkey={fkey}
+                value={(draftFilters[fkey] as string) || ''}
+                onChange={(v) => setDraftFilters((f) => ({ ...f, [fkey]: v || undefined }))}
+                dictionaries={dictionaries}
+              />
+            ))}
+          </div>
+          {appliedCount > 0 && (
+            <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600, marginTop: 10 }}>
+              {appliedCount} filter{appliedCount > 1 ? 's' : ''} applied · KPIs and tab counts reflect the filtered set ·
+              status tabs still switch freely · search runs inside the result.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* list */}
+      {loading && (
+        <div style={{ ...S.card, padding: 16, fontSize: 12, color: '#9CA3AF', display: 'flex', gap: 8 }}>
+          <Loader2 style={{ width: 16, height: 16 }} className="animate-spin" /> Loading orders…
+        </div>
+      )}
+      {error && (
+        <div style={{ ...S.card, padding: 16, fontSize: 12, color: '#DC2626', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <AlertCircle style={{ width: 16, height: 16 }} /> {error}
+        </div>
+      )}
+      {!loading && !error && visible.length === 0 && (
+        <div style={{ ...S.card, padding: 32, fontSize: 12, color: '#9CA3AF', textAlign: 'center', fontWeight: 600 }}>
+          {appliedCount > 0 || search
+            ? 'No orders match this view. Adjust the filters, tab, or search.'
+            : viewer.mode === 'seller'
+              ? 'No orders for your business yet.'
+              : 'No Operations orders found.'}
+        </div>
+      )}
+      {!loading && !error && visible.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {visible.map((r) => (
+            <OrderCard key={r.order.orderId} row={r} viewer={viewer} onQuickView={openQuickView} />
+          ))}
+        </div>
+      )}
+
+      {/* Quick View modal */}
+      <Modal
+        isOpen={Boolean(selected)}
+        onClose={closeModal}
+        title={selected ? `Quick View · ${selected.order.orderId}` : undefined}
+        maxWidth="max-w-2xl"
+      >
+        <QuickViewBody
+          row={selected}
+          viewer={viewer}
+          loading={detailLoading}
+          error={detailError}
+          shipment={qvShipment}
+          shipmentChecked={qvShipmentChecked}
+          markingItemId={markingItemId}
+          onMarkDelivered={handleMarkDelivered}
+          onOpenFull={() => {
+            if (selected) {
+              const path = orderDetailsPath(viewer, selected.order.orderId);
+              const row = selected.order;
+              closeModal();
+              navigate(path, { state: { order: row } });
+            }
+          }}
+        />
       </Modal>
 
       {toast && (
         <div
-          className={`fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-3 rounded-xl shadow-2xl font-bold text-sm flex items-center gap-2 z-[600] text-white ${
-            toast.kind === 'success' ? 'bg-emerald-600' : 'bg-rose-600'
-          }`}
+          style={{
+            position: 'fixed',
+            bottom: 32,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '12px 24px',
+            borderRadius: 12,
+            boxShadow: '0 12px 40px rgba(0,0,0,0.25)',
+            fontWeight: 700,
+            fontSize: 13,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            zIndex: 600,
+            color: '#fff',
+            background: toast.kind === 'success' ? '#16A34A' : '#DC2626',
+          }}
         >
-          {toast.kind === 'success' ? (
-            <CheckCircle2 className="w-5 h-5 text-white" />
-          ) : (
-            <AlertCircle className="w-5 h-5 text-white" />
-          )}
+          {toast.kind === 'success' ? <CheckCircle2 style={{ width: 18, height: 18 }} /> : <AlertCircle style={{ width: 18, height: 18 }} />}
           <span>{toast.message}</span>
         </div>
       )}

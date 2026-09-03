@@ -20,6 +20,20 @@ export interface UnifiedMessage {
   bookingOffer?: Record<string, unknown>;
   /** Embedded manual product-order offer card snapshot (Sprint 10) — deliberately separate from bookingOffer. */
   orderOffer?: Record<string, unknown>;
+  /**
+   * Structured "order dispatched" system card (Sprint 14). System-generated on a
+   * successful canonical dispatch — never a seller-authored message. One per
+   * order (platformMessageId `sys_dispatch_<orderId>`).
+   */
+  dispatchEvent?: {
+    orderId: string;
+    fulfillmentMethod: 'courier' | 'seller_delivery' | 'pickup';
+    courier?: string;
+    trackingNumber?: string;
+    trackingUrl?: string;
+    estimatedDelivery?: string;
+    dispatchedAt: string;
+  };
 }
 
 export interface Conversation {

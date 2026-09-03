@@ -1,6 +1,11 @@
 import type { Conversation, UnifiedMessage } from '../../src/types';
 import type { OpsStorefrontOrder } from './types';
-import { getConversation, saveConversation, saveMessage } from '../messaging/omniStore';
+import {
+  getConversation,
+  saveConversation,
+  saveMessage,
+  messageExistsByPlatformId,
+} from '../messaging/omniStore';
 
 const nowIso = () => new Date().toISOString();
 
@@ -63,11 +68,23 @@ export async function submitPlatformMessage(payload: {
    * is what makes a seller's own reply show as theirs instead of the buyer's.
    */
   direction?: 'inbound' | 'outbound';
-}): Promise<{ conversation: Conversation; message: UnifiedMessage }> {
+  /** Structured "order dispatched" system card payload (Sprint 14). */
+  dispatchEvent?: UnifiedMessage['dispatchEvent'];
+  /**
+   * Stable platform message id — pass to make the write idempotent. If a
+   * message with this id already exists the call is a no-op (deduped=true).
+   * Used by system events (e.g. `sys_dispatch_<orderId>`).
+   */
+  platformMessageId?: string;
+}): Promise<{ conversation: Conversation | null; message: UnifiedMessage | null; deduped: boolean }> {
   const conversationId = `conv_platform_${payload.buyerId}`;
   const existing = await getConversation(conversationId);
   const direction = payload.direction || 'inbound';
   const senderId = payload.senderId || payload.buyerId;
+
+  if (payload.platformMessageId && (await messageExistsByPlatformId(payload.platformMessageId))) {
+    return { conversation: existing || null, message: null, deduped: true };
+  }
 
   const conversation: Conversation = {
     conversationId,
@@ -81,9 +98,9 @@ export async function submitPlatformMessage(payload: {
 
   const prefix = payload.orderId ? `[Order ${payload.orderId}] ` : '';
   const message: UnifiedMessage = {
-    id: `m_plat_${Date.now()}`,
+    id: `m_plat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     platform: 'platform',
-    platformMessageId: `plat_${Date.now()}`,
+    platformMessageId: payload.platformMessageId || `plat_${Date.now()}`,
     conversationId,
     senderId,
     senderName: payload.userName,
@@ -95,9 +112,10 @@ export async function submitPlatformMessage(payload: {
     timestamp: nowIso(),
     bookingOffer: payload.bookingOffer,
     orderOffer: payload.orderOffer,
+    dispatchEvent: payload.dispatchEvent,
   };
 
   await saveConversation(conversation);
   await saveMessage(message);
-  return { conversation, message };
+  return { conversation, message, deduped: false };
 }
