@@ -73,6 +73,26 @@ type AttentionRow = {
   lowStockThreshold: number | null;
   state: AttentionState;
 };
+
+type VariantInvState = 'in_stock' | 'low_stock' | 'out_of_stock' | 'archived';
+type VariantStockLine = {
+  variantId: string;
+  sku: string | null;
+  available: number;
+  state: VariantInvState;
+};
+/** Per-product roll-up of its canonical VARIANT inventory records (never the
+ *  parent-level record). `totalUnits` is Σ availableQuantity across the variant
+ *  rows — the same figure syncProductStockFromInventory denormalises onto
+ *  product.stock, so the two agree. */
+type VariantStockSummary = {
+  count: number;
+  totalUnits: number;
+  inStock: number;
+  low: number;
+  out: number;
+  lines: VariantStockLine[];
+};
 type PageTab = 'catalog' | 'attention' | 'audit';
 type SortKey = 'name_asc' | 'name_desc' | 'price_asc' | 'price_desc' | 'stock_asc';
 
@@ -101,6 +121,28 @@ const mapCatalogProduct = (product: CatalogProduct): ProductRow => ({
   stock: Math.max(0, typeof product.stock === 'number' ? product.stock : 0),
   sellerId: product.sellerId,
 });
+
+/** Small inline chip for the variant stock roll-up in the Stock cell. */
+const vChip = (fg: string, bg: string): CSSProperties => ({
+  fontSize: 9,
+  fontWeight: 800,
+  color: fg,
+  background: bg,
+  borderRadius: 4,
+  padding: '1px 5px',
+  whiteSpace: 'nowrap',
+});
+
+/** Canonical inventory state → pill styling + label (reuses the server's own
+ *  `inventoryState`; no new threshold logic here). */
+const statePill = (state: VariantInvState): { label: string; fg: string; bg: string } => {
+  switch (state) {
+    case 'in_stock': return { label: 'In Stock', fg: '#15803D', bg: '#DCFCE7' };
+    case 'low_stock': return { label: 'Low Stock', fg: '#B45309', bg: '#FEF3C7' };
+    case 'out_of_stock': return { label: 'Out of Stock', fg: '#B91C1C', bg: '#FEE2E2' };
+    default: return { label: 'Archived', fg: '#6B7280', bg: '#F3F4F6' };
+  }
+};
 
 const statusPill = (status: string): CSSProperties => {
   const map: Record<string, { bg: string; fg: string }> = {
@@ -147,6 +189,40 @@ export default function ProductsPage() {
   const [attentionLoading, setAttentionLoading] = useState(false);
   const [attentionLoaded, setAttentionLoaded] = useState(false);
   const [attentionError, setAttentionError] = useState<string | null>(null);
+
+  // Per-product variant inventory roll-up, built from the same getProductInventory
+  // read the attention hydration already makes (its `records[]` were discarded).
+  const [variantStock, setVariantStock] = useState<Record<string, VariantStockSummary>>({});
+  const [expandedStockId, setExpandedStockId] = useState<string | null>(null);
+  // Lazily-fetched option labels + price per variant, keyed by productId, for the
+  // expanded breakdown only (avoids N GET /catalog/products/:id on first paint).
+  const [variantMeta, setVariantMeta] = useState<
+    Record<string, Array<{ id: string; options?: Record<string, string>; price?: number }>>
+  >({});
+  const [variantMetaLoading, setVariantMetaLoading] = useState<string | null>(null);
+
+  const loadVariantMeta = React.useCallback(
+    async (productId: string) => {
+      if (variantMeta[productId] || variantMetaLoading === productId) return;
+      setVariantMetaLoading(productId);
+      try {
+        const prod = await catalogApi.getProduct(productId);
+        setVariantMeta((prev) => ({
+          ...prev,
+          [productId]: (prod.productVariants ?? []).map((v) => ({
+            id: v.id,
+            options: v.options,
+            price: v.price,
+          })),
+        }));
+      } catch {
+        setVariantMeta((prev) => ({ ...prev, [productId]: [] }));
+      } finally {
+        setVariantMetaLoading(null);
+      }
+    },
+    [variantMeta, variantMetaLoading],
+  );
 
   const showToast = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
     setToast({ message, type });
@@ -232,9 +308,36 @@ export default function ProductsPage() {
         const results = await Promise.allSettled(targets.map((p) => catalogApi.getProductInventory(p.id)));
         if (cancelled) return;
         const rows: AttentionRow[] = [];
+        const vs: Record<string, VariantStockSummary> = {};
         results.forEach((res, i) => {
           const product = targets[i];
           if (res.status === 'fulfilled') {
+            const records = res.value.records || [];
+            const vrows = records.filter((r) => r.variantId);
+            if (vrows.length) {
+              const summary: VariantStockSummary = {
+                count: vrows.length,
+                totalUnits: vrows.reduce((s, r) => s + Math.max(0, r.availableQuantity), 0),
+                inStock: vrows.filter((r) => r.inventoryState === 'in_stock').length,
+                low: vrows.filter((r) => r.inventoryState === 'low_stock').length,
+                out: vrows.filter((r) => r.inventoryState === 'out_of_stock').length,
+                lines: vrows.map((r) => ({
+                  variantId: r.variantId as string,
+                  sku: r.sku ?? null,
+                  available: Math.max(0, r.availableQuantity),
+                  state: r.inventoryState as VariantInvState,
+                })),
+              };
+              vs[product.id] = summary;
+              // A variant product needs attention if any combination is low/out
+              // (unless literally everything is out → out_of_stock).
+              if (summary.out > 0 && summary.inStock === 0 && summary.low === 0) {
+                rows.push({ productId: product.id, name: product.name, brand: product.brand, availableQuantity: 0, lowStockThreshold: null, state: 'out_of_stock' });
+              } else if (summary.low > 0 || summary.out > 0) {
+                rows.push({ productId: product.id, name: product.name, brand: product.brand, availableQuantity: summary.totalUnits, lowStockThreshold: null, state: 'low_stock' });
+              }
+              return;
+            }
             const inv: CatalogInventory = res.value.data;
             if (inv.inventoryState === 'out_of_stock' || inv.inventoryState === 'low_stock') {
               rows.push({
@@ -252,6 +355,7 @@ export default function ProductsPage() {
           return (a.availableQuantity ?? 0) - (b.availableQuantity ?? 0);
         });
         setAttentionRows(rows);
+        setVariantStock(vs);
         setAttentionLoaded(true);
       } catch (err) {
         if (cancelled) return;
@@ -264,7 +368,12 @@ export default function ProductsPage() {
     return () => { cancelled = true; };
   }, [attentionLoaded, isLoadingProducts, products]);
 
-  React.useEffect(() => { setAttentionLoaded(false); setAttentionRows([]); }, [selectedBrandFilter, profile?.id]);
+  React.useEffect(() => {
+    setAttentionLoaded(false);
+    setAttentionRows([]);
+    setVariantStock({});
+    setExpandedStockId(null);
+  }, [selectedBrandFilter, profile?.id]);
 
   const attentionByProduct = useMemo(() => {
     const m: Record<string, AttentionRow> = {};
@@ -595,10 +704,12 @@ export default function ProductsPage() {
                 ) : (
                   displayedProducts.map((p, idx) => {
                     const att = attentionByProduct[p.id];
+                    const vsum = variantStock[p.id];
                     const stockColor = p.stock === 0 ? '#DC2626' : att?.state === 'low_stock' ? '#B45309' : '#111827';
                     const displayStatus = p.stock === 0 ? 'Out of Stock' : p.status;
                     return (
-                      <tr key={p.id} style={S.row}>
+                      <React.Fragment key={p.id}>
+                      <tr style={S.row}>
                         <td style={{ ...S.td, textAlign: 'center' }}>
                           <input type="checkbox" checked={selectedIds.has(p.id)} onChange={() => toggleSelect(p.id)} aria-label={`Select ${p.name}`} />
                         </td>
@@ -618,12 +729,36 @@ export default function ProductsPage() {
                         </td>
                         <td style={S.td}><span style={S.catPill}>{p.category || '—'}</span></td>
                         <td style={S.td}>
-                          <span style={{ fontWeight: 800, color: stockColor }}>{p.stock} units</span>
-                          {p.stock === 0
-                            ? <div style={{ fontSize: 9, color: '#DC2626', fontWeight: 700, marginTop: 2 }}>⚠ Out of stock</div>
-                            : att?.state === 'low_stock'
-                              ? <div style={{ fontSize: 9, color: '#B45309', fontWeight: 700, marginTop: 2 }}>⚠ Low stock</div>
-                              : null}
+                          {vsum ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = expandedStockId === p.id ? null : p.id;
+                                setExpandedStockId(next);
+                                if (next) void loadVariantMeta(p.id);
+                              }}
+                              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left', display: 'block' }}
+                            >
+                              <span style={{ fontWeight: 800, color: stockColor }}>{vsum.totalUnits} units</span>
+                              <span style={{ fontSize: 10, color: '#6B7280', fontWeight: 700 }}>
+                                {' · '}{vsum.count} variant{vsum.count === 1 ? '' : 's'} {expandedStockId === p.id ? '▴' : '▾'}
+                              </span>
+                              <div style={{ display: 'flex', gap: 4, marginTop: 3, flexWrap: 'wrap' }}>
+                                {vsum.inStock > 0 ? <span style={vChip('#15803D', '#DCFCE7')}>{vsum.inStock} In</span> : null}
+                                {vsum.low > 0 ? <span style={vChip('#B45309', '#FEF3C7')}>{vsum.low} Low</span> : null}
+                                {vsum.out > 0 ? <span style={vChip('#B91C1C', '#FEE2E2')}>{vsum.out} Out</span> : null}
+                              </div>
+                            </button>
+                          ) : (
+                            <>
+                              <span style={{ fontWeight: 800, color: stockColor }}>{p.stock} units</span>
+                              {p.stock === 0
+                                ? <div style={{ fontSize: 9, color: '#DC2626', fontWeight: 700, marginTop: 2 }}>⚠ Out of stock</div>
+                                : att?.state === 'low_stock'
+                                  ? <div style={{ fontSize: 9, color: '#B45309', fontWeight: 700, marginTop: 2 }}>⚠ Low stock</div>
+                                  : null}
+                            </>
+                          )}
                           {publishToggle(p)}
                         </td>
                         <td style={S.td}><span style={{ fontWeight: 800 }}>{p.price}</span></td>
@@ -639,14 +774,30 @@ export default function ProductsPage() {
                             </div>
                           ) : (
                             <div style={{ display: 'inline-flex', alignItems: 'flex-start', justifyContent: 'flex-end', gap: 16 }}>
-                              {(p.stock === 0 || att?.state === 'low_stock') && (
+                              {/* Quick-restock is a product-level inventory delta — meaningless for a
+                                  variant product, whose stock is Σ variant records. Only offer it
+                                  for non-variant products. */}
+                              {!vsum && (p.stock === 0 || att?.state === 'low_stock') && (
                                 <button onClick={() => handleQuickRestock(p.id)} disabled={restockingId === p.id} style={{ ...restockBtn, alignSelf: 'center' }}>
                                   {restockingId === p.id ? '…' : `⚡ RE-STOCK (+${RESTOCK_STEP})`}
                                 </button>
                               )}
                               <span style={S.actionCol}>
                                 <span style={S.actionCap}>STOCK</span>
-                                <Link to={`/admin/products/${p.id}/edit`} style={actionWord('#2563EB')}>Adjust Stock</Link>
+                                {vsum ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setExpandedStockId(expandedStockId === p.id ? null : p.id);
+                                      void loadVariantMeta(p.id);
+                                    }}
+                                    style={{ ...actionWord('#2563EB'), background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                                  >
+                                    Per-variant stock
+                                  </button>
+                                ) : (
+                                  <Link to={`/admin/products/${p.id}/edit`} style={actionWord('#2563EB')}>Adjust Stock</Link>
+                                )}
                               </span>
                               <span style={S.actionCol}>
                                 <span style={S.actionCap}>EDIT</span>
@@ -662,6 +813,52 @@ export default function ProductsPage() {
                           )}
                         </td>
                       </tr>
+                      {expandedStockId === p.id && vsum ? (
+                        <tr>
+                          <td colSpan={8} style={{ padding: '0 16px 14px 66px', background: '#F9FAFB', borderBottom: '1px solid #EEF1F4' }}>
+                            <div style={{ fontSize: 10, fontWeight: 800, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.04em', margin: '8px 0 6px' }}>
+                              Per-variant inventory — {vsum.count} combinations · {vsum.totalUnits} units total
+                            </div>
+                            <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 480 }}>
+                              <thead>
+                                <tr>
+                                  <th style={{ ...S.th, fontSize: 9 }}>Combination</th>
+                                  <th style={{ ...S.th, fontSize: 9 }}>SKU</th>
+                                  {variantMeta[p.id]?.some((m) => typeof m.price === 'number') ? <th style={{ ...S.th, fontSize: 9 }}>Price</th> : null}
+                                  <th style={{ ...S.th, fontSize: 9 }}>Stock</th>
+                                  <th style={{ ...S.th, fontSize: 9 }}>Status</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {vsum.lines.map((ln) => {
+                                  const meta = variantMeta[p.id]?.find((m) => m.id === ln.variantId);
+                                  const combo = meta?.options
+                                    ? Object.entries(meta.options).map(([k, v]) => `${k}: ${v}`).join(' · ')
+                                    : variantMetaLoading === p.id
+                                      ? 'loading…'
+                                      : ln.variantId;
+                                  const sp = statePill(ln.state);
+                                  return (
+                                    <tr key={ln.variantId}>
+                                      <td style={{ ...S.td, fontSize: 11, fontWeight: 700 }}>{combo}</td>
+                                      <td style={{ ...S.td, fontSize: 10.5, fontFamily: 'monospace', color: '#6B7280' }}>{ln.sku || '—'}</td>
+                                      {variantMeta[p.id]?.some((m) => typeof m.price === 'number') ? (
+                                        <td style={{ ...S.td, fontSize: 11 }}>{typeof meta?.price === 'number' ? `৳ ${meta.price.toLocaleString()}` : '—'}</td>
+                                      ) : null}
+                                      <td style={{ ...S.td, fontSize: 11, fontWeight: 800, fontFamily: 'monospace' }}>{ln.available}</td>
+                                      <td style={S.td}><span style={{ fontSize: 9, fontWeight: 800, color: sp.fg, background: sp.bg, borderRadius: 999, padding: '3px 8px', whiteSpace: 'nowrap' }}>{sp.label}</span></td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                            <Link to={`/admin/products/${p.id}/edit`} style={{ display: 'inline-block', marginTop: 8, fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.04em', color: ACCENT, textDecoration: 'none', border: `1px solid ${ACCENT}`, borderRadius: 6, padding: '5px 10px', background: ACCENT_WASH }}>
+                              Adjust per-variant stock in Product Studio →
+                            </Link>
+                          </td>
+                        </tr>
+                      ) : null}
+                      </React.Fragment>
                     );
                   })
                 )}

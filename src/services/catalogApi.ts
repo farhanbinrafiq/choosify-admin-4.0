@@ -11,6 +11,7 @@ import type {
   CatalogPlacement,
   CatalogProduct,
   CatalogProductDetail,
+  CatalogProductWithVariants,
   CatalogService,
   HomepageConfig,
   SiteConfig,
@@ -191,8 +192,8 @@ export const catalogApi = {
   /** Authoritative single-product fetch — GET /catalog/products/:id returns the
    *  product object directly (not wrapped) and 404s when it doesn't exist or is
    *  not scoped to the caller. Throws on any non-2xx. */
-  getProduct: async (id: string): Promise<CatalogProduct> => {
-    return request<CatalogProduct>(`/catalog/products/${id}`);
+  getProduct: async (id: string): Promise<CatalogProductWithVariants> => {
+    return request<CatalogProductWithVariants>(`/catalog/products/${id}`);
   },
   createProduct: async (payload: Partial<CatalogProduct> & Record<string, unknown>): Promise<CatalogProduct> => {
     const result = await request<{ data: CatalogProduct }>('/catalog/products', 'POST', payload);

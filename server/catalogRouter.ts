@@ -781,7 +781,42 @@ catalogRouter.get(
       brandName: product.brandName,
       source: 'catalog_product_detail',
     });
-    res.json(product);
+    // Options & Variants (and the size guide) live on the separate
+    // product-detail record. The public Product Detail — Choosify-Web storefront
+    // and the admin read-only preview — reads THIS endpoint, so surface the
+    // canonical optionGroups / productVariants / sizeGuide here too; otherwise a
+    // shopper never sees the choices the seller configured. Owners/staff get the
+    // full variant set (inactive rows included, so the Studio's own loads stay
+    // complete); everyone else gets active variants only.
+    const detail = await catalogStore.getProductDetail(product.id).catch(() => null);
+    const canEditThisProduct = userCanMutateOwnedProduct(req, product);
+    const allVariants = Array.isArray(detail?.productVariants) ? detail!.productVariants : [];
+    const publicVariants = allVariants.filter((v) =>
+      v && (v as { status?: string }).status
+        ? (v as { status?: string }).status === 'active'
+        : (v as { enabled?: boolean }).enabled !== false,
+    );
+    let responseVariants = canEditThisProduct ? allVariants : publicVariants;
+    if (!canEditThisProduct && responseVariants.length) {
+      // Storefront availability must reflect LIVE inventory, not the on-hand
+      // number last written to the detail JSON. Overlay each variant's
+      // availableQuantity from its canonical inventory record where one exists;
+      // the editor still gets the seller-set value (above) so the Studio Stock
+      // field stays editable.
+      const invRows = await listInventoryForProduct(product.id).catch(() => []);
+      const availByVariant = new Map(
+        invRows.filter((r) => r.variantId).map((r) => [r.variantId as string, r.availableQuantity]),
+      );
+      responseVariants = responseVariants.map((v) =>
+        availByVariant.has(v.id) ? { ...v, stock: availByVariant.get(v.id) } : v,
+      );
+    }
+    res.json({
+      ...product,
+      optionGroups: Array.isArray(detail?.optionGroups) ? detail!.optionGroups : [],
+      productVariants: responseVariants,
+      ...(detail?.sizeGuide ? { sizeGuide: detail.sizeGuide } : {}),
+    });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : 'Failed to get product' });
   }
@@ -3264,6 +3299,20 @@ catalogRouter.put('/catalog/product-details/:productId', ...requireProductEdit, 
           actor: req.userId || 'anonymous',
           payload: { productId: product.id, variantId: variant.id, sku: variant.sku },
         });
+        // The seller edits per-combination Stock (and SKU) in the Product Studio
+        // combination table; that must land on the canonical inventory record,
+        // not just the detail JSON. ensureInventoryRecord re-asserts on-hand
+        // `quantity` while preserving `reservedQuantity`, so this is idempotent
+        // and safe to run on every save. Skipped when the seller left Stock
+        // blank (undefined) — that is "unchanged", not "zero".
+        if (usesPhysicalInventory && typeof variant.stock === 'number') {
+          await ensureInventoryRecord({
+            productId: product.id,
+            variantId: variant.id,
+            sku: variant.sku,
+            quantity: Math.max(0, variant.stock),
+          });
+        }
       }
     }
     if (usesPhysicalInventory) {

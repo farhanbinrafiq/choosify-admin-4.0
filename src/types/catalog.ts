@@ -269,6 +269,21 @@ export interface CatalogProduct {
 }
 
 /**
+ * A `CatalogProduct` as returned by `GET /catalog/products/:id`, which merges in
+ * the Options & Variants and size guide from the separate
+ * {@link CatalogProductDetail} record so the public Product Detail (Choosify-Web
+ * storefront + admin read-only preview) can render buyer-selectable options
+ * without a second fetch. The list endpoint returns bare `CatalogProduct` (these
+ * fields absent). For non-editors `productVariants` is active-only. Internal
+ * field names and shapes are identical to `CatalogProductDetail`.
+ */
+export interface CatalogProductWithVariants extends CatalogProduct {
+  optionGroups?: CatalogProductDetail['optionGroups'];
+  productVariants?: CatalogProductDetail['productVariants'];
+  sizeGuide?: CatalogProductDetail['sizeGuide'];
+}
+
+/**
  * Service catalog foundation (Sprint 3). Dedicated resource — booking engine deferred.
  * Lifecycle reuses CatalogPublishStatus (`live` ≡ Active).
  */

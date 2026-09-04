@@ -271,6 +271,18 @@ async function recomputeOrderPricingServerSide(
             warrantyStartsAt?: string;
             warrantyExpiresAt?: string;
           } = {};
+          // Server-authoritative snapshot of the buyer's selected variant
+          // combination. Never trusted from the client — resolved below against
+          // the product's own productVariants and used to overwrite whatever the
+          // client sent for variantId / SKU / options / label.
+          let resolvedVariant:
+            | {
+                variantId: string;
+                variantSku?: string;
+                selectedOptions?: Record<string, string>;
+                variantLabel?: string;
+              }
+            | undefined;
           // Guide LIVE-offer context (client-supplied, never trusted for price).
           const rawGuideOfferRef =
             item.guideOfferRef && typeof item.guideOfferRef === 'object'
@@ -297,6 +309,55 @@ async function recomputeOrderPricingServerSide(
             }
             realPrice = product.price;
             realTitle = product.title;
+
+            // ── Variant-aware pricing + authoritative snapshot ───────────────
+            // Retail checkout (Choosify-Web) can send a selected variant. Trust
+            // NOTHING from the client for money: resolve the id against the
+            // product's own productVariants, require it to be active, and take
+            // the price / SKU / option map from the stored variant. A forged,
+            // unknown or inactive variant id is a hard error — never a silent
+            // fall-through to the base price.
+            const rawVariantId = typeof item.variantId === 'string' ? item.variantId.trim() : '';
+            if (rawVariantId) {
+              const variantDetail = await catalogStore.getProductDetail(productId).catch(() => null);
+              const allVariants = variantDetail?.productVariants ?? [];
+              // Only enforce when the product actually defines variants. A stray
+              // variantId on a product with none configured is ignored (older
+              // clients occasionally send noise), never a hard failure.
+              if (allVariants.length > 0) {
+                const variant = allVariants.find((v) => v.id === rawVariantId);
+                if (!variant) {
+                  throw new Error(
+                    `The selected option for "${product.title}" is no longer available. Please re-pick your choice and try again.`,
+                  );
+                }
+                const variantActive = variant.status
+                  ? variant.status === 'active'
+                  : variant.enabled !== false;
+                if (!variantActive) {
+                  throw new Error(
+                    `The selected option for "${product.title}" is no longer available. Please choose another combination.`,
+                  );
+                }
+                if (typeof variant.price === 'number' && Number.isFinite(variant.price) && variant.price > 0) {
+                  realPrice = variant.price;
+                }
+                const opts =
+                  variant.options && typeof variant.options === 'object'
+                    ? (variant.options as Record<string, string>)
+                    : undefined;
+                resolvedVariant = {
+                  variantId: variant.id,
+                  variantSku: variant.sku || undefined,
+                  selectedOptions: opts,
+                  variantLabel: opts
+                    ? Object.entries(opts)
+                        .map(([k, v]) => `${k}: ${v}`)
+                        .join(' · ')
+                    : undefined,
+                };
+              }
+            }
 
             // ── Guide LIVE offer: server-authoritative promotional price ──────
             // The offer only ever LOWERS realPrice, only for the exact product it
@@ -386,6 +447,8 @@ async function recomputeOrderPricingServerSide(
             price: realPrice,
             productTitle: realTitle,
             quantity,
+            // Server-resolved variant identity wins over anything the client sent.
+            ...(resolvedVariant ?? {}),
             ...(guideOfferSnapshot ? { guideOffer: guideOfferSnapshot } : {}),
           };
         }),

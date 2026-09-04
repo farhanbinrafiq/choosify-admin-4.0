@@ -26,8 +26,15 @@ export default function ProductStorefrontPreview() {
       setLoading(true);
       setError(null);
       try {
-        const products = await catalogApi.listProducts();
-        const product = products.find((p) => p.id === id);
+        // Prefer the single-product endpoint — it now merges optionGroups /
+        // productVariants / sizeGuide from the product-detail record, so the
+        // preview shows the same options the storefront resolves. Fall back to
+        // the list only if that fails.
+        let product = await catalogApi.getProduct(id!).catch(() => null);
+        if (!product) {
+          const products = await catalogApi.listProducts();
+          product = products.find((p) => p.id === id) ?? null;
+        }
         if (!product) {
           if (!cancelled) { setError('Product not found or not visible to you.'); setLoading(false); }
           return;

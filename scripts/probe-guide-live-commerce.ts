@@ -441,13 +441,22 @@ async function main() {
     const variantOrder = await req('POST', '/operations/orders', consumer.token, mkOpsOrder([
       { productId: ownedProduct.id, productTitle: ownedProduct.title, quantity: 1, variantId: 'probe-variant-xyz', price: flatPromo, guideOfferRef: { guideId: promoGuide.id, productId: ownedProduct.id }, expectedUnitPrice: flatPromo },
     ]));
-    // With a variant line the flat promoPrice is skipped → server prices at
-    // canonical, so the stale expectedUnitPrice (flatPromo) is rejected explicitly.
+    // With a variant line the flat promoPrice is skipped. Either way the offer
+    // is NOT silently applied to the line:
+    //  - if `ownedProduct` has no configured variants, the stray variantId is
+    //    ignored, the server prices at canonical, and the stale expectedUnitPrice
+    //    is rejected → 409 GUIDE_OFFER_PRICE_CHANGED (actualUnitPrice === base).
+    //  - if `ownedProduct` DOES have variants, `probe-variant-xyz` matches none,
+    //    so the operations router rejects the unknown variant outright → 400.
+    const guardHeld =
+      (variantOrder.status === 409 &&
+        variantOrder.body.code === 'GUIDE_OFFER_PRICE_CHANGED' &&
+        Number(variantOrder.body.details?.actualUnitPrice) === basePrice) ||
+      (variantOrder.status === 400 && /variant|option|no longer available/i.test(String(variantOrder.body?.error || '')));
     check(
-      variantOrder.status === 409 && variantOrder.body.code === 'GUIDE_OFFER_PRICE_CHANGED' &&
-        Number(variantOrder.body.details?.actualUnitPrice) === basePrice,
-      'operations order: absolute promoPrice offer is NOT applied to a variant line (guard) → explicit price-change',
-      { status: variantOrder.status, details: variantOrder.body.details },
+      guardHeld,
+      'operations order: absolute promoPrice offer is NOT applied to a variant line (guard) → explicit price-change or unknown-variant rejection',
+      { status: variantOrder.status, error: variantOrder.body?.error, details: variantOrder.body.details },
     );
     await req('POST', `/catalog/guides/${promoGuide.id}/archive`, admin.token);
 

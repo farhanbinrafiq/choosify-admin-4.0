@@ -22,6 +22,7 @@ import {
 import {
   AddonItemsEditor,
   CategoryChangeDecision,
+  CategorySearchSelect,
   CreatorReviewsEditor,
   HashtagsEditor,
   OverviewBlocksEditor,
@@ -626,9 +627,11 @@ export default function ProductEditStudio() {
       } else {
         await catalogApi.updateProduct(productId, productPatch);
       }
-      try {
-        await catalogApi.upsertProductDetail(productId, editorModelToDetailPayload({ ...merged, id: productId }));
-      } catch (_) {}
+      // Options & Variants, the size guide and every other rich Product Detail
+      // field are persisted here. A failure (category-schema rejection, invalid
+      // variant pricing, auth) MUST surface — swallowing it told the seller the
+      // save succeeded while the storefront kept the old (or empty) variants.
+      await catalogApi.upsertProductDetail(productId, editorModelToDetailPayload({ ...merged, id: productId }));
       const saved: ProductEditorModel = { ...merged, id: productId };
       persistCache(saved);
       if (!isNew) {
@@ -665,9 +668,9 @@ export default function ProductEditStudio() {
       } else {
         await catalogApi.updateProduct(productId, productPatch);
       }
-      try {
-        await catalogApi.upsertProductDetail(productId, editorModelToDetailPayload({ ...base, id: productId }));
-      } catch (_) {}
+      // See saveSection: a Product Detail write failure must fail the publish
+      // rather than report a false success while the storefront stays stale.
+      await catalogApi.upsertProductDetail(productId, editorModelToDetailPayload({ ...base, id: productId }));
       const published: ProductEditorModel = { ...base, id: productId, status: 'LIVE' };
       persistCache(published);
       setModel(published);
@@ -924,6 +927,41 @@ export default function ProductEditStudio() {
       case 'options':
         return (
           <>
+            <div style={{ marginBottom: 6 }}>
+              <div style={S.label}>PRODUCT CATEGORY</div>
+              <CategorySearchSelect
+                options={categoryOptions}
+                valueId={d.categoryId}
+                valueName={d.categoryName}
+                onSelect={(id) => void onPickCategory(id)}
+                placeholder="Search a category that best fits this product…"
+              />
+              <div style={S.hint}>
+                The category decides which product options are recommended below. Search and pick the
+                closest match.
+              </div>
+              {pendingCategory && editingId === 'options' ? (
+                <div style={{ marginTop: 12 }}>
+                  <CategoryChangeDecision
+                    compat={pendingCategory.compat}
+                    fromName={d.categoryName}
+                    toName={pendingCategory.name}
+                    onRemap={() => setRemapOpen(true)}
+                    onClear={applyCategoryClear}
+                    onCancel={() => { setPendingCategory(null); setRemapOpen(false); }}
+                  />
+                  {remapOpen ? (
+                    <VariantRemapPanel
+                      optionGroups={d.optionGroups}
+                      productVariants={d.productVariants}
+                      targetDims={pendingCategory.dims}
+                      onApply={applyCategoryRemap}
+                      onCancel={() => setRemapOpen(false)}
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
             <VariantMatrixEditor
               optionGroups={d.optionGroups}
               productVariants={d.productVariants}

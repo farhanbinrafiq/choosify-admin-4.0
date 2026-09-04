@@ -72,6 +72,147 @@ const x: Record<string, CSSProperties> = {
 const norm = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '');
 
 /**
+ * Per-combination stock state for the Studio at-a-glance chip. Mirrors the
+ * server's canonical `deriveInventoryState(available, lowStockThreshold = 5)`
+ * (server/catalog/productLifecycle.ts) — do NOT introduce a different threshold.
+ * The live availability the storefront/inventory use still comes from the
+ * canonical inventory record; this is the seller's on-hand number as typed.
+ */
+export const VARIANT_LOW_STOCK_THRESHOLD = 5;
+export function variantStockState(
+  v: { stock?: number; status?: string; enabled?: boolean },
+): { label: string; color: string; bg: string } {
+  const active = v.status ? v.status === 'active' : v.enabled !== false;
+  if (!active) return { label: 'Inactive', color: '#6B7280', bg: '#F3F4F6' };
+  const s = typeof v.stock === 'number' ? v.stock : undefined;
+  if (s === undefined) return { label: 'No stock set', color: '#92400E', bg: '#FEF3C7' };
+  if (s <= 0) return { label: 'Out of stock', color: '#B91C1C', bg: '#FEE2E2' };
+  if (s < VARIANT_LOW_STOCK_THRESHOLD) return { label: 'Low', color: '#B45309', bg: '#FEF3C7' };
+  return { label: 'In stock', color: '#15803D', bg: '#DCFCE7' };
+}
+
+/**
+ * Searchable category picker shown at the top of the Options & Variants section.
+ * The chosen category is what drives the recommended product options below, so
+ * the seller can find and set the closest-fitting category right here without
+ * leaving the section. Delegates the actual change (and the incompatible-data
+ * remap prompt) to the same handler the Basic Information picker uses.
+ */
+export function CategorySearchSelect({
+  options,
+  valueId,
+  valueName,
+  onSelect,
+  placeholder,
+}: {
+  options: Array<{ id: string; name: string }>;
+  valueId: string;
+  valueName?: string;
+  onSelect: (id: string) => void;
+  placeholder?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [open]);
+
+  const selectedName = valueName || options.find((o) => o.id === valueId)?.name || '';
+  const needle = q.trim().toLowerCase();
+  const filtered = needle ? options.filter((o) => o.name.toLowerCase().includes(needle)) : options;
+
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => { setOpen((v) => !v); setQ(''); }}
+        style={{
+          ...x.smallInput,
+          height: 34,
+          textAlign: 'left',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+        }}
+      >
+        <span
+          style={{
+            color: selectedName ? '#111827' : '#9CA3AF',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {selectedName || placeholder || 'Select a category…'}
+        </span>
+        <span style={{ color: '#9CA3AF', fontSize: 10 }}>▾</span>
+      </button>
+      {open ? (
+        <div
+          style={{
+            position: 'absolute',
+            zIndex: 30,
+            top: 'calc(100% + 4px)',
+            left: 0,
+            right: 0,
+            background: '#fff',
+            border: '1px solid #E8EDF2',
+            borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.10)',
+            padding: 6,
+          }}
+        >
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search categories…"
+            style={{ ...x.smallInput, marginBottom: 6 }}
+          />
+          <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+            {filtered.length === 0 ? (
+              <div style={{ ...x.note, padding: '8px 6px' }}>No category matches “{q}”.</div>
+            ) : (
+              filtered.map((o) => (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => { onSelect(o.id); setOpen(false); setQ(''); }}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '7px 8px',
+                    borderRadius: 6,
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: 12,
+                    fontWeight: o.id === valueId ? 800 : 600,
+                    background: o.id === valueId ? '#F1F5F9' : 'transparent',
+                    color: '#111827',
+                  }}
+                >
+                  {o.name}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/**
  * Fully controlled by `optionGroups` — no local mirror of enabled dims/values,
  * so it can't go stale when the category schema arrives after mount.
  */
@@ -92,6 +233,8 @@ export function VariantMatrixEditor({
   const dims = variantDimensions ?? [];
   const [freeInput, setFreeInput] = useState<Record<string, string>>({});
   const [newDimName, setNewDimName] = useState('');
+  const [uploadingRow, setUploadingRow] = useState<string | null>(null);
+  const [imgUrlInput, setImgUrlInput] = useState<Record<string, string>>({});
 
   const groupFor = (d: SchemaVariantDimension) =>
     optionGroups.find((g) => norm(g.name) === norm(d.name) || norm(g.name) === norm(d.key));
@@ -242,21 +385,39 @@ export function VariantMatrixEditor({
     onChange({ optionGroups, productVariants: productVariants.map((v) => (v.id === id ? { ...v, ...patch } : v)) });
   };
 
+  /** Reuse one combination's images on every OTHER combination that shares the
+   *  same value for `optionName` (e.g. give every "Black" combination the same
+   *  photos). Stays entirely within the canonical productVariants[] model. */
+  const copyImagesToMatching = (sourceId: string, optionName: string) => {
+    const src = productVariants.find((v) => v.id === sourceId);
+    const imgs = src?.images ?? [];
+    if (!src || imgs.length === 0) return;
+    const val = src.options?.[optionName];
+    if (val == null) return;
+    onChange({
+      optionGroups,
+      productVariants: productVariants.map((v) =>
+        v.id !== sourceId && v.options?.[optionName] === val ? { ...v, images: [...imgs] } : v,
+      ),
+    });
+  };
+
+
   if (variantDimensions === null) {
-    return <p style={x.note}>Loading this category's variant schema…</p>;
+    return <p style={x.note}>Loading this category's product options…</p>;
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div>
-        <div style={x.label}>Category variant dimensions</div>
+        <div style={x.label}>Category product options</div>
         <div style={x.note}>
           {dims.length ? (
-            <>Enable the dimensions that apply to this product and choose their values. <b>select</b>
-            {' '}values come from the category schema; text/number dimensions accept custom values.</>
+            <>Turn on the options that apply to this product and pick the choices you offer. <b>select</b>
+            {' '}choices come from the category; text/number options also accept your own choices.</>
           ) : (
-            <>This product's category defines no variant dimensions. You can still add your own
-            product-specific dimensions below.</>
+            <>This product's category defines no product options yet. You can still add your own
+            product options below if this product comes in different choices.</>
           )}
         </div>
       </div>
@@ -324,11 +485,11 @@ export function VariantMatrixEditor({
 
       {/* ── Seller custom, product-only dimensions (not a category facet) ── */}
       <div style={{ borderTop: '1px dashed #E8EDF2', paddingTop: 12 }}>
-        <div style={x.label}>Custom dimensions (this product only)</div>
+        <div style={x.label}>Custom product options (this product only)</div>
         <div style={{ ...x.note, marginBottom: 8 }}>
-          Add anything the category doesn't cover (e.g. Strap Material, Roast, Frame). These drive
-          pricing &amp; combinations but aren't category search facets, and a later category change
-          never removes them.
+          Add a buyer-selectable option the category doesn't cover (e.g. Strap Material, Roast,
+          Frame, Pack Size). These drive pricing &amp; variant combinations but aren't category
+          search filters, and a later category change never removes them.
         </div>
         {customGroups.map((g) => (
           <div key={g.id} style={{ border: '1px solid #E8EDF2', borderRadius: 10, padding: 12, marginBottom: 8 }}>
@@ -336,7 +497,7 @@ export function VariantMatrixEditor({
               <span style={{ fontSize: 12.5, fontWeight: 800 }}>{g.name}</span>
               <span style={{ ...x.chip, color: ACCENT }}>custom</span>
               <button type="button" onClick={() => removeCustomDimension(g.id)} style={{ ...x.ghostBtn, color: '#DC2626', marginLeft: 'auto' }}>
-                Remove dimension
+                Remove option
               </button>
             </div>
             <div style={{ marginTop: 10, display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
@@ -385,10 +546,10 @@ export function VariantMatrixEditor({
             value={newDimName}
             onChange={(e) => setNewDimName(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addCustomDimension(); } }}
-            placeholder="New dimension name…"
-            style={{ ...x.smallInput, width: 180 }}
+            placeholder="Option name — e.g. Size, Storage, Color"
+            style={{ ...x.smallInput, width: 220 }}
           />
-          <button type="button" onClick={addCustomDimension} style={x.ghostBtn}>+ Add custom dimension</button>
+          <button type="button" onClick={addCustomDimension} style={x.ghostBtn}>+ Add product option</button>
         </div>
       </div>
 
@@ -400,23 +561,24 @@ export function VariantMatrixEditor({
           style={x.accentBtn}
         >
           {missingCombos.length
-            ? `Add missing combinations (${missingCombos.length})`
-            : 'All combinations added'}
+            ? `Generate missing combinations (${missingCombos.length})`
+            : '✓ All combinations created'}
         </button>
         {productVariants.length > 0 ? (
           <button type="button" onClick={resetToFullMatrix} style={x.ghostBtn}>
-            Reset to full matrix
+            Reset to all combinations
           </button>
         ) : null}
         <span style={x.note}>
-          Delete the rows for combinations you don't sell (e.g. "12GB only in Black") — a deleted
-          row stays deleted. Adding only ever fills gaps.
+          Choosify builds one variant combination per set of choices. Delete the rows you don't
+          sell (e.g. "12GB only in Black") — a deleted combination stays deleted. Generating only
+          ever fills gaps.
         </span>
       </div>
 
       {productVariants.length > 0 ? (
         <div style={{ overflowX: 'auto', border: '1px solid #E8EDF2', borderRadius: 10 }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 640 }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 760 }}>
             <thead>
               <tr>
                 {effectiveDims.map((d) => (
@@ -425,11 +587,11 @@ export function VariantMatrixEditor({
                   </th>
                 ))}
                 <th style={x.th}>SKU</th>
-                <th style={x.th}>Price ৳</th>
-                <th style={x.th}>MRP ৳</th>
+                <th style={x.th}>Selling price ৳</th>
+                <th style={x.th}>Original / MRP ৳</th>
                 {!isService ? <th style={x.th}>Stock</th> : null}
                 <th style={x.th}>Active</th>
-                <th style={x.th}>Media URLs</th>
+                <th style={x.th}>Variant images</th>
                 <th style={x.th} />
               </tr>
             </thead>
@@ -450,7 +612,17 @@ export function VariantMatrixEditor({
                   </td>
                   {!isService ? (
                     <td style={x.cell}>
-                      <input type="number" min={0} value={v.stock ?? ''} onChange={(e) => patchVariant(v.id, { stock: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ ...x.smallInput, width: 66 }} />
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        <input type="number" min={0} value={v.stock ?? ''} onChange={(e) => patchVariant(v.id, { stock: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ ...x.smallInput, width: 66 }} />
+                        {(() => {
+                          const st = variantStockState(v);
+                          return (
+                            <span style={{ fontSize: 9, fontWeight: 800, color: st.color, background: st.bg, borderRadius: 4, padding: '1px 5px', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
+                              {st.label}
+                            </span>
+                          );
+                        })()}
+                      </div>
                     </td>
                   ) : null}
                   <td style={{ ...x.cell, textAlign: 'center' }}>
@@ -461,17 +633,90 @@ export function VariantMatrixEditor({
                     />
                   </td>
                   <td style={x.cell}>
-                    <input
-                      value={(v.images ?? []).join(', ')}
-                      onChange={(e) => patchVariant(v.id, { images: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })}
-                      placeholder="https://… , https://…"
-                      style={x.smallInput}
-                    />
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 150 }}>
+                      {(v.images ?? []).length ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {(v.images ?? []).map((src, i) => (
+                            <span key={`${src}-${i}`} style={{ position: 'relative', width: 34, height: 34, borderRadius: 6, overflow: 'hidden', border: '1px solid #E8EDF2', background: '#F9FAFB', flexShrink: 0 }}>
+                              <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
+                              <button
+                                type="button"
+                                onClick={() => patchVariant(v.id, { images: (v.images ?? []).filter((_, j) => j !== i) })}
+                                title="Remove"
+                                style={{ position: 'absolute', top: 0, right: 0, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', fontSize: 9, lineHeight: '12px', width: 12, height: 12, cursor: 'pointer', padding: 0 }}
+                              >
+                                ×
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      ) : null}
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <label style={{ ...x.ghostBtn, cursor: uploadingRow === v.id ? 'wait' : 'pointer', fontSize: 10, padding: '4px 8px' }}>
+                          {uploadingRow === v.id ? 'Uploading…' : '＋ Upload'}
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            style={{ display: 'none' }}
+                            disabled={uploadingRow === v.id}
+                            onChange={async (e) => {
+                              const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith('image/'));
+                              e.currentTarget.value = '';
+                              if (!files.length) return;
+                              setUploadingRow(v.id);
+                              try {
+                                const urls = await uploadProductImages(files);
+                                patchVariant(v.id, { images: [...(v.images ?? []), ...urls] });
+                              } catch {
+                                const locals = files.map((f) => URL.createObjectURL(f));
+                                patchVariant(v.id, { images: [...(v.images ?? []), ...locals] });
+                              } finally {
+                                setUploadingRow(null);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                      {(v.images ?? []).length > 0 && effectiveDims.length > 0 ? (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ fontSize: 9, color: '#9CA3AF', fontWeight: 700 }}>Use these for every</span>
+                          {effectiveDims
+                            .filter((d) => v.options?.[d.name] != null)
+                            .map((d) => (
+                              <button
+                                key={d.key}
+                                type="button"
+                                onClick={() => copyImagesToMatching(v.id, d.name)}
+                                title={`Copy these images onto every combination where ${d.name} is ${v.options?.[d.name]}`}
+                                style={{ ...x.chip, fontSize: 9.5, padding: '2px 7px', cursor: 'pointer' }}
+                              >
+                                {d.name}: {v.options?.[d.name]}
+                              </button>
+                            ))}
+                        </div>
+                      ) : null}
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <input
+                          value={imgUrlInput[v.id] ?? ''}
+                          onChange={(e) => setImgUrlInput((p) => ({ ...p, [v.id]: e.target.value }))}
+                          onKeyDown={(e) => {
+                            if (e.key !== 'Enter') return;
+                            e.preventDefault();
+                            const url = (imgUrlInput[v.id] ?? '').trim();
+                            if (url) patchVariant(v.id, { images: [...(v.images ?? []), url] });
+                            setImgUrlInput((p) => ({ ...p, [v.id]: '' }));
+                          }}
+                          placeholder="or paste image URL"
+                          style={{ ...x.smallInput, fontSize: 10 }}
+                        />
+                      </div>
+                    </div>
                   </td>
                   <td style={{ ...x.cell, textAlign: 'center' }}>
                     <button
                       type="button"
-                      title="This combination doesn't exist — remove the row"
+                      title="You don't sell this combination — remove it"
                       onClick={() => deleteVariantRow(v.id)}
                       style={{ ...x.ghostBtn, color: '#DC2626', padding: '4px 8px' }}
                     >
@@ -485,13 +730,14 @@ export function VariantMatrixEditor({
         </div>
       ) : (
         <p style={x.note}>
-          No combinations yet — choose values above and press <b>Add missing combinations</b>.
+          No variant combinations yet — choose your option choices above and press
+          {' '}<b>Generate missing combinations</b>.
         </p>
       )}
       {isService ? (
         <p style={x.note}>
           This is a service listing — per-combination <b>stock</b> is hidden. Appointment / resource
-          availability stays controlled by the booking model; variant pricing still applies.
+          availability stays controlled by the booking model; per-combination pricing still applies.
         </p>
       ) : null}
     </div>
@@ -510,13 +756,22 @@ export function VariantSummaryView({
   isService: boolean;
 }) {
   if (!optionGroups.length && !productVariants.length) {
-    return <div style={{ fontSize: 11, color: '#9CA3AF', fontStyle: 'italic' }}>No options / variants.</div>;
+    return <div style={{ fontSize: 11, color: '#9CA3AF', fontStyle: 'italic' }}>No product options or variant combinations.</div>;
   }
   const activeCount = productVariants.filter(variantIsActive).length;
   const prices = productVariants.map((v) => v.price).filter((p): p is number => typeof p === 'number' && p > 0);
   const minP = prices.length ? Math.min(...prices) : 0;
   const maxP = prices.length ? Math.max(...prices) : 0;
   const inStock = productVariants.filter((v) => variantIsActive(v) && (isService || (v.stock ?? 0) > 0)).length;
+
+  // Column order for the per-combination breakdown: declared option groups first,
+  // then any stray option key that appears only on variant rows.
+  const comboCols: string[] = [
+    ...optionGroups.map((g) => g.name),
+    ...Array.from(
+      new Set(productVariants.flatMap((v) => Object.keys(v.options || {}))),
+    ).filter((k) => !optionGroups.some((g) => g.name === k)),
+  ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -534,13 +789,47 @@ export function VariantSummaryView({
         </div>
       ))}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 11.5, color: '#374151', paddingTop: 4 }}>
-        <span><b>{productVariants.length}</b> combination{productVariants.length === 1 ? '' : 's'}</span>
+        <span><b>{productVariants.length}</b> variant combination{productVariants.length === 1 ? '' : 's'}</span>
         <span><b>{activeCount}</b> active</span>
         {!isService ? <span><b>{inStock}</b> in stock</span> : null}
         {prices.length ? (
           <span>Price {minP === maxP ? `৳${minP.toLocaleString()}` : `৳${minP.toLocaleString()} – ৳${maxP.toLocaleString()}`}</span>
         ) : null}
       </div>
+
+      {productVariants.length ? (
+        <div style={{ overflowX: 'auto', border: '1px solid #E8EDF2', borderRadius: 10 }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 520 }}>
+            <thead>
+              <tr>
+                {comboCols.map((c) => <th key={c} style={x.th}>{c}</th>)}
+                <th style={x.th}>SKU</th>
+                <th style={x.th}>Price ৳</th>
+                {!isService ? <th style={x.th}>Stock</th> : null}
+                <th style={x.th}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {productVariants.map((v) => {
+                const st = variantStockState(v);
+                return (
+                  <tr key={v.id}>
+                    {comboCols.map((c) => (
+                      <td key={c} style={{ ...x.cell, fontWeight: 700 }}>{v.options?.[c] ?? '—'}</td>
+                    ))}
+                    <td style={{ ...x.cell, fontFamily: 'monospace', fontSize: 10.5 }}>{v.sku || '—'}</td>
+                    <td style={x.cell}>{typeof v.price === 'number' ? `৳${v.price.toLocaleString()}` : '—'}</td>
+                    {!isService ? <td style={x.cell}>{typeof v.stock === 'number' ? v.stock : '—'}</td> : null}
+                    <td style={x.cell}>
+                      <span style={{ fontSize: 9.5, fontWeight: 800, color: st.color, background: st.bg, borderRadius: 4, padding: '1px 6px', whiteSpace: 'nowrap' }}>{st.label}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -565,7 +854,7 @@ export function ProductGuideView({ guide }: { guide?: ProductGuide | null }) {
       <span style={{ fontSize: 11.5, fontWeight: 800, color: ACCENT, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
         ↗ {productGuideCtaLabel(g).toUpperCase()}
       </span>
-      <span style={{ fontSize: 10.5, color: '#9CA3AF' }}>shown to buyers beside the variant picker</span>
+      <span style={{ fontSize: 10.5, color: '#9CA3AF' }}>shown to buyers beside the product option picker</span>
     </div>
   );
 }
@@ -608,9 +897,9 @@ export function ProductGuideEditor({
       <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #E8EDF2' }}>
         <div style={x.label}>Size / Measurement / Compatibility Guide</div>
         <p style={{ ...x.note, margin: '0 0 8px' }}>
-          Optional. Upload your own chart image so buyers can understand your real measurements /
-          compatibility before choosing a variant. Informational only — it never changes prices,
-          stock or the variants themselves.
+          Optional. Add a guide so customers can understand sizing, measurements or compatibility
+          before choosing an option. Guides are informational only — they never change prices,
+          stock or the variant combinations themselves.
         </p>
         <button type="button" style={x.ghostBtn} onClick={() => onChange({ enabled: true, guideType: 'size', type: 'image' })}>
           ＋ Add a guide

@@ -1,4 +1,9 @@
-import type { CatalogProduct, CatalogProductDetail, RelatedStoreEntry } from '../../types/catalog';
+import type {
+  CatalogProduct,
+  CatalogProductDetail,
+  CatalogProductWithVariants,
+  RelatedStoreEntry,
+} from '../../types/catalog';
 
 export type ProductEditorStatus = 'DRAFT' | 'LIVE' | 'ARCHIVED';
 
@@ -276,7 +281,7 @@ export function createBlankProductModel(id = 'new'): ProductEditorModel {
 }
 
 export function mapCatalogProductToEditor(
-  product: CatalogProduct,
+  product: CatalogProductWithVariants,
   detail?: CatalogProductDetail | null,
 ): ProductEditorModel {
   const blank = createBlankProductModel(product.id);
@@ -465,10 +470,25 @@ export function mapCatalogProductToEditor(
     afterSalesBullets: Array.isArray(detail?.afterSalesInfo?.bullets)
       ? detail!.afterSalesInfo!.bullets!.map(String).filter(Boolean)
       : [],
-    optionGroups: Array.isArray(detail?.optionGroups) ? detail!.optionGroups : [],
-    productVariants: Array.isArray(detail?.productVariants) ? detail!.productVariants : [],
+    // Prefer the dedicated product-detail record; fall back to the fields
+    // `GET /catalog/products/:id` now merges onto the product itself, so a
+    // preview that only fetched the product still renders options/variants.
+    optionGroups: Array.isArray(detail?.optionGroups)
+      ? detail!.optionGroups
+      : Array.isArray(product.optionGroups)
+        ? product.optionGroups
+        : [],
+    productVariants: Array.isArray(detail?.productVariants)
+      ? detail!.productVariants
+      : Array.isArray(product.productVariants)
+        ? product.productVariants
+        : [],
     sizeGuide:
-      detail?.sizeGuide && typeof detail.sizeGuide === 'object' ? detail.sizeGuide : undefined,
+      detail?.sizeGuide && typeof detail.sizeGuide === 'object'
+        ? detail.sizeGuide
+        : product.sizeGuide && typeof product.sizeGuide === 'object'
+          ? product.sizeGuide
+          : undefined,
     publicReviews,
     creatorVideos,
     relatedInfoType,
@@ -795,7 +815,7 @@ export interface ProductLoadDeps {
    * isn't in the caller's catalog; any other rejection is treated as an infra
    * failure. This is deliberately NOT the filtered/paginated list endpoint.
    */
-  getProduct: (id: string) => Promise<CatalogProduct>;
+  getProduct: (id: string) => Promise<CatalogProductWithVariants>;
   getProductDetail: (id: string) => Promise<CatalogProductDetail | null>;
   /** This product's own locally cached in-progress draft, if any. */
   readCache?: () => ProductEditorModel | null;
@@ -807,7 +827,7 @@ export async function resolveExistingProductLoad(
   activeId: string,
   deps: ProductLoadDeps,
 ): Promise<ProductLoadResult> {
-  let product: CatalogProduct;
+  let product: CatalogProductWithVariants;
   try {
     product = await deps.getProduct(activeId);
   } catch (err) {
