@@ -138,6 +138,30 @@ export async function uploadCreatorImage(file: File): Promise<string> {
   return uploadImage(file, 'choosify/creators');
 }
 
+/**
+ * Any authenticated user's own profile photo — Consumer, Seller, Creator,
+ * Admin, Super Admin alike. Routes through the same `/catalog/media/upload`
+ * chokepoint as product/brand/creator images, in the `users` category that
+ * `CONSUMER_UPLOAD_CATEGORIES` (server/catalogRouter.ts) allows any signed-in
+ * account to write to for itself — no separate upload path, only a narrower
+ * auth gate on the same endpoint. Distinct from a seller's business/brand
+ * logo, which stays on the brand record and is never touched here.
+ */
+export async function uploadUserAvatar(file: File): Promise<string> {
+  return uploadImage(file, 'choosify/users');
+}
+
+/** Converts a canvas-exported `data:image/...;base64,...` URL (e.g. from AvatarCropModal) into a File for upload. */
+export function dataUrlToFile(dataUrl: string, fileName: string): File {
+  const [meta, base64] = dataUrl.split(',');
+  const mimeMatch = /data:([^;]+);base64/.exec(meta || '');
+  const mimeType = mimeMatch?.[1] || 'image/png';
+  const binary = atob(base64 || '');
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new File([bytes], fileName, { type: mimeType });
+}
+
 export async function uploadProductImages(files: File[]): Promise<string[]> {
   const uploads = files.map((file) => uploadProductImage(file));
   return Promise.all(uploads);

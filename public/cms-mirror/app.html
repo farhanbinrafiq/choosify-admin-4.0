@@ -330,7 +330,14 @@ window.addEventListener('message', function(ev) {
       </sc-for>
     </div>
     <div style="{{ sidebarFooterStyle }}">
-      <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#EF3C23,#2323FF);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0">A</div>
+      <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#EF3C23,#2323FF);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:700;flex-shrink:0;overflow:hidden;position:relative">
+        <sc-if value="{{ footerHasAvatarUrl }}" hint-placeholder-val="{{ false }}">
+          <img src="{{ footerAvatarUrl }}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover">
+        </sc-if>
+        <sc-if value="{{ !footerHasAvatarUrl }}" hint-placeholder-val="{{ true }}">
+          <span>{{ footerInitials }}</span>
+        </sc-if>
+      </div>
       <div style="min-width:0">
         <div style="{{ footerNameStyle }}">{{ footerName }}</div>
         <div style="{{ footerRoleStyle }}">{{ footerRole }}</div>
@@ -1730,7 +1737,14 @@ window.addEventListener('message', function(ev) {
               <span style="font-size:14px;font-weight:800;letter-spacing:0.15em;color:#fff">{{ universalProfile.bannerLabel }}</span>
             </div>
             <div style="padding:16px;position:relative">
-              <div style="width:56px;height:56px;border-radius:50%;overflow:hidden;background:#EFF6FF;color:#2563EB;border:1px solid #E8EDF2;margin-top:-42px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,0.08);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px">{{ universalProfile.initials }}</div>
+              <div style="width:56px;height:56px;border-radius:50%;overflow:hidden;background:#EFF6FF;color:#2563EB;border:1px solid #E8EDF2;margin-top:-42px;margin-bottom:10px;box-shadow:0 2px 6px rgba(0,0,0,0.08);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:16px">
+                <sc-if value="{{ universalProfile.hasAvatarUrl }}" hint-placeholder-val="{{ false }}">
+                  <img src="{{ universalProfile.avatarUrl }}" alt="" style="width:100%;height:100%;object-fit:cover">
+                </sc-if>
+                <sc-if value="{{ !universalProfile.hasAvatarUrl }}" hint-placeholder-val="{{ true }}">
+                  <span>{{ universalProfile.initials }}</span>
+                </sc-if>
+              </div>
               <div style="font-size:13.5px;font-weight:800">{{ universalProfile.name }}</div>
               <div style="font-size:11px;color:#2563EB;font-weight:600;margin-top:2px">{{ universalProfile.handle }}</div>
               <sc-if value="{{ universalProfile.profileStatus.showPills }}" hint-placeholder-val="{{ true }}">
@@ -15470,6 +15484,7 @@ class Component extends DCLogic {
     const universalProfileSearch = this.state.universalProfileSearch || '';
     const __upName = window.__CMS_MIRROR_DISPLAY_NAME__ || 'User';
     const __upEmail = window.__CMS_MIRROR_EMAIL__ || '—';
+    const __upAvatarUrl = window.__CMS_MIRROR_AVATAR_URL__ || '';
     const __upRole = window.__CMS_MIRROR_ROLE__ || 'admin';
     const __upCf = (typeof window.resolveProfileChoosifyUserId === 'function'
       ? window.resolveProfileChoosifyUserId(window.__CMS_MIRROR_USER_ID__, window.__CMS_MIRROR_CHOOSIFY_USER_ID__, __upEmail)
@@ -15509,6 +15524,8 @@ class Component extends DCLogic {
         : { showPills: true, pills: [], showHint: false, hint: '' }),
       choosifyUserId: __upCf,
       initials: __upInitials,
+      avatarUrl: __upAvatarUrl,
+      hasAvatarUrl: !!__upAvatarUrl,
       kpis: isAdminSelfProfilePage
         ? [
             { label: 'LAST LOGIN', value: 'Today', color: '#111827', sub: 'This browser session' },
@@ -17541,6 +17558,9 @@ class Component extends DCLogic {
       footerNameStyle: `font-size:12.5px;font-weight:700;color:#fff`,
       footerRoleStyle: `font-size:10.5px;font-weight:600;color:rgba(255,255,255,0.4)`,
       footerName: window.__CMS_MIRROR_DISPLAY_NAME__ || window.__CMS_MIRROR_EMAIL__ || 'Loading…',
+      footerInitials: String(window.__CMS_MIRROR_DISPLAY_NAME__ || window.__CMS_MIRROR_EMAIL__ || 'U').trim().split(/\s+/).filter(Boolean).slice(0, 2).map(function (p) { return p[0]; }).join('').toUpperCase() || 'U',
+      footerAvatarUrl: window.__CMS_MIRROR_AVATAR_URL__ || '',
+      footerHasAvatarUrl: !!window.__CMS_MIRROR_AVATAR_URL__,
       footerRole: ({
         super_admin: 'Super Admin', admin: 'Admin', seller: 'Seller', creator: 'Creator',
         moderator: 'Moderator', finance_manager: 'Finance Manager', support_agent: 'Support Agent',
@@ -19336,6 +19356,7 @@ window.__CMS_MIRROR_FILTER_NAV__ = function(defs) {
           if (e.data.bio != null) window.__CMS_MIRROR_BIO__ = e.data.bio;
           if (e.data.choosifyUserId != null) window.__CMS_MIRROR_CHOOSIFY_USER_ID__ = e.data.choosifyUserId;
       if (e.data.email) window.__CMS_MIRROR_EMAIL__ = e.data.email;
+      if (e.data.avatarUrl != null) window.__CMS_MIRROR_AVATAR_URL__ = e.data.avatarUrl;
       if (e.data.canImpersonate !== undefined) window.__CMS_MIRROR_CAN_IMPERSONATE__ = !!e.data.canImpersonate;
       if (e.data.marketplaceAccess !== undefined) window.__CMS_MIRROR_MARKETPLACE_ACCESS__ = !!e.data.marketplaceAccess;
       if (e.data.partnerApplicationStatus !== undefined) window.__CMS_MIRROR_PARTNER_APPLICATION_STATUS__ = e.data.partnerApplicationStatus;

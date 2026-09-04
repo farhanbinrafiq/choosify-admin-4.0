@@ -34,8 +34,11 @@ const CashBookHub = lazy(() => import('./pages/admin/CashBookHub'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const ForcePasswordChangePage = lazy(() => import('./pages/ForcePasswordChangePage'));
 const SellerSignupPage = lazy(() => import('./pages/SellerSignupPage'));
+const AdminForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const AdminResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
 // Profile & Detail Pages
+const AccountSecurityPage = lazy(() => import('./pages/admin/AccountSecurityPage'));
 const UnifiedProfileShell = lazy(() => import('./pages/admin/profiles/UnifiedProfileShell'));
 const ConsumerProfileView = lazy(() => import('./pages/admin/profiles/ConsumerProfileView'));
 const SellerDashboardPreview = lazy(() => import('./pages/admin/previews/SellerDashboardPreview'));
@@ -606,6 +609,22 @@ export default function App() {
               <Routes>
             <Route path="/login" element={<LoginRoute />} />
             <Route
+              path="/forgot-password"
+              element={
+                <Suspense fallback={routeSuspenseFallback}>
+                  <AdminForgotPasswordPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/reset-password"
+              element={
+                <Suspense fallback={routeSuspenseFallback}>
+                  <AdminResetPasswordPage />
+                </Suspense>
+              }
+            />
+            <Route
               path="/force-password-change"
               element={
                 <Suspense fallback={routeSuspenseFallback}>
@@ -656,7 +675,20 @@ export default function App() {
             */}
             <Route path="/admin/account/profile" element={<Navigate to="/admin/profile" replace />} />
             <Route path="/admin/account/settings" element={<Navigate to="/admin/settings" replace />} />
-            <Route path="/admin/account/security" element={<Navigate to="/admin/settings" replace />} />
+            <Route
+              path="/admin/account/security"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <AccountSecurityPage />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
             
             <Route path="/" element={<RootRoute />} />
             <Route path="/marketplace" element={<Navigate to="/login" replace />} />

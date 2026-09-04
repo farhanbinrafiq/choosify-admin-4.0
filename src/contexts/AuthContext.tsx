@@ -68,6 +68,10 @@ interface AuthContextType {
   loginWithEmail: (email: string, password: string, fallbackRole?: UserRole) => Promise<UserRole>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   clearMustChangePassword: () => void;
+  /** Persists the canonical avatarUrl (PATCH /auth/profile) and updates `profile.avatar`
+   *  in place — every surface reading `profile.avatar` (navbar, dropdown, profile page)
+   *  updates immediately, no refetch/refresh required. Pass null to remove the photo. */
+  updateAvatar: (avatarUrl: string | null) => Promise<void>;
   applyAsPartner: (input: {
     applicantType: 'seller' | 'creator';
     email: string;
@@ -188,6 +192,7 @@ async function resolveAuthProfile(token: string) {
     username?: string;
     website?: string;
     bio?: string;
+    avatarUrl?: string;
     choosifyUserId?: string | null;
     partnerApplicationStatus?: 'pending' | 'approved' | 'rejected' | null;
     identityVerified?: boolean;
@@ -228,6 +233,7 @@ const AuthContext = createContext<AuthContextType>({
   loginWithEmail: async () => 'admin',
   changePassword: async () => {},
   clearMustChangePassword: () => {},
+  updateAvatar: async () => {},
   applyAsPartner: async () => ({
     applicationId: '',
     status: 'pending' as const,
@@ -293,6 +299,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 displayName: remote.displayName,
                 email: remote.email,
                 role: toUserRole(remote.role),
+                avatar: remote.avatarUrl || undefined,
                 changeNextLogin: remote.changeNextLogin === true,
                 username: remote.username,
                 website: remote.website,
@@ -418,6 +425,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       username?: string;
       website?: string;
       bio?: string;
+      avatarUrl?: string;
       choosifyUserId?: string | null;
       partnerApplicationStatus?: 'pending' | 'approved' | 'rejected' | null;
       identityVerified?: boolean;
@@ -438,6 +446,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       displayName: payload.displayName || email.trim(),
       email: payload.email || email.trim(),
       role,
+      avatar: payload.avatarUrl || undefined,
       changeNextLogin: payload.changeNextLogin === true,
       username: payload.username,
       website: payload.website,
@@ -453,6 +462,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         displayName: remote.displayName,
         email: remote.email,
         role: toUserRole(remote.role, role),
+        avatar: remote.avatarUrl || undefined,
         changeNextLogin: remote.changeNextLogin === true,
         username: remote.username,
         website: remote.website,
@@ -470,6 +480,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const clearMustChangePassword = () => {
     setProfile((prev) => (prev ? { ...prev, changeNextLogin: false } : prev));
+  };
+
+  const updateAvatar = async (avatarUrl: string | null) => {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!token) throw new Error('Sign in required');
+    const response = await fetch(`${API_BASE}/auth/profile`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ avatarUrl: avatarUrl || '' }),
+    });
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    if (!response.ok) {
+      throw new Error(payload.error || 'Unable to update profile photo');
+    }
+    // Optimistic in-place update — every surface reading `profile.avatar`
+    // (navbar dropdown, mobile drawer, profile page) re-renders immediately;
+    // no /auth/me refetch or page refresh required.
+    setProfile((prev) => (prev ? { ...prev, avatar: avatarUrl || undefined } : prev));
   };
 
   const changePassword = async (currentPassword: string, newPassword: string) => {
@@ -858,6 +886,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loginWithEmail,
       changePassword,
       clearMustChangePassword,
+      updateAvatar,
       applyAsPartner,
       registerSeller,
       logout,

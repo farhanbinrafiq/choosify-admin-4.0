@@ -1,5 +1,5 @@
-import React from 'react';
-import { Phone, MessageSquare } from 'lucide-react';
+import React, { useRef } from 'react';
+import { Camera, Loader2, Phone, MessageSquare } from 'lucide-react';
 import { profileShellClasses, type ProfileShellVariant } from './profileTheme';
 import { ProfileStatusBadges } from './ProfileStatusBadges';
 import type { ResolvedProfileStatus } from '../../lib/profileStatus';
@@ -30,6 +30,12 @@ interface IdentityCardProps {
   onPhoneClick?: () => void;
   onMessageClick?: () => void;
   variant?: ProfileShellVariant;
+  /** Self-profile only — renders a small camera control on the avatar that
+   *  uploads a new photo through the caller's own persistence (canonical
+   *  AuthContext.updateAvatar). Omit entirely when viewing another user's
+   *  profile — there is no admin-edit-another-user's-photo affordance. */
+  onAvatarChange?: (file: File) => void;
+  avatarBusy?: boolean;
 }
 
 export default function IdentityCard({
@@ -47,9 +53,27 @@ export default function IdentityCard({
   onPhoneClick,
   onMessageClick,
   variant = 'dark',
+  onAvatarChange,
+  avatarBusy = false,
 }: IdentityCardProps) {
   const t = profileShellClasses(variant);
   const fieldDivider = variant === 'light' ? 'border-[#F1F3F5]' : 'border-white/5';
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !onAvatarChange) return;
+    if (!file.type.startsWith('image/')) {
+      window.alert('Please choose an image file (JPG, PNG, WebP, or GIF).');
+      return;
+    }
+    if (file.size > 2_500_000) {
+      window.alert('Please choose an image under 2.5 MB.');
+      return;
+    }
+    onAvatarChange(file);
+  };
   return (
     <div className={`${t.identityCard} font-sans`}>
       <div className={`${t.identityBanner} relative overflow-hidden flex items-center justify-center`}>
@@ -62,25 +86,52 @@ export default function IdentityCard({
 
       <div className="px-5 pb-5 relative">
         <div className="-mt-10 mb-4 flex items-end justify-between">
-          {avatarUrl ? (
-            <img
-              src={avatarUrl}
-              alt={name}
-              className={`w-20 h-20 rounded-full border-2 object-cover shrink-0 ${
-                variant === 'light' ? 'border-white shadow-md bg-white' : 'border-app-border bg-app-card'
-              }`}
-            />
-          ) : (
-            <div
-              className={`w-20 h-20 rounded-full border-2 flex items-center justify-center text-xl font-black shrink-0 ${
-                variant === 'light'
-                  ? 'border-white bg-[#111827] text-white shadow-md'
-                  : 'border-app-border bg-slate-900 text-white'
-              }`}
-            >
-              {initials}
-            </div>
-          )}
+          <div className="relative shrink-0">
+            {avatarUrl ? (
+              <img
+                src={avatarUrl}
+                alt={name}
+                className={`w-20 h-20 rounded-full border-2 object-cover ${
+                  variant === 'light' ? 'border-white shadow-md bg-white' : 'border-app-border bg-app-card'
+                }`}
+              />
+            ) : (
+              <div
+                className={`w-20 h-20 rounded-full border-2 flex items-center justify-center text-xl font-black ${
+                  variant === 'light'
+                    ? 'border-white bg-[#111827] text-white shadow-md'
+                    : 'border-app-border bg-slate-900 text-white'
+                }`}
+              >
+                {initials}
+              </div>
+            )}
+            {onAvatarChange && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={avatarBusy}
+                  aria-label="Change profile photo"
+                  title="Change profile photo"
+                  className="absolute bottom-0 right-0 w-6 h-6 rounded-full bg-app-accent text-white flex items-center justify-center border-2 border-app-card shadow-md hover:bg-app-accent-light transition-colors disabled:opacity-60"
+                >
+                  {avatarBusy ? (
+                    <Loader2 className="w-3 h-3 animate-spin" aria-hidden />
+                  ) : (
+                    <Camera className="w-3 h-3" aria-hidden />
+                  )}
+                </button>
+              </>
+            )}
+          </div>
 
           {/* Contact Actions */}
           <div className="flex gap-1.5">

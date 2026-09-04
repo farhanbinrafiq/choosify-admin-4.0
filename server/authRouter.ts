@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { Router } from 'express';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import {
   DEV_ROLE_MAP,
   getBearerToken,
@@ -20,7 +20,29 @@ import {
   verifyPassword,
 } from './auth/jwtTokens';
 import { consumeAuthToken, issueAuthToken } from './auth/authTokens';
-import { sendPasswordChangedEmail, sendPasswordResetEmail, sendVerificationEmail } from './email/emailService';
+import {
+  consumeSetupGrant,
+  LocalPasswordSetupError,
+  maskEmail,
+  requestSetupOtp,
+  verifySetupOtp,
+} from './auth/localPasswordSetup';
+import {
+  sendLocalPasswordOtpEmail,
+  sendPasswordAddedEmail,
+  sendPasswordChangedEmail,
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+  sendWelcomeEmail,
+} from './email/emailService';
+import {
+  resolveOrCreateUserForSocialIdentity,
+  socialProvidersStatus,
+  SocialAuthError,
+  verifyFacebookCredential,
+  verifyGoogleCredential,
+  type VerifiedSocialIdentity,
+} from './auth/socialAuth';
 import {
   allocateNextChoosifyUserId,
   backfillChoosifyUserIds,
@@ -55,7 +77,8 @@ import { RegisterBodySchema } from './validation/auth/registerSchema';
 import { UpgradeToSellerBodySchema } from './validation/auth/upgradeToSellerSchema';
 import { loadAdminUserByEmail } from './operations/operationsDb';
 import { db } from './db/client';
-import { sellerProfiles, users } from './db/schema';
+import { sellerProfiles, userIdentities, users } from './db/schema';
+import { normalizePrimaryPhone } from './lib/phone';
 import { hasRole } from './permissions/authorization';
 import { ROLES, toUserRole, type UserRole } from './permissions/roles';
 import { publishEvent } from './events/eventBus';
@@ -69,6 +92,16 @@ export const authRouter = Router();
 
 const requireAuth = [authenticateRequest];
 const requireAdmin = [authenticateRequest, requireRole(ROLES.ADMIN)];
+
+/**
+ * The trusted auth surface for an account, decided SERVER-SIDE from the
+ * canonical role. Consumers → the storefront (choosify.bd); every dashboard /
+ * partner / staff role → the dashboard (dashboard.choosify.bd). A verification
+ * or reset link is always built from this — never from a client-supplied URL.
+ */
+function resetSurfaceForRole(role: string | null | undefined): 'web' | 'dashboard' {
+  return role && role !== ROLES.USER ? 'dashboard' : 'web';
+}
 
 /**
  * Public seller/creator-account lookup for the storefront Dashboard partner-account UI.
@@ -178,6 +211,7 @@ authRouter.post('/auth/login', validate({ body: LoginBodySchema }), async (req, 
       role: user.role,
       accessToken,
       choosifyUserId: choosifyUserId || null,
+      hasPassword: true,
       changeNextLogin: extras?.changeNextLogin === true,
       ...publicLifecycleFields(life),
       ...(extras?.lastNameChangedAt && { lastNameChangedAt: extras.lastNameChangedAt }),
@@ -283,10 +317,10 @@ authRouter.post(
     });
 
     // Email verification is informational only — never blocks registration
-    // or login. A slow/unconfigured SMTP send must not fail account creation.
+    // or login. A slow/unconfigured email send must not fail account creation.
     try {
       const { rawToken } = await issueAuthToken(uid, 'email_verification');
-      await sendVerificationEmail(normalizedEmail, rawToken);
+      await sendVerificationEmail(normalizedEmail, rawToken, { name: fullName.trim(), surface: 'web' });
     } catch (error) {
       Logger.warn('verification email failed to send', {
         requestId: req.requestId,
@@ -311,6 +345,181 @@ authRouter.post(
     });
     res.status(500).json({ error: 'Unable to create account' });
   }
+});
+
+/**
+ * Issue the SAME session (access JWT + rotating refresh cookie) and identity
+ * payload as POST /auth/login, for a user row we've already authenticated by
+ * some other means (currently: a server-verified social provider credential).
+ * Kept separate from the /auth/login handler so that flow is untouched.
+ */
+async function finalizeLoginSession(
+  req: import('express').Request,
+  res: import('express').Response,
+  user: typeof users.$inferSelect,
+  mode: string,
+): Promise<void> {
+  const accessToken = signAccessToken({
+    id: user.id,
+    email: user.email,
+    emailVerified: user.emailVerified,
+  });
+  const refreshToken = await issueRefreshToken(user.id);
+  setRefreshTokenCookie(res, refreshToken);
+
+  recordLogin(req, { userId: user.id, metadata: { mode, role: user.role } });
+  operationalEvents.authenticationSuccess({
+    requestId: req.requestId,
+    path: req.originalUrl,
+    metadata: { mode, userId: user.id, role: user.role },
+  });
+
+  const extras = getUserProfileExtras(user.id);
+  let choosifyUserId = user.choosifyUserId || undefined;
+  try {
+    choosifyUserId = await ensureUserHasChoosifyUserId(user.id);
+  } catch (error) {
+    Logger.warn('choosifyUserId ensure on social login failed', {
+      userId: user.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+  const life = await resolvePartnerLifecycle({
+    userId: user.id,
+    email: user.email,
+    role: user.role,
+  });
+  res.json({
+    uid: user.id,
+    email: user.email,
+    displayName: user.displayName,
+    role: user.role,
+    accessToken,
+    choosifyUserId: choosifyUserId || null,
+    changeNextLogin: extras?.changeNextLogin === true,
+    ...publicLifecycleFields(life),
+    ...(extras?.lastNameChangedAt && { lastNameChangedAt: extras.lastNameChangedAt }),
+    ...(extras?.username && { username: extras.username }),
+    ...(extras?.website && { website: extras.website }),
+    ...(extras?.bio && { bio: extras.bio }),
+  });
+}
+
+/** Which social providers the server can actually verify right now. Public — the
+ *  consumer Login page reads this to decide which buttons are active. */
+authRouter.get('/auth/social/providers', (_req, res) => {
+  res.json({ providers: socialProvidersStatus() });
+});
+
+/**
+ * Social sign-in / sign-up — Consumer storefront only.
+ *
+ *  - The backend verifies the provider credential itself (Google ID token via
+ *    google-auth-library; Facebook access token via the Graph API). A raw email
+ *    from the client is never trusted.
+ *  - Resolves to / creates ONE canonical Choosify Postgres account and issues
+ *    the normal JWT + refresh session.
+ *  - New accounts are ALWAYS role 'user'. The provider can never grant Seller /
+ *    Creator / Admin / Super Admin / staff. A verified email that already
+ *    belongs to a NON-consumer account is refused (409) — those use password
+ *    login on the dashboard, which is unchanged.
+ */
+async function handleSocialLogin(
+  req: import('express').Request,
+  res: import('express').Response,
+  verify: () => Promise<VerifiedSocialIdentity>,
+  mode: string,
+): Promise<void> {
+  try {
+    const identity = await verify();
+    const resolution = await resolveOrCreateUserForSocialIdentity(identity);
+
+    const rows = await db.select().from(users).where(eq(users.id, resolution.userId)).limit(1);
+    const user = rows[0];
+    if (!user) {
+      res.status(500).json({ error: 'Unable to sign in', code: 'ACCOUNT_LOOKUP_FAILED' });
+      return;
+    }
+    // Defence in depth: a social session is only ever a Consumer session.
+    if (user.role !== ROLES.USER) {
+      Logger.warn('social login resolved to a non-consumer account — refused', {
+        requestId: req.requestId,
+        userId: user.id,
+        role: user.role,
+        provider: identity.provider,
+      });
+      res.status(409).json({
+        error: 'This email belongs to a Choosify dashboard account. Please sign in with your email and password.',
+        code: 'SOCIAL_ACCOUNT_CONFLICT',
+      });
+      return;
+    }
+
+    if (resolution.created) {
+      Logger.audit('auth.social_account_created', {
+        userId: user.id,
+        provider: identity.provider,
+        ip: req.ip,
+      });
+      publishEvent({
+        eventName: 'UserRegistered',
+        domain: 'Identity',
+        producer: 'authRouter',
+        aggregateId: user.id,
+        actor: user.id,
+        payload: { email: user.email, via: identity.provider },
+      });
+      try {
+        await sendWelcomeEmail(user.email, user.displayName);
+      } catch (error) {
+        Logger.warn('welcome email failed to send', {
+          requestId: req.requestId,
+          userId: user.id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    } else if (resolution.linked) {
+      Logger.audit('auth.social_identity_linked', {
+        userId: user.id,
+        provider: identity.provider,
+        ip: req.ip,
+      });
+      publishEvent({
+        eventName: 'SocialIdentityLinked',
+        domain: 'Identity',
+        producer: 'authRouter',
+        aggregateId: user.id,
+        actor: user.id,
+        payload: { email: user.email, provider: identity.provider },
+      });
+    }
+
+    await finalizeLoginSession(req, res, user, mode);
+  } catch (error) {
+    if (error instanceof SocialAuthError) {
+      if (error.statusCode >= 500 || error.statusCode === 401) {
+        recordFailedAuthAttempt(req.ip, req.originalUrl);
+      }
+      res.status(error.statusCode).json({ error: error.message, code: error.code });
+      return;
+    }
+    Logger.warn('social login failed', {
+      requestId: req.requestId,
+      mode,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ error: 'Unable to sign in' });
+  }
+}
+
+authRouter.post('/auth/google', async (req, res) => {
+  const credential = String(req.body?.credential || req.body?.idToken || '').trim();
+  await handleSocialLogin(req, res, () => verifyGoogleCredential(credential), 'google');
+});
+
+authRouter.post('/auth/facebook', async (req, res) => {
+  const accessToken = String(req.body?.accessToken || req.body?.token || '').trim();
+  await handleSocialLogin(req, res, () => verifyFacebookCredential(accessToken), 'facebook');
 });
 
 /**
@@ -353,7 +562,10 @@ authRouter.post('/auth/resend-verification', authenticateRequest, async (req, re
       return;
     }
     const { rawToken } = await issueAuthToken(user.id, 'email_verification');
-    await sendVerificationEmail(user.email, rawToken);
+    await sendVerificationEmail(user.email, rawToken, {
+      name: user.displayName,
+      surface: resetSurfaceForRole(user.role),
+    });
     res.json({ success: true, message: 'Verification email sent.' });
   } catch (error) {
     Logger.warn('resend-verification failed', { requestId: req.requestId, error: error instanceof Error ? error.message : String(error) });
@@ -501,18 +713,51 @@ authRouter.get('/auth/me', async (req, res) => {
       role: user.role,
     });
     let avatarUrl: string | undefined;
+    let hasPassword = true;
     try {
-      const userRows = await db.select({ avatarUrl: users.avatarUrl }).from(users).where(eq(users.id, user.uid)).limit(1);
+      const userRows = await db
+        .select({ avatarUrl: users.avatarUrl, passwordHash: users.passwordHash })
+        .from(users)
+        .where(eq(users.id, user.uid))
+        .limit(1);
       avatarUrl = userRows[0]?.avatarUrl || undefined;
+      hasPassword = Boolean(userRows[0]?.passwordHash);
     } catch {
       /* avatarUrl is optional */
     }
+
+    // Linked social identities — provider + (masked) provider email + link time.
+    // Never exposes provider_subject. Empty array when the account has none.
+    let identities: Array<{ provider: string; email: string | null; connectedAt: string }> = [];
+    try {
+      const idRows = await db
+        .select({
+          provider: userIdentities.provider,
+          providerEmail: userIdentities.providerEmail,
+          linkedAt: userIdentities.linkedAt,
+        })
+        .from(userIdentities)
+        .where(eq(userIdentities.userId, user.uid));
+      identities = idRows.map((r) => ({
+        provider: r.provider,
+        email: r.providerEmail ? maskEmail(r.providerEmail) : null,
+        connectedAt: r.linkedAt instanceof Date ? r.linkedAt.toISOString() : String(r.linkedAt ?? ''),
+      }));
+    } catch {
+      /* user_identities is optional until migration 0005 */
+    }
+
     res.json({
       uid: user.uid,
       email: user.email,
       displayName: user.displayName,
       role: user.role,
       choosifyUserId,
+      // Canonical account/security facts for the storefront Profile Settings.
+      emailVerified: user.emailVerified === true,
+      hasPassword,
+      phone: extras?.phone || null,
+      identities,
       changeNextLogin: extras?.changeNextLogin === true,
       ...publicLifecycleFields(life),
       ...(extras?.lastNameChangedAt && { lastNameChangedAt: extras.lastNameChangedAt }),
@@ -883,16 +1128,42 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
         .slice(0, 700)
     : undefined;
 
+  // Primary account phone. Present + empty/null => clear it. Present + value =>
+  // normalize server-side to canonical E.164 (see server/lib/phone.ts) — the
+  // browser's formatting is never trusted. Contact info only; not a credential,
+  // not unique, and editing it does not touch any historical order snapshot.
+  const hasPhone = Object.prototype.hasOwnProperty.call(req.body || {}, 'phone');
+  const phoneRaw = hasPhone ? req.body?.phone : undefined;
+  let phone: string | null | undefined;
+  if (hasPhone) {
+    if (phoneRaw === null || (typeof phoneRaw === 'string' && phoneRaw.trim() === '')) {
+      phone = null; // explicit delete
+    } else {
+      const normalized = normalizePrimaryPhone(phoneRaw);
+      if (normalized.ok && normalized.e164) {
+        phone = normalized.e164;
+      } else {
+        res.status(400).json({
+          success: false,
+          error: normalized.error || 'Enter a valid phone number.',
+          code: 'INVALID_PHONE',
+        });
+        return;
+      }
+    }
+  }
+
   if (
     displayName === undefined &&
     username === undefined &&
     website === undefined &&
     bio === undefined &&
-    avatarUrl === undefined
+    avatarUrl === undefined &&
+    phone === undefined
   ) {
     res.status(400).json({
       success: false,
-      error: 'Provide at least one of displayName, username, website, bio, avatarUrl',
+      error: 'Provide at least one of displayName, username, website, bio, avatarUrl, phone',
     });
     return;
   }
@@ -1033,6 +1304,27 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
       });
     }
 
+    if (phone !== undefined) {
+      // phone === null  -> clear;  phone === '<e164>' -> set. Preserves every
+      // other extras field. Historical order/invoice/shipment phone snapshots
+      // are separate records and are never touched here.
+      nextExtras = upsertUserProfileExtras({
+        userId: targetUserId,
+        lastNameChangedAt: nextExtras?.lastNameChangedAt || extras?.lastNameChangedAt,
+        changeNextLogin: extras?.changeNextLogin,
+        username: nextExtras?.username ?? extras?.username,
+        website: nextExtras?.website ?? extras?.website,
+        bio: nextExtras?.bio ?? extras?.bio,
+        phone: phone === null ? undefined : phone,
+      });
+      Logger.audit('auth.profile_phone_update', {
+        actorId,
+        targetUserId,
+        cleared: phone === null,
+        admin: isAdmin && !isSelf,
+      });
+    }
+
     const fresh = getUserProfileExtras(targetUserId);
     res.json({
       success: true,
@@ -1043,6 +1335,7 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
         website: fresh?.website || website || '',
         bio: fresh?.bio || '',
         avatarUrl: avatarUrl !== undefined ? avatarUrl : undefined,
+        phone: fresh?.phone || null,
         lastNameChangedAt: fresh?.lastNameChangedAt,
         changeNextLogin: fresh?.changeNextLogin === true,
       },
@@ -1102,7 +1395,9 @@ authRouter.post('/auth/password-reset-request', async (req, res) => {
         payload: { email: user.email },
       });
 
-      await sendPasswordResetEmail(user.email, rawToken);
+      await sendPasswordResetEmail(user.email, rawToken, {
+        surface: resetSurfaceForRole(user.role),
+      });
     }
 
     res.json(genericResponse);
@@ -1148,7 +1443,9 @@ authRouter.post('/auth/reset-password', async (req, res) => {
 
     const rows = await db.select().from(users).where(eq(users.id, userId)).limit(1);
     Logger.audit('auth.password_reset_completed', { userId, ip: req.ip });
-    if (rows[0]) await sendPasswordChangedEmail(rows[0].email);
+    if (rows[0]) {
+      await sendPasswordChangedEmail(rows[0].email, { surface: resetSurfaceForRole(rows[0].role) });
+    }
 
     res.json({ success: true, message: 'Password reset. Sign in with your new password.' });
   } catch (error) {
@@ -1238,6 +1535,16 @@ authRouter.post('/auth/change-password', ...requireAuth, async (req, res) => {
       payload: { email: user.email },
     });
 
+    // Security-notice email — best effort, must not fail the change.
+    try {
+      await sendPasswordChangedEmail(user.email, { surface: resetSurfaceForRole(user.role) });
+    } catch (error) {
+      Logger.warn('password-changed email failed to send', {
+        requestId: req.requestId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
     res.json({
       success: true,
       message: 'Password updated successfully',
@@ -1248,6 +1555,207 @@ authRouter.post('/auth/change-password', ...requireAuth, async (req, res) => {
       error: error instanceof Error ? error.message : String(error),
     });
     res.status(500).json({ success: false, error: 'Unable to change password' });
+  }
+});
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * OPTIONAL: a passwordless (social-only) Consumer adds a local password.
+ *
+ * Never forced. Consumer-only. Never touches role or linked social identities.
+ * Two stages: (1) email a 6-digit OTP to the *canonical account email the
+ * server derives from the session* — the browser can neither supply nor change
+ * the destination; (2) the correct OTP mints a short-lived, one-time,
+ * purpose-bound server authorization ("setupToken"); (3) the write endpoint
+ * consumes that token and sets `users.password_hash` only while it is still
+ * NULL and the role is still 'user'. A manipulated client cannot assert
+ * "otpVerified" — it can only present a server-issued unforgeable token.
+ * See server/auth/localPasswordSetup.ts.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+type PasswordlessConsumer = {
+  id: string;
+  email: string;
+  displayName: string | null;
+  emailVerified: boolean;
+};
+
+/**
+ * Shared hard guard for every local-password-setup endpoint. Re-resolves the
+ * account from the DB (never trusts a request field), and enforces: not during
+ * impersonation, account exists, role is exactly 'user', and no password is set
+ * yet. On any failure it writes the response and returns null.
+ */
+async function guardPasswordlessConsumer(
+  req: import('express').Request,
+  res: import('express').Response,
+): Promise<PasswordlessConsumer | null> {
+  if (req.impersonationSessionId) {
+    res.status(403).json({ success: false, error: 'Unavailable during Admin impersonation', code: 'IMPERSONATION' });
+    return null;
+  }
+  const userId = req.userId || req.user?.uid || '';
+  const rows = await db
+    .select({
+      id: users.id,
+      email: users.email,
+      role: users.role,
+      passwordHash: users.passwordHash,
+      displayName: users.displayName,
+      emailVerified: users.emailVerified,
+    })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  const user = rows[0];
+  if (!user) {
+    res.status(404).json({ success: false, error: 'Account not found', code: 'NOT_FOUND' });
+    return null;
+  }
+  if (user.role !== ROLES.USER) {
+    // Seller / Creator / Admin / Super Admin / staff / partner: their auth rules
+    // are unchanged and this flow is not available to them.
+    res.status(403).json({ success: false, error: 'This feature is only available for shopper accounts.', code: 'NOT_CONSUMER' });
+    return null;
+  }
+  if (user.passwordHash) {
+    // Already has a password — must use the canonical Change Password flow.
+    res.status(409).json({ success: false, error: 'This account already has a password. Use Change password instead.', code: 'PASSWORD_ALREADY_SET' });
+    return null;
+  }
+  return { id: user.id, email: user.email, displayName: user.displayName, emailVerified: user.emailVerified };
+}
+
+function sendLocalPasswordSetupError(res: import('express').Response, error: unknown): boolean {
+  if (error instanceof LocalPasswordSetupError) {
+    res.status(error.statusCode).json({
+      success: false,
+      code: error.code,
+      error: error.message,
+      ...(error.retryAfterSeconds ? { retryAfterSeconds: error.retryAfterSeconds } : {}),
+    });
+    return true;
+  }
+  return false;
+}
+
+/** Step 1 — email a fresh 6-digit code to the account's own email. */
+authRouter.post('/auth/local-password/request-otp', ...requireAuth, async (req, res) => {
+  const user = await guardPasswordlessConsumer(req, res);
+  if (!user) return;
+  try {
+    const { code } = await requestSetupOtp(user.id);
+    // The code is a transient secret: emailed, never logged, never returned.
+    await sendLocalPasswordOtpEmail(user.email, code);
+    Logger.audit('auth.local_password_otp_requested', { userId: user.id, ip: req.ip });
+    res.json({ success: true, email: maskEmail(user.email), expiresInSeconds: 600 });
+  } catch (error) {
+    if (sendLocalPasswordSetupError(res, error)) return;
+    Logger.warn('local-password request-otp failed', {
+      requestId: req.requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ success: false, error: 'Unable to send a verification code right now.' });
+  }
+});
+
+/** Step 2 — verify the code; on success mint the one-time setup authorization. */
+authRouter.post('/auth/local-password/verify-otp', ...requireAuth, async (req, res) => {
+  const user = await guardPasswordlessConsumer(req, res);
+  if (!user) return;
+  const code = String(req.body?.code || '').trim();
+  try {
+    const { grant } = await verifySetupOtp(user.id, code);
+    Logger.audit('auth.local_password_otp_verified', { userId: user.id, ip: req.ip });
+    // setupToken is a short-lived, single-use, purpose-bound server grant — the
+    // client presents it back on step 3; it can never fabricate one.
+    res.json({ success: true, setupToken: grant, expiresInSeconds: 600 });
+  } catch (error) {
+    if (sendLocalPasswordSetupError(res, error)) return;
+    Logger.warn('local-password verify-otp failed', {
+      requestId: req.requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ success: false, error: 'Unable to verify that code right now.' });
+  }
+});
+
+/** Step 3 — consume the setup authorization and write the password (once). */
+authRouter.post('/auth/local-password/set', ...requireAuth, async (req, res) => {
+  const user = await guardPasswordlessConsumer(req, res);
+  if (!user) return;
+
+  const setupToken = String(req.body?.setupToken || '').trim();
+  const newPassword = String(req.body?.newPassword || '');
+  const confirmPassword = String(req.body?.confirmPassword || '');
+
+  if (!setupToken) {
+    res.status(400).json({ success: false, error: 'Verification is required before setting a password.', code: 'SETUP_AUTHORIZATION_INVALID' });
+    return;
+  }
+  if (newPassword.length < 8 || newPassword.length > 128) {
+    res.status(400).json({ success: false, error: 'Password must be between 8 and 128 characters.', code: 'WEAK_PASSWORD' });
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    res.status(400).json({ success: false, error: 'Passwords do not match.', code: 'PASSWORD_MISMATCH' });
+    return;
+  }
+
+  try {
+    const authorized = await consumeSetupGrant(user.id, setupToken);
+    if (!authorized) {
+      res.status(401).json({ success: false, error: 'Your verification has expired. Start again.', code: 'SETUP_AUTHORIZATION_INVALID' });
+      return;
+    }
+
+    const passwordHash = await hashPassword(newPassword);
+    // Atomic + guarded: only writes while role is still 'user' AND no password
+    // exists yet. A manipulated client or a TOCTOU race cannot overwrite an
+    // existing password or a non-Consumer account.
+    const updated = await db
+      .update(users)
+      .set({ passwordHash, updatedAt: new Date() })
+      .where(and(eq(users.id, user.id), eq(users.role, ROLES.USER), isNull(users.passwordHash)))
+      .returning({ id: users.id });
+
+    if (!updated.length) {
+      res.status(409).json({ success: false, error: 'This account already has a password.', code: 'PASSWORD_ALREADY_SET' });
+      return;
+    }
+
+    // Keep THIS session; sign every other refresh session out (a new credential
+    // was just added — consistent with treating it like a sensitive change).
+    await revokeAllRefreshTokensForUser(user.id);
+    const refreshToken = await issueRefreshToken(user.id);
+    setRefreshTokenCookie(res, refreshToken);
+    const accessToken = signAccessToken({ id: user.id, email: user.email, emailVerified: user.emailVerified });
+
+    Logger.audit('auth.local_password_added', { userId: user.id, ip: req.ip });
+    publishEvent({
+      eventName: 'LocalPasswordAdded',
+      domain: 'Identity',
+      producer: 'authRouter',
+      aggregateId: user.id,
+      actor: user.id,
+      payload: { email: user.email },
+    });
+
+    try {
+      await sendPasswordAddedEmail(user.email);
+    } catch (error) {
+      Logger.warn('password-added email failed to send', {
+        requestId: req.requestId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    res.json({ success: true, message: 'Password set. You can now sign in with email and password.', accessToken });
+  } catch (error) {
+    Logger.warn('local-password set failed', {
+      requestId: req.requestId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    res.status(500).json({ success: false, error: 'Unable to set a password right now.' });
   }
 });
 

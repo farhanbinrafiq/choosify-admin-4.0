@@ -70,6 +70,8 @@ import {
 } from 'recharts';
 
 import ProfileLayout from '../../../components/profile/ProfileLayout';
+import PersonalAvatarCard from '../../../components/account/PersonalAvatarCard';
+import { uploadUserAvatar } from '../../../services/mediaUpload';
 import ContentTable from '../../../components/profile/ContentTable';
 import BrandEditStudio from '../BrandEditStudio';
 import GuideStudioCMS, { GuideStudioItem } from '../../../components/profile/GuideStudioCMS';
@@ -402,11 +404,27 @@ export default function UnifiedProfileShell() {
 
   const { orders, customers, approveOrder, dispatchOrder, cancelOrder, addCustomerNotes, sendChatMessage } = useOrders();
   const { profiles: brandProfiles, addLog } = useBrandProfiles();
-  const { profile: loggedInProfile } = useAuth();
+  const { profile: loggedInProfile, updateAvatar } = useAuth();
   const { can } = useRbac();
   const { state: impersonationState, openLoginAsConfirm } = useImpersonation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { triggerMessage, triggerPhone } = useContact();
+  const [avatarBusy, setAvatarBusy] = useState(false);
+
+  // Admin/Super Admin's own avatar circle IS their personal photo (no brand-
+  // logo ambiguity, unlike Seller/Creator where the same circle shows
+  // brand.logo — see PersonalAvatarCard for those roles instead).
+  const handleAdminAvatarChange = async (file: File) => {
+    setAvatarBusy(true);
+    try {
+      const url = await uploadUserAvatar(file);
+      await updateAvatar(url);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to update profile photo.');
+    } finally {
+      setAvatarBusy(false);
+    }
+  };
 
   // Marketplace Access mutations require platform CMS edit privilege (viewer role — not profile type).
   const canManageMarketplaceAccess = useMemo(() => {
@@ -1744,6 +1762,8 @@ export default function UnifiedProfileShell() {
         identityFields={identityFields}
         onPhoneClick={onPhoneClick}
         onMessageClick={onMessageClick}
+        onAvatarChange={isSelfProfile && typeKey === 'admin' ? handleAdminAvatarChange : undefined}
+        avatarBusy={avatarBusy}
         tagsTitle={tagsTitle}
         tags={tags}
         timelineTitle={timelineTitle}
@@ -2844,24 +2864,13 @@ export default function UnifiedProfileShell() {
 
                 <div className="space-y-4">
                   <h4 className="text-xs font-bold text-app-accent-light uppercase tracking-wider">Authentication Credentials</h4>
-                  <div className="space-y-3 text-xs">
-                    <div className="p-3 bg-white/5 border border-app-border rounded space-y-2">
-                      <div className="flex justify-between items-center">
-                        <span className="font-bold text-app-text-primary block">Admin Password</span>
-                        <span className="text-[10px] text-app-text-secondary">Last updated 12 days ago</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <input type="password" value="••••••••••••" readOnly className="flex-1 bg-app-card/20 border border-app-border rounded px-2.5 py-1.5 text-xs text-app-text-primary outline-none" />
-                        <button onClick={() => showToast('✓ Reset instruction sent to registered email.')} className="px-3 py-1.5 bg-white/5 border border-app-border hover:bg-white/10 text-app-text-primary rounded font-bold cursor-pointer transition-colors text-xs">Reset</button>
-                      </div>
-                    </div>
-                    <div className="p-3.5 bg-white/5 border border-app-border rounded flex justify-between items-center">
-                      <div>
-                        <span className="font-bold text-app-text-primary block">Two-Factor Authentication (2FA)</span>
-                        <span className="text-[10px] text-emerald-400 font-semibold truncate block mt-0.5">✓ SECURED WITH GOOGLE AUTHENTICATOR</span>
-                      </div>
-                      <span className="px-2.5 py-1 bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 rounded text-[10px] uppercase font-black font-mono">ACTIVE</span>
-                    </div>
+                  {isSelfProfile && <PersonalAvatarCard />}
+                  <div className="p-3.5 bg-white/5 border border-app-border rounded text-xs text-app-text-secondary leading-relaxed">
+                    Passwords are self-service and can only be changed by the account holder from
+                    <span className="text-app-text-primary font-semibold"> Account menu → Change password</span> while
+                    signed in as this account. Choosify staff cannot view or set another user&apos;s password here. If this
+                    user is locked out, they can use <span className="text-app-text-primary font-semibold">Forgot password</span> on
+                    the sign-in screen.
                   </div>
                 </div>
               </div>
@@ -3592,6 +3601,7 @@ export default function UnifiedProfileShell() {
                 <div className="space-y-4">
                   <h4 className="text-xs font-bold text-app-accent-light uppercase tracking-wider">Authentication & Connected Socials</h4>
                   <div className="space-y-3 text-xs font-sans">
+                    {isSelfProfile && <PersonalAvatarCard />}
                     <div className="p-3 bg-white/5 border border-app-border rounded space-y-2">
                       <div className="flex justify-between items-center">
                         <span className="font-bold text-app-text-primary block">Password & Security</span>

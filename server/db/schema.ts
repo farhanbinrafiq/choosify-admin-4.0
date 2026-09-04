@@ -125,6 +125,78 @@ export const authTokens = pgTable('auth_tokens', {
   tokenHashIdx: index('auth_tokens_token_hash_idx').on(table.tokenHash),
 }));
 
+/**
+ * Social login provider identities. One canonical Choosify user (Postgres) may
+ * have zero or more linked provider identities. NEVER stores OAuth access/
+ * refresh tokens — basic login only. `provider_subject` is the provider's own
+ * stable user id (Google `sub`, Facebook `id`). A social login only ever
+ * resolves to / creates a Consumer (`users.role = 'user'`) account — the
+ * provider can never influence role.
+ */
+export const authProviderEnum = pgEnum('auth_provider', ['google', 'facebook']);
+
+export const userIdentities = pgTable('user_identities', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  provider: authProviderEnum('provider').notNull(),
+  /** Provider's stable subject id — Google OIDC `sub`, Facebook `id`. */
+  providerSubject: varchar('provider_subject', { length: 255 }).notNull(),
+  /** Provider-reported email at link time (informational; `users.email` stays canonical). */
+  providerEmail: varchar('provider_email', { length: 320 }),
+  /** Whether the provider asserted the email as verified when this identity was linked. */
+  providerEmailVerified: boolean('provider_email_verified').notNull().default(false),
+  linkedAt: timestamp('linked_at').notNull().defaultNow(),
+  lastLoginAt: timestamp('last_login_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  providerSubjectUnique: uniqueIndex('user_identities_provider_subject_unique').on(table.provider, table.providerSubject),
+  userProviderUnique: uniqueIndex('user_identities_user_provider_unique').on(table.userId, table.provider),
+  userIdx: index('user_identities_user_id_idx').on(table.userId),
+}));
+
+/**
+ * Optional "add a local password to a passwordless (social-only) Consumer"
+ * flow — a dedicated, purpose-bound, two-stage challenge. Kept OUT of
+ * `auth_tokens` on purpose: that table holds high-entropy (256-bit) bearer
+ * tokens that never need an attempt counter, whereas this flow's stage-1
+ * secret is a 6-digit email OTP that is only safe with server-side
+ * brute-force limiting (`attempts`) and send throttling (`resend_count` /
+ * `last_sent_at`). Stage 2 is a short-lived server-minted authorization
+ * (`grant_hash`) so a verified OTP is never an indefinitely reusable
+ * "otpVerified" state. Only ever used for `purpose = 'SET_LOCAL_PASSWORD'`
+ * and only for `users.role = 'user'` with `users.password_hash IS NULL`.
+ * Never used to change an existing password.
+ */
+export const localPasswordSetups = pgTable('local_password_setups', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** Fixed discriminator — guards against this row ever being consumed by another flow. */
+  purpose: varchar('purpose', { length: 40 }).notNull().default('SET_LOCAL_PASSWORD'),
+  // ── Stage 1: the emailed 6-digit code ──
+  /** sha256(pepper : userId : purpose : code) — the raw code is never stored. */
+  codeHash: varchar('code_hash', { length: 255 }).notNull(),
+  codeExpiresAt: timestamp('code_expires_at').notNull(),
+  /** Wrong-code submissions against this row; the row locks at the cap. */
+  attempts: integer('attempts').notNull().default(0),
+  /** How many codes have been issued in this setup episode (send throttle). */
+  resendCount: integer('resend_count').notNull().default(0),
+  lastSentAt: timestamp('last_sent_at').notNull().defaultNow(),
+  verifiedAt: timestamp('verified_at'),
+  // ── Stage 2: the short-lived purpose-bound authorization minted on verify ──
+  /** sha256(pepper : userId : purpose : grant) — raw grant returned once, never stored. */
+  grantHash: varchar('grant_hash', { length: 255 }),
+  grantExpiresAt: timestamp('grant_expires_at'),
+  /** Set when the password is actually written — whole row is then spent. */
+  consumedAt: timestamp('consumed_at'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+}, (table) => ({
+  userIdx: index('local_password_setups_user_id_idx').on(table.userId),
+  codeHashIdx: index('local_password_setups_code_hash_idx').on(table.codeHash),
+  grantHashIdx: index('local_password_setups_grant_hash_idx').on(table.grantHash),
+}));
+
 /** Sprint 10 durability migration — Partner Applications (was in-memory + JSON snapshot). */
 export const partnerApplications = pgTable('partner_applications', {
   id: varchar('id', { length: 64 }).primaryKey(),

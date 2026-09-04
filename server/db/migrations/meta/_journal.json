@@ -36,6 +36,20 @@
       "when": 1787319163716,
       "tag": "0004_durability_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1788480000000,
+      "tag": "0005_user_identities",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788566400000,
+      "tag": "0006_local_password_setup",
+      "breakpoints": true
     }
   ]
 }

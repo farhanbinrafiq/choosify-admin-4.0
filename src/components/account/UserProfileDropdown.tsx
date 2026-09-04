@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
-import { Pencil, RefreshCw, Settings, Undo2, User } from 'lucide-react';
+import { KeyRound, Pencil, RefreshCw, Settings, Trash2, Undo2, User } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   formatRoleLabel,
@@ -10,6 +10,7 @@ import {
   getSettingsPath,
   getUserInitials,
 } from '../../lib/userDisplay';
+import { dataUrlToFile, uploadUserAvatar } from '../../services/mediaUpload';
 import { AvatarCropModal } from './AvatarCropModal';
 
 type UserProfileDropdownProps = {
@@ -25,35 +26,12 @@ type MenuItem = {
   onSelect: () => void;
 };
 
-const AVATAR_STORAGE_PREFIX = 'choosify_user_avatar:';
-
-function avatarStorageKey(userId: string): string {
-  return `${AVATAR_STORAGE_PREFIX}${userId}`;
-}
-
-function readStoredAvatar(userId: string): string | null {
-  try {
-    const value = localStorage.getItem(avatarStorageKey(userId));
-    return value?.trim() || null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredAvatar(userId: string, dataUrl: string): void {
-  try {
-    localStorage.setItem(avatarStorageKey(userId), dataUrl);
-  } catch {
-    // Quota / private mode — ignore persistence failure; session still updates.
-  }
-}
-
 export function UserProfileDropdown({ variant = 'header', className = '' }: UserProfileDropdownProps) {
-  const { profile, logout } = useAuth();
+  const { profile, logout, updateAvatar } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
-  const [localAvatar, setLocalAvatar] = useState<string | null>(null);
+  const [avatarBusy, setAvatarBusy] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
   const [cropSrc, setCropSrc] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
@@ -76,16 +54,12 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
   const roleLabel = formatRoleLabel(profile?.role);
   const roleBadge = roleLabel.toUpperCase();
   const initials = getUserInitials(displayName, email);
-  const baseAvatarUrl = profile ? getAvatarUrl(profile) : '';
-  const avatarUrl = localAvatar || baseAvatarUrl;
-
-  useEffect(() => {
-    if (!profile?.id) {
-      setLocalAvatar(null);
-      return;
-    }
-    setLocalAvatar(readStoredAvatar(profile.id));
-  }, [profile?.id]);
+  // profile.avatar (via getAvatarUrl) is the ONE canonical source — no
+  // separate local/localStorage copy. Every consumer of `profile` (this
+  // dropdown, the mobile drawer, the profile page) re-renders from the same
+  // AuthContext state the instant updateAvatar() resolves.
+  const avatarUrl = profile ? getAvatarUrl(profile) : '';
+  const hasRealPhoto = Boolean(profile?.avatar?.trim());
 
   const close = useCallback(() => {
     setOpen(false);
@@ -106,25 +80,34 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
     [close, navigate],
   );
 
+  /** Uploads through the canonical media pipeline (category 'users'), then
+   *  persists avatarUrl onto the account (PATCH /auth/profile) via AuthContext
+   *  — the same call the Profile Photo section on the profile page makes. */
   const persistAvatar = useCallback(
-    (dataUrl: string) => {
-      if (!profile?.id) return;
-      writeStoredAvatar(profile.id, dataUrl);
-      setLocalAvatar(dataUrl);
+    async (file: File) => {
+      setAvatarBusy(true);
+      try {
+        const url = await uploadUserAvatar(file);
+        await updateAvatar(url);
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : 'Failed to update profile photo.');
+      } finally {
+        setAvatarBusy(false);
+      }
     },
-    [profile?.id],
+    [updateAvatar],
   );
 
   /** Edit = crop / reposition the current photo. */
   const openCropEditor = useCallback(() => {
     setAvatarMenuOpen(false);
-    if (!avatarUrl) {
+    if (!hasRealPhoto) {
       window.alert('No photo to edit. Use Replace to upload one first.');
       return;
     }
     setCropSrc(avatarUrl);
     setCropOpen(true);
-  }, [avatarUrl]);
+  }, [avatarUrl, hasRealPhoto]);
 
   /** Replace = pick a new image file (reupload / change). */
   const openReplacePicker = useCallback(() => {
@@ -136,32 +119,41 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
     (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       event.target.value = '';
-      if (!file || !profile?.id) return;
-      if (!file.type.startsWith('image/')) return;
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        window.alert('Please choose an image file (JPG, PNG, WebP, or GIF).');
+        return;
+      }
       if (file.size > 2_500_000) {
         window.alert('Please choose an image under 2.5 MB.');
         return;
       }
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = typeof reader.result === 'string' ? reader.result : '';
-        if (!result) return;
-        // Replace applies the new upload immediately; user can Edit to crop/reposition.
-        persistAvatar(result);
-      };
-      reader.readAsDataURL(file);
+      // Replace applies the new upload immediately; user can Edit to crop/reposition.
+      void persistAvatar(file);
     },
-    [persistAvatar, profile?.id],
+    [persistAvatar],
   );
 
   const onCropSave = useCallback(
     (dataUrl: string) => {
-      persistAvatar(dataUrl);
       setCropOpen(false);
       setCropSrc('');
+      void persistAvatar(dataUrlToFile(dataUrl, 'avatar.png'));
     },
     [persistAvatar],
   );
+
+  const onRemovePhoto = useCallback(async () => {
+    setAvatarMenuOpen(false);
+    setAvatarBusy(true);
+    try {
+      await updateAvatar(null);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to remove profile photo.');
+    } finally {
+      setAvatarBusy(false);
+    }
+  }, [updateAvatar]);
 
   const onCropCancel = useCallback(() => {
     setCropOpen(false);
@@ -184,6 +176,12 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
             label: 'Account Settings',
             icon: <Settings className="w-[18px] h-[18px] text-[#6B7280]" aria-hidden strokeWidth={2.25} />,
             onSelect: () => go(getSettingsPath()),
+          },
+          {
+            id: 'security',
+            label: 'Change password',
+            icon: <KeyRound className="w-[18px] h-[18px] text-[#6B7280]" aria-hidden strokeWidth={2.25} />,
+            onSelect: () => go('/admin/account/security'),
           },
         ];
 
@@ -342,6 +340,7 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
                   aria-label="Profile photo options"
                   aria-expanded={avatarMenuOpen}
                   title="Photo options"
+                  disabled={avatarBusy}
                   onClick={(event) => {
                     event.stopPropagation();
                     setAvatarMenuOpen((prev) => !prev);
@@ -361,6 +360,11 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
                       event.currentTarget.style.display = 'none';
                     }}
                   />
+                  {avatarBusy && (
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/40">
+                      <RefreshCw className="w-4 h-4 text-white animate-spin" aria-hidden />
+                    </span>
+                  )}
                 </button>
 
                 <AnimatePresence>
@@ -401,6 +405,21 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
                         <RefreshCw className="w-3.5 h-3.5 text-[#2563EB]" aria-hidden strokeWidth={2.4} />
                         Replace
                       </button>
+                      {hasRealPhoto && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          title="Remove the current photo"
+                          className="w-full flex items-center gap-2.5 px-3 py-2 text-left text-[13px] font-semibold text-[#DC2626] hover:bg-[#FEF2F2]"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void onRemovePhoto();
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 text-[#DC2626]" aria-hidden strokeWidth={2.4} />
+                          Remove
+                        </button>
+                      )}
                     </motion.div>
                   )}
                 </AnimatePresence>

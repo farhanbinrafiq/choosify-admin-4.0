@@ -147,7 +147,7 @@ export function createApp(): Express {
   // Authenticated reads (/auth/me, impersonation status/history, directory) use
   // the admin policy so a valid session is not flushed by login-tier limits.
   const AUTH_STRICT_PATH =
-    /^\/api\/v1\/auth\/(login|register|seller-register|partner-apply|upgrade-to-seller|refresh|logout|dev-login|password-reset-request|reset-password|verify-email|resend-verification|change-password)(\/|$)/i;
+    /^\/api\/v1\/auth\/(login|register|seller-register|partner-apply|upgrade-to-seller|refresh|logout|dev-login|google|facebook|password-reset-request|reset-password|verify-email|resend-verification|change-password|local-password)(\/|$)/i;
   app.use("/api/v1/auth", (req, res, next) => {
     if (AUTH_STRICT_PATH.test(req.originalUrl.split("?")[0] || "")) {
       return authRateLimit(req, res, next);

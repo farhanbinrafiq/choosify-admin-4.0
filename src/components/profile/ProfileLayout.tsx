@@ -30,6 +30,9 @@ export interface ProfileLayoutProps {
   identityFields?: IdentityField[];
   onPhoneClick?: () => void;
   onMessageClick?: () => void;
+  /** Self-profile only — see IdentityCard's onAvatarChange doc. */
+  onAvatarChange?: (file: File) => void;
+  avatarBusy?: boolean;
 
   // Extra Left Column Element (e.g. Tags/Specialties)
   tagsTitle?: string;
@@ -96,6 +99,8 @@ export default function ProfileLayout({
   identityFields,
   onPhoneClick,
   onMessageClick,
+  onAvatarChange,
+  avatarBusy,
   tagsTitle,
   tagsBadgeText,
   tagsBadgeColorClass,
@@ -156,6 +161,8 @@ export default function ProfileLayout({
             fields={identityFields}
             onPhoneClick={onPhoneClick}
             onMessageClick={onMessageClick}
+            onAvatarChange={onAvatarChange}
+            avatarBusy={avatarBusy}
             variant={variant}
           />
 

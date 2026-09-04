@@ -15,6 +15,13 @@ export type UserProfileExtras = {
   bio?: string;
   /** Official website for roles without seller_profiles.website. */
   website?: string;
+  /**
+   * Consumer's primary account phone in canonical E.164 (see server/lib/phone.ts).
+   * Contact info only — never a login credential, deliberately not unique. This is
+   * NOT the checkout/order recipient phone; editing/clearing it never rewrites any
+   * historical order/invoice/shipment snapshot.
+   */
+  phone?: string;
   updatedAt: string;
 };
 
