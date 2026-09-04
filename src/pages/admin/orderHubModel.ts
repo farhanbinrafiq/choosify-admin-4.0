@@ -1122,3 +1122,135 @@ export function orderMatchesFilters(
   }
   return true;
 }
+
+// ── Invoice — one canonical, role-scoped view model for Screen / Print / PDF ──
+//
+// Financial-data audit (2026-09-04): GET /operations/orders/:id is a verbatim
+// pass-through of the stored order — there is no server serializer to "fix".
+// Orders created through the real checkout path (recomputeOrderPricingServerSide)
+// always have numeric item.price + subOrder.deliveryFee. A batch of synthetic
+// seed fixtures written directly into the operations snapshot skipped that path
+// and have undefined values. This model NEVER coerces a missing value to 0 —
+// see `dataComplete` below — so a malformed fixture renders an explicit
+// "unavailable" state instead of a false ৳0 document.
+
+/** Order lifecycle states a *finalized* invoice may exist for. Excludes
+ *  abandoned pending_payment and cancelled orders. */
+const INVOICE_ELIGIBLE_STATUSES = new Set<OpsStorefrontOrder['status']>([
+  'active',
+  'confirmed',
+  'completed',
+]);
+
+export type InvoiceLine = {
+  itemId: string;
+  title: string;
+  variantLabel?: string;
+  variantSku?: string;
+  serviceCategory?: string;
+  qty: number;
+  unitPrice: number;
+  lineTotal: number;
+};
+
+export type InvoiceViewModel = {
+  scope: 'seller' | 'admin';
+  subOrder: OpsSubOrder | null;
+  lines: InvoiceLine[];
+  itemsSubtotal: number;
+  deliveryTotal: number;
+  grandTotal: number;
+  /** From the existing sub-order field only — never fabricated, never the order id. */
+  invoiceNumber: string | null;
+  paymentMethodLabel: string;
+  paymentStatusLabel: string;
+  /** False the instant ANY in-scope item price or the sub-order's deliveryFee
+   *  is not a finite number. No `|| 0` masking anywhere in this function. */
+  dataComplete: boolean;
+};
+
+function isFiniteNumber(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v);
+}
+
+/** Pure — no network, no mutation. The one calculation Screen/Print/PDF all share. */
+export function buildInvoiceViewModel(
+  order: OpsStorefrontOrder,
+  viewer: OrderHubViewer,
+  targetSellerId?: string | null,
+): InvoiceViewModel {
+  const subs =
+    viewer.mode === 'admin' && targetSellerId
+      ? (order.subOrders || []).filter((s) => s.sellerId === targetSellerId)
+      : visibleSubOrders(order, viewer);
+  const sub = subs[0] || null;
+
+  const lines: InvoiceLine[] = (sub?.items || []).map((it) => ({
+    itemId: it.itemId,
+    title: it.productTitle,
+    variantLabel:
+      it.variantLabel?.trim() ||
+      (it.selectedOptions
+        ? Object.entries(it.selectedOptions)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join(' · ')
+        : undefined),
+    variantSku: it.variantSku,
+    serviceCategory: it.productType === 'service' ? it.serviceCategory : undefined,
+    qty: it.quantity,
+    unitPrice: it.price,
+    lineTotal: isFiniteNumber(it.price) && isFiniteNumber(it.quantity) ? it.price * it.quantity : NaN,
+  }));
+
+  const priceFieldsComplete = lines.every((l) => isFiniteNumber(l.unitPrice) && isFiniteNumber(l.qty));
+  const deliveryComplete = isFiniteNumber(sub?.deliveryFee);
+  const dataComplete = Boolean(sub) && priceFieldsComplete && deliveryComplete;
+
+  const itemsSubtotal = dataComplete ? lines.reduce((sum, l) => sum + l.lineTotal, 0) : NaN;
+  const deliveryTotal = dataComplete ? Number(sub!.deliveryFee) : NaN;
+  const grandTotal = dataComplete ? itemsSubtotal + deliveryTotal : NaN;
+
+  const paymentMethodLabel = order.isCOD ? 'Cash on Delivery' : order.paymentMethod === 'online' ? 'Online Payment' : 'Credit / EMI';
+  const paymentStatusLabel = order.isCOD
+    ? order.codDeliveryFeePaid
+      ? 'Delivery fee paid online, balance due on delivery'
+      : 'Balance due on delivery'
+    : order.paidAt
+      ? `Paid ${new Date(order.paidAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}`
+      : 'Awaiting payment';
+
+  return {
+    scope: viewer.mode === 'admin' ? 'admin' : 'seller',
+    subOrder: sub,
+    lines,
+    itemsSubtotal,
+    deliveryTotal,
+    grandTotal,
+    invoiceNumber: sub?.invoiceId?.trim() || null,
+    paymentMethodLabel,
+    paymentStatusLabel,
+    dataComplete,
+  };
+}
+
+/**
+ * Whether the invoice action (View Invoice / Print / Download PDF) should be
+ * exposed at all — same rule for Order Hub row, Order Details header, and the
+ * invoice screen itself. Does NOT decide the invoice *number*; that's assigned
+ * lazily server-side (see server/operations/invoiceAssignment.ts) the first
+ * time an eligible invoice is actually opened.
+ */
+export function invoiceActionEligible(
+  order: OpsStorefrontOrder,
+  viewer: OrderHubViewer,
+  targetSellerId?: string | null,
+): boolean {
+  const subs =
+    viewer.mode === 'admin' && targetSellerId
+      ? (order.subOrders || []).filter((s) => s.sellerId === targetSellerId)
+      : visibleSubOrders(order, viewer);
+  if (!subs.length) return false;
+  if (!INVOICE_ELIGIBLE_STATUSES.has(order.status)) return false;
+  const model = buildInvoiceViewModel(order, viewer, targetSellerId);
+  return model.dataComplete;
+}

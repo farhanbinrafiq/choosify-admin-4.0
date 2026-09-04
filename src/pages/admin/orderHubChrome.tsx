@@ -280,7 +280,14 @@ export function ProductIdentityLink({
   const cls = `ordhub-identity${size === 'md' ? ' ordhub-identity--md' : ''}`;
   if (!to) return <div className={cls}>{body}</div>;
   return (
-    <Link to={to} className={cls} title="Open in Products & Inventory" aria-label={`Open “${title}” in Products & Inventory`}>
+    <Link
+      to={to}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cls}
+      title="Open in Products & Inventory (new tab)"
+      aria-label={`Open “${title}” in Products & Inventory (opens in a new tab)`}
+    >
       {body}
     </Link>
   );

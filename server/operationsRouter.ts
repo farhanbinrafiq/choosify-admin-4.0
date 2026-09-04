@@ -11,6 +11,7 @@ import {
   submitPlatformMessage,
 } from './operations/platformMessagingBridge';
 import { scheduleOperationsPersist } from './operations/operationsPersistence';
+import { ensureSubOrderInvoiceNumber } from './operations/invoiceAssignment';
 import type {
   OpsCoupon,
   OpsFeeCharge,
@@ -861,6 +862,57 @@ operationsRouter.get('/operations/orders/:id', ...requireAuth, (req, res) => {
     return;
   }
   res.json({ data: order });
+});
+
+/**
+ * Ensures the given seller sub-order has a real invoice number, minting one
+ * exactly once (lazily, idempotently, concurrency-safe) the first time an
+ * authorized eligible request asks for it. See server/operations/invoiceAssignment.ts.
+ *
+ * Authorization is scoped to THIS sub-order specifically — not "does the
+ * requester own any sub-order on this order" (userCanMutateOrder is too broad
+ * for a multi-seller order: it would let seller A ensure/read seller B's
+ * invoice). Staff (admin/super_admin/support_agent/moderator/finance_manager)
+ * may act on any sub-order. Buyers are not authorized here, matching the
+ * existing invoice-screen authorization (OperationsInvoiceView.tsx).
+ */
+operationsRouter.post('/operations/orders/:id/subs/:sellerId/invoice', ...requireAuth, async (req, res) => {
+  const order = operationsStore.getOrder(req.params.id);
+  if (!order) {
+    res.status(404).json({ error: 'Order not found' });
+    return;
+  }
+  const targetSellerId = req.params.sellerId;
+  const sub = (order.subOrders || []).find((s: { sellerId?: string }) => s.sellerId === targetSellerId);
+  if (!sub) {
+    res.status(404).json({ error: "Seller's slice of this order was not found" });
+    return;
+  }
+  const role = req.userRole;
+  const isStaff = Boolean(
+    role &&
+      (hasRole(role, ROLES.SUPER_ADMIN) ||
+        hasRole(role, ROLES.ADMIN) ||
+        hasRole(role, ROLES.SUPPORT_AGENT) ||
+        hasRole(role, ROLES.MODERATOR) ||
+        hasRole(role, ROLES.FINANCE_MANAGER)),
+  );
+  const isOwningSeller = Boolean(req.userId && req.userId === targetSellerId);
+  if (!isStaff && !isOwningSeller) {
+    res.status(403).json({ error: 'Not authorized to view this invoice' });
+    return;
+  }
+
+  try {
+    const result = await ensureSubOrderInvoiceNumber(req.params.id, targetSellerId);
+    if (!result.eligible) {
+      res.json({ data: { invoiceId: null, eligible: false, reason: result.reason } });
+      return;
+    }
+    res.json({ data: { invoiceId: result.invoiceId, eligible: true } });
+  } catch (error) {
+    res.status(500).json({ error: error instanceof Error ? error.message : 'Unable to prepare invoice' });
+  }
 });
 
 operationsRouter.post('/operations/orders', ...requireAuth, async (req, res) => {

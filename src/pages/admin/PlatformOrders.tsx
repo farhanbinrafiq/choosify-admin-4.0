@@ -15,6 +15,7 @@ import {
 import {
   operationsApi,
   type OpsStorefrontOrder,
+  type OpsSubOrder,
   type OpsShipment,
   type CommerceOrderLite,
 } from '../../services/operationsApi';
@@ -64,6 +65,7 @@ import {
   applyFiltersToSearchParams,
   buildFilterDictionaries,
   orderMatchesFilters,
+  invoiceActionEligible,
 } from './orderHubModel';
 
 /**
@@ -96,7 +98,12 @@ function OrderCard({ row, viewer, onQuickView }: { row: Row; viewer: OrderHubVie
   const subs = visibleSubOrders(order, viewer);
   const items = subs.flatMap((s) => s.items || []);
   const others = otherSellerCount(order, viewer);
-  const invoiceSub = subs.find((s) => s.invoiceId && s.sellerId);
+  // Eligibility no longer requires a pre-existing invoiceId — regular checkout
+  // sub-orders get one lazily minted server-side the first time the invoice is
+  // actually opened (see orderHubModel.invoiceActionEligible + server/operations
+  // /invoiceAssignment.ts). This only decides whether to SHOW the action.
+  const invoiceEligible = invoiceActionEligible(order, viewer);
+  const invoiceLinkSellerId = subs[0]?.sellerId;
   const value = visibleOrderValue(order, viewer);
   const fullPath = orderDetailsPath(viewer, order.orderId);
   const lc = deriveHubStatus(order, ctx);
@@ -124,17 +131,17 @@ function OrderCard({ row, viewer, onQuickView }: { row: Row; viewer: OrderHubVie
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {invoiceSub && (
-            <Link to={`/admin/invoice/op/${order.orderId}/${invoiceSub.sellerId}`} style={actionBtnStyle(false)}>
-              📄 Invoice
-            </Link>
-          )}
           <Link to={conversationDeepLink(order.buyerId)} style={actionBtnStyle(false)}>
             💬 Conversation
           </Link>
           <button type="button" onClick={() => onQuickView(row)} style={actionBtnStyle(false)}>
             Quick View
           </button>
+          {invoiceEligible && invoiceLinkSellerId && (
+            <Link to={`/admin/invoice/op/${order.orderId}/${invoiceLinkSellerId}`} style={actionBtnStyle(false)}>
+              📄 Invoice
+            </Link>
+          )}
           <Link to={fullPath} state={{ order }} style={actionBtnStyle(true)}>
             Manage
           </Link>
@@ -282,7 +289,7 @@ function QuickViewBody({
   error,
   shipment,
   shipmentChecked,
-  markingItemId,
+  markingSubId,
   onMarkDelivered,
   onOpenFull,
 }: {
@@ -292,8 +299,8 @@ function QuickViewBody({
   error: string | null;
   shipment: OpsShipment | null;
   shipmentChecked: boolean;
-  markingItemId: string | null;
-  onMarkDelivered: (orderId: string, itemId: string) => void;
+  markingSubId: string | null;
+  onMarkDelivered: (orderId: string, sub: OpsSubOrder) => void;
   onOpenFull: () => void;
 }) {
   const qvThumbs = useOrderedItemThumbs(
@@ -375,33 +382,42 @@ function QuickViewBody({
         {subs.flatMap((s) => s.items || []).length === 0 ? (
           <div style={{ fontSize: 11, color: '#9CA3AF', fontStyle: 'italic', fontWeight: 600 }}>No line items in your scope.</div>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {subs.map((sub) =>
-              (sub.items || []).map((item) => {
-                const isDelivered = Boolean(item.deliveredAt);
-                const isMarking = markingItemId === item.itemId;
-                return (
-                  <div key={item.itemId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, fontSize: 12 }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <ProductIdentityLink
-                        size="md"
-                        productId={item.productId}
-                        title={item.productTitle}
-                        imageUrl={qvThumbs.get(String(item.productId || ''))}
-                        meta={`Qty ${item.quantity} · ${formatCurrency(item.price)} · ${sub.sellerBusinessName || 'seller'}`}
-                      />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {subs.map((sub, si) => {
+              const items = sub.items || [];
+              const undelivered = items.filter((it) => !it.deliveredAt);
+              const allDelivered = items.length > 0 && undelivered.length === 0;
+              const isMarking = markingSubId === sub.sellerId;
+              return (
+                <div key={sub.sellerId || si} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {items.map((item) => (
+                    <div key={item.itemId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, fontSize: 12 }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <ProductIdentityLink
+                          size="md"
+                          productId={item.productId}
+                          title={item.productTitle}
+                          imageUrl={qvThumbs.get(String(item.productId || ''))}
+                          meta={`Qty ${item.quantity} · ${formatCurrency(item.price)} · ${sub.sellerBusinessName || 'seller'}`}
+                        />
+                      </div>
+                      {item.deliveredAt && (
+                        <span
+                          style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#16A34A', fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', whiteSpace: 'nowrap' }}
+                        >
+                          <CheckCircle2 style={{ width: 12, height: 12 }} /> {formatDay(item.deliveredAt)}
+                        </span>
+                      )}
                     </div>
-                    {isDelivered ? (
-                      <span
-                        style={{ display: 'inline-flex', alignItems: 'center', gap: 4, color: '#16A34A', fontSize: 9.5, fontWeight: 800, textTransform: 'uppercase', whiteSpace: 'nowrap' }}
-                      >
-                        <CheckCircle2 style={{ width: 12, height: 12 }} /> {formatDay(item.deliveredAt)}
-                      </span>
-                    ) : (
+                  ))}
+                  {/* ONE action for the whole sub-order — items in a sub-order
+                      ship together (one seller, one parcel). */}
+                  {!allDelivered && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                       <button
                         type="button"
                         disabled={isMarking}
-                        onClick={() => onMarkDelivered(order.orderId, item.itemId)}
+                        onClick={() => onMarkDelivered(order.orderId, sub)}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
@@ -422,11 +438,11 @@ function QuickViewBody({
                         {isMarking ? <Loader2 style={{ width: 11, height: 11 }} className="animate-spin" /> : <CheckCircle2 style={{ width: 11, height: 11 }} />}
                         Mark Delivered
                       </button>
-                    )}
-                  </div>
-                );
-              }),
-            )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -624,7 +640,7 @@ export default function PlatformOrdersPage() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [qvShipment, setQvShipment] = useState<OpsShipment | null>(null);
   const [qvShipmentChecked, setQvShipmentChecked] = useState(false);
-  const [markingItemId, setMarkingItemId] = useState<string | null>(null);
+  const [markingSubId, setMarkingSubId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
 
   const showToast = useCallback((kind: 'success' | 'error', message: string) => {
@@ -732,17 +748,25 @@ export default function PlatformOrdersPage() {
     }
   };
 
-  const handleMarkDelivered = async (orderId: string, itemId: string) => {
-    setMarkingItemId(itemId);
+  // ONE control per sub-order — see OrderDetails.tsx's handleMarkSubOrderDelivered.
+  const handleMarkDelivered = async (orderId: string, sub: OpsSubOrder) => {
+    const undelivered = (sub.items || []).filter((it) => !it.deliveredAt);
+    if (undelivered.length === 0) return;
+    setMarkingSubId(sub.sellerId);
     try {
-      const updated = await operationsApi.markOrderItemDelivered(orderId, itemId);
-      setOrders((prev) => prev.map((o) => (o.orderId === updated.orderId ? updated : o)));
-      setSelected((cur) => (cur && cur.order.orderId === updated.orderId ? { ...cur, order: updated } : cur));
-      showToast('success', 'Item marked delivered.');
+      let updated: OpsStorefrontOrder | null = null;
+      for (const it of undelivered) {
+        updated = await operationsApi.markOrderItemDelivered(orderId, it.itemId);
+      }
+      if (updated) {
+        setOrders((prev) => prev.map((o) => (o.orderId === updated!.orderId ? updated! : o)));
+        setSelected((cur) => (cur && cur.order.orderId === updated!.orderId ? { ...cur, order: updated! } : cur));
+      }
+      showToast('success', undelivered.length > 1 ? 'Items marked delivered.' : 'Item marked delivered.');
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Failed to mark item delivered');
+      showToast('error', err instanceof Error ? err.message : 'Failed to mark delivered');
     } finally {
-      setMarkingItemId(null);
+      setMarkingSubId(null);
     }
   };
 
@@ -968,7 +992,7 @@ export default function PlatformOrdersPage() {
           error={detailError}
           shipment={qvShipment}
           shipmentChecked={qvShipmentChecked}
-          markingItemId={markingItemId}
+          markingSubId={markingSubId}
           onMarkDelivered={handleMarkDelivered}
           onOpenFull={() => {
             if (selected) {

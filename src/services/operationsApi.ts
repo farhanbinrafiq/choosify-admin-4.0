@@ -67,6 +67,14 @@ export interface OpsOrderItem {
   productId?: string;
   serviceId?: string;
   variantId?: string;
+  /**
+   * Buyer's selected variant combination, snapshotted server-side at checkout
+   * (recomputeOrderPricingServerSide) from the product's own productVariants —
+   * never re-derived from the live product. Display only.
+   */
+  variantSku?: string;
+  variantLabel?: string;
+  selectedOptions?: Record<string, string>;
   productTitle: string;
   quantity: number;
   price: number;
@@ -547,6 +555,24 @@ export const operationsApi = {
   getOrder: async (orderId: string): Promise<OpsStorefrontOrder> => {
     const result = await request<{ data: OpsStorefrontOrder }>(
       `/operations/orders/${encodeURIComponent(orderId)}`,
+    );
+    return result.data;
+  },
+  /**
+   * Lazily/idempotently ensures the seller sub-order has a real invoice
+   * number, minting one server-side exactly once if eligible. Never mints a
+   * second number on repeat calls. `eligible:false` (never a thrown error)
+   * means the order isn't in an invoice-eligible state or its financial data
+   * can't be resolved — callers must show an explicit unavailable state, not
+   * a zeroed document.
+   */
+  ensureInvoiceNumber: async (
+    orderId: string,
+    sellerId: string,
+  ): Promise<{ invoiceId: string | null; eligible: boolean; reason?: string }> => {
+    const result = await request<{ data: { invoiceId: string | null; eligible: boolean; reason?: string } }>(
+      `/operations/orders/${encodeURIComponent(orderId)}/subs/${encodeURIComponent(sellerId)}/invoice`,
+      'POST',
     );
     return result.data;
   },

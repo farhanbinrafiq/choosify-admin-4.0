@@ -12,10 +12,18 @@ import {
   Bell,
   Megaphone,
 } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import { operationsApi, type OpsStorefrontOrder, type OpsReview } from '../../../services/operationsApi';
 import { catalogApi } from '../../../services/catalogApi';
 import type { CatalogProduct, CatalogBrand } from '../../../types/catalog';
 import { useAuth } from '../../../contexts/AuthContext';
+import {
+  resolveOrderHubViewer,
+  orderDetailsPath,
+  invoicePath,
+  invoiceActionEligible,
+  visibleSubOrders,
+} from '../orderHubModel';
 import { useNavAttention } from '../../../contexts/NavAttentionContext';
 import {
   DashShell,
@@ -141,6 +149,7 @@ export default function SellerHomeDashboard() {
         .slice(0, 5),
     [orders],
   );
+  const viewer = useMemo(() => resolveOrderHubViewer(profile), [profile]);
 
   const dash = (v: string) => (loading ? '…' : v);
   const money = (n: number) => `৳ ${Math.round(n).toLocaleString()}`;
@@ -272,28 +281,45 @@ export default function SellerHomeDashboard() {
           <EmptyState message={loading ? 'Loading…' : 'No orders yet.'} />
         ) : (
           <div className="divide-y divide-app-border">
-            {recent.map((o) => (
-              <Link
-                key={o.id}
-                to="/admin/orders"
-                className="flex items-center justify-between py-3 gap-3 hover:opacity-80 transition-opacity"
-              >
-                <div className="min-w-0">
-                  <div className="text-[12px] font-bold text-app-text-primary truncate">
-                    {o.shipping?.fullName || 'Customer'}
-                  </div>
-                  <div className="text-[10px] text-app-text-secondary font-mono">
-                    {o.orderId || o.id} · {new Date(o.createdAt).toLocaleDateString()}
-                  </div>
+            {recent.map((o) => {
+              // Same canonical eligibility policy as Order Hub / Order Details —
+              // no separate rule, no separate financial check.
+              const eligible = invoiceActionEligible(o, viewer);
+              const invoiceSellerId = visibleSubOrders(o, viewer)[0]?.sellerId;
+              return (
+                <div key={o.id} className="flex items-center justify-between gap-3 py-3">
+                  <Link
+                    to={orderDetailsPath(viewer, o.orderId)}
+                    className="flex min-w-0 flex-1 items-center justify-between gap-3 hover:opacity-80 transition-opacity"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-[12px] font-bold text-app-text-primary truncate">
+                        {o.shipping?.fullName || 'Customer'}
+                      </div>
+                      <div className="text-[10px] text-app-text-secondary font-mono">
+                        {o.orderId || o.id} · {new Date(o.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-[12px] font-bold text-app-text-primary">
+                        {money(Number(o.overallTotal || 0))}
+                      </div>
+                      <div className="text-[10px] text-app-text-secondary">{statusLabel(o.status)}</div>
+                    </div>
+                  </Link>
+                  {eligible && invoiceSellerId && (
+                    <Link
+                      to={invoicePath(o.orderId, invoiceSellerId)}
+                      title="Invoice"
+                      aria-label={`Invoice for order ${o.orderId || o.id}`}
+                      className="shrink-0 flex items-center justify-center w-7 h-7 rounded-lg border border-app-border text-app-text-secondary hover:text-app-accent hover:border-app-accent/40 transition-colors"
+                    >
+                      <FileText size={13} />
+                    </Link>
+                  )}
                 </div>
-                <div className="text-right shrink-0">
-                  <div className="text-[12px] font-bold text-app-text-primary">
-                    {money(Number(o.overallTotal || 0))}
-                  </div>
-                  <div className="text-[10px] text-app-text-secondary">{statusLabel(o.status)}</div>
-                </div>
-              </Link>
-            ))}
+              );
+            })}
           </div>
         )}
       </ContentCard>

@@ -9,7 +9,6 @@ import {
   MessageSquare,
   ExternalLink,
   RefreshCw,
-  Printer,
   ShieldCheck,
   StickyNote,
   ArrowRight,
@@ -17,6 +16,7 @@ import {
 import {
   operationsApi,
   type OpsStorefrontOrder,
+  type OpsSubOrder,
   type OpsShipment,
   type OpsOrderInternalNote,
   type CommerceOrderLite,
@@ -57,6 +57,7 @@ import {
   conversationDeepLink,
   viewCustomerPath,
   invoicePath,
+  invoiceActionEligible,
   lifecyclePanel,
   commerceStatusLabel,
   canAdministrativelyCorrect,
@@ -92,6 +93,28 @@ import {
  * Omitted (no canonical backend — not faked): risk scores, behaviour
  * verification, dispute-case creation, audit-log trail, Reorder / Send Invoice.
  */
+
+/**
+ * Human-readable label for the buyer's chosen variant combination on an order
+ * line. Prefers the stored `variantLabel` string; otherwise builds one from the
+ * `selectedOptions` map the server snapshots at checkout. Display only — never
+ * derived from the live product. Returns '' when the line has no variant.
+ */
+function variantChoiceLabel(it: {
+  variantLabel?: unknown;
+  selectedOptions?: unknown;
+  variantId?: unknown;
+}): string {
+  if (typeof it.variantLabel === 'string' && it.variantLabel.trim()) return it.variantLabel.trim();
+  const opts = it.selectedOptions;
+  if (opts && typeof opts === 'object') {
+    const parts = Object.entries(opts as Record<string, unknown>)
+      .filter(([, v]) => v != null && String(v).trim())
+      .map(([k, v]) => `${k}: ${v}`);
+    if (parts.length) return parts.join(' · ');
+  }
+  return typeof it.variantId === 'string' && it.variantId ? `variant ${it.variantId}` : '';
+}
 
 type ToastState = { kind: 'success' | 'error'; message: string } | null;
 type LoadState<T> = { status: 'idle' | 'loading' | 'ok' | 'error'; data: T; error?: string };
@@ -158,7 +181,7 @@ export default function OrderDetailsPage() {
 
   const [trackingDraft, setTrackingDraft] = useState({ courier: '', trackingNumber: '' });
   const [savingTracking, setSavingTracking] = useState(false);
-  const [markingItemId, setMarkingItemId] = useState<string | null>(null);
+  const [markingSubId, setMarkingSubId] = useState<string | null>(null);
   const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [modifyOpen, setModifyOpen] = useState(false);
   const [pendingSecondary, setPendingSecondary] = useState<LifecycleSecondaryAction | null>(null);
@@ -335,18 +358,28 @@ export default function OrderDetailsPage() {
     }
   };
 
-  const handleMarkDelivered = async (itemId: string) => {
+  // ONE control per sub-order — items in a sub-order ship together (one
+  // seller, one parcel), so there is no legitimate reason to mark them
+  // delivered one at a time. Loops the same canonical per-item endpoint
+  // (mirrors SellerConversations.tsx's markDelivered) so settlement,
+  // inventory consumption, and buyer notification stay unchanged.
+  const handleMarkSubOrderDelivered = async (sub: OpsSubOrder) => {
     if (!order) return;
-    setMarkingItemId(itemId);
+    const undelivered = (sub.items || []).filter((it) => !it.deliveredAt);
+    if (undelivered.length === 0) return;
+    setMarkingSubId(sub.sellerId);
     try {
-      const updated = await operationsApi.markOrderItemDelivered(order.orderId, itemId);
+      let updated: OpsStorefrontOrder = order;
+      for (const it of undelivered) {
+        updated = await operationsApi.markOrderItemDelivered(order.orderId, it.itemId);
+      }
       setOrder(updated);
       await refetchLifecycle();
-      showToast('success', 'Item marked delivered.');
+      showToast('success', undelivered.length > 1 ? 'Items marked delivered.' : 'Item marked delivered.');
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Failed to mark item delivered');
+      showToast('error', err instanceof Error ? err.message : 'Failed to mark delivered');
     } finally {
-      setMarkingItemId(null);
+      setMarkingSubId(null);
     }
   };
 
@@ -542,7 +575,11 @@ export default function OrderDetailsPage() {
   const fin = scopedFinancials(order, viewer);
   const others = otherSellerCount(order, viewer);
   const fx = derivedFulfillment(order, viewer);
-  const invoiceSub = subs.find((s) => s.invoiceId && s.sellerId);
+  // Eligibility no longer requires a pre-existing invoiceId (see
+  // orderHubModel.invoiceActionEligible) — this only decides whether to show
+  // the action; a real number is minted lazily when the invoice page opens.
+  const invoiceEligible = invoiceActionEligible(order, viewer);
+  const invoiceLinkSellerId = subs[0]?.sellerId;
   const lc = lifecyclePanel(commerce.data, viewer, shipment.data);
   const hubStatus = deriveHubStatus(order, {
     commerce: commerce.data,
@@ -551,7 +588,7 @@ export default function OrderDetailsPage() {
   });
   const hubStatusText = fulfillmentStatusLabel(hubStatus, shipment.data);
   // once the canonical shipment is delivered / failed / returned there is no
-  // ordinary per-item "Mark Delivered" — the lifecycle panel drives it.
+  // ordinary per-sub-order "Mark Delivered" — the lifecycle panel drives it.
   const perItemDeliveryLocked =
     shipment.data?.status === 'delivered' ||
     shipment.data?.status === 'failed_delivery' ||
@@ -607,20 +644,10 @@ export default function OrderDetailsPage() {
           <Link to={conversationDeepLink(order.buyerId)} style={actionBtnStyle(false)}>
             <MessageSquare style={{ width: 13, height: 13 }} /> Conversation
           </Link>
-          {invoiceSub && (
-            <>
-              <Link to={invoicePath(order.orderId, invoiceSub.sellerId!)} style={actionBtnStyle(false)}>
-                📄 View invoice
-              </Link>
-              <a
-                href={invoicePath(order.orderId, invoiceSub.sellerId!, true)}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={actionBtnStyle(false)}
-              >
-                <Printer style={{ width: 13, height: 13 }} /> Print
-              </a>
-            </>
+          {invoiceEligible && invoiceLinkSellerId && (
+            <Link to={invoicePath(order.orderId, invoiceLinkSellerId)} style={actionBtnStyle(false)}>
+              📄 View Invoice
+            </Link>
           )}
           <Link to="/admin/logistics/shipments" style={actionBtnStyle(true)}>
             <Truck style={{ width: 13, height: 13 }} /> Shipment Operations
@@ -694,105 +721,139 @@ export default function OrderDetailsPage() {
                 No line items in your scope for this order.
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {subs.map((sub, si) =>
-                  (sub.items || []).map((it) => {
-                    const isDelivered = Boolean(it.deliveredAt);
-                    const isMarking = markingItemId === it.itemId;
-                    const lineTotal =
-                      Number(it.price || 0) * Math.max(1, Math.floor(Number(it.quantity) || 1));
-                    return (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                {subs.map((sub, si) => {
+                  const items = sub.items || [];
+                  const undelivered = items.filter((it) => !it.deliveredAt);
+                  const deliveredCount = items.length - undelivered.length;
+                  const allDelivered = items.length > 0 && undelivered.length === 0;
+                  const statusLabel = allDelivered
+                    ? 'Delivered'
+                    : deliveredCount > 0
+                      ? `${deliveredCount}/${items.length} delivered`
+                      : 'Awaiting delivery';
+                  const isMarking = markingSubId === sub.sellerId;
+                  return (
+                    <div key={sub.sellerId || si} style={{ display: 'flex', flexDirection: 'column' }}>
+                      {items.map((it, ii) => {
+                        const isDelivered = Boolean(it.deliveredAt);
+                        const lineTotal =
+                          Number(it.price || 0) * Math.max(1, Math.floor(Number(it.quantity) || 1));
+                        return (
+                          <div
+                            key={it.itemId}
+                            style={{
+                              display: 'flex',
+                              gap: 16,
+                              alignItems: 'flex-start',
+                              padding: '16px 0',
+                              borderTop: si === 0 && ii === 0 ? 'none' : '1px solid #F1F3F5',
+                            }}
+                          >
+                            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                              <ProductIdentityLink
+                                size="lg"
+                                productId={it.productId}
+                                title={it.productTitle}
+                                imageUrl={productThumbs.get(String(it.productId || ''))}
+                                meta={[
+                                  it.productType || 'physical',
+                                  variantChoiceLabel(it),
+                                  it.serviceCategory || '',
+                                  it.productId ? `code ${it.productId}` : '',
+                                ]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              />
+                              {(variantChoiceLabel(it) || it.variantSku) && (
+                                <div style={{ fontSize: 10.5, color: '#4B5563', fontWeight: 700 }}>
+                                  {variantChoiceLabel(it) ? <span>Chosen: {variantChoiceLabel(it)}</span> : null}
+                                  {variantChoiceLabel(it) && it.variantSku ? <span> · </span> : null}
+                                  {it.variantSku ? <span>SKU {it.variantSku}</span> : null}
+                                </div>
+                              )}
+                              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <span style={chipStyle()}>{sub.sellerBusinessName || sub.sellerId || 'Seller'}</span>
+                                {sub.invoiceId && (
+                                  <span style={{ fontSize: 9.5, color: '#9CA3AF', fontWeight: 700 }}>Invoice {sub.invoiceId}</span>
+                                )}
+                              </div>
+                              {isDelivered && (
+                                <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>
+                                  Delivered {formatDate(it.deliveredAt)}
+                                  {it.warrantyExpiresAt ? ` · warranty to ${formatDay(it.warrantyExpiresAt)}` : ''}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>
+                                {formatCurrency(lineTotal)}
+                              </div>
+                              <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>
+                                {formatCurrency(it.price)} × {it.quantity}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {/* ONE status/action for the whole sub-order — items in a
+                          sub-order ship together (one seller, one parcel), so
+                          they are marked delivered together, not one at a time. */}
                       <div
-                        key={it.itemId}
                         style={{
                           display: 'flex',
-                          gap: 16,
-                          alignItems: 'flex-start',
-                          padding: '16px 0',
-                          borderTop: si === 0 && (sub.items || [])[0]?.itemId === it.itemId ? 'none' : '1px solid #F1F3F5',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          gap: 12,
+                          padding: '10px 0 0',
+                          borderTop: '1px solid #F1F3F5',
+                          marginTop: 4,
                         }}
                       >
-                        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                          <ProductIdentityLink
-                            size="lg"
-                            productId={it.productId}
-                            title={it.productTitle}
-                            imageUrl={productThumbs.get(String(it.productId || ''))}
-                            meta={[
-                              it.productType || 'physical',
-                              it.variantId ? `variant ${it.variantId}` : '',
-                              it.serviceCategory || '',
-                              it.productId ? `code ${it.productId}` : '',
-                            ]
-                              .filter(Boolean)
-                              .join(' · ')}
-                          />
-                          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                            <span style={chipStyle()}>{sub.sellerBusinessName || sub.sellerId || 'Seller'}</span>
-                            {sub.invoiceId && (
-                              <span style={{ fontSize: 9.5, color: '#9CA3AF', fontWeight: 700 }}>Invoice {sub.invoiceId}</span>
+                        <span
+                          style={{
+                            fontSize: 9,
+                            fontWeight: 800,
+                            letterSpacing: '0.04em',
+                            textTransform: 'uppercase',
+                            color: allDelivered ? '#16A34A' : '#B45309',
+                          }}
+                        >
+                          {statusLabel}
+                        </span>
+                        {!allDelivered && !perItemDeliveryLocked && (
+                          <button
+                            type="button"
+                            disabled={isMarking}
+                            onClick={() => void handleMarkSubOrderDelivered(sub)}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              background: '#16A34A',
+                              color: '#fff',
+                              border: 'none',
+                              borderRadius: 6,
+                              padding: '6px 12px',
+                              fontSize: 10,
+                              fontWeight: 800,
+                              textTransform: 'uppercase',
+                              cursor: isMarking ? 'not-allowed' : 'pointer',
+                              opacity: isMarking ? 0.6 : 1,
+                            }}
+                          >
+                            {isMarking ? (
+                              <Loader2 style={{ width: 12, height: 12 }} className="animate-spin" />
+                            ) : (
+                              <CheckCircle2 style={{ width: 12, height: 12 }} />
                             )}
-                            <span
-                              style={{
-                                fontSize: 9,
-                                fontWeight: 800,
-                                letterSpacing: '0.04em',
-                                textTransform: 'uppercase',
-                                color: isDelivered ? '#16A34A' : '#B45309',
-                              }}
-                            >
-                              {isDelivered ? 'Delivered' : 'Awaiting delivery'}
-                            </span>
-                          </div>
-                          {isDelivered && (
-                            <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>
-                              Delivered {formatDate(it.deliveredAt)}
-                              {it.warrantyExpiresAt ? ` · warranty to ${formatDay(it.warrantyExpiresAt)}` : ''}
-                            </div>
-                          )}
-                        </div>
-                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 800, color: '#111827' }}>
-                            {formatCurrency(lineTotal)}
-                          </div>
-                          <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 600 }}>
-                            {formatCurrency(it.price)} × {it.quantity}
-                          </div>
-                          {!isDelivered && !perItemDeliveryLocked && (
-                            <button
-                              type="button"
-                              disabled={isMarking}
-                              onClick={() => void handleMarkDelivered(it.itemId)}
-                              style={{
-                                marginTop: 8,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 6,
-                                background: '#16A34A',
-                                color: '#fff',
-                                border: 'none',
-                                borderRadius: 6,
-                                padding: '6px 12px',
-                                fontSize: 10,
-                                fontWeight: 800,
-                                textTransform: 'uppercase',
-                                cursor: isMarking ? 'not-allowed' : 'pointer',
-                                opacity: isMarking ? 0.6 : 1,
-                              }}
-                            >
-                              {isMarking ? (
-                                <Loader2 style={{ width: 12, height: 12 }} className="animate-spin" />
-                              ) : (
-                                <CheckCircle2 style={{ width: 12, height: 12 }} />
-                              )}
-                              {shipment.data?.fulfillmentMethod === 'pickup' ? 'Mark Collected' : 'Mark Delivered'}
-                            </button>
-                          )}
-                        </div>
+                            {shipment.data?.fulfillmentMethod === 'pickup' ? 'Mark Collected' : 'Mark Delivered'}
+                          </button>
+                        )}
                       </div>
-                    );
-                  }),
-                )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -836,7 +897,7 @@ export default function OrderDetailsPage() {
             {commerce.status !== 'loading' && !lc.available && (
               <div style={{ fontSize: 11.5, color: '#9CA3AF', fontWeight: 600 }}>
                 Lifecycle controls are not available for this order type (no linked commerce order —
-                e.g. a service booking). Use per-item “Mark Delivered” above and the shipment controls
+                e.g. a service booking). Use “Mark Delivered” above and the shipment controls
                 below.
               </div>
             )}
