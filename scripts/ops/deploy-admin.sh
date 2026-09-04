@@ -32,8 +32,19 @@ set -Eeuo pipefail
 # describes.
 #
 # Usage:
-#   ./deploy-admin.sh              real deployment
-#   ./deploy-admin.sh --dry-run    inspection only, no changes
+#   ./deploy-admin.sh                                 real deployment
+#   ./deploy-admin.sh --dry-run                        inspection only, no changes
+#   ./deploy-admin.sh --migrations-verified-applied    real deployment; acknowledges that
+#                                                       pending server/db/migrations/ changes
+#                                                       were already applied via the normal
+#                                                       migration runner (npm run db:migrate)
+#                                                       and independently verified against
+#                                                       production BEFORE this run. This
+#                                                       script still never runs migrations
+#                                                       itself. Ignored (with a warning) if
+#                                                       no migration files actually changed.
+#                                                       Combine with --dry-run to test the
+#                                                       acknowledgment path without deploying.
 # ============================================================
 
 REPO_DIR="/var/www/choosify/admin"
@@ -51,9 +62,22 @@ HEALTH_ATTEMPTS=12
 HEALTH_INTERVAL=2
 
 DRY_RUN=0
-if [ "${1:-}" = "--dry-run" ]; then
-  DRY_RUN=1
-fi
+MIGRATIONS_VERIFIED_APPLIED=0
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run)
+      DRY_RUN=1
+      ;;
+    --migrations-verified-applied)
+      MIGRATIONS_VERIFIED_APPLIED=1
+      ;;
+    *)
+      echo "[ERROR] Unrecognized argument: $arg" >&2
+      echo "[ERROR] Supported: --dry-run, --migrations-verified-applied" >&2
+      exit 1
+      ;;
+  esac
+done
 
 ts() { date -u +"%Y-%m-%dT%H:%M:%SZ"; }
 log() { printf '[%s] [%s] %s\n' "$(ts)" "$1" "$2"; }
@@ -391,21 +415,49 @@ fi
 
 MIGRATION_FILES_CHANGED=$(git diff --name-only "$MARKER_COMMIT" "$TARGET_COMMIT" -- server/db/migrations/)
 if [ -n "$MIGRATION_FILES_CHANGED" ]; then
-  log ERROR "=============================================="
-  log ERROR "[MIGRATION REQUIRED]"
-  log ERROR "=============================================="
-  log ERROR "This deployment includes changes under server/db/migrations/:"
-  while IFS= read -r f; do
-    [ -n "$f" ] && log ERROR "  - $f"
-  done <<< "$MIGRATION_FILES_CHANGED"
-  log ERROR "This script deliberately never runs database migrations."
-  log ERROR "A separate, migration-aware deployment procedure (with a"
-  log ERROR "pre-migration backup and manual review) is required before"
-  log ERROR "this code can be deployed."
-  log ERROR "No changes have been made -- Git was not fast-forwarded, the marker was not touched."
-  exit 1
+  if [ "$MIGRATIONS_VERIFIED_APPLIED" -eq 1 ]; then
+    # Operator has explicitly acknowledged (via this one, narrowly-scoped flag)
+    # that these specific migrations were already applied through the normal
+    # migration runner and independently verified against production BEFORE
+    # invoking this deploy. This script still never runs migrations itself --
+    # only this one file-diff abort is skipped. Every other check below
+    # (clean tree, branch, fast-forward-only, deps, build, artifact backup,
+    # api/index.js restore, PM2 restart, health checks, rollback, marker
+    # advancement) runs exactly as it would on any other deploy.
+    log ERROR "=============================================="
+    log ERROR "[MIGRATION FILES DETECTED -- OPERATOR ACKNOWLEDGED]"
+    log ERROR "=============================================="
+    log ERROR "This deployment includes changes under server/db/migrations/:"
+    while IFS= read -r f; do
+      [ -n "$f" ] && log ERROR "  - $f"
+    done <<< "$MIGRATION_FILES_CHANGED"
+    log ERROR "--migrations-verified-applied was supplied: the operator has explicitly"
+    log ERROR "acknowledged these migrations were already applied via the project's"
+    log ERROR "normal migration runner and independently verified against the production"
+    log ERROR "database before running this deployment. This script still never runs"
+    log ERROR "database migrations itself. Proceeding with deployment on that basis."
+    log ERROR "=============================================="
+  else
+    log ERROR "=============================================="
+    log ERROR "[MIGRATION REQUIRED]"
+    log ERROR "=============================================="
+    log ERROR "This deployment includes changes under server/db/migrations/:"
+    while IFS= read -r f; do
+      [ -n "$f" ] && log ERROR "  - $f"
+    done <<< "$MIGRATION_FILES_CHANGED"
+    log ERROR "This script deliberately never runs database migrations."
+    log ERROR "A separate, migration-aware deployment procedure (with a"
+    log ERROR "pre-migration backup and manual review) is required before"
+    log ERROR "this code can be deployed."
+    log ERROR "No changes have been made -- Git was not fast-forwarded, the marker was not touched."
+    exit 1
+  fi
+else
+  if [ "$MIGRATIONS_VERIFIED_APPLIED" -eq 1 ]; then
+    log INFO "[CHECK] --migrations-verified-applied was supplied but no migration file changes were detected between the marker and target commit -- flag is unnecessary here, ignoring it and continuing normally."
+  fi
+  log CHECK "No migration file changes detected."
 fi
-log CHECK "No migration file changes detected."
 
 if [ "$DRY_RUN" -eq 1 ]; then
   if [ "$LOCAL_HEAD" != "$TARGET_COMMIT" ]; then
