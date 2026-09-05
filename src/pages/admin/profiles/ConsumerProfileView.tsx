@@ -3,9 +3,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useRbac } from '../../../contexts/RbacContext';
 import { useImpersonation } from '../../../contexts/ImpersonationContext';
-import { useContact } from '../../../contexts/ContactInteractionContext';
 import { Loader2, AlertTriangle, Phone, Mail, ArrowLeft, LogIn } from 'lucide-react';
 import { AdminMessageUserButton } from '../../../components/messaging/AdminMessageUserButton';
+import { ProfileMessagePopup } from '../../../components/messaging/ProfileMessagePopup';
 
 // ============================================================================
 // Consumer Profile — the canonical /admin/consumers/:id surface.
@@ -76,7 +76,7 @@ export default function ConsumerProfileView() {
   const { profile } = useAuth();
   const { can } = useRbac();
   const { state: impersonation, openLoginAsConfirm } = useImpersonation();
-  const { triggerMessage } = useContact();
+  const [showMessagePopup, setShowMessagePopup] = useState(false);
 
   const [account, setAccount] = useState<AccountDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -260,7 +260,7 @@ export default function ConsumerProfileView() {
                   <Phone size={12} /> Call
                 </button>
                 <button
-                  onClick={() => triggerMessage({ id: account.uid, name: account.displayName || account.email, avatarUrl: '', role: account.role })}
+                  onClick={() => setShowMessagePopup(true)}
                   style={{ flex: 1, background: '#fff', border: '1px solid #E8EDF2', borderRadius: 7, padding: '8px 0', fontSize: 11, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}
                 >
                   <Mail size={12} /> Message
@@ -421,6 +421,14 @@ export default function ConsumerProfileView() {
       </div>
 
       <style>{`@media (max-width: 860px){ .cpv-grid{ grid-template-columns: minmax(0,1fr) !important; } }`}</style>
+
+      {showMessagePopup && account?.uid ? (
+        <ProfileMessagePopup
+          targetUserId={account.uid}
+          targetName={account.displayName || account.email}
+          onClose={() => setShowMessagePopup(false)}
+        />
+      ) : null}
     </div>
   );
 }

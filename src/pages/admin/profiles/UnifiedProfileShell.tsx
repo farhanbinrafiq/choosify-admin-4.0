@@ -7,6 +7,7 @@ import { useContact } from '../../../contexts/ContactInteractionContext';
 import { useRbac } from '../../../contexts/RbacContext';
 import { useImpersonation } from '../../../contexts/ImpersonationContext';
 import { MarketplaceAccessPanel } from '../../../components/admin/MarketplaceAccessPanel';
+import { ProfileMessagePopup } from '../../../components/messaging/ProfileMessagePopup';
 import { useMarketplaceAccess } from '../../../hooks/useMarketplaceAccess';
 import type { MarketplaceAccessState, MarketplaceEntityType, SuspendInput } from '../../../hooks/useMarketplaceAccess';
 import { 
@@ -408,7 +409,8 @@ export default function UnifiedProfileShell() {
   const { can } = useRbac();
   const { state: impersonationState, openLoginAsConfirm } = useImpersonation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { triggerMessage, triggerPhone } = useContact();
+  const { triggerPhone } = useContact();
+  const [showMessagePopup, setShowMessagePopup] = useState(false);
   const [avatarBusy, setAvatarBusy] = useState(false);
 
   // Admin/Super Admin's own avatar circle IS their personal photo (no brand-
@@ -1728,16 +1730,17 @@ export default function UnifiedProfileShell() {
     showToast(`🔄 Connecting phone call routing...`, 'info');
   };
 
+  // Real canonical Support relationship (same as the header "Message" action
+  // below) -- NOT the mock ContactInteractionContext popup, which never
+  // created a real conversation and so could never redirect anywhere real
+  // after "send". Guarded the same way messageUserAction/canMessageUser are:
+  // consumer/seller/creator only, a real idKey, not messaging yourself.
   const onMessageClick = () => {
-    triggerMessage({
-      id: entityData.id,
-      name: typeKey === 'order' ? entityData.customer.name : entityData.name,
-      phone: (entityData as any).phone || '+880 1711-223344',
-      avatarUrl: (entityData as any).avatarUrl || '',
-      status: (entityData as any).status || 'Active',
-      role: typeKey.toUpperCase()
-    });
-    showToast(`💬 Initiated contact message box sync`, 'success');
+    if (!canMessageUser) {
+      showToast('Messaging is not available for this profile.', 'error');
+      return;
+    }
+    setShowMessagePopup(true);
   };
 
   return (
@@ -4166,6 +4169,14 @@ export default function UnifiedProfileShell() {
       </ProfileLayout>
 
       {renderInspectModal()}
+
+      {showMessagePopup && idKey ? (
+        <ProfileMessagePopup
+          targetUserId={idKey}
+          targetName={typeKey === 'order' ? entityData.customer?.name : entityData.name}
+          onClose={() => setShowMessagePopup(false)}
+        />
+      ) : null}
     </div>
   );
 }

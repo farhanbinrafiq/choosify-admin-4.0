@@ -665,6 +665,7 @@ var init_roles = __esm({
 var schema_exports = {};
 __export(schema_exports, {
   accountPlans: () => accountPlans,
+  authProviderEnum: () => authProviderEnum,
   authTokenTypeEnum: () => authTokenTypeEnum,
   authTokens: () => authTokens,
   choosifyReferenceIdCounters: () => choosifyReferenceIdCounters,
@@ -673,6 +674,7 @@ __export(schema_exports, {
   featureEntitlements: () => featureEntitlements,
   featureRequestStatusEnum: () => featureRequestStatusEnum,
   featureRequests: () => featureRequests,
+  localPasswordSetups: () => localPasswordSetups,
   media: () => media,
   mediaEnum: () => mediaEnum,
   mediaTypeEnum: () => mediaTypeEnum,
@@ -683,11 +685,12 @@ __export(schema_exports, {
   refreshTokens: () => refreshTokens,
   roleEnum: () => roleEnum,
   sellerProfiles: () => sellerProfiles,
+  userIdentities: () => userIdentities,
   users: () => users
 });
 import { sql } from "drizzle-orm";
 import { pgTable, uuid, varchar, boolean, timestamp, pgEnum, integer, bigint, jsonb, text, index, uniqueIndex } from "drizzle-orm/pg-core";
-var roleEnum, users, choosifyUserIdCounters, choosifyReferenceIdCounters, sellerProfiles, mediaEnum, mediaVisibilityEnum, mediaTypeEnum, media, refreshTokens, authTokenTypeEnum, authTokens, partnerApplications, featureEntitlementScopeEnum, featureEntitlements, notifications, plans, accountPlans, featureRequestStatusEnum, featureRequests;
+var roleEnum, users, choosifyUserIdCounters, choosifyReferenceIdCounters, sellerProfiles, mediaEnum, mediaVisibilityEnum, mediaTypeEnum, media, refreshTokens, authTokenTypeEnum, authTokens, authProviderEnum, userIdentities, localPasswordSetups, partnerApplications, featureEntitlementScopeEnum, featureEntitlements, notifications, plans, accountPlans, featureRequestStatusEnum, featureRequests;
 var init_schema = __esm({
   "server/db/schema.ts"() {
     roleEnum = pgEnum("user_role", [
@@ -786,6 +789,54 @@ var init_schema = __esm({
     }, (table) => ({
       userTypeIdx: index("auth_tokens_user_type_idx").on(table.userId, table.type),
       tokenHashIdx: index("auth_tokens_token_hash_idx").on(table.tokenHash)
+    }));
+    authProviderEnum = pgEnum("auth_provider", ["google", "facebook"]);
+    userIdentities = pgTable("user_identities", {
+      id: uuid("id").primaryKey().defaultRandom(),
+      userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+      provider: authProviderEnum("provider").notNull(),
+      /** Provider's stable subject id — Google OIDC `sub`, Facebook `id`. */
+      providerSubject: varchar("provider_subject", { length: 255 }).notNull(),
+      /** Provider-reported email at link time (informational; `users.email` stays canonical). */
+      providerEmail: varchar("provider_email", { length: 320 }),
+      /** Whether the provider asserted the email as verified when this identity was linked. */
+      providerEmailVerified: boolean("provider_email_verified").notNull().default(false),
+      linkedAt: timestamp("linked_at").notNull().defaultNow(),
+      lastLoginAt: timestamp("last_login_at"),
+      createdAt: timestamp("created_at").notNull().defaultNow(),
+      updatedAt: timestamp("updated_at").notNull().defaultNow()
+    }, (table) => ({
+      providerSubjectUnique: uniqueIndex("user_identities_provider_subject_unique").on(table.provider, table.providerSubject),
+      userProviderUnique: uniqueIndex("user_identities_user_provider_unique").on(table.userId, table.provider),
+      userIdx: index("user_identities_user_id_idx").on(table.userId)
+    }));
+    localPasswordSetups = pgTable("local_password_setups", {
+      id: uuid("id").primaryKey().defaultRandom(),
+      userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+      /** Fixed discriminator — guards against this row ever being consumed by another flow. */
+      purpose: varchar("purpose", { length: 40 }).notNull().default("SET_LOCAL_PASSWORD"),
+      // ── Stage 1: the emailed 6-digit code ──
+      /** sha256(pepper : userId : purpose : code) — the raw code is never stored. */
+      codeHash: varchar("code_hash", { length: 255 }).notNull(),
+      codeExpiresAt: timestamp("code_expires_at").notNull(),
+      /** Wrong-code submissions against this row; the row locks at the cap. */
+      attempts: integer("attempts").notNull().default(0),
+      /** How many codes have been issued in this setup episode (send throttle). */
+      resendCount: integer("resend_count").notNull().default(0),
+      lastSentAt: timestamp("last_sent_at").notNull().defaultNow(),
+      verifiedAt: timestamp("verified_at"),
+      // ── Stage 2: the short-lived purpose-bound authorization minted on verify ──
+      /** sha256(pepper : userId : purpose : grant) — raw grant returned once, never stored. */
+      grantHash: varchar("grant_hash", { length: 255 }),
+      grantExpiresAt: timestamp("grant_expires_at"),
+      /** Set when the password is actually written — whole row is then spent. */
+      consumedAt: timestamp("consumed_at"),
+      createdAt: timestamp("created_at").notNull().defaultNow(),
+      updatedAt: timestamp("updated_at").notNull().defaultNow()
+    }, (table) => ({
+      userIdx: index("local_password_setups_user_id_idx").on(table.userId),
+      codeHashIdx: index("local_password_setups_code_hash_idx").on(table.codeHash),
+      grantHashIdx: index("local_password_setups_grant_hash_idx").on(table.grantHash)
     }));
     partnerApplications = pgTable("partner_applications", {
       id: varchar("id", { length: 64 }).primaryKey(),
@@ -1023,8 +1074,8 @@ function requireAccessSecret() {
   return secret;
 }
 function hashRefreshToken(raw) {
-  const pepper = process.env.JWT_REFRESH_SECRET?.trim() || "";
-  return createHash("sha256").update(`${pepper}:${raw}`).digest("hex");
+  const pepper2 = process.env.JWT_REFRESH_SECRET?.trim() || "";
+  return createHash("sha256").update(`${pepper2}:${raw}`).digest("hex");
 }
 function signAccessToken(user) {
   const claims = {
@@ -1227,27 +1278,41 @@ var init_firebase = __esm({
 });
 
 // server/operations/shipmentStore.ts
-var nowIso2, state3, shipmentStore;
+var SHIPMENT_MOVEMENT_STATUSES, nowIso2, state3, shipmentStore;
 var init_shipmentStore = __esm({
   "server/operations/shipmentStore.ts"() {
+    SHIPMENT_MOVEMENT_STATUSES = /* @__PURE__ */ new Set([
+      "picked_up",
+      "in_transit",
+      "delivered",
+      "failed_delivery",
+      "returned"
+    ]);
     nowIso2 = () => (/* @__PURE__ */ new Date()).toISOString();
     state3 = [];
     shipmentStore = {
       listShipments: () => [...state3].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       getShipment: (id) => state3.find((row) => row.id === id || row.orderId === id || row.trackingNumber === id) ?? null,
       getShipmentByOrderId: (orderId) => state3.find((row) => row.orderId === orderId) ?? null,
+      /**
+       * Sprint 14: a shipment record is now created EMPTY — no courier, no tracking
+       * number, status `awaiting_dispatch` — until the seller/staff submits real
+       * Dispatch Details. Previously it was seeded with `courier: 'pathao'` and an
+       * auto `TRK-…`, which made every fresh order falsely look courier-assigned.
+       * Existing (hydrated) shipments are untouched; a legacy synthetic `TRK-…` is
+       * NOT treated as proof of courier handover anywhere.
+       */
       createFromOrder: (order) => {
         const existing = state3.find((row) => row.orderId === order.orderId);
         if (existing) return existing;
         const ts = nowIso2();
-        const trackingNumber = `TRK-${order.orderId.replace(/\W/g, "").slice(-10).toUpperCase()}`;
         const shipment = {
           id: `ship_${order.orderId}`,
           orderId: order.orderId,
           buyerId: order.buyerId,
-          status: "pending_pickup",
-          courier: "pathao",
-          trackingNumber,
+          status: "awaiting_dispatch",
+          courier: "",
+          trackingNumber: "",
           recipientName: order.shipping?.fullName || order.buyerId,
           recipientPhone: order.shipping?.phone || "",
           deliveryAddress: order.shipping?.address || "",
@@ -1260,14 +1325,25 @@ var init_shipmentStore = __esm({
             {
               id: `evt_${Date.now()}`,
               timestamp: ts,
-              status: "pending_pickup",
+              status: "awaiting_dispatch",
               location: order.shipping?.region || "Dhaka",
-              description: `Shipment created for order ${order.orderId}`
+              description: `Order ${order.orderId} received \u2014 awaiting dispatch (no courier assigned yet)`
             }
           ]
         };
         state3.unshift(shipment);
         return shipment;
+      },
+      /** Append a checkpoint event without changing status (history-preserving). */
+      appendTrackingEvent: (id, event) => {
+        const idx = state3.findIndex((row) => row.id === id || row.orderId === id);
+        if (idx < 0) return null;
+        state3[idx] = {
+          ...state3[idx],
+          trackingEvents: [{ ...event, id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}` }, ...state3[idx].trackingEvents],
+          updatedAt: nowIso2()
+        };
+        return state3[idx];
       },
       hydrate: (rows) => {
         state3.length = 0;
@@ -3049,7 +3125,7 @@ var init_catalogStore = __esm({
 });
 
 // lib/vercel-catalog/catalogEditorialContract.ts
-var nowIso6, toString, toNumber, toBoolean, toStringArray, toBrandPartners, slugify, safeUrlOrPath, normalizeCreatorCustomSocial, normalizeCreatorFeatured, normalizeCreatorInput, GUIDE_FORMATS, GUIDE_MEDIA_TYPES, GUIDE_STATUSES, LIVE_STATUSES, LIVE_PLATFORMS, KNOWN_GUIDE_SECTION_IDS, strList, clampStr, highlightTagList, highlightTagMap, safeHttpUrl, GUIDE_SOCIAL_PLATFORMS, toNum, normalizeGuideSocialLinks, normalizeGuideExternalRefs, normalizeGuideLiveOffers, normalizeWinnerSectionData, normalizeKnownSectionData, legacyBrandIdsFromSections, resolveGuideBrandIds, normalizeGuideSections, toGuideLive, mergeStrArray, normalizeGuideInput, normalizePlacementInput, normalizeVariant, normalizeAddon, normalizeStoreEntry, normalizeStoreList, GUIDE_TYPES, normalizeSizeGuide, normalizeProductDetailInput, normalizeSeoEntryInput;
+var nowIso6, toString, toNumber, toBoolean, toStringArray, toBrandPartners, slugify, safeUrlOrPath, normalizeCreatorCustomSocial, normalizeCreatorFeatured, normalizeCreatorInput, GUIDE_FORMATS, GUIDE_MEDIA_TYPES, GUIDE_STATUSES, LIVE_STATUSES, LIVE_PLATFORMS, KNOWN_GUIDE_SECTION_IDS, strList, clampStr, highlightTagList, highlightTagMap, safeHttpUrl, GUIDE_SOCIAL_PLATFORMS, toNum, normalizeGuideSocialLinks, normalizeGuideExternalRefs, normalizeGuideLiveOffers, normalizeWinnerSectionData, normalizeKnownSectionData, legacyBrandIdsFromSections, resolveGuideBrandIds, normalizeGuideSections, toGuideLive, mergeStrArray, normalizeGuideInput, normalizePlacementInput, normalizeVariant, normalizeAddon, normalizeStoreEntry, normalizeStoreList, GUIDE_TYPES, normalizeSizeGuide, variantCombinationKey, assertNoDuplicateVariantCombinations, normalizeProductDetailInput, normalizeSeoEntryInput;
 var init_catalogEditorialContract = __esm({
   "lib/vercel-catalog/catalogEditorialContract.ts"() {
     nowIso6 = () => (/* @__PURE__ */ new Date()).toISOString();
@@ -3641,9 +3717,26 @@ var init_catalogEditorialContract = __esm({
       };
       return out;
     };
+    variantCombinationKey = (options) => Object.keys(options || {}).sort().map((k) => `${k}=${options[k]}`).join("|");
+    assertNoDuplicateVariantCombinations = (variants) => {
+      const seen = /* @__PURE__ */ new Map();
+      for (const v of variants) {
+        const key = variantCombinationKey(v.options);
+        if (!key) continue;
+        const priorId = seen.get(key);
+        if (priorId && priorId !== v.id) {
+          throw new Error(
+            `Duplicate variant combination: "${v.id}" and "${priorId}" both resolve to the same option values.`
+          );
+        }
+        seen.set(key, v.id);
+      }
+    };
     normalizeProductDetailInput = (payload, productId, existing) => {
       const raw = payload ?? {};
       const relatedInfoTypeRaw = toString(raw.relatedInfoType, existing?.relatedInfoType);
+      const productVariants = Array.isArray(raw.productVariants) ? raw.productVariants.map((v, i) => normalizeVariant(v, i)).filter((v) => v !== null) : existing?.productVariants ?? [];
+      assertNoDuplicateVariantCombinations(productVariants);
       return {
         productId,
         relatedInfoType: relatedInfoTypeRaw === "price_across_stores" || relatedInfoTypeRaw === "whats_nearby" || relatedInfoTypeRaw === "before_your_visit" || relatedInfoTypeRaw === "custom" ? relatedInfoTypeRaw : existing?.relatedInfoType,
@@ -3698,7 +3791,7 @@ var init_catalogEditorialContract = __esm({
         physicalStores: Array.isArray(raw.physicalStores) ? raw.physicalStores : existing?.physicalStores ?? [],
         overviewBlocks: Array.isArray(raw.overviewBlocks) ? raw.overviewBlocks : existing?.overviewBlocks ?? [],
         optionGroups: Array.isArray(raw.optionGroups) ? raw.optionGroups : existing?.optionGroups ?? [],
-        productVariants: Array.isArray(raw.productVariants) ? raw.productVariants.map((v, i) => normalizeVariant(v, i)).filter((v) => v !== null) : existing?.productVariants ?? [],
+        productVariants,
         creatorContent: Array.isArray(raw.creatorContent) ? raw.creatorContent : existing?.creatorContent ?? [],
         seoTitle: toString(raw.seoTitle, existing?.seoTitle),
         seoDescription: toString(raw.seoDescription, existing?.seoDescription),
@@ -4533,6 +4626,9 @@ var init_operationsStore = __esm({
         if (filter?.sellerId) {
           rows = rows.filter((row) => row.sellerId === filter.sellerId);
         }
+        if (filter?.orderId) {
+          rows = rows.filter((row) => row.orderId === filter.orderId);
+        }
         if (filter?.status) {
           rows = rows.filter((row) => row.status.toLowerCase() === filter.status.toLowerCase());
         }
@@ -5172,1162 +5268,641 @@ var init_productLifecycle = __esm({
   }
 });
 
-// server/catalogContract.ts
-import { z as z2 } from "zod";
-function assertOriginalPriceNotBelowPrice(originalPrice, price, label = "Listing") {
-  const op = typeof originalPrice === "number" ? originalPrice : NaN;
-  const p = typeof price === "number" ? price : NaN;
-  if (Number.isFinite(op) && op > 0 && Number.isFinite(p) && op < p) {
-    throw new Error(
-      `${label} originalPrice (${op}) cannot be lower than price (${p}). Leave it blank for no MRP.`
-    );
-  }
+// server/catalog/inventoryStore.ts
+function inventoryRecordId(productId, variantId) {
+  return variantId ? `inv__${productId}__${variantId}` : `inv__${productId}__product`;
 }
-var nonEmpty, isoDate, nowIso8, slugify3, ensureUniqueSlug, toString2, toNumber2, toBoolean2, toStringArray2, normalizeProductVideoUrl, categorySchema, brandSchema, productSchema, dealSchema, heroBannerSchema, dealsBannerSchema, sectionSchema, homepageSchema, existingOrNow, normalizeCategoryInput, normalizeBrandInput, normalizeProductInput, normalizeDealInput, normalizeHeroBannerInput, normalizeDealsBannerInput, normalizeSectionInput, normalizeHomepageInput, brandPostKindSchema, brandPostStatusSchema, brandPostSchema, normalizeBrandPostInput;
-var init_catalogContract = __esm({
-  "server/catalogContract.ts"() {
-    init_productLifecycle();
-    nonEmpty = z2.string().trim().min(1);
-    isoDate = z2.string().datetime();
-    nowIso8 = () => (/* @__PURE__ */ new Date()).toISOString();
-    slugify3 = (value) => value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-");
-    ensureUniqueSlug = (base, takenSlugs) => {
-      const normalized = slugify3(base) || "item";
-      const taken = new Set(takenSlugs);
-      if (!taken.has(normalized)) return normalized;
-      for (let attempt = 0; attempt < 25; attempt += 1) {
-        const suffix = attempt === 0 ? Date.now().toString(36).slice(-5) : Math.random().toString(36).slice(2, 7);
-        const candidate = `${normalized}-${suffix}`;
-        if (!taken.has(candidate)) return candidate;
-      }
-      return `${normalized}-${Date.now().toString(36)}`;
-    };
-    toString2 = (value, fallback) => typeof value === "string" ? value : fallback ?? "";
-    toNumber2 = (value, fallback = 0) => {
-      if (typeof value === "number" && Number.isFinite(value)) return value;
-      if (typeof value === "string") {
-        const normalized = Number(value.replace(/[^0-9.-]/g, ""));
-        if (Number.isFinite(normalized)) return normalized;
-      }
-      return fallback;
-    };
-    toBoolean2 = (value, fallback = false) => typeof value === "boolean" ? value : fallback;
-    toStringArray2 = (value) => {
-      if (!Array.isArray(value)) return [];
-      return value.filter((item) => typeof item === "string" && item.length > 0);
-    };
-    normalizeProductVideoUrl = (raw, existing) => {
-      if (raw === void 0 || raw === null) return existing || void 0;
-      const s = typeof raw === "string" ? raw.trim() : "";
-      if (!s) return void 0;
-      if (s.startsWith("/media/")) return s;
-      let url;
-      try {
-        url = new URL(s);
-      } catch {
-        throw new Error("Product video must be a valid absolute URL or an uploaded /media path.");
-      }
-      if (url.protocol !== "https:") {
-        throw new Error("Product video URL must use https.");
-      }
-      const host = url.hostname.replace(/^www\./, "").toLowerCase();
-      const isYouTube = host === "youtube.com" || host === "m.youtube.com" || host === "youtu.be" || host === "youtube-nocookie.com";
-      const isDirectFile = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(url.pathname);
-      if (!isYouTube && !isDirectFile) {
-        throw new Error("Unsupported product video URL. Use a YouTube link or a direct .mp4/.webm/.mov URL.");
-      }
-      return url.toString();
-    };
-    categorySchema = z2.object({
-      id: nonEmpty,
-      slug: nonEmpty,
-      name: nonEmpty,
-      description: z2.string(),
-      icon: z2.string(),
-      parentId: z2.string().nullable(),
-      enabled: z2.boolean(),
-      displayOrder: z2.number().int(),
-      createdAt: isoDate,
-      updatedAt: isoDate
-    });
-    brandSchema = z2.object({
-      id: nonEmpty,
-      slug: nonEmpty,
-      name: nonEmpty,
-      category: z2.string(),
-      description: z2.string(),
-      logo: z2.string(),
-      coverImage: z2.string().optional(),
-      tagline: z2.string().optional(),
-      website: z2.string().optional(),
-      socialLinks: z2.object({
-        facebook: z2.string().optional(),
-        instagram: z2.string().optional(),
-        youtube: z2.string().optional(),
-        tiktok: z2.string().optional(),
-        linkedin: z2.string().optional(),
-        custom: z2.array(z2.object({ label: z2.string(), url: z2.string() })).optional()
-      }).optional(),
-      story: z2.string().optional(),
-      storyBlocks: z2.array(
-        z2.object({
-          id: z2.string(),
-          heading: z2.string(),
-          body: z2.string(),
-          kind: z2.enum(["text", "link", "content"]).optional(),
-          url: z2.string().optional(),
-          thumbnail: z2.string().optional(),
-          contentId: z2.string().optional(),
-          mediaKind: z2.enum([
-            "youtube",
-            "youtube_shorts",
-            "instagram_reel",
-            "instagram_post",
-            "tiktok",
-            "facebook",
-            "other"
-          ]).optional()
-        })
-      ).optional(),
-      pinnedStoryContentIds: z2.array(z2.string()).optional(),
-      /** HTTPS URL for brand story / creator-review embed on storefront */
-      storyVideoUrl: z2.string().optional(),
-      credentials: z2.string().optional(),
-      overview: z2.object({
-        address: z2.string().optional(),
-        mapLink: z2.string().optional(),
-        email: z2.string().optional(),
-        phone: z2.string().optional(),
-        priceRange: z2.string().optional(),
-        ageFocus: z2.string().optional(),
-        audience: z2.string().optional(),
-        services: z2.array(z2.string()).optional(),
-        tags: z2.array(z2.string()).optional()
-      }).optional(),
-      faq: z2.array(z2.object({ q: z2.string(), a: z2.string() })).optional(),
-      stores: z2.object({
-        authorized: z2.array(z2.object({ name: z2.string(), sub: z2.string().optional() })).optional(),
-        distributors: z2.array(z2.object({ name: z2.string(), sub: z2.string().optional() })).optional(),
-        serviceCenters: z2.array(z2.object({ name: z2.string(), sub: z2.string().optional(), hours: z2.string().optional() })).optional()
-      }).optional(),
-      promoCodes: z2.array(
-        z2.object({
-          id: nonEmpty,
-          code: z2.string(),
-          discountType: z2.enum(["Percentage", "Flat"]),
-          discountValue: z2.number(),
-          startDate: z2.string(),
-          endDate: z2.string(),
-          usageLimit: z2.number(),
-          enabled: z2.boolean()
-        })
-      ).optional(),
-      pinnedProductIds: z2.array(z2.string()).optional(),
-      pinnedShowcaseProductIds: z2.array(z2.string()).optional(),
-      verifiedStatus: z2.boolean(),
-      claimStatus: z2.enum(["community", "pending", "verified"]),
-      followers: z2.number().nonnegative(),
-      ratings: z2.number().min(0).max(5),
-      qualityScore: z2.number().min(0).max(5).optional(),
-      valueScore: z2.number().min(0).max(5).optional(),
-      supportScore: z2.number().min(0).max(5).optional(),
-      featuredFlag: z2.boolean(),
-      sponsoredFlag: z2.boolean(),
-      /** Owning seller user id when brand is seller-managed; omitted for platform/legacy rows. */
-      sellerId: z2.string().optional(),
-      /** Public storefront visibility. Seller drafts default false. */
-      marketplaceAccess: z2.boolean().optional(),
-      /** ES-005 Marketplace Access lifecycle state; marketplaceAccess is kept in sync with it. */
-      marketplaceStatus: z2.enum(["not_granted", "granted", "restricted", "suspended", "restored", "revoked"]).optional(),
-      createdAt: isoDate,
-      updatedAt: isoDate
-    });
-    productSchema = z2.object({
-      id: nonEmpty,
-      slug: nonEmpty,
-      title: nonEmpty,
-      description: z2.string(),
-      brandId: nonEmpty,
-      brandName: z2.string(),
-      categoryId: nonEmpty,
-      categoryName: z2.string(),
-      image: nonEmpty,
-      gallery: z2.array(z2.string()),
-      videoUrl: z2.string().optional(),
-      modeType: z2.literal("retail"),
-      productType: z2.enum(["physical", "service"]).optional(),
-      serviceCategory: z2.enum([
-        "hotels",
-        "restaurants",
-        "travel",
-        "doctors",
-        "education",
-        "beauty",
-        "real_estate",
-        "transport",
-        "events",
-        "tickets",
-        "home_services",
-        "gov_services",
-        "recruitment",
-        "b2b",
-        "rental",
-        "donation"
-      ]).optional(),
-      relatedInfoType: z2.enum(["price_across_stores", "whats_nearby", "before_your_visit"]).optional(),
-      priceAcrossStoresEnabled: z2.boolean().optional(),
-      partialPaymentEnabled: z2.boolean().optional(),
-      depositPercent: z2.number().optional(),
-      requiredBookingFieldKeys: z2.array(z2.string()).optional(),
-      requiresApproval: z2.boolean().optional(),
-      price: z2.number().nonnegative(),
-      originalPrice: z2.number().nonnegative().optional(),
-      stock: z2.number().int(),
-      /** Optional seller-supplied product code / SKU / article number. Free-form. */
-      sku: z2.string().optional(),
-      /** `live` = legacy Active; also accepts ES-005 states. */
-      status: z2.enum(["draft", "live", "active", "out_of_stock", "suspended", "archived"]),
-      warrantyMonths: z2.number().int().nonnegative().optional(),
-      warrantyType: z2.string().optional(),
-      warrantyProvider: z2.string().optional(),
-      warrantyTerms: z2.string().optional(),
-      tags: z2.array(z2.string()),
-      isDeal: z2.boolean(),
-      dealType: z2.enum(["flash", "seasonal", "brand", "promo", "clearance"]).optional(),
-      discountPercent: z2.number().nonnegative().optional(),
-      promoCode: z2.string().optional(),
-      dealValidUntil: z2.string().optional(),
-      featuredFlag: z2.boolean(),
-      isNewArrival: z2.boolean(),
-      isBestseller: z2.boolean(),
-      /** Firebase uid of owning seller when listing is seller-managed; omitted for legacy/admin rows. */
-      sellerId: z2.string().optional(),
-      attributes: z2.record(z2.string(), z2.unknown()).optional(),
-      createdAt: isoDate,
-      updatedAt: isoDate
-    });
-    dealSchema = z2.object({
-      id: nonEmpty,
-      slug: nonEmpty,
-      name: nonEmpty,
-      seller: z2.string(),
-      category: z2.string(),
-      status: z2.enum(["live", "pending", "expiring", "expired", "rejected", "draft"]),
-      type: z2.literal("retail"),
-      discountType: z2.enum(["percentage", "flat"]),
-      discountValue: z2.number().nonnegative(),
-      promoCode: z2.string().optional(),
-      productId: z2.string().optional(),
-      brandId: z2.string().optional(),
-      clicks: z2.number().nonnegative(),
-      validFrom: isoDate,
-      validUntil: isoDate,
-      createdAt: isoDate,
-      updatedAt: isoDate
-    });
-    heroBannerSchema = z2.object({
-      id: nonEmpty,
-      headline: z2.string(),
-      subtitle: z2.string(),
-      ctaText: z2.string(),
-      ctaUrl: z2.string(),
-      backgroundImage: z2.string(),
-      isActive: z2.boolean(),
-      order: z2.number().int()
-    });
-    dealsBannerSchema = z2.object({
-      id: nonEmpty,
-      image: z2.string(),
-      destinationType: z2.enum(["product", "brand", "custom-url"]),
-      destinationRef: z2.string(),
-      order: z2.number().int(),
-      isActive: z2.boolean(),
-      brandName: z2.string().optional(),
-      brandLogoUrl: z2.string().optional(),
-      createdAt: isoDate,
-      updatedAt: isoDate
-    });
-    sectionSchema = z2.object({
-      id: nonEmpty,
-      label: z2.string(),
-      isVisible: z2.boolean(),
-      order: z2.number().int(),
-      itemIds: z2.array(z2.string())
-    });
-    homepageSchema = z2.object({
-      id: z2.literal("default"),
-      heroBanners: z2.array(heroBannerSchema),
-      dealsBanners: z2.array(dealsBannerSchema).default([]),
-      sections: z2.array(sectionSchema),
-      featuredProductIds: z2.array(z2.string()),
-      featuredBrandIds: z2.array(z2.string()),
-      featuredDealIds: z2.array(z2.string()),
-      featuredCreatorIds: z2.array(z2.string()),
-      featuredGuideIds: z2.array(z2.string()),
-      updatedAt: isoDate
-    });
-    existingOrNow = (existingDate) => existingDate ? existingDate : nowIso8();
-    normalizeCategoryInput = (payload, existing) => {
-      const raw = payload ?? {};
-      const name = toString2(raw.name, existing?.name ?? "Untitled Category");
-      const id = toString2(raw.id, existing?.id ?? `cat-${Date.now()}`);
-      const normalized = {
-        id,
-        slug: toString2(raw.slug, existing?.slug ?? slugify3(name || id)),
-        name,
-        description: toString2(raw.description, existing?.description ?? ""),
-        icon: toString2(raw.icon, existing?.icon ?? "Folder"),
-        parentId: raw.parentId === null ? null : toString2(raw.parentId, existing?.parentId ?? "") || null,
-        enabled: toBoolean2(raw.enabled, existing?.enabled ?? true),
-        displayOrder: Math.floor(toNumber2(raw.displayOrder, existing?.displayOrder ?? 0)),
-        createdAt: existingOrNow(existing?.createdAt),
-        updatedAt: nowIso8()
-      };
-      return categorySchema.parse(normalized);
-    };
-    normalizeBrandInput = (payload, existing, context) => {
-      const raw = payload ?? {};
-      const name = toString2(raw.name, existing?.name ?? "Untitled Brand");
-      const id = toString2(raw.id, existing?.id ?? `brand-${Date.now()}`);
-      const claimStatusRaw = toString2(raw.claimStatus, existing?.claimStatus ?? "community");
-      const requestedSlug = toString2(raw.slug, existing?.slug ?? slugify3(name || id));
-      const takenSlugs = (context?.existingBrandSlugs ?? []).filter(
-        (slug2) => !existing || slug2 !== existing.slug
-      );
-      const slug = ensureUniqueSlug(requestedSlug, takenSlugs);
-      const socialRaw = raw.socialLinks && typeof raw.socialLinks === "object" ? raw.socialLinks : null;
-      const overviewRaw = raw.overview && typeof raw.overview === "object" ? raw.overview : null;
-      const normalized = {
-        id,
-        slug,
-        name,
-        category: toString2(raw.category, existing?.category ?? "General"),
-        description: toString2(raw.description, existing?.description ?? ""),
-        logo: toString2(raw.logo, existing?.logo ?? ""),
-        coverImage: toString2(raw.coverImage, existing?.coverImage ?? "") || void 0,
-        tagline: toString2(raw.tagline, existing?.tagline ?? "") || void 0,
-        website: toString2(raw.website, existing?.website ?? "") || void 0,
-        socialLinks: socialRaw || existing?.socialLinks ? {
-          facebook: toString2(socialRaw?.facebook, existing?.socialLinks?.facebook ?? "") || void 0,
-          instagram: toString2(socialRaw?.instagram, existing?.socialLinks?.instagram ?? "") || void 0,
-          youtube: toString2(socialRaw?.youtube, existing?.socialLinks?.youtube ?? "") || void 0,
-          tiktok: toString2(socialRaw?.tiktok, existing?.socialLinks?.tiktok ?? "") || void 0,
-          linkedin: toString2(socialRaw?.linkedin, existing?.socialLinks?.linkedin ?? "") || void 0,
-          custom: (() => {
-            const src = Array.isArray(socialRaw?.custom) ? socialRaw.custom : socialRaw && "custom" in socialRaw ? [] : existing?.socialLinks?.custom;
-            if (!Array.isArray(src)) return void 0;
-            const rows = src.filter((r) => !!r && typeof r === "object").map((r) => ({
-              label: toString2(r.label).trim().slice(0, 40),
-              url: toString2(r.url).trim().slice(0, 500)
-            })).filter((r) => r.label && r.url).slice(0, 10);
-            return rows.length ? rows : void 0;
-          })()
-        } : void 0,
-        story: toString2(raw.story, existing?.story ?? "") || void 0,
-        storyBlocks: (() => {
-          if (!Array.isArray(raw.storyBlocks)) return existing?.storyBlocks;
-          return raw.storyBlocks.filter((b) => !!b && typeof b === "object").map((b, i) => {
-            const kindRaw = toString2(b.kind);
-            const kind = kindRaw === "link" || kindRaw === "content" ? kindRaw : "text";
-            const url = toString2(b.url).trim().slice(0, 500);
-            const thumbnail = toString2(b.thumbnail).trim().slice(0, 500);
-            const contentId = toString2(b.contentId).trim().slice(0, 80);
-            const mkRaw = toString2(b.mediaKind);
-            const MK = /* @__PURE__ */ new Set([
-              "youtube",
-              "youtube_shorts",
-              "instagram_reel",
-              "instagram_post",
-              "tiktok",
-              "facebook",
-              "other"
-            ]);
-            return {
-              id: toString2(b.id) || `sb-${i}`,
-              heading: toString2(b.heading).trim().slice(0, 120),
-              body: toString2(b.body).trim().slice(0, 4e3),
-              kind,
-              ...kind === "link" && url ? { url } : {},
-              ...kind === "link" && thumbnail ? { thumbnail } : {},
-              ...kind === "content" && contentId ? { contentId } : {},
-              ...MK.has(mkRaw) ? { mediaKind: mkRaw } : {}
-            };
-          }).filter(
-            (b) => b.kind === "text" && (b.heading || b.body) || b.kind === "link" && b.url || b.kind === "content" && b.contentId
-          ).slice(0, 16);
-        })(),
-        pinnedStoryContentIds: (() => {
-          const hasBlocks = Array.isArray(raw.storyBlocks);
-          const hasExplicit = Array.isArray(raw.pinnedStoryContentIds);
-          if (!hasBlocks && !hasExplicit) return existing?.pinnedStoryContentIds;
-          const explicit = hasExplicit ? raw.pinnedStoryContentIds.map((v) => toString2(v).trim()).filter(Boolean) : [];
-          const fromBlocks = hasBlocks ? raw.storyBlocks.filter((b) => !!b && typeof b === "object").filter((b) => toString2(b.kind) === "content").map((b) => toString2(b.contentId).trim()).filter(Boolean) : [];
-          return Array.from(/* @__PURE__ */ new Set([...explicit, ...fromBlocks])).slice(0, 16);
-        })(),
-        storyVideoUrl: toString2(raw.storyVideoUrl, existing?.storyVideoUrl ?? "") || void 0,
-        credentials: toString2(raw.credentials, existing?.credentials ?? "") || void 0,
-        overview: overviewRaw || existing?.overview ? {
-          address: toString2(overviewRaw?.address, existing?.overview?.address ?? "") || void 0,
-          mapLink: toString2(overviewRaw?.mapLink, existing?.overview?.mapLink ?? "") || void 0,
-          email: toString2(overviewRaw?.email, existing?.overview?.email ?? "") || void 0,
-          phone: toString2(overviewRaw?.phone, existing?.overview?.phone ?? "") || void 0,
-          priceRange: toString2(overviewRaw?.priceRange, existing?.overview?.priceRange ?? "") || void 0,
-          ageFocus: toString2(overviewRaw?.ageFocus, existing?.overview?.ageFocus ?? "") || void 0,
-          audience: toString2(overviewRaw?.audience, existing?.overview?.audience ?? "") || void 0,
-          services: toStringArray2(overviewRaw?.services).length ? toStringArray2(overviewRaw?.services) : existing?.overview?.services,
-          tags: toStringArray2(overviewRaw?.tags).length ? toStringArray2(overviewRaw?.tags) : existing?.overview?.tags
-        } : void 0,
-        faq: Array.isArray(raw.faq) ? raw.faq : existing?.faq,
-        stores: raw.stores && typeof raw.stores === "object" ? raw.stores : existing?.stores,
-        promoCodes: Array.isArray(raw.promoCodes) ? raw.promoCodes : existing?.promoCodes,
-        pinnedProductIds: Array.isArray(raw.pinnedProductIds) ? Array.from(
-          new Set(
-            raw.pinnedProductIds.map((v) => toString2(v).trim()).filter(Boolean)
-          )
-        ).slice(0, 12) : existing?.pinnedProductIds,
-        pinnedShowcaseProductIds: Array.isArray(raw.pinnedShowcaseProductIds) ? Array.from(
-          new Set(
-            raw.pinnedShowcaseProductIds.map((v) => toString2(v).trim()).filter(Boolean)
-          )
-        ).slice(0, 24) : existing?.pinnedShowcaseProductIds,
-        verifiedStatus: toBoolean2(raw.verifiedStatus, existing?.verifiedStatus ?? false),
-        claimStatus: claimStatusRaw === "verified" || claimStatusRaw === "pending" ? claimStatusRaw : "community",
-        followers: toNumber2(raw.followers, existing?.followers ?? 0),
-        ratings: Math.max(0, Math.min(5, toNumber2(raw.ratings, existing?.ratings ?? 0))),
-        qualityScore: raw.qualityScore !== void 0 ? Math.max(0, Math.min(5, toNumber2(raw.qualityScore, existing?.qualityScore ?? 0))) : existing?.qualityScore,
-        valueScore: raw.valueScore !== void 0 ? Math.max(0, Math.min(5, toNumber2(raw.valueScore, existing?.valueScore ?? 0))) : existing?.valueScore,
-        supportScore: raw.supportScore !== void 0 ? Math.max(0, Math.min(5, toNumber2(raw.supportScore, existing?.supportScore ?? 0))) : existing?.supportScore,
-        featuredFlag: toBoolean2(raw.featuredFlag, existing?.featuredFlag ?? false),
-        sponsoredFlag: toBoolean2(raw.sponsoredFlag, existing?.sponsoredFlag ?? false),
-        sellerId: toString2(raw.sellerId, existing?.sellerId ?? "") || void 0,
-        marketplaceAccess: typeof raw.marketplaceAccess === "boolean" ? raw.marketplaceAccess : typeof existing?.marketplaceAccess === "boolean" ? existing.marketplaceAccess : void 0,
-        marketplaceStatus: typeof raw.marketplaceStatus === "string" ? raw.marketplaceStatus : existing?.marketplaceStatus,
-        createdAt: existingOrNow(existing?.createdAt),
-        updatedAt: nowIso8()
-      };
-      return brandSchema.parse(normalized);
-    };
-    normalizeProductInput = (payload, existing, context) => {
-      const raw = payload ?? {};
-      const title = toString2(raw.title, toString2(raw.name, existing?.title ?? "Untitled Product"));
-      const id = toString2(raw.id, existing?.id ?? `prod-${Date.now()}`);
-      const status = parseProductStatusInput(raw.status, existing?.status);
-      const brandId = toString2(raw.brandId, existing?.brandId ?? "");
-      const categoryId = toString2(raw.categoryId, existing?.categoryId ?? "");
-      if (!brandId) {
-        throw new Error("brandId is required and must reference an existing brand.");
-      }
-      if (!categoryId) {
-        throw new Error("categoryId is required and must reference an existing category.");
-      }
-      const brands = context?.brands ?? [];
-      const categories = context?.categories ?? [];
-      const matchedBrand = brands.find((brand) => brand.id === brandId);
-      const matchedCategory = categories.find((category) => category.id === categoryId);
-      if (context && !matchedBrand) {
-        throw new Error(`brandId "${brandId}" does not match an existing brand.`);
-      }
-      if (context && !matchedCategory) {
-        throw new Error(`categoryId "${categoryId}" does not match an existing category.`);
-      }
-      const brandName = matchedBrand ? matchedBrand.name : toString2(raw.brandName, toString2(raw.brand, existing?.brandName ?? ""));
-      const categoryName = matchedCategory ? matchedCategory.name : toString2(raw.categoryName, toString2(raw.category, existing?.categoryName ?? ""));
-      const hasVariants = Array.isArray(raw.productVariants) && raw.productVariants.length > 0 || Array.isArray(raw.variants) && raw.variants.length > 0 || raw.hasVariants === true;
-      const stockExplicitlyProvided = raw.stock !== void 0 && raw.stock !== null && String(raw.stock).trim() !== "";
-      let stock;
-      if (stockExplicitlyProvided) {
-        stock = Math.floor(toNumber2(raw.stock, 0));
-      } else if (existing?.stock !== void 0) {
-        stock = existing.stock;
-      } else if (!hasVariants) {
-        throw new Error(
-          "STOCK_REQUIRED: Provide an explicit stock value when the product has no variants. Stock was not defaulted to 0."
-        );
-      } else {
-        stock = 0;
-      }
-      const requestedSlug = toString2(raw.slug, existing?.slug ?? slugify3(title || id));
-      const takenSlugs = (context?.existingProductSlugs ?? []).filter(
-        (slug2) => !existing || slug2 !== existing.slug
-      );
-      const slug = ensureUniqueSlug(requestedSlug, takenSlugs);
-      const normalized = {
-        id,
-        slug,
-        title,
-        description: toString2(raw.description, existing?.description ?? ""),
-        brandId,
-        brandName,
-        categoryId,
-        categoryName,
-        image: toString2(raw.image, existing?.image ?? ""),
-        gallery: toStringArray2(raw.gallery).length > 0 ? toStringArray2(raw.gallery) : existing?.gallery ?? [],
-        videoUrl: normalizeProductVideoUrl(raw.videoUrl, existing?.videoUrl),
-        modeType: "retail",
-        productType: (() => {
-          const v = toString2(raw.productType, existing?.productType);
-          return v === "physical" || v === "service" ? v : void 0;
-        })(),
-        serviceCategory: (() => {
-          const allowed = /* @__PURE__ */ new Set([
-            "hotels",
-            "restaurants",
-            "travel",
-            "doctors",
-            "education",
-            "beauty",
-            "real_estate",
-            "transport",
-            "events",
-            "tickets",
-            "home_services",
-            "gov_services",
-            "recruitment",
-            "b2b",
-            "rental",
-            "donation"
-          ]);
-          const v = toString2(raw.serviceCategory, existing?.serviceCategory);
-          return allowed.has(v) ? v : void 0;
-        })(),
-        relatedInfoType: (() => {
-          const v = toString2(raw.relatedInfoType, existing?.relatedInfoType);
-          return v === "price_across_stores" || v === "whats_nearby" || v === "before_your_visit" ? v : void 0;
-        })(),
-        priceAcrossStoresEnabled: raw.priceAcrossStoresEnabled !== void 0 ? toBoolean2(raw.priceAcrossStoresEnabled) : existing?.priceAcrossStoresEnabled,
-        partialPaymentEnabled: raw.partialPaymentEnabled !== void 0 ? toBoolean2(raw.partialPaymentEnabled) : existing?.partialPaymentEnabled,
-        depositPercent: raw.depositPercent !== void 0 ? toNumber2(raw.depositPercent) : existing?.depositPercent,
-        requiredBookingFieldKeys: toStringArray2(raw.requiredBookingFieldKeys).length ? toStringArray2(raw.requiredBookingFieldKeys) : existing?.requiredBookingFieldKeys,
-        requiresApproval: raw.requiresApproval !== void 0 ? toBoolean2(raw.requiresApproval) : existing?.requiresApproval,
-        price: toNumber2(raw.price, existing?.price ?? 0),
-        originalPrice: raw.originalPrice !== void 0 ? toNumber2(raw.originalPrice) : existing?.originalPrice,
-        stock,
-        status,
-        sku: toString2(raw.sku, existing?.sku) || void 0,
-        warrantyMonths: raw.warrantyMonths !== void 0 ? toNumber2(raw.warrantyMonths) : existing?.warrantyMonths,
-        warrantyType: toString2(raw.warrantyType, existing?.warrantyType) || void 0,
-        warrantyProvider: toString2(raw.warrantyProvider, existing?.warrantyProvider) || void 0,
-        warrantyTerms: toString2(raw.warrantyTerms, existing?.warrantyTerms) || void 0,
-        tags: toStringArray2(raw.tags).length > 0 ? toStringArray2(raw.tags) : existing?.tags ?? [],
-        isDeal: toBoolean2(raw.isDeal, existing?.isDeal ?? false),
-        dealType: (() => {
-          const v = toString2(raw.dealType, existing?.dealType);
-          return v === "flash" || v === "seasonal" || v === "brand" || v === "promo" || v === "clearance" ? v : void 0;
-        })(),
-        discountPercent: raw.discountPercent !== void 0 ? toNumber2(raw.discountPercent) : existing?.discountPercent,
-        promoCode: toString2(raw.promoCode, existing?.promoCode),
-        dealValidUntil: toString2(raw.dealValidUntil, existing?.dealValidUntil),
-        featuredFlag: toBoolean2(raw.featuredFlag, existing?.featuredFlag ?? false),
-        isNewArrival: toBoolean2(raw.isNewArrival, existing?.isNewArrival ?? false),
-        isBestseller: toBoolean2(raw.isBestseller, existing?.isBestseller ?? false),
-        sellerId: toString2(raw.sellerId, existing?.sellerId) || void 0,
-        attributes: (() => {
-          if (raw.attributes && typeof raw.attributes === "object" && !Array.isArray(raw.attributes)) {
-            return raw.attributes;
-          }
-          return existing?.attributes;
-        })(),
-        createdAt: existingOrNow(existing?.createdAt),
-        updatedAt: nowIso8()
-      };
-      assertOriginalPriceNotBelowPrice(normalized.originalPrice, normalized.price, "Product");
-      return productSchema.parse(normalized);
-    };
-    normalizeDealInput = (payload, existing) => {
-      const raw = payload ?? {};
-      const name = toString2(raw.name, existing?.name ?? "Untitled Deal");
-      const id = toString2(raw.id, existing?.id ?? `deal-${Date.now()}`);
-      const statusRaw = toString2(raw.status, existing?.status ?? "draft").toLowerCase();
-      const discountTypeRaw = toString2(raw.discountType, existing?.discountType ?? "percentage").toLowerCase();
-      const validUntil = toString2(raw.validUntil, toString2(raw.expiry, existing?.validUntil ?? nowIso8()));
-      const normalized = {
-        id,
-        slug: toString2(raw.slug, existing?.slug ?? slugify3(name || id)),
-        name,
-        seller: toString2(raw.seller, existing?.seller ?? "Platform"),
-        category: toString2(raw.category, existing?.category ?? "General"),
-        status: statusRaw === "live" || statusRaw === "pending" || statusRaw === "expiring" || statusRaw === "expired" || statusRaw === "rejected" ? statusRaw : "draft",
-        type: "retail",
-        discountType: discountTypeRaw === "flat" ? "flat" : "percentage",
-        discountValue: toNumber2(raw.discountValue, toNumber2(raw.discount, existing?.discountValue ?? 0)),
-        promoCode: toString2(raw.promoCode, existing?.promoCode),
-        productId: toString2(raw.productId, existing?.productId),
-        brandId: toString2(raw.brandId, existing?.brandId),
-        clicks: toNumber2(raw.clicks, existing?.clicks ?? 0),
-        validFrom: toString2(raw.validFrom, existing?.validFrom ?? nowIso8()),
-        validUntil,
-        createdAt: existingOrNow(existing?.createdAt),
-        updatedAt: nowIso8()
-      };
-      return dealSchema.parse(normalized);
-    };
-    normalizeHeroBannerInput = (payload, idx) => {
-      const raw = payload ?? {};
-      const id = toString2(raw.id, `hero-${idx + 1}`);
-      return heroBannerSchema.parse({
-        id,
-        headline: toString2(raw.headline),
-        subtitle: toString2(raw.subtitle),
-        ctaText: toString2(raw.ctaText),
-        ctaUrl: toString2(raw.ctaUrl, "/products"),
-        backgroundImage: toString2(raw.backgroundImage),
-        isActive: toBoolean2(raw.isActive, true),
-        order: Math.floor(toNumber2(raw.order, idx))
-      });
-    };
-    normalizeDealsBannerInput = (payload, idx, existing) => {
-      const raw = payload ?? {};
-      const id = toString2(raw.id, existing?.id ?? `deals-banner-${Date.now()}-${idx}`);
-      const typeRaw = toString2(raw.destinationType, existing?.destinationType ?? "custom-url").toLowerCase();
-      const destinationType = typeRaw === "product" || typeRaw === "brand" || typeRaw === "custom-url" ? typeRaw : "custom-url";
-      return dealsBannerSchema.parse({
-        id,
-        image: toString2(raw.image, existing?.image ?? ""),
-        destinationType,
-        destinationRef: toString2(raw.destinationRef, existing?.destinationRef ?? ""),
-        order: Math.floor(toNumber2(raw.order, existing?.order ?? idx)),
-        isActive: toBoolean2(raw.isActive, existing?.isActive ?? true),
-        brandName: toString2(raw.brandName, existing?.brandName ?? "") || void 0,
-        brandLogoUrl: toString2(raw.brandLogoUrl, existing?.brandLogoUrl ?? "") || void 0,
-        createdAt: existingOrNow(existing?.createdAt),
-        updatedAt: nowIso8()
-      });
-    };
-    normalizeSectionInput = (payload, idx) => {
-      const raw = payload ?? {};
-      const id = toString2(raw.id, `section-${idx + 1}`);
-      return sectionSchema.parse({
-        id,
-        label: toString2(raw.label, id),
-        isVisible: toBoolean2(raw.isVisible, true),
-        order: Math.floor(toNumber2(raw.order, idx)),
-        itemIds: toStringArray2(raw.itemIds)
-      });
-    };
-    normalizeHomepageInput = (payload, existing) => {
-      const raw = payload ?? {};
-      const heroBannersInput = Array.isArray(raw.heroBanners) ? raw.heroBanners : existing?.heroBanners ?? [];
-      const dealsBannersInput = Array.isArray(raw.dealsBanners) ? raw.dealsBanners : existing?.dealsBanners ?? [];
-      const sectionsInput = Array.isArray(raw.sections) ? raw.sections : existing?.sections ?? [];
-      const normalized = {
-        id: "default",
-        heroBanners: heroBannersInput.map(normalizeHeroBannerInput),
-        dealsBanners: dealsBannersInput.map((item, idx) => {
-          const existingBanner = existing?.dealsBanners?.find(
-            (b) => b.id === toString2(item?.id)
-          );
-          return normalizeDealsBannerInput(item, idx, existingBanner);
-        }),
-        sections: sectionsInput.map(normalizeSectionInput),
-        featuredProductIds: toStringArray2(raw.featuredProductIds).length > 0 ? toStringArray2(raw.featuredProductIds) : existing?.featuredProductIds ?? [],
-        featuredBrandIds: toStringArray2(raw.featuredBrandIds).length > 0 ? toStringArray2(raw.featuredBrandIds) : existing?.featuredBrandIds ?? [],
-        featuredDealIds: toStringArray2(raw.featuredDealIds).length > 0 ? toStringArray2(raw.featuredDealIds) : existing?.featuredDealIds ?? [],
-        featuredCreatorIds: toStringArray2(raw.featuredCreatorIds).length > 0 ? toStringArray2(raw.featuredCreatorIds) : existing?.featuredCreatorIds ?? [],
-        featuredGuideIds: toStringArray2(raw.featuredGuideIds).length > 0 ? toStringArray2(raw.featuredGuideIds) : existing?.featuredGuideIds ?? [],
-        updatedAt: nowIso8()
-      };
-      return homepageSchema.parse(normalized);
-    };
-    brandPostKindSchema = z2.enum(["event", "launch", "festival", "campaign", "store_moment"]);
-    brandPostStatusSchema = z2.enum(["scheduled", "live", "expired"]);
-    brandPostSchema = z2.object({
-      id: nonEmpty,
-      slug: nonEmpty,
-      brandId: nonEmpty,
-      brandName: nonEmpty,
-      brandLogo: z2.string().optional(),
-      kind: brandPostKindSchema,
-      title: nonEmpty,
-      excerpt: z2.string(),
-      heroImage: nonEmpty,
-      bannerImages: z2.array(z2.string()).optional(),
-      body: z2.array(z2.string()),
-      startDate: z2.string().optional(),
-      endDate: z2.string().optional(),
-      location: z2.string().optional(),
-      ctaLabel: z2.string().optional(),
-      ctaUrl: z2.string().optional(),
-      linkedProductIds: z2.array(z2.string()).optional(),
-      sponsored: z2.boolean(),
-      status: brandPostStatusSchema,
-      publishedAt: z2.string(),
-      createdAt: isoDate,
-      updatedAt: isoDate
-    });
-    normalizeBrandPostInput = (payload, existing) => {
-      const raw = payload ?? {};
-      const title = toString2(raw.title, existing?.title ?? "Untitled Post");
-      const id = toString2(raw.id, existing?.id ?? `bp-${Date.now()}`);
-      const kindRaw = toString2(raw.kind, existing?.kind ?? "campaign");
-      const statusRaw = toString2(raw.status, existing?.status ?? "scheduled");
-      const kindParsed = brandPostKindSchema.safeParse(kindRaw);
-      const statusParsed = brandPostStatusSchema.safeParse(statusRaw);
-      const normalized = {
-        id,
-        slug: toString2(raw.slug, existing?.slug ?? slugify3(title || id)),
-        brandId: toString2(raw.brandId, existing?.brandId ?? ""),
-        brandName: toString2(raw.brandName, existing?.brandName ?? ""),
-        brandLogo: toString2(raw.brandLogo, existing?.brandLogo ?? "") || void 0,
-        kind: kindParsed.success ? kindParsed.data : "campaign",
-        title,
-        excerpt: toString2(raw.excerpt, existing?.excerpt ?? ""),
-        heroImage: toString2(raw.heroImage, existing?.heroImage ?? ""),
-        bannerImages: toStringArray2(raw.bannerImages).length > 0 ? toStringArray2(raw.bannerImages) : existing?.bannerImages,
-        body: toStringArray2(raw.body).length > 0 ? toStringArray2(raw.body) : existing?.body ?? [],
-        startDate: toString2(raw.startDate, existing?.startDate ?? "") || void 0,
-        endDate: toString2(raw.endDate, existing?.endDate ?? "") || void 0,
-        location: toString2(raw.location, existing?.location ?? "") || void 0,
-        ctaLabel: toString2(raw.ctaLabel, existing?.ctaLabel ?? "") || void 0,
-        ctaUrl: toString2(raw.ctaUrl, existing?.ctaUrl ?? "") || void 0,
-        linkedProductIds: toStringArray2(raw.linkedProductIds).length > 0 ? toStringArray2(raw.linkedProductIds) : existing?.linkedProductIds,
-        sponsored: toBoolean2(raw.sponsored, existing?.sponsored ?? false),
-        status: statusParsed.success ? statusParsed.data : "scheduled",
-        publishedAt: toString2(raw.publishedAt, existing?.publishedAt ?? nowIso8().slice(0, 10)),
-        createdAt: existingOrNow(existing?.createdAt),
-        updatedAt: nowIso8()
-      };
-      return brandPostSchema.parse(normalized);
-    };
-  }
-});
-
-// lib/vercel-catalog/mediaUpload.ts
-import crypto3 from "node:crypto";
-async function uploadImageToCloudinary(input) {
-  const cloudName = getCloudName();
-  if (!cloudName) {
-    throw new Error(
-      "Image upload is not configured. Set CLOUDINARY_CLOUD_NAME (or VITE_CLOUDINARY_CLOUD_NAME) on the server."
-    );
-  }
-  const uploadPreset = getUploadPreset();
-  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
-  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
-  const dataUri = `data:${input.mimeType || "image/jpeg"};base64,${input.base64Data}`;
-  const form = new FormData();
-  form.append("file", dataUri);
-  form.append("folder", "choosify/products");
-  if (uploadPreset) {
-    form.append("upload_preset", uploadPreset);
-  } else if (apiKey && apiSecret) {
-    const timestamp2 = Math.round(Date.now() / 1e3);
-    const folder = "choosify/products";
-    const paramsToSign = `folder=${folder}&timestamp=${timestamp2}`;
-    const signature = crypto3.createHash("sha1").update(paramsToSign + apiSecret).digest("hex");
-    form.append("api_key", apiKey);
-    form.append("timestamp", String(timestamp2));
-    form.append("signature", signature);
-  } else {
-    throw new Error(
-      "Image upload is not configured. Set CLOUDINARY_UPLOAD_PRESET or CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET on the server."
-    );
-  }
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
-    method: "POST",
-    body: form
-  });
-  if (!response.ok) {
-    const raw = await response.text();
-    throw new Error(raw || `Cloudinary upload failed with ${response.status}`);
-  }
-  const payload = await response.json();
-  if (!payload.secure_url) {
-    throw new Error("Cloudinary upload succeeded but no secure_url was returned.");
-  }
-  return payload.secure_url;
+function nowIso8() {
+  return (/* @__PURE__ */ new Date()).toISOString();
 }
-async function uploadDocumentToCloudinary(input) {
-  const cloudName = getCloudName();
-  if (!cloudName) {
-    throw new Error(
-      "Document upload is not configured. Set CLOUDINARY_CLOUD_NAME (or VITE_CLOUDINARY_CLOUD_NAME) on the server."
-    );
-  }
-  const uploadPreset = getUploadPreset();
-  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
-  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
-  const mimeType = input.mimeType || "application/pdf";
-  const dataUri = `data:${mimeType};base64,${input.base64Data}`;
-  const folder = "choosify/resumes";
-  const form = new FormData();
-  form.append("file", dataUri);
-  form.append("folder", folder);
-  if (uploadPreset) {
-    form.append("upload_preset", uploadPreset);
-  } else if (apiKey && apiSecret) {
-    const timestamp2 = Math.round(Date.now() / 1e3);
-    const paramsToSign = `folder=${folder}&timestamp=${timestamp2}`;
-    const signature = crypto3.createHash("sha1").update(paramsToSign + apiSecret).digest("hex");
-    form.append("api_key", apiKey);
-    form.append("timestamp", String(timestamp2));
-    form.append("signature", signature);
-  } else {
-    throw new Error(
-      "Document upload is not configured. Set CLOUDINARY_UPLOAD_PRESET or CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET on the server."
-    );
-  }
-  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`, {
-    method: "POST",
-    body: form
-  });
-  if (!response.ok) {
-    const raw = await response.text();
-    throw new Error(raw || `Cloudinary document upload failed with ${response.status}`);
-  }
-  const payload = await response.json();
-  if (!payload.secure_url) {
-    throw new Error("Cloudinary upload succeeded but no secure_url was returned.");
-  }
-  return payload.secure_url;
-}
-var getCloudName, getUploadPreset;
-var init_mediaUpload = __esm({
-  "lib/vercel-catalog/mediaUpload.ts"() {
-    getCloudName = () => process.env.CLOUDINARY_CLOUD_NAME?.trim() || process.env.VITE_CLOUDINARY_CLOUD_NAME?.trim() || "";
-    getUploadPreset = () => process.env.CLOUDINARY_UPLOAD_PRESET?.trim() || process.env.VITE_CLOUDINARY_UPLOAD_PRESET?.trim() || "";
-  }
-});
-
-// server/lib/imageProcessing.ts
-import sharp from "sharp";
-async function processImage(buffer) {
-  const pipeline = sharp(buffer, { failOn: "error" }).rotate();
-  const full = await pipeline.clone().resize({ width: MAX_DIMENSION, height: MAX_DIMENSION, fit: "inside", withoutEnlargement: true }).webp({ quality: WEBP_QUALITY }).toBuffer({ resolveWithObject: true });
-  const thumbnail = await pipeline.clone().resize({ width: THUMBNAIL_DIMENSION, height: THUMBNAIL_DIMENSION, fit: "inside", withoutEnlargement: true }).webp({ quality: THUMBNAIL_QUALITY }).toBuffer({ resolveWithObject: true });
+function recompute(record) {
+  const reserved = Math.max(0, Math.floor(record.reservedQuantity));
+  const quantity = Math.floor(record.quantity);
+  const available = Math.max(0, quantity - reserved);
   return {
-    full: { buffer: full.data, width: full.info.width, height: full.info.height },
-    thumbnail: { buffer: thumbnail.data, width: thumbnail.info.width, height: thumbnail.info.height }
+    ...record,
+    quantity,
+    reservedQuantity: reserved,
+    availableQuantity: available,
+    inventoryState: record.inventoryState === "archived" ? "archived" : deriveInventoryState(available, record.lowStockThreshold),
+    updatedAt: nowIso8()
   };
 }
-var MAX_DIMENSION, THUMBNAIL_DIMENSION, WEBP_QUALITY, THUMBNAIL_QUALITY;
-var init_imageProcessing = __esm({
-  "server/lib/imageProcessing.ts"() {
-    MAX_DIMENSION = 2e3;
-    THUMBNAIL_DIMENSION = 400;
-    WEBP_QUALITY = 82;
-    THUMBNAIL_QUALITY = 72;
+async function getInventoryRecord(productId, variantId) {
+  return catalogStore2.getInventory(inventoryRecordId(productId, variantId));
+}
+async function listInventoryForProduct(productId) {
+  const all = await catalogStore2.listInventory();
+  return all.filter((r) => r.productId === productId);
+}
+async function ensureInventoryRecord(input) {
+  const id = inventoryRecordId(input.productId, input.variantId);
+  const existing = await catalogStore2.getInventory(id);
+  if (existing) {
+    const next = recompute({
+      ...existing,
+      sku: input.sku ?? existing.sku,
+      quantity: input.quantity,
+      reservedQuantity: input.reservedQuantity ?? existing.reservedQuantity,
+      lowStockThreshold: input.lowStockThreshold ?? existing.lowStockThreshold,
+      warehouseId: input.warehouseId !== void 0 ? input.warehouseId : existing.warehouseId
+    });
+    return catalogStore2.upsertInventory(next);
   }
-});
-
-// server/lib/mediaStorage.ts
-var mediaStorage_exports = {};
-__export(mediaStorage_exports, {
-  MEDIA_CATEGORIES: () => MEDIA_CATEGORIES,
-  PRIVATE_MEDIA_CATEGORIES: () => PRIVATE_MEDIA_CATEGORIES,
-  PUBLIC_MEDIA_CATEGORIES: () => PUBLIC_MEDIA_CATEGORIES,
-  deleteMediaFile: () => deleteMediaFile,
-  extensionForMimeType: () => extensionForMimeType,
-  getMediaStaticMount: () => getMediaStaticMount,
-  isMediaCategory: () => isMediaCategory,
-  mediaTypeForMimeType: () => mediaTypeForMimeType,
-  resolvePrivateFilePath: () => resolvePrivateFilePath,
-  saveMediaFile: () => saveMediaFile,
-  visibilityForCategory: () => visibilityForCategory
-});
-import { randomUUID } from "node:crypto";
-import { mkdir, writeFile, unlink } from "node:fs/promises";
-import { join as join6, resolve, sep } from "node:path";
-function isMediaCategory(value) {
-  return typeof value === "string" && MEDIA_CATEGORIES.includes(value);
+  const created2 = recompute({
+    id,
+    productId: input.productId,
+    variantId: input.variantId,
+    sku: input.sku,
+    quantity: Math.max(0, Math.floor(input.quantity)),
+    reservedQuantity: Math.max(0, Math.floor(input.reservedQuantity ?? 0)),
+    availableQuantity: 0,
+    lowStockThreshold: input.lowStockThreshold ?? 5,
+    inventoryState: "in_stock",
+    warehouseId: input.warehouseId ?? null,
+    createdAt: nowIso8(),
+    updatedAt: nowIso8()
+  });
+  return catalogStore2.upsertInventory(created2);
 }
-function visibilityForCategory(category) {
-  return PRIVATE_MEDIA_CATEGORIES.includes(category) ? "private" : "public";
-}
-function extensionForMimeType(mimeType) {
-  return MIME_TO_EXTENSION[mimeType.toLowerCase()] || "";
-}
-function mediaTypeForMimeType(mimeType) {
-  const mime = mimeType.toLowerCase();
-  if (mime in VIDEO_MIME_TO_EXTENSION) return "video";
-  if (mime in DOCUMENT_MIME_TO_EXTENSION) return "document";
-  return "image";
-}
-function publicStorageRoot() {
-  const configured = process.env.MEDIA_STORAGE_ROOT?.trim();
-  return resolve(configured || join6(process.cwd(), ".data", "media"));
-}
-function privateStorageRoot() {
-  const configured = process.env.PRIVATE_STORAGE_ROOT?.trim();
-  return resolve(configured || join6(process.cwd(), ".data", "private"));
-}
-function rootForVisibility(visibility) {
-  return visibility === "private" ? privateStorageRoot() : publicStorageRoot();
-}
-function publicBaseUrl() {
-  const configured = process.env.MEDIA_PUBLIC_BASE_URL?.trim();
-  return (configured || "/media").replace(/\/$/, "");
-}
-function publicOrigin() {
-  const configured = process.env.MEDIA_PUBLIC_ORIGIN?.trim();
-  return configured ? configured.replace(/\/$/, "") : "";
-}
-function getMediaStaticMount() {
-  return { root: publicStorageRoot(), urlPrefix: publicBaseUrl() };
-}
-function assertWithinRoot(root, absolutePath, action) {
-  if (!absolutePath.startsWith(root + sep) && absolutePath !== root) {
-    throw new Error(`Refusing to ${action} outside the configured media storage root`);
+async function adjustInventory(input) {
+  const id = inventoryRecordId(input.productId, input.variantId);
+  let current = await catalogStore2.getInventory(id);
+  if (!current) {
+    current = await ensureInventoryRecord({
+      productId: input.productId,
+      variantId: input.variantId,
+      sku: input.sku,
+      quantity: 0
+    });
   }
-}
-async function saveMediaFile(input) {
-  if (!isMediaCategory(input.category)) {
-    throw new Error(`Invalid media category: ${String(input.category)}`);
+  let nextQuantity = current.quantity;
+  if (typeof input.quantity === "number" && Number.isFinite(input.quantity)) {
+    nextQuantity = Math.floor(input.quantity);
+  } else if (typeof input.delta === "number" && Number.isFinite(input.delta)) {
+    nextQuantity = Math.floor(current.quantity + input.delta);
   }
-  const visibility = visibilityForCategory(input.category);
-  const extension = extensionForMimeType(input.mimeType) || ".bin";
-  const filename = `${randomUUID()}${extension}`;
-  const relativePath = `${input.category}/${filename}`;
-  const root = rootForVisibility(visibility);
-  const absolutePath = resolve(root, relativePath);
-  assertWithinRoot(root, absolutePath, "write");
-  await mkdir(resolve(root, input.category), { recursive: true });
-  await writeFile(absolutePath, input.buffer);
-  return {
-    relativePath,
-    publicUrl: visibility === "public" ? `${publicOrigin()}${publicBaseUrl()}/${relativePath}` : void 0,
-    sizeBytes: input.buffer.byteLength
+  if (!input.allowNegative && nextQuantity < 0) {
+    throw new InventoryValidationError("Inventory quantity cannot be negative");
+  }
+  const reserved = typeof input.reservedQuantity === "number" && Number.isFinite(input.reservedQuantity) ? Math.floor(input.reservedQuantity) : current.reservedQuantity;
+  if (reserved < 0) {
+    throw new InventoryValidationError("Reserved quantity cannot be negative");
+  }
+  if (reserved > nextQuantity && !input.allowNegative) {
+    throw new InventoryValidationError("Reserved quantity cannot exceed on-hand quantity");
+  }
+  const next = recompute({
+    ...current,
+    sku: input.sku ?? current.sku,
+    quantity: nextQuantity,
+    reservedQuantity: reserved,
+    lowStockThreshold: input.lowStockThreshold ?? current.lowStockThreshold,
+    warehouseId: input.warehouseId !== void 0 ? input.warehouseId : current.warehouseId
+  });
+  return catalogStore2.upsertInventory(next);
+}
+async function syncProductStockFromInventory(productId) {
+  const product = await catalogStore2.getProduct(productId);
+  if (!product) return null;
+  const records = await listInventoryForProduct(productId);
+  const variantRows = records.filter((r) => Boolean(r.variantId));
+  const productRow = records.find((r) => !r.variantId);
+  let available = 0;
+  if (variantRows.length > 0) {
+    available = variantRows.reduce((sum, r) => sum + r.availableQuantity, 0);
+  } else if (productRow) {
+    available = productRow.availableQuantity;
+  } else {
+    available = Math.max(0, product.stock);
+  }
+  const nextStatus = applyInventoryLifecycleCoupling(product.status, available);
+  const saved = await catalogStore2.upsertProduct({
+    ...product,
+    stock: available,
+    status: nextStatus,
+    updatedAt: nowIso8()
+  });
+  return saved;
+}
+async function withInventoryLock(key, fn) {
+  const prior = inventoryLocks.get(key) ?? Promise.resolve();
+  let release = () => {
   };
-}
-async function deleteMediaFile(relativePath, category) {
-  const root = rootForVisibility(visibilityForCategory(category));
-  const absolutePath = resolve(root, relativePath);
-  assertWithinRoot(root, absolutePath, "delete");
+  const next = new Promise((resolve2) => {
+    release = resolve2;
+  });
+  inventoryLocks.set(key, prior.then(() => next));
+  await prior;
   try {
-    await unlink(absolutePath);
-  } catch (error2) {
-    const code = error2?.code;
-    if (code !== "ENOENT") throw error2;
+    return await fn();
+  } finally {
+    release();
+    if (inventoryLocks.get(key) === next) inventoryLocks.delete(key);
   }
 }
-function resolvePrivateFilePath(relativePath) {
-  const root = privateStorageRoot();
-  const absolutePath = resolve(root, relativePath);
-  assertWithinRoot(root, absolutePath, "read");
-  return absolutePath;
+async function reserveInventoryQuantity(input) {
+  const key = inventoryRecordId(input.productId, input.variantId);
+  return withInventoryLock(key, async () => {
+    const existing = await getInventoryRecord(input.productId, input.variantId);
+    if (!existing) {
+      let seedQty;
+      if (input.variantId) {
+        const detail = await catalogStore2.getProductDetail(input.productId);
+        const variant = detail?.productVariants?.find((v) => v.id === input.variantId);
+        seedQty = Math.max(0, Math.floor(variant?.stock ?? 0));
+      } else {
+        const product = await catalogStore2.getProduct(input.productId);
+        seedQty = Math.max(0, Math.floor(product?.stock ?? 0));
+      }
+      if (input.quantity > seedQty) {
+        return { ok: false, available: seedQty };
+      }
+      const record2 = await ensureInventoryRecord({
+        productId: input.productId,
+        variantId: input.variantId,
+        quantity: seedQty,
+        reservedQuantity: input.quantity
+      });
+      await syncProductStockFromInventory(input.productId);
+      return { ok: true, record: record2 };
+    }
+    if (input.quantity > existing.availableQuantity) {
+      return { ok: false, available: existing.availableQuantity };
+    }
+    const record = await adjustInventory({
+      productId: input.productId,
+      variantId: input.variantId,
+      reservedQuantity: existing.reservedQuantity + input.quantity
+    });
+    await syncProductStockFromInventory(input.productId);
+    return { ok: true, record };
+  });
 }
-var PUBLIC_MEDIA_CATEGORIES, PRIVATE_MEDIA_CATEGORIES, MEDIA_CATEGORIES, IMAGE_MIME_TO_EXTENSION, VIDEO_MIME_TO_EXTENSION, DOCUMENT_MIME_TO_EXTENSION, MIME_TO_EXTENSION;
-var init_mediaStorage = __esm({
-  "server/lib/mediaStorage.ts"() {
-    PUBLIC_MEDIA_CATEGORIES = [
-      "users",
-      "sellers",
-      "creators",
-      "brands",
-      "products",
-      "services",
-      "reviews",
-      "guides",
-      "cms",
-      "ads",
-      "careers",
-      "videos",
-      "temporary"
-    ];
-    PRIVATE_MEDIA_CATEGORIES = [
-      "verification",
-      "identity-documents",
-      "seller-documents",
-      "creator-documents",
-      /** Warranty claim evidence photos/videos — buyer/seller/admin only, never public. */
-      "warranty-claims"
-    ];
-    MEDIA_CATEGORIES = [...PUBLIC_MEDIA_CATEGORIES, ...PRIVATE_MEDIA_CATEGORIES];
-    IMAGE_MIME_TO_EXTENSION = {
-      "image/jpeg": ".jpg",
-      "image/jpg": ".jpg",
-      "image/png": ".png",
-      "image/webp": ".webp",
-      "image/gif": ".gif"
+async function releaseInventoryQuantity(input) {
+  const key = inventoryRecordId(input.productId, input.variantId);
+  return withInventoryLock(key, async () => {
+    const existing = await getInventoryRecord(input.productId, input.variantId);
+    if (!existing) return null;
+    const record = await adjustInventory({
+      productId: input.productId,
+      variantId: input.variantId,
+      reservedQuantity: Math.max(0, existing.reservedQuantity - input.quantity)
+    });
+    await syncProductStockFromInventory(input.productId);
+    return record;
+  });
+}
+async function consumeInventoryQuantity(input) {
+  const key = inventoryRecordId(input.productId, input.variantId);
+  return withInventoryLock(key, async () => {
+    const existing = await getInventoryRecord(input.productId, input.variantId);
+    if (!existing) return null;
+    const nextQuantity = Math.max(0, existing.quantity - input.quantity);
+    const nextReserved = Math.max(0, existing.reservedQuantity - input.quantity);
+    const record = await adjustInventory({
+      productId: input.productId,
+      variantId: input.variantId,
+      quantity: nextQuantity,
+      reservedQuantity: Math.min(nextReserved, nextQuantity)
+    });
+    await syncProductStockFromInventory(input.productId);
+    return record;
+  });
+}
+async function restockInventoryQuantity(input) {
+  const key = inventoryRecordId(input.productId, input.variantId);
+  return withInventoryLock(key, async () => {
+    const existing = await getInventoryRecord(input.productId, input.variantId);
+    if (!existing) return null;
+    const record = await adjustInventory({
+      productId: input.productId,
+      variantId: input.variantId,
+      quantity: existing.quantity + input.quantity,
+      reservedQuantity: existing.reservedQuantity
+    });
+    await syncProductStockFromInventory(input.productId);
+    return record;
+  });
+}
+var InventoryValidationError, inventoryLocks;
+var init_inventoryStore = __esm({
+  "server/catalog/inventoryStore.ts"() {
+    init_catalogStore();
+    init_productLifecycle();
+    InventoryValidationError = class extends Error {
+      constructor(message) {
+        super(message);
+        this.statusCode = 400;
+        this.name = "InventoryValidationError";
+      }
     };
-    VIDEO_MIME_TO_EXTENSION = {
-      "video/mp4": ".mp4",
-      "video/webm": ".webm"
+    inventoryLocks = /* @__PURE__ */ new Map();
+  }
+});
+
+// server/communication/communicationTypes.ts
+var communicationTypes_exports = {};
+__export(communicationTypes_exports, {
+  BROADCAST_STATUSES: () => BROADCAST_STATUSES,
+  BROADCAST_TYPES: () => BROADCAST_TYPES,
+  COMMUNICATION_TYPES: () => COMMUNICATION_TYPES,
+  DELIVERY_CHANNELS: () => DELIVERY_CHANNELS,
+  DIGEST_MODES: () => DIGEST_MODES,
+  NOTIFICATION_CATEGORIES: () => NOTIFICATION_CATEGORIES,
+  NOTIFICATION_PRIORITIES: () => NOTIFICATION_PRIORITIES
+});
+var COMMUNICATION_TYPES, NOTIFICATION_CATEGORIES, NOTIFICATION_PRIORITIES, DELIVERY_CHANNELS, DIGEST_MODES, BROADCAST_TYPES, BROADCAST_STATUSES;
+var init_communicationTypes = __esm({
+  "server/communication/communicationTypes.ts"() {
+    COMMUNICATION_TYPES = {
+      NOTIFICATION: "notification",
+      ANNOUNCEMENT: "announcement",
+      BROADCAST: "broadcast",
+      CAMPAIGN: "campaign",
+      REMINDER: "reminder",
+      ORDER_UPDATE: "order_update",
+      MODERATION_UPDATE: "moderation_update",
+      SELLER_UPDATE: "seller_update",
+      BUYER_UPDATE: "buyer_update",
+      SYSTEM_ALERT: "system_alert",
+      PROMOTION: "promotion",
+      AI_SUGGESTION: "ai_suggestion"
     };
-    DOCUMENT_MIME_TO_EXTENSION = {
-      "application/pdf": ".pdf",
-      "application/msword": ".doc",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx"
+    NOTIFICATION_CATEGORIES = {
+      BUYER: "buyer",
+      SELLER: "seller",
+      ADMIN: "admin",
+      MODERATOR: "moderator",
+      OPERATIONS: "operations",
+      MARKETING: "marketing",
+      SECURITY: "security",
+      SYSTEM: "system",
+      AI: "ai"
     };
-    MIME_TO_EXTENSION = {
-      ...IMAGE_MIME_TO_EXTENSION,
-      ...VIDEO_MIME_TO_EXTENSION,
-      ...DOCUMENT_MIME_TO_EXTENSION
+    NOTIFICATION_PRIORITIES = {
+      CRITICAL: "critical",
+      HIGH: "high",
+      NORMAL: "normal",
+      LOW: "low",
+      SILENT: "silent"
+    };
+    DELIVERY_CHANNELS = {
+      IN_APP: "in_app",
+      EMAIL: "email",
+      PUSH: "push",
+      SMS: "sms",
+      WHATSAPP: "whatsapp",
+      WEBHOOK: "webhook"
+    };
+    DIGEST_MODES = {
+      INSTANT: "instant",
+      DAILY: "daily",
+      WEEKLY: "weekly"
+    };
+    BROADCAST_TYPES = {
+      ADMIN: "admin",
+      SELLER: "seller",
+      BUYER: "buyer"
+    };
+    BROADCAST_STATUSES = {
+      DRAFT: "draft",
+      SCHEDULED: "scheduled",
+      SENT: "sent"
     };
   }
 });
 
-// server/media/mediaRepository.ts
-var mediaRepository_exports = {};
-__export(mediaRepository_exports, {
-  createMediaRecord: () => createMediaRecord,
-  deleteMediaRecord: () => deleteMediaRecord,
-  getMediaRecord: () => getMediaRecord,
-  linkMediaToEntity: () => linkMediaToEntity,
-  markMediaStatus: () => markMediaStatus
-});
-import { eq as eq4 } from "drizzle-orm";
-async function createMediaRecord(input) {
-  const rows = await db.insert(media).values({
-    uploadedByUserId: input.uploadedByUserId,
-    category: input.category,
-    visibility: visibilityForCategory(input.category),
-    mediaType: input.mediaType,
-    provider: input.provider,
-    relativePath: input.relativePath,
-    publicUrl: input.publicUrl,
-    mimeType: input.mimeType,
-    sizeBytes: input.sizeBytes,
-    width: input.width,
-    height: input.height,
-    durationSeconds: input.durationSeconds,
-    originalFilename: input.originalFilename,
-    relatedEntityType: input.relatedEntityType,
-    relatedEntityId: input.relatedEntityId
-  }).returning();
-  return rows[0];
+// server/communication/communicationStore.ts
+import { randomUUID } from "crypto";
+import { existsSync as existsSync6, mkdirSync as mkdirSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync6 } from "node:fs";
+import { dirname as dirname6, join as join6 } from "node:path";
+import { and as and2, desc, eq as eq4 } from "drizzle-orm";
+function ensureCommunicationHydrated() {
+  if (hydrated2) return;
+  hydrated2 = true;
+  if (!existsSync6(DISK_SNAPSHOT_PATH3)) return;
+  try {
+    const snap = JSON.parse(readFileSync6(DISK_SNAPSHOT_PATH3, "utf8"));
+    if (snap.broadcasts) state5.broadcasts = snap.broadcasts;
+    if (snap.preferences) state5.preferences = new Map(snap.preferences);
+    console.log(
+      `[CommunicationMemoryPersist] Hydrated (${state5.broadcasts.length} broadcasts, ${state5.preferences.size} preference rows).`
+    );
+  } catch (error2) {
+    console.warn("[CommunicationMemoryPersist] Failed to load snapshot:", error2);
+  }
 }
-async function getMediaRecord(id) {
-  const rows = await db.select().from(media).where(eq4(media.id, id)).limit(1);
-  return rows[0] || null;
+function schedulePersist3() {
+  if (persistTimer4) clearTimeout(persistTimer4);
+  persistTimer4 = setTimeout(() => {
+    try {
+      mkdirSync6(dirname6(DISK_SNAPSHOT_PATH3), { recursive: true });
+      writeFileSync6(
+        DISK_SNAPSHOT_PATH3,
+        JSON.stringify({ broadcasts: state5.broadcasts, preferences: [...state5.preferences.entries()] }),
+        "utf8"
+      );
+    } catch (error2) {
+      console.error("[CommunicationMemoryPersist] Failed to save snapshot:", error2);
+    }
+  }, 300);
 }
-async function deleteMediaRecord(id) {
-  const rows = await db.delete(media).where(eq4(media.id, id)).returning();
-  return rows.length > 0;
+function rowToNotification(row) {
+  return {
+    id: row.id,
+    userId: row.userId,
+    type: row.type,
+    category: row.category,
+    priority: row.priority,
+    title: row.title,
+    summary: row.summary || void 0,
+    actionUrl: row.actionUrl || void 0,
+    channels: row.channels || [],
+    read: row.read,
+    dismissed: row.dismissed,
+    archived: row.archived,
+    pinned: row.pinned,
+    metadata: row.metadata || void 0,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+    readAt: row.readAt ? row.readAt.toISOString() : void 0,
+    dismissedAt: row.dismissedAt ? row.dismissedAt.toISOString() : void 0,
+    archivedAt: row.archivedAt ? row.archivedAt.toISOString() : void 0,
+    expiresAt: row.expiresAt ? row.expiresAt.toISOString() : void 0
+  };
 }
-async function markMediaStatus(id, status) {
-  const rows = await db.update(media).set({ status }).where(eq4(media.id, id)).returning();
-  return rows[0] || null;
+function nowIso9() {
+  return (/* @__PURE__ */ new Date()).toISOString();
 }
-async function linkMediaToEntity(mediaId, relatedEntityType, relatedEntityId) {
-  const rows = await db.update(media).set({ relatedEntityType, relatedEntityId }).where(eq4(media.id, mediaId)).returning();
-  return rows[0] || null;
+function defaultPreferences(userId) {
+  return {
+    userId,
+    channels: {
+      [DELIVERY_CHANNELS.IN_APP]: true,
+      [DELIVERY_CHANNELS.EMAIL]: true,
+      [DELIVERY_CHANNELS.PUSH]: true,
+      [DELIVERY_CHANNELS.SMS]: false,
+      [DELIVERY_CHANNELS.WHATSAPP]: false,
+      [DELIVERY_CHANNELS.WEBHOOK]: false
+    },
+    quietHours: { enabled: false, start: "22:00", end: "08:00" },
+    digestMode: DIGEST_MODES.INSTANT,
+    marketingOptIn: false,
+    systemRequired: true,
+    updatedAt: nowIso9()
+  };
 }
-var init_mediaRepository = __esm({
-  "server/media/mediaRepository.ts"() {
+var state5, DISK_SNAPSHOT_PATH3, hydrated2, persistTimer4, communicationStore;
+var init_communicationStore = __esm({
+  "server/communication/communicationStore.ts"() {
     init_client();
     init_schema();
-    init_mediaStorage();
+    init_communicationTypes();
+    state5 = {
+      broadcasts: [],
+      preferences: /* @__PURE__ */ new Map()
+    };
+    DISK_SNAPSHOT_PATH3 = process.env.COMMUNICATION_MEMORY_SNAPSHOT_PATH?.trim() || join6(process.cwd(), ".data", "communication-memory-snapshot.json");
+    hydrated2 = false;
+    persistTimer4 = null;
+    ensureCommunicationHydrated();
+    communicationStore = {
+      // Sprint 10 durability migration: notifications are read/written directly against
+      // PostgreSQL on every call (no per-process cache) — a bare in-memory Map with no
+      // disk snapshot at all previously meant every restart silently discarded history.
+      async listNotifications(filter) {
+        const conditions = [];
+        if (filter.userId) conditions.push(eq4(notifications.userId, filter.userId));
+        if (filter.read !== void 0) conditions.push(eq4(notifications.read, filter.read));
+        if (filter.archived !== void 0) conditions.push(eq4(notifications.archived, filter.archived));
+        if (filter.dismissed !== void 0) conditions.push(eq4(notifications.dismissed, filter.dismissed));
+        if (filter.pinned !== void 0) conditions.push(eq4(notifications.pinned, filter.pinned));
+        if (filter.priority) conditions.push(eq4(notifications.priority, filter.priority));
+        if (filter.category) conditions.push(eq4(notifications.category, filter.category));
+        if (filter.type) conditions.push(eq4(notifications.type, filter.type));
+        const query2 = conditions.length ? db.select().from(notifications).where(and2(...conditions)) : db.select().from(notifications);
+        let rows = (await query2.orderBy(desc(notifications.pinned), desc(notifications.createdAt))).map(rowToNotification);
+        if (filter.q) {
+          const q = filter.q.toLowerCase();
+          rows = rows.filter((n) => n.title.toLowerCase().includes(q) || (n.summary || "").toLowerCase().includes(q));
+        }
+        const offset = filter.offset ?? 0;
+        const limit = filter.limit ?? rows.length;
+        return rows.slice(offset, offset + limit);
+      },
+      async countNotifications(userId) {
+        const rows = userId ? await db.select().from(notifications).where(eq4(notifications.userId, userId)) : await db.select().from(notifications);
+        return rows.map(rowToNotification);
+      },
+      async getNotification(id) {
+        const rows = await db.select().from(notifications).where(eq4(notifications.id, id)).limit(1);
+        return rows[0] ? rowToNotification(rows[0]) : null;
+      },
+      async createNotification(input) {
+        const rows = await db.insert(notifications).values({
+          id: `ntf-${randomUUID()}`,
+          userId: input.userId,
+          type: input.type,
+          category: input.category,
+          priority: input.priority ?? NOTIFICATION_PRIORITIES.NORMAL,
+          title: input.title,
+          summary: input.summary,
+          actionUrl: input.actionUrl,
+          channels: input.channels?.length ? input.channels : [DELIVERY_CHANNELS.IN_APP],
+          pinned: input.pinned ?? false,
+          metadata: input.metadata,
+          expiresAt: input.expiresAt ? new Date(input.expiresAt) : void 0
+        }).returning();
+        return rowToNotification(rows[0]);
+      },
+      async updateNotification(id, patch) {
+        const {
+          id: _ignoreId,
+          createdAt: _ignoreCreatedAt,
+          updatedAt: _ignoreUpdatedAt,
+          readAt: _ignoreReadAt,
+          dismissedAt: _ignoreDismissedAt,
+          archivedAt: _ignoreArchivedAt,
+          expiresAt: _ignoreExpiresAt,
+          ...rest
+        } = patch;
+        const values = { ...rest, updatedAt: /* @__PURE__ */ new Date() };
+        if (patch.readAt !== void 0) values.readAt = patch.readAt ? new Date(patch.readAt) : null;
+        if (patch.dismissedAt !== void 0) values.dismissedAt = patch.dismissedAt ? new Date(patch.dismissedAt) : null;
+        if (patch.archivedAt !== void 0) values.archivedAt = patch.archivedAt ? new Date(patch.archivedAt) : null;
+        if (patch.expiresAt !== void 0) values.expiresAt = patch.expiresAt ? new Date(patch.expiresAt) : null;
+        const rows = await db.update(notifications).set(values).where(eq4(notifications.id, id)).returning();
+        return rows[0] ? rowToNotification(rows[0]) : null;
+      },
+      async deleteNotification(id) {
+        const rows = await db.delete(notifications).where(eq4(notifications.id, id)).returning();
+        return rows.length > 0;
+      },
+      listBroadcasts() {
+        return [...state5.broadcasts].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      },
+      getBroadcast(id) {
+        return state5.broadcasts.find((b) => b.id === id) ?? null;
+      },
+      createBroadcast(input) {
+        const broadcast = {
+          ...input,
+          id: `brc-${randomUUID()}`,
+          createdAt: nowIso9(),
+          updatedAt: nowIso9()
+        };
+        state5.broadcasts.unshift(broadcast);
+        schedulePersist3();
+        return broadcast;
+      },
+      updateBroadcast(id, patch) {
+        const idx = state5.broadcasts.findIndex((b) => b.id === id);
+        if (idx < 0) return null;
+        state5.broadcasts[idx] = { ...state5.broadcasts[idx], ...patch, updatedAt: nowIso9() };
+        schedulePersist3();
+        return state5.broadcasts[idx];
+      },
+      getPreferences(userId) {
+        return state5.preferences.get(userId) ?? defaultPreferences(userId);
+      },
+      upsertPreferences(userId, patch) {
+        const current = state5.preferences.get(userId) ?? defaultPreferences(userId);
+        const updated = {
+          ...current,
+          ...patch,
+          channels: { ...current.channels, ...patch.channels || {} },
+          quietHours: { ...current.quietHours, ...patch.quietHours || {} },
+          userId,
+          updatedAt: nowIso9()
+        };
+        state5.preferences.set(userId, updated);
+        schedulePersist3();
+        return updated;
+      },
+      countPreferencesUsers() {
+        return state5.preferences.size;
+      }
+    };
   }
 });
 
-// server/media/mediaUploadService.ts
-var mediaUploadService_exports = {};
-__export(mediaUploadService_exports, {
-  storeUploadedDocument: () => storeUploadedDocument,
-  storeUploadedImage: () => storeUploadedImage,
-  storeUploadedVerificationAsset: () => storeUploadedVerificationAsset
-});
-function storageProvider(category) {
-  if (visibilityForCategory(category) === "private") return "local";
-  const raw = process.env.MEDIA_STORAGE_PROVIDER?.trim().toLowerCase();
-  return raw === "cloudinary" ? "cloudinary" : "local";
+// server/communication/deliveryChannels.ts
+function getChannelProvider(channel) {
+  return providers[channel];
 }
-function privateReferenceUrl(mediaId) {
-  return `/api/v1/catalog/media/private/${mediaId}`;
-}
-async function storeLocal(input) {
-  const rawBuffer = Buffer.from(input.base64Data, "base64");
-  const isImage = input.mimeType.toLowerCase().startsWith(IMAGE_MIME_PREFIX);
-  const visibility = visibilityForCategory(input.category);
-  if (isImage) {
-    const processed = await processImage(rawBuffer);
-    const saved2 = await saveMediaFile({ category: input.category, buffer: processed.full.buffer, mimeType: "image/webp" });
-    const savedThumb = visibility === "public" ? await saveMediaFile({ category: input.category, buffer: processed.thumbnail.buffer, mimeType: "image/webp" }) : null;
-    const record2 = await createMediaRecord({
-      uploadedByUserId: input.uploaderId,
-      category: input.category,
-      mediaType: "image",
-      provider: "local",
-      relativePath: saved2.relativePath,
-      publicUrl: saved2.publicUrl,
-      mimeType: "image/webp",
-      sizeBytes: saved2.sizeBytes,
-      width: processed.full.width,
-      height: processed.full.height,
-      originalFilename: input.fileName
-    });
-    return { record: record2, thumbnailUrl: savedThumb?.publicUrl };
+async function dispatchToChannels(request, channels) {
+  const results = [];
+  for (const channel of channels) {
+    const provider = getChannelProvider(channel);
+    results.push(await provider.dispatch({ ...request, channel }));
   }
-  const saved = await saveMediaFile({ category: input.category, buffer: rawBuffer, mimeType: input.mimeType });
-  const record = await createMediaRecord({
-    uploadedByUserId: input.uploaderId,
-    category: input.category,
-    mediaType: mediaTypeForMimeType(input.mimeType),
-    provider: "local",
-    relativePath: saved.relativePath,
-    publicUrl: saved.publicUrl,
-    mimeType: input.mimeType,
-    sizeBytes: saved.sizeBytes,
-    originalFilename: input.fileName
-  });
-  return { record };
+  return results;
 }
-function resultFor(record, thumbnailUrl, provider) {
-  const visibility = record.visibility;
+function listChannelStatus() {
+  return Object.values(providers).map((provider) => ({
+    channel: provider.channel,
+    configured: provider.isConfigured()
+  }));
+}
+var FrameworkChannelProvider, providers;
+var init_deliveryChannels = __esm({
+  "server/communication/deliveryChannels.ts"() {
+    init_communicationTypes();
+    FrameworkChannelProvider = class {
+      constructor(channel) {
+        this.channel = channel;
+      }
+      isConfigured() {
+        return false;
+      }
+      async dispatch(request) {
+        return {
+          channel: this.channel,
+          status: "unsupported",
+          message: `Provider for ${this.channel} is not configured. Framework only.`
+        };
+      }
+    };
+    providers = {
+      [DELIVERY_CHANNELS.IN_APP]: {
+        channel: DELIVERY_CHANNELS.IN_APP,
+        isConfigured: () => true,
+        async dispatch(request) {
+          return {
+            channel: DELIVERY_CHANNELS.IN_APP,
+            status: "queued",
+            message: `In-app notification queued for ${request.userId}`
+          };
+        }
+      },
+      [DELIVERY_CHANNELS.EMAIL]: new FrameworkChannelProvider(DELIVERY_CHANNELS.EMAIL),
+      [DELIVERY_CHANNELS.PUSH]: new FrameworkChannelProvider(DELIVERY_CHANNELS.PUSH),
+      [DELIVERY_CHANNELS.SMS]: new FrameworkChannelProvider(DELIVERY_CHANNELS.SMS),
+      [DELIVERY_CHANNELS.WHATSAPP]: new FrameworkChannelProvider(DELIVERY_CHANNELS.WHATSAPP),
+      [DELIVERY_CHANNELS.WEBHOOK]: new FrameworkChannelProvider(DELIVERY_CHANNELS.WEBHOOK)
+    };
+  }
+});
+
+// server/logging/auditLogger.ts
+function resolveRequestContext(req) {
+  if (!req) {
+    return {};
+  }
   return {
-    url: visibility === "private" ? privateReferenceUrl(record.id) : record.publicUrl,
-    thumbnailUrl,
-    mediaId: record.id,
-    provider,
-    visibility
+    requestId: req.requestId,
+    userId: req.userId || req.user?.uid,
+    userRole: req.userRole || req.user?.role,
+    realActorUserId: req.realActorUserId,
+    realActorRole: req.realActorRole,
+    impersonationSessionId: req.impersonationSessionId,
+    ip: req.ip,
+    userAgent: req.get("user-agent") || void 0
   };
 }
-async function storeUploadedImage(input) {
-  if (!isMediaCategory(input.category)) throw new Error(`Invalid media category: ${input.category}`);
-  if (storageProvider(input.category) === "cloudinary") {
-    const url = await uploadImageToCloudinary({ base64Data: input.base64Data, mimeType: input.mimeType, fileName: input.fileName });
-    const record2 = await createMediaRecord({
-      uploadedByUserId: input.uploaderId,
-      category: input.category,
-      mediaType: "image",
-      provider: "cloudinary",
-      publicUrl: url,
-      mimeType: input.mimeType,
-      sizeBytes: Math.floor(input.base64Data.length * 3 / 4),
-      originalFilename: input.fileName
-    });
-    return resultFor(record2, void 0, "cloudinary");
-  }
-  const { record, thumbnailUrl } = await storeLocal(input);
-  return resultFor(record, thumbnailUrl, "local");
-}
-async function storeUploadedDocument(input) {
-  if (!isMediaCategory(input.category)) throw new Error(`Invalid media category: ${input.category}`);
-  if (storageProvider(input.category) === "cloudinary") {
-    const url = await uploadDocumentToCloudinary({ base64Data: input.base64Data, mimeType: input.mimeType, fileName: input.fileName });
-    const record2 = await createMediaRecord({
-      uploadedByUserId: input.uploaderId,
-      category: input.category,
-      mediaType: "document",
-      provider: "cloudinary",
-      publicUrl: url,
-      mimeType: input.mimeType,
-      sizeBytes: Math.floor(input.base64Data.length * 3 / 4),
-      originalFilename: input.fileName
-    });
-    return resultFor(record2, void 0, "cloudinary");
-  }
-  const { record } = await storeLocal(input);
-  return resultFor(record, void 0, "local");
-}
-async function storeUploadedVerificationAsset(input) {
-  const { record, thumbnailUrl } = await storeLocal({
-    category: "verification",
-    base64Data: input.base64Data,
-    mimeType: input.mimeType,
-    fileName: input.fileName,
-    uploaderId: input.uploaderId
+function auditLog(input, req) {
+  const context = resolveRequestContext(req);
+  Logger.audit("Audit event", {
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    category: input.category,
+    action: input.action,
+    resource: input.resource,
+    resourceId: input.resourceId,
+    result: input.result,
+    requestId: input.requestId || context.requestId,
+    userId: input.userId || context.userId,
+    userRole: input.userRole || context.userRole,
+    ip: input.ip || context.ip,
+    userAgent: input.userAgent || context.userAgent,
+    metadata: input.metadata
   });
-  return resultFor(record, thumbnailUrl, "local");
 }
-var IMAGE_MIME_PREFIX;
-var init_mediaUploadService = __esm({
-  "server/media/mediaUploadService.ts"() {
-    init_mediaUpload();
-    init_imageProcessing();
-    init_mediaStorage();
-    init_mediaRepository();
-    IMAGE_MIME_PREFIX = "image/";
+function auditAdminAction(action, resource, result, options = {}, req) {
+  auditLog({ category: AUDIT_CATEGORIES.ADMIN_ACTION, action, resource, result, ...options }, req);
+}
+function auditPermissionChange(action, resource, result, options = {}, req) {
+  auditLog(
+    { category: AUDIT_CATEGORIES.PERMISSION_CHANGE, action, resource, result, ...options },
+    req
+  );
+}
+function auditSystemEvent(action, resource, result, options = {}, req) {
+  auditLog({ category: AUDIT_CATEGORIES.SYSTEM_EVENT, action, resource, result, ...options }, req);
+}
+var AUDIT_CATEGORIES;
+var init_auditLogger = __esm({
+  "server/logging/auditLogger.ts"() {
+    init_logger();
+    AUDIT_CATEGORIES = {
+      ADMIN_ACTION: "admin_action",
+      AUTHENTICATION: "authentication",
+      SELLER_ACTION: "seller_action",
+      CATALOG_MODERATION: "catalog_moderation",
+      PERMISSION_CHANGE: "permission_change",
+      SECURITY_EVENT: "security_event",
+      SYSTEM_EVENT: "system_event"
+    };
   }
 });
 
@@ -6699,6 +6274,6280 @@ var init_analyticsService = __esm({
   }
 });
 
+// server/communication/eventHooks.ts
+function requestContext(req) {
+  if (!req) return {};
+  return {
+    requestId: req.requestId,
+    ip: req.ip,
+    userAgent: req.get("user-agent") || void 0,
+    userId: req.userId || req.user?.uid
+  };
+}
+function logNotificationAudit(action, resource, result, options = {}, req) {
+  auditAdminAction(action, resource, result, {
+    resourceId: options.resourceId,
+    userId: options.userId,
+    metadata: options.metadata
+  }, req);
+}
+function logBroadcastAudit(action, resourceId, result, options = {}, req) {
+  auditAdminAction(action, "broadcast", result, {
+    resourceId,
+    userId: options.userId,
+    metadata: options.metadata
+  }, req);
+}
+function logPreferenceChangeAudit(userId, req) {
+  auditPermissionChange("update_communication_preferences", "communication_preferences", "success", {
+    resourceId: userId,
+    userId: req?.userId || userId
+  }, req);
+}
+function recordNotificationSent(notification, req) {
+  recordEventAsync({
+    type: ANALYTICS_EVENTS.NOTIFICATION_SENT,
+    userId: notification.userId,
+    source: "communication_platform",
+    metadata: {
+      notificationId: notification.id,
+      category: notification.category,
+      type: notification.type,
+      priority: notification.priority,
+      channels: notification.channels
+    },
+    ...requestContext(req)
+  });
+}
+function recordNotificationRead(notification, req) {
+  recordEventAsync({
+    type: ANALYTICS_EVENTS.NOTIFICATION_READ,
+    userId: notification.userId,
+    source: "communication_platform",
+    metadata: { notificationId: notification.id, category: notification.category },
+    ...requestContext(req)
+  });
+}
+function recordNotificationDismissed(notification, req) {
+  recordEventAsync({
+    type: ANALYTICS_EVENTS.NOTIFICATION_DISMISSED,
+    userId: notification.userId,
+    source: "communication_platform",
+    metadata: { notificationId: notification.id, category: notification.category },
+    ...requestContext(req)
+  });
+}
+function recordBroadcastSent(broadcast, req) {
+  recordEventAsync({
+    type: ANALYTICS_EVENTS.BROADCAST_SENT,
+    source: "communication_platform",
+    metadata: {
+      broadcastId: broadcast.id,
+      broadcastType: broadcast.broadcastType,
+      targetRoles: broadcast.targetRoles,
+      targetSegments: broadcast.targetSegments
+    },
+    ...requestContext(req)
+  });
+}
+var init_eventHooks = __esm({
+  "server/communication/eventHooks.ts"() {
+    init_auditLogger();
+    init_analyticsService();
+    init_analyticsEvents();
+  }
+});
+
+// server/communication/notificationService.ts
+function listNotifications(filter) {
+  return communicationStore.listNotifications(filter);
+}
+function getNotification(id) {
+  return communicationStore.getNotification(id);
+}
+async function createNotification(input, req) {
+  const preferences = communicationStore.getPreferences(input.userId);
+  const channels = input.channels?.length ? input.channels : [DELIVERY_CHANNELS.IN_APP];
+  const notification = await communicationStore.createNotification({
+    userId: input.userId,
+    type: input.type,
+    category: input.category,
+    priority: input.priority ?? NOTIFICATION_PRIORITIES.NORMAL,
+    title: input.title,
+    summary: input.summary,
+    actionUrl: input.actionUrl,
+    channels,
+    pinned: input.pinned ?? false,
+    metadata: input.metadata,
+    expiresAt: input.expiresAt
+  });
+  const enabledChannels = channels.filter((channel) => {
+    if (input.category === "system" || input.category === "security") return true;
+    return preferences.channels[channel] !== false;
+  });
+  await dispatchToChannels(
+    {
+      notificationId: notification.id,
+      userId: notification.userId,
+      title: notification.title,
+      summary: notification.summary,
+      metadata: notification.metadata
+    },
+    enabledChannels
+  );
+  recordNotificationSent(notification, req);
+  return notification;
+}
+async function dismissNotification(id, req) {
+  const updated = await communicationStore.updateNotification(id, {
+    dismissed: true,
+    dismissedAt: (/* @__PURE__ */ new Date()).toISOString()
+  });
+  if (updated) recordNotificationDismissed(updated, req);
+  return updated;
+}
+async function markRead(id, req) {
+  const updated = await communicationStore.updateNotification(id, {
+    read: true,
+    readAt: (/* @__PURE__ */ new Date()).toISOString()
+  });
+  if (updated) recordNotificationRead(updated, req);
+  return updated;
+}
+function markUnread(id) {
+  return communicationStore.updateNotification(id, {
+    read: false,
+    readAt: void 0
+  });
+}
+function archiveNotification(id) {
+  return communicationStore.updateNotification(id, {
+    archived: true,
+    archivedAt: (/* @__PURE__ */ new Date()).toISOString()
+  });
+}
+async function deleteNotification(id, req) {
+  const existing = await communicationStore.getNotification(id);
+  if (!existing) return false;
+  const deleted = await communicationStore.deleteNotification(id);
+  if (deleted) {
+    logNotificationAudit("delete_notification", "notification", "success", {
+      resourceId: id,
+      userId: req?.userId,
+      metadata: { targetUserId: existing.userId }
+    }, req);
+  }
+  return deleted;
+}
+async function runBulk(ids, action) {
+  const succeeded = [];
+  const failed = [];
+  for (const id of ids) {
+    const result = await action(id);
+    if (result) succeeded.push(id);
+    else failed.push({ id, error: "Notification not found" });
+  }
+  return { succeeded, failed };
+}
+function bulkRead(ids, req) {
+  return runBulk(ids, (id) => markRead(id, req));
+}
+function bulkArchive(ids) {
+  return runBulk(ids, (id) => archiveNotification(id));
+}
+async function getNotificationCenterSummary(userId) {
+  const rows = await communicationStore.countNotifications(userId);
+  return {
+    total: rows.length,
+    unread: rows.filter((n) => !n.read && !n.archived).length,
+    read: rows.filter((n) => n.read && !n.archived).length,
+    archived: rows.filter((n) => n.archived).length,
+    pinned: rows.filter((n) => n.pinned).length,
+    dismissed: rows.filter((n) => n.dismissed).length
+  };
+}
+var init_notificationService = __esm({
+  "server/communication/notificationService.ts"() {
+    init_communicationStore();
+    init_deliveryChannels();
+    init_eventHooks();
+    init_communicationTypes();
+  }
+});
+
+// server/communication/systemNotify.ts
+var systemNotify_exports = {};
+__export(systemNotify_exports, {
+  notifyRoles: () => notifyRoles,
+  notifyUser: () => notifyUser
+});
+import { inArray as inArray2 } from "drizzle-orm";
+async function notifyRoles(roles, input) {
+  if (roles.length === 0) return;
+  const rows = await db.select({ id: users.id }).from(users).where(inArray2(users.role, roles));
+  for (const row of rows) {
+    await createNotification({ ...input, userId: row.id });
+  }
+}
+async function notifyUser(userId, input) {
+  if (!userId) return;
+  await createNotification({ ...input, userId });
+}
+var init_systemNotify = __esm({
+  "server/communication/systemNotify.ts"() {
+    init_client();
+    init_schema();
+    init_notificationService();
+  }
+});
+
+// server/operations/operationsPersistence.ts
+function buildOperationsSnapshot() {
+  return {
+    orders: operationsStore.listOrders(),
+    coupons: operationsStore.listCoupons(),
+    couponUsage: operationsStore.listCouponUsage(),
+    reviews: operationsStore.listReviews(),
+    leads: operationsStore.listLeads(),
+    jobPostings: operationsStore.listJobPostings(),
+    jobApplications: operationsStore.listJobApplications(),
+    permissions: operationsStore.getPermissions(),
+    shipments: shipmentStore.listShipments(),
+    featureFlags: operationsStore.getFeatureFlags(),
+    sellerOffers: operationsStore.listSellerOffers(),
+    feeCharges: operationsStore.listFeeCharges(),
+    paymentOptionsConfig: operationsStore.getPaymentOptionsConfig(),
+    sellerBookingSettings: operationsStore.getAllSellerBookingSettings(),
+    returns: operationsStore.listReturns(),
+    verifications: operationsStore.listVerifications(),
+    warrantyClaims: operationsStore.listWarrantyClaims()
+  };
+}
+function scheduleOperationsPersist() {
+  if (persistTimer5) clearTimeout(persistTimer5);
+  persistTimer5 = setTimeout(() => {
+    saveOperationsSnapshot(buildOperationsSnapshot()).catch((err) => {
+      console.error("[OperationsPersist] Failed to save snapshot:", err);
+    });
+  }, 400);
+}
+async function ensureOperationsHydrated() {
+  if (hydrated3) return;
+  hydrated3 = true;
+  try {
+    const snapshot = await loadOperationsSnapshot();
+    if (snapshot) {
+      operationsStore.hydrate(snapshot);
+      if (snapshot.shipments?.length) {
+        shipmentStore.hydrate(snapshot.shipments);
+      }
+      console.log(`[OperationsPersist] Hydrated from ${useOperationsFirestore ? "Firestore" : "disk snapshot"}.`);
+    } else {
+      await saveOperationsSnapshot(buildOperationsSnapshot());
+      console.log(`[OperationsPersist] Seeded initial ${useOperationsFirestore ? "Firestore" : "disk"} snapshot.`);
+    }
+  } catch (err) {
+    console.error("[OperationsPersist] Hydration failed, using in-memory defaults.", err);
+  }
+}
+function attachOperationsPersistence() {
+  operationsStore.setPersistHook(scheduleOperationsPersist);
+}
+var persistTimer5, hydrated3;
+var init_operationsPersistence = __esm({
+  "server/operations/operationsPersistence.ts"() {
+    init_operationsStore();
+    init_shipmentStore();
+    init_operationsDb();
+    persistTimer5 = null;
+    hydrated3 = false;
+  }
+});
+
+// server/commerce/commercePersistence.ts
+import { existsSync as existsSync7, mkdirSync as mkdirSync7, readFileSync as readFileSync7, writeFileSync as writeFileSync7 } from "node:fs";
+import { dirname as dirname7, join as join7 } from "node:path";
+function commerceMemorySnapshotPath() {
+  return process.env.COMMERCE_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH3;
+}
+function loadCommerceMemorySnapshot() {
+  const path = commerceMemorySnapshotPath();
+  if (!existsSync7(path)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync7(path, "utf8"));
+    if (!parsed || parsed.version !== 1) return null;
+    return parsed;
+  } catch (error2) {
+    console.warn("[CommerceMemoryPersist] Failed to load snapshot:", error2);
+    return null;
+  }
+}
+function scheduleCommerceMemoryPersist(build) {
+  pendingBuild = build;
+  if (persistTimer6) clearTimeout(persistTimer6);
+  persistTimer6 = setTimeout(() => {
+    flushCommerceMemoryPersist();
+  }, 250);
+}
+function flushCommerceMemoryPersist() {
+  if (persistTimer6) {
+    clearTimeout(persistTimer6);
+    persistTimer6 = null;
+  }
+  if (!pendingBuild) return;
+  try {
+    const snapshot = pendingBuild();
+    const path = commerceMemorySnapshotPath();
+    mkdirSync7(dirname7(path), { recursive: true });
+    writeFileSync7(path, JSON.stringify(snapshot), "utf8");
+  } catch (error2) {
+    console.error("[CommerceMemoryPersist] Failed to save snapshot:", error2);
+  }
+}
+var DEFAULT_PATH3, persistTimer6, pendingBuild;
+var init_commercePersistence = __esm({
+  "server/commerce/commercePersistence.ts"() {
+    DEFAULT_PATH3 = join7(process.cwd(), ".data", "commerce-memory-snapshot.json");
+    persistTimer6 = null;
+    pendingBuild = null;
+  }
+});
+
+// server/commerce/commerceCollections.ts
+function idempotencyDocId(consumerId, key) {
+  const safeKey = key.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 180);
+  return `idem__${consumerId}__${safeKey}`.slice(0, 700);
+}
+var COMMERCE_CARTS, COMMERCE_CHECKOUTS, COMMERCE_ORDERS, COMMERCE_BOOKING_REQUESTS, COMMERCE_IDEMPOTENCY, COMMERCE_SHIPMENTS;
+var init_commerceCollections = __esm({
+  "server/commerce/commerceCollections.ts"() {
+    COMMERCE_CARTS = "commerce_carts";
+    COMMERCE_CHECKOUTS = "commerce_checkouts";
+    COMMERCE_ORDERS = "commerce_orders";
+    COMMERCE_BOOKING_REQUESTS = "commerce_booking_requests";
+    COMMERCE_IDEMPOTENCY = "commerce_idempotency";
+    COMMERCE_SHIPMENTS = "commerce_shipments";
+  }
+});
+
+// server/commerce/commerceMemoryBackend.ts
+function buildSnapshot3() {
+  return {
+    version: 1,
+    savedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    carts: state6.carts,
+    checkouts: state6.checkouts,
+    orders: state6.orders,
+    bookingRequests: state6.bookingRequests,
+    idempotency: state6.idempotency,
+    shipments: state6.shipments
+  };
+}
+function schedulePersist4() {
+  scheduleCommerceMemoryPersist(buildSnapshot3);
+}
+function upsertById(arr, row) {
+  const idx = arr.findIndex((r) => r.id === row.id);
+  if (idx >= 0) arr[idx] = row;
+  else arr.push(row);
+  schedulePersist4();
+  return row;
+}
+function ensureCommerceMemoryHydrated() {
+  if (hydrated4) return true;
+  hydrated4 = true;
+  const snapshot = loadCommerceMemorySnapshot();
+  if (!snapshot) return false;
+  state6.carts = snapshot.carts || [];
+  state6.checkouts = snapshot.checkouts || [];
+  state6.orders = snapshot.orders || [];
+  state6.bookingRequests = snapshot.bookingRequests || [];
+  state6.idempotency = snapshot.idempotency || [];
+  state6.shipments = snapshot.shipments || [];
+  console.log(
+    `[CommerceMemoryPersist] Hydrated (${state6.carts.length} carts, ${state6.orders.length} orders, ${state6.shipments.length} shipments).`
+  );
+  return true;
+}
+var state6, hydrated4, commerceMemoryBackend;
+var init_commerceMemoryBackend = __esm({
+  "server/commerce/commerceMemoryBackend.ts"() {
+    init_commercePersistence();
+    init_commerceCollections();
+    state6 = {
+      carts: [],
+      checkouts: [],
+      orders: [],
+      bookingRequests: [],
+      idempotency: [],
+      shipments: []
+    };
+    hydrated4 = false;
+    commerceMemoryBackend = {
+      getCartByConsumer(consumerId) {
+        ensureCommerceMemoryHydrated();
+        return state6.carts.find((c) => c.consumerId === consumerId) ?? null;
+      },
+      getCart(id) {
+        ensureCommerceMemoryHydrated();
+        return state6.carts.find((c) => c.id === id) ?? null;
+      },
+      upsertCart(cart) {
+        ensureCommerceMemoryHydrated();
+        return upsertById(state6.carts, cart);
+      },
+      deleteCart(id) {
+        ensureCommerceMemoryHydrated();
+        state6.carts = state6.carts.filter((c) => c.id !== id);
+        schedulePersist4();
+      },
+      getCheckout(id) {
+        ensureCommerceMemoryHydrated();
+        return state6.checkouts.find((c) => c.id === id) ?? null;
+      },
+      upsertCheckout(checkout) {
+        ensureCommerceMemoryHydrated();
+        return upsertById(state6.checkouts, checkout);
+      },
+      getOrder(id) {
+        ensureCommerceMemoryHydrated();
+        return state6.orders.find((o) => o.id === id) ?? null;
+      },
+      listOrders() {
+        ensureCommerceMemoryHydrated();
+        return [...state6.orders];
+      },
+      upsertOrder(order) {
+        ensureCommerceMemoryHydrated();
+        return upsertById(state6.orders, order);
+      },
+      getBookingRequest(id) {
+        ensureCommerceMemoryHydrated();
+        return state6.bookingRequests.find((b) => b.id === id) ?? null;
+      },
+      listBookingRequests() {
+        ensureCommerceMemoryHydrated();
+        return [...state6.bookingRequests];
+      },
+      upsertBookingRequest(row) {
+        ensureCommerceMemoryHydrated();
+        return upsertById(state6.bookingRequests, row);
+      },
+      getShipment(id) {
+        ensureCommerceMemoryHydrated();
+        return state6.shipments.find((s) => s.id === id) ?? null;
+      },
+      getShipmentByOrderId(orderId) {
+        ensureCommerceMemoryHydrated();
+        return state6.shipments.find((s) => s.orderId === orderId) ?? null;
+      },
+      listShipments() {
+        ensureCommerceMemoryHydrated();
+        return [...state6.shipments];
+      },
+      upsertShipment(row) {
+        ensureCommerceMemoryHydrated();
+        return upsertById(state6.shipments, row);
+      },
+      getIdempotency(key, consumerId) {
+        ensureCommerceMemoryHydrated();
+        return state6.idempotency.find((r) => r.key === key && r.consumerId === consumerId) ?? null;
+      },
+      putIdempotency(row) {
+        ensureCommerceMemoryHydrated();
+        const id = idempotencyDocId(row.consumerId, row.key);
+        const payload = { ...row, id };
+        const idx = state6.idempotency.findIndex(
+          (r) => r.key === row.key && r.consumerId === row.consumerId
+        );
+        if (idx >= 0) state6.idempotency[idx] = payload;
+        else state6.idempotency.push(payload);
+        schedulePersist4();
+        return payload;
+      },
+      commitCheckoutBundle(bundle) {
+        ensureCommerceMemoryHydrated();
+        upsertById(state6.checkouts, bundle.checkout);
+        for (const order of bundle.orders) upsertById(state6.orders, order);
+        for (const br of bundle.bookingRequests) upsertById(state6.bookingRequests, br);
+        if (bundle.idempotency) {
+          this.putIdempotency(bundle.idempotency);
+        }
+        if (bundle.clearedCart) {
+          upsertById(state6.carts, bundle.clearedCart);
+        }
+      },
+      commitOrderMutation(bundle) {
+        ensureCommerceMemoryHydrated();
+        upsertById(state6.orders, bundle.order);
+        if (bundle.shipment) upsertById(state6.shipments, bundle.shipment);
+      },
+      flushPersist() {
+        flushCommerceMemoryPersist();
+      }
+    };
+  }
+});
+
+// server/commerce/commerceFirestoreAdmin.ts
+var commerceFirestoreAdmin_exports = {};
+__export(commerceFirestoreAdmin_exports, {
+  commerceFirestoreAdmin: () => commerceFirestoreAdmin
+});
+var commerceFirestoreAdmin;
+var init_commerceFirestoreAdmin = __esm({
+  "server/commerce/commerceFirestoreAdmin.ts"() {
+    init_queryHelpers();
+    init_commerceCollections();
+    commerceFirestoreAdmin = {
+      async getCart(id) {
+        return getDocumentById(COMMERCE_CARTS, id);
+      },
+      async getCartByConsumer(consumerId) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(COMMERCE_CARTS).where("consumerId", "==", consumerId).limit(1).get();
+        if (snap.empty) return null;
+        return snap.docs[0].data();
+      },
+      async upsertCart(cart) {
+        return upsertDocument(COMMERCE_CARTS, cart);
+      },
+      async deleteCart(id) {
+        return deleteDocument(COMMERCE_CARTS, id);
+      },
+      async getCheckout(id) {
+        return getDocumentById(COMMERCE_CHECKOUTS, id);
+      },
+      async upsertCheckout(checkout) {
+        return upsertDocument(COMMERCE_CHECKOUTS, checkout);
+      },
+      async getOrder(id) {
+        return getDocumentById(COMMERCE_ORDERS, id);
+      },
+      async listOrders() {
+        return listCollection(COMMERCE_ORDERS);
+      },
+      async upsertOrder(order) {
+        return upsertDocument(COMMERCE_ORDERS, order);
+      },
+      async getBookingRequest(id) {
+        return getDocumentById(COMMERCE_BOOKING_REQUESTS, id);
+      },
+      async listBookingRequests() {
+        return listCollection(COMMERCE_BOOKING_REQUESTS);
+      },
+      async upsertBookingRequest(row) {
+        return upsertDocument(COMMERCE_BOOKING_REQUESTS, row);
+      },
+      async getShipment(id) {
+        return getDocumentById(COMMERCE_SHIPMENTS, id);
+      },
+      async getShipmentByOrderId(orderId) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(COMMERCE_SHIPMENTS).where("orderId", "==", orderId).limit(1).get();
+        if (snap.empty) return null;
+        return snap.docs[0].data();
+      },
+      async listShipments() {
+        return listCollection(COMMERCE_SHIPMENTS);
+      },
+      async upsertShipment(row) {
+        return upsertDocument(COMMERCE_SHIPMENTS, row);
+      },
+      async getIdempotency(key, consumerId) {
+        const id = idempotencyDocId(consumerId, key);
+        return getDocumentById(COMMERCE_IDEMPOTENCY, id);
+      },
+      async putIdempotency(row) {
+        const id = idempotencyDocId(row.consumerId, row.key);
+        const payload = { ...row, id };
+        return upsertDocument(COMMERCE_IDEMPOTENCY, payload);
+      },
+      /**
+       * Atomic checkout commit: checkout + split orders + booking requests +
+       * idempotency + cleared cart in one Firestore batch (≤500 ops).
+       */
+      async commitCheckoutBundle(bundle) {
+        const db3 = await requireAdminFirestore();
+        const batch = db3.batch();
+        let ops = 0;
+        const set = (collection2, id, data) => {
+          batch.set(db3.collection(collection2).doc(id), data, { merge: true });
+          ops += 1;
+          if (ops >= 450) {
+            throw new Error("Commerce checkout batch too large; reduce cart size");
+          }
+        };
+        set(COMMERCE_CHECKOUTS, bundle.checkout.id, bundle.checkout);
+        for (const order of bundle.orders) {
+          set(COMMERCE_ORDERS, order.id, order);
+        }
+        for (const br of bundle.bookingRequests) {
+          set(COMMERCE_BOOKING_REQUESTS, br.id, br);
+        }
+        if (bundle.idempotency) {
+          const id = idempotencyDocId(bundle.idempotency.consumerId, bundle.idempotency.key);
+          set(COMMERCE_IDEMPOTENCY, id, { ...bundle.idempotency, id });
+        }
+        if (bundle.clearedCart) {
+          set(COMMERCE_CARTS, bundle.clearedCart.id, bundle.clearedCart);
+        }
+        await batch.commit();
+      },
+      /** Atomic order + optional shipment update. */
+      async commitOrderMutation(bundle) {
+        const db3 = await requireAdminFirestore();
+        const batch = db3.batch();
+        batch.set(db3.collection(COMMERCE_ORDERS).doc(bundle.order.id), bundle.order, {
+          merge: true
+        });
+        if (bundle.shipment) {
+          batch.set(db3.collection(COMMERCE_SHIPMENTS).doc(bundle.shipment.id), bundle.shipment, {
+            merge: true
+          });
+        }
+        await batch.commit();
+      }
+    };
+  }
+});
+
+// server/commerce/commerceStore.ts
+var commerceStore_exports = {};
+__export(commerceStore_exports, {
+  assertCommercePersistenceReady: () => assertCommercePersistenceReady,
+  commerceStore: () => commerceStore,
+  getCommercePersistenceMode: () => getCommercePersistenceMode
+});
+function isCommerceFirestoreRequested() {
+  const raw = process.env.COMMERCE_USE_FIRESTORE?.trim().toLowerCase();
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  return process.env.CATALOG_USE_FIRESTORE === "true";
+}
+async function getAdmin() {
+  if (!useAdminFirestore2) {
+    throw new Error(
+      "Commerce Firestore mode is requested but not available. Set FIREBASE_SERVICE_ACCOUNT_JSON or disable COMMERCE_USE_FIRESTORE."
+    );
+  }
+  if (!adminPromise) {
+    adminPromise = Promise.resolve().then(() => (init_commerceFirestoreAdmin(), commerceFirestoreAdmin_exports)).then((m) => m.commerceFirestoreAdmin);
+  }
+  return adminPromise;
+}
+function getCommercePersistenceMode() {
+  if (firestoreRequested && !credentialsOk) return "firestore-misconfigured";
+  return useAdminFirestore2 ? "firestore-admin" : "memory-disk";
+}
+function assertCommercePersistenceReady() {
+  if (getCommercePersistenceMode() === "firestore-misconfigured") {
+    throw new Error(
+      "Commerce persistence misconfigured: Firestore requested but FIREBASE_SERVICE_ACCOUNT_JSON is not set."
+    );
+  }
+}
+var firestoreRequested, credentialsOk, useAdminFirestore2, adminPromise, commerceStore;
+var init_commerceStore = __esm({
+  "server/commerce/commerceStore.ts"() {
+    init_firestoreAdmin();
+    init_commerceMemoryBackend();
+    firestoreRequested = isCommerceFirestoreRequested();
+    credentialsOk = hasFirebaseAdminCredentials();
+    useAdminFirestore2 = firestoreRequested && credentialsOk;
+    if (firestoreRequested && !credentialsOk) {
+      console.error(
+        "[Commerce] Firestore mode requested (COMMERCE_USE_FIRESTORE/CATALOG_USE_FIRESTORE) but FIREBASE_SERVICE_ACCOUNT_JSON is missing. Fail-closed: commerce writes will error until credentials are configured."
+      );
+    }
+    adminPromise = null;
+    if (!useAdminFirestore2 && getCommercePersistenceMode() === "memory-disk") {
+      ensureCommerceMemoryHydrated();
+    }
+    console.log(`[Commerce] Persistence mode: ${getCommercePersistenceMode()}`);
+    commerceStore = {
+      async getCartByConsumer(consumerId) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).getCartByConsumer(consumerId);
+        return commerceMemoryBackend.getCartByConsumer(consumerId);
+      },
+      async getCart(id) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).getCart(id);
+        return commerceMemoryBackend.getCart(id);
+      },
+      async upsertCart(cart) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).upsertCart(cart);
+        return commerceMemoryBackend.upsertCart(cart);
+      },
+      async deleteCart(id) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).deleteCart(id);
+        commerceMemoryBackend.deleteCart(id);
+      },
+      async getCheckout(id) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).getCheckout(id);
+        return commerceMemoryBackend.getCheckout(id);
+      },
+      async upsertCheckout(checkout) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).upsertCheckout(checkout);
+        return commerceMemoryBackend.upsertCheckout(checkout);
+      },
+      async getOrder(id) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).getOrder(id);
+        return commerceMemoryBackend.getOrder(id);
+      },
+      async listOrders() {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).listOrders();
+        return commerceMemoryBackend.listOrders();
+      },
+      async upsertOrder(order) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).upsertOrder(order);
+        return commerceMemoryBackend.upsertOrder(order);
+      },
+      async getBookingRequest(id) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).getBookingRequest(id);
+        return commerceMemoryBackend.getBookingRequest(id);
+      },
+      async listBookingRequests() {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).listBookingRequests();
+        return commerceMemoryBackend.listBookingRequests();
+      },
+      async upsertBookingRequest(row) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).upsertBookingRequest(row);
+        return commerceMemoryBackend.upsertBookingRequest(row);
+      },
+      async getShipment(id) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).getShipment(id);
+        return commerceMemoryBackend.getShipment(id);
+      },
+      async getShipmentByOrderId(orderId) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).getShipmentByOrderId(orderId);
+        return commerceMemoryBackend.getShipmentByOrderId(orderId);
+      },
+      async listShipments() {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).listShipments();
+        return commerceMemoryBackend.listShipments();
+      },
+      async upsertShipment(row) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).upsertShipment(row);
+        return commerceMemoryBackend.upsertShipment(row);
+      },
+      async getIdempotency(key, consumerId) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).getIdempotency(key, consumerId);
+        return commerceMemoryBackend.getIdempotency(key, consumerId);
+      },
+      async putIdempotency(row) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) return (await getAdmin()).putIdempotency(row);
+        return commerceMemoryBackend.putIdempotency(row);
+      },
+      async commitCheckoutBundle(bundle) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) {
+          await (await getAdmin()).commitCheckoutBundle(bundle);
+          return;
+        }
+        commerceMemoryBackend.commitCheckoutBundle(bundle);
+      },
+      async commitOrderMutation(bundle) {
+        assertCommercePersistenceReady();
+        if (useAdminFirestore2) {
+          await (await getAdmin()).commitOrderMutation(bundle);
+          return;
+        }
+        commerceMemoryBackend.commitOrderMutation(bundle);
+      },
+      async flushPersist() {
+        if (useAdminFirestore2) return;
+        commerceMemoryBackend.flushPersist();
+      }
+    };
+  }
+});
+
+// server/operations/platformMessagingBridge.ts
+var platformMessagingBridge_exports = {};
+__export(platformMessagingBridge_exports, {
+  ensurePlatformOrderConversation: () => ensurePlatformOrderConversation,
+  submitPlatformMessage: () => submitPlatformMessage
+});
+async function ensurePlatformOrderConversation(order) {
+  const conversationId = `conv_platform_${order.buyerId}`;
+  const existing = await getConversation(conversationId);
+  const summary = `Order ${order.orderId} placed \u2014 \u09F3${Number(order.overallTotal || 0).toLocaleString()} (${order.sourceMode || "retail"})`;
+  const conversation = {
+    conversationId,
+    platform: "platform",
+    senderName: order.shipping?.fullName || order.buyerId,
+    lastMessage: summary,
+    assignedAgent: existing?.assignedAgent || "agent_farhan",
+    status: "open",
+    updatedAt: nowIso10()
+  };
+  await saveConversation(conversation);
+  const message = {
+    id: `m_sys_${Date.now()}`,
+    platform: "platform",
+    platformMessageId: `sys_order_${order.orderId}`,
+    conversationId,
+    senderId: "system",
+    senderName: "Choosify Platform",
+    content: { type: "text", body: summary },
+    direction: "inbound",
+    status: "delivered",
+    assignedAgent: conversation.assignedAgent,
+    conversationStatus: conversation.status,
+    timestamp: nowIso10()
+  };
+  await saveMessage(message);
+  return conversation;
+}
+async function submitPlatformMessage(payload) {
+  const conversationId = `conv_platform_${payload.buyerId}`;
+  const existing = await getConversation(conversationId);
+  const direction = payload.direction || "inbound";
+  const senderId = payload.senderId || payload.buyerId;
+  if (payload.platformMessageId && await messageExistsByPlatformId(payload.platformMessageId)) {
+    return { conversation: existing || null, message: null, deduped: true };
+  }
+  const conversation = {
+    conversationId,
+    platform: "platform",
+    senderName: direction === "inbound" ? payload.userName : existing?.senderName || payload.buyerId,
+    lastMessage: payload.body,
+    assignedAgent: existing?.assignedAgent || "agent_farhan",
+    status: "open",
+    updatedAt: nowIso10()
+  };
+  const prefix = payload.orderId ? `[Order ${payload.orderId}] ` : "";
+  const message = {
+    id: `m_plat_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    platform: "platform",
+    platformMessageId: payload.platformMessageId || `plat_${Date.now()}`,
+    conversationId,
+    senderId,
+    senderName: payload.userName,
+    content: { type: "text", body: `${prefix}${payload.body}`.trim() },
+    direction,
+    status: "delivered",
+    assignedAgent: conversation.assignedAgent,
+    conversationStatus: conversation.status,
+    timestamp: nowIso10(),
+    bookingOffer: payload.bookingOffer,
+    orderOffer: payload.orderOffer,
+    dispatchEvent: payload.dispatchEvent
+  };
+  await saveConversation(conversation);
+  await saveMessage(message);
+  return { conversation, message, deduped: false };
+}
+var nowIso10;
+var init_platformMessagingBridge = __esm({
+  "server/operations/platformMessagingBridge.ts"() {
+    init_omniStore();
+    nowIso10 = () => (/* @__PURE__ */ new Date()).toISOString();
+  }
+});
+
+// server/events/eventBus.ts
+import { randomUUID as randomUUID3 } from "node:crypto";
+function subscribe(eventName, handler) {
+  if (!subscribersByEvent.has(eventName)) {
+    subscribersByEvent.set(eventName, /* @__PURE__ */ new Set());
+  }
+  subscribersByEvent.get(eventName).add(handler);
+  return () => subscribersByEvent.get(eventName)?.delete(handler);
+}
+function getRecentPublishedEvents(opts) {
+  let rows = RECENT_EVENT_RING;
+  if (opts?.domain) rows = rows.filter((e) => e.domain === opts.domain);
+  const limit = opts?.limit ?? 100;
+  return rows.slice(-limit);
+}
+function publishEvent(input) {
+  const event = {
+    eventId: randomUUID3(),
+    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
+    correlationId: input.correlationId || randomUUID3(),
+    version: input.version ?? 1,
+    ...input
+  };
+  RECENT_EVENT_RING.push(event);
+  if (RECENT_EVENT_RING.length > RECENT_EVENT_RING_MAX) {
+    RECENT_EVENT_RING.splice(0, RECENT_EVENT_RING.length - RECENT_EVENT_RING_MAX);
+  }
+  Logger.audit(`event.${event.eventName}`, {
+    eventId: event.eventId,
+    domain: event.domain,
+    producer: event.producer,
+    aggregateId: event.aggregateId,
+    actor: event.actor,
+    correlationId: event.correlationId,
+    version: event.version
+  });
+  const handlers = [
+    ...subscribersByEvent.get(event.eventName) ?? [],
+    ...wildcardSubscribers
+  ];
+  for (const handler of handlers) {
+    try {
+      void handler(event);
+    } catch (error2) {
+      Logger.warn("event subscriber threw", {
+        eventName: event.eventName,
+        eventId: event.eventId,
+        error: error2 instanceof Error ? error2.message : String(error2)
+      });
+    }
+  }
+  return event;
+}
+var subscribersByEvent, wildcardSubscribers, RECENT_EVENT_RING, RECENT_EVENT_RING_MAX;
+var init_eventBus = __esm({
+  "server/events/eventBus.ts"() {
+    init_logger();
+    subscribersByEvent = /* @__PURE__ */ new Map();
+    wildcardSubscribers = /* @__PURE__ */ new Set();
+    RECENT_EVENT_RING = [];
+    RECENT_EVENT_RING_MAX = 400;
+  }
+});
+
+// server/catalog/serviceStore.ts
+import { randomUUID as randomUUID4 } from "node:crypto";
+function nowIso11() {
+  return (/* @__PURE__ */ new Date()).toISOString();
+}
+function slugify3(value) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "service";
+}
+async function listServices() {
+  return catalogStore2.listServices();
+}
+async function getService(id) {
+  return catalogStore2.getService(id);
+}
+async function upsertService(service) {
+  return catalogStore2.upsertService(service);
+}
+async function deleteService(id) {
+  await catalogStore2.deleteService(id);
+  return true;
+}
+function normalizeServiceInput(payload, existing, context) {
+  const raw = payload ?? {};
+  const title = typeof raw.title === "string" && raw.title.trim() ? raw.title.trim() : existing?.title || "Untitled Service";
+  const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : existing?.id || `svc-${randomUUID4()}`;
+  const requestedSlug = typeof raw.slug === "string" && raw.slug.trim() ? slugify3(raw.slug) : existing?.slug || slugify3(title);
+  const taken = new Set((context?.existingSlugs ?? []).filter((s) => s !== existing?.slug));
+  let slug = requestedSlug;
+  if (taken.has(slug)) {
+    slug = `${requestedSlug}-${Date.now().toString(36).slice(-5)}`;
+  }
+  const statusRaw = typeof raw.status === "string" ? raw.status : existing?.status ?? "draft";
+  const status = toPersistedProductStatus(
+    normalizeProductLifecycle(statusRaw)
+  );
+  const price = typeof raw.price === "number" ? raw.price : typeof raw.rate === "number" ? raw.rate : existing?.price ?? 0;
+  const media2 = Array.isArray(raw.media) ? raw.media.filter((m) => typeof m === "string") : typeof raw.image === "string" ? [raw.image] : existing?.media ?? [];
+  return {
+    id,
+    slug,
+    title,
+    description: typeof raw.description === "string" ? raw.description : existing?.description ?? "",
+    brandId: typeof raw.brandId === "string" && raw.brandId.trim() ? raw.brandId.trim() : existing?.brandId || "",
+    brandName: typeof raw.brandName === "string" ? raw.brandName : existing?.brandName ?? "",
+    categoryId: typeof raw.categoryId === "string" ? raw.categoryId : existing?.categoryId ?? "",
+    categoryName: typeof raw.categoryName === "string" ? raw.categoryName : existing?.categoryName ?? "",
+    serviceCategory: typeof raw.serviceCategory === "string" ? raw.serviceCategory : existing?.serviceCategory,
+    price: Number.isFinite(price) ? Math.max(0, price) : 0,
+    currency: typeof raw.currency === "string" && raw.currency.trim() ? raw.currency.trim() : existing?.currency ?? "BDT",
+    durationMinutes: typeof raw.durationMinutes === "number" ? Math.max(0, Math.floor(raw.durationMinutes)) : typeof raw.duration === "number" ? Math.max(0, Math.floor(raw.duration)) : existing?.durationMinutes,
+    serviceArea: typeof raw.serviceArea === "string" ? raw.serviceArea : typeof raw.location === "string" ? raw.location : existing?.serviceArea,
+    media: media2,
+    image: typeof raw.image === "string" ? raw.image : media2[0] || existing?.image || "",
+    status,
+    sellerId: typeof raw.sellerId === "string" && raw.sellerId.trim() ? raw.sellerId.trim() : existing?.sellerId,
+    attributes: (() => {
+      if (raw.attributes && typeof raw.attributes === "object" && !Array.isArray(raw.attributes)) {
+        return raw.attributes;
+      }
+      return existing?.attributes;
+    })(),
+    createdAt: existing?.createdAt ?? nowIso11(),
+    updatedAt: nowIso11()
+  };
+}
+var init_serviceStore = __esm({
+  "server/catalog/serviceStore.ts"() {
+    init_catalogStore();
+    init_productLifecycle();
+  }
+});
+
+// server/commerce/cartService.ts
+function emitCart(eventName, cartId, actor, payload) {
+  publishEvent({
+    eventName,
+    domain: "Commerce",
+    producer: "commerceCart",
+    aggregateId: cartId,
+    actor,
+    payload
+  });
+}
+function nowIso12() {
+  return (/* @__PURE__ */ new Date()).toISOString();
+}
+function newId(prefix) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+function variantIsActive(v) {
+  if (v.status) return v.status === "active";
+  return v.enabled !== false;
+}
+async function resolveVariantPricing(productId, variantId, basePrice, baseOriginalPrice) {
+  const detail = await catalogStore2.getProductDetail(productId);
+  const v = detail?.productVariants?.find((x) => x.id === variantId);
+  if (!v) return null;
+  return {
+    variantId,
+    sku: v.sku || void 0,
+    unitPrice: typeof v.price === "number" && v.price >= 0 ? v.price : basePrice,
+    originalUnitPrice: typeof v.originalPrice === "number" && v.originalPrice > 0 ? v.originalPrice : baseOriginalPrice,
+    active: variantIsActive(v),
+    options: v.options,
+    images: Array.isArray(v.images) && v.images.length ? v.images : void 0
+  };
+}
+async function resolveAddonsForProduct(productId, requested) {
+  if (!Array.isArray(requested) || requested.length === 0) return [];
+  const detail = await catalogStore2.getProductDetail(productId);
+  const defs = detail?.addonItems ?? [];
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const r of requested) {
+    const id = String(r?.id ?? "").trim();
+    if (!id) throw new CommerceError("Add-on id is required", 400);
+    if (seen.has(id)) throw new CommerceError(`Duplicate add-on "${id}"`, 400);
+    seen.add(id);
+    const def = defs.find((a) => a.id === id);
+    if (!def) throw new CommerceError("Add-on does not belong to this product", 400);
+    if (def.enabled === false) throw new CommerceError(`Add-on "${def.title}" is not available`, 400);
+    const maxQ = typeof def.maxQuantity === "number" && def.maxQuantity >= 1 ? Math.floor(def.maxQuantity) : 1;
+    const q = Math.max(1, Math.floor(Number(r?.quantity ?? 1) || 1));
+    if (q > maxQ) {
+      throw new CommerceError(`Add-on "${def.title}" allows at most ${maxQ} per order`, 400);
+    }
+    const unitPrice = Math.max(0, typeof def.price === "number" ? def.price : 0);
+    out.push({ id: def.id, title: def.title, unitPrice, quantity: q, lineTotal: unitPrice * q });
+  }
+  return out;
+}
+function sumAddonLines(addons) {
+  return (addons ?? []).reduce((s, a) => s + a.lineTotal, 0);
+}
+function computeCartTotals(cart) {
+  const subtotal = cart.items.reduce(
+    (sum, item) => sum + item.unitPrice * item.quantity + sumAddonLines(item.addons),
+    0
+  );
+  const discountTotal = 0;
+  const deliveryTotal = cart.items.length ? DEFAULT_DELIVERY : 0;
+  const taxTotal = 0;
+  return {
+    currency: cart.currency || "BDT",
+    itemCount: cart.items.reduce((n, i) => n + i.quantity, 0),
+    subtotal,
+    discountTotal,
+    deliveryTotal,
+    taxTotal,
+    grandTotal: Math.max(0, subtotal - discountTotal + deliveryTotal + taxTotal)
+  };
+}
+async function getOrCreateCart(consumerId) {
+  const existing = await commerceStore.getCartByConsumer(consumerId);
+  if (existing) return existing;
+  const created2 = {
+    id: newId("cart"),
+    consumerId,
+    items: [],
+    currency: "BDT",
+    createdAt: nowIso12(),
+    updatedAt: nowIso12()
+  };
+  const saved = await commerceStore.upsertCart(created2);
+  emitCart("CartCreated", saved.id, consumerId, { cartId: saved.id, consumerId });
+  return saved;
+}
+async function assertProductEligible(productId, variantId) {
+  const product = await catalogStore2.getProduct(productId);
+  if (!product) throw new CommerceError("Product not found", 404);
+  const lifecycle = normalizeProductLifecycle(product.status);
+  if (lifecycle === "archived" || lifecycle === "suspended") {
+    throw new CommerceError(`Product is ${lifecycle} and cannot be added to cart`);
+  }
+  const brand = (await catalogStore2.listBrands()).find((b) => b.id === product.brandId);
+  if (!brand || !brandIsMarketplaceVisible(brand)) {
+    throw new CommerceError("Brand Marketplace Access does not allow commerce for this product");
+  }
+  if (!isProductPubliclyEligible(product, brand)) {
+    if (lifecycle !== "active" && lifecycle !== "out_of_stock") {
+      throw new CommerceError("Product is not publicly eligible for commerce");
+    }
+  }
+  if (!product.sellerId && brand.sellerId) {
+  }
+  const sellerId = product.sellerId || brand.sellerId;
+  if (!sellerId) {
+    throw new CommerceError("Product has no owning seller");
+  }
+  if (variantId) {
+    const detail = await catalogStore2.getProductDetail(productId);
+    const variant = detail?.productVariants?.find((v) => v.id === variantId);
+    if (!variant) {
+      throw new CommerceError("Variant does not belong to this product", 400);
+    }
+    if (!variantIsActive(variant)) {
+      throw new CommerceError("Selected variant is not available for purchase", 400);
+    }
+  }
+  return { product, brand, sellerId };
+}
+function usesPhysicalInventory(product) {
+  return product.productType !== "service";
+}
+async function assertInventoryAvailable(productId, quantity, variantId) {
+  let record = await getInventoryRecord(productId, variantId);
+  if (!record && !variantId) {
+    const all = await listInventoryForProduct(productId);
+    record = all.find((r) => !r.variantId) || all[0] || null;
+  }
+  let available;
+  if (record) {
+    available = record.availableQuantity;
+  } else if (variantId) {
+    const detail = await catalogStore2.getProductDetail(productId);
+    const variant = detail?.productVariants?.find((v) => v.id === variantId);
+    available = Math.max(0, Math.floor(variant?.stock ?? 0));
+  } else {
+    const product = await catalogStore2.getProduct(productId);
+    available = Math.max(0, Math.floor(product?.stock ?? 0));
+  }
+  if (quantity > available) {
+    throw new CommerceError(`Insufficient stock: requested ${quantity}, available ${available}`);
+  }
+}
+async function assertServiceEligible(serviceId) {
+  const service = await getService(serviceId);
+  if (!service) throw new CommerceError("Service not found", 404);
+  const lifecycle = normalizeProductLifecycle(service.status);
+  if (lifecycle === "archived" || lifecycle === "suspended") {
+    throw new CommerceError(`Service is ${lifecycle} and cannot be added to cart`);
+  }
+  if (lifecycle !== "active" && lifecycle !== "out_of_stock") {
+    throw new CommerceError("Service is not publicly eligible for commerce");
+  }
+  const brand = (await catalogStore2.listBrands()).find((b) => b.id === service.brandId);
+  if (!brand || !brandIsMarketplaceVisible(brand)) {
+    throw new CommerceError("Brand Marketplace Access does not allow commerce for this service");
+  }
+  const sellerId = service.sellerId || brand.sellerId;
+  if (!sellerId) throw new CommerceError("Service has no owning seller");
+  return { service, brand, sellerId };
+}
+async function addCartItem(consumerId, input) {
+  const qty2 = Math.max(1, Math.floor(input.quantity ?? 1));
+  const cart = await getOrCreateCart(consumerId);
+  if (input.listingType === "product") {
+    const { product, brand, sellerId } = await assertProductEligible(
+      input.listingId,
+      input.variantId
+    );
+    let unitPrice = product.price;
+    let originalUnitPrice = product.originalPrice;
+    let variantSku;
+    if (input.variantId) {
+      const rv = await resolveVariantPricing(
+        product.id,
+        input.variantId,
+        product.price,
+        product.originalPrice
+      );
+      if (!rv) throw new CommerceError("Variant does not belong to this product", 400);
+      if (!rv.active) throw new CommerceError("Selected variant is not available for purchase", 400);
+      unitPrice = rv.unitPrice;
+      originalUnitPrice = rv.originalUnitPrice;
+      variantSku = rv.sku;
+    }
+    const resolvedAddons = await resolveAddonsForProduct(product.id, input.addons);
+    const physical = usesPhysicalInventory(product);
+    if (physical) {
+      await assertInventoryAvailable(input.listingId, qty2, input.variantId);
+    }
+    const existing = cart.items.find(
+      (i) => i.listingType === "product" && i.listingId === product.id && (i.variantId || "") === (input.variantId || "")
+    );
+    if (existing) {
+      const nextQty = existing.quantity + qty2;
+      if (physical) await assertInventoryAvailable(product.id, nextQty, input.variantId);
+      existing.quantity = nextQty;
+      existing.unitPrice = unitPrice;
+      existing.originalUnitPrice = originalUnitPrice;
+      existing.variantSku = variantSku;
+      if (Array.isArray(input.addons)) existing.addons = resolvedAddons;
+      if (input.guideOfferRef?.guideId) {
+        existing.guideOfferRef = {
+          guideId: input.guideOfferRef.guideId,
+          productId: input.guideOfferRef.productId || product.id
+        };
+      }
+      if (typeof input.expectedUnitPrice === "number") existing.expectedUnitPrice = input.expectedUnitPrice;
+      existing.updatedAt = nowIso12();
+    } else {
+      const item = {
+        id: newId("ci"),
+        listingType: "product",
+        listingId: product.id,
+        variantId: input.variantId,
+        variantSku,
+        quantity: qty2,
+        title: product.title,
+        brandId: product.brandId,
+        brandName: brand.name || product.brandName,
+        sellerId,
+        unitPrice,
+        originalUnitPrice,
+        addons: resolvedAddons.length ? resolvedAddons : void 0,
+        ...input.guideOfferRef?.guideId ? {
+          guideOfferRef: {
+            guideId: input.guideOfferRef.guideId,
+            productId: input.guideOfferRef.productId || product.id
+          }
+        } : {},
+        ...typeof input.expectedUnitPrice === "number" ? { expectedUnitPrice: input.expectedUnitPrice } : {},
+        currency: "BDT",
+        image: product.image,
+        selectedOptions: input.selectedOptions,
+        addedAt: nowIso12(),
+        updatedAt: nowIso12()
+      };
+      cart.items.push(item);
+    }
+  } else if (input.listingType === "service") {
+    const { service, brand, sellerId } = await assertServiceEligible(input.listingId);
+    const existing = cart.items.find(
+      (i) => i.listingType === "service" && i.listingId === service.id
+    );
+    if (existing) {
+      existing.quantity += qty2;
+      existing.unitPrice = service.price;
+      existing.updatedAt = nowIso12();
+      if (input.requestedAt) existing.requestedAt = input.requestedAt;
+      if (input.serviceArea) existing.serviceArea = input.serviceArea;
+      if (input.notes) existing.notes = input.notes;
+    } else {
+      cart.items.push({
+        id: newId("ci"),
+        listingType: "service",
+        listingId: service.id,
+        quantity: qty2,
+        title: service.title,
+        brandId: service.brandId,
+        brandName: brand.name || service.brandName,
+        sellerId,
+        unitPrice: service.price,
+        currency: service.currency || "BDT",
+        image: service.image,
+        requestedAt: input.requestedAt,
+        serviceArea: input.serviceArea || service.serviceArea,
+        notes: input.notes,
+        addedAt: nowIso12(),
+        updatedAt: nowIso12()
+      });
+    }
+  } else {
+    throw new CommerceError("Unsupported listing type");
+  }
+  cart.updatedAt = nowIso12();
+  const saved = await commerceStore.upsertCart(cart);
+  emitCart("CartItemAdded", saved.id, consumerId, {
+    cartId: saved.id,
+    listingType: input.listingType,
+    listingId: input.listingId,
+    quantity: qty2
+  });
+  emitCart("CartUpdated", saved.id, consumerId, { cartId: saved.id });
+  return { cart: saved, totals: computeCartTotals(saved) };
+}
+async function updateCartItemQuantity(consumerId, itemId, quantity) {
+  const cart = await getOrCreateCart(consumerId);
+  const item = cart.items.find((i) => i.id === itemId);
+  if (!item) throw new CommerceError("Cart item not found", 404);
+  const qty2 = Math.floor(quantity);
+  if (qty2 <= 0) {
+    cart.items = cart.items.filter((i) => i.id !== itemId);
+  } else {
+    if (item.listingType === "product") {
+      const product = await catalogStore2.getProduct(item.listingId);
+      if (!product || usesPhysicalInventory(product)) {
+        await assertInventoryAvailable(item.listingId, qty2, item.variantId);
+      }
+    }
+    item.quantity = qty2;
+    item.updatedAt = nowIso12();
+  }
+  cart.updatedAt = nowIso12();
+  const saved = await commerceStore.upsertCart(cart);
+  emitCart("CartUpdated", saved.id, consumerId, { cartId: saved.id, itemId, quantity: qty2 });
+  return { cart: saved, totals: computeCartTotals(saved) };
+}
+async function updateCartItemAddons(consumerId, itemId, addons) {
+  const cart = await getOrCreateCart(consumerId);
+  const item = cart.items.find((i) => i.id === itemId);
+  if (!item) throw new CommerceError("Cart item not found", 404);
+  if (item.listingType !== "product") {
+    throw new CommerceError("Add-ons apply to product cart items only", 400);
+  }
+  const resolved = await resolveAddonsForProduct(item.listingId, addons);
+  item.addons = resolved.length ? resolved : void 0;
+  item.updatedAt = nowIso12();
+  cart.updatedAt = nowIso12();
+  const saved = await commerceStore.upsertCart(cart);
+  emitCart("CartUpdated", saved.id, consumerId, { cartId: saved.id, itemId, addons: resolved.length });
+  return { cart: saved, totals: computeCartTotals(saved) };
+}
+async function removeCartItem(consumerId, itemId) {
+  const cart = await getOrCreateCart(consumerId);
+  const before = cart.items.length;
+  cart.items = cart.items.filter((i) => i.id !== itemId);
+  if (cart.items.length === before) throw new CommerceError("Cart item not found", 404);
+  cart.updatedAt = nowIso12();
+  const saved = await commerceStore.upsertCart(cart);
+  emitCart("CartItemRemoved", saved.id, consumerId, { cartId: saved.id, itemId });
+  emitCart("CartUpdated", saved.id, consumerId, { cartId: saved.id });
+  return { cart: saved, totals: computeCartTotals(saved) };
+}
+async function clearCart(consumerId) {
+  const cart = await getOrCreateCart(consumerId);
+  cart.items = [];
+  cart.updatedAt = nowIso12();
+  const saved = await commerceStore.upsertCart(cart);
+  emitCart("CartUpdated", saved.id, consumerId, { cartId: saved.id, cleared: true });
+  return saved;
+}
+async function refreshCartPrices(cart) {
+  for (const item of cart.items) {
+    if (item.listingType === "product") {
+      const product = await catalogStore2.getProduct(item.listingId);
+      if (product) {
+        item.unitPrice = product.price;
+        item.originalUnitPrice = product.originalPrice;
+        if (item.variantId) {
+          const rv = await resolveVariantPricing(
+            product.id,
+            item.variantId,
+            product.price,
+            product.originalPrice
+          );
+          if (rv) {
+            item.unitPrice = rv.unitPrice;
+            item.originalUnitPrice = rv.originalUnitPrice;
+            item.variantSku = rv.sku;
+          }
+        }
+        if (item.addons?.length) {
+          const still = [];
+          for (const a of item.addons) {
+            try {
+              const [re] = await resolveAddonsForProduct(product.id, [
+                { id: a.id, quantity: a.quantity }
+              ]);
+              if (re) still.push(re);
+            } catch {
+            }
+          }
+          item.addons = still.length ? still : void 0;
+        }
+      }
+    } else {
+      const service = await getService(item.listingId);
+      if (service) item.unitPrice = service.price;
+    }
+    item.updatedAt = nowIso12();
+  }
+  cart.updatedAt = nowIso12();
+  return commerceStore.upsertCart(cart);
+}
+var CommerceError, DEFAULT_DELIVERY;
+var init_cartService = __esm({
+  "server/commerce/cartService.ts"() {
+    init_catalogStore();
+    init_sellerWorkspace();
+    init_productLifecycle();
+    init_inventoryStore();
+    init_serviceStore();
+    init_eventBus();
+    init_commerceStore();
+    CommerceError = class extends Error {
+      constructor(message, statusCode = 400, opts) {
+        super(message);
+        this.statusCode = statusCode;
+        this.code = opts?.code;
+        this.details = opts?.details;
+        this.name = "CommerceError";
+      }
+    };
+    DEFAULT_DELIVERY = 0;
+  }
+});
+
+// server/commerce/orderLifecycle.ts
+function normalizeOrderStatus(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim().toLowerCase().replace(/\s+/g, "_");
+  const map = {
+    pending: "pending",
+    pending_payment: "pending",
+    confirmed: "confirmed",
+    packed: "packed",
+    shipped: "shipped",
+    in_transit: "shipped",
+    dispatched: "shipped",
+    delivered: "delivered",
+    completed: "completed",
+    cancelled: "cancelled",
+    canceled: "cancelled"
+  };
+  return map[s] ?? null;
+}
+function isTerminalOrderStatus(status) {
+  return status === "completed" || status === "cancelled";
+}
+function orderHasProductLines(items) {
+  return items.some((i) => i.listingType === "product");
+}
+function orderHasOnlyServices(items) {
+  return items.length > 0 && items.every((i) => i.listingType === "service");
+}
+function canTransitionOrder(from, to, opts) {
+  if (from === to) return true;
+  if (isTerminalOrderStatus(from)) return false;
+  if (to === "cancelled") {
+    return from === "pending" || from === "confirmed" || from === "packed";
+  }
+  if (opts?.serviceOnly) {
+    if (from === "pending" && to === "confirmed") return true;
+    if (from === "confirmed" && to === "completed") return true;
+    return false;
+  }
+  return PRODUCT_FORWARD[from] === to;
+}
+function canActorForwardTransition(actor, to) {
+  if (actor === "consumer") return false;
+  if (actor === "admin") return true;
+  return to === "confirmed" || to === "packed" || to === "shipped" || to === "delivered" || to === "completed";
+}
+function canActorCancel(actor, status) {
+  if (status === "cancelled" || status === "completed") return false;
+  if (actor === "admin") return true;
+  if (actor === "consumer") return status === "pending";
+  if (actor === "seller") {
+    return status === "pending" || status === "confirmed" || status === "packed";
+  }
+  return false;
+}
+function eventNameForStatus(to) {
+  switch (to) {
+    case "confirmed":
+      return "OrderConfirmed";
+    case "cancelled":
+      return "OrderCancelled";
+    case "packed":
+      return "OrderPacked";
+    case "shipped":
+      return "OrderShipped";
+    case "delivered":
+      return "OrderDelivered";
+    case "completed":
+      return "OrderCompleted";
+    default:
+      return null;
+  }
+}
+var PRODUCT_FORWARD;
+var init_orderLifecycle = __esm({
+  "server/commerce/orderLifecycle.ts"() {
+    PRODUCT_FORWARD = {
+      pending: "confirmed",
+      confirmed: "packed",
+      packed: "shipped",
+      shipped: "delivered",
+      delivered: "completed"
+    };
+  }
+});
+
+// server/payments/commercePaymentPersistence.ts
+import { existsSync as existsSync8, mkdirSync as mkdirSync8, readFileSync as readFileSync8, writeFileSync as writeFileSync8 } from "node:fs";
+import { dirname as dirname8, join as join8 } from "node:path";
+function paymentsMemorySnapshotPath() {
+  return process.env.PAYMENTS_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH4;
+}
+function loadPaymentsMemorySnapshot() {
+  const path = paymentsMemorySnapshotPath();
+  if (!existsSync8(path)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync8(path, "utf8"));
+    if (!parsed || parsed.version !== 1) return null;
+    return parsed;
+  } catch (error2) {
+    console.warn("[PaymentsMemoryPersist] Failed to load snapshot:", error2);
+    return null;
+  }
+}
+function schedulePaymentsMemoryPersist(build) {
+  pendingBuild2 = build;
+  if (persistTimer7) clearTimeout(persistTimer7);
+  persistTimer7 = setTimeout(() => {
+    flushPaymentsMemoryPersist();
+  }, 250);
+}
+function flushPaymentsMemoryPersist() {
+  if (persistTimer7) {
+    clearTimeout(persistTimer7);
+    persistTimer7 = null;
+  }
+  if (!pendingBuild2) return;
+  try {
+    const snapshot = pendingBuild2();
+    const path = paymentsMemorySnapshotPath();
+    mkdirSync8(dirname8(path), { recursive: true });
+    writeFileSync8(path, JSON.stringify(snapshot), "utf8");
+  } catch (error2) {
+    console.error("[PaymentsMemoryPersist] Failed to save snapshot:", error2);
+  }
+}
+var DEFAULT_PATH4, persistTimer7, pendingBuild2;
+var init_commercePaymentPersistence = __esm({
+  "server/payments/commercePaymentPersistence.ts"() {
+    DEFAULT_PATH4 = join8(process.cwd(), ".data", "payments-memory-snapshot.json");
+    persistTimer7 = null;
+    pendingBuild2 = null;
+  }
+});
+
+// server/payments/commercePaymentMemoryBackend.ts
+function buildSnapshot4() {
+  return {
+    version: 1,
+    savedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    payments: state7.payments,
+    processedValIds: [...state7.processedValIds]
+  };
+}
+function schedulePersist5() {
+  schedulePaymentsMemoryPersist(buildSnapshot4);
+}
+function ensurePaymentsMemoryHydrated() {
+  if (hydrated5) return true;
+  hydrated5 = true;
+  const snapshot = loadPaymentsMemorySnapshot();
+  if (!snapshot) return false;
+  state7.payments = snapshot.payments || [];
+  state7.processedValIds = new Set(snapshot.processedValIds || []);
+  console.log(
+    `[PaymentsMemoryPersist] Hydrated (${state7.payments.length} payments).`
+  );
+  return true;
+}
+var state7, hydrated5, paymentsMemoryBackend;
+var init_commercePaymentMemoryBackend = __esm({
+  "server/payments/commercePaymentMemoryBackend.ts"() {
+    init_commercePaymentPersistence();
+    state7 = {
+      payments: [],
+      processedValIds: /* @__PURE__ */ new Set()
+    };
+    hydrated5 = false;
+    paymentsMemoryBackend = {
+      getPayment(paymentId) {
+        ensurePaymentsMemoryHydrated();
+        return state7.payments.find((p) => p.paymentId === paymentId) ?? null;
+      },
+      getByTranId(tranId) {
+        ensurePaymentsMemoryHydrated();
+        return state7.payments.find((p) => p.providerTransactionId === tranId) ?? null;
+      },
+      getByIdempotency(consumerId, key) {
+        ensurePaymentsMemoryHydrated();
+        return state7.payments.find(
+          (p) => p.consumerId === consumerId && p.idempotencyKey === key
+        ) ?? null;
+      },
+      listByCheckout(checkoutId) {
+        ensurePaymentsMemoryHydrated();
+        return state7.payments.filter((p) => p.checkoutId === checkoutId);
+      },
+      listPayments() {
+        ensurePaymentsMemoryHydrated();
+        return [...state7.payments];
+      },
+      upsertPayment(payment) {
+        ensurePaymentsMemoryHydrated();
+        const idx = state7.payments.findIndex((p) => p.paymentId === payment.paymentId);
+        if (idx >= 0) state7.payments[idx] = payment;
+        else state7.payments.push(payment);
+        schedulePersist5();
+        return payment;
+      },
+      hasProcessedValId(valId) {
+        ensurePaymentsMemoryHydrated();
+        if (state7.processedValIds.has(valId)) return true;
+        return state7.payments.some(
+          (p) => (p.providerValId === valId || p.processedValIds?.includes(valId)) && p.status === "captured"
+        );
+      },
+      markValIdProcessed(valId) {
+        ensurePaymentsMemoryHydrated();
+        if (!valId) return;
+        state7.processedValIds.add(valId);
+        schedulePersist5();
+      },
+      flush() {
+        ensurePaymentsMemoryHydrated();
+        schedulePaymentsMemoryPersist(buildSnapshot4);
+        flushPaymentsMemoryPersist();
+      },
+      /** Test helper — clear in-memory state (does not delete disk until flush). */
+      __resetForTests() {
+        state7.payments = [];
+        state7.processedValIds.clear();
+        hydrated5 = true;
+        schedulePersist5();
+      }
+    };
+  }
+});
+
+// server/payments/commercePaymentFirestoreAdmin.ts
+var commercePaymentFirestoreAdmin_exports = {};
+__export(commercePaymentFirestoreAdmin_exports, {
+  COMMERCE_PAYMENTS: () => COMMERCE_PAYMENTS,
+  COMMERCE_PAYMENT_VAL_IDS: () => COMMERCE_PAYMENT_VAL_IDS,
+  commercePaymentFirestoreAdmin: () => commercePaymentFirestoreAdmin
+});
+var COMMERCE_PAYMENTS, COMMERCE_PAYMENT_VAL_IDS, commercePaymentFirestoreAdmin;
+var init_commercePaymentFirestoreAdmin = __esm({
+  "server/payments/commercePaymentFirestoreAdmin.ts"() {
+    init_queryHelpers();
+    COMMERCE_PAYMENTS = "commerce_payments";
+    COMMERCE_PAYMENT_VAL_IDS = "commerce_payment_val_ids";
+    commercePaymentFirestoreAdmin = {
+      async getPayment(paymentId) {
+        return getDocumentById(COMMERCE_PAYMENTS, paymentId);
+      },
+      async getByTranId(tranId) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(COMMERCE_PAYMENTS).where("providerTransactionId", "==", tranId).limit(1).get();
+        if (snap.empty) return null;
+        return snap.docs[0].data();
+      },
+      async getByIdempotency(consumerId, key) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(COMMERCE_PAYMENTS).where("consumerId", "==", consumerId).where("idempotencyKey", "==", key).limit(1).get();
+        if (snap.empty) return null;
+        return snap.docs[0].data();
+      },
+      async listByCheckout(checkoutId) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(COMMERCE_PAYMENTS).where("checkoutId", "==", checkoutId).get();
+        return snap.docs.map((d) => d.data());
+      },
+      async upsertPayment(payment) {
+        await upsertDocumentById(COMMERCE_PAYMENTS, payment.paymentId, payment);
+        return payment;
+      },
+      async hasProcessedValId(valId) {
+        if (!valId) return false;
+        const existing = await getDocumentById(
+          COMMERCE_PAYMENT_VAL_IDS,
+          valId
+        );
+        return Boolean(existing);
+      },
+      async markValIdProcessed(valId) {
+        if (!valId) return;
+        await upsertDocumentById(COMMERCE_PAYMENT_VAL_IDS, valId, {
+          processedAt: (/* @__PURE__ */ new Date()).toISOString()
+        });
+      }
+    };
+  }
+});
+
+// server/payments/commercePaymentStore.ts
+var commercePaymentStore_exports = {};
+__export(commercePaymentStore_exports, {
+  assertPaymentsPersistenceReady: () => assertPaymentsPersistenceReady,
+  commercePaymentStore: () => commercePaymentStore,
+  getPaymentsPersistenceMode: () => getPaymentsPersistenceMode
+});
+function isPaymentsFirestoreRequested() {
+  const raw = process.env.PAYMENTS_USE_FIRESTORE?.trim().toLowerCase();
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  const commerce = process.env.COMMERCE_USE_FIRESTORE?.trim().toLowerCase();
+  if (commerce === "true") return true;
+  if (commerce === "false") return false;
+  return process.env.CATALOG_USE_FIRESTORE === "true";
+}
+async function getAdmin2() {
+  if (!useAdminFirestore3) {
+    throw new Error(
+      "Payments Firestore mode is requested but not available. Set FIREBASE_SERVICE_ACCOUNT_JSON or disable PAYMENTS_USE_FIRESTORE."
+    );
+  }
+  if (!adminPromise2) {
+    adminPromise2 = Promise.resolve().then(() => (init_commercePaymentFirestoreAdmin(), commercePaymentFirestoreAdmin_exports)).then(
+      (m) => m.commercePaymentFirestoreAdmin
+    );
+  }
+  return adminPromise2;
+}
+function getPaymentsPersistenceMode() {
+  if (firestoreRequested2 && !credentialsOk2) return "firestore-misconfigured";
+  return useAdminFirestore3 ? "firestore-admin" : "memory-disk";
+}
+function assertPaymentsPersistenceReady() {
+  if (getPaymentsPersistenceMode() === "firestore-misconfigured") {
+    throw new Error(
+      "Payments persistence misconfigured: Firestore requested but FIREBASE_SERVICE_ACCOUNT_JSON is not set."
+    );
+  }
+}
+var firestoreRequested2, credentialsOk2, useAdminFirestore3, adminPromise2, commercePaymentStore;
+var init_commercePaymentStore = __esm({
+  "server/payments/commercePaymentStore.ts"() {
+    init_firestoreAdmin();
+    init_commercePaymentMemoryBackend();
+    firestoreRequested2 = isPaymentsFirestoreRequested();
+    credentialsOk2 = hasFirebaseAdminCredentials();
+    useAdminFirestore3 = firestoreRequested2 && credentialsOk2;
+    if (firestoreRequested2 && !credentialsOk2) {
+      console.error(
+        "[Payments] Firestore mode requested but FIREBASE_SERVICE_ACCOUNT_JSON is missing. Fail-closed."
+      );
+    }
+    adminPromise2 = null;
+    if (!useAdminFirestore3 && getPaymentsPersistenceMode() === "memory-disk") {
+      ensurePaymentsMemoryHydrated();
+    }
+    console.log(`[Payments] Persistence mode: ${getPaymentsPersistenceMode()}`);
+    commercePaymentStore = {
+      async getPayment(paymentId) {
+        assertPaymentsPersistenceReady();
+        if (useAdminFirestore3) return (await getAdmin2()).getPayment(paymentId);
+        return paymentsMemoryBackend.getPayment(paymentId);
+      },
+      async getByTranId(tranId) {
+        assertPaymentsPersistenceReady();
+        if (useAdminFirestore3) return (await getAdmin2()).getByTranId(tranId);
+        return paymentsMemoryBackend.getByTranId(tranId);
+      },
+      async getByIdempotency(consumerId, key) {
+        assertPaymentsPersistenceReady();
+        if (useAdminFirestore3) return (await getAdmin2()).getByIdempotency(consumerId, key);
+        return paymentsMemoryBackend.getByIdempotency(consumerId, key);
+      },
+      async listByCheckout(checkoutId) {
+        assertPaymentsPersistenceReady();
+        if (useAdminFirestore3) return (await getAdmin2()).listByCheckout(checkoutId);
+        return paymentsMemoryBackend.listByCheckout(checkoutId);
+      },
+      async upsertPayment(payment) {
+        assertPaymentsPersistenceReady();
+        if (useAdminFirestore3) return (await getAdmin2()).upsertPayment(payment);
+        return paymentsMemoryBackend.upsertPayment(payment);
+      },
+      async hasProcessedValId(valId) {
+        assertPaymentsPersistenceReady();
+        if (useAdminFirestore3) return (await getAdmin2()).hasProcessedValId(valId);
+        return paymentsMemoryBackend.hasProcessedValId(valId);
+      },
+      async markValIdProcessed(valId) {
+        assertPaymentsPersistenceReady();
+        if (useAdminFirestore3) {
+          await (await getAdmin2()).markValIdProcessed(valId);
+          return;
+        }
+        paymentsMemoryBackend.markValIdProcessed(valId);
+      },
+      flushMemory() {
+        if (!useAdminFirestore3) paymentsMemoryBackend.flush();
+      }
+    };
+  }
+});
+
+// server/payments/mockProvider.ts
+var MockPaymentProvider, mockPaymentProvider;
+var init_mockProvider = __esm({
+  "server/payments/mockProvider.ts"() {
+    MockPaymentProvider = class {
+      constructor() {
+        this.id = "mock";
+        /** val_id → expected validation outcome (harness can seed). */
+        this.validations = /* @__PURE__ */ new Map();
+      }
+      isConfigured() {
+        return (process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() === "true";
+      }
+      seedValidation(valId, outcome) {
+        this.validations.set(valId, {
+          valid: outcome.valid,
+          amount: outcome.amount,
+          status: outcome.status || (outcome.valid ? "VALID" : "INVALID_TRANSACTION"),
+          tranId: outcome.tranId,
+          currency: outcome.currency || "BDT"
+        });
+      }
+      clear() {
+        this.validations.clear();
+      }
+      async initiateSession(input) {
+        if (!this.isConfigured()) {
+          throw new Error("Mock payment gateway is not enabled (set PAYMENT_GATEWAY_MOCK=true)");
+        }
+        const redirectUrl = `${input.successUrl}${input.successUrl.includes("?") ? "&" : "?"}mock=1&tran_id=${encodeURIComponent(input.tranId)}&orderId=${encodeURIComponent(input.order.orderId)}`;
+        return { redirectUrl, tranId: input.tranId, sessionKey: `mock_session_${input.tranId}` };
+      }
+      async validateTransaction(valId) {
+        if (!this.isConfigured()) {
+          throw new Error("Mock payment gateway is not enabled");
+        }
+        const seeded = this.validations.get(valId);
+        if (!seeded) {
+          return {
+            valid: false,
+            amount: 0,
+            status: "INVALID_TRANSACTION",
+            tranId: "",
+            valId
+          };
+        }
+        return {
+          valid: seeded.valid,
+          amount: seeded.amount,
+          currency: seeded.currency || "BDT",
+          status: seeded.status,
+          tranId: seeded.tranId,
+          valId
+        };
+      }
+      /** Interface readiness only — mock refund for harness; not a business Refund workflow. */
+      async refundTransaction(input) {
+        if (!this.isConfigured()) {
+          throw new Error("Mock payment gateway is not enabled");
+        }
+        return {
+          success: true,
+          refundRefId: `mock_refund_${input.bankTranId}`,
+          message: "mock refund accepted (no business workflow)"
+        };
+      }
+    };
+    mockPaymentProvider = new MockPaymentProvider();
+  }
+});
+
+// server/payments/sslcommerzProvider.ts
+function readMode() {
+  const raw = (process.env.SSLCOMMERZ_MODE || "sandbox").trim().toLowerCase();
+  return raw === "live" ? "live" : "sandbox";
+}
+function baseUrl(mode) {
+  return mode === "live" ? "https://securepay.sslcommerz.com" : "https://sandbox.sslcommerz.com";
+}
+function sessionOrderId(input) {
+  return input.order.orderId;
+}
+var SslcommerzProvider, sslcommerzProvider;
+var init_sslcommerzProvider = __esm({
+  "server/payments/sslcommerzProvider.ts"() {
+    SslcommerzProvider = class {
+      constructor() {
+        this.id = "sslcommerz";
+      }
+      storeId() {
+        return (process.env.SSLCOMMERZ_STORE_ID || "").trim();
+      }
+      storePassword() {
+        return (process.env.SSLCOMMERZ_STORE_PASSWORD || "").trim();
+      }
+      isConfigured() {
+        return Boolean(this.storeId() && this.storePassword());
+      }
+      getMode() {
+        return readMode();
+      }
+      async initiateSession(input) {
+        if (!this.isConfigured()) {
+          throw new Error("SSLCommerz is not configured");
+        }
+        const mode = this.getMode();
+        const url = `${baseUrl(mode)}/gwprocess/v4/api.php`;
+        const orderId = sessionOrderId(input);
+        const body = new URLSearchParams();
+        body.set("store_id", this.storeId());
+        body.set("store_passwd", this.storePassword());
+        body.set("total_amount", input.amount.toFixed(2));
+        body.set("currency", input.currency || "BDT");
+        body.set("tran_id", input.tranId);
+        body.set("success_url", input.successUrl);
+        body.set("fail_url", input.failUrl);
+        body.set("cancel_url", input.cancelUrl);
+        body.set("ipn_url", input.ipnUrl);
+        body.set("cus_name", input.customer.name || "Customer");
+        body.set("cus_email", input.customer.email || "noreply@choosify.com.bd");
+        body.set("cus_phone", input.customer.phone || "01700000000");
+        body.set("cus_add1", input.customer.address || "N/A");
+        body.set("cus_city", input.customer.city || "Dhaka");
+        body.set("cus_country", "Bangladesh");
+        body.set("shipping_method", "NO");
+        body.set("product_name", `Order ${orderId}`);
+        body.set("product_category", "general");
+        body.set("product_profile", "general");
+        body.set("value_a", orderId);
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: body.toString()
+        });
+        const rawText = await response.text();
+        let data = {};
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          throw new Error(`SSLCommerz session response was not JSON: ${rawText.slice(0, 200)}`);
+        }
+        const status = String(data.status || "");
+        const gatewayUrl = String(data.GatewayPageURL || data.gatewayPageURL || "");
+        if (status !== "SUCCESS" || !gatewayUrl) {
+          const reason = String(data.failedreason || data.message || status || "unknown");
+          throw new Error(`SSLCommerz session failed: ${reason}`);
+        }
+        return {
+          redirectUrl: gatewayUrl,
+          tranId: input.tranId,
+          sessionKey: typeof data.sessionkey === "string" ? data.sessionkey : void 0
+        };
+      }
+      async validateTransaction(valId) {
+        if (!this.isConfigured()) {
+          throw new Error("SSLCommerz is not configured");
+        }
+        if (!valId.trim()) {
+          return {
+            valid: false,
+            amount: 0,
+            status: "MISSING_VAL_ID",
+            tranId: "",
+            valId: ""
+          };
+        }
+        const mode = this.getMode();
+        const qs = new URLSearchParams({
+          val_id: valId.trim(),
+          store_id: this.storeId(),
+          store_passwd: this.storePassword(),
+          v: "1",
+          format: "json"
+        });
+        const url = `${baseUrl(mode)}/validator/api/validationserverAPI.php?${qs}`;
+        const response = await fetch(url, { method: "GET" });
+        const rawText = await response.text();
+        let data = {};
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          throw new Error(`SSLCommerz validation response was not JSON: ${rawText.slice(0, 200)}`);
+        }
+        const status = String(data.status || "").toUpperCase();
+        const valid = status === "VALID" || status === "VALIDATED";
+        return {
+          valid,
+          amount: Number(data.amount || data.store_amount || 0),
+          currency: typeof data.currency === "string" ? data.currency : "BDT",
+          status,
+          tranId: String(data.tran_id || ""),
+          valId: String(data.val_id || valId),
+          raw: data
+        };
+      }
+      /**
+       * Provider-level refund API readiness (Sprint 8 input).
+       * Does NOT implement Returns/Refund business workflow.
+       */
+      async refundTransaction(input) {
+        if (!this.isConfigured()) {
+          throw new Error("SSLCommerz is not configured");
+        }
+        const mode = this.getMode();
+        const url = `${baseUrl(mode)}/validator/api/merchantTransIDvalidationAPI.php`;
+        const body = new URLSearchParams();
+        body.set("store_id", this.storeId());
+        body.set("store_passwd", this.storePassword());
+        body.set("bank_tran_id", input.bankTranId);
+        body.set("refund_amount", input.refundAmount.toFixed(2));
+        body.set("refund_remarks", input.refundRemarks || "Refund");
+        if (input.refeId) body.set("refe_id", input.refeId);
+        body.set("format", "json");
+        const response = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: body.toString()
+        });
+        const rawText = await response.text();
+        let data = {};
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          return {
+            success: false,
+            message: `SSLCommerz refund response was not JSON: ${rawText.slice(0, 200)}`
+          };
+        }
+        const status = String(data.status || "").toUpperCase();
+        const success2 = status === "SUCCESS" || status === "REFUNDED" || status === "PROCESSING";
+        return {
+          success: success2,
+          refundRefId: typeof data.refund_ref_id === "string" ? data.refund_ref_id : void 0,
+          message: String(data.errorReason || data.failedreason || data.status || ""),
+          raw: data
+        };
+      }
+    };
+    sslcommerzProvider = new SslcommerzProvider();
+  }
+});
+
+// server/escrow/money.ts
+function toMinor(major) {
+  return Math.round(Number(major) * 100);
+}
+function fromMinor(minor) {
+  return Math.round(minor) / 100;
+}
+function addMajor(a, b) {
+  return fromMinor(toMinor(a) + toMinor(b));
+}
+function subMajor(a, b) {
+  return fromMinor(toMinor(a) - toMinor(b));
+}
+function percentOfMajor(major, percent) {
+  const minor = toMinor(major);
+  return fromMinor(Math.round(minor * percent / 100));
+}
+function amountsEqual(a, b, toleranceMinor = 0) {
+  return Math.abs(toMinor(a) - toMinor(b)) <= toleranceMinor;
+}
+var init_money = __esm({
+  "server/escrow/money.ts"() {
+  }
+});
+
+// server/escrow/commissionPolicy.ts
+function resolveSettlementCommission(grossAmount) {
+  const raw = process.env.PLATFORM_SETTLEMENT_COMMISSION_PERCENT?.trim();
+  let percent = 0;
+  let policySource = "default_zero";
+  if (raw !== void 0 && raw !== "") {
+    const n = Number(raw);
+    if (Number.isFinite(n) && n >= 0 && n <= 100) {
+      percent = n;
+      policySource = "env";
+    }
+  }
+  const commissionAmount = percentOfMajor(grossAmount, percent);
+  const sellerNetAmount = subMajor(grossAmount, commissionAmount);
+  return {
+    grossAmount,
+    commissionPercent: percent,
+    commissionAmount,
+    sellerNetAmount,
+    policySource
+  };
+}
+var init_commissionPolicy = __esm({
+  "server/escrow/commissionPolicy.ts"() {
+    init_money();
+  }
+});
+
+// server/escrow/escrowLifecycle.ts
+function canSettleFromStatus(status) {
+  return status === "held" || status === "partial_refund_remaining";
+}
+function canRefundFromStatus(status) {
+  return status === "held" || status === "partial_refund_remaining";
+}
+function blocksSettlement(status) {
+  return status === "dispute_hold" || status === "full_refund" || status === "settled" || status === "administrative_adjustment";
+}
+var init_escrowLifecycle = __esm({
+  "server/escrow/escrowLifecycle.ts"() {
+  }
+});
+
+// server/escrow/escrowPersistence.ts
+import { existsSync as existsSync9, mkdirSync as mkdirSync9, readFileSync as readFileSync9, writeFileSync as writeFileSync9 } from "node:fs";
+import { dirname as dirname9, join as join9 } from "node:path";
+function escrowMemorySnapshotPath() {
+  return process.env.ESCROW_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH5;
+}
+function loadEscrowMemorySnapshot() {
+  const path = escrowMemorySnapshotPath();
+  if (!existsSync9(path)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync9(path, "utf8"));
+    if (!parsed || parsed.version !== 1) return null;
+    return parsed;
+  } catch (error2) {
+    console.warn("[EscrowMemoryPersist] Failed to load snapshot:", error2);
+    return null;
+  }
+}
+function scheduleEscrowMemoryPersist(build) {
+  pendingBuild3 = build;
+  if (persistTimer8) clearTimeout(persistTimer8);
+  persistTimer8 = setTimeout(() => {
+    flushEscrowMemoryPersist();
+  }, 250);
+}
+function flushEscrowMemoryPersist() {
+  if (persistTimer8) {
+    clearTimeout(persistTimer8);
+    persistTimer8 = null;
+  }
+  if (!pendingBuild3) return;
+  try {
+    const snapshot = pendingBuild3();
+    const path = escrowMemorySnapshotPath();
+    mkdirSync9(dirname9(path), { recursive: true });
+    writeFileSync9(path, JSON.stringify(snapshot), "utf8");
+  } catch (error2) {
+    console.error("[EscrowMemoryPersist] Failed to save snapshot:", error2);
+  }
+}
+var DEFAULT_PATH5, persistTimer8, pendingBuild3;
+var init_escrowPersistence = __esm({
+  "server/escrow/escrowPersistence.ts"() {
+    DEFAULT_PATH5 = join9(process.cwd(), ".data", "escrow-memory-snapshot.json");
+    persistTimer8 = null;
+    pendingBuild3 = null;
+  }
+});
+
+// server/escrow/escrowMemoryBackend.ts
+function buildSnapshot5() {
+  return {
+    version: 1,
+    savedAt: (/* @__PURE__ */ new Date()).toISOString(),
+    escrows: state8.escrows,
+    settlements: state8.settlements,
+    balances: state8.balances,
+    balanceEntries: state8.balanceEntries,
+    refunds: state8.refunds,
+    returns: state8.returns
+  };
+}
+function schedulePersist6() {
+  scheduleEscrowMemoryPersist(buildSnapshot5);
+}
+function upsertById2(arr, row, idOf) {
+  const id = idOf(row);
+  const idx = arr.findIndex((r) => idOf(r) === id);
+  if (idx >= 0) arr[idx] = row;
+  else arr.push(row);
+  schedulePersist6();
+  return row;
+}
+function ensureEscrowMemoryHydrated() {
+  if (hydrated6) return true;
+  hydrated6 = true;
+  const snapshot = loadEscrowMemorySnapshot();
+  if (!snapshot) return false;
+  state8.escrows = snapshot.escrows || [];
+  state8.settlements = snapshot.settlements || [];
+  state8.balances = snapshot.balances || [];
+  state8.balanceEntries = snapshot.balanceEntries || [];
+  state8.refunds = snapshot.refunds || [];
+  state8.returns = snapshot.returns || [];
+  console.log(
+    `[EscrowMemoryPersist] Hydrated (${state8.escrows.length} escrows, ${state8.settlements.length} settlements).`
+  );
+  return true;
+}
+var state8, hydrated6, escrowMemoryBackend;
+var init_escrowMemoryBackend = __esm({
+  "server/escrow/escrowMemoryBackend.ts"() {
+    init_escrowPersistence();
+    state8 = {
+      escrows: [],
+      settlements: [],
+      balances: [],
+      balanceEntries: [],
+      refunds: [],
+      returns: []
+    };
+    hydrated6 = false;
+    escrowMemoryBackend = {
+      getEscrow(escrowId) {
+        ensureEscrowMemoryHydrated();
+        return state8.escrows.find((e) => e.escrowId === escrowId) ?? null;
+      },
+      getEscrowByPaymentOrder(paymentId, orderId) {
+        ensureEscrowMemoryHydrated();
+        return state8.escrows.find((e) => e.paymentId === paymentId && e.orderId === orderId) ?? null;
+      },
+      listEscrowsByPayment(paymentId) {
+        ensureEscrowMemoryHydrated();
+        return state8.escrows.filter((e) => e.paymentId === paymentId);
+      },
+      listEscrowsByOrder(orderId) {
+        ensureEscrowMemoryHydrated();
+        return state8.escrows.filter((e) => e.orderId === orderId);
+      },
+      listEscrowsBySeller(sellerId) {
+        ensureEscrowMemoryHydrated();
+        return state8.escrows.filter((e) => e.sellerId === sellerId);
+      },
+      upsertEscrow(row) {
+        ensureEscrowMemoryHydrated();
+        return upsertById2(state8.escrows, row, (r) => r.escrowId);
+      },
+      getSettlement(settlementId) {
+        ensureEscrowMemoryHydrated();
+        return state8.settlements.find((s) => s.settlementId === settlementId) ?? null;
+      },
+      getSettlementByEscrow(escrowId) {
+        ensureEscrowMemoryHydrated();
+        return state8.settlements.find((s) => s.escrowId === escrowId) ?? null;
+      },
+      upsertSettlement(row) {
+        ensureEscrowMemoryHydrated();
+        return upsertById2(state8.settlements, row, (r) => r.settlementId);
+      },
+      getBalance(sellerId, currency) {
+        ensureEscrowMemoryHydrated();
+        return state8.balances.find((b) => b.sellerId === sellerId && b.currency === currency) ?? null;
+      },
+      upsertBalance(row) {
+        ensureEscrowMemoryHydrated();
+        const idx = state8.balances.findIndex(
+          (b) => b.sellerId === row.sellerId && b.currency === row.currency
+        );
+        if (idx >= 0) state8.balances[idx] = row;
+        else state8.balances.push(row);
+        schedulePersist6();
+        return row;
+      },
+      getBalanceEntryByIdempotency(key) {
+        ensureEscrowMemoryHydrated();
+        return state8.balanceEntries.find((e) => e.idempotencyKey === key) ?? null;
+      },
+      appendBalanceEntry(row) {
+        ensureEscrowMemoryHydrated();
+        const existing = state8.balanceEntries.find((e) => e.idempotencyKey === row.idempotencyKey);
+        if (existing) return existing;
+        state8.balanceEntries.push(row);
+        schedulePersist6();
+        return row;
+      },
+      listBalanceEntriesBySeller(sellerId) {
+        ensureEscrowMemoryHydrated();
+        return state8.balanceEntries.filter((e) => e.sellerId === sellerId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      },
+      getRefund(refundId) {
+        ensureEscrowMemoryHydrated();
+        return state8.refunds.find((r) => r.refundId === refundId) ?? null;
+      },
+      listRefundsByEscrow(escrowId) {
+        ensureEscrowMemoryHydrated();
+        return state8.refunds.filter((r) => r.escrowId === escrowId);
+      },
+      upsertRefund(row) {
+        ensureEscrowMemoryHydrated();
+        return upsertById2(state8.refunds, row, (r) => r.refundId);
+      },
+      getReturn(returnId) {
+        ensureEscrowMemoryHydrated();
+        return state8.returns.find((r) => r.returnId === returnId) ?? null;
+      },
+      listReturnsByOrder(orderId) {
+        ensureEscrowMemoryHydrated();
+        return state8.returns.filter((r) => r.orderId === orderId);
+      },
+      upsertReturn(row) {
+        ensureEscrowMemoryHydrated();
+        return upsertById2(state8.returns, row, (r) => r.returnId);
+      },
+      flush() {
+        ensureEscrowMemoryHydrated();
+        scheduleEscrowMemoryPersist(buildSnapshot5);
+        flushEscrowMemoryPersist();
+      }
+    };
+  }
+});
+
+// server/escrow/escrowFirestoreAdmin.ts
+var escrowFirestoreAdmin_exports = {};
+__export(escrowFirestoreAdmin_exports, {
+  escrowFirestoreAdmin: () => escrowFirestoreAdmin
+});
+function balanceDocId(sellerId, currency) {
+  return `${sellerId}__${currency}`;
+}
+var ESCROWS, SETTLEMENTS, BALANCES, BALANCE_ENTRIES, REFUNDS, RETURNS, escrowFirestoreAdmin;
+var init_escrowFirestoreAdmin = __esm({
+  "server/escrow/escrowFirestoreAdmin.ts"() {
+    init_queryHelpers();
+    ESCROWS = "commerce_escrows";
+    SETTLEMENTS = "commerce_settlements";
+    BALANCES = "commerce_seller_balances";
+    BALANCE_ENTRIES = "commerce_seller_balance_entries";
+    REFUNDS = "commerce_refunds";
+    RETURNS = "commerce_returns";
+    escrowFirestoreAdmin = {
+      async getEscrow(escrowId) {
+        return getDocumentById(ESCROWS, escrowId);
+      },
+      async getEscrowByPaymentOrder(paymentId, orderId) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(ESCROWS).where("paymentId", "==", paymentId).where("orderId", "==", orderId).limit(1).get();
+        if (snap.empty) return null;
+        return snap.docs[0].data();
+      },
+      async listEscrowsByPayment(paymentId) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(ESCROWS).where("paymentId", "==", paymentId).get();
+        return snap.docs.map((d) => d.data());
+      },
+      async listEscrowsByOrder(orderId) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(ESCROWS).where("orderId", "==", orderId).get();
+        return snap.docs.map((d) => d.data());
+      },
+      async listEscrowsBySeller(sellerId) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(ESCROWS).where("sellerId", "==", sellerId).get();
+        return snap.docs.map((d) => d.data());
+      },
+      async upsertEscrow(row) {
+        await upsertDocumentById(ESCROWS, row.escrowId, row);
+        return row;
+      },
+      async getSettlement(settlementId) {
+        return getDocumentById(SETTLEMENTS, settlementId);
+      },
+      async getSettlementByEscrow(escrowId) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(SETTLEMENTS).where("escrowId", "==", escrowId).limit(1).get();
+        if (snap.empty) return null;
+        return snap.docs[0].data();
+      },
+      async upsertSettlement(row) {
+        await upsertDocumentById(SETTLEMENTS, row.settlementId, row);
+        return row;
+      },
+      async getBalance(sellerId, currency) {
+        return getDocumentById(BALANCES, balanceDocId(sellerId, currency));
+      },
+      async upsertBalance(row) {
+        await upsertDocumentById(BALANCES, balanceDocId(row.sellerId, row.currency), row);
+        return row;
+      },
+      async getBalanceEntryByIdempotency(key) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(BALANCE_ENTRIES).where("idempotencyKey", "==", key).limit(1).get();
+        if (snap.empty) return null;
+        return snap.docs[0].data();
+      },
+      async appendBalanceEntry(row) {
+        const existing = await this.getBalanceEntryByIdempotency(row.idempotencyKey);
+        if (existing) return existing;
+        await upsertDocumentById(BALANCE_ENTRIES, row.entryId, row);
+        return row;
+      },
+      async getRefund(refundId) {
+        return getDocumentById(REFUNDS, refundId);
+      },
+      async listRefundsByEscrow(escrowId) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(REFUNDS).where("escrowId", "==", escrowId).get();
+        return snap.docs.map((d) => d.data());
+      },
+      async upsertRefund(row) {
+        await upsertDocumentById(REFUNDS, row.refundId, row);
+        return row;
+      },
+      async getReturn(returnId) {
+        return getDocumentById(RETURNS, returnId);
+      },
+      async listReturnsByOrder(orderId) {
+        const db3 = await requireAdminFirestore();
+        const snap = await db3.collection(RETURNS).where("orderId", "==", orderId).get();
+        return snap.docs.map((d) => d.data());
+      },
+      async upsertReturn(row) {
+        await upsertDocumentById(RETURNS, row.returnId, row);
+        return row;
+      }
+    };
+  }
+});
+
+// server/escrow/escrowStore.ts
+var escrowStore_exports = {};
+__export(escrowStore_exports, {
+  assertEscrowPersistenceReady: () => assertEscrowPersistenceReady,
+  escrowStore: () => escrowStore,
+  getEscrowPersistenceMode: () => getEscrowPersistenceMode
+});
+function isEscrowFirestoreRequested() {
+  const raw = process.env.ESCROW_USE_FIRESTORE?.trim().toLowerCase();
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  const commerce = process.env.COMMERCE_USE_FIRESTORE?.trim().toLowerCase();
+  if (commerce === "true") return true;
+  if (commerce === "false") return false;
+  return process.env.CATALOG_USE_FIRESTORE === "true";
+}
+function getEscrowPersistenceMode() {
+  if (firestoreRequested3 && !credentialsOk3) return "firestore-misconfigured";
+  return useAdminFirestore4 ? "firestore-admin" : "memory-disk";
+}
+function assertEscrowPersistenceReady() {
+  if (getEscrowPersistenceMode() === "firestore-misconfigured") {
+    throw new Error(
+      "Escrow persistence misconfigured: Firestore requested but FIREBASE_SERVICE_ACCOUNT_JSON is not set."
+    );
+  }
+}
+async function requireMemory() {
+  assertEscrowPersistenceReady();
+  if (useAdminFirestore4) {
+    const mod = await Promise.resolve().then(() => (init_escrowFirestoreAdmin(), escrowFirestoreAdmin_exports));
+    return mod.escrowFirestoreAdmin;
+  }
+  return escrowMemoryBackend;
+}
+var firestoreRequested3, credentialsOk3, useAdminFirestore4, escrowStore;
+var init_escrowStore = __esm({
+  "server/escrow/escrowStore.ts"() {
+    init_firestoreAdmin();
+    init_escrowMemoryBackend();
+    firestoreRequested3 = isEscrowFirestoreRequested();
+    credentialsOk3 = hasFirebaseAdminCredentials();
+    useAdminFirestore4 = firestoreRequested3 && credentialsOk3;
+    if (firestoreRequested3 && !credentialsOk3) {
+      console.error(
+        "[Escrow] Firestore mode requested but FIREBASE_SERVICE_ACCOUNT_JSON is missing. Fail-closed."
+      );
+    }
+    if (!useAdminFirestore4 && getEscrowPersistenceMode() === "memory-disk") {
+      ensureEscrowMemoryHydrated();
+    }
+    console.log(`[Escrow] Persistence mode: ${getEscrowPersistenceMode()}`);
+    escrowStore = {
+      async getEscrow(escrowId) {
+        return (await requireMemory()).getEscrow(escrowId);
+      },
+      async getEscrowByPaymentOrder(paymentId, orderId) {
+        return (await requireMemory()).getEscrowByPaymentOrder(paymentId, orderId);
+      },
+      async listEscrowsByPayment(paymentId) {
+        return (await requireMemory()).listEscrowsByPayment(paymentId);
+      },
+      async listEscrowsByOrder(orderId) {
+        return (await requireMemory()).listEscrowsByOrder(orderId);
+      },
+      async listEscrowsBySeller(sellerId) {
+        return (await requireMemory()).listEscrowsBySeller(sellerId);
+      },
+      async upsertEscrow(row) {
+        return (await requireMemory()).upsertEscrow(row);
+      },
+      async getSettlement(settlementId) {
+        return (await requireMemory()).getSettlement(settlementId);
+      },
+      async getSettlementByEscrow(escrowId) {
+        return (await requireMemory()).getSettlementByEscrow(escrowId);
+      },
+      async upsertSettlement(row) {
+        return (await requireMemory()).upsertSettlement(row);
+      },
+      async getBalance(sellerId, currency) {
+        return (await requireMemory()).getBalance(sellerId, currency);
+      },
+      async upsertBalance(row) {
+        return (await requireMemory()).upsertBalance(row);
+      },
+      async getBalanceEntryByIdempotency(key) {
+        return (await requireMemory()).getBalanceEntryByIdempotency(key);
+      },
+      async appendBalanceEntry(row) {
+        return (await requireMemory()).appendBalanceEntry(row);
+      },
+      async listBalanceEntriesBySeller(sellerId) {
+        return (await requireMemory()).listBalanceEntriesBySeller(sellerId);
+      },
+      async getRefund(refundId) {
+        return (await requireMemory()).getRefund(refundId);
+      },
+      async listRefundsByEscrow(escrowId) {
+        return (await requireMemory()).listRefundsByEscrow(escrowId);
+      },
+      async upsertRefund(row) {
+        return (await requireMemory()).upsertRefund(row);
+      },
+      async getReturn(returnId) {
+        return (await requireMemory()).getReturn(returnId);
+      },
+      async listReturnsByOrder(orderId) {
+        return (await requireMemory()).listReturnsByOrder(orderId);
+      },
+      async upsertReturn(row) {
+        return (await requireMemory()).upsertReturn(row);
+      },
+      flushMemory() {
+        if (!useAdminFirestore4) escrowMemoryBackend.flush();
+      }
+    };
+  }
+});
+
+// server/auth/choosifyUserId.ts
+var choosifyUserId_exports = {};
+__export(choosifyUserId_exports, {
+  allocateNextChoosifyUserId: () => allocateNextChoosifyUserId,
+  backfillChoosifyUserIds: () => backfillChoosifyUserIds,
+  ensureChoosifyUserIdSchema: () => ensureChoosifyUserIdSchema,
+  ensureUserHasChoosifyUserId: () => ensureUserHasChoosifyUserId,
+  findUserByChoosifyUserId: () => findUserByChoosifyUserId,
+  formatChoosifyUserId: () => formatChoosifyUserId,
+  isCanonicalChoosifyUserId: () => isCanonicalChoosifyUserId,
+  normalizeChoosifyUserIdQuery: () => normalizeChoosifyUserIdQuery
+});
+import { existsSync as existsSync10, mkdirSync as mkdirSync10, readFileSync as readFileSync10, writeFileSync as writeFileSync10 } from "node:fs";
+import { dirname as dirname10, join as join10 } from "node:path";
+import { asc, eq as eq5, sql as sql2 } from "drizzle-orm";
+function formatChoosifyUserId(sequence) {
+  const n = Math.floor(Number(sequence));
+  if (!Number.isFinite(n) || n < 1) {
+    throw new Error(`Invalid Choosify User ID sequence: ${sequence}`);
+  }
+  const body = n < 10 ** MIN_PAD ? String(n).padStart(MIN_PAD, "0") : String(n);
+  return `${CF_PREFIX}${body}`;
+}
+function normalizeChoosifyUserIdQuery(raw) {
+  const trimmed = String(raw || "").trim().replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, "-").replace(/\s+/g, "").toUpperCase();
+  if (!trimmed) return null;
+  const digits = trimmed.startsWith(CF_PREFIX) ? trimmed.slice(CF_PREFIX.length) : trimmed;
+  if (!/^\d+$/.test(digits)) return null;
+  const n = Number(digits.replace(/^0+/, "") || "0");
+  if (!Number.isFinite(n) || n < 1) return null;
+  return formatChoosifyUserId(n);
+}
+function isCanonicalChoosifyUserId(value) {
+  const normalized = normalizeChoosifyUserIdQuery(value);
+  return Boolean(normalized && normalized === String(value).trim().toUpperCase());
+}
+function sequenceNumberFromCfId(cfId) {
+  const normalized = normalizeChoosifyUserIdQuery(cfId);
+  if (!normalized) return 0;
+  return Number(normalized.slice(CF_PREFIX.length).replace(/^0+/, "") || "0");
+}
+function readSequenceMirror() {
+  if (!existsSync10(SEQUENCE_MIRROR_PATH)) return null;
+  try {
+    const parsed = JSON.parse(readFileSync10(SEQUENCE_MIRROR_PATH, "utf8"));
+    if (parsed?.version === 1 && Number.isFinite(parsed.nextValue) && parsed.nextValue >= 1) {
+      return parsed;
+    }
+  } catch (error2) {
+    Logger.warn("choosifyUserId sequence mirror load failed", {
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+  }
+  return null;
+}
+function writeSequenceMirror(nextValue) {
+  try {
+    mkdirSync10(dirname10(SEQUENCE_MIRROR_PATH), { recursive: true });
+    const snapshot = {
+      version: 1,
+      nextValue,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    writeFileSync10(SEQUENCE_MIRROR_PATH, JSON.stringify(snapshot, null, 2), "utf8");
+  } catch (error2) {
+    Logger.warn("choosifyUserId sequence mirror save failed", {
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+  }
+}
+async function ensureChoosifyUserIdSchema() {
+  if (!schemaReady) {
+    schemaReady = (async () => {
+      await db.execute(sql2`
+        ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS choosify_user_id varchar(32)
+      `);
+      await db.execute(sql2`
+        CREATE UNIQUE INDEX IF NOT EXISTS users_choosify_user_id_uidx
+        ON users (choosify_user_id)
+        WHERE choosify_user_id IS NOT NULL
+      `);
+      await db.execute(sql2`
+        CREATE TABLE IF NOT EXISTS choosify_user_id_counters (
+          id integer PRIMARY KEY,
+          next_value bigint NOT NULL DEFAULT 1,
+          updated_at timestamptz NOT NULL DEFAULT now(),
+          CONSTRAINT choosify_user_id_counters_singleton CHECK (id = 1)
+        )
+      `);
+      await db.execute(sql2`
+        INSERT INTO choosify_user_id_counters (id, next_value)
+        VALUES (1, 1)
+        ON CONFLICT (id) DO NOTHING
+      `);
+      const existing = await db.select({ choosifyUserId: users.choosifyUserId }).from(users).where(sql2`${users.choosifyUserId} IS NOT NULL`);
+      let maxAssigned = 0;
+      for (const row of existing) {
+        const num = sequenceNumberFromCfId(row.choosifyUserId || "");
+        if (num > maxAssigned) maxAssigned = num;
+      }
+      const mirror = readSequenceMirror();
+      const mirrorNext = mirror?.nextValue || 1;
+      const desiredNext = Math.max(maxAssigned + 1, mirrorNext, 1);
+      await db.execute(sql2`
+        UPDATE choosify_user_id_counters
+        SET next_value = GREATEST(next_value, ${desiredNext}),
+            updated_at = now()
+        WHERE id = 1
+      `);
+      writeSequenceMirror(desiredNext);
+    })().catch((error2) => {
+      schemaReady = null;
+      throw error2;
+    });
+  }
+  await schemaReady;
+}
+async function allocateNextChoosifyUserId(tx) {
+  await ensureChoosifyUserIdSchema();
+  const runner = tx || db;
+  const rows = await runner.update(choosifyUserIdCounters).set({
+    nextValue: sql2`${choosifyUserIdCounters.nextValue} + 1`,
+    updatedAt: /* @__PURE__ */ new Date()
+  }).where(eq5(choosifyUserIdCounters.id, 1)).returning({ nextValue: choosifyUserIdCounters.nextValue });
+  let after = Number(rows[0]?.nextValue);
+  if (!Number.isFinite(after) || after < 2) {
+    await runner.insert(choosifyUserIdCounters).values({ id: 1, nextValue: 2, updatedAt: /* @__PURE__ */ new Date() }).onConflictDoNothing();
+    const retry = await runner.update(choosifyUserIdCounters).set({
+      nextValue: sql2`${choosifyUserIdCounters.nextValue} + 1`,
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq5(choosifyUserIdCounters.id, 1)).returning({ nextValue: choosifyUserIdCounters.nextValue });
+    after = Number(retry[0]?.nextValue);
+    if (!Number.isFinite(after) || after < 2) {
+      throw new Error("Failed to allocate Choosify User ID sequence");
+    }
+  }
+  const allocated = after - 1;
+  writeSequenceMirror(after);
+  return formatChoosifyUserId(allocated);
+}
+async function ensureUserHasChoosifyUserId(userId) {
+  await ensureChoosifyUserIdSchema();
+  const existing = await db.select({
+    id: users.id,
+    choosifyUserId: users.choosifyUserId
+  }).from(users).where(eq5(users.id, userId)).limit(1);
+  const row = existing[0];
+  if (!row) {
+    throw new Error("User not found");
+  }
+  if (row.choosifyUserId) {
+    return row.choosifyUserId;
+  }
+  return db.transaction(async (tx) => {
+    const locked = await tx.select({ choosifyUserId: users.choosifyUserId }).from(users).where(eq5(users.id, userId)).limit(1);
+    if (locked[0]?.choosifyUserId) {
+      return locked[0].choosifyUserId;
+    }
+    const cfId = await allocateNextChoosifyUserId(tx);
+    await tx.update(users).set({ choosifyUserId: cfId, updatedAt: /* @__PURE__ */ new Date() }).where(eq5(users.id, userId));
+    Logger.audit("auth.choosify_user_id_assigned", { userId, choosifyUserId: cfId });
+    return cfId;
+  });
+}
+async function backfillChoosifyUserIds() {
+  await ensureChoosifyUserIdSchema();
+  const strategy = "ORDER BY users.created_at ASC NULLS LAST, users.id ASC \u2014 preserve existing valid choosifyUserId; assign only when null";
+  const all = await db.select({
+    id: users.id,
+    choosifyUserId: users.choosifyUserId,
+    createdAt: users.createdAt
+  }).from(users).orderBy(asc(users.createdAt), asc(users.id));
+  const seen = /* @__PURE__ */ new Map();
+  const duplicatesDetected = [];
+  const preserved = [];
+  let alreadyHadId = 0;
+  let assigned = 0;
+  for (const row of all) {
+    if (row.choosifyUserId) {
+      alreadyHadId += 1;
+      const canonical = normalizeChoosifyUserIdQuery(row.choosifyUserId) || row.choosifyUserId;
+      if (seen.has(canonical) && seen.get(canonical) !== row.id) {
+        duplicatesDetected.push(`${canonical} \u2192 ${seen.get(canonical)} and ${row.id}`);
+      } else {
+        seen.set(canonical, row.id);
+        preserved.push(canonical);
+      }
+      continue;
+    }
+    const cfId = await ensureUserHasChoosifyUserId(row.id);
+    assigned += 1;
+    if (seen.has(cfId) && seen.get(cfId) !== row.id) {
+      duplicatesDetected.push(`${cfId} \u2192 ${seen.get(cfId)} and ${row.id}`);
+    } else {
+      seen.set(cfId, row.id);
+    }
+  }
+  return {
+    strategy,
+    totalUsers: all.length,
+    alreadyHadId,
+    assigned,
+    duplicatesDetected,
+    preserved: [...new Set(preserved)]
+  };
+}
+async function findUserByChoosifyUserId(query2) {
+  await ensureChoosifyUserIdSchema();
+  const canonical = normalizeChoosifyUserIdQuery(query2);
+  if (!canonical) return null;
+  const candidates = Array.from(
+    /* @__PURE__ */ new Set([
+      canonical,
+      `CF-${String(sequenceNumberFromCfId(canonical))}`,
+      `CF-${String(sequenceNumberFromCfId(canonical)).padStart(5, "0")}`
+    ])
+  );
+  for (const c of candidates) {
+    const rows = await db.select().from(users).where(eq5(users.choosifyUserId, c)).limit(1);
+    if (rows[0]) return rows[0];
+  }
+  return null;
+}
+var SEQUENCE_MIRROR_PATH, CF_PREFIX, MIN_PAD, schemaReady;
+var init_choosifyUserId = __esm({
+  "server/auth/choosifyUserId.ts"() {
+    init_client();
+    init_schema();
+    init_logger();
+    SEQUENCE_MIRROR_PATH = process.env.CHOOSIFY_USER_ID_SEQUENCE_PATH?.trim() || join10(process.cwd(), ".data", "choosify-user-id-sequence.json");
+    CF_PREFIX = "CF-";
+    MIN_PAD = 5;
+    schemaReady = null;
+  }
+});
+
+// shared/referenceIds/registry.ts
+function formatReferenceId(entityType, sequence) {
+  const n = Math.floor(Number(sequence));
+  if (!Number.isFinite(n) || n < 1) {
+    throw new Error(`Invalid reference sequence for ${entityType}: ${sequence}`);
+  }
+  const prefix = REFERENCE_PREFIX[entityType];
+  const body = n < 10 ** MIN_PAD2 ? String(n).padStart(MIN_PAD2, "0") : String(n);
+  return `${prefix}-${body}`;
+}
+function parseReferenceId(raw) {
+  const trimmed = String(raw || "").trim().toUpperCase();
+  if (!trimmed) return null;
+  const m = trimmed.match(/^([A-Z]+)-(\d+)$/);
+  if (!m) return null;
+  const prefix = m[1];
+  const entityType = PREFIX_TO_TYPE[prefix];
+  if (!entityType) return null;
+  const sequence = Number(m[2].replace(/^0+/, "") || "0");
+  if (!Number.isFinite(sequence) || sequence < 1) return null;
+  return {
+    entityType,
+    prefix: REFERENCE_PREFIX[entityType],
+    sequence,
+    canonical: formatReferenceId(entityType, sequence)
+  };
+}
+function normalizeReferenceIdQuery(raw, hintType) {
+  const trimmed = String(raw || "").trim();
+  if (!trimmed) return null;
+  const parsed = parseReferenceId(trimmed);
+  if (parsed) {
+    if (hintType && parsed.entityType !== hintType) return null;
+    return parsed.canonical;
+  }
+  if (hintType && /^\d+$/.test(trimmed)) {
+    const n = Number(trimmed.replace(/^0+/, "") || "0");
+    if (!Number.isFinite(n) || n < 1) return null;
+    return formatReferenceId(hintType, n);
+  }
+  return null;
+}
+var REFERENCE_PREFIX, REFERENCE_FIELD, REFERENCE_ENTITY_TYPES, MIN_PAD2, PREFIX_TO_TYPE;
+var init_registry = __esm({
+  "shared/referenceIds/registry.ts"() {
+    REFERENCE_PREFIX = {
+      user: "CF",
+      brand: "BR",
+      product: "PR",
+      content: "CT",
+      order: "OR",
+      invoice: "INV",
+      return: "RT",
+      refund: "RF",
+      advertisement: "AD",
+      deal: "DL",
+      payment: "PAY",
+      escrow: "ESC",
+      conversation: "CV",
+      cashbook: "CB"
+    };
+    REFERENCE_FIELD = {
+      user: "choosifyUserId",
+      brand: "brandReferenceId",
+      product: "productReferenceId",
+      content: "contentReferenceId",
+      order: "orderReferenceId",
+      invoice: "invoiceReferenceId",
+      return: "returnReferenceId",
+      refund: "refundReferenceId",
+      advertisement: "advertisementReferenceId",
+      deal: "dealReferenceId",
+      payment: "paymentReferenceId",
+      escrow: "escrowReferenceId",
+      conversation: "conversationReferenceId",
+      cashbook: "cashbookReferenceId"
+    };
+    REFERENCE_ENTITY_TYPES = Object.keys(REFERENCE_PREFIX);
+    MIN_PAD2 = 5;
+    PREFIX_TO_TYPE = Object.fromEntries(
+      Object.entries(REFERENCE_PREFIX).map(([t, p]) => [
+        p.toUpperCase(),
+        t
+      ])
+    );
+  }
+});
+
+// server/referenceIds/referenceIdService.ts
+var referenceIdService_exports = {};
+__export(referenceIdService_exports, {
+  REFERENCE_ENTITY_TYPES: () => REFERENCE_ENTITY_TYPES,
+  REFERENCE_FIELD: () => REFERENCE_FIELD,
+  REFERENCE_PREFIX: () => REFERENCE_PREFIX,
+  allocateReferenceId: () => allocateReferenceId,
+  backfillEntityList: () => backfillEntityList,
+  ensureEntityReferenceId: () => ensureEntityReferenceId,
+  ensureReferenceIdSchema: () => ensureReferenceIdSchema,
+  formatReferenceId: () => formatReferenceId,
+  listReferenceIndexByType: () => listReferenceIndexByType,
+  lookupReferenceIndex: () => lookupReferenceIndex,
+  normalizeReferenceIdQuery: () => normalizeReferenceIdQuery,
+  parseReferenceId: () => parseReferenceId,
+  registerReferenceAssignment: () => registerReferenceAssignment
+});
+import { existsSync as existsSync11, mkdirSync as mkdirSync11, readFileSync as readFileSync11, writeFileSync as writeFileSync11 } from "node:fs";
+import { dirname as dirname11, join as join11 } from "node:path";
+import { eq as eq6, sql as sql3 } from "drizzle-orm";
+function writeMirror(nextByType) {
+  try {
+    mkdirSync11(dirname11(MIRROR_PATH), { recursive: true });
+    const snap = {
+      version: 1,
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      nextByType
+    };
+    writeFileSync11(MIRROR_PATH, JSON.stringify(snap, null, 2), "utf8");
+  } catch (error2) {
+    Logger.warn("referenceId sequence mirror save failed", {
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+  }
+}
+function readMirror() {
+  if (!existsSync11(MIRROR_PATH)) return null;
+  try {
+    return JSON.parse(readFileSync11(MIRROR_PATH, "utf8"));
+  } catch {
+    return null;
+  }
+}
+function ensureIndexHydrated() {
+  if (indexState.hydrated) return;
+  indexState.hydrated = true;
+  if (!existsSync11(INDEX_PATH)) return;
+  try {
+    const parsed = JSON.parse(readFileSync11(INDEX_PATH, "utf8"));
+    if (parsed?.version === 1 && parsed.byRef) {
+      indexState.byRef = parsed.byRef;
+    }
+  } catch (error2) {
+    Logger.warn("referenceId index load failed", {
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+  }
+}
+function persistIndex() {
+  try {
+    mkdirSync11(dirname11(INDEX_PATH), { recursive: true });
+    const snap = {
+      version: 1,
+      savedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      byRef: indexState.byRef
+    };
+    writeFileSync11(INDEX_PATH, JSON.stringify(snap), "utf8");
+  } catch (error2) {
+    Logger.warn("referenceId index save failed", {
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+  }
+}
+function registerReferenceAssignment(entityType, refId, internalId) {
+  ensureIndexHydrated();
+  const canonical = normalizeReferenceIdQuery(refId, entityType);
+  if (!canonical) throw new Error(`Invalid reference id: ${refId}`);
+  const existing = indexState.byRef[canonical];
+  if (existing && existing.internalId !== internalId) {
+    throw new Error(`Reference ID collision: ${canonical}`);
+  }
+  if (!existing) {
+    indexState.byRef[canonical] = {
+      entityType,
+      internalId,
+      assignedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    persistIndex();
+  }
+}
+function lookupReferenceIndex(raw) {
+  ensureIndexHydrated();
+  const parsed = parseReferenceId(raw);
+  if (!parsed) return null;
+  const hit = indexState.byRef[parsed.canonical];
+  if (!hit) return null;
+  return { ...hit, referenceId: parsed.canonical };
+}
+function listReferenceIndexByType(entityType) {
+  ensureIndexHydrated();
+  return Object.entries(indexState.byRef).filter(([, v]) => v.entityType === entityType).map(([referenceId, v]) => ({ referenceId, internalId: v.internalId }));
+}
+async function ensureReferenceIdSchema() {
+  if (!schemaReady2) {
+    schemaReady2 = (async () => {
+      await ensureChoosifyUserIdSchema();
+      await db.execute(sql3`
+        CREATE TABLE IF NOT EXISTS choosify_reference_id_counters (
+          entity_type varchar(32) PRIMARY KEY,
+          next_value bigint NOT NULL DEFAULT 1,
+          updated_at timestamptz NOT NULL DEFAULT now()
+        )
+      `);
+      for (const t of REFERENCE_ENTITY_TYPES) {
+        if (t === "user") continue;
+        await db.execute(sql3`
+          INSERT INTO choosify_reference_id_counters (entity_type, next_value)
+          VALUES (${t}, 1)
+          ON CONFLICT (entity_type) DO NOTHING
+        `);
+      }
+      ensureIndexHydrated();
+      const maxByType = {};
+      for (const [ref, entry] of Object.entries(indexState.byRef)) {
+        const parsed = parseReferenceId(ref);
+        if (!parsed || parsed.entityType === "user") continue;
+        maxByType[parsed.entityType] = Math.max(
+          maxByType[parsed.entityType] || 0,
+          parsed.sequence
+        );
+      }
+      const mirror = readMirror();
+      for (const t of REFERENCE_ENTITY_TYPES) {
+        if (t === "user") continue;
+        const desired = Math.max(
+          (maxByType[t] || 0) + 1,
+          mirror?.nextByType?.[t] || 1,
+          1
+        );
+        await db.execute(sql3`
+          UPDATE choosify_reference_id_counters
+          SET next_value = GREATEST(next_value, ${desired}),
+              updated_at = now()
+          WHERE entity_type = ${t}
+        `);
+      }
+    })().catch((error2) => {
+      schemaReady2 = null;
+      throw error2;
+    });
+  }
+  await schemaReady2;
+}
+async function allocateFromCounter(entityType, tx) {
+  await ensureReferenceIdSchema();
+  if (entityType === "user") {
+    return allocateNextChoosifyUserId(tx);
+  }
+  const runner = tx || db;
+  const rows = await runner.update(choosifyReferenceIdCounters).set({
+    nextValue: sql3`${choosifyReferenceIdCounters.nextValue} + 1`,
+    updatedAt: /* @__PURE__ */ new Date()
+  }).where(eq6(choosifyReferenceIdCounters.entityType, entityType)).returning({ nextValue: choosifyReferenceIdCounters.nextValue });
+  let after = Number(rows[0]?.nextValue);
+  if (!Number.isFinite(after) || after < 2) {
+    await runner.insert(choosifyReferenceIdCounters).values({ entityType, nextValue: 2, updatedAt: /* @__PURE__ */ new Date() }).onConflictDoNothing();
+    const retry = await runner.update(choosifyReferenceIdCounters).set({
+      nextValue: sql3`${choosifyReferenceIdCounters.nextValue} + 1`,
+      updatedAt: /* @__PURE__ */ new Date()
+    }).where(eq6(choosifyReferenceIdCounters.entityType, entityType)).returning({ nextValue: choosifyReferenceIdCounters.nextValue });
+    after = Number(retry[0]?.nextValue);
+    if (!Number.isFinite(after) || after < 2) {
+      throw new Error(`Failed to allocate reference id for ${entityType}`);
+    }
+  }
+  const allocated = after - 1;
+  const mirror = readMirror() || { version: 1, updatedAt: "", nextByType: {} };
+  mirror.nextByType[entityType] = after;
+  writeMirror(mirror.nextByType);
+  return formatReferenceId(entityType, allocated);
+}
+async function allocateReferenceId(entityType, tx) {
+  const prev = allocateLocks.get(entityType) || Promise.resolve();
+  let release;
+  const gate = new Promise((r) => {
+    release = r;
+  });
+  allocateLocks.set(
+    entityType,
+    prev.then(() => gate)
+  );
+  await prev;
+  try {
+    return await allocateFromCounter(entityType, tx);
+  } finally {
+    release();
+  }
+}
+async function ensureEntityReferenceId(params) {
+  const { entityType, internalId, current } = params;
+  if (current) {
+    const canonical = normalizeReferenceIdQuery(current, entityType);
+    if (canonical) {
+      registerReferenceAssignment(entityType, canonical, internalId);
+      return canonical;
+    }
+  }
+  const ref = await allocateReferenceId(entityType);
+  registerReferenceAssignment(entityType, ref, internalId);
+  return ref;
+}
+async function backfillEntityList(params) {
+  const sorted = [...params.rows].sort((a, b) => {
+    const ca = a.createdAt || "";
+    const cb = b.createdAt || "";
+    if (ca !== cb) return ca.localeCompare(cb);
+    return a.internalId.localeCompare(b.internalId);
+  });
+  let alreadyHadId = 0;
+  let assigned = 0;
+  const duplicates = [];
+  const seen = /* @__PURE__ */ new Map();
+  for (const row of sorted) {
+    if (row.current) {
+      const canonical = normalizeReferenceIdQuery(row.current, params.entityType) || row.current;
+      alreadyHadId += 1;
+      if (seen.has(canonical) && seen.get(canonical) !== row.internalId) {
+        duplicates.push(`${canonical} \u2192 ${seen.get(canonical)} and ${row.internalId}`);
+      } else {
+        seen.set(canonical, row.internalId);
+        registerReferenceAssignment(params.entityType, canonical, row.internalId);
+      }
+      continue;
+    }
+    const ref = await ensureEntityReferenceId({
+      entityType: params.entityType,
+      internalId: row.internalId,
+      current: null
+    });
+    await params.apply(row.internalId, ref);
+    assigned += 1;
+    seen.set(ref, row.internalId);
+  }
+  return {
+    entityType: params.entityType,
+    total: sorted.length,
+    alreadyHadId,
+    assigned,
+    duplicates
+  };
+}
+var INDEX_PATH, MIRROR_PATH, indexState, schemaReady2, allocateLocks;
+var init_referenceIdService = __esm({
+  "server/referenceIds/referenceIdService.ts"() {
+    init_client();
+    init_schema();
+    init_logger();
+    init_choosifyUserId();
+    init_registry();
+    init_registry();
+    INDEX_PATH = process.env.CHOOSIFY_REFERENCE_ID_INDEX_PATH?.trim() || join11(process.cwd(), ".data", "reference-id-index.json");
+    MIRROR_PATH = process.env.CHOOSIFY_REFERENCE_ID_SEQUENCE_PATH?.trim() || join11(process.cwd(), ".data", "reference-id-sequences.json");
+    indexState = {
+      byRef: {},
+      hydrated: false
+    };
+    schemaReady2 = null;
+    allocateLocks = /* @__PURE__ */ new Map();
+  }
+});
+
+// server/escrow/escrowService.ts
+var escrowService_exports = {};
+__export(escrowService_exports, {
+  allocateCapturedToOrders: () => allocateCapturedToOrders,
+  applyAdministrativeAdjustment: () => applyAdministrativeAdjustment,
+  createEscrowsForCapturedPayment: () => createEscrowsForCapturedPayment,
+  creditSellerBalanceFromSettlement: () => creditSellerBalanceFromSettlement,
+  decideReturn: () => decideReturn,
+  getEscrowForActor: () => getEscrowForActor,
+  getSellerBalanceForActor: () => getSellerBalanceForActor,
+  harnessMarkCapturedWithoutEscrow: () => harnessMarkCapturedWithoutEscrow,
+  harnessSettleWithoutBalanceCredit: () => harnessSettleWithoutBalanceCredit,
+  harnessSimulateProviderRefundWithoutLocalReverse: () => harnessSimulateProviderRefundWithoutLocalReverse,
+  harnessSimulateSettlementWithoutBalanceCredit: () => harnessSimulateSettlementWithoutBalanceCredit,
+  placeDisputeHold: () => placeDisputeHold,
+  processEscrowRefund: () => processEscrowRefund,
+  reconcileEscrowEffectsForPayment: () => reconcileEscrowEffectsForPayment,
+  reconcileRefundLocalEffects: () => reconcileRefundLocalEffects,
+  reconcileSettlementBalanceCredit: () => reconcileSettlementBalanceCredit,
+  refundEscrowsForCancelledOrder: () => refundEscrowsForCancelledOrder,
+  requestReturn: () => requestReturn,
+  settleEscrowForOrder: () => settleEscrowForOrder
+});
+import { randomUUID as randomUUID5 } from "node:crypto";
+function nowIso13() {
+  return (/* @__PURE__ */ new Date()).toISOString();
+}
+function resolveRefundProvider() {
+  const mockOn = (process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() === "true";
+  const sslOn = sslcommerzProvider.isConfigured();
+  if (mockOn && mockPaymentProvider.isConfigured()) return mockPaymentProvider;
+  if (sslOn) return sslcommerzProvider;
+  if (mockOn) return mockPaymentProvider;
+  return sslcommerzProvider;
+}
+function newId2(prefix) {
+  return `${prefix}_${randomUUID5().replace(/-/g, "").slice(0, 16)}`;
+}
+function emitFinance(eventName, aggregateId, actor, payload) {
+  publishEvent({
+    eventName,
+    domain: "Finance",
+    producer: "escrowService",
+    aggregateId,
+    actor,
+    payload
+  });
+}
+function allocateCapturedToOrders(payment, orders) {
+  const checkoutTotal = orders.reduce((s, o) => s + (o.grandTotal || 0), 0) || 1;
+  let allocatedCaptured = 0;
+  const shares = [];
+  for (let i = 0; i < orders.length; i++) {
+    const order = orders[i];
+    const isLast = i === orders.length - 1;
+    const share = checkoutTotal > 0 ? (order.grandTotal || 0) / checkoutTotal : 1 / Math.max(orders.length, 1);
+    const orderCaptured = isLast ? Math.round(((payment.capturedAmount || 0) - allocatedCaptured) * 100) / 100 : Math.round((payment.capturedAmount || 0) * share * 100) / 100;
+    allocatedCaptured += orderCaptured;
+    shares.push({ order, capturedAmount: orderCaptured });
+  }
+  return shares;
+}
+function emptyBalance(sellerId, currency) {
+  return {
+    sellerId,
+    currency,
+    escrowBalance: 0,
+    pendingSettlement: 0,
+    availableBalance: 0,
+    updatedAt: nowIso13()
+  };
+}
+async function bumpEscrowBalanceAggregate(sellerId, currency, deltaHeld) {
+  const bal = await escrowStore.getBalance(sellerId, currency) || emptyBalance(sellerId, currency);
+  await escrowStore.upsertBalance({
+    ...bal,
+    escrowBalance: addMajor(bal.escrowBalance, deltaHeld),
+    updatedAt: nowIso13()
+  });
+}
+async function createEscrowsForCapturedPayment(payment, actor) {
+  if (payment.status !== "captured") {
+    return [];
+  }
+  if (!payment.capturedAmount || payment.capturedAmount <= 0) {
+    return [];
+  }
+  const orders = (await Promise.all(payment.orderIds.map((id) => commerceStore.getOrder(id)))).filter(Boolean);
+  const shares = allocateCapturedToOrders(payment, orders);
+  const created2 = [];
+  for (const share of shares) {
+    if (share.capturedAmount <= 0) continue;
+    const existing = await escrowStore.getEscrowByPaymentOrder(
+      payment.paymentId,
+      share.order.id
+    );
+    if (existing) {
+      created2.push(existing);
+      if (!existing.escrowCreatedEmitted) {
+        emitFinance("EscrowCreated", existing.escrowId, actor, {
+          escrowId: existing.escrowId,
+          paymentId: existing.paymentId,
+          orderId: existing.orderId,
+          amount: existing.capturedAmount,
+          currency: existing.currency,
+          source: "reconcile"
+        });
+        const patched = {
+          ...existing,
+          escrowCreatedEmitted: true,
+          updatedAt: nowIso13()
+        };
+        await escrowStore.upsertEscrow(patched);
+        created2[created2.length - 1] = patched;
+      }
+      continue;
+    }
+    const now = nowIso13();
+    const escrow = {
+      escrowId: newId2("esc"),
+      paymentId: payment.paymentId,
+      checkoutId: payment.checkoutId,
+      orderId: share.order.id,
+      consumerId: share.order.consumerId,
+      sellerId: share.order.sellerId,
+      brandId: share.order.brandId,
+      currency: payment.currency || share.order.currency || "BDT",
+      capturedAmount: share.capturedAmount,
+      heldAmount: share.capturedAmount,
+      refundedAmount: 0,
+      settledAmount: 0,
+      commissionAmount: 0,
+      sellerNetAmount: 0,
+      status: "held",
+      escrowCreatedEmitted: true,
+      createdAt: now,
+      updatedAt: now
+    };
+    try {
+      escrow.escrowReferenceId = await ensureEntityReferenceId({
+        entityType: "escrow",
+        internalId: escrow.escrowId,
+        current: escrow.escrowReferenceId
+      });
+    } catch {
+    }
+    await escrowStore.upsertEscrow(escrow);
+    await bumpEscrowBalanceAggregate(escrow.sellerId, escrow.currency, escrow.heldAmount);
+    emitFinance("EscrowCreated", escrow.escrowId, actor, {
+      escrowId: escrow.escrowId,
+      paymentId: escrow.paymentId,
+      orderId: escrow.orderId,
+      amount: escrow.capturedAmount,
+      currency: escrow.currency
+    });
+    created2.push(escrow);
+  }
+  return created2;
+}
+async function reconcileEscrowEffectsForPayment(payment, actor) {
+  if (payment.status !== "captured") {
+    return { payment, escrows: [] };
+  }
+  const escrows = await createEscrowsForCapturedPayment(payment, actor);
+  let next = payment;
+  if (!next.escrowEffectsApplied) {
+    next = { ...next, escrowEffectsApplied: true, updatedAt: nowIso13() };
+    await commercePaymentStore.upsertPayment(next);
+  }
+  return { payment: next, escrows };
+}
+async function settleEscrowForOrder(orderId, actor) {
+  const escrows = await escrowStore.listEscrowsByOrder(orderId);
+  if (!escrows.length) return null;
+  let last = null;
+  for (const escrow of escrows) {
+    last = await settleOneEscrow(escrow, actor);
+  }
+  return last;
+}
+async function settleOneEscrow(escrow, actor) {
+  if (escrow.status === "settled" && escrow.settlementId) {
+    const existing = await escrowStore.getSettlement(escrow.settlementId);
+    if (existing) {
+      await creditSellerBalanceFromSettlement(existing, actor);
+      return { escrow, settlement: existing };
+    }
+  }
+  if (blocksSettlement(escrow.status) && escrow.status !== "settled") {
+    throw new CommerceError(`Escrow cannot settle while status is ${escrow.status}`, 409);
+  }
+  if (!canSettleFromStatus(escrow.status)) {
+    throw new CommerceError(`Escrow status ${escrow.status} is not settlement-eligible`, 409);
+  }
+  const settleable = escrow.heldAmount;
+  if (settleable <= 0) {
+    throw new CommerceError("No settleable Escrow amount remaining", 400);
+  }
+  const existingByEscrow = await escrowStore.getSettlementByEscrow(escrow.escrowId);
+  if (existingByEscrow) {
+    let e = escrow;
+    if (e.status !== "settled") {
+      e = {
+        ...e,
+        status: "settled",
+        settledAmount: settleable,
+        heldAmount: 0,
+        commissionAmount: existingByEscrow.commissionAmount,
+        sellerNetAmount: existingByEscrow.sellerNetAmount,
+        settlementId: existingByEscrow.settlementId,
+        releasedAt: e.releasedAt || nowIso13(),
+        updatedAt: nowIso13()
+      };
+      if (!e.escrowReleasedEmitted) {
+        emitFinance("EscrowReleased", e.escrowId, actor, {
+          escrowId: e.escrowId,
+          settlementId: existingByEscrow.settlementId,
+          sellerNetAmount: existingByEscrow.sellerNetAmount,
+          source: "reconcile"
+        });
+        e = { ...e, escrowReleasedEmitted: true };
+      }
+      await escrowStore.upsertEscrow(e);
+      await bumpEscrowBalanceAggregate(e.sellerId, e.currency, -settleable);
+    }
+    await creditSellerBalanceFromSettlement(existingByEscrow, actor);
+    return { escrow: e, settlement: existingByEscrow };
+  }
+  const commission = resolveSettlementCommission(settleable);
+  const now = nowIso13();
+  const settlement = {
+    settlementId: newId2("stl"),
+    escrowId: escrow.escrowId,
+    paymentId: escrow.paymentId,
+    orderId: escrow.orderId,
+    checkoutId: escrow.checkoutId,
+    sellerId: escrow.sellerId,
+    brandId: escrow.brandId,
+    currency: escrow.currency,
+    grossAmount: settleable,
+    commissionAmount: commission.commissionAmount,
+    sellerNetAmount: commission.sellerNetAmount,
+    sellerBalanceCredited: false,
+    createdAt: now,
+    updatedAt: now
+  };
+  await escrowStore.upsertSettlement(settlement);
+  let nextEscrow = {
+    ...escrow,
+    status: "settled",
+    settledAmount: settleable,
+    heldAmount: 0,
+    commissionAmount: commission.commissionAmount,
+    sellerNetAmount: commission.sellerNetAmount,
+    settlementId: settlement.settlementId,
+    releasedAt: now,
+    updatedAt: now
+  };
+  if (!nextEscrow.escrowReleasedEmitted) {
+    emitFinance("EscrowReleased", nextEscrow.escrowId, actor, {
+      escrowId: nextEscrow.escrowId,
+      settlementId: settlement.settlementId,
+      sellerNetAmount: commission.sellerNetAmount,
+      commissionAmount: commission.commissionAmount,
+      grossAmount: settleable
+    });
+    nextEscrow = { ...nextEscrow, escrowReleasedEmitted: true };
+  }
+  await escrowStore.upsertEscrow(nextEscrow);
+  await bumpEscrowBalanceAggregate(nextEscrow.sellerId, nextEscrow.currency, -settleable);
+  const credited = await creditSellerBalanceFromSettlement(settlement, actor);
+  return { escrow: nextEscrow, settlement: credited };
+}
+async function creditSellerBalanceFromSettlement(settlement, actor) {
+  const idempotencyKey = `settlement_credit:${settlement.settlementId}`;
+  const existingEntry = await escrowStore.getBalanceEntryByIdempotency(idempotencyKey);
+  if (existingEntry || settlement.sellerBalanceCredited) {
+    if (!settlement.sellerBalanceCredited) {
+      const patched2 = {
+        ...settlement,
+        sellerBalanceCredited: true,
+        updatedAt: nowIso13()
+      };
+      await escrowStore.upsertSettlement(patched2);
+      return patched2;
+    }
+    return settlement;
+  }
+  const bal = await escrowStore.getBalance(settlement.sellerId, settlement.currency) || emptyBalance(settlement.sellerId, settlement.currency);
+  const nextBal = {
+    ...bal,
+    pendingSettlement: Math.max(0, subMajor(bal.pendingSettlement, settlement.sellerNetAmount)),
+    availableBalance: addMajor(bal.availableBalance, settlement.sellerNetAmount),
+    updatedAt: nowIso13()
+  };
+  await escrowStore.upsertBalance(nextBal);
+  const entry = {
+    entryId: newId2("sbe"),
+    sellerId: settlement.sellerId,
+    currency: settlement.currency,
+    amount: settlement.sellerNetAmount,
+    kind: "settlement_credit",
+    settlementId: settlement.settlementId,
+    escrowId: settlement.escrowId,
+    orderId: settlement.orderId,
+    idempotencyKey,
+    createdAt: nowIso13()
+  };
+  await escrowStore.appendBalanceEntry(entry);
+  const patched = {
+    ...settlement,
+    sellerBalanceCredited: true,
+    updatedAt: nowIso13()
+  };
+  await escrowStore.upsertSettlement(patched);
+  Logger.info("Seller Balance credited from Settlement", {
+    settlementId: settlement.settlementId,
+    sellerId: settlement.sellerId,
+    amount: settlement.sellerNetAmount,
+    actor
+  });
+  return patched;
+}
+async function reconcileSettlementBalanceCredit(settlementId, actor) {
+  const settlement = await escrowStore.getSettlement(settlementId);
+  if (!settlement) return null;
+  return creditSellerBalanceFromSettlement(settlement, actor);
+}
+function refundableAmount(escrow) {
+  if (!canRefundFromStatus(escrow.status)) return 0;
+  return Math.max(0, escrow.heldAmount);
+}
+async function processEscrowRefund(input) {
+  const reason = (input.reason || "").trim();
+  if (!reason) throw new CommerceError("Refund reason is required");
+  const escrow = await escrowStore.getEscrow(input.escrowId);
+  if (!escrow) throw new CommerceError("Escrow not found", 404);
+  if (!input.authorizedCancelPath) {
+    await assertEscrowAccess(escrow, input.actor, "refund");
+  }
+  const prior = await escrowStore.listRefundsByEscrow(escrow.escrowId);
+  if (escrow.status === "full_refund") {
+    const completed = prior.find((r) => r.status === "completed");
+    if (completed) return completed;
+    throw new CommerceError("Escrow already fully refunded", 409);
+  }
+  if (escrow.status === "settled") {
+    const now2 = nowIso13();
+    const blocked = {
+      refundId: newId2("ref"),
+      paymentId: escrow.paymentId,
+      escrowId: escrow.escrowId,
+      checkoutId: escrow.checkoutId,
+      orderId: escrow.orderId,
+      amount: input.amount ?? escrow.settledAmount,
+      currency: escrow.currency,
+      reason,
+      requestedBy: input.actor.userId,
+      status: "requires_financial_adjustment",
+      createdAt: now2,
+      updatedAt: now2
+    };
+    try {
+      blocked.refundReferenceId = await ensureEntityReferenceId({
+        entityType: "refund",
+        internalId: blocked.refundId,
+        current: blocked.refundReferenceId
+      });
+    } catch {
+    }
+    await escrowStore.upsertRefund(blocked);
+    return blocked;
+  }
+  const maxRefundable = refundableAmount(escrow);
+  if (maxRefundable <= 0) {
+    throw new CommerceError("Escrow is not refundable in current status", 409);
+  }
+  const amount = input.amount === void 0 || input.amount === null ? maxRefundable : Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new CommerceError("Invalid refund amount");
+  }
+  if (toMinor(amount) > toMinor(maxRefundable)) {
+    throw new CommerceError("Refund amount exceeds refundable Escrow hold", 400);
+  }
+  const duplicate = prior.find(
+    (r) => r.status === "completed" && amountsEqual(r.amount, amount) && r.reason === reason
+  );
+  if (duplicate) return duplicate;
+  const inFlight = prior.find(
+    (r) => r.providerRefundDone && r.status !== "completed" && amountsEqual(r.amount, amount)
+  );
+  if (inFlight) {
+    return finalizeLocalRefundReversal(inFlight, escrow, input.actor.userId);
+  }
+  const now = nowIso13();
+  let refund = {
+    refundId: newId2("ref"),
+    paymentId: escrow.paymentId,
+    escrowId: escrow.escrowId,
+    checkoutId: escrow.checkoutId,
+    orderId: escrow.orderId,
+    amount,
+    currency: escrow.currency,
+    reason,
+    requestedBy: input.actor.userId,
+    status: "processing",
+    createdAt: now,
+    updatedAt: now
+  };
+  try {
+    refund.refundReferenceId = await ensureEntityReferenceId({
+      entityType: "refund",
+      internalId: refund.refundId,
+      current: refund.refundReferenceId
+    });
+  } catch {
+  }
+  await escrowStore.upsertRefund(refund);
+  if (!input.skipProvider) {
+    const payment = await commercePaymentStore.getPayment(escrow.paymentId);
+    if (payment && payment.provider !== "none" && payment.capturedAmount > 0) {
+      try {
+        const provider = resolveRefundProvider();
+        if (typeof provider.refundTransaction === "function") {
+          const bankTranId = payment.providerTransactionId || payment.providerValId || payment.paymentId;
+          const result = await provider.refundTransaction({
+            bankTranId,
+            refundAmount: amount,
+            refundRemarks: reason,
+            refeId: refund.refundId
+          });
+          if (!result.success) {
+            refund = {
+              ...refund,
+              status: "failed",
+              updatedAt: nowIso13()
+            };
+            await escrowStore.upsertRefund(refund);
+            throw new CommerceError(result.message || "Provider refund failed", 502);
+          }
+          refund = {
+            ...refund,
+            providerRefundDone: true,
+            providerRefundRefId: result.refundRefId,
+            updatedAt: nowIso13()
+          };
+          await escrowStore.upsertRefund(refund);
+        } else {
+          refund = { ...refund, providerRefundDone: true, updatedAt: nowIso13() };
+          await escrowStore.upsertRefund(refund);
+        }
+      } catch (error2) {
+        if (error2 instanceof CommerceError) throw error2;
+        refund = {
+          ...refund,
+          status: "failed",
+          updatedAt: nowIso13()
+        };
+        await escrowStore.upsertRefund(refund);
+        throw new CommerceError(
+          error2 instanceof Error ? error2.message : "Provider refund error",
+          502
+        );
+      }
+    } else {
+      refund = { ...refund, providerRefundDone: true, updatedAt: nowIso13() };
+      await escrowStore.upsertRefund(refund);
+    }
+  } else {
+    refund = {
+      ...refund,
+      providerRefundDone: true,
+      providerRefundRefId: `skip_${refund.refundId}`,
+      updatedAt: nowIso13()
+    };
+    await escrowStore.upsertRefund(refund);
+  }
+  return finalizeLocalRefundReversal(refund, escrow, input.actor.userId);
+}
+async function finalizeLocalRefundReversal(refund, escrowIn, actor) {
+  if (refund.status === "completed") return refund;
+  let escrow = await escrowStore.getEscrow(escrowIn.escrowId) || escrowIn;
+  const amount = refund.amount;
+  const remaining = subMajor(escrow.heldAmount, amount);
+  const isFull = remaining <= 0 || amountsEqual(amount, escrow.heldAmount);
+  const nextStatus = isFull ? "full_refund" : "partial_refund_remaining";
+  let nextEscrow = {
+    ...escrow,
+    heldAmount: Math.max(0, remaining),
+    refundedAmount: addMajor(escrow.refundedAmount, amount),
+    status: nextStatus,
+    cancelledAt: isFull ? nowIso13() : escrow.cancelledAt,
+    updatedAt: nowIso13()
+  };
+  if (isFull && !nextEscrow.escrowCancelledEmitted) {
+    emitFinance("EscrowCancelled", nextEscrow.escrowId, actor, {
+      escrowId: nextEscrow.escrowId,
+      refundId: refund.refundId,
+      amount,
+      reason: refund.reason
+    });
+    nextEscrow = { ...nextEscrow, escrowCancelledEmitted: true };
+  }
+  await escrowStore.upsertEscrow(nextEscrow);
+  await bumpEscrowBalanceAggregate(nextEscrow.sellerId, nextEscrow.currency, -amount);
+  let nextRefund = {
+    ...refund,
+    status: "completed",
+    completedAt: nowIso13(),
+    updatedAt: nowIso13()
+  };
+  if (!nextRefund.paymentRefundedEmitted) {
+    emitFinance("PaymentRefunded", nextRefund.paymentId, actor, {
+      refundId: nextRefund.refundId,
+      paymentId: nextRefund.paymentId,
+      escrowId: nextRefund.escrowId,
+      orderId: nextRefund.orderId,
+      amount: nextRefund.amount,
+      currency: nextRefund.currency
+    });
+    nextRefund = { ...nextRefund, paymentRefundedEmitted: true };
+  }
+  if (isFull && !nextRefund.escrowCancelledEmitted) {
+    nextRefund = { ...nextRefund, escrowCancelledEmitted: true };
+  }
+  await escrowStore.upsertRefund(nextRefund);
+  return nextRefund;
+}
+async function reconcileRefundLocalEffects(refundId, actor) {
+  const refund = await escrowStore.getRefund(refundId);
+  if (!refund) return null;
+  if (refund.status === "completed") return refund;
+  if (!refund.providerRefundDone) return refund;
+  const escrow = await escrowStore.getEscrow(refund.escrowId);
+  if (!escrow) return refund;
+  return finalizeLocalRefundReversal(refund, escrow, actor);
+}
+async function placeDisputeHold(params) {
+  const reason = (params.reason || "").trim();
+  if (!reason) throw new CommerceError("Dispute hold reason is required");
+  const escrow = await escrowStore.getEscrow(params.escrowId);
+  if (!escrow) throw new CommerceError("Escrow not found", 404);
+  await assertEscrowAccess(escrow, params.actor, "admin");
+  if (escrow.status === "settled" || escrow.status === "full_refund") {
+    throw new CommerceError(`Cannot dispute-hold Escrow in status ${escrow.status}`, 409);
+  }
+  if (escrow.status === "dispute_hold") return escrow;
+  const next = {
+    ...escrow,
+    status: "dispute_hold",
+    disputeHoldReason: reason,
+    disputeHoldAt: nowIso13(),
+    updatedAt: nowIso13()
+  };
+  await escrowStore.upsertEscrow(next);
+  return next;
+}
+async function applyAdministrativeAdjustment(params) {
+  const note = (params.note || "").trim();
+  if (!note) throw new CommerceError("Adjustment note is required");
+  const role = (params.actor.role || "").toLowerCase();
+  if (role !== "admin" && role !== "super_admin" && role !== "superadmin") {
+    throw new CommerceError("Administrative adjustment requires Admin", 403);
+  }
+  const escrow = await escrowStore.getEscrow(params.escrowId);
+  if (!escrow) throw new CommerceError("Escrow not found", 404);
+  if (escrow.status === "settled" || escrow.status === "full_refund") {
+    throw new CommerceError("Cannot adjust settled/refunded Escrow", 409);
+  }
+  const prevHeld = escrow.heldAmount;
+  let nextHeld = prevHeld;
+  if (params.heldAmount !== void 0) {
+    nextHeld = Number(params.heldAmount);
+    if (!Number.isFinite(nextHeld) || nextHeld < 0) {
+      throw new CommerceError("Invalid heldAmount");
+    }
+    if (toMinor(nextHeld) > toMinor(escrow.capturedAmount)) {
+      throw new CommerceError("heldAmount cannot exceed capturedAmount");
+    }
+  }
+  const delta = subMajor(nextHeld, prevHeld);
+  const next = {
+    ...escrow,
+    heldAmount: nextHeld,
+    status: "administrative_adjustment",
+    adminAdjustmentNote: note,
+    updatedAt: nowIso13()
+  };
+  await escrowStore.upsertEscrow(next);
+  if (delta !== 0) {
+    await bumpEscrowBalanceAggregate(next.sellerId, next.currency, delta);
+  }
+  const entry = {
+    entryId: newId2("sbe"),
+    sellerId: next.sellerId,
+    currency: next.currency,
+    amount: 0,
+    kind: "admin_adjustment",
+    escrowId: next.escrowId,
+    orderId: next.orderId,
+    idempotencyKey: `admin_adj:${next.escrowId}:${nowIso13()}`,
+    createdAt: nowIso13()
+  };
+  await escrowStore.appendBalanceEntry(entry);
+  Logger.audit("escrow.administrative_adjustment", {
+    escrowId: next.escrowId,
+    actor: params.actor.userId,
+    note,
+    previousHeld: prevHeld,
+    newHeld: nextHeld
+  });
+  return next;
+}
+async function requestReturn(params) {
+  const reason = (params.reason || "").trim();
+  if (!reason) throw new CommerceError("Return reason is required");
+  const order = await commerceStore.getOrder(params.orderId);
+  if (!order) throw new CommerceError("Order not found", 404);
+  const role = (params.actor.role || "").toLowerCase();
+  const isAdmin = role === "admin" || role === "super_admin" || role === "superadmin";
+  if (!isAdmin && order.consumerId !== params.actor.userId) {
+    throw new CommerceError("Only the Consumer may request a Return", 403);
+  }
+  if (order.status !== "delivered" && order.status !== "completed") {
+    throw new CommerceError("Return only eligible after Delivery/Completion", 409);
+  }
+  const existing = await escrowStore.listReturnsByOrder(order.id);
+  const open = existing.find((r) => r.status === "requested" || r.status === "approved");
+  if (open) return open;
+  const row = {
+    returnId: newId2("rtn"),
+    orderId: order.id,
+    consumerId: order.consumerId,
+    sellerId: order.sellerId,
+    brandId: order.brandId,
+    reason,
+    status: "requested",
+    createdAt: nowIso13(),
+    updatedAt: nowIso13()
+  };
+  try {
+    row.returnReferenceId = await ensureEntityReferenceId({
+      entityType: "return",
+      internalId: row.returnId,
+      current: row.returnReferenceId
+    });
+  } catch {
+  }
+  await escrowStore.upsertReturn(row);
+  return row;
+}
+async function decideReturn(params) {
+  const row = await escrowStore.getReturn(params.returnId);
+  if (!row) throw new CommerceError("Return not found", 404);
+  const order = await commerceStore.getOrder(row.orderId);
+  if (!order) throw new CommerceError("Order not found", 404);
+  const role = (params.actor.role || "").toLowerCase();
+  const isAdmin = role === "admin" || role === "super_admin" || role === "superadmin";
+  const isSeller2 = order.sellerId === params.actor.userId;
+  if (!isAdmin && !isSeller2) {
+    throw new CommerceError("Not authorized to decide Return", 403);
+  }
+  if (row.status !== "requested") {
+    return { returnRow: row };
+  }
+  if (params.decision === "rejected") {
+    const rejected = {
+      ...row,
+      status: "rejected",
+      updatedAt: nowIso13()
+    };
+    await escrowStore.upsertReturn(rejected);
+    return { returnRow: rejected };
+  }
+  const escrows = await escrowStore.listEscrowsByOrder(row.orderId);
+  const escrow = escrows.find((e) => canRefundFromStatus(e.status));
+  if (!escrow) {
+    throw new CommerceError("No refundable Escrow for this Return", 409);
+  }
+  const refund = await processEscrowRefund({
+    escrowId: escrow.escrowId,
+    amount: params.refundAmount,
+    reason: `Return approved: ${row.reason}`,
+    actor: params.actor
+  });
+  const approved = {
+    ...row,
+    status: refund.status === "completed" ? "closed" : "refund_processing",
+    refundId: refund.refundId,
+    updatedAt: nowIso13()
+  };
+  await escrowStore.upsertReturn(approved);
+  return { returnRow: approved, refund };
+}
+async function refundEscrowsForCancelledOrder(params) {
+  const escrows = await escrowStore.listEscrowsByOrder(params.orderId);
+  const refunds = [];
+  for (const escrow of escrows) {
+    if (!canRefundFromStatus(escrow.status)) continue;
+    if (escrow.heldAmount <= 0) continue;
+    const refund = await processEscrowRefund({
+      escrowId: escrow.escrowId,
+      reason: params.reason,
+      actor: params.actor,
+      authorizedCancelPath: true
+    });
+    refunds.push(refund);
+  }
+  return refunds;
+}
+async function assertEscrowAccess(escrow, actor, action) {
+  const role = (actor.role || "").toLowerCase();
+  const isAdmin = role === "admin" || role === "super_admin" || role === "superadmin";
+  if (isAdmin) return;
+  if (action === "admin" || action === "release") {
+    throw new CommerceError("Not authorized for this Escrow action", 403);
+  }
+  if (action === "refund") {
+    if (escrow.sellerId === actor.userId || escrow.consumerId === actor.userId) {
+      if (escrow.consumerId === actor.userId && escrow.sellerId !== actor.userId) {
+        throw new CommerceError("Consumers cannot directly process Refunds", 403);
+      }
+      return;
+    }
+    throw new CommerceError("Not authorized for this Escrow", 403);
+  }
+  if (escrow.sellerId === actor.userId || escrow.consumerId === actor.userId) {
+    return;
+  }
+  throw new CommerceError("Not authorized for this Escrow", 403);
+}
+async function getEscrowForActor(escrowId, actor) {
+  const escrow = await escrowStore.getEscrow(escrowId);
+  if (!escrow) throw new CommerceError("Escrow not found", 404);
+  await assertEscrowAccess(escrow, actor, "read");
+  return escrow;
+}
+async function getSellerBalanceForActor(sellerId, currency, actor) {
+  const role = (actor.role || "").toLowerCase();
+  const isAdmin = role === "admin" || role === "super_admin" || role === "superadmin";
+  if (!isAdmin && actor.userId !== sellerId) {
+    throw new CommerceError("Not authorized to view this Seller Balance", 403);
+  }
+  return await escrowStore.getBalance(sellerId, currency) || emptyBalance(sellerId, currency);
+}
+async function harnessMarkCapturedWithoutEscrow(params) {
+  if ((process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() !== "true") {
+    throw new CommerceError("Harness requires PAYMENT_GATEWAY_MOCK", 403);
+  }
+  const payment = await commercePaymentStore.getPayment(params.paymentId);
+  if (!payment) throw new CommerceError("Payment not found", 404);
+  const now = nowIso13();
+  const next = {
+    ...payment,
+    status: "captured",
+    capturedAmount: payment.amount,
+    outstandingAmount: Math.max(0, payment.outstandingAmount ?? 0),
+    capturedAt: payment.capturedAt || now,
+    paymentCapturedEmitted: true,
+    escrowEffectsApplied: false,
+    updatedAt: now
+  };
+  await commercePaymentStore.upsertPayment(next);
+  return next;
+}
+async function harnessSettleWithoutBalanceCredit(params) {
+  if ((process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() !== "true") {
+    throw new CommerceError("Harness requires PAYMENT_GATEWAY_MOCK", 403);
+  }
+  const escrow = await escrowStore.getEscrow(params.escrowId);
+  if (!escrow) throw new CommerceError("Escrow not found", 404);
+  if (!canSettleFromStatus(escrow.status)) {
+    throw new CommerceError(`Escrow not settleable: ${escrow.status}`, 409);
+  }
+  const existing = await escrowStore.getSettlementByEscrow(escrow.escrowId);
+  if (existing) {
+    const patched = {
+      ...existing,
+      sellerBalanceCredited: false,
+      updatedAt: nowIso13()
+    };
+    await escrowStore.upsertSettlement(patched);
+    return { escrow, settlement: patched };
+  }
+  const settleable = escrow.heldAmount;
+  const commission = resolveSettlementCommission(settleable);
+  const now = nowIso13();
+  const settlement = {
+    settlementId: newId2("stl"),
+    escrowId: escrow.escrowId,
+    paymentId: escrow.paymentId,
+    orderId: escrow.orderId,
+    checkoutId: escrow.checkoutId,
+    sellerId: escrow.sellerId,
+    brandId: escrow.brandId,
+    currency: escrow.currency,
+    grossAmount: settleable,
+    commissionAmount: commission.commissionAmount,
+    sellerNetAmount: commission.sellerNetAmount,
+    sellerBalanceCredited: false,
+    createdAt: now,
+    updatedAt: now
+  };
+  await escrowStore.upsertSettlement(settlement);
+  const nextEscrow = {
+    ...escrow,
+    status: "settled",
+    settledAmount: settleable,
+    heldAmount: 0,
+    commissionAmount: commission.commissionAmount,
+    sellerNetAmount: commission.sellerNetAmount,
+    settlementId: settlement.settlementId,
+    releasedAt: now,
+    escrowReleasedEmitted: true,
+    updatedAt: now
+  };
+  await escrowStore.upsertEscrow(nextEscrow);
+  await bumpEscrowBalanceAggregate(nextEscrow.sellerId, nextEscrow.currency, -settleable);
+  emitFinance("EscrowReleased", nextEscrow.escrowId, params.actor, {
+    escrowId: nextEscrow.escrowId,
+    settlementId: settlement.settlementId,
+    source: "harness_skip_balance"
+  });
+  return { escrow: nextEscrow, settlement };
+}
+async function harnessSimulateSettlementWithoutBalanceCredit(params) {
+  if ((process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() !== "true") {
+    throw new CommerceError("Harness requires PAYMENT_GATEWAY_MOCK", 403);
+  }
+  const settlement = await escrowStore.getSettlement(params.settlementId);
+  if (!settlement) throw new CommerceError("Settlement not found", 404);
+  const patched = {
+    ...settlement,
+    sellerBalanceCredited: false,
+    updatedAt: nowIso13()
+  };
+  await escrowStore.upsertSettlement(patched);
+  return patched;
+}
+async function harnessSimulateProviderRefundWithoutLocalReverse(params) {
+  if ((process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() !== "true") {
+    throw new CommerceError("Harness requires PAYMENT_GATEWAY_MOCK", 403);
+  }
+  const escrow = await escrowStore.getEscrow(params.escrowId);
+  if (!escrow) throw new CommerceError("Escrow not found", 404);
+  const now = nowIso13();
+  const refund = {
+    refundId: newId2("ref"),
+    paymentId: escrow.paymentId,
+    escrowId: escrow.escrowId,
+    checkoutId: escrow.checkoutId,
+    orderId: escrow.orderId,
+    amount: params.amount,
+    currency: escrow.currency,
+    reason: params.reason,
+    requestedBy: params.actorUserId,
+    status: "processing",
+    providerRefundDone: true,
+    providerRefundRefId: `harness_provider_${now}`,
+    createdAt: now,
+    updatedAt: now
+  };
+  await escrowStore.upsertRefund(refund);
+  return refund;
+}
+var init_escrowService = __esm({
+  "server/escrow/escrowService.ts"() {
+    init_cartService();
+    init_commerceStore();
+    init_eventBus();
+    init_logger();
+    init_commercePaymentStore();
+    init_mockProvider();
+    init_sslcommerzProvider();
+    init_commissionPolicy();
+    init_escrowLifecycle();
+    init_escrowStore();
+    init_money();
+    init_referenceIdService();
+  }
+});
+
+// server/commerce/orderService.ts
+var orderService_exports = {};
+__export(orderService_exports, {
+  adminCorrectOrderStatus: () => adminCorrectOrderStatus,
+  applyPaymentFailureInventoryRelease: () => applyPaymentFailureInventoryRelease,
+  cancelOrder: () => cancelOrder,
+  confirmOrdersForCapturedPayment: () => confirmOrdersForCapturedPayment,
+  dispatchOrder: () => dispatchOrder,
+  getShipmentForActor: () => getShipmentForActor,
+  listOrdersGroupedByCheckout: () => listOrdersGroupedByCheckout,
+  markCommerceOrderDeliveredExternal: () => markCommerceOrderDeliveredExternal,
+  normalizeOrderStatus: () => normalizeOrderStatus,
+  releaseOrderReservations: () => releaseOrderReservations,
+  returnOrderToPending: () => returnOrderToPending,
+  shipmentEvent: () => shipmentEvent,
+  transitionOrder: () => transitionOrder
+});
+function nowIso14() {
+  return (/* @__PURE__ */ new Date()).toISOString();
+}
+function newId3(prefix) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+function emitOrder(eventName, orderId, actor, payload) {
+  publishEvent({
+    eventName,
+    domain: "Commerce",
+    producer: "commerceOrderLifecycle",
+    aggregateId: orderId,
+    actor,
+    payload
+  });
+}
+function resolveActorRole(role) {
+  if (role === "admin" || role === "super_admin") return "admin";
+  if (role?.includes("seller")) return "seller";
+  return "consumer";
+}
+function isPlatformReader(role) {
+  return role === "admin" || role === "super_admin" || role === "moderator";
+}
+async function assertOrderAccess(order, actor, mutate) {
+  if (mutate) {
+    if (resolveActorRole(actor.role) === "admin") return "admin";
+  } else if (isPlatformReader(actor.role)) {
+    return "admin";
+  }
+  if (order.sellerId === actor.userId) {
+    if (actor.brandId && actor.brandId !== order.brandId) {
+      throw new CommerceError("Not authorized for this Brand Order", 403);
+    }
+    return "seller";
+  }
+  if (order.consumerId === actor.userId) {
+    return "consumer";
+  }
+  throw new CommerceError("Not authorized to access this order", 403);
+}
+async function releaseOrderReservations(order) {
+  if (!order.inventoryReserved || order.inventoryConsumed) {
+    return { ...order, inventoryReserved: false };
+  }
+  for (const item of order.items.filter((i) => i.listingType === "product")) {
+    await releaseInventoryQuantity({
+      productId: item.listingId,
+      variantId: item.variantId,
+      quantity: item.quantity
+    });
+  }
+  return { ...order, inventoryReserved: false };
+}
+async function applyPaymentFailureInventoryRelease(orderIds) {
+  for (const orderId of orderIds) {
+    const order = await commerceStore.getOrder(orderId);
+    if (!order) continue;
+    if (!order.inventoryReserved || order.inventoryConsumed) continue;
+    const next = await releaseOrderReservations(order);
+    await commerceStore.upsertOrder({ ...next, updatedAt: (/* @__PURE__ */ new Date()).toISOString() });
+  }
+}
+async function confirmOrdersForCapturedPayment(params) {
+  const out = [];
+  for (const orderId of params.orderIds) {
+    const order = await commerceStore.getOrder(orderId);
+    if (!order) continue;
+    if (order.status !== "pending") {
+      out.push(order);
+      continue;
+    }
+    const next = {
+      ...order,
+      status: "confirmed",
+      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    await commerceStore.upsertOrder(next);
+    mirrorOpsStatus(next);
+    emitOrder("OrderConfirmed", next.id, params.actorId, {
+      orderId: next.id,
+      paymentId: params.paymentId,
+      reason: params.reason,
+      from: "pending",
+      to: "confirmed"
+    });
+    out.push(next);
+  }
+  return out;
+}
+function assertPaymentAllowsConfirm(order) {
+  if (order.source === "manual" || String(order.source).startsWith("external_")) {
+    return;
+  }
+  const method = String(order.paymentMethod || "").toLowerCase();
+  const payStatus = String(order.paymentStatus || "").toLowerCase();
+  if (method === "cod") {
+    if (payStatus === "failed" || payStatus === "cancelled") {
+      throw new CommerceError("COD Order cannot be Confirmed after payment failure", 409);
+    }
+    return;
+  }
+  if (method === "wallet" || method === "installment") {
+    throw new CommerceError("Payment method not available for Confirm in this sprint", 409);
+  }
+  if (payStatus !== "paid" && payStatus !== "partial") {
+    throw new CommerceError(
+      "Prepaid Order cannot be Confirmed until Payment is Captured",
+      409
+    );
+  }
+}
+async function restockConsumedInventory(order) {
+  if (!order.inventoryConsumed) return order;
+  for (const item of order.items.filter((i) => i.listingType === "product")) {
+    await restockInventoryQuantity({
+      productId: item.listingId,
+      variantId: item.variantId,
+      quantity: item.quantity
+    });
+  }
+  return { ...order, inventoryConsumed: false, inventoryReserved: false };
+}
+async function consumeOrderInventory(order) {
+  if (order.inventoryConsumed || !orderHasProductLines(order.items)) {
+    return { ...order, inventoryConsumed: true, inventoryReserved: false };
+  }
+  for (const item of order.items.filter((i) => i.listingType === "product")) {
+    const key = inventoryRecordId(item.listingId, item.variantId);
+    await withInventoryLock(key, async () => {
+      const record = await getInventoryRecord(item.listingId, item.variantId);
+      if (!record) return;
+      const nextQty = Math.max(0, record.quantity - item.quantity);
+      const nextReserved = order.inventoryReserved ? Math.max(0, record.reservedQuantity - item.quantity) : record.reservedQuantity;
+      await adjustInventory({
+        productId: item.listingId,
+        variantId: item.variantId,
+        quantity: nextQty,
+        reservedQuantity: Math.min(nextReserved, nextQty)
+      });
+      await syncProductStockFromInventory(item.listingId);
+    });
+  }
+  return { ...order, inventoryConsumed: true, inventoryReserved: false };
+}
+function mirrorOpsStatus(order) {
+  try {
+    const map = {
+      pending: "pending_payment",
+      confirmed: "confirmed",
+      packed: "active",
+      shipped: "active",
+      delivered: "active",
+      completed: "completed",
+      cancelled: "cancelled"
+    };
+    operationsStore.updateOrder(order.orderNumber, {
+      status: map[order.status],
+      cancelledAt: order.cancelledAt,
+      cancelReason: order.cancelReason,
+      cancelledBy: order.cancelledBy === "consumer" ? "buyer" : order.cancelledBy === "seller" || order.cancelledBy === "admin" ? order.cancelledBy : void 0
+    });
+  } catch {
+  }
+}
+function ensureShipment(order, existing, fulfilmentMethod, patch) {
+  const ts = nowIso14();
+  if (existing) {
+    return {
+      ...existing,
+      ...patch,
+      fulfilmentMethod: patch?.fulfilmentMethod || existing.fulfilmentMethod || fulfilmentMethod,
+      updatedAt: ts
+    };
+  }
+  return {
+    id: newId3("cship"),
+    orderId: order.id,
+    checkoutId: order.checkoutId,
+    consumerId: order.consumerId,
+    sellerId: order.sellerId,
+    brandId: order.brandId,
+    fulfilmentMethod,
+    courierProvider: patch?.courierProvider ?? null,
+    trackingNumber: patch?.trackingNumber ?? null,
+    status: patch?.status || "pending_fulfilment",
+    shippedAt: patch?.shippedAt,
+    deliveredAt: patch?.deliveredAt,
+    createdAt: ts,
+    updatedAt: ts
+  };
+}
+function shipmentEvent(status) {
+  switch (status) {
+    case "pending_fulfilment":
+      return "ShipmentCreated";
+    case "courier_assigned":
+      return "ShipmentAssigned";
+    case "in_transit":
+    case "picked_up":
+    case "out_for_delivery":
+      return "ShipmentShipped";
+    case "delivered":
+      return "ShipmentDelivered";
+    case "packed":
+      return "ShipmentCreated";
+    default:
+      return null;
+  }
+}
+async function transitionOrder(input) {
+  const order = await commerceStore.getOrder(input.orderId);
+  if (!order) throw new CommerceError("Order not found", 404);
+  const actorKind = await assertOrderAccess(order, input.actor, true);
+  if (actorKind === "consumer") {
+    throw new CommerceError("Consumers cannot advance fulfilment status", 403);
+  }
+  const to = normalizeOrderStatus(input.toStatus);
+  if (!to || to === "cancelled") {
+    throw new CommerceError("Invalid target status (use cancel endpoint for cancellation)");
+  }
+  if (order.status === to) {
+    const shipment2 = order.shipmentId ? await commerceStore.getShipment(order.shipmentId) : await commerceStore.getShipmentByOrderId(order.id);
+    return { order, shipment: shipment2 || void 0, reused: true };
+  }
+  const serviceOnly = orderHasOnlyServices(order.items);
+  if (!canTransitionOrder(order.status, to, { serviceOnly })) {
+    throw new CommerceError(`Invalid transition ${order.status} \u2192 ${to}`);
+  }
+  if (!canActorForwardTransition(actorKind, to)) {
+    throw new CommerceError("Not authorized for this transition", 403);
+  }
+  if (to === "confirmed" && order.status === "pending") {
+    assertPaymentAllowsConfirm(order);
+  }
+  let next = {
+    ...order,
+    status: to,
+    updatedAt: nowIso14()
+  };
+  let shipment;
+  const method = input.fulfilmentMethod || "self_delivery";
+  if (!serviceOnly) {
+    if (to === "packed") {
+      next = await consumeOrderInventory(next);
+      const existing = await commerceStore.getShipmentByOrderId(order.id);
+      const created2 = !existing;
+      shipment = ensureShipment(next, existing, method, {
+        status: "packed",
+        courierProvider: input.courierProvider,
+        trackingNumber: input.trackingNumber
+      });
+      next.shipmentId = shipment.id;
+      if (created2) {
+        emitOrder("ShipmentCreated", next.id, input.actor.userId, {
+          orderId: next.id,
+          shipmentId: shipment.id,
+          status: shipment.status
+        });
+      }
+    }
+    if (to === "shipped") {
+      const existing = await commerceStore.getShipmentByOrderId(order.id);
+      if (!existing && !next.shipmentId) {
+        throw new CommerceError("Order must be packed before shipping");
+      }
+      const hadCourier = !!existing?.courierProvider || existing?.status === "courier_assigned" || existing?.status === "in_transit";
+      shipment = ensureShipment(next, existing, method, {
+        status: "in_transit",
+        courierProvider: input.courierProvider ?? existing?.courierProvider ?? null,
+        trackingNumber: input.trackingNumber ?? existing?.trackingNumber ?? null,
+        shippedAt: existing?.shippedAt || nowIso14()
+      });
+      next.shipmentId = shipment.id;
+      if (!hadCourier || input.courierProvider) {
+        emitOrder("ShipmentAssigned", next.id, input.actor.userId, {
+          orderId: next.id,
+          shipmentId: shipment.id,
+          courierProvider: shipment.courierProvider
+        });
+      }
+      emitOrder("ShipmentShipped", next.id, input.actor.userId, {
+        orderId: next.id,
+        shipmentId: shipment.id
+      });
+    }
+    if (to === "delivered") {
+      const existing = await commerceStore.getShipmentByOrderId(order.id);
+      if (existing && (existing.status === "packed" || existing.status === "pending_fulfilment")) {
+        throw new CommerceError("Shipment must be shipped before Order can be Delivered");
+      }
+      shipment = ensureShipment(next, existing, method, {
+        status: "delivered",
+        deliveredAt: nowIso14(),
+        shippedAt: existing?.shippedAt || nowIso14()
+      });
+      next.shipmentId = shipment.id;
+      emitOrder("ShipmentDelivered", next.id, input.actor.userId, {
+        orderId: next.id,
+        shipmentId: shipment.id
+      });
+    }
+  }
+  await commerceStore.commitOrderMutation({ order: next, shipment });
+  mirrorOpsStatus(next);
+  const evt = eventNameForStatus(to);
+  if (evt) {
+    emitOrder(evt, next.id, input.actor.userId, {
+      orderId: next.id,
+      from: order.status,
+      to,
+      sellerId: next.sellerId,
+      brandId: next.brandId
+    });
+  }
+  if (to === "delivered") {
+    try {
+      const { settleOrderDelivered: settleOrderDelivered2 } = await Promise.resolve().then(() => (init_deliverySettlement(), deliverySettlement_exports));
+      await settleOrderDelivered2(next.orderNumber, "lifecycle_cta", {
+        actorId: input.actor.userId
+      });
+    } catch (error2) {
+      const { Logger: Logger2 } = await Promise.resolve().then(() => (init_logger(), logger_exports));
+      Logger2.error('settleOrderDelivered after lifecycle "delivered" failed', {
+        orderId: next.orderNumber,
+        error: error2 instanceof Error ? error2.message : String(error2)
+      });
+    }
+  }
+  if (to === "completed") {
+    try {
+      const { settleEscrowForOrder: settleEscrowForOrder2 } = await Promise.resolve().then(() => (init_escrowService(), escrowService_exports));
+      await settleEscrowForOrder2(next.id, input.actor.userId);
+    } catch (error2) {
+      const { Logger: Logger2 } = await Promise.resolve().then(() => (init_logger(), logger_exports));
+      Logger2.error("Escrow settlement after OrderCompleted failed", {
+        orderId: next.id,
+        error: error2 instanceof Error ? error2.message : String(error2)
+      });
+    }
+  }
+  return { order: next, shipment, reused: false };
+}
+async function cancelOrder(input) {
+  const reason = (input.reason || "").trim();
+  if (!reason) throw new CommerceError("Cancellation reason is required");
+  const order = await commerceStore.getOrder(input.orderId);
+  if (!order) throw new CommerceError("Order not found", 404);
+  if (order.status === "cancelled") {
+    return { order, reused: true };
+  }
+  const roleKind = resolveActorRole(input.actor.role);
+  let effective;
+  if (roleKind === "admin") {
+    effective = "admin";
+  } else if (order.sellerId === input.actor.userId) {
+    effective = "seller";
+    if (input.actor.brandId && input.actor.brandId !== order.brandId) {
+      throw new CommerceError("Not authorized for this Brand Order", 403);
+    }
+  } else if (order.consumerId === input.actor.userId) {
+    effective = "consumer";
+  } else {
+    throw new CommerceError("Not authorized to cancel this order", 403);
+  }
+  if (!canActorCancel(effective, order.status)) {
+    throw new CommerceError(
+      `Cancellation not allowed for ${effective} while order is ${order.status}`,
+      403
+    );
+  }
+  let next = {
+    ...order,
+    status: "cancelled",
+    cancelledBy: effective,
+    cancelReason: reason,
+    cancelledAt: nowIso14(),
+    statusBeforeCancel: order.status,
+    updatedAt: nowIso14()
+  };
+  if (next.inventoryConsumed) {
+    next = await restockConsumedInventory(next);
+  } else if (next.inventoryReserved) {
+    next = await releaseOrderReservations(next);
+  }
+  const shipment = await commerceStore.getShipmentByOrderId(order.id);
+  let shipmentUpdate;
+  if (shipment && shipment.status !== "delivered") {
+    shipmentUpdate = { ...shipment, status: "cancelled", updatedAt: nowIso14() };
+  }
+  const hadCapturedFunds = (order.paymentStatus === "paid" || order.paymentStatus === "partial") && (order.paidAmount || 0) > 0;
+  if (hadCapturedFunds) {
+    try {
+      if (order.paymentId) {
+        const { commercePaymentStore: commercePaymentStore2 } = await Promise.resolve().then(() => (init_commercePaymentStore(), commercePaymentStore_exports));
+        const { reconcileEscrowEffectsForPayment: reconcileEscrowEffectsForPayment2, refundEscrowsForCancelledOrder: refundEscrowsForCancelledOrder2 } = await Promise.resolve().then(() => (init_escrowService(), escrowService_exports));
+        const payment = await commercePaymentStore2.getPayment(order.paymentId);
+        if (payment?.status === "captured") {
+          await reconcileEscrowEffectsForPayment2(payment, input.actor.userId);
+        }
+        await refundEscrowsForCancelledOrder2({
+          orderId: order.id,
+          reason: `Order cancelled: ${reason}`,
+          actor: input.actor
+        });
+      } else {
+        const { refundEscrowsForCancelledOrder: refundEscrowsForCancelledOrder2 } = await Promise.resolve().then(() => (init_escrowService(), escrowService_exports));
+        await refundEscrowsForCancelledOrder2({
+          orderId: order.id,
+          reason: `Order cancelled: ${reason}`,
+          actor: input.actor
+        });
+      }
+    } catch (error2) {
+      const { Logger: Logger2 } = await Promise.resolve().then(() => (init_logger(), logger_exports));
+      Logger2.error("Escrow refund on cancel failed", {
+        orderId: order.id,
+        error: error2 instanceof Error ? error2.message : String(error2)
+      });
+      throw error2 instanceof Error ? error2 : new CommerceError("Escrow refund on cancel failed", 500);
+    }
+  }
+  await commerceStore.commitOrderMutation({ order: next, shipment: shipmentUpdate });
+  mirrorOpsStatus(next);
+  emitOrder("OrderCancelled", next.id, input.actor.userId, {
+    orderId: next.id,
+    cancelledBy: effective,
+    reason,
+    previousStatus: order.status
+  });
+  return { order: next, reused: false };
+}
+async function returnOrderToPending(input) {
+  const order = await commerceStore.getOrder(input.orderId);
+  if (!order) throw new CommerceError("Order not found", 404);
+  const roleKind = resolveActorRole(input.actor.role);
+  let effective;
+  if (roleKind === "admin") {
+    effective = "admin";
+  } else if (order.sellerId === input.actor.userId) {
+    effective = "seller";
+    if (input.actor.brandId && input.actor.brandId !== order.brandId) {
+      throw new CommerceError("Not authorized for this Brand Order", 403);
+    }
+  } else {
+    throw new CommerceError("Not authorized to correct this order", 403);
+  }
+  if (order.status !== "confirmed") {
+    throw new CommerceError(
+      `Only a confirmed order can be returned to pending (this order is ${order.status})`,
+      409
+    );
+  }
+  if (order.inventoryConsumed) {
+    throw new CommerceError("Order has already consumed stock \u2014 cannot return to pending", 409);
+  }
+  const shipment = await commerceStore.getShipmentByOrderId(order.id);
+  if (shipment && shipment.status !== "pending_fulfilment") {
+    throw new CommerceError("A shipment has already been created \u2014 cannot return to pending", 409);
+  }
+  const opsMirror = operationsStore.getOrder(order.orderNumber);
+  const anyDelivered = (opsMirror?.subOrders || []).some((s) => (s.items || []).some((it) => Boolean(it.deliveredAt)));
+  if (anyDelivered) {
+    throw new CommerceError("An item on this order is already delivered \u2014 cannot return to pending", 409);
+  }
+  const now = nowIso14();
+  const reason = (input.reason || "").trim();
+  const next = {
+    ...order,
+    status: "pending",
+    returnedToPendingAt: now,
+    returnedToPendingBy: effective,
+    returnedToPendingReason: reason || void 0,
+    updatedAt: now
+  };
+  await commerceStore.commitOrderMutation({ order: next });
+  mirrorOpsStatus(next);
+  emitOrder("OrderReturnedToPending", next.id, input.actor.userId, {
+    orderId: next.id,
+    from: "confirmed",
+    to: "pending",
+    by: effective,
+    reason: reason || void 0
+  });
+  return { order: next };
+}
+function validateDispatchDetails(input) {
+  const errors = {};
+  const method = input.fulfillmentMethod;
+  if (method !== "courier" && method !== "seller_delivery" && method !== "pickup") {
+    return { errors: { fulfillmentMethod: "Select a fulfillment method" }, normalized: null };
+  }
+  const courier = String(input.courier || "").trim();
+  const tracking = String(input.trackingNumber || "").trim();
+  if (method === "courier") {
+    if (!courier) errors.courier = "Courier / logistics provider is required";
+    const knownNoTracking = COURIERS_WITHOUT_TRACKING.has(courier.toLowerCase());
+    if (!knownNoTracking && !tracking) {
+      errors.trackingNumber = "Tracking / consignment number is required for courier dispatch";
+    }
+  } else if (method === "seller_delivery") {
+    if (!courier && !tracking) {
+      errors.courier = "A delivery method or reference is required for own delivery";
+    }
+  }
+  const eta = String(input.estimatedDelivery || "").trim();
+  if (eta && Number.isNaN(Date.parse(eta))) errors.estimatedDelivery = "Estimated delivery date is invalid";
+  if (Object.keys(errors).length > 0) return { errors, normalized: null };
+  return {
+    errors,
+    normalized: {
+      method,
+      courier,
+      trackingNumber: tracking,
+      trackingUrl: String(input.trackingUrl || "").trim() || void 0,
+      estimatedDelivery: eta || void 0,
+      dispatchNote: String(input.dispatchNote || "").trim() || void 0
+    }
+  };
+}
+async function postDispatchSystemCard(order, shipment, n) {
+  const { submitPlatformMessage: submitPlatformMessage2 } = await Promise.resolve().then(() => (init_platformMessagingBridge(), platformMessagingBridge_exports));
+  const lines = ["\u{1F4E6} Your order has been dispatched"];
+  if (n.method === "courier") lines.push(`Courier: ${n.courier}`);
+  else if (n.method === "seller_delivery") lines.push(`Delivery: ${n.courier || "Seller delivery"}`);
+  else lines.push("Ready for pickup");
+  if (n.trackingNumber) lines.push(`Tracking: ${n.trackingNumber}`);
+  if (n.estimatedDelivery) lines.push(`Estimated delivery: ${n.estimatedDelivery}`);
+  await submitPlatformMessage2({
+    buyerId: order.consumerId,
+    userName: "Choosify Platform",
+    body: lines.join("\n"),
+    orderId: order.orderNumber,
+    senderId: "system",
+    direction: "outbound",
+    platformMessageId: `sys_dispatch_${order.orderNumber}`,
+    dispatchEvent: {
+      orderId: order.orderNumber,
+      fulfillmentMethod: n.method,
+      courier: n.courier || void 0,
+      trackingNumber: n.trackingNumber || void 0,
+      trackingUrl: n.trackingUrl,
+      estimatedDelivery: n.estimatedDelivery,
+      dispatchedAt: shipment.dispatchedAt || nowIso14()
+    }
+  });
+}
+async function notifyBuyerDispatched(order) {
+  try {
+    const { notifyUser: notifyUser2 } = await Promise.resolve().then(() => (init_systemNotify(), systemNotify_exports));
+    const { COMMUNICATION_TYPES: COMMUNICATION_TYPES2, DELIVERY_CHANNELS: DELIVERY_CHANNELS2 } = await Promise.resolve().then(() => (init_communicationTypes(), communicationTypes_exports));
+    await notifyUser2(order.consumerId, {
+      type: COMMUNICATION_TYPES2.ORDER_UPDATE,
+      category: "buyer",
+      priority: "normal",
+      title: "Order dispatched",
+      summary: `Order ${order.orderNumber} has been dispatched.`,
+      actionUrl: "/profile/orders",
+      channels: [DELIVERY_CHANNELS2.IN_APP],
+      metadata: { orderId: order.orderNumber, event: "dispatched" }
+    });
+  } catch (err) {
+    const { Logger: Logger2 } = await Promise.resolve().then(() => (init_logger(), logger_exports));
+    Logger2.error("notifyBuyerDispatched failed", { orderId: order.orderNumber, error: String(err) });
+  }
+}
+async function dispatchOrder(input) {
+  const order = await commerceStore.getOrder(input.orderId);
+  if (!order) throw new CommerceError("Order not found", 404);
+  const actorKind = await assertOrderAccess(order, input.actor, true);
+  if (actorKind === "consumer") throw new CommerceError("Consumers cannot dispatch orders", 403);
+  const opsOrderId = order.orderNumber;
+  let shipment = shipmentStore.getShipmentByOrderId(opsOrderId);
+  if (!shipment) {
+    const opsOrder = operationsStore.getOrder(opsOrderId);
+    if (opsOrder) shipment = shipmentStore.createFromOrder(opsOrder);
+  }
+  if (!shipment) throw new CommerceError("Shipment record not found for this order", 404);
+  if (shipment.dispatchedAt || String(order.status) === "shipped") {
+    return { order, shipment, reused: true };
+  }
+  if (order.status !== "packed") {
+    throw new CommerceError(
+      `Only a processing order can be dispatched (this order is ${order.status})`,
+      409
+    );
+  }
+  const { errors, normalized } = validateDispatchDetails(input);
+  if (!normalized) {
+    throw new CommerceError("Dispatch details are incomplete", 400, {
+      code: "DISPATCH_VALIDATION",
+      details: errors
+    });
+  }
+  const snapshot = JSON.parse(JSON.stringify(shipment));
+  const now = nowIso14();
+  const dispatched = shipmentStore.updateShipment(shipment.id, {
+    status: "dispatched",
+    courier: normalized.courier || shipment.courier || "",
+    trackingNumber: normalized.trackingNumber || "",
+    trackingUrl: normalized.trackingUrl,
+    estimatedDelivery: normalized.estimatedDelivery,
+    dispatchNote: normalized.dispatchNote,
+    fulfillmentMethod: normalized.method,
+    dispatchedAt: now
+  });
+  shipmentStore.appendTrackingEvent(shipment.id, {
+    timestamp: now,
+    status: "dispatched",
+    location: shipment.region || "Dhaka",
+    description: normalized.method === "courier" ? `Dispatched via ${normalized.courier}${normalized.trackingNumber ? ` \u2014 ${normalized.trackingNumber}` : ""}` : normalized.method === "seller_delivery" ? `Dispatched \u2014 seller delivery${normalized.courier ? ` (${normalized.courier})` : ""}` : "Ready for customer pickup"
+  });
+  let advanced;
+  try {
+    advanced = await transitionOrder({
+      orderId: order.id,
+      toStatus: "shipped",
+      actor: input.actor,
+      fulfilmentMethod: normalized.method === "courier" ? "third_party_courier" : normalized.method === "pickup" ? "pickup" : "self_delivery",
+      courierProvider: normalized.courier || void 0,
+      trackingNumber: normalized.trackingNumber || void 0
+    });
+  } catch (err) {
+    shipmentStore.updateShipment(shipment.id, {
+      status: snapshot.status,
+      courier: snapshot.courier,
+      trackingNumber: snapshot.trackingNumber,
+      trackingUrl: snapshot.trackingUrl,
+      estimatedDelivery: snapshot.estimatedDelivery,
+      dispatchNote: snapshot.dispatchNote,
+      fulfillmentMethod: snapshot.fulfillmentMethod,
+      dispatchedAt: snapshot.dispatchedAt,
+      trackingEvents: snapshot.trackingEvents
+    });
+    throw err;
+  }
+  await postDispatchSystemCard(order, dispatched || shipment, normalized).catch(
+    (e) => console.warn("[Dispatch] System-B card failed (non-fatal):", e)
+  );
+  await notifyBuyerDispatched(order);
+  emitOrder("OrderDispatched", order.id, input.actor.userId, {
+    orderId: order.id,
+    orderNumber: opsOrderId,
+    fulfillmentMethod: normalized.method,
+    courier: normalized.courier || void 0,
+    trackingNumber: normalized.trackingNumber || void 0,
+    dispatchedAt: now
+  });
+  return {
+    order: advanced.order,
+    shipment: shipmentStore.getShipmentByOrderId(opsOrderId) || dispatched || shipment,
+    reused: false
+  };
+}
+async function markCommerceOrderDeliveredExternal(orderNumber2, actorId3) {
+  const all = await commerceStore.listOrders();
+  const order = all.find((o) => o.orderNumber === orderNumber2) || null;
+  if (!order) return { changed: false, status: null };
+  if (order.status !== "shipped") return { changed: false, status: order.status };
+  const existing = await commerceStore.getShipmentByOrderId(order.id);
+  const now = nowIso14();
+  const next = { ...order, status: "delivered", updatedAt: now };
+  const shipment = existing && existing.status !== "delivered" ? {
+    ...existing,
+    status: "delivered",
+    deliveredAt: now,
+    shippedAt: existing.shippedAt || now,
+    updatedAt: now
+  } : void 0;
+  await commerceStore.commitOrderMutation({ order: next, shipment });
+  mirrorOpsStatus(next);
+  emitOrder("ShipmentDelivered", next.id, actorId3, {
+    orderId: next.id,
+    shipmentId: existing?.id
+  });
+  emitOrder("OrderDelivered", next.id, actorId3, {
+    orderId: next.id,
+    from: "shipped",
+    to: "delivered",
+    sellerId: next.sellerId,
+    brandId: next.brandId
+  });
+  return { changed: true, status: "delivered" };
+}
+function isCorrectionActor(role) {
+  return role === "admin" || role === "super_admin";
+}
+async function reverseConsumeToReserved(order) {
+  if (!order.inventoryConsumed || !orderHasProductLines(order.items)) {
+    return { ...order, inventoryConsumed: false, inventoryReserved: true };
+  }
+  for (const item of order.items.filter((i) => i.listingType === "product")) {
+    const key = inventoryRecordId(item.listingId, item.variantId);
+    await withInventoryLock(key, async () => {
+      const record = await getInventoryRecord(item.listingId, item.variantId);
+      if (!record) return;
+      await adjustInventory({
+        productId: item.listingId,
+        variantId: item.variantId,
+        quantity: record.quantity + item.quantity,
+        // symmetric with consume: reserved was only decremented if the order held a reservation
+        reservedQuantity: order.inventoryReserved ? record.reservedQuantity + item.quantity : record.reservedQuantity
+      });
+      await syncProductStockFromInventory(item.listingId);
+    });
+  }
+  return { ...order, inventoryConsumed: false, inventoryReserved: true };
+}
+function shipmentHasMoved(shipment) {
+  if (!shipment) return false;
+  if (SHIPMENT_MOVEMENT_STATUSES.has(shipment.status)) return true;
+  return (shipment.trackingEvents || []).some((e) => SHIPMENT_MOVEMENT_STATUSES.has(e.status));
+}
+async function adminCorrectOrderStatus(input) {
+  if (!isCorrectionActor(input.actor.role)) {
+    throw new CommerceError("Administrative status correction is staff-only", 403);
+  }
+  const reason = String(input.reason || "").trim();
+  if (!reason) throw new CommerceError("A correction reason is required", 400);
+  const order = await commerceStore.getOrder(input.orderId);
+  if (!order) throw new CommerceError("Order not found", 404);
+  const from = order.status;
+  const to = input.toStatus;
+  const opsOrderId = order.orderNumber;
+  const opsShipment = shipmentStore.getShipmentByOrderId(opsOrderId);
+  const ALLOWED2 = {
+    confirmed: ["pending"],
+    packed: ["confirmed", "pending"],
+    shipped: ["packed"]
+  };
+  if (!(ALLOWED2[from] || []).includes(to)) {
+    throw new CommerceError(
+      `No administrative correction from "${from}" to "${to}" (allowed: ${(ALLOWED2[from] || []).join(", ") || "none"})`,
+      409
+    );
+  }
+  const anyDelivered = (operationsStore.getOrder(opsOrderId)?.subOrders || []).some((s) => (s.items || []).some((it) => Boolean(it.deliveredAt)));
+  if (anyDelivered) {
+    throw new CommerceError("An item on this order is already delivered \u2014 cannot correct backward", 409);
+  }
+  let next = { ...order, status: to, updatedAt: nowIso14() };
+  let shipmentUpdate;
+  if (from === "confirmed" && to === "pending") {
+    if (order.inventoryConsumed) {
+      throw new CommerceError("Order has already consumed stock \u2014 cannot return to pending", 409);
+    }
+  } else if (from === "packed" && (to === "confirmed" || to === "pending")) {
+    next = await reverseConsumeToReserved(next);
+    const cShip = await commerceStore.getShipmentByOrderId(order.id);
+    if (cShip && cShip.status !== "delivered") {
+      shipmentUpdate = { ...cShip, status: "cancelled", updatedAt: nowIso14() };
+    }
+  } else if (from === "shipped" && to === "packed") {
+    if (shipmentHasMoved(opsShipment)) {
+      throw new CommerceError(
+        "Canonical courier movement is recorded for this shipment \u2014 dispatch cannot be retracted (use a return / support workflow)",
+        409
+      );
+    }
+    if (opsShipment) {
+      shipmentStore.updateShipment(opsShipment.id, {
+        status: "awaiting_dispatch",
+        courier: "",
+        trackingNumber: "",
+        trackingUrl: void 0,
+        estimatedDelivery: void 0,
+        dispatchNote: void 0,
+        fulfillmentMethod: void 0,
+        dispatchedAt: void 0
+      });
+      shipmentStore.appendTrackingEvent(opsShipment.id, {
+        timestamp: nowIso14(),
+        status: "awaiting_dispatch",
+        location: opsShipment.region || "Dhaka",
+        description: `Dispatch retracted by platform staff \u2014 ${reason}`
+      });
+    }
+    const cShip = await commerceStore.getShipmentByOrderId(order.id);
+    if (cShip) shipmentUpdate = { ...cShip, status: "packed", updatedAt: nowIso14() };
+  }
+  await commerceStore.commitOrderMutation({ order: next, shipment: shipmentUpdate });
+  mirrorOpsStatus(next);
+  emitOrder("OrderStatusCorrected", next.id, input.actor.userId, {
+    orderId: next.id,
+    orderNumber: opsOrderId,
+    fromState: from,
+    toState: to,
+    actorId: input.actor.userId,
+    actorRole: input.actor.role || "staff",
+    reason,
+    correctedAt: nowIso14()
+  });
+  return { order: next, from, to };
+}
+async function getShipmentForActor(shipmentId, actor) {
+  const shipment = await commerceStore.getShipment(shipmentId);
+  if (!shipment) throw new CommerceError("Shipment not found", 404);
+  const order = await commerceStore.getOrder(shipment.orderId);
+  if (!order) throw new CommerceError("Order not found", 404);
+  await assertOrderAccess(order, actor, false);
+  return shipment;
+}
+async function listOrdersGroupedByCheckout(actor) {
+  const all = await commerceStore.listOrders();
+  const kind = resolveActorRole(actor.role);
+  const platformReader = isPlatformReader(actor.role);
+  let filtered = all;
+  if (platformReader && !actor.as) {
+    filtered = all;
+  } else if (actor.as === "seller" || !actor.as && kind === "seller") {
+    filtered = all.filter((o) => o.sellerId === actor.userId);
+    if (actor.brandId) filtered = filtered.filter((o) => o.brandId === actor.brandId);
+  } else {
+    filtered = all.filter((o) => o.consumerId === actor.userId);
+  }
+  if (actor.brandId && platformReader && !actor.as) {
+    filtered = filtered.filter((o) => o.brandId === actor.brandId);
+  }
+  if (actor.status) {
+    const st = normalizeOrderStatus(actor.status);
+    if (st) filtered = filtered.filter((o) => o.status === st);
+  }
+  const byCheckout = {};
+  for (const o of filtered) {
+    const key = o.checkoutId || "unknown";
+    if (!byCheckout[key]) byCheckout[key] = [];
+    byCheckout[key].push(o);
+  }
+  return { orders: filtered, byCheckout };
+}
+var COURIERS_WITHOUT_TRACKING;
+var init_orderService = __esm({
+  "server/commerce/orderService.ts"() {
+    init_inventoryStore();
+    init_eventBus();
+    init_operationsStore();
+    init_shipmentStore();
+    init_cartService();
+    init_commerceStore();
+    init_orderLifecycle();
+    COURIERS_WITHOUT_TRACKING = /* @__PURE__ */ new Set();
+  }
+});
+
+// server/operations/deliverySettlement.ts
+var deliverySettlement_exports = {};
+__export(deliverySettlement_exports, {
+  settleOrderDelivered: () => settleOrderDelivered,
+  settleOrderItemDelivered: () => settleOrderItemDelivered
+});
+function subOrdersOf(order) {
+  return (order.subOrders || []) ?? [];
+}
+function everyItemDelivered(subs) {
+  const items = subs.flatMap((s) => s.items || []);
+  return items.length > 0 && items.every((it) => Boolean(it.deliveredAt));
+}
+async function loadCommerceOrder(orderNumber2) {
+  try {
+    const { commerceStore: commerceStore2 } = await Promise.resolve().then(() => (init_commerceStore(), commerceStore_exports));
+    const all = await commerceStore2.listOrders();
+    return all.find((o) => o.orderNumber === orderNumber2) || null;
+  } catch {
+    return null;
+  }
+}
+function withDeliveryStamp(it, deliveredAt) {
+  const productId = String(it.productId || "").trim();
+  const consumedFlag = productId ? { inventoryConsumed: true } : {};
+  const warrantyMonths = Number(it.warrantyMonthsAtPurchase) || 0;
+  if (!warrantyMonths) return { ...it, ...consumedFlag, deliveredAt };
+  const warrantyExpiresAt = new Date(
+    Date.now() + warrantyMonths * 30 * 24 * 60 * 60 * 1e3
+  ).toISOString();
+  return {
+    ...it,
+    ...consumedFlag,
+    deliveredAt,
+    warrantyStartsAt: deliveredAt,
+    warrantyExpiresAt
+  };
+}
+async function consumeItemIfOperationsOwned(it, commerceConsumed) {
+  const productId = String(it.productId || "").trim();
+  if (!productId || it.inventoryConsumed || commerceConsumed) return;
+  const variantId = typeof it.variantId === "string" ? it.variantId : void 0;
+  const quantity = Math.max(1, Math.floor(Number(it.quantity) || 1));
+  await consumeInventoryQuantity({ productId, variantId, quantity }).catch((err) => {
+    console.error("[DeliverySettlement] inventory consume failed:", err);
+  });
+}
+async function postDeliveredSystemCard(order, isPickup) {
+  try {
+    const { submitPlatformMessage: submitPlatformMessage2 } = await Promise.resolve().then(() => (init_platformMessagingBridge(), platformMessagingBridge_exports));
+    const body = isPickup ? "\u2705 Your order has been collected\nThank you for shopping with Choosify." : "\u{1F4E6} Your order has been delivered\nThank you for shopping with Choosify.";
+    await submitPlatformMessage2({
+      buyerId: order.buyerId,
+      userName: "Choosify Platform",
+      body,
+      orderId: order.orderId,
+      senderId: "system",
+      direction: "outbound",
+      // dedup — one card per order regardless of how many triggers fire
+      platformMessageId: `sys_delivered_${order.orderId}`
+    });
+  } catch (err) {
+    console.warn("[DeliverySettlement] System-B delivered card failed (non-fatal):", err);
+  }
+}
+async function notifyBuyerDelivered(order, isPickup) {
+  if (!order.buyerId) return;
+  try {
+    await notifyUser(order.buyerId, {
+      type: COMMUNICATION_TYPES.ORDER_UPDATE,
+      category: "buyer",
+      priority: "normal",
+      title: isPickup ? "Order collected" : "Order delivered",
+      summary: isPickup ? `Order ${order.orderId} has been collected.` : `Order ${order.orderId} has been delivered.`,
+      actionUrl: "/profile/orders",
+      channels: [DELIVERY_CHANNELS.IN_APP],
+      metadata: { orderId: order.orderId, event: "delivered" }
+    });
+  } catch (err) {
+    console.warn("[DeliverySettlement] buyer delivered notification failed (non-fatal):", err);
+  }
+}
+async function settleOrderItemDelivered(opsOrderId, itemId, source, opts = {}) {
+  const order = operationsStore.getOrder(opsOrderId);
+  if (!order) return { ok: false, reused: false, allDelivered: false, reason: "no_ops_order" };
+  const subs = subOrdersOf(order);
+  const target = subs.flatMap((s) => s.items || []).find((it) => it.itemId === itemId);
+  if (!target) {
+    return { ok: false, reused: false, allDelivered: false, reason: "item_not_found" };
+  }
+  const alreadyDelivered = Boolean(target.deliveredAt);
+  const commerce = await loadCommerceOrder(opsOrderId);
+  const commerceConsumed = Boolean(commerce?.inventoryConsumed);
+  const deliveredAt = nowIso15();
+  if (!alreadyDelivered) {
+    await consumeItemIfOperationsOwned(target, commerceConsumed);
+    const nextSubs = subs.map((sub) => {
+      const items = sub.items || [];
+      if (!items.some((it) => it.itemId === itemId)) return sub;
+      const newItems = items.map(
+        (it) => it.itemId === itemId ? withDeliveryStamp(it, deliveredAt) : it
+      );
+      return { ...sub, trackingStatus: "delivered", items: newItems };
+    });
+    operationsStore.updateOrder(opsOrderId, { subOrders: nextSubs });
+    scheduleOperationsPersist();
+    const allDelivered2 = everyItemDelivered(nextSubs);
+    if (allDelivered2) {
+      await settleOrderDelivered(opsOrderId, source, opts);
+      return { ok: true, reused: false, allDelivered: true };
+    }
+    if (order.buyerId) {
+      try {
+        await notifyUser(order.buyerId, {
+          type: COMMUNICATION_TYPES.ORDER_UPDATE,
+          category: "buyer",
+          title: "Item delivered",
+          summary: `${String(target.productTitle || "Your item")} from order ${order.orderId} was delivered.`,
+          actionUrl: "/profile/orders",
+          metadata: { orderId: order.orderId, itemId }
+        });
+      } catch {
+      }
+    }
+    return { ok: true, reused: false, allDelivered: false };
+  }
+  const allDelivered = everyItemDelivered(subs);
+  if (allDelivered) {
+    await settleOrderDelivered(opsOrderId, source, opts);
+  }
+  return { ok: true, reused: true, allDelivered };
+}
+async function settleOrderDelivered(opsOrderId, source, opts = {}) {
+  const order = operationsStore.getOrder(opsOrderId);
+  if (!order) return { ok: false, reused: false, allDelivered: false, reason: "no_ops_order" };
+  const actorId3 = opts.actorId || "system";
+  const commerce = await loadCommerceOrder(opsOrderId);
+  const commerceConsumed = Boolean(commerce?.inventoryConsumed);
+  const deliveredAt = nowIso15();
+  const subs = subOrdersOf(order);
+  const pendingConsume = [];
+  let itemsChanged = false;
+  const nextSubs = subs.map((sub) => {
+    const items = sub.items || [];
+    const newItems = items.map((it) => {
+      if (it.deliveredAt) return it;
+      itemsChanged = true;
+      pendingConsume.push(it);
+      return withDeliveryStamp(it, deliveredAt);
+    });
+    const allSubDelivered = newItems.length > 0 && newItems.every((it) => Boolean(it.deliveredAt));
+    return { ...sub, ...allSubDelivered ? { trackingStatus: "delivered" } : {}, items: newItems };
+  });
+  for (const it of pendingConsume) {
+    await consumeItemIfOperationsOwned(it, commerceConsumed);
+  }
+  if (itemsChanged) {
+    operationsStore.updateOrder(opsOrderId, { subOrders: nextSubs });
+    scheduleOperationsPersist();
+  }
+  const shipment = shipmentStore.getShipmentByOrderId(opsOrderId);
+  const isPickup = shipment?.fulfillmentMethod === "pickup";
+  let shipmentChanged = false;
+  if (shipment && shipment.status !== "delivered") {
+    shipmentStore.updateShipment(shipment.id, { status: "delivered" });
+    shipmentStore.appendTrackingEvent(shipment.id, {
+      timestamp: deliveredAt,
+      status: "delivered",
+      location: shipment.region || "Dhaka",
+      description: isPickup ? `Order ${opsOrderId} collected by customer` : `Order ${opsOrderId} delivered \u2014 settlement (${source})`
+    });
+    shipmentChanged = true;
+  }
+  let commerceChanged = false;
+  if (commerce?.status === "shipped") {
+    try {
+      const { markCommerceOrderDeliveredExternal: markCommerceOrderDeliveredExternal2 } = await Promise.resolve().then(() => (init_orderService(), orderService_exports));
+      const r = await markCommerceOrderDeliveredExternal2(opsOrderId, actorId3);
+      commerceChanged = r.changed;
+    } catch (err) {
+      console.warn("[DeliverySettlement] Commerce delivered advance failed (non-fatal):", err);
+    }
+  }
+  if (itemsChanged || shipmentChanged || commerceChanged) {
+    await postDeliveredSystemCard(order, isPickup);
+    await notifyBuyerDelivered(order, isPickup);
+  }
+  return {
+    ok: true,
+    reused: !(itemsChanged || shipmentChanged || commerceChanged),
+    allDelivered: true
+  };
+}
+var nowIso15;
+var init_deliverySettlement = __esm({
+  "server/operations/deliverySettlement.ts"() {
+    init_inventoryStore();
+    init_communicationTypes();
+    init_systemNotify();
+    init_operationsStore();
+    init_operationsPersistence();
+    init_shipmentStore();
+    nowIso15 = () => (/* @__PURE__ */ new Date()).toISOString();
+  }
+});
+
+// server/catalogContract.ts
+import { z as z2 } from "zod";
+function assertOriginalPriceNotBelowPrice(originalPrice, price, label = "Listing") {
+  const op = typeof originalPrice === "number" ? originalPrice : NaN;
+  const p = typeof price === "number" ? price : NaN;
+  if (Number.isFinite(op) && op > 0 && Number.isFinite(p) && op < p) {
+    throw new Error(
+      `${label} originalPrice (${op}) cannot be lower than price (${p}). Leave it blank for no MRP.`
+    );
+  }
+}
+var nonEmpty, isoDate, nowIso16, slugify4, ensureUniqueSlug, toString2, toNumber2, toBoolean2, toStringArray2, normalizeProductVideoUrl, categorySchema, brandSchema, productSchema, dealSchema, heroBannerSchema, dealsBannerSchema, sectionSchema, homepageSchema, existingOrNow, normalizeCategoryInput, normalizeBrandInput, normalizeProductInput, normalizeDealInput, normalizeHeroBannerInput, normalizeDealsBannerInput, normalizeSectionInput, normalizeHomepageInput, brandPostKindSchema, brandPostStatusSchema, brandPostSchema, normalizeBrandPostInput;
+var init_catalogContract = __esm({
+  "server/catalogContract.ts"() {
+    init_productLifecycle();
+    nonEmpty = z2.string().trim().min(1);
+    isoDate = z2.string().datetime();
+    nowIso16 = () => (/* @__PURE__ */ new Date()).toISOString();
+    slugify4 = (value) => value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-");
+    ensureUniqueSlug = (base, takenSlugs) => {
+      const normalized = slugify4(base) || "item";
+      const taken = new Set(takenSlugs);
+      if (!taken.has(normalized)) return normalized;
+      for (let attempt = 0; attempt < 25; attempt += 1) {
+        const suffix = attempt === 0 ? Date.now().toString(36).slice(-5) : Math.random().toString(36).slice(2, 7);
+        const candidate = `${normalized}-${suffix}`;
+        if (!taken.has(candidate)) return candidate;
+      }
+      return `${normalized}-${Date.now().toString(36)}`;
+    };
+    toString2 = (value, fallback) => typeof value === "string" ? value : fallback ?? "";
+    toNumber2 = (value, fallback = 0) => {
+      if (typeof value === "number" && Number.isFinite(value)) return value;
+      if (typeof value === "string") {
+        const normalized = Number(value.replace(/[^0-9.-]/g, ""));
+        if (Number.isFinite(normalized)) return normalized;
+      }
+      return fallback;
+    };
+    toBoolean2 = (value, fallback = false) => typeof value === "boolean" ? value : fallback;
+    toStringArray2 = (value) => {
+      if (!Array.isArray(value)) return [];
+      return value.filter((item) => typeof item === "string" && item.length > 0);
+    };
+    normalizeProductVideoUrl = (raw, existing) => {
+      if (raw === void 0 || raw === null) return existing || void 0;
+      const s = typeof raw === "string" ? raw.trim() : "";
+      if (!s) return void 0;
+      if (s.startsWith("/media/")) return s;
+      let url;
+      try {
+        url = new URL(s);
+      } catch {
+        throw new Error("Product video must be a valid absolute URL or an uploaded /media path.");
+      }
+      if (url.protocol !== "https:") {
+        throw new Error("Product video URL must use https.");
+      }
+      const host = url.hostname.replace(/^www\./, "").toLowerCase();
+      const isYouTube = host === "youtube.com" || host === "m.youtube.com" || host === "youtu.be" || host === "youtube-nocookie.com";
+      const isDirectFile = /\.(mp4|webm|mov|m4v)(\?.*)?$/i.test(url.pathname);
+      if (!isYouTube && !isDirectFile) {
+        throw new Error("Unsupported product video URL. Use a YouTube link or a direct .mp4/.webm/.mov URL.");
+      }
+      return url.toString();
+    };
+    categorySchema = z2.object({
+      id: nonEmpty,
+      slug: nonEmpty,
+      name: nonEmpty,
+      description: z2.string(),
+      icon: z2.string(),
+      parentId: z2.string().nullable(),
+      enabled: z2.boolean(),
+      displayOrder: z2.number().int(),
+      createdAt: isoDate,
+      updatedAt: isoDate
+    });
+    brandSchema = z2.object({
+      id: nonEmpty,
+      slug: nonEmpty,
+      name: nonEmpty,
+      category: z2.string(),
+      description: z2.string(),
+      logo: z2.string(),
+      coverImage: z2.string().optional(),
+      tagline: z2.string().optional(),
+      website: z2.string().optional(),
+      socialLinks: z2.object({
+        facebook: z2.string().optional(),
+        instagram: z2.string().optional(),
+        youtube: z2.string().optional(),
+        tiktok: z2.string().optional(),
+        linkedin: z2.string().optional(),
+        custom: z2.array(z2.object({ label: z2.string(), url: z2.string() })).optional()
+      }).optional(),
+      story: z2.string().optional(),
+      storyBlocks: z2.array(
+        z2.object({
+          id: z2.string(),
+          heading: z2.string(),
+          body: z2.string(),
+          kind: z2.enum(["text", "link", "content"]).optional(),
+          url: z2.string().optional(),
+          thumbnail: z2.string().optional(),
+          contentId: z2.string().optional(),
+          mediaKind: z2.enum([
+            "youtube",
+            "youtube_shorts",
+            "instagram_reel",
+            "instagram_post",
+            "tiktok",
+            "facebook",
+            "other"
+          ]).optional()
+        })
+      ).optional(),
+      pinnedStoryContentIds: z2.array(z2.string()).optional(),
+      /** HTTPS URL for brand story / creator-review embed on storefront */
+      storyVideoUrl: z2.string().optional(),
+      credentials: z2.string().optional(),
+      overview: z2.object({
+        address: z2.string().optional(),
+        mapLink: z2.string().optional(),
+        email: z2.string().optional(),
+        phone: z2.string().optional(),
+        priceRange: z2.string().optional(),
+        ageFocus: z2.string().optional(),
+        audience: z2.string().optional(),
+        services: z2.array(z2.string()).optional(),
+        tags: z2.array(z2.string()).optional()
+      }).optional(),
+      faq: z2.array(z2.object({ q: z2.string(), a: z2.string() })).optional(),
+      stores: z2.object({
+        authorized: z2.array(z2.object({ name: z2.string(), sub: z2.string().optional() })).optional(),
+        distributors: z2.array(z2.object({ name: z2.string(), sub: z2.string().optional() })).optional(),
+        serviceCenters: z2.array(z2.object({ name: z2.string(), sub: z2.string().optional(), hours: z2.string().optional() })).optional()
+      }).optional(),
+      promoCodes: z2.array(
+        z2.object({
+          id: nonEmpty,
+          code: z2.string(),
+          discountType: z2.enum(["Percentage", "Flat"]),
+          discountValue: z2.number(),
+          startDate: z2.string(),
+          endDate: z2.string(),
+          usageLimit: z2.number(),
+          enabled: z2.boolean()
+        })
+      ).optional(),
+      pinnedProductIds: z2.array(z2.string()).optional(),
+      pinnedShowcaseProductIds: z2.array(z2.string()).optional(),
+      verifiedStatus: z2.boolean(),
+      claimStatus: z2.enum(["community", "pending", "verified"]),
+      followers: z2.number().nonnegative(),
+      ratings: z2.number().min(0).max(5),
+      qualityScore: z2.number().min(0).max(5).optional(),
+      valueScore: z2.number().min(0).max(5).optional(),
+      supportScore: z2.number().min(0).max(5).optional(),
+      featuredFlag: z2.boolean(),
+      sponsoredFlag: z2.boolean(),
+      /** Owning seller user id when brand is seller-managed; omitted for platform/legacy rows. */
+      sellerId: z2.string().optional(),
+      /** Public storefront visibility. Seller drafts default false. */
+      marketplaceAccess: z2.boolean().optional(),
+      /** ES-005 Marketplace Access lifecycle state; marketplaceAccess is kept in sync with it. */
+      marketplaceStatus: z2.enum(["not_granted", "granted", "restricted", "suspended", "restored", "revoked"]).optional(),
+      createdAt: isoDate,
+      updatedAt: isoDate
+    });
+    productSchema = z2.object({
+      id: nonEmpty,
+      slug: nonEmpty,
+      title: nonEmpty,
+      description: z2.string(),
+      brandId: nonEmpty,
+      brandName: z2.string(),
+      categoryId: nonEmpty,
+      categoryName: z2.string(),
+      image: nonEmpty,
+      gallery: z2.array(z2.string()),
+      videoUrl: z2.string().optional(),
+      modeType: z2.literal("retail"),
+      productType: z2.enum(["physical", "service"]).optional(),
+      serviceCategory: z2.enum([
+        "hotels",
+        "restaurants",
+        "travel",
+        "doctors",
+        "education",
+        "beauty",
+        "real_estate",
+        "transport",
+        "events",
+        "tickets",
+        "home_services",
+        "gov_services",
+        "recruitment",
+        "b2b",
+        "rental",
+        "donation"
+      ]).optional(),
+      relatedInfoType: z2.enum(["price_across_stores", "whats_nearby", "before_your_visit"]).optional(),
+      priceAcrossStoresEnabled: z2.boolean().optional(),
+      partialPaymentEnabled: z2.boolean().optional(),
+      depositPercent: z2.number().optional(),
+      requiredBookingFieldKeys: z2.array(z2.string()).optional(),
+      requiresApproval: z2.boolean().optional(),
+      price: z2.number().nonnegative(),
+      originalPrice: z2.number().nonnegative().optional(),
+      stock: z2.number().int(),
+      /** Optional seller-supplied product code / SKU / article number. Free-form. */
+      sku: z2.string().optional(),
+      /** `live` = legacy Active; also accepts ES-005 states. */
+      status: z2.enum(["draft", "live", "active", "out_of_stock", "suspended", "archived"]),
+      warrantyMonths: z2.number().int().nonnegative().optional(),
+      warrantyType: z2.string().optional(),
+      warrantyProvider: z2.string().optional(),
+      warrantyTerms: z2.string().optional(),
+      tags: z2.array(z2.string()),
+      isDeal: z2.boolean(),
+      dealType: z2.enum(["flash", "seasonal", "brand", "promo", "clearance"]).optional(),
+      discountPercent: z2.number().nonnegative().optional(),
+      promoCode: z2.string().optional(),
+      dealValidUntil: z2.string().optional(),
+      featuredFlag: z2.boolean(),
+      isNewArrival: z2.boolean(),
+      isBestseller: z2.boolean(),
+      /** Firebase uid of owning seller when listing is seller-managed; omitted for legacy/admin rows. */
+      sellerId: z2.string().optional(),
+      attributes: z2.record(z2.string(), z2.unknown()).optional(),
+      createdAt: isoDate,
+      updatedAt: isoDate
+    });
+    dealSchema = z2.object({
+      id: nonEmpty,
+      slug: nonEmpty,
+      name: nonEmpty,
+      seller: z2.string(),
+      category: z2.string(),
+      status: z2.enum(["live", "pending", "expiring", "expired", "rejected", "draft"]),
+      type: z2.literal("retail"),
+      discountType: z2.enum(["percentage", "flat"]),
+      discountValue: z2.number().nonnegative(),
+      promoCode: z2.string().optional(),
+      productId: z2.string().optional(),
+      brandId: z2.string().optional(),
+      clicks: z2.number().nonnegative(),
+      validFrom: isoDate,
+      validUntil: isoDate,
+      createdAt: isoDate,
+      updatedAt: isoDate
+    });
+    heroBannerSchema = z2.object({
+      id: nonEmpty,
+      headline: z2.string(),
+      subtitle: z2.string(),
+      ctaText: z2.string(),
+      ctaUrl: z2.string(),
+      backgroundImage: z2.string(),
+      isActive: z2.boolean(),
+      order: z2.number().int()
+    });
+    dealsBannerSchema = z2.object({
+      id: nonEmpty,
+      image: z2.string(),
+      destinationType: z2.enum(["product", "brand", "custom-url"]),
+      destinationRef: z2.string(),
+      order: z2.number().int(),
+      isActive: z2.boolean(),
+      brandName: z2.string().optional(),
+      brandLogoUrl: z2.string().optional(),
+      createdAt: isoDate,
+      updatedAt: isoDate
+    });
+    sectionSchema = z2.object({
+      id: nonEmpty,
+      label: z2.string(),
+      isVisible: z2.boolean(),
+      order: z2.number().int(),
+      itemIds: z2.array(z2.string())
+    });
+    homepageSchema = z2.object({
+      id: z2.literal("default"),
+      heroBanners: z2.array(heroBannerSchema),
+      dealsBanners: z2.array(dealsBannerSchema).default([]),
+      sections: z2.array(sectionSchema),
+      featuredProductIds: z2.array(z2.string()),
+      featuredBrandIds: z2.array(z2.string()),
+      featuredDealIds: z2.array(z2.string()),
+      featuredCreatorIds: z2.array(z2.string()),
+      featuredGuideIds: z2.array(z2.string()),
+      updatedAt: isoDate
+    });
+    existingOrNow = (existingDate) => existingDate ? existingDate : nowIso16();
+    normalizeCategoryInput = (payload, existing) => {
+      const raw = payload ?? {};
+      const name = toString2(raw.name, existing?.name ?? "Untitled Category");
+      const id = toString2(raw.id, existing?.id ?? `cat-${Date.now()}`);
+      const normalized = {
+        id,
+        slug: toString2(raw.slug, existing?.slug ?? slugify4(name || id)),
+        name,
+        description: toString2(raw.description, existing?.description ?? ""),
+        icon: toString2(raw.icon, existing?.icon ?? "Folder"),
+        parentId: raw.parentId === null ? null : toString2(raw.parentId, existing?.parentId ?? "") || null,
+        enabled: toBoolean2(raw.enabled, existing?.enabled ?? true),
+        displayOrder: Math.floor(toNumber2(raw.displayOrder, existing?.displayOrder ?? 0)),
+        createdAt: existingOrNow(existing?.createdAt),
+        updatedAt: nowIso16()
+      };
+      return categorySchema.parse(normalized);
+    };
+    normalizeBrandInput = (payload, existing, context) => {
+      const raw = payload ?? {};
+      const name = toString2(raw.name, existing?.name ?? "Untitled Brand");
+      const id = toString2(raw.id, existing?.id ?? `brand-${Date.now()}`);
+      const claimStatusRaw = toString2(raw.claimStatus, existing?.claimStatus ?? "community");
+      const requestedSlug = toString2(raw.slug, existing?.slug ?? slugify4(name || id));
+      const takenSlugs = (context?.existingBrandSlugs ?? []).filter(
+        (slug2) => !existing || slug2 !== existing.slug
+      );
+      const slug = ensureUniqueSlug(requestedSlug, takenSlugs);
+      const socialRaw = raw.socialLinks && typeof raw.socialLinks === "object" ? raw.socialLinks : null;
+      const overviewRaw = raw.overview && typeof raw.overview === "object" ? raw.overview : null;
+      const normalized = {
+        id,
+        slug,
+        name,
+        category: toString2(raw.category, existing?.category ?? "General"),
+        description: toString2(raw.description, existing?.description ?? ""),
+        logo: toString2(raw.logo, existing?.logo ?? ""),
+        coverImage: toString2(raw.coverImage, existing?.coverImage ?? "") || void 0,
+        tagline: toString2(raw.tagline, existing?.tagline ?? "") || void 0,
+        website: toString2(raw.website, existing?.website ?? "") || void 0,
+        socialLinks: socialRaw || existing?.socialLinks ? {
+          facebook: toString2(socialRaw?.facebook, existing?.socialLinks?.facebook ?? "") || void 0,
+          instagram: toString2(socialRaw?.instagram, existing?.socialLinks?.instagram ?? "") || void 0,
+          youtube: toString2(socialRaw?.youtube, existing?.socialLinks?.youtube ?? "") || void 0,
+          tiktok: toString2(socialRaw?.tiktok, existing?.socialLinks?.tiktok ?? "") || void 0,
+          linkedin: toString2(socialRaw?.linkedin, existing?.socialLinks?.linkedin ?? "") || void 0,
+          custom: (() => {
+            const src = Array.isArray(socialRaw?.custom) ? socialRaw.custom : socialRaw && "custom" in socialRaw ? [] : existing?.socialLinks?.custom;
+            if (!Array.isArray(src)) return void 0;
+            const rows = src.filter((r) => !!r && typeof r === "object").map((r) => ({
+              label: toString2(r.label).trim().slice(0, 40),
+              url: toString2(r.url).trim().slice(0, 500)
+            })).filter((r) => r.label && r.url).slice(0, 10);
+            return rows.length ? rows : void 0;
+          })()
+        } : void 0,
+        story: toString2(raw.story, existing?.story ?? "") || void 0,
+        storyBlocks: (() => {
+          if (!Array.isArray(raw.storyBlocks)) return existing?.storyBlocks;
+          return raw.storyBlocks.filter((b) => !!b && typeof b === "object").map((b, i) => {
+            const kindRaw = toString2(b.kind);
+            const kind = kindRaw === "link" || kindRaw === "content" ? kindRaw : "text";
+            const url = toString2(b.url).trim().slice(0, 500);
+            const thumbnail = toString2(b.thumbnail).trim().slice(0, 500);
+            const contentId = toString2(b.contentId).trim().slice(0, 80);
+            const mkRaw = toString2(b.mediaKind);
+            const MK = /* @__PURE__ */ new Set([
+              "youtube",
+              "youtube_shorts",
+              "instagram_reel",
+              "instagram_post",
+              "tiktok",
+              "facebook",
+              "other"
+            ]);
+            return {
+              id: toString2(b.id) || `sb-${i}`,
+              heading: toString2(b.heading).trim().slice(0, 120),
+              body: toString2(b.body).trim().slice(0, 4e3),
+              kind,
+              ...kind === "link" && url ? { url } : {},
+              ...kind === "link" && thumbnail ? { thumbnail } : {},
+              ...kind === "content" && contentId ? { contentId } : {},
+              ...MK.has(mkRaw) ? { mediaKind: mkRaw } : {}
+            };
+          }).filter(
+            (b) => b.kind === "text" && (b.heading || b.body) || b.kind === "link" && b.url || b.kind === "content" && b.contentId
+          ).slice(0, 16);
+        })(),
+        pinnedStoryContentIds: (() => {
+          const hasBlocks = Array.isArray(raw.storyBlocks);
+          const hasExplicit = Array.isArray(raw.pinnedStoryContentIds);
+          if (!hasBlocks && !hasExplicit) return existing?.pinnedStoryContentIds;
+          const explicit = hasExplicit ? raw.pinnedStoryContentIds.map((v) => toString2(v).trim()).filter(Boolean) : [];
+          const fromBlocks = hasBlocks ? raw.storyBlocks.filter((b) => !!b && typeof b === "object").filter((b) => toString2(b.kind) === "content").map((b) => toString2(b.contentId).trim()).filter(Boolean) : [];
+          return Array.from(/* @__PURE__ */ new Set([...explicit, ...fromBlocks])).slice(0, 16);
+        })(),
+        storyVideoUrl: toString2(raw.storyVideoUrl, existing?.storyVideoUrl ?? "") || void 0,
+        credentials: toString2(raw.credentials, existing?.credentials ?? "") || void 0,
+        overview: overviewRaw || existing?.overview ? {
+          address: toString2(overviewRaw?.address, existing?.overview?.address ?? "") || void 0,
+          mapLink: toString2(overviewRaw?.mapLink, existing?.overview?.mapLink ?? "") || void 0,
+          email: toString2(overviewRaw?.email, existing?.overview?.email ?? "") || void 0,
+          phone: toString2(overviewRaw?.phone, existing?.overview?.phone ?? "") || void 0,
+          priceRange: toString2(overviewRaw?.priceRange, existing?.overview?.priceRange ?? "") || void 0,
+          ageFocus: toString2(overviewRaw?.ageFocus, existing?.overview?.ageFocus ?? "") || void 0,
+          audience: toString2(overviewRaw?.audience, existing?.overview?.audience ?? "") || void 0,
+          services: toStringArray2(overviewRaw?.services).length ? toStringArray2(overviewRaw?.services) : existing?.overview?.services,
+          tags: toStringArray2(overviewRaw?.tags).length ? toStringArray2(overviewRaw?.tags) : existing?.overview?.tags
+        } : void 0,
+        faq: Array.isArray(raw.faq) ? raw.faq : existing?.faq,
+        stores: raw.stores && typeof raw.stores === "object" ? raw.stores : existing?.stores,
+        promoCodes: Array.isArray(raw.promoCodes) ? raw.promoCodes : existing?.promoCodes,
+        pinnedProductIds: Array.isArray(raw.pinnedProductIds) ? Array.from(
+          new Set(
+            raw.pinnedProductIds.map((v) => toString2(v).trim()).filter(Boolean)
+          )
+        ).slice(0, 12) : existing?.pinnedProductIds,
+        pinnedShowcaseProductIds: Array.isArray(raw.pinnedShowcaseProductIds) ? Array.from(
+          new Set(
+            raw.pinnedShowcaseProductIds.map((v) => toString2(v).trim()).filter(Boolean)
+          )
+        ).slice(0, 24) : existing?.pinnedShowcaseProductIds,
+        verifiedStatus: toBoolean2(raw.verifiedStatus, existing?.verifiedStatus ?? false),
+        claimStatus: claimStatusRaw === "verified" || claimStatusRaw === "pending" ? claimStatusRaw : "community",
+        followers: toNumber2(raw.followers, existing?.followers ?? 0),
+        ratings: Math.max(0, Math.min(5, toNumber2(raw.ratings, existing?.ratings ?? 0))),
+        qualityScore: raw.qualityScore !== void 0 ? Math.max(0, Math.min(5, toNumber2(raw.qualityScore, existing?.qualityScore ?? 0))) : existing?.qualityScore,
+        valueScore: raw.valueScore !== void 0 ? Math.max(0, Math.min(5, toNumber2(raw.valueScore, existing?.valueScore ?? 0))) : existing?.valueScore,
+        supportScore: raw.supportScore !== void 0 ? Math.max(0, Math.min(5, toNumber2(raw.supportScore, existing?.supportScore ?? 0))) : existing?.supportScore,
+        featuredFlag: toBoolean2(raw.featuredFlag, existing?.featuredFlag ?? false),
+        sponsoredFlag: toBoolean2(raw.sponsoredFlag, existing?.sponsoredFlag ?? false),
+        sellerId: toString2(raw.sellerId, existing?.sellerId ?? "") || void 0,
+        marketplaceAccess: typeof raw.marketplaceAccess === "boolean" ? raw.marketplaceAccess : typeof existing?.marketplaceAccess === "boolean" ? existing.marketplaceAccess : void 0,
+        marketplaceStatus: typeof raw.marketplaceStatus === "string" ? raw.marketplaceStatus : existing?.marketplaceStatus,
+        createdAt: existingOrNow(existing?.createdAt),
+        updatedAt: nowIso16()
+      };
+      return brandSchema.parse(normalized);
+    };
+    normalizeProductInput = (payload, existing, context) => {
+      const raw = payload ?? {};
+      const title = toString2(raw.title, toString2(raw.name, existing?.title ?? "Untitled Product"));
+      const id = toString2(raw.id, existing?.id ?? `prod-${Date.now()}`);
+      const status = parseProductStatusInput(raw.status, existing?.status);
+      const brandId = toString2(raw.brandId, existing?.brandId ?? "");
+      const categoryId = toString2(raw.categoryId, existing?.categoryId ?? "");
+      if (!brandId) {
+        throw new Error("brandId is required and must reference an existing brand.");
+      }
+      if (!categoryId) {
+        throw new Error("categoryId is required and must reference an existing category.");
+      }
+      const brands = context?.brands ?? [];
+      const categories = context?.categories ?? [];
+      const matchedBrand = brands.find((brand) => brand.id === brandId);
+      const matchedCategory = categories.find((category) => category.id === categoryId);
+      if (context && !matchedBrand) {
+        throw new Error(`brandId "${brandId}" does not match an existing brand.`);
+      }
+      if (context && !matchedCategory) {
+        throw new Error(`categoryId "${categoryId}" does not match an existing category.`);
+      }
+      const brandName = matchedBrand ? matchedBrand.name : toString2(raw.brandName, toString2(raw.brand, existing?.brandName ?? ""));
+      const categoryName = matchedCategory ? matchedCategory.name : toString2(raw.categoryName, toString2(raw.category, existing?.categoryName ?? ""));
+      const hasVariants = Array.isArray(raw.productVariants) && raw.productVariants.length > 0 || Array.isArray(raw.variants) && raw.variants.length > 0 || raw.hasVariants === true;
+      const stockExplicitlyProvided = raw.stock !== void 0 && raw.stock !== null && String(raw.stock).trim() !== "";
+      let stock;
+      if (stockExplicitlyProvided) {
+        stock = Math.floor(toNumber2(raw.stock, 0));
+      } else if (existing?.stock !== void 0) {
+        stock = existing.stock;
+      } else if (!hasVariants) {
+        throw new Error(
+          "STOCK_REQUIRED: Provide an explicit stock value when the product has no variants. Stock was not defaulted to 0."
+        );
+      } else {
+        stock = 0;
+      }
+      const requestedSlug = toString2(raw.slug, existing?.slug ?? slugify4(title || id));
+      const takenSlugs = (context?.existingProductSlugs ?? []).filter(
+        (slug2) => !existing || slug2 !== existing.slug
+      );
+      const slug = ensureUniqueSlug(requestedSlug, takenSlugs);
+      const normalized = {
+        id,
+        slug,
+        title,
+        description: toString2(raw.description, existing?.description ?? ""),
+        brandId,
+        brandName,
+        categoryId,
+        categoryName,
+        image: toString2(raw.image, existing?.image ?? ""),
+        gallery: toStringArray2(raw.gallery).length > 0 ? toStringArray2(raw.gallery) : existing?.gallery ?? [],
+        videoUrl: normalizeProductVideoUrl(raw.videoUrl, existing?.videoUrl),
+        modeType: "retail",
+        productType: (() => {
+          const v = toString2(raw.productType, existing?.productType);
+          return v === "physical" || v === "service" ? v : void 0;
+        })(),
+        serviceCategory: (() => {
+          const allowed = /* @__PURE__ */ new Set([
+            "hotels",
+            "restaurants",
+            "travel",
+            "doctors",
+            "education",
+            "beauty",
+            "real_estate",
+            "transport",
+            "events",
+            "tickets",
+            "home_services",
+            "gov_services",
+            "recruitment",
+            "b2b",
+            "rental",
+            "donation"
+          ]);
+          const v = toString2(raw.serviceCategory, existing?.serviceCategory);
+          return allowed.has(v) ? v : void 0;
+        })(),
+        relatedInfoType: (() => {
+          const v = toString2(raw.relatedInfoType, existing?.relatedInfoType);
+          return v === "price_across_stores" || v === "whats_nearby" || v === "before_your_visit" ? v : void 0;
+        })(),
+        priceAcrossStoresEnabled: raw.priceAcrossStoresEnabled !== void 0 ? toBoolean2(raw.priceAcrossStoresEnabled) : existing?.priceAcrossStoresEnabled,
+        partialPaymentEnabled: raw.partialPaymentEnabled !== void 0 ? toBoolean2(raw.partialPaymentEnabled) : existing?.partialPaymentEnabled,
+        depositPercent: raw.depositPercent !== void 0 ? toNumber2(raw.depositPercent) : existing?.depositPercent,
+        requiredBookingFieldKeys: toStringArray2(raw.requiredBookingFieldKeys).length ? toStringArray2(raw.requiredBookingFieldKeys) : existing?.requiredBookingFieldKeys,
+        requiresApproval: raw.requiresApproval !== void 0 ? toBoolean2(raw.requiresApproval) : existing?.requiresApproval,
+        price: toNumber2(raw.price, existing?.price ?? 0),
+        originalPrice: raw.originalPrice !== void 0 ? toNumber2(raw.originalPrice) : existing?.originalPrice,
+        stock,
+        status,
+        sku: toString2(raw.sku, existing?.sku) || void 0,
+        warrantyMonths: raw.warrantyMonths !== void 0 ? toNumber2(raw.warrantyMonths) : existing?.warrantyMonths,
+        warrantyType: toString2(raw.warrantyType, existing?.warrantyType) || void 0,
+        warrantyProvider: toString2(raw.warrantyProvider, existing?.warrantyProvider) || void 0,
+        warrantyTerms: toString2(raw.warrantyTerms, existing?.warrantyTerms) || void 0,
+        tags: toStringArray2(raw.tags).length > 0 ? toStringArray2(raw.tags) : existing?.tags ?? [],
+        isDeal: toBoolean2(raw.isDeal, existing?.isDeal ?? false),
+        dealType: (() => {
+          const v = toString2(raw.dealType, existing?.dealType);
+          return v === "flash" || v === "seasonal" || v === "brand" || v === "promo" || v === "clearance" ? v : void 0;
+        })(),
+        discountPercent: raw.discountPercent !== void 0 ? toNumber2(raw.discountPercent) : existing?.discountPercent,
+        promoCode: toString2(raw.promoCode, existing?.promoCode),
+        dealValidUntil: toString2(raw.dealValidUntil, existing?.dealValidUntil),
+        featuredFlag: toBoolean2(raw.featuredFlag, existing?.featuredFlag ?? false),
+        isNewArrival: toBoolean2(raw.isNewArrival, existing?.isNewArrival ?? false),
+        isBestseller: toBoolean2(raw.isBestseller, existing?.isBestseller ?? false),
+        sellerId: toString2(raw.sellerId, existing?.sellerId) || void 0,
+        attributes: (() => {
+          if (raw.attributes && typeof raw.attributes === "object" && !Array.isArray(raw.attributes)) {
+            return raw.attributes;
+          }
+          return existing?.attributes;
+        })(),
+        createdAt: existingOrNow(existing?.createdAt),
+        updatedAt: nowIso16()
+      };
+      assertOriginalPriceNotBelowPrice(normalized.originalPrice, normalized.price, "Product");
+      return productSchema.parse(normalized);
+    };
+    normalizeDealInput = (payload, existing) => {
+      const raw = payload ?? {};
+      const name = toString2(raw.name, existing?.name ?? "Untitled Deal");
+      const id = toString2(raw.id, existing?.id ?? `deal-${Date.now()}`);
+      const statusRaw = toString2(raw.status, existing?.status ?? "draft").toLowerCase();
+      const discountTypeRaw = toString2(raw.discountType, existing?.discountType ?? "percentage").toLowerCase();
+      const validUntil = toString2(raw.validUntil, toString2(raw.expiry, existing?.validUntil ?? nowIso16()));
+      const normalized = {
+        id,
+        slug: toString2(raw.slug, existing?.slug ?? slugify4(name || id)),
+        name,
+        seller: toString2(raw.seller, existing?.seller ?? "Platform"),
+        category: toString2(raw.category, existing?.category ?? "General"),
+        status: statusRaw === "live" || statusRaw === "pending" || statusRaw === "expiring" || statusRaw === "expired" || statusRaw === "rejected" ? statusRaw : "draft",
+        type: "retail",
+        discountType: discountTypeRaw === "flat" ? "flat" : "percentage",
+        discountValue: toNumber2(raw.discountValue, toNumber2(raw.discount, existing?.discountValue ?? 0)),
+        promoCode: toString2(raw.promoCode, existing?.promoCode),
+        productId: toString2(raw.productId, existing?.productId),
+        brandId: toString2(raw.brandId, existing?.brandId),
+        clicks: toNumber2(raw.clicks, existing?.clicks ?? 0),
+        validFrom: toString2(raw.validFrom, existing?.validFrom ?? nowIso16()),
+        validUntil,
+        createdAt: existingOrNow(existing?.createdAt),
+        updatedAt: nowIso16()
+      };
+      return dealSchema.parse(normalized);
+    };
+    normalizeHeroBannerInput = (payload, idx) => {
+      const raw = payload ?? {};
+      const id = toString2(raw.id, `hero-${idx + 1}`);
+      return heroBannerSchema.parse({
+        id,
+        headline: toString2(raw.headline),
+        subtitle: toString2(raw.subtitle),
+        ctaText: toString2(raw.ctaText),
+        ctaUrl: toString2(raw.ctaUrl, "/products"),
+        backgroundImage: toString2(raw.backgroundImage),
+        isActive: toBoolean2(raw.isActive, true),
+        order: Math.floor(toNumber2(raw.order, idx))
+      });
+    };
+    normalizeDealsBannerInput = (payload, idx, existing) => {
+      const raw = payload ?? {};
+      const id = toString2(raw.id, existing?.id ?? `deals-banner-${Date.now()}-${idx}`);
+      const typeRaw = toString2(raw.destinationType, existing?.destinationType ?? "custom-url").toLowerCase();
+      const destinationType = typeRaw === "product" || typeRaw === "brand" || typeRaw === "custom-url" ? typeRaw : "custom-url";
+      return dealsBannerSchema.parse({
+        id,
+        image: toString2(raw.image, existing?.image ?? ""),
+        destinationType,
+        destinationRef: toString2(raw.destinationRef, existing?.destinationRef ?? ""),
+        order: Math.floor(toNumber2(raw.order, existing?.order ?? idx)),
+        isActive: toBoolean2(raw.isActive, existing?.isActive ?? true),
+        brandName: toString2(raw.brandName, existing?.brandName ?? "") || void 0,
+        brandLogoUrl: toString2(raw.brandLogoUrl, existing?.brandLogoUrl ?? "") || void 0,
+        createdAt: existingOrNow(existing?.createdAt),
+        updatedAt: nowIso16()
+      });
+    };
+    normalizeSectionInput = (payload, idx) => {
+      const raw = payload ?? {};
+      const id = toString2(raw.id, `section-${idx + 1}`);
+      return sectionSchema.parse({
+        id,
+        label: toString2(raw.label, id),
+        isVisible: toBoolean2(raw.isVisible, true),
+        order: Math.floor(toNumber2(raw.order, idx)),
+        itemIds: toStringArray2(raw.itemIds)
+      });
+    };
+    normalizeHomepageInput = (payload, existing) => {
+      const raw = payload ?? {};
+      const heroBannersInput = Array.isArray(raw.heroBanners) ? raw.heroBanners : existing?.heroBanners ?? [];
+      const dealsBannersInput = Array.isArray(raw.dealsBanners) ? raw.dealsBanners : existing?.dealsBanners ?? [];
+      const sectionsInput = Array.isArray(raw.sections) ? raw.sections : existing?.sections ?? [];
+      const normalized = {
+        id: "default",
+        heroBanners: heroBannersInput.map(normalizeHeroBannerInput),
+        dealsBanners: dealsBannersInput.map((item, idx) => {
+          const existingBanner = existing?.dealsBanners?.find(
+            (b) => b.id === toString2(item?.id)
+          );
+          return normalizeDealsBannerInput(item, idx, existingBanner);
+        }),
+        sections: sectionsInput.map(normalizeSectionInput),
+        featuredProductIds: toStringArray2(raw.featuredProductIds).length > 0 ? toStringArray2(raw.featuredProductIds) : existing?.featuredProductIds ?? [],
+        featuredBrandIds: toStringArray2(raw.featuredBrandIds).length > 0 ? toStringArray2(raw.featuredBrandIds) : existing?.featuredBrandIds ?? [],
+        featuredDealIds: toStringArray2(raw.featuredDealIds).length > 0 ? toStringArray2(raw.featuredDealIds) : existing?.featuredDealIds ?? [],
+        featuredCreatorIds: toStringArray2(raw.featuredCreatorIds).length > 0 ? toStringArray2(raw.featuredCreatorIds) : existing?.featuredCreatorIds ?? [],
+        featuredGuideIds: toStringArray2(raw.featuredGuideIds).length > 0 ? toStringArray2(raw.featuredGuideIds) : existing?.featuredGuideIds ?? [],
+        updatedAt: nowIso16()
+      };
+      return homepageSchema.parse(normalized);
+    };
+    brandPostKindSchema = z2.enum(["event", "launch", "festival", "campaign", "store_moment"]);
+    brandPostStatusSchema = z2.enum(["scheduled", "live", "expired"]);
+    brandPostSchema = z2.object({
+      id: nonEmpty,
+      slug: nonEmpty,
+      brandId: nonEmpty,
+      brandName: nonEmpty,
+      brandLogo: z2.string().optional(),
+      kind: brandPostKindSchema,
+      title: nonEmpty,
+      excerpt: z2.string(),
+      heroImage: nonEmpty,
+      bannerImages: z2.array(z2.string()).optional(),
+      body: z2.array(z2.string()),
+      startDate: z2.string().optional(),
+      endDate: z2.string().optional(),
+      location: z2.string().optional(),
+      ctaLabel: z2.string().optional(),
+      ctaUrl: z2.string().optional(),
+      linkedProductIds: z2.array(z2.string()).optional(),
+      sponsored: z2.boolean(),
+      status: brandPostStatusSchema,
+      publishedAt: z2.string(),
+      createdAt: isoDate,
+      updatedAt: isoDate
+    });
+    normalizeBrandPostInput = (payload, existing) => {
+      const raw = payload ?? {};
+      const title = toString2(raw.title, existing?.title ?? "Untitled Post");
+      const id = toString2(raw.id, existing?.id ?? `bp-${Date.now()}`);
+      const kindRaw = toString2(raw.kind, existing?.kind ?? "campaign");
+      const statusRaw = toString2(raw.status, existing?.status ?? "scheduled");
+      const kindParsed = brandPostKindSchema.safeParse(kindRaw);
+      const statusParsed = brandPostStatusSchema.safeParse(statusRaw);
+      const normalized = {
+        id,
+        slug: toString2(raw.slug, existing?.slug ?? slugify4(title || id)),
+        brandId: toString2(raw.brandId, existing?.brandId ?? ""),
+        brandName: toString2(raw.brandName, existing?.brandName ?? ""),
+        brandLogo: toString2(raw.brandLogo, existing?.brandLogo ?? "") || void 0,
+        kind: kindParsed.success ? kindParsed.data : "campaign",
+        title,
+        excerpt: toString2(raw.excerpt, existing?.excerpt ?? ""),
+        heroImage: toString2(raw.heroImage, existing?.heroImage ?? ""),
+        bannerImages: toStringArray2(raw.bannerImages).length > 0 ? toStringArray2(raw.bannerImages) : existing?.bannerImages,
+        body: toStringArray2(raw.body).length > 0 ? toStringArray2(raw.body) : existing?.body ?? [],
+        startDate: toString2(raw.startDate, existing?.startDate ?? "") || void 0,
+        endDate: toString2(raw.endDate, existing?.endDate ?? "") || void 0,
+        location: toString2(raw.location, existing?.location ?? "") || void 0,
+        ctaLabel: toString2(raw.ctaLabel, existing?.ctaLabel ?? "") || void 0,
+        ctaUrl: toString2(raw.ctaUrl, existing?.ctaUrl ?? "") || void 0,
+        linkedProductIds: toStringArray2(raw.linkedProductIds).length > 0 ? toStringArray2(raw.linkedProductIds) : existing?.linkedProductIds,
+        sponsored: toBoolean2(raw.sponsored, existing?.sponsored ?? false),
+        status: statusParsed.success ? statusParsed.data : "scheduled",
+        publishedAt: toString2(raw.publishedAt, existing?.publishedAt ?? nowIso16().slice(0, 10)),
+        createdAt: existingOrNow(existing?.createdAt),
+        updatedAt: nowIso16()
+      };
+      return brandPostSchema.parse(normalized);
+    };
+  }
+});
+
+// lib/vercel-catalog/mediaUpload.ts
+import crypto3 from "node:crypto";
+async function uploadImageToCloudinary(input) {
+  const cloudName = getCloudName();
+  if (!cloudName) {
+    throw new Error(
+      "Image upload is not configured. Set CLOUDINARY_CLOUD_NAME (or VITE_CLOUDINARY_CLOUD_NAME) on the server."
+    );
+  }
+  const uploadPreset = getUploadPreset();
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+  const dataUri = `data:${input.mimeType || "image/jpeg"};base64,${input.base64Data}`;
+  const form = new FormData();
+  form.append("file", dataUri);
+  form.append("folder", "choosify/products");
+  if (uploadPreset) {
+    form.append("upload_preset", uploadPreset);
+  } else if (apiKey && apiSecret) {
+    const timestamp2 = Math.round(Date.now() / 1e3);
+    const folder = "choosify/products";
+    const paramsToSign = `folder=${folder}&timestamp=${timestamp2}`;
+    const signature = crypto3.createHash("sha1").update(paramsToSign + apiSecret).digest("hex");
+    form.append("api_key", apiKey);
+    form.append("timestamp", String(timestamp2));
+    form.append("signature", signature);
+  } else {
+    throw new Error(
+      "Image upload is not configured. Set CLOUDINARY_UPLOAD_PRESET or CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET on the server."
+    );
+  }
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+    method: "POST",
+    body: form
+  });
+  if (!response.ok) {
+    const raw = await response.text();
+    throw new Error(raw || `Cloudinary upload failed with ${response.status}`);
+  }
+  const payload = await response.json();
+  if (!payload.secure_url) {
+    throw new Error("Cloudinary upload succeeded but no secure_url was returned.");
+  }
+  return payload.secure_url;
+}
+async function uploadDocumentToCloudinary(input) {
+  const cloudName = getCloudName();
+  if (!cloudName) {
+    throw new Error(
+      "Document upload is not configured. Set CLOUDINARY_CLOUD_NAME (or VITE_CLOUDINARY_CLOUD_NAME) on the server."
+    );
+  }
+  const uploadPreset = getUploadPreset();
+  const apiKey = process.env.CLOUDINARY_API_KEY?.trim();
+  const apiSecret = process.env.CLOUDINARY_API_SECRET?.trim();
+  const mimeType = input.mimeType || "application/pdf";
+  const dataUri = `data:${mimeType};base64,${input.base64Data}`;
+  const folder = "choosify/resumes";
+  const form = new FormData();
+  form.append("file", dataUri);
+  form.append("folder", folder);
+  if (uploadPreset) {
+    form.append("upload_preset", uploadPreset);
+  } else if (apiKey && apiSecret) {
+    const timestamp2 = Math.round(Date.now() / 1e3);
+    const paramsToSign = `folder=${folder}&timestamp=${timestamp2}`;
+    const signature = crypto3.createHash("sha1").update(paramsToSign + apiSecret).digest("hex");
+    form.append("api_key", apiKey);
+    form.append("timestamp", String(timestamp2));
+    form.append("signature", signature);
+  } else {
+    throw new Error(
+      "Document upload is not configured. Set CLOUDINARY_UPLOAD_PRESET or CLOUDINARY_API_KEY + CLOUDINARY_API_SECRET on the server."
+    );
+  }
+  const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/raw/upload`, {
+    method: "POST",
+    body: form
+  });
+  if (!response.ok) {
+    const raw = await response.text();
+    throw new Error(raw || `Cloudinary document upload failed with ${response.status}`);
+  }
+  const payload = await response.json();
+  if (!payload.secure_url) {
+    throw new Error("Cloudinary upload succeeded but no secure_url was returned.");
+  }
+  return payload.secure_url;
+}
+var getCloudName, getUploadPreset;
+var init_mediaUpload = __esm({
+  "lib/vercel-catalog/mediaUpload.ts"() {
+    getCloudName = () => process.env.CLOUDINARY_CLOUD_NAME?.trim() || process.env.VITE_CLOUDINARY_CLOUD_NAME?.trim() || "";
+    getUploadPreset = () => process.env.CLOUDINARY_UPLOAD_PRESET?.trim() || process.env.VITE_CLOUDINARY_UPLOAD_PRESET?.trim() || "";
+  }
+});
+
+// server/lib/imageProcessing.ts
+import sharp from "sharp";
+async function processImage(buffer) {
+  const pipeline = sharp(buffer, { failOn: "error" }).rotate();
+  const full = await pipeline.clone().resize({ width: MAX_DIMENSION, height: MAX_DIMENSION, fit: "inside", withoutEnlargement: true }).webp({ quality: WEBP_QUALITY }).toBuffer({ resolveWithObject: true });
+  const thumbnail = await pipeline.clone().resize({ width: THUMBNAIL_DIMENSION, height: THUMBNAIL_DIMENSION, fit: "inside", withoutEnlargement: true }).webp({ quality: THUMBNAIL_QUALITY }).toBuffer({ resolveWithObject: true });
+  return {
+    full: { buffer: full.data, width: full.info.width, height: full.info.height },
+    thumbnail: { buffer: thumbnail.data, width: thumbnail.info.width, height: thumbnail.info.height }
+  };
+}
+var MAX_DIMENSION, THUMBNAIL_DIMENSION, WEBP_QUALITY, THUMBNAIL_QUALITY;
+var init_imageProcessing = __esm({
+  "server/lib/imageProcessing.ts"() {
+    MAX_DIMENSION = 2e3;
+    THUMBNAIL_DIMENSION = 400;
+    WEBP_QUALITY = 82;
+    THUMBNAIL_QUALITY = 72;
+  }
+});
+
+// server/lib/mediaStorage.ts
+var mediaStorage_exports = {};
+__export(mediaStorage_exports, {
+  MEDIA_CATEGORIES: () => MEDIA_CATEGORIES,
+  PRIVATE_MEDIA_CATEGORIES: () => PRIVATE_MEDIA_CATEGORIES,
+  PUBLIC_MEDIA_CATEGORIES: () => PUBLIC_MEDIA_CATEGORIES,
+  deleteMediaFile: () => deleteMediaFile,
+  extensionForMimeType: () => extensionForMimeType,
+  getMediaStaticMount: () => getMediaStaticMount,
+  isMediaCategory: () => isMediaCategory,
+  mediaTypeForMimeType: () => mediaTypeForMimeType,
+  resolvePrivateFilePath: () => resolvePrivateFilePath,
+  saveMediaFile: () => saveMediaFile,
+  visibilityForCategory: () => visibilityForCategory
+});
+import { randomUUID as randomUUID6 } from "node:crypto";
+import { mkdir, writeFile, unlink } from "node:fs/promises";
+import { join as join12, resolve, sep } from "node:path";
+function isMediaCategory(value) {
+  return typeof value === "string" && MEDIA_CATEGORIES.includes(value);
+}
+function visibilityForCategory(category) {
+  return PRIVATE_MEDIA_CATEGORIES.includes(category) ? "private" : "public";
+}
+function extensionForMimeType(mimeType) {
+  return MIME_TO_EXTENSION[mimeType.toLowerCase()] || "";
+}
+function mediaTypeForMimeType(mimeType) {
+  const mime = mimeType.toLowerCase();
+  if (mime in VIDEO_MIME_TO_EXTENSION) return "video";
+  if (mime in DOCUMENT_MIME_TO_EXTENSION) return "document";
+  return "image";
+}
+function publicStorageRoot() {
+  const configured = process.env.MEDIA_STORAGE_ROOT?.trim();
+  return resolve(configured || join12(process.cwd(), ".data", "media"));
+}
+function privateStorageRoot() {
+  const configured = process.env.PRIVATE_STORAGE_ROOT?.trim();
+  return resolve(configured || join12(process.cwd(), ".data", "private"));
+}
+function rootForVisibility(visibility) {
+  return visibility === "private" ? privateStorageRoot() : publicStorageRoot();
+}
+function publicBaseUrl() {
+  const configured = process.env.MEDIA_PUBLIC_BASE_URL?.trim();
+  return (configured || "/media").replace(/\/$/, "");
+}
+function publicOrigin() {
+  const configured = process.env.MEDIA_PUBLIC_ORIGIN?.trim();
+  return configured ? configured.replace(/\/$/, "") : "";
+}
+function getMediaStaticMount() {
+  return { root: publicStorageRoot(), urlPrefix: publicBaseUrl() };
+}
+function assertWithinRoot(root, absolutePath, action) {
+  if (!absolutePath.startsWith(root + sep) && absolutePath !== root) {
+    throw new Error(`Refusing to ${action} outside the configured media storage root`);
+  }
+}
+async function saveMediaFile(input) {
+  if (!isMediaCategory(input.category)) {
+    throw new Error(`Invalid media category: ${String(input.category)}`);
+  }
+  const visibility = visibilityForCategory(input.category);
+  const extension = extensionForMimeType(input.mimeType) || ".bin";
+  const filename = `${randomUUID6()}${extension}`;
+  const relativePath = `${input.category}/${filename}`;
+  const root = rootForVisibility(visibility);
+  const absolutePath = resolve(root, relativePath);
+  assertWithinRoot(root, absolutePath, "write");
+  await mkdir(resolve(root, input.category), { recursive: true });
+  await writeFile(absolutePath, input.buffer);
+  return {
+    relativePath,
+    publicUrl: visibility === "public" ? `${publicOrigin()}${publicBaseUrl()}/${relativePath}` : void 0,
+    sizeBytes: input.buffer.byteLength
+  };
+}
+async function deleteMediaFile(relativePath, category) {
+  const root = rootForVisibility(visibilityForCategory(category));
+  const absolutePath = resolve(root, relativePath);
+  assertWithinRoot(root, absolutePath, "delete");
+  try {
+    await unlink(absolutePath);
+  } catch (error2) {
+    const code = error2?.code;
+    if (code !== "ENOENT") throw error2;
+  }
+}
+function resolvePrivateFilePath(relativePath) {
+  const root = privateStorageRoot();
+  const absolutePath = resolve(root, relativePath);
+  assertWithinRoot(root, absolutePath, "read");
+  return absolutePath;
+}
+var PUBLIC_MEDIA_CATEGORIES, PRIVATE_MEDIA_CATEGORIES, MEDIA_CATEGORIES, IMAGE_MIME_TO_EXTENSION, VIDEO_MIME_TO_EXTENSION, DOCUMENT_MIME_TO_EXTENSION, MIME_TO_EXTENSION;
+var init_mediaStorage = __esm({
+  "server/lib/mediaStorage.ts"() {
+    PUBLIC_MEDIA_CATEGORIES = [
+      "users",
+      "sellers",
+      "creators",
+      "brands",
+      "products",
+      "services",
+      "reviews",
+      "guides",
+      "cms",
+      "ads",
+      "careers",
+      "videos",
+      "temporary"
+    ];
+    PRIVATE_MEDIA_CATEGORIES = [
+      "verification",
+      "identity-documents",
+      "seller-documents",
+      "creator-documents",
+      /** Warranty claim evidence photos/videos — buyer/seller/admin only, never public. */
+      "warranty-claims"
+    ];
+    MEDIA_CATEGORIES = [...PUBLIC_MEDIA_CATEGORIES, ...PRIVATE_MEDIA_CATEGORIES];
+    IMAGE_MIME_TO_EXTENSION = {
+      "image/jpeg": ".jpg",
+      "image/jpg": ".jpg",
+      "image/png": ".png",
+      "image/webp": ".webp",
+      "image/gif": ".gif"
+    };
+    VIDEO_MIME_TO_EXTENSION = {
+      "video/mp4": ".mp4",
+      "video/webm": ".webm"
+    };
+    DOCUMENT_MIME_TO_EXTENSION = {
+      "application/pdf": ".pdf",
+      "application/msword": ".doc",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx"
+    };
+    MIME_TO_EXTENSION = {
+      ...IMAGE_MIME_TO_EXTENSION,
+      ...VIDEO_MIME_TO_EXTENSION,
+      ...DOCUMENT_MIME_TO_EXTENSION
+    };
+  }
+});
+
+// server/media/mediaRepository.ts
+var mediaRepository_exports = {};
+__export(mediaRepository_exports, {
+  createMediaRecord: () => createMediaRecord,
+  deleteMediaRecord: () => deleteMediaRecord,
+  getMediaRecord: () => getMediaRecord,
+  linkMediaToEntity: () => linkMediaToEntity,
+  markMediaStatus: () => markMediaStatus
+});
+import { eq as eq7 } from "drizzle-orm";
+async function createMediaRecord(input) {
+  const rows = await db.insert(media).values({
+    uploadedByUserId: input.uploadedByUserId,
+    category: input.category,
+    visibility: visibilityForCategory(input.category),
+    mediaType: input.mediaType,
+    provider: input.provider,
+    relativePath: input.relativePath,
+    publicUrl: input.publicUrl,
+    mimeType: input.mimeType,
+    sizeBytes: input.sizeBytes,
+    width: input.width,
+    height: input.height,
+    durationSeconds: input.durationSeconds,
+    originalFilename: input.originalFilename,
+    relatedEntityType: input.relatedEntityType,
+    relatedEntityId: input.relatedEntityId
+  }).returning();
+  return rows[0];
+}
+async function getMediaRecord(id) {
+  const rows = await db.select().from(media).where(eq7(media.id, id)).limit(1);
+  return rows[0] || null;
+}
+async function deleteMediaRecord(id) {
+  const rows = await db.delete(media).where(eq7(media.id, id)).returning();
+  return rows.length > 0;
+}
+async function markMediaStatus(id, status) {
+  const rows = await db.update(media).set({ status }).where(eq7(media.id, id)).returning();
+  return rows[0] || null;
+}
+async function linkMediaToEntity(mediaId, relatedEntityType, relatedEntityId) {
+  const rows = await db.update(media).set({ relatedEntityType, relatedEntityId }).where(eq7(media.id, mediaId)).returning();
+  return rows[0] || null;
+}
+var init_mediaRepository = __esm({
+  "server/media/mediaRepository.ts"() {
+    init_client();
+    init_schema();
+    init_mediaStorage();
+  }
+});
+
+// server/media/mediaUploadService.ts
+var mediaUploadService_exports = {};
+__export(mediaUploadService_exports, {
+  storeUploadedDocument: () => storeUploadedDocument,
+  storeUploadedImage: () => storeUploadedImage,
+  storeUploadedVerificationAsset: () => storeUploadedVerificationAsset
+});
+function storageProvider(category) {
+  if (visibilityForCategory(category) === "private") return "local";
+  const raw = process.env.MEDIA_STORAGE_PROVIDER?.trim().toLowerCase();
+  return raw === "cloudinary" ? "cloudinary" : "local";
+}
+function privateReferenceUrl(mediaId) {
+  return `/api/v1/catalog/media/private/${mediaId}`;
+}
+async function storeLocal(input) {
+  const rawBuffer = Buffer.from(input.base64Data, "base64");
+  const isImage = input.mimeType.toLowerCase().startsWith(IMAGE_MIME_PREFIX);
+  const visibility = visibilityForCategory(input.category);
+  if (isImage) {
+    const processed = await processImage(rawBuffer);
+    const saved2 = await saveMediaFile({ category: input.category, buffer: processed.full.buffer, mimeType: "image/webp" });
+    const savedThumb = visibility === "public" ? await saveMediaFile({ category: input.category, buffer: processed.thumbnail.buffer, mimeType: "image/webp" }) : null;
+    const record2 = await createMediaRecord({
+      uploadedByUserId: input.uploaderId,
+      category: input.category,
+      mediaType: "image",
+      provider: "local",
+      relativePath: saved2.relativePath,
+      publicUrl: saved2.publicUrl,
+      mimeType: "image/webp",
+      sizeBytes: saved2.sizeBytes,
+      width: processed.full.width,
+      height: processed.full.height,
+      originalFilename: input.fileName
+    });
+    return { record: record2, thumbnailUrl: savedThumb?.publicUrl };
+  }
+  const saved = await saveMediaFile({ category: input.category, buffer: rawBuffer, mimeType: input.mimeType });
+  const record = await createMediaRecord({
+    uploadedByUserId: input.uploaderId,
+    category: input.category,
+    mediaType: mediaTypeForMimeType(input.mimeType),
+    provider: "local",
+    relativePath: saved.relativePath,
+    publicUrl: saved.publicUrl,
+    mimeType: input.mimeType,
+    sizeBytes: saved.sizeBytes,
+    originalFilename: input.fileName
+  });
+  return { record };
+}
+function resultFor(record, thumbnailUrl, provider) {
+  const visibility = record.visibility;
+  return {
+    url: visibility === "private" ? privateReferenceUrl(record.id) : record.publicUrl,
+    thumbnailUrl,
+    mediaId: record.id,
+    provider,
+    visibility
+  };
+}
+async function storeUploadedImage(input) {
+  if (!isMediaCategory(input.category)) throw new Error(`Invalid media category: ${input.category}`);
+  if (storageProvider(input.category) === "cloudinary") {
+    const url = await uploadImageToCloudinary({ base64Data: input.base64Data, mimeType: input.mimeType, fileName: input.fileName });
+    const record2 = await createMediaRecord({
+      uploadedByUserId: input.uploaderId,
+      category: input.category,
+      mediaType: "image",
+      provider: "cloudinary",
+      publicUrl: url,
+      mimeType: input.mimeType,
+      sizeBytes: Math.floor(input.base64Data.length * 3 / 4),
+      originalFilename: input.fileName
+    });
+    return resultFor(record2, void 0, "cloudinary");
+  }
+  const { record, thumbnailUrl } = await storeLocal(input);
+  return resultFor(record, thumbnailUrl, "local");
+}
+async function storeUploadedDocument(input) {
+  if (!isMediaCategory(input.category)) throw new Error(`Invalid media category: ${input.category}`);
+  if (storageProvider(input.category) === "cloudinary") {
+    const url = await uploadDocumentToCloudinary({ base64Data: input.base64Data, mimeType: input.mimeType, fileName: input.fileName });
+    const record2 = await createMediaRecord({
+      uploadedByUserId: input.uploaderId,
+      category: input.category,
+      mediaType: "document",
+      provider: "cloudinary",
+      publicUrl: url,
+      mimeType: input.mimeType,
+      sizeBytes: Math.floor(input.base64Data.length * 3 / 4),
+      originalFilename: input.fileName
+    });
+    return resultFor(record2, void 0, "cloudinary");
+  }
+  const { record } = await storeLocal(input);
+  return resultFor(record, void 0, "local");
+}
+async function storeUploadedVerificationAsset(input) {
+  const { record, thumbnailUrl } = await storeLocal({
+    category: "verification",
+    base64Data: input.base64Data,
+    mimeType: input.mimeType,
+    fileName: input.fileName,
+    uploaderId: input.uploaderId
+  });
+  return resultFor(record, thumbnailUrl, "local");
+}
+var IMAGE_MIME_PREFIX;
+var init_mediaUploadService = __esm({
+  "server/media/mediaUploadService.ts"() {
+    init_mediaUpload();
+    init_imageProcessing();
+    init_mediaStorage();
+    init_mediaRepository();
+    IMAGE_MIME_PREFIX = "image/";
+  }
+});
+
 // server/lib/uploadValidation.ts
 var uploadValidation_exports = {};
 __export(uploadValidation_exports, {
@@ -6855,8 +12704,8 @@ var init_uploadValidation = __esm({
 });
 
 // server/partnerApplications/partnerApplicationStore.ts
-import { randomUUID as randomUUID4 } from "node:crypto";
-import { and as and3, desc, eq as eq7, or } from "drizzle-orm";
+import { randomUUID as randomUUID8 } from "node:crypto";
+import { and as and4, desc as desc2, eq as eq10, or } from "drizzle-orm";
 function rowToApplication(row) {
   return {
     id: row.id,
@@ -6895,24 +12744,24 @@ var init_partnerApplicationStore = __esm({
     init_schema();
     partnerApplicationStore = {
       list: async (status) => {
-        const rows = status ? await db.select().from(partnerApplications).where(eq7(partnerApplications.status, status)).orderBy(desc(partnerApplications.createdAt)) : await db.select().from(partnerApplications).orderBy(desc(partnerApplications.createdAt));
+        const rows = status ? await db.select().from(partnerApplications).where(eq10(partnerApplications.status, status)).orderBy(desc2(partnerApplications.createdAt)) : await db.select().from(partnerApplications).orderBy(desc2(partnerApplications.createdAt));
         return rows.map(rowToApplication);
       },
       getById: async (id) => {
-        const rows = await db.select().from(partnerApplications).where(eq7(partnerApplications.id, id)).limit(1);
+        const rows = await db.select().from(partnerApplications).where(eq10(partnerApplications.id, id)).limit(1);
         return rows[0] ? rowToApplication(rows[0]) : null;
       },
       findPendingByEmail: async (email) => {
         const normalized = email.trim().toLowerCase();
-        const rows = await db.select().from(partnerApplications).where(and3(eq7(partnerApplications.email, normalized), eq7(partnerApplications.status, "pending"))).limit(1);
+        const rows = await db.select().from(partnerApplications).where(and4(eq10(partnerApplications.email, normalized), eq10(partnerApplications.status, "pending"))).limit(1);
         return rows[0] ? rowToApplication(rows[0]) : null;
       },
       findForActor: async (params) => {
         const uid = params.userId?.trim();
         const email = params.email?.trim().toLowerCase();
         const conditions = [];
-        if (uid) conditions.push(eq7(partnerApplications.provisionedUserId, uid), eq7(partnerApplications.existingUserId, uid));
-        if (email) conditions.push(eq7(partnerApplications.email, email));
+        if (uid) conditions.push(eq10(partnerApplications.provisionedUserId, uid), eq10(partnerApplications.existingUserId, uid));
+        if (email) conditions.push(eq10(partnerApplications.email, email));
         if (conditions.length === 0) return null;
         const rows = await db.select().from(partnerApplications).where(or(...conditions));
         if (!rows.length) return null;
@@ -6922,7 +12771,7 @@ var init_partnerApplicationStore = __esm({
         return [...mapped].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] || null;
       },
       create: async (input) => {
-        const id = `papp_${randomUUID4()}`;
+        const id = `papp_${randomUUID8()}`;
         const rows = await db.insert(partnerApplications).values({
           id,
           applicantType: input.applicantType,
@@ -6953,7 +12802,7 @@ var init_partnerApplicationStore = __esm({
         const { id: _ignoreId, createdAt: _ignoreCreatedAt, updatedAt: _ignoreUpdatedAt, reviewedAt: _ignoreReviewedAt, ...rest } = patch;
         const values = { ...rest, updatedAt: /* @__PURE__ */ new Date() };
         if (patch.reviewedAt !== void 0) values.reviewedAt = patch.reviewedAt ? new Date(patch.reviewedAt) : null;
-        const rows = await db.update(partnerApplications).set(values).where(eq7(partnerApplications.id, id)).returning();
+        const rows = await db.update(partnerApplications).set(values).where(eq10(partnerApplications.id, id)).returning();
         return rows[0] ? rowToApplication(rows[0]) : null;
       }
     };
@@ -6997,1025 +12846,6 @@ var init_brandOwnership = __esm({
   }
 });
 
-// server/logging/auditLogger.ts
-function resolveRequestContext(req) {
-  if (!req) {
-    return {};
-  }
-  return {
-    requestId: req.requestId,
-    userId: req.userId || req.user?.uid,
-    userRole: req.userRole || req.user?.role,
-    realActorUserId: req.realActorUserId,
-    realActorRole: req.realActorRole,
-    impersonationSessionId: req.impersonationSessionId,
-    ip: req.ip,
-    userAgent: req.get("user-agent") || void 0
-  };
-}
-function auditLog(input, req) {
-  const context = resolveRequestContext(req);
-  Logger.audit("Audit event", {
-    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-    category: input.category,
-    action: input.action,
-    resource: input.resource,
-    resourceId: input.resourceId,
-    result: input.result,
-    requestId: input.requestId || context.requestId,
-    userId: input.userId || context.userId,
-    userRole: input.userRole || context.userRole,
-    ip: input.ip || context.ip,
-    userAgent: input.userAgent || context.userAgent,
-    metadata: input.metadata
-  });
-}
-function auditAdminAction(action, resource, result, options = {}, req) {
-  auditLog({ category: AUDIT_CATEGORIES.ADMIN_ACTION, action, resource, result, ...options }, req);
-}
-function auditPermissionChange(action, resource, result, options = {}, req) {
-  auditLog(
-    { category: AUDIT_CATEGORIES.PERMISSION_CHANGE, action, resource, result, ...options },
-    req
-  );
-}
-function auditSystemEvent(action, resource, result, options = {}, req) {
-  auditLog({ category: AUDIT_CATEGORIES.SYSTEM_EVENT, action, resource, result, ...options }, req);
-}
-var AUDIT_CATEGORIES;
-var init_auditLogger = __esm({
-  "server/logging/auditLogger.ts"() {
-    init_logger();
-    AUDIT_CATEGORIES = {
-      ADMIN_ACTION: "admin_action",
-      AUTHENTICATION: "authentication",
-      SELLER_ACTION: "seller_action",
-      CATALOG_MODERATION: "catalog_moderation",
-      PERMISSION_CHANGE: "permission_change",
-      SECURITY_EVENT: "security_event",
-      SYSTEM_EVENT: "system_event"
-    };
-  }
-});
-
-// server/catalog/inventoryStore.ts
-function inventoryRecordId(productId, variantId) {
-  return variantId ? `inv__${productId}__${variantId}` : `inv__${productId}__product`;
-}
-function nowIso11() {
-  return (/* @__PURE__ */ new Date()).toISOString();
-}
-function recompute(record) {
-  const reserved = Math.max(0, Math.floor(record.reservedQuantity));
-  const quantity = Math.floor(record.quantity);
-  const available = Math.max(0, quantity - reserved);
-  return {
-    ...record,
-    quantity,
-    reservedQuantity: reserved,
-    availableQuantity: available,
-    inventoryState: record.inventoryState === "archived" ? "archived" : deriveInventoryState(available, record.lowStockThreshold),
-    updatedAt: nowIso11()
-  };
-}
-async function getInventoryRecord(productId, variantId) {
-  return catalogStore2.getInventory(inventoryRecordId(productId, variantId));
-}
-async function listInventoryForProduct(productId) {
-  const all = await catalogStore2.listInventory();
-  return all.filter((r) => r.productId === productId);
-}
-async function ensureInventoryRecord(input) {
-  const id = inventoryRecordId(input.productId, input.variantId);
-  const existing = await catalogStore2.getInventory(id);
-  if (existing) {
-    const next = recompute({
-      ...existing,
-      sku: input.sku ?? existing.sku,
-      quantity: input.quantity,
-      reservedQuantity: input.reservedQuantity ?? existing.reservedQuantity,
-      lowStockThreshold: input.lowStockThreshold ?? existing.lowStockThreshold,
-      warehouseId: input.warehouseId !== void 0 ? input.warehouseId : existing.warehouseId
-    });
-    return catalogStore2.upsertInventory(next);
-  }
-  const created2 = recompute({
-    id,
-    productId: input.productId,
-    variantId: input.variantId,
-    sku: input.sku,
-    quantity: Math.max(0, Math.floor(input.quantity)),
-    reservedQuantity: Math.max(0, Math.floor(input.reservedQuantity ?? 0)),
-    availableQuantity: 0,
-    lowStockThreshold: input.lowStockThreshold ?? 5,
-    inventoryState: "in_stock",
-    warehouseId: input.warehouseId ?? null,
-    createdAt: nowIso11(),
-    updatedAt: nowIso11()
-  });
-  return catalogStore2.upsertInventory(created2);
-}
-async function adjustInventory(input) {
-  const id = inventoryRecordId(input.productId, input.variantId);
-  let current = await catalogStore2.getInventory(id);
-  if (!current) {
-    current = await ensureInventoryRecord({
-      productId: input.productId,
-      variantId: input.variantId,
-      sku: input.sku,
-      quantity: 0
-    });
-  }
-  let nextQuantity = current.quantity;
-  if (typeof input.quantity === "number" && Number.isFinite(input.quantity)) {
-    nextQuantity = Math.floor(input.quantity);
-  } else if (typeof input.delta === "number" && Number.isFinite(input.delta)) {
-    nextQuantity = Math.floor(current.quantity + input.delta);
-  }
-  if (!input.allowNegative && nextQuantity < 0) {
-    throw new InventoryValidationError("Inventory quantity cannot be negative");
-  }
-  const reserved = typeof input.reservedQuantity === "number" && Number.isFinite(input.reservedQuantity) ? Math.floor(input.reservedQuantity) : current.reservedQuantity;
-  if (reserved < 0) {
-    throw new InventoryValidationError("Reserved quantity cannot be negative");
-  }
-  if (reserved > nextQuantity && !input.allowNegative) {
-    throw new InventoryValidationError("Reserved quantity cannot exceed on-hand quantity");
-  }
-  const next = recompute({
-    ...current,
-    sku: input.sku ?? current.sku,
-    quantity: nextQuantity,
-    reservedQuantity: reserved,
-    lowStockThreshold: input.lowStockThreshold ?? current.lowStockThreshold,
-    warehouseId: input.warehouseId !== void 0 ? input.warehouseId : current.warehouseId
-  });
-  return catalogStore2.upsertInventory(next);
-}
-async function syncProductStockFromInventory(productId) {
-  const product = await catalogStore2.getProduct(productId);
-  if (!product) return null;
-  const records = await listInventoryForProduct(productId);
-  const variantRows = records.filter((r) => Boolean(r.variantId));
-  const productRow = records.find((r) => !r.variantId);
-  let available = 0;
-  if (variantRows.length > 0) {
-    available = variantRows.reduce((sum, r) => sum + r.availableQuantity, 0);
-  } else if (productRow) {
-    available = productRow.availableQuantity;
-  } else {
-    available = Math.max(0, product.stock);
-  }
-  const nextStatus = applyInventoryLifecycleCoupling(product.status, available);
-  const saved = await catalogStore2.upsertProduct({
-    ...product,
-    stock: available,
-    status: nextStatus,
-    updatedAt: nowIso11()
-  });
-  return saved;
-}
-async function withInventoryLock(key, fn) {
-  const prior = inventoryLocks.get(key) ?? Promise.resolve();
-  let release = () => {
-  };
-  const next = new Promise((resolve2) => {
-    release = resolve2;
-  });
-  inventoryLocks.set(key, prior.then(() => next));
-  await prior;
-  try {
-    return await fn();
-  } finally {
-    release();
-    if (inventoryLocks.get(key) === next) inventoryLocks.delete(key);
-  }
-}
-async function reserveInventoryQuantity(input) {
-  const key = inventoryRecordId(input.productId, input.variantId);
-  return withInventoryLock(key, async () => {
-    const existing = await getInventoryRecord(input.productId, input.variantId);
-    if (!existing) {
-      const product = await catalogStore2.getProduct(input.productId);
-      const seedQty = Math.max(0, Math.floor(product?.stock ?? 0));
-      if (input.quantity > seedQty) {
-        return { ok: false, available: seedQty };
-      }
-      const record2 = await ensureInventoryRecord({
-        productId: input.productId,
-        variantId: input.variantId,
-        quantity: seedQty,
-        reservedQuantity: input.quantity
-      });
-      await syncProductStockFromInventory(input.productId);
-      return { ok: true, record: record2 };
-    }
-    if (input.quantity > existing.availableQuantity) {
-      return { ok: false, available: existing.availableQuantity };
-    }
-    const record = await adjustInventory({
-      productId: input.productId,
-      variantId: input.variantId,
-      reservedQuantity: existing.reservedQuantity + input.quantity
-    });
-    await syncProductStockFromInventory(input.productId);
-    return { ok: true, record };
-  });
-}
-async function releaseInventoryQuantity(input) {
-  const key = inventoryRecordId(input.productId, input.variantId);
-  return withInventoryLock(key, async () => {
-    const existing = await getInventoryRecord(input.productId, input.variantId);
-    if (!existing) return null;
-    const record = await adjustInventory({
-      productId: input.productId,
-      variantId: input.variantId,
-      reservedQuantity: Math.max(0, existing.reservedQuantity - input.quantity)
-    });
-    await syncProductStockFromInventory(input.productId);
-    return record;
-  });
-}
-async function consumeInventoryQuantity(input) {
-  const key = inventoryRecordId(input.productId, input.variantId);
-  return withInventoryLock(key, async () => {
-    const existing = await getInventoryRecord(input.productId, input.variantId);
-    if (!existing) return null;
-    const nextQuantity = Math.max(0, existing.quantity - input.quantity);
-    const nextReserved = Math.max(0, existing.reservedQuantity - input.quantity);
-    const record = await adjustInventory({
-      productId: input.productId,
-      variantId: input.variantId,
-      quantity: nextQuantity,
-      reservedQuantity: Math.min(nextReserved, nextQuantity)
-    });
-    await syncProductStockFromInventory(input.productId);
-    return record;
-  });
-}
-async function restockInventoryQuantity(input) {
-  const key = inventoryRecordId(input.productId, input.variantId);
-  return withInventoryLock(key, async () => {
-    const existing = await getInventoryRecord(input.productId, input.variantId);
-    if (!existing) return null;
-    const record = await adjustInventory({
-      productId: input.productId,
-      variantId: input.variantId,
-      quantity: existing.quantity + input.quantity,
-      reservedQuantity: existing.reservedQuantity
-    });
-    await syncProductStockFromInventory(input.productId);
-    return record;
-  });
-}
-var InventoryValidationError, inventoryLocks;
-var init_inventoryStore = __esm({
-  "server/catalog/inventoryStore.ts"() {
-    init_catalogStore();
-    init_productLifecycle();
-    InventoryValidationError = class extends Error {
-      constructor(message) {
-        super(message);
-        this.statusCode = 400;
-        this.name = "InventoryValidationError";
-      }
-    };
-    inventoryLocks = /* @__PURE__ */ new Map();
-  }
-});
-
-// server/catalog/serviceStore.ts
-import { randomUUID as randomUUID7 } from "node:crypto";
-function nowIso12() {
-  return (/* @__PURE__ */ new Date()).toISOString();
-}
-function slugify4(value) {
-  return value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "service";
-}
-async function listServices() {
-  return catalogStore2.listServices();
-}
-async function getService(id) {
-  return catalogStore2.getService(id);
-}
-async function upsertService(service) {
-  return catalogStore2.upsertService(service);
-}
-async function deleteService(id) {
-  await catalogStore2.deleteService(id);
-  return true;
-}
-function normalizeServiceInput(payload, existing, context) {
-  const raw = payload ?? {};
-  const title = typeof raw.title === "string" && raw.title.trim() ? raw.title.trim() : existing?.title || "Untitled Service";
-  const id = typeof raw.id === "string" && raw.id.trim() ? raw.id.trim() : existing?.id || `svc-${randomUUID7()}`;
-  const requestedSlug = typeof raw.slug === "string" && raw.slug.trim() ? slugify4(raw.slug) : existing?.slug || slugify4(title);
-  const taken = new Set((context?.existingSlugs ?? []).filter((s) => s !== existing?.slug));
-  let slug = requestedSlug;
-  if (taken.has(slug)) {
-    slug = `${requestedSlug}-${Date.now().toString(36).slice(-5)}`;
-  }
-  const statusRaw = typeof raw.status === "string" ? raw.status : existing?.status ?? "draft";
-  const status = toPersistedProductStatus(
-    normalizeProductLifecycle(statusRaw)
-  );
-  const price = typeof raw.price === "number" ? raw.price : typeof raw.rate === "number" ? raw.rate : existing?.price ?? 0;
-  const media2 = Array.isArray(raw.media) ? raw.media.filter((m) => typeof m === "string") : typeof raw.image === "string" ? [raw.image] : existing?.media ?? [];
-  return {
-    id,
-    slug,
-    title,
-    description: typeof raw.description === "string" ? raw.description : existing?.description ?? "",
-    brandId: typeof raw.brandId === "string" && raw.brandId.trim() ? raw.brandId.trim() : existing?.brandId || "",
-    brandName: typeof raw.brandName === "string" ? raw.brandName : existing?.brandName ?? "",
-    categoryId: typeof raw.categoryId === "string" ? raw.categoryId : existing?.categoryId ?? "",
-    categoryName: typeof raw.categoryName === "string" ? raw.categoryName : existing?.categoryName ?? "",
-    serviceCategory: typeof raw.serviceCategory === "string" ? raw.serviceCategory : existing?.serviceCategory,
-    price: Number.isFinite(price) ? Math.max(0, price) : 0,
-    currency: typeof raw.currency === "string" && raw.currency.trim() ? raw.currency.trim() : existing?.currency ?? "BDT",
-    durationMinutes: typeof raw.durationMinutes === "number" ? Math.max(0, Math.floor(raw.durationMinutes)) : typeof raw.duration === "number" ? Math.max(0, Math.floor(raw.duration)) : existing?.durationMinutes,
-    serviceArea: typeof raw.serviceArea === "string" ? raw.serviceArea : typeof raw.location === "string" ? raw.location : existing?.serviceArea,
-    media: media2,
-    image: typeof raw.image === "string" ? raw.image : media2[0] || existing?.image || "",
-    status,
-    sellerId: typeof raw.sellerId === "string" && raw.sellerId.trim() ? raw.sellerId.trim() : existing?.sellerId,
-    attributes: (() => {
-      if (raw.attributes && typeof raw.attributes === "object" && !Array.isArray(raw.attributes)) {
-        return raw.attributes;
-      }
-      return existing?.attributes;
-    })(),
-    createdAt: existing?.createdAt ?? nowIso12(),
-    updatedAt: nowIso12()
-  };
-}
-var init_serviceStore = __esm({
-  "server/catalog/serviceStore.ts"() {
-    init_catalogStore();
-    init_productLifecycle();
-  }
-});
-
-// server/events/eventBus.ts
-import { randomUUID as randomUUID8 } from "node:crypto";
-function subscribe(eventName, handler) {
-  if (!subscribersByEvent.has(eventName)) {
-    subscribersByEvent.set(eventName, /* @__PURE__ */ new Set());
-  }
-  subscribersByEvent.get(eventName).add(handler);
-  return () => subscribersByEvent.get(eventName)?.delete(handler);
-}
-function getRecentPublishedEvents(opts) {
-  let rows = RECENT_EVENT_RING;
-  if (opts?.domain) rows = rows.filter((e) => e.domain === opts.domain);
-  const limit = opts?.limit ?? 100;
-  return rows.slice(-limit);
-}
-function publishEvent(input) {
-  const event = {
-    eventId: randomUUID8(),
-    timestamp: (/* @__PURE__ */ new Date()).toISOString(),
-    correlationId: input.correlationId || randomUUID8(),
-    version: input.version ?? 1,
-    ...input
-  };
-  RECENT_EVENT_RING.push(event);
-  if (RECENT_EVENT_RING.length > RECENT_EVENT_RING_MAX) {
-    RECENT_EVENT_RING.splice(0, RECENT_EVENT_RING.length - RECENT_EVENT_RING_MAX);
-  }
-  Logger.audit(`event.${event.eventName}`, {
-    eventId: event.eventId,
-    domain: event.domain,
-    producer: event.producer,
-    aggregateId: event.aggregateId,
-    actor: event.actor,
-    correlationId: event.correlationId,
-    version: event.version
-  });
-  const handlers = [
-    ...subscribersByEvent.get(event.eventName) ?? [],
-    ...wildcardSubscribers
-  ];
-  for (const handler of handlers) {
-    try {
-      void handler(event);
-    } catch (error2) {
-      Logger.warn("event subscriber threw", {
-        eventName: event.eventName,
-        eventId: event.eventId,
-        error: error2 instanceof Error ? error2.message : String(error2)
-      });
-    }
-  }
-  return event;
-}
-var subscribersByEvent, wildcardSubscribers, RECENT_EVENT_RING, RECENT_EVENT_RING_MAX;
-var init_eventBus = __esm({
-  "server/events/eventBus.ts"() {
-    init_logger();
-    subscribersByEvent = /* @__PURE__ */ new Map();
-    wildcardSubscribers = /* @__PURE__ */ new Set();
-    RECENT_EVENT_RING = [];
-    RECENT_EVENT_RING_MAX = 400;
-  }
-});
-
-// server/auth/choosifyUserId.ts
-var choosifyUserId_exports = {};
-__export(choosifyUserId_exports, {
-  allocateNextChoosifyUserId: () => allocateNextChoosifyUserId,
-  backfillChoosifyUserIds: () => backfillChoosifyUserIds,
-  ensureChoosifyUserIdSchema: () => ensureChoosifyUserIdSchema,
-  ensureUserHasChoosifyUserId: () => ensureUserHasChoosifyUserId,
-  findUserByChoosifyUserId: () => findUserByChoosifyUserId,
-  formatChoosifyUserId: () => formatChoosifyUserId,
-  isCanonicalChoosifyUserId: () => isCanonicalChoosifyUserId,
-  normalizeChoosifyUserIdQuery: () => normalizeChoosifyUserIdQuery
-});
-import { existsSync as existsSync7, mkdirSync as mkdirSync7, readFileSync as readFileSync7, writeFileSync as writeFileSync7 } from "node:fs";
-import { dirname as dirname7, join as join8 } from "node:path";
-import { asc, eq as eq8, sql as sql2 } from "drizzle-orm";
-function formatChoosifyUserId(sequence) {
-  const n = Math.floor(Number(sequence));
-  if (!Number.isFinite(n) || n < 1) {
-    throw new Error(`Invalid Choosify User ID sequence: ${sequence}`);
-  }
-  const body = n < 10 ** MIN_PAD ? String(n).padStart(MIN_PAD, "0") : String(n);
-  return `${CF_PREFIX}${body}`;
-}
-function normalizeChoosifyUserIdQuery(raw) {
-  const trimmed = String(raw || "").trim().replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g, "-").replace(/\s+/g, "").toUpperCase();
-  if (!trimmed) return null;
-  const digits = trimmed.startsWith(CF_PREFIX) ? trimmed.slice(CF_PREFIX.length) : trimmed;
-  if (!/^\d+$/.test(digits)) return null;
-  const n = Number(digits.replace(/^0+/, "") || "0");
-  if (!Number.isFinite(n) || n < 1) return null;
-  return formatChoosifyUserId(n);
-}
-function isCanonicalChoosifyUserId(value) {
-  const normalized = normalizeChoosifyUserIdQuery(value);
-  return Boolean(normalized && normalized === String(value).trim().toUpperCase());
-}
-function sequenceNumberFromCfId(cfId) {
-  const normalized = normalizeChoosifyUserIdQuery(cfId);
-  if (!normalized) return 0;
-  return Number(normalized.slice(CF_PREFIX.length).replace(/^0+/, "") || "0");
-}
-function readSequenceMirror() {
-  if (!existsSync7(SEQUENCE_MIRROR_PATH)) return null;
-  try {
-    const parsed = JSON.parse(readFileSync7(SEQUENCE_MIRROR_PATH, "utf8"));
-    if (parsed?.version === 1 && Number.isFinite(parsed.nextValue) && parsed.nextValue >= 1) {
-      return parsed;
-    }
-  } catch (error2) {
-    Logger.warn("choosifyUserId sequence mirror load failed", {
-      error: error2 instanceof Error ? error2.message : String(error2)
-    });
-  }
-  return null;
-}
-function writeSequenceMirror(nextValue) {
-  try {
-    mkdirSync7(dirname7(SEQUENCE_MIRROR_PATH), { recursive: true });
-    const snapshot = {
-      version: 1,
-      nextValue,
-      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    writeFileSync7(SEQUENCE_MIRROR_PATH, JSON.stringify(snapshot, null, 2), "utf8");
-  } catch (error2) {
-    Logger.warn("choosifyUserId sequence mirror save failed", {
-      error: error2 instanceof Error ? error2.message : String(error2)
-    });
-  }
-}
-async function ensureChoosifyUserIdSchema() {
-  if (!schemaReady) {
-    schemaReady = (async () => {
-      await db.execute(sql2`
-        ALTER TABLE users
-        ADD COLUMN IF NOT EXISTS choosify_user_id varchar(32)
-      `);
-      await db.execute(sql2`
-        CREATE UNIQUE INDEX IF NOT EXISTS users_choosify_user_id_uidx
-        ON users (choosify_user_id)
-        WHERE choosify_user_id IS NOT NULL
-      `);
-      await db.execute(sql2`
-        CREATE TABLE IF NOT EXISTS choosify_user_id_counters (
-          id integer PRIMARY KEY,
-          next_value bigint NOT NULL DEFAULT 1,
-          updated_at timestamptz NOT NULL DEFAULT now(),
-          CONSTRAINT choosify_user_id_counters_singleton CHECK (id = 1)
-        )
-      `);
-      await db.execute(sql2`
-        INSERT INTO choosify_user_id_counters (id, next_value)
-        VALUES (1, 1)
-        ON CONFLICT (id) DO NOTHING
-      `);
-      const existing = await db.select({ choosifyUserId: users.choosifyUserId }).from(users).where(sql2`${users.choosifyUserId} IS NOT NULL`);
-      let maxAssigned = 0;
-      for (const row of existing) {
-        const num = sequenceNumberFromCfId(row.choosifyUserId || "");
-        if (num > maxAssigned) maxAssigned = num;
-      }
-      const mirror = readSequenceMirror();
-      const mirrorNext = mirror?.nextValue || 1;
-      const desiredNext = Math.max(maxAssigned + 1, mirrorNext, 1);
-      await db.execute(sql2`
-        UPDATE choosify_user_id_counters
-        SET next_value = GREATEST(next_value, ${desiredNext}),
-            updated_at = now()
-        WHERE id = 1
-      `);
-      writeSequenceMirror(desiredNext);
-    })().catch((error2) => {
-      schemaReady = null;
-      throw error2;
-    });
-  }
-  await schemaReady;
-}
-async function allocateNextChoosifyUserId(tx) {
-  await ensureChoosifyUserIdSchema();
-  const runner = tx || db;
-  const rows = await runner.update(choosifyUserIdCounters).set({
-    nextValue: sql2`${choosifyUserIdCounters.nextValue} + 1`,
-    updatedAt: /* @__PURE__ */ new Date()
-  }).where(eq8(choosifyUserIdCounters.id, 1)).returning({ nextValue: choosifyUserIdCounters.nextValue });
-  let after = Number(rows[0]?.nextValue);
-  if (!Number.isFinite(after) || after < 2) {
-    await runner.insert(choosifyUserIdCounters).values({ id: 1, nextValue: 2, updatedAt: /* @__PURE__ */ new Date() }).onConflictDoNothing();
-    const retry = await runner.update(choosifyUserIdCounters).set({
-      nextValue: sql2`${choosifyUserIdCounters.nextValue} + 1`,
-      updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq8(choosifyUserIdCounters.id, 1)).returning({ nextValue: choosifyUserIdCounters.nextValue });
-    after = Number(retry[0]?.nextValue);
-    if (!Number.isFinite(after) || after < 2) {
-      throw new Error("Failed to allocate Choosify User ID sequence");
-    }
-  }
-  const allocated = after - 1;
-  writeSequenceMirror(after);
-  return formatChoosifyUserId(allocated);
-}
-async function ensureUserHasChoosifyUserId(userId) {
-  await ensureChoosifyUserIdSchema();
-  const existing = await db.select({
-    id: users.id,
-    choosifyUserId: users.choosifyUserId
-  }).from(users).where(eq8(users.id, userId)).limit(1);
-  const row = existing[0];
-  if (!row) {
-    throw new Error("User not found");
-  }
-  if (row.choosifyUserId) {
-    return row.choosifyUserId;
-  }
-  return db.transaction(async (tx) => {
-    const locked = await tx.select({ choosifyUserId: users.choosifyUserId }).from(users).where(eq8(users.id, userId)).limit(1);
-    if (locked[0]?.choosifyUserId) {
-      return locked[0].choosifyUserId;
-    }
-    const cfId = await allocateNextChoosifyUserId(tx);
-    await tx.update(users).set({ choosifyUserId: cfId, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(users.id, userId));
-    Logger.audit("auth.choosify_user_id_assigned", { userId, choosifyUserId: cfId });
-    return cfId;
-  });
-}
-async function backfillChoosifyUserIds() {
-  await ensureChoosifyUserIdSchema();
-  const strategy = "ORDER BY users.created_at ASC NULLS LAST, users.id ASC \u2014 preserve existing valid choosifyUserId; assign only when null";
-  const all = await db.select({
-    id: users.id,
-    choosifyUserId: users.choosifyUserId,
-    createdAt: users.createdAt
-  }).from(users).orderBy(asc(users.createdAt), asc(users.id));
-  const seen = /* @__PURE__ */ new Map();
-  const duplicatesDetected = [];
-  const preserved = [];
-  let alreadyHadId = 0;
-  let assigned = 0;
-  for (const row of all) {
-    if (row.choosifyUserId) {
-      alreadyHadId += 1;
-      const canonical = normalizeChoosifyUserIdQuery(row.choosifyUserId) || row.choosifyUserId;
-      if (seen.has(canonical) && seen.get(canonical) !== row.id) {
-        duplicatesDetected.push(`${canonical} \u2192 ${seen.get(canonical)} and ${row.id}`);
-      } else {
-        seen.set(canonical, row.id);
-        preserved.push(canonical);
-      }
-      continue;
-    }
-    const cfId = await ensureUserHasChoosifyUserId(row.id);
-    assigned += 1;
-    if (seen.has(cfId) && seen.get(cfId) !== row.id) {
-      duplicatesDetected.push(`${cfId} \u2192 ${seen.get(cfId)} and ${row.id}`);
-    } else {
-      seen.set(cfId, row.id);
-    }
-  }
-  return {
-    strategy,
-    totalUsers: all.length,
-    alreadyHadId,
-    assigned,
-    duplicatesDetected,
-    preserved: [...new Set(preserved)]
-  };
-}
-async function findUserByChoosifyUserId(query2) {
-  await ensureChoosifyUserIdSchema();
-  const canonical = normalizeChoosifyUserIdQuery(query2);
-  if (!canonical) return null;
-  const candidates = Array.from(
-    /* @__PURE__ */ new Set([
-      canonical,
-      `CF-${String(sequenceNumberFromCfId(canonical))}`,
-      `CF-${String(sequenceNumberFromCfId(canonical)).padStart(5, "0")}`
-    ])
-  );
-  for (const c of candidates) {
-    const rows = await db.select().from(users).where(eq8(users.choosifyUserId, c)).limit(1);
-    if (rows[0]) return rows[0];
-  }
-  return null;
-}
-var SEQUENCE_MIRROR_PATH, CF_PREFIX, MIN_PAD, schemaReady;
-var init_choosifyUserId = __esm({
-  "server/auth/choosifyUserId.ts"() {
-    init_client();
-    init_schema();
-    init_logger();
-    SEQUENCE_MIRROR_PATH = process.env.CHOOSIFY_USER_ID_SEQUENCE_PATH?.trim() || join8(process.cwd(), ".data", "choosify-user-id-sequence.json");
-    CF_PREFIX = "CF-";
-    MIN_PAD = 5;
-    schemaReady = null;
-  }
-});
-
-// shared/referenceIds/registry.ts
-function formatReferenceId(entityType, sequence) {
-  const n = Math.floor(Number(sequence));
-  if (!Number.isFinite(n) || n < 1) {
-    throw new Error(`Invalid reference sequence for ${entityType}: ${sequence}`);
-  }
-  const prefix = REFERENCE_PREFIX[entityType];
-  const body = n < 10 ** MIN_PAD2 ? String(n).padStart(MIN_PAD2, "0") : String(n);
-  return `${prefix}-${body}`;
-}
-function parseReferenceId(raw) {
-  const trimmed = String(raw || "").trim().toUpperCase();
-  if (!trimmed) return null;
-  const m = trimmed.match(/^([A-Z]+)-(\d+)$/);
-  if (!m) return null;
-  const prefix = m[1];
-  const entityType = PREFIX_TO_TYPE[prefix];
-  if (!entityType) return null;
-  const sequence = Number(m[2].replace(/^0+/, "") || "0");
-  if (!Number.isFinite(sequence) || sequence < 1) return null;
-  return {
-    entityType,
-    prefix: REFERENCE_PREFIX[entityType],
-    sequence,
-    canonical: formatReferenceId(entityType, sequence)
-  };
-}
-function normalizeReferenceIdQuery(raw, hintType) {
-  const trimmed = String(raw || "").trim();
-  if (!trimmed) return null;
-  const parsed = parseReferenceId(trimmed);
-  if (parsed) {
-    if (hintType && parsed.entityType !== hintType) return null;
-    return parsed.canonical;
-  }
-  if (hintType && /^\d+$/.test(trimmed)) {
-    const n = Number(trimmed.replace(/^0+/, "") || "0");
-    if (!Number.isFinite(n) || n < 1) return null;
-    return formatReferenceId(hintType, n);
-  }
-  return null;
-}
-var REFERENCE_PREFIX, REFERENCE_FIELD, REFERENCE_ENTITY_TYPES, MIN_PAD2, PREFIX_TO_TYPE;
-var init_registry = __esm({
-  "shared/referenceIds/registry.ts"() {
-    REFERENCE_PREFIX = {
-      user: "CF",
-      brand: "BR",
-      product: "PR",
-      content: "CT",
-      order: "OR",
-      invoice: "INV",
-      return: "RT",
-      refund: "RF",
-      advertisement: "AD",
-      deal: "DL",
-      payment: "PAY",
-      escrow: "ESC",
-      conversation: "CV",
-      cashbook: "CB"
-    };
-    REFERENCE_FIELD = {
-      user: "choosifyUserId",
-      brand: "brandReferenceId",
-      product: "productReferenceId",
-      content: "contentReferenceId",
-      order: "orderReferenceId",
-      invoice: "invoiceReferenceId",
-      return: "returnReferenceId",
-      refund: "refundReferenceId",
-      advertisement: "advertisementReferenceId",
-      deal: "dealReferenceId",
-      payment: "paymentReferenceId",
-      escrow: "escrowReferenceId",
-      conversation: "conversationReferenceId",
-      cashbook: "cashbookReferenceId"
-    };
-    REFERENCE_ENTITY_TYPES = Object.keys(REFERENCE_PREFIX);
-    MIN_PAD2 = 5;
-    PREFIX_TO_TYPE = Object.fromEntries(
-      Object.entries(REFERENCE_PREFIX).map(([t, p]) => [
-        p.toUpperCase(),
-        t
-      ])
-    );
-  }
-});
-
-// server/referenceIds/referenceIdService.ts
-var referenceIdService_exports = {};
-__export(referenceIdService_exports, {
-  REFERENCE_ENTITY_TYPES: () => REFERENCE_ENTITY_TYPES,
-  REFERENCE_FIELD: () => REFERENCE_FIELD,
-  REFERENCE_PREFIX: () => REFERENCE_PREFIX,
-  allocateReferenceId: () => allocateReferenceId,
-  backfillEntityList: () => backfillEntityList,
-  ensureEntityReferenceId: () => ensureEntityReferenceId,
-  ensureReferenceIdSchema: () => ensureReferenceIdSchema,
-  formatReferenceId: () => formatReferenceId,
-  listReferenceIndexByType: () => listReferenceIndexByType,
-  lookupReferenceIndex: () => lookupReferenceIndex,
-  normalizeReferenceIdQuery: () => normalizeReferenceIdQuery,
-  parseReferenceId: () => parseReferenceId,
-  registerReferenceAssignment: () => registerReferenceAssignment
-});
-import { existsSync as existsSync8, mkdirSync as mkdirSync8, readFileSync as readFileSync8, writeFileSync as writeFileSync8 } from "node:fs";
-import { dirname as dirname8, join as join9 } from "node:path";
-import { eq as eq9, sql as sql3 } from "drizzle-orm";
-function writeMirror(nextByType) {
-  try {
-    mkdirSync8(dirname8(MIRROR_PATH), { recursive: true });
-    const snap = {
-      version: 1,
-      updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      nextByType
-    };
-    writeFileSync8(MIRROR_PATH, JSON.stringify(snap, null, 2), "utf8");
-  } catch (error2) {
-    Logger.warn("referenceId sequence mirror save failed", {
-      error: error2 instanceof Error ? error2.message : String(error2)
-    });
-  }
-}
-function readMirror() {
-  if (!existsSync8(MIRROR_PATH)) return null;
-  try {
-    return JSON.parse(readFileSync8(MIRROR_PATH, "utf8"));
-  } catch {
-    return null;
-  }
-}
-function ensureIndexHydrated() {
-  if (indexState.hydrated) return;
-  indexState.hydrated = true;
-  if (!existsSync8(INDEX_PATH)) return;
-  try {
-    const parsed = JSON.parse(readFileSync8(INDEX_PATH, "utf8"));
-    if (parsed?.version === 1 && parsed.byRef) {
-      indexState.byRef = parsed.byRef;
-    }
-  } catch (error2) {
-    Logger.warn("referenceId index load failed", {
-      error: error2 instanceof Error ? error2.message : String(error2)
-    });
-  }
-}
-function persistIndex() {
-  try {
-    mkdirSync8(dirname8(INDEX_PATH), { recursive: true });
-    const snap = {
-      version: 1,
-      savedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      byRef: indexState.byRef
-    };
-    writeFileSync8(INDEX_PATH, JSON.stringify(snap), "utf8");
-  } catch (error2) {
-    Logger.warn("referenceId index save failed", {
-      error: error2 instanceof Error ? error2.message : String(error2)
-    });
-  }
-}
-function registerReferenceAssignment(entityType, refId, internalId) {
-  ensureIndexHydrated();
-  const canonical = normalizeReferenceIdQuery(refId, entityType);
-  if (!canonical) throw new Error(`Invalid reference id: ${refId}`);
-  const existing = indexState.byRef[canonical];
-  if (existing && existing.internalId !== internalId) {
-    throw new Error(`Reference ID collision: ${canonical}`);
-  }
-  if (!existing) {
-    indexState.byRef[canonical] = {
-      entityType,
-      internalId,
-      assignedAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    persistIndex();
-  }
-}
-function lookupReferenceIndex(raw) {
-  ensureIndexHydrated();
-  const parsed = parseReferenceId(raw);
-  if (!parsed) return null;
-  const hit = indexState.byRef[parsed.canonical];
-  if (!hit) return null;
-  return { ...hit, referenceId: parsed.canonical };
-}
-function listReferenceIndexByType(entityType) {
-  ensureIndexHydrated();
-  return Object.entries(indexState.byRef).filter(([, v]) => v.entityType === entityType).map(([referenceId, v]) => ({ referenceId, internalId: v.internalId }));
-}
-async function ensureReferenceIdSchema() {
-  if (!schemaReady2) {
-    schemaReady2 = (async () => {
-      await ensureChoosifyUserIdSchema();
-      await db.execute(sql3`
-        CREATE TABLE IF NOT EXISTS choosify_reference_id_counters (
-          entity_type varchar(32) PRIMARY KEY,
-          next_value bigint NOT NULL DEFAULT 1,
-          updated_at timestamptz NOT NULL DEFAULT now()
-        )
-      `);
-      for (const t of REFERENCE_ENTITY_TYPES) {
-        if (t === "user") continue;
-        await db.execute(sql3`
-          INSERT INTO choosify_reference_id_counters (entity_type, next_value)
-          VALUES (${t}, 1)
-          ON CONFLICT (entity_type) DO NOTHING
-        `);
-      }
-      ensureIndexHydrated();
-      const maxByType = {};
-      for (const [ref, entry] of Object.entries(indexState.byRef)) {
-        const parsed = parseReferenceId(ref);
-        if (!parsed || parsed.entityType === "user") continue;
-        maxByType[parsed.entityType] = Math.max(
-          maxByType[parsed.entityType] || 0,
-          parsed.sequence
-        );
-      }
-      const mirror = readMirror();
-      for (const t of REFERENCE_ENTITY_TYPES) {
-        if (t === "user") continue;
-        const desired = Math.max(
-          (maxByType[t] || 0) + 1,
-          mirror?.nextByType?.[t] || 1,
-          1
-        );
-        await db.execute(sql3`
-          UPDATE choosify_reference_id_counters
-          SET next_value = GREATEST(next_value, ${desired}),
-              updated_at = now()
-          WHERE entity_type = ${t}
-        `);
-      }
-    })().catch((error2) => {
-      schemaReady2 = null;
-      throw error2;
-    });
-  }
-  await schemaReady2;
-}
-async function allocateFromCounter(entityType, tx) {
-  await ensureReferenceIdSchema();
-  if (entityType === "user") {
-    return allocateNextChoosifyUserId(tx);
-  }
-  const runner = tx || db;
-  const rows = await runner.update(choosifyReferenceIdCounters).set({
-    nextValue: sql3`${choosifyReferenceIdCounters.nextValue} + 1`,
-    updatedAt: /* @__PURE__ */ new Date()
-  }).where(eq9(choosifyReferenceIdCounters.entityType, entityType)).returning({ nextValue: choosifyReferenceIdCounters.nextValue });
-  let after = Number(rows[0]?.nextValue);
-  if (!Number.isFinite(after) || after < 2) {
-    await runner.insert(choosifyReferenceIdCounters).values({ entityType, nextValue: 2, updatedAt: /* @__PURE__ */ new Date() }).onConflictDoNothing();
-    const retry = await runner.update(choosifyReferenceIdCounters).set({
-      nextValue: sql3`${choosifyReferenceIdCounters.nextValue} + 1`,
-      updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq9(choosifyReferenceIdCounters.entityType, entityType)).returning({ nextValue: choosifyReferenceIdCounters.nextValue });
-    after = Number(retry[0]?.nextValue);
-    if (!Number.isFinite(after) || after < 2) {
-      throw new Error(`Failed to allocate reference id for ${entityType}`);
-    }
-  }
-  const allocated = after - 1;
-  const mirror = readMirror() || { version: 1, updatedAt: "", nextByType: {} };
-  mirror.nextByType[entityType] = after;
-  writeMirror(mirror.nextByType);
-  return formatReferenceId(entityType, allocated);
-}
-async function allocateReferenceId(entityType, tx) {
-  const prev = allocateLocks.get(entityType) || Promise.resolve();
-  let release;
-  const gate = new Promise((r) => {
-    release = r;
-  });
-  allocateLocks.set(
-    entityType,
-    prev.then(() => gate)
-  );
-  await prev;
-  try {
-    return await allocateFromCounter(entityType, tx);
-  } finally {
-    release();
-  }
-}
-async function ensureEntityReferenceId(params) {
-  const { entityType, internalId, current } = params;
-  if (current) {
-    const canonical = normalizeReferenceIdQuery(current, entityType);
-    if (canonical) {
-      registerReferenceAssignment(entityType, canonical, internalId);
-      return canonical;
-    }
-  }
-  const ref = await allocateReferenceId(entityType);
-  registerReferenceAssignment(entityType, ref, internalId);
-  return ref;
-}
-async function backfillEntityList(params) {
-  const sorted = [...params.rows].sort((a, b) => {
-    const ca = a.createdAt || "";
-    const cb = b.createdAt || "";
-    if (ca !== cb) return ca.localeCompare(cb);
-    return a.internalId.localeCompare(b.internalId);
-  });
-  let alreadyHadId = 0;
-  let assigned = 0;
-  const duplicates = [];
-  const seen = /* @__PURE__ */ new Map();
-  for (const row of sorted) {
-    if (row.current) {
-      const canonical = normalizeReferenceIdQuery(row.current, params.entityType) || row.current;
-      alreadyHadId += 1;
-      if (seen.has(canonical) && seen.get(canonical) !== row.internalId) {
-        duplicates.push(`${canonical} \u2192 ${seen.get(canonical)} and ${row.internalId}`);
-      } else {
-        seen.set(canonical, row.internalId);
-        registerReferenceAssignment(params.entityType, canonical, row.internalId);
-      }
-      continue;
-    }
-    const ref = await ensureEntityReferenceId({
-      entityType: params.entityType,
-      internalId: row.internalId,
-      current: null
-    });
-    await params.apply(row.internalId, ref);
-    assigned += 1;
-    seen.set(ref, row.internalId);
-  }
-  return {
-    entityType: params.entityType,
-    total: sorted.length,
-    alreadyHadId,
-    assigned,
-    duplicates
-  };
-}
-var INDEX_PATH, MIRROR_PATH, indexState, schemaReady2, allocateLocks;
-var init_referenceIdService = __esm({
-  "server/referenceIds/referenceIdService.ts"() {
-    init_client();
-    init_schema();
-    init_logger();
-    init_choosifyUserId();
-    init_registry();
-    init_registry();
-    INDEX_PATH = process.env.CHOOSIFY_REFERENCE_ID_INDEX_PATH?.trim() || join9(process.cwd(), ".data", "reference-id-index.json");
-    MIRROR_PATH = process.env.CHOOSIFY_REFERENCE_ID_SEQUENCE_PATH?.trim() || join9(process.cwd(), ".data", "reference-id-sequences.json");
-    indexState = {
-      byRef: {},
-      hydrated: false
-    };
-    schemaReady2 = null;
-    allocateLocks = /* @__PURE__ */ new Map();
-  }
-});
-
 // server/referenceIds/stampReferenceId.ts
 async function stampReferenceId(entityType, entity, current, internalId) {
   const id = internalId || entity.id;
@@ -8036,1617 +12866,15 @@ var init_stampReferenceId = __esm({
   }
 });
 
-// server/operations/platformMessagingBridge.ts
-async function ensurePlatformOrderConversation(order) {
-  const conversationId = `conv_platform_${order.buyerId}`;
-  const existing = await getConversation(conversationId);
-  const summary = `Order ${order.orderId} placed \u2014 \u09F3${Number(order.overallTotal || 0).toLocaleString()} (${order.sourceMode || "retail"})`;
-  const conversation = {
-    conversationId,
-    platform: "platform",
-    senderName: order.shipping?.fullName || order.buyerId,
-    lastMessage: summary,
-    assignedAgent: existing?.assignedAgent || "agent_farhan",
-    status: "open",
-    updatedAt: nowIso14()
-  };
-  await saveConversation(conversation);
-  const message = {
-    id: `m_sys_${Date.now()}`,
-    platform: "platform",
-    platformMessageId: `sys_order_${order.orderId}`,
-    conversationId,
-    senderId: "system",
-    senderName: "Choosify Platform",
-    content: { type: "text", body: summary },
-    direction: "inbound",
-    status: "delivered",
-    assignedAgent: conversation.assignedAgent,
-    conversationStatus: conversation.status,
-    timestamp: nowIso14()
-  };
-  await saveMessage(message);
-  return conversation;
-}
-async function submitPlatformMessage(payload) {
-  const conversationId = `conv_platform_${payload.buyerId}`;
-  const existing = await getConversation(conversationId);
-  const direction = payload.direction || "inbound";
-  const senderId = payload.senderId || payload.buyerId;
-  const conversation = {
-    conversationId,
-    platform: "platform",
-    senderName: direction === "inbound" ? payload.userName : existing?.senderName || payload.buyerId,
-    lastMessage: payload.body,
-    assignedAgent: existing?.assignedAgent || "agent_farhan",
-    status: "open",
-    updatedAt: nowIso14()
-  };
-  const prefix = payload.orderId ? `[Order ${payload.orderId}] ` : "";
-  const message = {
-    id: `m_plat_${Date.now()}`,
-    platform: "platform",
-    platformMessageId: `plat_${Date.now()}`,
-    conversationId,
-    senderId,
-    senderName: payload.userName,
-    content: { type: "text", body: `${prefix}${payload.body}`.trim() },
-    direction,
-    status: "delivered",
-    assignedAgent: conversation.assignedAgent,
-    conversationStatus: conversation.status,
-    timestamp: nowIso14(),
-    bookingOffer: payload.bookingOffer,
-    orderOffer: payload.orderOffer
-  };
-  await saveConversation(conversation);
-  await saveMessage(message);
-  return { conversation, message };
-}
-var nowIso14;
-var init_platformMessagingBridge = __esm({
-  "server/operations/platformMessagingBridge.ts"() {
-    init_omniStore();
-    nowIso14 = () => (/* @__PURE__ */ new Date()).toISOString();
-  }
-});
-
-// server/operations/operationsPersistence.ts
-function buildOperationsSnapshot() {
-  return {
-    orders: operationsStore.listOrders(),
-    coupons: operationsStore.listCoupons(),
-    couponUsage: operationsStore.listCouponUsage(),
-    reviews: operationsStore.listReviews(),
-    leads: operationsStore.listLeads(),
-    jobPostings: operationsStore.listJobPostings(),
-    jobApplications: operationsStore.listJobApplications(),
-    permissions: operationsStore.getPermissions(),
-    shipments: shipmentStore.listShipments(),
-    featureFlags: operationsStore.getFeatureFlags(),
-    sellerOffers: operationsStore.listSellerOffers(),
-    feeCharges: operationsStore.listFeeCharges(),
-    paymentOptionsConfig: operationsStore.getPaymentOptionsConfig(),
-    sellerBookingSettings: operationsStore.getAllSellerBookingSettings(),
-    returns: operationsStore.listReturns(),
-    verifications: operationsStore.listVerifications(),
-    warrantyClaims: operationsStore.listWarrantyClaims()
-  };
-}
-function scheduleOperationsPersist() {
-  if (persistTimer5) clearTimeout(persistTimer5);
-  persistTimer5 = setTimeout(() => {
-    saveOperationsSnapshot(buildOperationsSnapshot()).catch((err) => {
-      console.error("[OperationsPersist] Failed to save snapshot:", err);
-    });
-  }, 400);
-}
-async function ensureOperationsHydrated() {
-  if (hydrated3) return;
-  hydrated3 = true;
-  try {
-    const snapshot = await loadOperationsSnapshot();
-    if (snapshot) {
-      operationsStore.hydrate(snapshot);
-      if (snapshot.shipments?.length) {
-        shipmentStore.hydrate(snapshot.shipments);
-      }
-      console.log(`[OperationsPersist] Hydrated from ${useOperationsFirestore ? "Firestore" : "disk snapshot"}.`);
-    } else {
-      await saveOperationsSnapshot(buildOperationsSnapshot());
-      console.log(`[OperationsPersist] Seeded initial ${useOperationsFirestore ? "Firestore" : "disk"} snapshot.`);
-    }
-  } catch (err) {
-    console.error("[OperationsPersist] Hydration failed, using in-memory defaults.", err);
-  }
-}
-function attachOperationsPersistence() {
-  operationsStore.setPersistHook(scheduleOperationsPersist);
-}
-var persistTimer5, hydrated3;
-var init_operationsPersistence = __esm({
-  "server/operations/operationsPersistence.ts"() {
-    init_operationsStore();
-    init_shipmentStore();
-    init_operationsDb();
-    persistTimer5 = null;
-    hydrated3 = false;
-  }
-});
-
-// server/communication/communicationTypes.ts
-var COMMUNICATION_TYPES, NOTIFICATION_PRIORITIES, DELIVERY_CHANNELS, DIGEST_MODES, BROADCAST_STATUSES;
-var init_communicationTypes = __esm({
-  "server/communication/communicationTypes.ts"() {
-    COMMUNICATION_TYPES = {
-      NOTIFICATION: "notification",
-      ANNOUNCEMENT: "announcement",
-      BROADCAST: "broadcast",
-      CAMPAIGN: "campaign",
-      REMINDER: "reminder",
-      ORDER_UPDATE: "order_update",
-      MODERATION_UPDATE: "moderation_update",
-      SELLER_UPDATE: "seller_update",
-      BUYER_UPDATE: "buyer_update",
-      SYSTEM_ALERT: "system_alert",
-      PROMOTION: "promotion",
-      AI_SUGGESTION: "ai_suggestion"
-    };
-    NOTIFICATION_PRIORITIES = {
-      CRITICAL: "critical",
-      HIGH: "high",
-      NORMAL: "normal",
-      LOW: "low",
-      SILENT: "silent"
-    };
-    DELIVERY_CHANNELS = {
-      IN_APP: "in_app",
-      EMAIL: "email",
-      PUSH: "push",
-      SMS: "sms",
-      WHATSAPP: "whatsapp",
-      WEBHOOK: "webhook"
-    };
-    DIGEST_MODES = {
-      INSTANT: "instant",
-      DAILY: "daily",
-      WEEKLY: "weekly"
-    };
-    BROADCAST_STATUSES = {
-      DRAFT: "draft",
-      SCHEDULED: "scheduled",
-      SENT: "sent"
-    };
-  }
-});
-
-// server/communication/communicationStore.ts
-import { randomUUID as randomUUID9 } from "crypto";
-import { existsSync as existsSync9, mkdirSync as mkdirSync9, readFileSync as readFileSync9, writeFileSync as writeFileSync9 } from "node:fs";
-import { dirname as dirname9, join as join10 } from "node:path";
-import { and as and4, desc as desc2, eq as eq10 } from "drizzle-orm";
-function ensureCommunicationHydrated() {
-  if (hydrated4) return;
-  hydrated4 = true;
-  if (!existsSync9(DISK_SNAPSHOT_PATH3)) return;
-  try {
-    const snap = JSON.parse(readFileSync9(DISK_SNAPSHOT_PATH3, "utf8"));
-    if (snap.broadcasts) state6.broadcasts = snap.broadcasts;
-    if (snap.preferences) state6.preferences = new Map(snap.preferences);
-    console.log(
-      `[CommunicationMemoryPersist] Hydrated (${state6.broadcasts.length} broadcasts, ${state6.preferences.size} preference rows).`
-    );
-  } catch (error2) {
-    console.warn("[CommunicationMemoryPersist] Failed to load snapshot:", error2);
-  }
-}
-function schedulePersist4() {
-  if (persistTimer6) clearTimeout(persistTimer6);
-  persistTimer6 = setTimeout(() => {
-    try {
-      mkdirSync9(dirname9(DISK_SNAPSHOT_PATH3), { recursive: true });
-      writeFileSync9(
-        DISK_SNAPSHOT_PATH3,
-        JSON.stringify({ broadcasts: state6.broadcasts, preferences: [...state6.preferences.entries()] }),
-        "utf8"
-      );
-    } catch (error2) {
-      console.error("[CommunicationMemoryPersist] Failed to save snapshot:", error2);
-    }
-  }, 300);
-}
-function rowToNotification(row) {
-  return {
-    id: row.id,
-    userId: row.userId,
-    type: row.type,
-    category: row.category,
-    priority: row.priority,
-    title: row.title,
-    summary: row.summary || void 0,
-    actionUrl: row.actionUrl || void 0,
-    channels: row.channels || [],
-    read: row.read,
-    dismissed: row.dismissed,
-    archived: row.archived,
-    pinned: row.pinned,
-    metadata: row.metadata || void 0,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-    readAt: row.readAt ? row.readAt.toISOString() : void 0,
-    dismissedAt: row.dismissedAt ? row.dismissedAt.toISOString() : void 0,
-    archivedAt: row.archivedAt ? row.archivedAt.toISOString() : void 0,
-    expiresAt: row.expiresAt ? row.expiresAt.toISOString() : void 0
-  };
-}
-function nowIso15() {
-  return (/* @__PURE__ */ new Date()).toISOString();
-}
-function defaultPreferences(userId) {
-  return {
-    userId,
-    channels: {
-      [DELIVERY_CHANNELS.IN_APP]: true,
-      [DELIVERY_CHANNELS.EMAIL]: true,
-      [DELIVERY_CHANNELS.PUSH]: true,
-      [DELIVERY_CHANNELS.SMS]: false,
-      [DELIVERY_CHANNELS.WHATSAPP]: false,
-      [DELIVERY_CHANNELS.WEBHOOK]: false
-    },
-    quietHours: { enabled: false, start: "22:00", end: "08:00" },
-    digestMode: DIGEST_MODES.INSTANT,
-    marketingOptIn: false,
-    systemRequired: true,
-    updatedAt: nowIso15()
-  };
-}
-var state6, DISK_SNAPSHOT_PATH3, hydrated4, persistTimer6, communicationStore;
-var init_communicationStore = __esm({
-  "server/communication/communicationStore.ts"() {
-    init_client();
-    init_schema();
-    init_communicationTypes();
-    state6 = {
-      broadcasts: [],
-      preferences: /* @__PURE__ */ new Map()
-    };
-    DISK_SNAPSHOT_PATH3 = process.env.COMMUNICATION_MEMORY_SNAPSHOT_PATH?.trim() || join10(process.cwd(), ".data", "communication-memory-snapshot.json");
-    hydrated4 = false;
-    persistTimer6 = null;
-    ensureCommunicationHydrated();
-    communicationStore = {
-      // Sprint 10 durability migration: notifications are read/written directly against
-      // PostgreSQL on every call (no per-process cache) — a bare in-memory Map with no
-      // disk snapshot at all previously meant every restart silently discarded history.
-      async listNotifications(filter) {
-        const conditions = [];
-        if (filter.userId) conditions.push(eq10(notifications.userId, filter.userId));
-        if (filter.read !== void 0) conditions.push(eq10(notifications.read, filter.read));
-        if (filter.archived !== void 0) conditions.push(eq10(notifications.archived, filter.archived));
-        if (filter.dismissed !== void 0) conditions.push(eq10(notifications.dismissed, filter.dismissed));
-        if (filter.pinned !== void 0) conditions.push(eq10(notifications.pinned, filter.pinned));
-        if (filter.priority) conditions.push(eq10(notifications.priority, filter.priority));
-        if (filter.category) conditions.push(eq10(notifications.category, filter.category));
-        if (filter.type) conditions.push(eq10(notifications.type, filter.type));
-        const query2 = conditions.length ? db.select().from(notifications).where(and4(...conditions)) : db.select().from(notifications);
-        let rows = (await query2.orderBy(desc2(notifications.pinned), desc2(notifications.createdAt))).map(rowToNotification);
-        if (filter.q) {
-          const q = filter.q.toLowerCase();
-          rows = rows.filter((n) => n.title.toLowerCase().includes(q) || (n.summary || "").toLowerCase().includes(q));
-        }
-        const offset = filter.offset ?? 0;
-        const limit = filter.limit ?? rows.length;
-        return rows.slice(offset, offset + limit);
-      },
-      async countNotifications(userId) {
-        const rows = userId ? await db.select().from(notifications).where(eq10(notifications.userId, userId)) : await db.select().from(notifications);
-        return rows.map(rowToNotification);
-      },
-      async getNotification(id) {
-        const rows = await db.select().from(notifications).where(eq10(notifications.id, id)).limit(1);
-        return rows[0] ? rowToNotification(rows[0]) : null;
-      },
-      async createNotification(input) {
-        const rows = await db.insert(notifications).values({
-          id: `ntf-${randomUUID9()}`,
-          userId: input.userId,
-          type: input.type,
-          category: input.category,
-          priority: input.priority ?? NOTIFICATION_PRIORITIES.NORMAL,
-          title: input.title,
-          summary: input.summary,
-          actionUrl: input.actionUrl,
-          channels: input.channels?.length ? input.channels : [DELIVERY_CHANNELS.IN_APP],
-          pinned: input.pinned ?? false,
-          metadata: input.metadata,
-          expiresAt: input.expiresAt ? new Date(input.expiresAt) : void 0
-        }).returning();
-        return rowToNotification(rows[0]);
-      },
-      async updateNotification(id, patch) {
-        const {
-          id: _ignoreId,
-          createdAt: _ignoreCreatedAt,
-          updatedAt: _ignoreUpdatedAt,
-          readAt: _ignoreReadAt,
-          dismissedAt: _ignoreDismissedAt,
-          archivedAt: _ignoreArchivedAt,
-          expiresAt: _ignoreExpiresAt,
-          ...rest
-        } = patch;
-        const values = { ...rest, updatedAt: /* @__PURE__ */ new Date() };
-        if (patch.readAt !== void 0) values.readAt = patch.readAt ? new Date(patch.readAt) : null;
-        if (patch.dismissedAt !== void 0) values.dismissedAt = patch.dismissedAt ? new Date(patch.dismissedAt) : null;
-        if (patch.archivedAt !== void 0) values.archivedAt = patch.archivedAt ? new Date(patch.archivedAt) : null;
-        if (patch.expiresAt !== void 0) values.expiresAt = patch.expiresAt ? new Date(patch.expiresAt) : null;
-        const rows = await db.update(notifications).set(values).where(eq10(notifications.id, id)).returning();
-        return rows[0] ? rowToNotification(rows[0]) : null;
-      },
-      async deleteNotification(id) {
-        const rows = await db.delete(notifications).where(eq10(notifications.id, id)).returning();
-        return rows.length > 0;
-      },
-      listBroadcasts() {
-        return [...state6.broadcasts].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      },
-      getBroadcast(id) {
-        return state6.broadcasts.find((b) => b.id === id) ?? null;
-      },
-      createBroadcast(input) {
-        const broadcast = {
-          ...input,
-          id: `brc-${randomUUID9()}`,
-          createdAt: nowIso15(),
-          updatedAt: nowIso15()
-        };
-        state6.broadcasts.unshift(broadcast);
-        schedulePersist4();
-        return broadcast;
-      },
-      updateBroadcast(id, patch) {
-        const idx = state6.broadcasts.findIndex((b) => b.id === id);
-        if (idx < 0) return null;
-        state6.broadcasts[idx] = { ...state6.broadcasts[idx], ...patch, updatedAt: nowIso15() };
-        schedulePersist4();
-        return state6.broadcasts[idx];
-      },
-      getPreferences(userId) {
-        return state6.preferences.get(userId) ?? defaultPreferences(userId);
-      },
-      upsertPreferences(userId, patch) {
-        const current = state6.preferences.get(userId) ?? defaultPreferences(userId);
-        const updated = {
-          ...current,
-          ...patch,
-          channels: { ...current.channels, ...patch.channels || {} },
-          quietHours: { ...current.quietHours, ...patch.quietHours || {} },
-          userId,
-          updatedAt: nowIso15()
-        };
-        state6.preferences.set(userId, updated);
-        schedulePersist4();
-        return updated;
-      },
-      countPreferencesUsers() {
-        return state6.preferences.size;
-      }
-    };
-  }
-});
-
-// server/communication/deliveryChannels.ts
-function getChannelProvider(channel) {
-  return providers[channel];
-}
-async function dispatchToChannels(request, channels) {
-  const results = [];
-  for (const channel of channels) {
-    const provider = getChannelProvider(channel);
-    results.push(await provider.dispatch({ ...request, channel }));
-  }
-  return results;
-}
-function listChannelStatus() {
-  return Object.values(providers).map((provider) => ({
-    channel: provider.channel,
-    configured: provider.isConfigured()
-  }));
-}
-var FrameworkChannelProvider, providers;
-var init_deliveryChannels = __esm({
-  "server/communication/deliveryChannels.ts"() {
-    init_communicationTypes();
-    FrameworkChannelProvider = class {
-      constructor(channel) {
-        this.channel = channel;
-      }
-      isConfigured() {
-        return false;
-      }
-      async dispatch(request) {
-        return {
-          channel: this.channel,
-          status: "unsupported",
-          message: `Provider for ${this.channel} is not configured. Framework only.`
-        };
-      }
-    };
-    providers = {
-      [DELIVERY_CHANNELS.IN_APP]: {
-        channel: DELIVERY_CHANNELS.IN_APP,
-        isConfigured: () => true,
-        async dispatch(request) {
-          return {
-            channel: DELIVERY_CHANNELS.IN_APP,
-            status: "queued",
-            message: `In-app notification queued for ${request.userId}`
-          };
-        }
-      },
-      [DELIVERY_CHANNELS.EMAIL]: new FrameworkChannelProvider(DELIVERY_CHANNELS.EMAIL),
-      [DELIVERY_CHANNELS.PUSH]: new FrameworkChannelProvider(DELIVERY_CHANNELS.PUSH),
-      [DELIVERY_CHANNELS.SMS]: new FrameworkChannelProvider(DELIVERY_CHANNELS.SMS),
-      [DELIVERY_CHANNELS.WHATSAPP]: new FrameworkChannelProvider(DELIVERY_CHANNELS.WHATSAPP),
-      [DELIVERY_CHANNELS.WEBHOOK]: new FrameworkChannelProvider(DELIVERY_CHANNELS.WEBHOOK)
-    };
-  }
-});
-
-// server/communication/eventHooks.ts
-function requestContext3(req) {
-  if (!req) return {};
-  return {
-    requestId: req.requestId,
-    ip: req.ip,
-    userAgent: req.get("user-agent") || void 0,
-    userId: req.userId || req.user?.uid
-  };
-}
-function logNotificationAudit(action, resource, result, options = {}, req) {
-  auditAdminAction(action, resource, result, {
-    resourceId: options.resourceId,
-    userId: options.userId,
-    metadata: options.metadata
-  }, req);
-}
-function logBroadcastAudit(action, resourceId, result, options = {}, req) {
-  auditAdminAction(action, "broadcast", result, {
-    resourceId,
-    userId: options.userId,
-    metadata: options.metadata
-  }, req);
-}
-function logPreferenceChangeAudit(userId, req) {
-  auditPermissionChange("update_communication_preferences", "communication_preferences", "success", {
-    resourceId: userId,
-    userId: req?.userId || userId
-  }, req);
-}
-function recordNotificationSent(notification, req) {
-  recordEventAsync({
-    type: ANALYTICS_EVENTS.NOTIFICATION_SENT,
-    userId: notification.userId,
-    source: "communication_platform",
-    metadata: {
-      notificationId: notification.id,
-      category: notification.category,
-      type: notification.type,
-      priority: notification.priority,
-      channels: notification.channels
-    },
-    ...requestContext3(req)
-  });
-}
-function recordNotificationRead(notification, req) {
-  recordEventAsync({
-    type: ANALYTICS_EVENTS.NOTIFICATION_READ,
-    userId: notification.userId,
-    source: "communication_platform",
-    metadata: { notificationId: notification.id, category: notification.category },
-    ...requestContext3(req)
-  });
-}
-function recordNotificationDismissed(notification, req) {
-  recordEventAsync({
-    type: ANALYTICS_EVENTS.NOTIFICATION_DISMISSED,
-    userId: notification.userId,
-    source: "communication_platform",
-    metadata: { notificationId: notification.id, category: notification.category },
-    ...requestContext3(req)
-  });
-}
-function recordBroadcastSent(broadcast, req) {
-  recordEventAsync({
-    type: ANALYTICS_EVENTS.BROADCAST_SENT,
-    source: "communication_platform",
-    metadata: {
-      broadcastId: broadcast.id,
-      broadcastType: broadcast.broadcastType,
-      targetRoles: broadcast.targetRoles,
-      targetSegments: broadcast.targetSegments
-    },
-    ...requestContext3(req)
-  });
-}
-var init_eventHooks = __esm({
-  "server/communication/eventHooks.ts"() {
-    init_auditLogger();
-    init_analyticsService();
-    init_analyticsEvents();
-  }
-});
-
-// server/communication/notificationService.ts
-function listNotifications(filter) {
-  return communicationStore.listNotifications(filter);
-}
-function getNotification(id) {
-  return communicationStore.getNotification(id);
-}
-async function createNotification(input, req) {
-  const preferences = communicationStore.getPreferences(input.userId);
-  const channels = input.channels?.length ? input.channels : [DELIVERY_CHANNELS.IN_APP];
-  const notification = await communicationStore.createNotification({
-    userId: input.userId,
-    type: input.type,
-    category: input.category,
-    priority: input.priority ?? NOTIFICATION_PRIORITIES.NORMAL,
-    title: input.title,
-    summary: input.summary,
-    actionUrl: input.actionUrl,
-    channels,
-    pinned: input.pinned ?? false,
-    metadata: input.metadata,
-    expiresAt: input.expiresAt
-  });
-  const enabledChannels = channels.filter((channel) => {
-    if (input.category === "system" || input.category === "security") return true;
-    return preferences.channels[channel] !== false;
-  });
-  await dispatchToChannels(
-    {
-      notificationId: notification.id,
-      userId: notification.userId,
-      title: notification.title,
-      summary: notification.summary,
-      metadata: notification.metadata
-    },
-    enabledChannels
-  );
-  recordNotificationSent(notification, req);
-  return notification;
-}
-async function dismissNotification(id, req) {
-  const updated = await communicationStore.updateNotification(id, {
-    dismissed: true,
-    dismissedAt: (/* @__PURE__ */ new Date()).toISOString()
-  });
-  if (updated) recordNotificationDismissed(updated, req);
-  return updated;
-}
-async function markRead(id, req) {
-  const updated = await communicationStore.updateNotification(id, {
-    read: true,
-    readAt: (/* @__PURE__ */ new Date()).toISOString()
-  });
-  if (updated) recordNotificationRead(updated, req);
-  return updated;
-}
-function markUnread(id) {
-  return communicationStore.updateNotification(id, {
-    read: false,
-    readAt: void 0
-  });
-}
-function archiveNotification(id) {
-  return communicationStore.updateNotification(id, {
-    archived: true,
-    archivedAt: (/* @__PURE__ */ new Date()).toISOString()
-  });
-}
-async function deleteNotification(id, req) {
-  const existing = await communicationStore.getNotification(id);
-  if (!existing) return false;
-  const deleted = await communicationStore.deleteNotification(id);
-  if (deleted) {
-    logNotificationAudit("delete_notification", "notification", "success", {
-      resourceId: id,
-      userId: req?.userId,
-      metadata: { targetUserId: existing.userId }
-    }, req);
-  }
-  return deleted;
-}
-async function runBulk(ids, action) {
-  const succeeded = [];
-  const failed = [];
-  for (const id of ids) {
-    const result = await action(id);
-    if (result) succeeded.push(id);
-    else failed.push({ id, error: "Notification not found" });
-  }
-  return { succeeded, failed };
-}
-function bulkRead(ids, req) {
-  return runBulk(ids, (id) => markRead(id, req));
-}
-function bulkArchive(ids) {
-  return runBulk(ids, (id) => archiveNotification(id));
-}
-async function getNotificationCenterSummary(userId) {
-  const rows = await communicationStore.countNotifications(userId);
-  return {
-    total: rows.length,
-    unread: rows.filter((n) => !n.read && !n.archived).length,
-    read: rows.filter((n) => n.read && !n.archived).length,
-    archived: rows.filter((n) => n.archived).length,
-    pinned: rows.filter((n) => n.pinned).length,
-    dismissed: rows.filter((n) => n.dismissed).length
-  };
-}
-var init_notificationService = __esm({
-  "server/communication/notificationService.ts"() {
-    init_communicationStore();
-    init_deliveryChannels();
-    init_eventHooks();
-    init_communicationTypes();
-  }
-});
-
-// server/communication/systemNotify.ts
-import { inArray as inArray3 } from "drizzle-orm";
-async function notifyRoles(roles, input) {
-  if (roles.length === 0) return;
-  const rows = await db.select({ id: users.id }).from(users).where(inArray3(users.role, roles));
-  for (const row of rows) {
-    await createNotification({ ...input, userId: row.id });
-  }
-}
-async function notifyUser(userId, input) {
-  if (!userId) return;
-  await createNotification({ ...input, userId });
-}
-var init_systemNotify = __esm({
-  "server/communication/systemNotify.ts"() {
-    init_client();
-    init_schema();
-    init_notificationService();
-  }
-});
-
-// server/commerce/commercePersistence.ts
-import { existsSync as existsSync11, mkdirSync as mkdirSync11, readFileSync as readFileSync11, writeFileSync as writeFileSync11 } from "node:fs";
-import { dirname as dirname11, join as join12 } from "node:path";
-function commerceMemorySnapshotPath() {
-  return process.env.COMMERCE_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH4;
-}
-function loadCommerceMemorySnapshot() {
-  const path = commerceMemorySnapshotPath();
-  if (!existsSync11(path)) return null;
-  try {
-    const parsed = JSON.parse(readFileSync11(path, "utf8"));
-    if (!parsed || parsed.version !== 1) return null;
-    return parsed;
-  } catch (error2) {
-    console.warn("[CommerceMemoryPersist] Failed to load snapshot:", error2);
-    return null;
-  }
-}
-function scheduleCommerceMemoryPersist(build) {
-  pendingBuild2 = build;
-  if (persistTimer8) clearTimeout(persistTimer8);
-  persistTimer8 = setTimeout(() => {
-    flushCommerceMemoryPersist();
-  }, 250);
-}
-function flushCommerceMemoryPersist() {
-  if (persistTimer8) {
-    clearTimeout(persistTimer8);
-    persistTimer8 = null;
-  }
-  if (!pendingBuild2) return;
-  try {
-    const snapshot = pendingBuild2();
-    const path = commerceMemorySnapshotPath();
-    mkdirSync11(dirname11(path), { recursive: true });
-    writeFileSync11(path, JSON.stringify(snapshot), "utf8");
-  } catch (error2) {
-    console.error("[CommerceMemoryPersist] Failed to save snapshot:", error2);
-  }
-}
-var DEFAULT_PATH4, persistTimer8, pendingBuild2;
-var init_commercePersistence = __esm({
-  "server/commerce/commercePersistence.ts"() {
-    DEFAULT_PATH4 = join12(process.cwd(), ".data", "commerce-memory-snapshot.json");
-    persistTimer8 = null;
-    pendingBuild2 = null;
-  }
-});
-
-// server/commerce/commerceCollections.ts
-function idempotencyDocId(consumerId, key) {
-  const safeKey = key.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(0, 180);
-  return `idem__${consumerId}__${safeKey}`.slice(0, 700);
-}
-var COMMERCE_CARTS, COMMERCE_CHECKOUTS, COMMERCE_ORDERS, COMMERCE_BOOKING_REQUESTS, COMMERCE_IDEMPOTENCY, COMMERCE_SHIPMENTS;
-var init_commerceCollections = __esm({
-  "server/commerce/commerceCollections.ts"() {
-    COMMERCE_CARTS = "commerce_carts";
-    COMMERCE_CHECKOUTS = "commerce_checkouts";
-    COMMERCE_ORDERS = "commerce_orders";
-    COMMERCE_BOOKING_REQUESTS = "commerce_booking_requests";
-    COMMERCE_IDEMPOTENCY = "commerce_idempotency";
-    COMMERCE_SHIPMENTS = "commerce_shipments";
-  }
-});
-
-// server/commerce/commerceMemoryBackend.ts
-function buildSnapshot4() {
-  return {
-    version: 1,
-    savedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    carts: state7.carts,
-    checkouts: state7.checkouts,
-    orders: state7.orders,
-    bookingRequests: state7.bookingRequests,
-    idempotency: state7.idempotency,
-    shipments: state7.shipments
-  };
-}
-function schedulePersist5() {
-  scheduleCommerceMemoryPersist(buildSnapshot4);
-}
-function upsertById(arr, row) {
-  const idx = arr.findIndex((r) => r.id === row.id);
-  if (idx >= 0) arr[idx] = row;
-  else arr.push(row);
-  schedulePersist5();
-  return row;
-}
-function ensureCommerceMemoryHydrated() {
-  if (hydrated5) return true;
-  hydrated5 = true;
-  const snapshot = loadCommerceMemorySnapshot();
-  if (!snapshot) return false;
-  state7.carts = snapshot.carts || [];
-  state7.checkouts = snapshot.checkouts || [];
-  state7.orders = snapshot.orders || [];
-  state7.bookingRequests = snapshot.bookingRequests || [];
-  state7.idempotency = snapshot.idempotency || [];
-  state7.shipments = snapshot.shipments || [];
-  console.log(
-    `[CommerceMemoryPersist] Hydrated (${state7.carts.length} carts, ${state7.orders.length} orders, ${state7.shipments.length} shipments).`
-  );
-  return true;
-}
-var state7, hydrated5, commerceMemoryBackend;
-var init_commerceMemoryBackend = __esm({
-  "server/commerce/commerceMemoryBackend.ts"() {
-    init_commercePersistence();
-    init_commerceCollections();
-    state7 = {
-      carts: [],
-      checkouts: [],
-      orders: [],
-      bookingRequests: [],
-      idempotency: [],
-      shipments: []
-    };
-    hydrated5 = false;
-    commerceMemoryBackend = {
-      getCartByConsumer(consumerId) {
-        ensureCommerceMemoryHydrated();
-        return state7.carts.find((c) => c.consumerId === consumerId) ?? null;
-      },
-      getCart(id) {
-        ensureCommerceMemoryHydrated();
-        return state7.carts.find((c) => c.id === id) ?? null;
-      },
-      upsertCart(cart) {
-        ensureCommerceMemoryHydrated();
-        return upsertById(state7.carts, cart);
-      },
-      deleteCart(id) {
-        ensureCommerceMemoryHydrated();
-        state7.carts = state7.carts.filter((c) => c.id !== id);
-        schedulePersist5();
-      },
-      getCheckout(id) {
-        ensureCommerceMemoryHydrated();
-        return state7.checkouts.find((c) => c.id === id) ?? null;
-      },
-      upsertCheckout(checkout) {
-        ensureCommerceMemoryHydrated();
-        return upsertById(state7.checkouts, checkout);
-      },
-      getOrder(id) {
-        ensureCommerceMemoryHydrated();
-        return state7.orders.find((o) => o.id === id) ?? null;
-      },
-      listOrders() {
-        ensureCommerceMemoryHydrated();
-        return [...state7.orders];
-      },
-      upsertOrder(order) {
-        ensureCommerceMemoryHydrated();
-        return upsertById(state7.orders, order);
-      },
-      getBookingRequest(id) {
-        ensureCommerceMemoryHydrated();
-        return state7.bookingRequests.find((b) => b.id === id) ?? null;
-      },
-      listBookingRequests() {
-        ensureCommerceMemoryHydrated();
-        return [...state7.bookingRequests];
-      },
-      upsertBookingRequest(row) {
-        ensureCommerceMemoryHydrated();
-        return upsertById(state7.bookingRequests, row);
-      },
-      getShipment(id) {
-        ensureCommerceMemoryHydrated();
-        return state7.shipments.find((s) => s.id === id) ?? null;
-      },
-      getShipmentByOrderId(orderId) {
-        ensureCommerceMemoryHydrated();
-        return state7.shipments.find((s) => s.orderId === orderId) ?? null;
-      },
-      listShipments() {
-        ensureCommerceMemoryHydrated();
-        return [...state7.shipments];
-      },
-      upsertShipment(row) {
-        ensureCommerceMemoryHydrated();
-        return upsertById(state7.shipments, row);
-      },
-      getIdempotency(key, consumerId) {
-        ensureCommerceMemoryHydrated();
-        return state7.idempotency.find((r) => r.key === key && r.consumerId === consumerId) ?? null;
-      },
-      putIdempotency(row) {
-        ensureCommerceMemoryHydrated();
-        const id = idempotencyDocId(row.consumerId, row.key);
-        const payload = { ...row, id };
-        const idx = state7.idempotency.findIndex(
-          (r) => r.key === row.key && r.consumerId === row.consumerId
-        );
-        if (idx >= 0) state7.idempotency[idx] = payload;
-        else state7.idempotency.push(payload);
-        schedulePersist5();
-        return payload;
-      },
-      commitCheckoutBundle(bundle) {
-        ensureCommerceMemoryHydrated();
-        upsertById(state7.checkouts, bundle.checkout);
-        for (const order of bundle.orders) upsertById(state7.orders, order);
-        for (const br of bundle.bookingRequests) upsertById(state7.bookingRequests, br);
-        if (bundle.idempotency) {
-          this.putIdempotency(bundle.idempotency);
-        }
-        if (bundle.clearedCart) {
-          upsertById(state7.carts, bundle.clearedCart);
-        }
-      },
-      commitOrderMutation(bundle) {
-        ensureCommerceMemoryHydrated();
-        upsertById(state7.orders, bundle.order);
-        if (bundle.shipment) upsertById(state7.shipments, bundle.shipment);
-      },
-      flushPersist() {
-        flushCommerceMemoryPersist();
-      }
-    };
-  }
-});
-
-// server/commerce/commerceFirestoreAdmin.ts
-var commerceFirestoreAdmin_exports = {};
-__export(commerceFirestoreAdmin_exports, {
-  commerceFirestoreAdmin: () => commerceFirestoreAdmin
-});
-var commerceFirestoreAdmin;
-var init_commerceFirestoreAdmin = __esm({
-  "server/commerce/commerceFirestoreAdmin.ts"() {
-    init_queryHelpers();
-    init_commerceCollections();
-    commerceFirestoreAdmin = {
-      async getCart(id) {
-        return getDocumentById(COMMERCE_CARTS, id);
-      },
-      async getCartByConsumer(consumerId) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(COMMERCE_CARTS).where("consumerId", "==", consumerId).limit(1).get();
-        if (snap.empty) return null;
-        return snap.docs[0].data();
-      },
-      async upsertCart(cart) {
-        return upsertDocument(COMMERCE_CARTS, cart);
-      },
-      async deleteCart(id) {
-        return deleteDocument(COMMERCE_CARTS, id);
-      },
-      async getCheckout(id) {
-        return getDocumentById(COMMERCE_CHECKOUTS, id);
-      },
-      async upsertCheckout(checkout) {
-        return upsertDocument(COMMERCE_CHECKOUTS, checkout);
-      },
-      async getOrder(id) {
-        return getDocumentById(COMMERCE_ORDERS, id);
-      },
-      async listOrders() {
-        return listCollection(COMMERCE_ORDERS);
-      },
-      async upsertOrder(order) {
-        return upsertDocument(COMMERCE_ORDERS, order);
-      },
-      async getBookingRequest(id) {
-        return getDocumentById(COMMERCE_BOOKING_REQUESTS, id);
-      },
-      async listBookingRequests() {
-        return listCollection(COMMERCE_BOOKING_REQUESTS);
-      },
-      async upsertBookingRequest(row) {
-        return upsertDocument(COMMERCE_BOOKING_REQUESTS, row);
-      },
-      async getShipment(id) {
-        return getDocumentById(COMMERCE_SHIPMENTS, id);
-      },
-      async getShipmentByOrderId(orderId) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(COMMERCE_SHIPMENTS).where("orderId", "==", orderId).limit(1).get();
-        if (snap.empty) return null;
-        return snap.docs[0].data();
-      },
-      async listShipments() {
-        return listCollection(COMMERCE_SHIPMENTS);
-      },
-      async upsertShipment(row) {
-        return upsertDocument(COMMERCE_SHIPMENTS, row);
-      },
-      async getIdempotency(key, consumerId) {
-        const id = idempotencyDocId(consumerId, key);
-        return getDocumentById(COMMERCE_IDEMPOTENCY, id);
-      },
-      async putIdempotency(row) {
-        const id = idempotencyDocId(row.consumerId, row.key);
-        const payload = { ...row, id };
-        return upsertDocument(COMMERCE_IDEMPOTENCY, payload);
-      },
-      /**
-       * Atomic checkout commit: checkout + split orders + booking requests +
-       * idempotency + cleared cart in one Firestore batch (≤500 ops).
-       */
-      async commitCheckoutBundle(bundle) {
-        const db3 = await requireAdminFirestore();
-        const batch = db3.batch();
-        let ops = 0;
-        const set = (collection2, id, data) => {
-          batch.set(db3.collection(collection2).doc(id), data, { merge: true });
-          ops += 1;
-          if (ops >= 450) {
-            throw new Error("Commerce checkout batch too large; reduce cart size");
-          }
-        };
-        set(COMMERCE_CHECKOUTS, bundle.checkout.id, bundle.checkout);
-        for (const order of bundle.orders) {
-          set(COMMERCE_ORDERS, order.id, order);
-        }
-        for (const br of bundle.bookingRequests) {
-          set(COMMERCE_BOOKING_REQUESTS, br.id, br);
-        }
-        if (bundle.idempotency) {
-          const id = idempotencyDocId(bundle.idempotency.consumerId, bundle.idempotency.key);
-          set(COMMERCE_IDEMPOTENCY, id, { ...bundle.idempotency, id });
-        }
-        if (bundle.clearedCart) {
-          set(COMMERCE_CARTS, bundle.clearedCart.id, bundle.clearedCart);
-        }
-        await batch.commit();
-      },
-      /** Atomic order + optional shipment update. */
-      async commitOrderMutation(bundle) {
-        const db3 = await requireAdminFirestore();
-        const batch = db3.batch();
-        batch.set(db3.collection(COMMERCE_ORDERS).doc(bundle.order.id), bundle.order, {
-          merge: true
-        });
-        if (bundle.shipment) {
-          batch.set(db3.collection(COMMERCE_SHIPMENTS).doc(bundle.shipment.id), bundle.shipment, {
-            merge: true
-          });
-        }
-        await batch.commit();
-      }
-    };
-  }
-});
-
-// server/commerce/commerceStore.ts
-var commerceStore_exports = {};
-__export(commerceStore_exports, {
-  assertCommercePersistenceReady: () => assertCommercePersistenceReady,
-  commerceStore: () => commerceStore,
-  getCommercePersistenceMode: () => getCommercePersistenceMode
-});
-function isCommerceFirestoreRequested() {
-  const raw = process.env.COMMERCE_USE_FIRESTORE?.trim().toLowerCase();
-  if (raw === "true") return true;
-  if (raw === "false") return false;
-  return process.env.CATALOG_USE_FIRESTORE === "true";
-}
-async function getAdmin() {
-  if (!useAdminFirestore3) {
-    throw new Error(
-      "Commerce Firestore mode is requested but not available. Set FIREBASE_SERVICE_ACCOUNT_JSON or disable COMMERCE_USE_FIRESTORE."
-    );
-  }
-  if (!adminPromise) {
-    adminPromise = Promise.resolve().then(() => (init_commerceFirestoreAdmin(), commerceFirestoreAdmin_exports)).then((m) => m.commerceFirestoreAdmin);
-  }
-  return adminPromise;
-}
-function getCommercePersistenceMode() {
-  if (firestoreRequested && !credentialsOk) return "firestore-misconfigured";
-  return useAdminFirestore3 ? "firestore-admin" : "memory-disk";
-}
-function assertCommercePersistenceReady() {
-  if (getCommercePersistenceMode() === "firestore-misconfigured") {
-    throw new Error(
-      "Commerce persistence misconfigured: Firestore requested but FIREBASE_SERVICE_ACCOUNT_JSON is not set."
-    );
-  }
-}
-var firestoreRequested, credentialsOk, useAdminFirestore3, adminPromise, commerceStore;
-var init_commerceStore = __esm({
-  "server/commerce/commerceStore.ts"() {
-    init_firestoreAdmin();
-    init_commerceMemoryBackend();
-    firestoreRequested = isCommerceFirestoreRequested();
-    credentialsOk = hasFirebaseAdminCredentials();
-    useAdminFirestore3 = firestoreRequested && credentialsOk;
-    if (firestoreRequested && !credentialsOk) {
-      console.error(
-        "[Commerce] Firestore mode requested (COMMERCE_USE_FIRESTORE/CATALOG_USE_FIRESTORE) but FIREBASE_SERVICE_ACCOUNT_JSON is missing. Fail-closed: commerce writes will error until credentials are configured."
-      );
-    }
-    adminPromise = null;
-    if (!useAdminFirestore3 && getCommercePersistenceMode() === "memory-disk") {
-      ensureCommerceMemoryHydrated();
-    }
-    console.log(`[Commerce] Persistence mode: ${getCommercePersistenceMode()}`);
-    commerceStore = {
-      async getCartByConsumer(consumerId) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).getCartByConsumer(consumerId);
-        return commerceMemoryBackend.getCartByConsumer(consumerId);
-      },
-      async getCart(id) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).getCart(id);
-        return commerceMemoryBackend.getCart(id);
-      },
-      async upsertCart(cart) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).upsertCart(cart);
-        return commerceMemoryBackend.upsertCart(cart);
-      },
-      async deleteCart(id) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).deleteCart(id);
-        commerceMemoryBackend.deleteCart(id);
-      },
-      async getCheckout(id) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).getCheckout(id);
-        return commerceMemoryBackend.getCheckout(id);
-      },
-      async upsertCheckout(checkout) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).upsertCheckout(checkout);
-        return commerceMemoryBackend.upsertCheckout(checkout);
-      },
-      async getOrder(id) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).getOrder(id);
-        return commerceMemoryBackend.getOrder(id);
-      },
-      async listOrders() {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).listOrders();
-        return commerceMemoryBackend.listOrders();
-      },
-      async upsertOrder(order) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).upsertOrder(order);
-        return commerceMemoryBackend.upsertOrder(order);
-      },
-      async getBookingRequest(id) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).getBookingRequest(id);
-        return commerceMemoryBackend.getBookingRequest(id);
-      },
-      async listBookingRequests() {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).listBookingRequests();
-        return commerceMemoryBackend.listBookingRequests();
-      },
-      async upsertBookingRequest(row) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).upsertBookingRequest(row);
-        return commerceMemoryBackend.upsertBookingRequest(row);
-      },
-      async getShipment(id) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).getShipment(id);
-        return commerceMemoryBackend.getShipment(id);
-      },
-      async getShipmentByOrderId(orderId) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).getShipmentByOrderId(orderId);
-        return commerceMemoryBackend.getShipmentByOrderId(orderId);
-      },
-      async listShipments() {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).listShipments();
-        return commerceMemoryBackend.listShipments();
-      },
-      async upsertShipment(row) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).upsertShipment(row);
-        return commerceMemoryBackend.upsertShipment(row);
-      },
-      async getIdempotency(key, consumerId) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).getIdempotency(key, consumerId);
-        return commerceMemoryBackend.getIdempotency(key, consumerId);
-      },
-      async putIdempotency(row) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) return (await getAdmin()).putIdempotency(row);
-        return commerceMemoryBackend.putIdempotency(row);
-      },
-      async commitCheckoutBundle(bundle) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) {
-          await (await getAdmin()).commitCheckoutBundle(bundle);
-          return;
-        }
-        commerceMemoryBackend.commitCheckoutBundle(bundle);
-      },
-      async commitOrderMutation(bundle) {
-        assertCommercePersistenceReady();
-        if (useAdminFirestore3) {
-          await (await getAdmin()).commitOrderMutation(bundle);
-          return;
-        }
-        commerceMemoryBackend.commitOrderMutation(bundle);
-      },
-      async flushPersist() {
-        if (useAdminFirestore3) return;
-        commerceMemoryBackend.flushPersist();
-      }
-    };
-  }
-});
-
-// server/commerce/cartService.ts
-function emitCart(eventName, cartId, actor, payload) {
-  publishEvent({
-    eventName,
-    domain: "Commerce",
-    producer: "commerceCart",
-    aggregateId: cartId,
-    actor,
-    payload
-  });
-}
-function nowIso16() {
-  return (/* @__PURE__ */ new Date()).toISOString();
-}
-function newId(prefix) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-function variantIsActive(v) {
-  if (v.status) return v.status === "active";
-  return v.enabled !== false;
-}
-async function resolveVariantPricing(productId, variantId, basePrice, baseOriginalPrice) {
-  const detail = await catalogStore2.getProductDetail(productId);
-  const v = detail?.productVariants?.find((x) => x.id === variantId);
-  if (!v) return null;
-  return {
-    variantId,
-    sku: v.sku || void 0,
-    unitPrice: typeof v.price === "number" && v.price >= 0 ? v.price : basePrice,
-    originalUnitPrice: typeof v.originalPrice === "number" && v.originalPrice > 0 ? v.originalPrice : baseOriginalPrice,
-    active: variantIsActive(v),
-    options: v.options,
-    images: Array.isArray(v.images) && v.images.length ? v.images : void 0
-  };
-}
-async function resolveAddonsForProduct(productId, requested) {
-  if (!Array.isArray(requested) || requested.length === 0) return [];
-  const detail = await catalogStore2.getProductDetail(productId);
-  const defs = detail?.addonItems ?? [];
-  const out = [];
-  const seen = /* @__PURE__ */ new Set();
-  for (const r of requested) {
-    const id = String(r?.id ?? "").trim();
-    if (!id) throw new CommerceError("Add-on id is required", 400);
-    if (seen.has(id)) throw new CommerceError(`Duplicate add-on "${id}"`, 400);
-    seen.add(id);
-    const def = defs.find((a) => a.id === id);
-    if (!def) throw new CommerceError("Add-on does not belong to this product", 400);
-    if (def.enabled === false) throw new CommerceError(`Add-on "${def.title}" is not available`, 400);
-    const maxQ = typeof def.maxQuantity === "number" && def.maxQuantity >= 1 ? Math.floor(def.maxQuantity) : 1;
-    const q = Math.max(1, Math.floor(Number(r?.quantity ?? 1) || 1));
-    if (q > maxQ) {
-      throw new CommerceError(`Add-on "${def.title}" allows at most ${maxQ} per order`, 400);
-    }
-    const unitPrice = Math.max(0, typeof def.price === "number" ? def.price : 0);
-    out.push({ id: def.id, title: def.title, unitPrice, quantity: q, lineTotal: unitPrice * q });
-  }
-  return out;
-}
-function sumAddonLines(addons) {
-  return (addons ?? []).reduce((s, a) => s + a.lineTotal, 0);
-}
-function computeCartTotals(cart) {
-  const subtotal = cart.items.reduce(
-    (sum, item) => sum + item.unitPrice * item.quantity + sumAddonLines(item.addons),
-    0
-  );
-  const discountTotal = 0;
-  const deliveryTotal = cart.items.length ? DEFAULT_DELIVERY : 0;
-  const taxTotal = 0;
-  return {
-    currency: cart.currency || "BDT",
-    itemCount: cart.items.reduce((n, i) => n + i.quantity, 0),
-    subtotal,
-    discountTotal,
-    deliveryTotal,
-    taxTotal,
-    grandTotal: Math.max(0, subtotal - discountTotal + deliveryTotal + taxTotal)
-  };
-}
-async function getOrCreateCart(consumerId) {
-  const existing = await commerceStore.getCartByConsumer(consumerId);
-  if (existing) return existing;
-  const created2 = {
-    id: newId("cart"),
-    consumerId,
-    items: [],
-    currency: "BDT",
-    createdAt: nowIso16(),
-    updatedAt: nowIso16()
-  };
-  const saved = await commerceStore.upsertCart(created2);
-  emitCart("CartCreated", saved.id, consumerId, { cartId: saved.id, consumerId });
-  return saved;
-}
-async function assertProductEligible(productId, variantId) {
-  const product = await catalogStore2.getProduct(productId);
-  if (!product) throw new CommerceError("Product not found", 404);
-  const lifecycle = normalizeProductLifecycle(product.status);
-  if (lifecycle === "archived" || lifecycle === "suspended") {
-    throw new CommerceError(`Product is ${lifecycle} and cannot be added to cart`);
-  }
-  const brand = (await catalogStore2.listBrands()).find((b) => b.id === product.brandId);
-  if (!brand || !brandIsMarketplaceVisible(brand)) {
-    throw new CommerceError("Brand Marketplace Access does not allow commerce for this product");
-  }
-  if (!isProductPubliclyEligible(product, brand)) {
-    if (lifecycle !== "active" && lifecycle !== "out_of_stock") {
-      throw new CommerceError("Product is not publicly eligible for commerce");
-    }
-  }
-  if (!product.sellerId && brand.sellerId) {
-  }
-  const sellerId = product.sellerId || brand.sellerId;
-  if (!sellerId) {
-    throw new CommerceError("Product has no owning seller");
-  }
-  if (variantId) {
-    const detail = await catalogStore2.getProductDetail(productId);
-    const variant = detail?.productVariants?.find((v) => v.id === variantId);
-    if (!variant) {
-      throw new CommerceError("Variant does not belong to this product", 400);
-    }
-    if (!variantIsActive(variant)) {
-      throw new CommerceError("Selected variant is not available for purchase", 400);
-    }
-  }
-  return { product, brand, sellerId };
-}
-function usesPhysicalInventory(product) {
-  return product.productType !== "service";
-}
-async function assertInventoryAvailable(productId, quantity, variantId) {
-  let record = await getInventoryRecord(productId, variantId);
-  if (!record && !variantId) {
-    const all = await listInventoryForProduct(productId);
-    record = all.find((r) => !r.variantId) || all[0] || null;
-  }
-  const product = await catalogStore2.getProduct(productId);
-  const available = record?.availableQuantity ?? product?.stock ?? 0;
-  if (quantity > available) {
-    throw new CommerceError(`Insufficient stock: requested ${quantity}, available ${available}`);
-  }
-}
-async function assertServiceEligible(serviceId) {
-  const service = await getService(serviceId);
-  if (!service) throw new CommerceError("Service not found", 404);
-  const lifecycle = normalizeProductLifecycle(service.status);
-  if (lifecycle === "archived" || lifecycle === "suspended") {
-    throw new CommerceError(`Service is ${lifecycle} and cannot be added to cart`);
-  }
-  if (lifecycle !== "active" && lifecycle !== "out_of_stock") {
-    throw new CommerceError("Service is not publicly eligible for commerce");
-  }
-  const brand = (await catalogStore2.listBrands()).find((b) => b.id === service.brandId);
-  if (!brand || !brandIsMarketplaceVisible(brand)) {
-    throw new CommerceError("Brand Marketplace Access does not allow commerce for this service");
-  }
-  const sellerId = service.sellerId || brand.sellerId;
-  if (!sellerId) throw new CommerceError("Service has no owning seller");
-  return { service, brand, sellerId };
-}
-async function addCartItem(consumerId, input) {
-  const qty2 = Math.max(1, Math.floor(input.quantity ?? 1));
-  const cart = await getOrCreateCart(consumerId);
-  if (input.listingType === "product") {
-    const { product, brand, sellerId } = await assertProductEligible(
-      input.listingId,
-      input.variantId
-    );
-    let unitPrice = product.price;
-    let originalUnitPrice = product.originalPrice;
-    let variantSku;
-    if (input.variantId) {
-      const rv = await resolveVariantPricing(
-        product.id,
-        input.variantId,
-        product.price,
-        product.originalPrice
-      );
-      if (!rv) throw new CommerceError("Variant does not belong to this product", 400);
-      if (!rv.active) throw new CommerceError("Selected variant is not available for purchase", 400);
-      unitPrice = rv.unitPrice;
-      originalUnitPrice = rv.originalUnitPrice;
-      variantSku = rv.sku;
-    }
-    const resolvedAddons = await resolveAddonsForProduct(product.id, input.addons);
-    const physical = usesPhysicalInventory(product);
-    if (physical) {
-      await assertInventoryAvailable(input.listingId, qty2, input.variantId);
-    }
-    const existing = cart.items.find(
-      (i) => i.listingType === "product" && i.listingId === product.id && (i.variantId || "") === (input.variantId || "")
-    );
-    if (existing) {
-      const nextQty = existing.quantity + qty2;
-      if (physical) await assertInventoryAvailable(product.id, nextQty, input.variantId);
-      existing.quantity = nextQty;
-      existing.unitPrice = unitPrice;
-      existing.originalUnitPrice = originalUnitPrice;
-      existing.variantSku = variantSku;
-      if (Array.isArray(input.addons)) existing.addons = resolvedAddons;
-      if (input.guideOfferRef?.guideId) {
-        existing.guideOfferRef = {
-          guideId: input.guideOfferRef.guideId,
-          productId: input.guideOfferRef.productId || product.id
-        };
-      }
-      if (typeof input.expectedUnitPrice === "number") existing.expectedUnitPrice = input.expectedUnitPrice;
-      existing.updatedAt = nowIso16();
-    } else {
-      const item = {
-        id: newId("ci"),
-        listingType: "product",
-        listingId: product.id,
-        variantId: input.variantId,
-        variantSku,
-        quantity: qty2,
-        title: product.title,
-        brandId: product.brandId,
-        brandName: brand.name || product.brandName,
-        sellerId,
-        unitPrice,
-        originalUnitPrice,
-        addons: resolvedAddons.length ? resolvedAddons : void 0,
-        ...input.guideOfferRef?.guideId ? {
-          guideOfferRef: {
-            guideId: input.guideOfferRef.guideId,
-            productId: input.guideOfferRef.productId || product.id
-          }
-        } : {},
-        ...typeof input.expectedUnitPrice === "number" ? { expectedUnitPrice: input.expectedUnitPrice } : {},
-        currency: "BDT",
-        image: product.image,
-        selectedOptions: input.selectedOptions,
-        addedAt: nowIso16(),
-        updatedAt: nowIso16()
-      };
-      cart.items.push(item);
-    }
-  } else if (input.listingType === "service") {
-    const { service, brand, sellerId } = await assertServiceEligible(input.listingId);
-    const existing = cart.items.find(
-      (i) => i.listingType === "service" && i.listingId === service.id
-    );
-    if (existing) {
-      existing.quantity += qty2;
-      existing.unitPrice = service.price;
-      existing.updatedAt = nowIso16();
-      if (input.requestedAt) existing.requestedAt = input.requestedAt;
-      if (input.serviceArea) existing.serviceArea = input.serviceArea;
-      if (input.notes) existing.notes = input.notes;
-    } else {
-      cart.items.push({
-        id: newId("ci"),
-        listingType: "service",
-        listingId: service.id,
-        quantity: qty2,
-        title: service.title,
-        brandId: service.brandId,
-        brandName: brand.name || service.brandName,
-        sellerId,
-        unitPrice: service.price,
-        currency: service.currency || "BDT",
-        image: service.image,
-        requestedAt: input.requestedAt,
-        serviceArea: input.serviceArea || service.serviceArea,
-        notes: input.notes,
-        addedAt: nowIso16(),
-        updatedAt: nowIso16()
-      });
-    }
-  } else {
-    throw new CommerceError("Unsupported listing type");
-  }
-  cart.updatedAt = nowIso16();
-  const saved = await commerceStore.upsertCart(cart);
-  emitCart("CartItemAdded", saved.id, consumerId, {
-    cartId: saved.id,
-    listingType: input.listingType,
-    listingId: input.listingId,
-    quantity: qty2
-  });
-  emitCart("CartUpdated", saved.id, consumerId, { cartId: saved.id });
-  return { cart: saved, totals: computeCartTotals(saved) };
-}
-async function updateCartItemQuantity(consumerId, itemId, quantity) {
-  const cart = await getOrCreateCart(consumerId);
-  const item = cart.items.find((i) => i.id === itemId);
-  if (!item) throw new CommerceError("Cart item not found", 404);
-  const qty2 = Math.floor(quantity);
-  if (qty2 <= 0) {
-    cart.items = cart.items.filter((i) => i.id !== itemId);
-  } else {
-    if (item.listingType === "product") {
-      const product = await catalogStore2.getProduct(item.listingId);
-      if (!product || usesPhysicalInventory(product)) {
-        await assertInventoryAvailable(item.listingId, qty2, item.variantId);
-      }
-    }
-    item.quantity = qty2;
-    item.updatedAt = nowIso16();
-  }
-  cart.updatedAt = nowIso16();
-  const saved = await commerceStore.upsertCart(cart);
-  emitCart("CartUpdated", saved.id, consumerId, { cartId: saved.id, itemId, quantity: qty2 });
-  return { cart: saved, totals: computeCartTotals(saved) };
-}
-async function updateCartItemAddons(consumerId, itemId, addons) {
-  const cart = await getOrCreateCart(consumerId);
-  const item = cart.items.find((i) => i.id === itemId);
-  if (!item) throw new CommerceError("Cart item not found", 404);
-  if (item.listingType !== "product") {
-    throw new CommerceError("Add-ons apply to product cart items only", 400);
-  }
-  const resolved = await resolveAddonsForProduct(item.listingId, addons);
-  item.addons = resolved.length ? resolved : void 0;
-  item.updatedAt = nowIso16();
-  cart.updatedAt = nowIso16();
-  const saved = await commerceStore.upsertCart(cart);
-  emitCart("CartUpdated", saved.id, consumerId, { cartId: saved.id, itemId, addons: resolved.length });
-  return { cart: saved, totals: computeCartTotals(saved) };
-}
-async function removeCartItem(consumerId, itemId) {
-  const cart = await getOrCreateCart(consumerId);
-  const before = cart.items.length;
-  cart.items = cart.items.filter((i) => i.id !== itemId);
-  if (cart.items.length === before) throw new CommerceError("Cart item not found", 404);
-  cart.updatedAt = nowIso16();
-  const saved = await commerceStore.upsertCart(cart);
-  emitCart("CartItemRemoved", saved.id, consumerId, { cartId: saved.id, itemId });
-  emitCart("CartUpdated", saved.id, consumerId, { cartId: saved.id });
-  return { cart: saved, totals: computeCartTotals(saved) };
-}
-async function clearCart(consumerId) {
-  const cart = await getOrCreateCart(consumerId);
-  cart.items = [];
-  cart.updatedAt = nowIso16();
-  const saved = await commerceStore.upsertCart(cart);
-  emitCart("CartUpdated", saved.id, consumerId, { cartId: saved.id, cleared: true });
-  return saved;
-}
-async function refreshCartPrices(cart) {
-  for (const item of cart.items) {
-    if (item.listingType === "product") {
-      const product = await catalogStore2.getProduct(item.listingId);
-      if (product) {
-        item.unitPrice = product.price;
-        item.originalUnitPrice = product.originalPrice;
-        if (item.variantId) {
-          const rv = await resolveVariantPricing(
-            product.id,
-            item.variantId,
-            product.price,
-            product.originalPrice
-          );
-          if (rv) {
-            item.unitPrice = rv.unitPrice;
-            item.originalUnitPrice = rv.originalUnitPrice;
-            item.variantSku = rv.sku;
-          }
-        }
-        if (item.addons?.length) {
-          const still = [];
-          for (const a of item.addons) {
-            try {
-              const [re] = await resolveAddonsForProduct(product.id, [
-                { id: a.id, quantity: a.quantity }
-              ]);
-              if (re) still.push(re);
-            } catch {
-            }
-          }
-          item.addons = still.length ? still : void 0;
-        }
-      }
-    } else {
-      const service = await getService(item.listingId);
-      if (service) item.unitPrice = service.price;
-    }
-    item.updatedAt = nowIso16();
-  }
-  cart.updatedAt = nowIso16();
-  return commerceStore.upsertCart(cart);
-}
-var CommerceError, DEFAULT_DELIVERY;
-var init_cartService = __esm({
-  "server/commerce/cartService.ts"() {
-    init_catalogStore();
-    init_sellerWorkspace();
-    init_productLifecycle();
-    init_inventoryStore();
-    init_serviceStore();
-    init_eventBus();
-    init_commerceStore();
-    CommerceError = class extends Error {
-      constructor(message, statusCode = 400, opts) {
-        super(message);
-        this.statusCode = statusCode;
-        this.code = opts?.code;
-        this.details = opts?.details;
-        this.name = "CommerceError";
-      }
-    };
-    DEFAULT_DELIVERY = 0;
-  }
-});
-
 // server/catalogDefaults.ts
-var nowIso17, defaultCategories2, defaultBrands2, defaultProducts2, defaultDeals2, defaultHomepage2;
+var nowIso20, defaultCategories2, defaultBrands2, defaultProducts2, defaultDeals2, defaultHomepage2;
 var init_catalogDefaults2 = __esm({
   "server/catalogDefaults.ts"() {
     init_storefrontCategories();
-    nowIso17 = () => (/* @__PURE__ */ new Date()).toISOString();
+    nowIso20 = () => (/* @__PURE__ */ new Date()).toISOString();
     defaultCategories2 = () => buildDefaultCatalogCategories();
     defaultBrands2 = () => {
-      const ts = nowIso17();
+      const ts = nowIso20();
       return [
         {
           id: "brand-samsung",
@@ -9699,7 +12927,7 @@ var init_catalogDefaults2 = __esm({
       ];
     };
     defaultProducts2 = () => {
-      const ts = nowIso17();
+      const ts = nowIso20();
       return [
         {
           id: "prod-s24-ultra",
@@ -9783,7 +13011,7 @@ var init_catalogDefaults2 = __esm({
       ];
     };
     defaultDeals2 = () => {
-      const ts = nowIso17();
+      const ts = nowIso20();
       return [
         {
           id: "deal-s24-flash",
@@ -9826,7 +13054,7 @@ var init_catalogDefaults2 = __esm({
       ];
     };
     defaultHomepage2 = () => {
-      const ts = nowIso17();
+      const ts = nowIso20();
       return {
         id: "default",
         heroBanners: [
@@ -9991,7 +13219,7 @@ async function getAdminStore2() {
   return adminStorePromise2;
 }
 async function resolveDb() {
-  if (memoryMode || useAdminFirestore4) return null;
+  if (memoryMode || useAdminFirestore6) return null;
   if (firestoreDb) return firestoreDb;
   if (firestoreLoadAttempted) return null;
   firestoreLoadAttempted = true;
@@ -10005,7 +13233,7 @@ async function resolveDb() {
   }
 }
 async function listCollection5(collectionName) {
-  if (useAdminFirestore4) {
+  if (useAdminFirestore6) {
     const admin = await getAdminStore2();
     switch (collectionName) {
       case PRODUCTS_COLLECTION6:
@@ -10089,7 +13317,7 @@ function removeFromMemory2(collectionName, id) {
   }
 }
 async function getById4(collectionName, id) {
-  if (useAdminFirestore4) {
+  if (useAdminFirestore6) {
     const admin = await getAdminStore2();
     switch (collectionName) {
       case PRODUCTS_COLLECTION6:
@@ -10117,7 +13345,7 @@ async function getById4(collectionName, id) {
   }
 }
 async function upsert4(collectionName, data) {
-  if (useAdminFirestore4) {
+  if (useAdminFirestore6) {
     const admin = await getAdminStore2();
     switch (collectionName) {
       case PRODUCTS_COLLECTION6:
@@ -10147,7 +13375,7 @@ async function upsert4(collectionName, data) {
   return data;
 }
 async function remove4(collectionName, id) {
-  if (useAdminFirestore4) {
+  if (useAdminFirestore6) {
     const admin = await getAdminStore2();
     switch (collectionName) {
       case PRODUCTS_COLLECTION6:
@@ -10175,7 +13403,7 @@ async function remove4(collectionName, id) {
     }
   }
 }
-var firestoreModule, PRODUCTS_COLLECTION6, CATEGORIES_COLLECTION6, BRANDS_COLLECTION6, DEALS_COLLECTION6, HOMEPAGE_DOC3, useAdminFirestore4, adminStorePromise2, memoryMode, firestoreDb, firestoreLoadAttempted, enableMemoryMode, catalogStore4;
+var firestoreModule, PRODUCTS_COLLECTION6, CATEGORIES_COLLECTION6, BRANDS_COLLECTION6, DEALS_COLLECTION6, HOMEPAGE_DOC3, useAdminFirestore6, adminStorePromise2, memoryMode, firestoreDb, firestoreLoadAttempted, enableMemoryMode, catalogStore4;
 var init_catalogStore2 = __esm({
   "server/catalogStore.ts"() {
     init_catalogDefaults2();
@@ -10188,13 +13416,13 @@ var init_catalogStore2 = __esm({
     BRANDS_COLLECTION6 = "catalog_brands";
     DEALS_COLLECTION6 = "catalog_deals";
     HOMEPAGE_DOC3 = ["settings", "catalog_homepage"];
-    useAdminFirestore4 = process.env.CATALOG_USE_FIRESTORE === "true" && hasFirebaseAdminCredentials();
+    useAdminFirestore6 = process.env.CATALOG_USE_FIRESTORE === "true" && hasFirebaseAdminCredentials();
     adminStorePromise2 = null;
-    memoryMode = process.env.CATALOG_USE_FIRESTORE !== "true" && !useAdminFirestore4;
+    memoryMode = process.env.CATALOG_USE_FIRESTORE !== "true" && !useAdminFirestore6;
     firestoreDb = null;
     firestoreLoadAttempted = false;
     enableMemoryMode = (reason) => {
-      if (!memoryMode && !useAdminFirestore4) {
+      if (!memoryMode && !useAdminFirestore6) {
         memoryMode = true;
         console.warn("[Catalog Store] Falling back to in-memory persistence.", reason);
       }
@@ -10217,7 +13445,7 @@ var init_catalogStore2 = __esm({
       upsertDeal: (payload) => upsert4(DEALS_COLLECTION6, payload),
       deleteDeal: (id) => remove4(DEALS_COLLECTION6, id),
       async getHomepage() {
-        if (useAdminFirestore4) {
+        if (useAdminFirestore6) {
           const admin = await getAdminStore2();
           const homepage = await admin.getHomepage();
           return homepage ?? catalogStore3.getHomepage();
@@ -10236,7 +13464,7 @@ var init_catalogStore2 = __esm({
         }
       },
       async upsertHomepage(homepage) {
-        if (useAdminFirestore4) {
+        if (useAdminFirestore6) {
           const admin = await getAdminStore2();
           return admin.upsertHomepage(homepage);
         }
@@ -10259,16 +13487,16 @@ var init_catalogStore2 = __esm({
 });
 
 // server/messaging/conversations/conversationPersistence.ts
-import { existsSync as existsSync12, mkdirSync as mkdirSync12, readFileSync as readFileSync12, writeFileSync as writeFileSync12 } from "node:fs";
-import { dirname as dirname12, join as join13 } from "node:path";
+import { existsSync as existsSync14, mkdirSync as mkdirSync14, readFileSync as readFileSync14, writeFileSync as writeFileSync14 } from "node:fs";
+import { dirname as dirname14, join as join15 } from "node:path";
 function conversationMemorySnapshotPath() {
-  return process.env.MESSAGING_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH5;
+  return process.env.MESSAGING_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH7;
 }
 function loadConversationMemorySnapshot() {
   const path = conversationMemorySnapshotPath();
-  if (!existsSync12(path)) return null;
+  if (!existsSync14(path)) return null;
   try {
-    const parsed = JSON.parse(readFileSync12(path, "utf8"));
+    const parsed = JSON.parse(readFileSync14(path, "utf8"));
     if (!parsed || parsed.version !== 1) return null;
     return parsed;
   } catch (error2) {
@@ -10277,77 +13505,77 @@ function loadConversationMemorySnapshot() {
   }
 }
 function scheduleConversationMemoryPersist(build) {
-  pendingBuild3 = build;
-  if (persistTimer9) clearTimeout(persistTimer9);
-  persistTimer9 = setTimeout(() => {
+  pendingBuild5 = build;
+  if (persistTimer11) clearTimeout(persistTimer11);
+  persistTimer11 = setTimeout(() => {
     flushConversationMemoryPersist();
   }, 250);
 }
 function flushConversationMemoryPersist() {
-  if (persistTimer9) {
-    clearTimeout(persistTimer9);
-    persistTimer9 = null;
+  if (persistTimer11) {
+    clearTimeout(persistTimer11);
+    persistTimer11 = null;
   }
-  if (!pendingBuild3) return;
+  if (!pendingBuild5) return;
   try {
-    const snapshot = pendingBuild3();
+    const snapshot = pendingBuild5();
     const path = conversationMemorySnapshotPath();
-    mkdirSync12(dirname12(path), { recursive: true });
-    writeFileSync12(path, JSON.stringify(snapshot), "utf8");
+    mkdirSync14(dirname14(path), { recursive: true });
+    writeFileSync14(path, JSON.stringify(snapshot), "utf8");
   } catch (error2) {
     console.error("[MessagingMemoryPersist] Failed to save snapshot:", error2);
   }
 }
-var DEFAULT_PATH5, persistTimer9, pendingBuild3;
+var DEFAULT_PATH7, persistTimer11, pendingBuild5;
 var init_conversationPersistence = __esm({
   "server/messaging/conversations/conversationPersistence.ts"() {
-    DEFAULT_PATH5 = join13(process.cwd(), ".data", "messaging-memory-snapshot.json");
-    persistTimer9 = null;
-    pendingBuild3 = null;
+    DEFAULT_PATH7 = join15(process.cwd(), ".data", "messaging-memory-snapshot.json");
+    persistTimer11 = null;
+    pendingBuild5 = null;
   }
 });
 
 // server/messaging/conversations/conversationMemoryBackend.ts
-function buildSnapshot5() {
+function buildSnapshot7() {
   return {
     version: 1,
     savedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    conversations: state8.conversations,
-    messages: state8.messages,
-    attachments: state8.attachments,
-    socialInbox: state8.socialInbox,
-    supportTickets: state8.supportTickets,
-    adminEntries: state8.adminEntries,
-    supportNotes: state8.supportNotes,
-    supportFollowups: state8.supportFollowups
+    conversations: state10.conversations,
+    messages: state10.messages,
+    attachments: state10.attachments,
+    socialInbox: state10.socialInbox,
+    supportTickets: state10.supportTickets,
+    adminEntries: state10.adminEntries,
+    supportNotes: state10.supportNotes,
+    supportFollowups: state10.supportFollowups
   };
 }
-function schedulePersist6() {
-  scheduleConversationMemoryPersist(buildSnapshot5);
+function schedulePersist8() {
+  scheduleConversationMemoryPersist(buildSnapshot7);
 }
-function upsertById2(arr, row, idOf) {
+function upsertById3(arr, row, idOf) {
   const id = idOf(row);
   const idx = arr.findIndex((r) => idOf(r) === id);
   if (idx >= 0) arr[idx] = row;
   else arr.push(row);
-  schedulePersist6();
+  schedulePersist8();
   return row;
 }
 function ensureConversationMemoryHydrated() {
-  if (hydrated6) return true;
-  hydrated6 = true;
+  if (hydrated8) return true;
+  hydrated8 = true;
   const snapshot = loadConversationMemorySnapshot();
   if (!snapshot) return false;
-  state8.conversations = snapshot.conversations || [];
-  state8.messages = snapshot.messages || [];
-  state8.attachments = snapshot.attachments || [];
-  state8.socialInbox = snapshot.socialInbox || [];
-  state8.supportTickets = snapshot.supportTickets || [];
-  state8.adminEntries = snapshot.adminEntries || [];
-  state8.supportNotes = snapshot.supportNotes || [];
-  state8.supportFollowups = snapshot.supportFollowups || [];
+  state10.conversations = snapshot.conversations || [];
+  state10.messages = snapshot.messages || [];
+  state10.attachments = snapshot.attachments || [];
+  state10.socialInbox = snapshot.socialInbox || [];
+  state10.supportTickets = snapshot.supportTickets || [];
+  state10.adminEntries = snapshot.adminEntries || [];
+  state10.supportNotes = snapshot.supportNotes || [];
+  state10.supportFollowups = snapshot.supportFollowups || [];
   console.log(
-    `[MessagingMemoryPersist] Hydrated (${state8.conversations.length} conversations, ${state8.messages.length} messages).`
+    `[MessagingMemoryPersist] Hydrated (${state10.conversations.length} conversations, ${state10.messages.length} messages).`
   );
   return true;
 }
@@ -10355,14 +13583,14 @@ function conversationMemoryFlushNow() {
   pendingBuildForce();
 }
 function pendingBuildForce() {
-  scheduleConversationMemoryPersist(buildSnapshot5);
+  scheduleConversationMemoryPersist(buildSnapshot7);
   flushConversationMemoryPersist();
 }
-var state8, hydrated6, conversationMemoryBackend;
+var state10, hydrated8, conversationMemoryBackend;
 var init_conversationMemoryBackend = __esm({
   "server/messaging/conversations/conversationMemoryBackend.ts"() {
     init_conversationPersistence();
-    state8 = {
+    state10 = {
       conversations: [],
       messages: [],
       attachments: [],
@@ -10372,109 +13600,109 @@ var init_conversationMemoryBackend = __esm({
       supportNotes: [],
       supportFollowups: []
     };
-    hydrated6 = false;
+    hydrated8 = false;
     conversationMemoryBackend = {
       listConversations: async () => {
         ensureConversationMemoryHydrated();
-        return [...state8.conversations];
+        return [...state10.conversations];
       },
       getConversation: async (id) => {
         ensureConversationMemoryHydrated();
-        return state8.conversations.find((c) => c.id === id) || null;
+        return state10.conversations.find((c) => c.id === id) || null;
       },
       getConversationByReconcileKey: async (key) => {
         ensureConversationMemoryHydrated();
-        return state8.conversations.find((c) => c.reconcileKey === key) || null;
+        return state10.conversations.find((c) => c.reconcileKey === key) || null;
       },
       saveConversation: async (row) => {
         ensureConversationMemoryHydrated();
-        return upsertById2(state8.conversations, row, (r) => r.id);
+        return upsertById3(state10.conversations, row, (r) => r.id);
       },
       listMessages: async (conversationId) => {
         ensureConversationMemoryHydrated();
-        return state8.messages.filter((m) => m.conversationId === conversationId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+        return state10.messages.filter((m) => m.conversationId === conversationId).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       },
       getMessage: async (id) => {
         ensureConversationMemoryHydrated();
-        return state8.messages.find((m) => m.id === id) || null;
+        return state10.messages.find((m) => m.id === id) || null;
       },
       getMessageByExternalId: async (externalMessageId) => {
         ensureConversationMemoryHydrated();
-        return state8.messages.find((m) => m.externalMessageId === externalMessageId) || null;
+        return state10.messages.find((m) => m.externalMessageId === externalMessageId) || null;
       },
       saveMessage: async (row) => {
         ensureConversationMemoryHydrated();
-        return upsertById2(state8.messages, row, (r) => r.id);
+        return upsertById3(state10.messages, row, (r) => r.id);
       },
       saveAttachment: async (row) => {
         ensureConversationMemoryHydrated();
-        return upsertById2(state8.attachments, row, (r) => r.id);
+        return upsertById3(state10.attachments, row, (r) => r.id);
       },
       getAttachment: async (id) => {
         ensureConversationMemoryHydrated();
-        return state8.attachments.find((a) => a.id === id) || null;
+        return state10.attachments.find((a) => a.id === id) || null;
       },
       listAttachmentsForMessage: async (messageId) => {
         ensureConversationMemoryHydrated();
-        return state8.attachments.filter((a) => a.messageId === messageId);
+        return state10.attachments.filter((a) => a.messageId === messageId);
       },
       saveSocialInbox: async (row) => {
         ensureConversationMemoryHydrated();
-        return upsertById2(state8.socialInbox, row, (r) => r.id);
+        return upsertById3(state10.socialInbox, row, (r) => r.id);
       },
       listSocialInbox: async (brandId) => {
         ensureConversationMemoryHydrated();
-        return brandId ? state8.socialInbox.filter((s) => s.brandId === brandId) : [...state8.socialInbox];
+        return brandId ? state10.socialInbox.filter((s) => s.brandId === brandId) : [...state10.socialInbox];
       },
       saveSupportTicket: async (row) => {
         ensureConversationMemoryHydrated();
-        return upsertById2(state8.supportTickets, row, (r) => r.id);
+        return upsertById3(state10.supportTickets, row, (r) => r.id);
       },
       listSupportTickets: async () => {
         ensureConversationMemoryHydrated();
-        return [...state8.supportTickets];
+        return [...state10.supportTickets];
       },
       getSupportTicket: async (id) => {
         ensureConversationMemoryHydrated();
-        return state8.supportTickets.find((t) => t.id === id) || null;
+        return state10.supportTickets.find((t) => t.id === id) || null;
       },
       saveAdminEntry: async (row) => {
         ensureConversationMemoryHydrated();
-        return upsertById2(state8.adminEntries, row, (r) => r.id);
+        return upsertById3(state10.adminEntries, row, (r) => r.id);
       },
       listAdminEntries: async (conversationId) => {
         ensureConversationMemoryHydrated();
-        return conversationId ? state8.adminEntries.filter((e) => e.conversationId === conversationId) : [...state8.adminEntries];
+        return conversationId ? state10.adminEntries.filter((e) => e.conversationId === conversationId) : [...state10.adminEntries];
       },
       saveSupportNote: async (row) => {
         ensureConversationMemoryHydrated();
-        return upsertById2(state8.supportNotes, row, (r) => r.id);
+        return upsertById3(state10.supportNotes, row, (r) => r.id);
       },
       listSupportNotes: async (conversationId) => {
         ensureConversationMemoryHydrated();
-        const rows = conversationId ? state8.supportNotes.filter((n) => n.conversationId === conversationId) : [...state8.supportNotes];
+        const rows = conversationId ? state10.supportNotes.filter((n) => n.conversationId === conversationId) : [...state10.supportNotes];
         return rows.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
       },
       saveSupportFollowup: async (row) => {
         ensureConversationMemoryHydrated();
-        return upsertById2(state8.supportFollowups, row, (r) => r.id);
+        return upsertById3(state10.supportFollowups, row, (r) => r.id);
       },
       listSupportFollowups: async (conversationId) => {
         ensureConversationMemoryHydrated();
-        return conversationId ? state8.supportFollowups.filter((f) => f.conversationId === conversationId) : [...state8.supportFollowups];
+        return conversationId ? state10.supportFollowups.filter((f) => f.conversationId === conversationId) : [...state10.supportFollowups];
       },
       /** Test helper — wipe in-memory state (does not delete snapshot file). */
       __resetForTests: () => {
-        state8.conversations = [];
-        state8.messages = [];
-        state8.attachments = [];
-        state8.socialInbox = [];
-        state8.supportTickets = [];
-        state8.adminEntries = [];
-        state8.supportNotes = [];
-        state8.supportFollowups = [];
-        hydrated6 = true;
-        schedulePersist6();
+        state10.conversations = [];
+        state10.messages = [];
+        state10.attachments = [];
+        state10.socialInbox = [];
+        state10.supportTickets = [];
+        state10.adminEntries = [];
+        state10.supportNotes = [];
+        state10.supportFollowups = [];
+        hydrated8 = true;
+        schedulePersist8();
       }
     };
   }
@@ -10649,8 +13877,8 @@ function isMessagingFirestoreRequested() {
   return process.env.CATALOG_USE_FIRESTORE === "true";
 }
 function getMessagingPersistenceMode() {
-  if (firestoreRequested2 && !credentialsOk2) return "firestore-misconfigured";
-  return useAdminFirestore5 ? "firestore-admin" : "memory-disk";
+  if (firestoreRequested4 && !credentialsOk4) return "firestore-misconfigured";
+  return useAdminFirestore7 ? "firestore-admin" : "memory-disk";
 }
 function assertMessagingPersistenceReady() {
   if (getMessagingPersistenceMode() === "firestore-misconfigured") {
@@ -10661,7 +13889,7 @@ function assertMessagingPersistenceReady() {
 }
 async function requireBackend() {
   assertMessagingPersistenceReady();
-  if (useAdminFirestore5) {
+  if (useAdminFirestore7) {
     const mod = await Promise.resolve().then(() => (init_conversationFirestoreAdmin(), conversationFirestoreAdmin_exports));
     return mod.conversationFirestoreAdmin;
   }
@@ -10669,7 +13897,7 @@ async function requireBackend() {
 }
 function resolveConversationStore() {
   assertMessagingPersistenceReady();
-  if (useAdminFirestore5) {
+  if (useAdminFirestore7) {
     return conversationMemoryBackend;
   }
   return conversationMemoryBackend;
@@ -10740,20 +13968,20 @@ async function saveSupportFollowup(row) {
 async function listSupportFollowups(conversationId) {
   return (await requireBackend()).listSupportFollowups(conversationId);
 }
-var firestoreRequested2, credentialsOk2, useAdminFirestore5;
+var firestoreRequested4, credentialsOk4, useAdminFirestore7;
 var init_conversationStore = __esm({
   "server/messaging/conversations/conversationStore.ts"() {
     init_firestoreAdmin();
     init_conversationMemoryBackend();
-    firestoreRequested2 = isMessagingFirestoreRequested();
-    credentialsOk2 = hasFirebaseAdminCredentials();
-    useAdminFirestore5 = firestoreRequested2 && credentialsOk2;
-    if (firestoreRequested2 && !credentialsOk2) {
+    firestoreRequested4 = isMessagingFirestoreRequested();
+    credentialsOk4 = hasFirebaseAdminCredentials();
+    useAdminFirestore7 = firestoreRequested4 && credentialsOk4;
+    if (firestoreRequested4 && !credentialsOk4) {
       console.error(
         "[Messaging] Firestore mode requested but FIREBASE_SERVICE_ACCOUNT_JSON is missing. Fail-closed."
       );
     }
-    if (!useAdminFirestore5 && getMessagingPersistenceMode() === "memory-disk") {
+    if (!useAdminFirestore7 && getMessagingPersistenceMode() === "memory-disk") {
       ensureConversationMemoryHydrated();
     }
     console.log(`[Messaging] Persistence mode: ${getMessagingPersistenceMode()}`);
@@ -10902,6 +14130,22 @@ function resolveSupportAudience(role) {
   if (sr === "creator") return "creator";
   return "consumer";
 }
+function parseSupportAudience(value) {
+  return typeof value === "string" && SUPPORT_AUDIENCE_ALLOWLIST.has(value) ? value : null;
+}
+function allowedAudiencesForTarget(role) {
+  const sr = resolveSenderRole(role);
+  if (sr === "seller" || sr === "seller_staff") return ["consumer", "seller"];
+  if (sr === "creator") return ["consumer", "creator"];
+  return ["consumer"];
+}
+function resolveSelfServiceSupportAudience(actor, requestedAudience) {
+  const roleDerived = resolveSupportAudience(actor.role);
+  const requested = parseSupportAudience(requestedAudience);
+  if (requested === "consumer") return "consumer";
+  if (requested && requested === roleDerived) return requested;
+  return roleDerived;
+}
 function adminBlanketReadEnabled() {
   return String(process.env.MESSAGING_ADMIN_BLANKET_READ || "").trim().toLowerCase() === "true";
 }
@@ -11000,7 +14244,7 @@ function assertNotForbiddenDmCreate(opts) {
     throw new CommerceError("Consumer \u2194 Consumer messaging is forbidden", 403);
   }
 }
-var ADMIN_ENTER_ROLES, ADMIN_AUTO_READ_CONTEXTS;
+var ADMIN_ENTER_ROLES, SUPPORT_AUDIENCE_ALLOWLIST, ADMIN_AUTO_READ_CONTEXTS;
 var init_conversationPermissions = __esm({
   "server/messaging/conversations/conversationPermissions.ts"() {
     init_brandOwnership();
@@ -11013,6 +14257,7 @@ var init_conversationPermissions = __esm({
       ROLES.MODERATOR,
       ROLES.SUPPORT_AGENT
     ]);
+    SUPPORT_AUDIENCE_ALLOWLIST = /* @__PURE__ */ new Set(["consumer", "seller", "creator"]);
     ADMIN_AUTO_READ_CONTEXTS = /* @__PURE__ */ new Set([
       CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
       CONVERSATION_CONTEXT_TYPES.EXTERNAL_SOCIAL
@@ -11132,14 +14377,14 @@ __export(conversationService_exports, {
   toPublicSupportTicket: () => toPublicSupportTicket,
   updateSupportTicketCrm: () => updateSupportTicketCrm
 });
-import { randomUUID as randomUUID10 } from "node:crypto";
+import { randomUUID as randomUUID11 } from "node:crypto";
 async function resolveSupportTargetUser(targetUserId) {
   const id = String(targetUserId || "").trim();
   if (!id) return null;
   try {
     const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
     const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-    const { eq: eq16 } = await import("drizzle-orm");
+    const { eq: eq18 } = await import("drizzle-orm");
     const rows = await db3.select({
       id: users2.id,
       role: users2.role,
@@ -11149,7 +14394,7 @@ async function resolveSupportTargetUser(targetUserId) {
       email: users2.email,
       emailVerified: users2.emailVerified,
       createdAt: users2.createdAt
-    }).from(users2).where(eq16(users2.id, id)).limit(1);
+    }).from(users2).where(eq18(users2.id, id)).limit(1);
     const u = rows[0];
     if (!u) return null;
     const senderRole = resolveSenderRole(u.role);
@@ -11174,11 +14419,11 @@ async function resolveSupportTargetUser(targetUserId) {
     return null;
   }
 }
-function nowIso18() {
+function nowIso21() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
-function newId2(prefix) {
-  return `${prefix}_${randomUUID10().replace(/-/g, "").slice(0, 16)}`;
+function newId4(prefix) {
+  return `${prefix}_${randomUUID11().replace(/-/g, "").slice(0, 16)}`;
 }
 function emitMessaging(eventName, aggregateId, actor, payload) {
   publishEvent({
@@ -11209,7 +14454,10 @@ function inquiryReconcileKey(kind, listingId, consumerId) {
 function supportReconcileKey(ticketId) {
   return `support:${ticketId}`;
 }
-function activeSupportReconcileKey(userId) {
+function activeSupportReconcileKey(userId, audience) {
+  return `support:active:${userId}:${audience}`;
+}
+function legacyActiveSupportReconcileKey(userId) {
   return `support:active:${userId}`;
 }
 function closedSupportReconcileKey(ticketId) {
@@ -11228,10 +14476,10 @@ async function ensureOrderConversation(input) {
   if (existing) {
     return { conversation: existing, created: false };
   }
-  const now = nowIso18();
+  const now = nowIso21();
   const contextType = input.contextType || (input.sourceChannel && input.sourceChannel !== "platform" ? CONVERSATION_CONTEXT_TYPES.EXTERNAL_SOCIAL : CONVERSATION_CONTEXT_TYPES.ORDER);
   const conversation = {
-    id: newId2("conv"),
+    id: newId4("conv"),
     contextType,
     status: CONVERSATION_STATUSES.ACTIVE,
     consumerId: input.consumerId,
@@ -11293,9 +14541,9 @@ async function ensureClaimConversation(input) {
   if (existing) {
     return { conversation: existing, created: false };
   }
-  const now = nowIso18();
+  const now = nowIso21();
   const conversation = {
-    id: newId2("conv"),
+    id: newId4("conv"),
     contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
     status: CONVERSATION_STATUSES.ACTIVE,
     consumerId: input.consumerId,
@@ -11355,7 +14603,7 @@ async function ensureBookingConversation(input) {
         ...orderConv,
         bookingRequestId: input.bookingRequestId,
         contextType: CONVERSATION_CONTEXT_TYPES.BOOKING,
-        updatedAt: nowIso18(),
+        updatedAt: nowIso21(),
         metadata: {
           ...orderConv.metadata,
           bookingRequestId: input.bookingRequestId,
@@ -11367,9 +14615,9 @@ async function ensureBookingConversation(input) {
       return { conversation: saved2, created: false };
     }
   }
-  const now = nowIso18();
+  const now = nowIso21();
   const conversation = {
-    id: newId2("conv"),
+    id: newId4("conv"),
     contextType: CONVERSATION_CONTEXT_TYPES.BOOKING,
     status: CONVERSATION_STATUSES.ACTIVE,
     consumerId: input.consumerId,
@@ -11455,9 +14703,9 @@ async function persistMessageInternal(input) {
     const dup = await getMessageByExternalId(input.externalMessageId);
     if (dup) return dup;
   }
-  const now = nowIso18();
+  const now = nowIso21();
   const message = {
-    id: newId2("msg"),
+    id: newId4("msg"),
     conversationId: input.conversation.id,
     senderId: input.senderId,
     senderRole: input.senderRole,
@@ -11592,7 +14840,7 @@ async function createAttachment(input) {
     throw new CommerceError("Invalid attachment storage reference", 400);
   }
   const row = {
-    id: newId2("att"),
+    id: newId4("att"),
     messageId: input.messageIdPlaceholder ? "" : "",
     conversationId: input.conversationId,
     fileName: input.fileName.slice(0, 255),
@@ -11600,7 +14848,7 @@ async function createAttachment(input) {
     sizeBytes: input.sizeBytes,
     storageRef: input.storageRef,
     uploadedBy: input.actor.userId,
-    createdAt: nowIso18()
+    createdAt: nowIso21()
   };
   return saveAttachment(row);
 }
@@ -11625,9 +14873,9 @@ async function createProductInquiry(input) {
   let conv = await getConversationByReconcileKey(key);
   let created2 = false;
   if (!conv) {
-    const now = nowIso18();
+    const now = nowIso21();
     conv = await saveConversation2({
-      id: newId2("conv"),
+      id: newId4("conv"),
       contextType: CONVERSATION_CONTEXT_TYPES.PRODUCT_INQUIRY,
       status: CONVERSATION_STATUSES.ACTIVE,
       consumerId: input.actor.userId,
@@ -11676,9 +14924,9 @@ async function createServiceInquiry(input) {
   const key = inquiryReconcileKey("service", input.serviceId, input.actor.userId);
   let conv = await getConversationByReconcileKey(key);
   if (!conv) {
-    const now = nowIso18();
+    const now = nowIso21();
     conv = await saveConversation2({
-      id: newId2("conv"),
+      id: newId4("conv"),
       contextType: CONVERSATION_CONTEXT_TYPES.SERVICE_REQUEST,
       status: CONVERSATION_STATUSES.ACTIVE,
       consumerId: input.actor.userId,
@@ -11721,7 +14969,7 @@ async function createCounterOffer(input) {
   if (!Number.isFinite(input.amount) || input.amount <= 0) {
     throw new CommerceError("Invalid counter-offer amount", 400);
   }
-  const offerId = newId2("offer");
+  const offerId = newId4("offer");
   const expiresAt = new Date(Date.now() + COUNTER_OFFER_TTL_MS).toISOString();
   const message = await persistMessageInternal({
     conversation: conv,
@@ -11774,7 +15022,7 @@ async function respondCounterOffer(input) {
   const nextStatus = input.action === "accept" ? "accepted" : "rejected";
   await saveMessage2({
     ...offerMsg,
-    updatedAt: nowIso18(),
+    updatedAt: nowIso21(),
     metadata: { ...offerMsg.metadata, status: nextStatus }
   });
   const reply = await persistMessageInternal({
@@ -11804,7 +15052,7 @@ async function expireCounterOffer(conversationId, offerId, actor = "system") {
   if (!offerMsg) return;
   await saveMessage2({
     ...offerMsg,
-    updatedAt: nowIso18(),
+    updatedAt: nowIso21(),
     metadata: { ...offerMsg.metadata, status: "expired" }
   });
   emitMessaging("CounterOfferExpired", offerId, actor, {
@@ -11828,11 +15076,11 @@ async function enterConversationAsAdmin(input) {
   const conv = await getConversation2(input.conversationId);
   if (!conv) throw new CommerceError("Conversation not found", 404);
   const entry = await saveAdminEntry({
-    id: newId2("admin_entry"),
+    id: newId4("admin_entry"),
     conversationId: conv.id,
     adminId: input.actor.userId,
     reason: input.reason,
-    createdAt: nowIso18()
+    createdAt: nowIso21()
   });
   Logger.audit("messaging.admin_enter", {
     conversationId: conv.id,
@@ -11852,8 +15100,10 @@ async function openAdminSupportConversation(input) {
   if (target.id === input.adminActor.userId) {
     throw new CommerceError("Cannot start a support conversation with yourself", 400);
   }
+  const requestedAudience = parseSupportAudience(input.audience);
+  const audience = requestedAudience && allowedAudiencesForTarget(target.role).includes(requestedAudience) ? requestedAudience : target.audience;
   const body = input.body ? String(input.body).trim() : "";
-  const existing = await findActiveSupportConversationForUser(target.id);
+  const existing = await findActiveSupportConversationForUser(target.id, audience);
   let conversation;
   let ticket;
   let created2 = false;
@@ -11861,27 +15111,27 @@ async function openAdminSupportConversation(input) {
     conversation = existing.conversation;
     ticket = existing.ticket;
     if (!ticket.audience) {
-      ticket = await saveSupportTicket({ ...ticket, audience: target.audience, updatedAt: nowIso18() });
+      ticket = await saveSupportTicket({ ...ticket, audience, updatedAt: nowIso21() });
     }
-    if (conversation.metadata?.audience !== target.audience) {
+    if (conversation.metadata?.audience === void 0) {
       conversation = await saveConversation2({
         ...conversation,
-        metadata: { ...conversation.metadata, audience: target.audience },
+        metadata: { ...conversation.metadata, audience },
         updatedAt: conversation.updatedAt
       });
     }
   } else {
-    const now = nowIso18();
-    const key = activeSupportReconcileKey(target.id);
+    const now = nowIso21();
+    const key = activeSupportReconcileKey(target.id, audience);
     const raced = await getConversationByReconcileKey(key);
     if (raced && raced.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET) {
       conversation = raced;
       const tickets = await listSupportTickets();
       ticket = tickets.find((t) => t.conversationId === raced.id && t.openerId === target.id) || await saveSupportTicket({
-        id: newId2("ticket"),
+        id: newId4("ticket"),
         conversationId: raced.id,
         openerId: target.id,
-        audience: target.audience,
+        audience,
         subject: input.subject?.trim() || "Choosify Support",
         status: SUPPORT_TICKET_STATUSES.OPEN,
         createdAt: now,
@@ -11890,7 +15140,7 @@ async function openAdminSupportConversation(input) {
     } else {
       const subject = input.subject?.trim() || "Message from Choosify";
       conversation = await saveConversation2({
-        id: newId2("conv"),
+        id: newId4("conv"),
         contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
         status: CONVERSATION_STATUSES.ACTIVE,
         consumerId: target.id,
@@ -11905,15 +15155,15 @@ async function openAdminSupportConversation(input) {
           supportTicket: true,
           subject,
           openerId: target.id,
-          audience: target.audience,
+          audience,
           initiatedByAdminId: input.adminActor.userId
         }
       });
       ticket = await saveSupportTicket({
-        id: newId2("ticket"),
+        id: newId4("ticket"),
         conversationId: conversation.id,
         openerId: target.id,
-        audience: target.audience,
+        audience,
         initiatedByAdminId: input.adminActor.userId,
         subject,
         status: SUPPORT_TICKET_STATUSES.OPEN,
@@ -11924,18 +15174,18 @@ async function openAdminSupportConversation(input) {
       emitMessaging("ConversationCreated", conversation.id, input.adminActor.userId, {
         conversationId: conversation.id,
         supportTicketId: ticket.id,
-        audience: target.audience,
+        audience,
         initiatedByAdminId: input.adminActor.userId,
         contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET
       });
     }
   }
   await saveAdminEntry({
-    id: newId2("admin_entry"),
+    id: newId4("admin_entry"),
     conversationId: conversation.id,
     adminId: input.adminActor.userId,
     reason: "admin_initiated_support",
-    createdAt: nowIso18()
+    createdAt: nowIso21()
   });
   Logger.audit("messaging.admin_initiated_support", {
     conversationId: conversation.id,
@@ -11996,18 +15246,24 @@ function toPublicSupportTicket(ticket) {
   void reopenedAt;
   return pub;
 }
-async function findActiveSupportConversationForUser(userId) {
+async function findActiveSupportConversationForUser(userId, audience) {
   if (!userId) return null;
-  const byKey = await getConversationByReconcileKey(activeSupportReconcileKey(userId));
-  if (byKey && byKey.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET) {
+  const tryKey = async (key) => {
+    const byKey = await getConversationByReconcileKey(key);
+    if (!byKey || byKey.contextType !== CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET) return null;
     const tickets2 = await listSupportTickets();
     const ticket = tickets2.find((t) => t.conversationId === byKey.id && t.openerId === userId) || null;
     if (ticket && isActiveSupportConversation(ticket, byKey)) {
       return { ticket: toPublicSupportTicket(ticket), conversation: byKey };
     }
-  }
+    return null;
+  };
+  const byNewKey = await tryKey(activeSupportReconcileKey(userId, audience));
+  if (byNewKey) return byNewKey;
+  const legacyMatch = await tryKey(legacyActiveSupportReconcileKey(userId));
+  if (legacyMatch && (legacyMatch.ticket.audience ?? audience) === audience) return legacyMatch;
   const tickets = await listSupportTickets();
-  const mine = tickets.filter((t) => t.openerId === userId);
+  const mine = tickets.filter((t) => t.openerId === userId && (t.audience ?? audience) === audience);
   for (const ticket of mine) {
     const conv = await getConversation2(ticket.conversationId);
     if (conv && isActiveSupportConversation(ticket, conv)) {
@@ -12018,20 +15274,23 @@ async function findActiveSupportConversationForUser(userId) {
 }
 async function ensureActiveSupportConversation(input) {
   if (!input.actor?.userId) throw new CommerceError("Authentication required", 401);
-  const existing = await findActiveSupportConversationForUser(input.actor.userId);
+  const audience = resolveSelfServiceSupportAudience(input.actor, input.audience);
+  const existing = await findActiveSupportConversationForUser(input.actor.userId, audience);
   if (existing) {
     return { ...existing, message: null, created: false };
   }
   const created2 = await createSupportTicket({
     actor: input.actor,
     subject: input.subject,
-    body: input.body
+    body: input.body,
+    audience: input.audience
   });
   return { ...created2, created: true };
 }
 async function createSupportTicket(input) {
   if (!input.actor?.userId) throw new CommerceError("Authentication required", 401);
-  const racedExisting = await findActiveSupportConversationForUser(input.actor.userId);
+  const audience = resolveSelfServiceSupportAudience(input.actor, input.audience);
+  const racedExisting = await findActiveSupportConversationForUser(input.actor.userId, audience);
   if (racedExisting) {
     const messages = await listMessages2(racedExisting.conversation.id);
     return {
@@ -12048,9 +15307,9 @@ async function createSupportTicket(input) {
   }
   const subject = String(input.subject || "Support request").trim() || "Support request";
   const body = String(input.body || "Hello, I need help from Choosify Support.").trim() || "Hello, I need help from Choosify Support.";
-  const ticketId = newId2("ticket");
-  const now = nowIso18();
-  const key = activeSupportReconcileKey(input.actor.userId);
+  const ticketId = newId4("ticket");
+  const now = nowIso21();
+  const key = activeSupportReconcileKey(input.actor.userId, audience);
   const racedKey = await getConversationByReconcileKey(key);
   if (racedKey) {
     const tickets = await listSupportTickets();
@@ -12061,9 +15320,8 @@ async function createSupportTicket(input) {
     }
   }
   const openerSenderRole = resolveSenderRole(input.actor.role);
-  const audience = resolveSupportAudience(input.actor.role);
   const conversation = {
-    id: newId2("conv"),
+    id: newId4("conv"),
     contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
     status: CONVERSATION_STATUSES.ACTIVE,
     consumerId: input.actor.userId,
@@ -12134,7 +15392,7 @@ async function resolveSupportTicket(input) {
   const conv = await getConversation2(ticket.conversationId);
   if (!conv) throw new CommerceError("Conversation not found", 404);
   await assertCanReadConversation(conv, input.actor);
-  const now = nowIso18();
+  const now = nowIso21();
   const closedConv = await saveConversation2({
     ...markClosed(conv, now),
     reconcileKey: closedSupportReconcileKey(ticket.id),
@@ -12165,7 +15423,7 @@ async function findTicketByConversation(conversationId) {
 async function updateSupportTicketCrm(input) {
   assertSupportStaff(input.actor);
   const ticket = await findTicketByConversation(input.conversationId);
-  const now = nowIso18();
+  const now = nowIso21();
   const next = { ...ticket, updatedAt: now };
   if (input.patch.status && input.patch.status !== ticket.status) {
     const allowed = Object.values(SUPPORT_TICKET_STATUSES);
@@ -12209,8 +15467,8 @@ async function resolveStaffRole(userId) {
   try {
     const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
     const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-    const { eq: eq16 } = await import("drizzle-orm");
-    const rows = await db3.select({ role: users2.role }).from(users2).where(eq16(users2.id, userId)).limit(1);
+    const { eq: eq18 } = await import("drizzle-orm");
+    const rows = await db3.select({ role: users2.role }).from(users2).where(eq18(users2.id, userId)).limit(1);
     return rows[0]?.role || null;
   } catch {
     return null;
@@ -12223,13 +15481,13 @@ async function addSupportNote(input) {
   const ticket = await findTicketByConversation(input.conversationId);
   const staff = await resolveStaffDisplay(input.actor.userId);
   const note = {
-    id: newId2("snote"),
+    id: newId4("snote"),
     conversationId: input.conversationId,
     ticketId: ticket.id,
     authorId: input.actor.userId,
     authorName: staff,
     body,
-    createdAt: nowIso18()
+    createdAt: nowIso21()
   };
   const saved = await saveSupportNote(note);
   Logger.audit("messaging.support_note_added", {
@@ -12247,8 +15505,8 @@ async function resolveStaffDisplay(userId) {
   try {
     const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
     const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
-    const { eq: eq16 } = await import("drizzle-orm");
-    const rows = await db3.select({ displayName: users2.displayName, email: users2.email }).from(users2).where(eq16(users2.id, userId)).limit(1);
+    const { eq: eq18 } = await import("drizzle-orm");
+    const rows = await db3.select({ displayName: users2.displayName, email: users2.email }).from(users2).where(eq18(users2.id, userId)).limit(1);
     return rows[0]?.displayName || rows[0]?.email || "Choosify staff";
   } catch {
     return "Choosify staff";
@@ -12261,15 +15519,15 @@ async function scheduleSupportFollowup(input) {
   const ticket = await findTicketByConversation(input.conversationId);
   for (const f of await listSupportFollowups(input.conversationId)) {
     if (f.status === "scheduled") {
-      await saveSupportFollowup({ ...f, status: "cancelled", cancelledAt: nowIso18(), cancelReason: "manual" });
+      await saveSupportFollowup({ ...f, status: "cancelled", cancelledAt: nowIso21(), cancelReason: "manual" });
     }
   }
   const followup = {
-    id: newId2("sfu"),
+    id: newId4("sfu"),
     conversationId: input.conversationId,
     ticketId: ticket.id,
     createdBy: input.actor.userId,
-    createdAt: nowIso18(),
+    createdAt: nowIso21(),
     dueAt: new Date(due).toISOString(),
     status: "scheduled"
   };
@@ -12277,7 +15535,7 @@ async function scheduleSupportFollowup(input) {
   await saveSupportTicket({
     ...ticket,
     status: SUPPORT_TICKET_STATUSES.NEED_FOLLOWUP,
-    updatedAt: nowIso18()
+    updatedAt: nowIso21()
   });
   Logger.audit("messaging.support_followup_scheduled", {
     conversationId: input.conversationId,
@@ -12297,7 +15555,7 @@ async function cancelSupportFollowup(input) {
   const f = rows.find((x) => x.id === input.followupId);
   if (!f) throw new CommerceError("Follow-up not found", 404);
   if (f.status !== "scheduled") return f;
-  return saveSupportFollowup({ ...f, status: "cancelled", cancelledAt: nowIso18(), cancelReason: "manual" });
+  return saveSupportFollowup({ ...f, status: "cancelled", cancelledAt: nowIso21(), cancelReason: "manual" });
 }
 async function sweepDueFollowups() {
   const now = Date.now();
@@ -12306,7 +15564,7 @@ async function sweepDueFollowups() {
   for (const f of all) {
     if (f.status !== "scheduled") continue;
     if (Date.parse(f.dueAt) > now) continue;
-    await saveSupportFollowup({ ...f, status: "fired", firedAt: nowIso18() });
+    await saveSupportFollowup({ ...f, status: "fired", firedAt: nowIso21() });
     fired += 1;
     try {
       const ticket = (await listSupportTickets()).find((t) => t.id === f.ticketId);
@@ -12314,7 +15572,7 @@ async function sweepDueFollowups() {
         await saveSupportTicket({
           ...ticket,
           status: SUPPORT_TICKET_STATUSES.NEED_FOLLOWUP,
-          updatedAt: nowIso18()
+          updatedAt: nowIso21()
         });
       }
       const conv = await getConversation2(f.conversationId);
@@ -12341,7 +15599,7 @@ async function onSupportUserReply(conversationId) {
   try {
     const ticket = (await listSupportTickets()).find((t) => t.conversationId === conversationId);
     if (!ticket) return;
-    const now = nowIso18();
+    const now = nowIso21();
     for (const f of await listSupportFollowups(conversationId)) {
       if (f.status === "scheduled") {
         await saveSupportFollowup({ ...f, status: "cancelled", cancelledAt: now, cancelReason: "reply" });
@@ -12538,10 +15796,10 @@ async function connectSocialInbox(input) {
   const status = getMessagingStatus2();
   const channelState = input.channel === "facebook" ? status.channels.messenger : input.channel === "instagram" ? status.channels.instagram : status.channels.whatsapp;
   const channelReady = channelState === "ready";
-  const now = nowIso18();
+  const now = nowIso21();
   const existing = (await listSocialInbox(input.brandId)).find((s) => s.channel === input.channel);
   const row = {
-    id: existing?.id || newId2("social"),
+    id: existing?.id || newId4("social"),
     brandId: input.brandId,
     sellerId: input.actor.userId,
     channel: input.channel,
@@ -12565,8 +15823,8 @@ async function disconnectSocialInbox(input) {
   return saveSocialInbox({
     ...existing,
     status: "disconnected",
-    disconnectedAt: nowIso18(),
-    updatedAt: nowIso18()
+    disconnectedAt: nowIso21(),
+    updatedAt: nowIso21()
   });
 }
 async function ingestExternalMessageIdempotent(input) {
@@ -13003,7 +16261,7 @@ async function notifySeller(sellerId, sellerName, body, orderId) {
   }
 }
 async function createBookingRequest(input) {
-  const ts = nowIso19();
+  const ts = nowIso22();
   const id = `BOOK-REQ-${Date.now()}`;
   const isService = input.isService ?? true;
   const price = Number(input.price) || 0;
@@ -13115,7 +16373,7 @@ async function acceptBookingRequest(id, actor) {
   if (existing.status !== "pending" && existing.status !== "countered") {
     throw new Error(`Cannot accept booking in status ${existing.status}`);
   }
-  const ts = nowIso19();
+  const ts = nowIso22();
   const { order, buyerPayBy, orderId, invoiceId } = buildOrderFromRequest(existing, ts);
   operationsStore.createOrder(order);
   scheduleOperationsPersist();
@@ -13171,7 +16429,7 @@ async function declineBookingRequest(id, actor, declineReason) {
   if (existing.status !== "pending" && existing.status !== "countered") {
     throw new Error(`Cannot decline booking in status ${existing.status}`);
   }
-  const ts = nowIso19();
+  const ts = nowIso22();
   const nextVersion = existing.version + 1;
   const updated = {
     ...existing,
@@ -13221,7 +16479,7 @@ async function buyerDeclineBookingRequest(id, actor, declineReason) {
   if (existing.status !== "countered" && existing.status !== "accepted") {
     throw new Error(`Cannot buyer-decline booking in status ${existing.status}`);
   }
-  const ts = nowIso19();
+  const ts = nowIso22();
   const nextVersion = existing.version + 1;
   const updated = {
     ...existing,
@@ -13273,7 +16531,7 @@ async function counterBookingRequest(id, actor, patch) {
   }
   const price = patch.price !== void 0 ? Number(patch.price) : existing.price;
   if (!Number.isFinite(price) || price <= 0) throw new Error("Enter a valid counter-offer price");
-  const ts = nowIso19();
+  const ts = nowIso22();
   const nextVersion = existing.version + 1;
   const buyerRespondBy = hoursFromNow(BOOKING_SELLER_RESPONSE_HOURS);
   const fields = { ...existing.fields, ...patch.fields || {} };
@@ -13329,7 +16587,7 @@ async function buyerAcceptCounter(id, actor) {
   if (existing.status === "accepted" && existing.orderId) {
     const order2 = operationsStore.getOrder(existing.orderId);
     if (order2) {
-      const ts2 = nowIso19();
+      const ts2 = nowIso22();
       const nextVersion2 = existing.version + 1;
       const updated2 = {
         ...existing,
@@ -13364,7 +16622,7 @@ async function buyerAcceptCounter(id, actor) {
       return { request: updated2, offer: toBookingOfferCard(updated2), order: order2 };
     }
   }
-  const ts = nowIso19();
+  const ts = nowIso22();
   const { order, buyerPayBy, orderId, invoiceId } = buildOrderFromRequest(existing, ts);
   operationsStore.createOrder(order);
   scheduleOperationsPersist();
@@ -13413,7 +16671,7 @@ async function markBookingPaid(id, _orderId, paymentType = "full") {
   if (paymentType === "partial" && !existing.partialPaymentEnabled) {
     throw new Error("This listing does not offer partial payment");
   }
-  const ts = nowIso19();
+  const ts = nowIso22();
   const resolvedOrderId = existing.orderId;
   if (resolvedOrderId) {
     if (paymentType === "partial" && existing.depositPercent) {
@@ -13565,7 +16823,7 @@ async function sweepExpiredBookings(now = Date.now()) {
   }
   return result;
 }
-var nowIso19;
+var nowIso22;
 var init_bookingService = __esm({
   "server/booking/bookingService.ts"() {
     init_bookingFieldConfig();
@@ -13576,1930 +16834,7 @@ var init_bookingService = __esm({
     init_bookingStore();
     init_platformMessagingBridge();
     init_systemNotify();
-    nowIso19 = () => (/* @__PURE__ */ new Date()).toISOString();
-  }
-});
-
-// server/payments/mockProvider.ts
-var MockPaymentProvider, mockPaymentProvider;
-var init_mockProvider = __esm({
-  "server/payments/mockProvider.ts"() {
-    MockPaymentProvider = class {
-      constructor() {
-        this.id = "mock";
-        /** val_id → expected validation outcome (harness can seed). */
-        this.validations = /* @__PURE__ */ new Map();
-      }
-      isConfigured() {
-        return (process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() === "true";
-      }
-      seedValidation(valId, outcome) {
-        this.validations.set(valId, {
-          valid: outcome.valid,
-          amount: outcome.amount,
-          status: outcome.status || (outcome.valid ? "VALID" : "INVALID_TRANSACTION"),
-          tranId: outcome.tranId,
-          currency: outcome.currency || "BDT"
-        });
-      }
-      clear() {
-        this.validations.clear();
-      }
-      async initiateSession(input) {
-        if (!this.isConfigured()) {
-          throw new Error("Mock payment gateway is not enabled (set PAYMENT_GATEWAY_MOCK=true)");
-        }
-        const redirectUrl = `${input.successUrl}${input.successUrl.includes("?") ? "&" : "?"}mock=1&tran_id=${encodeURIComponent(input.tranId)}&orderId=${encodeURIComponent(input.order.orderId)}`;
-        return { redirectUrl, tranId: input.tranId, sessionKey: `mock_session_${input.tranId}` };
-      }
-      async validateTransaction(valId) {
-        if (!this.isConfigured()) {
-          throw new Error("Mock payment gateway is not enabled");
-        }
-        const seeded = this.validations.get(valId);
-        if (!seeded) {
-          return {
-            valid: false,
-            amount: 0,
-            status: "INVALID_TRANSACTION",
-            tranId: "",
-            valId
-          };
-        }
-        return {
-          valid: seeded.valid,
-          amount: seeded.amount,
-          currency: seeded.currency || "BDT",
-          status: seeded.status,
-          tranId: seeded.tranId,
-          valId
-        };
-      }
-      /** Interface readiness only — mock refund for harness; not a business Refund workflow. */
-      async refundTransaction(input) {
-        if (!this.isConfigured()) {
-          throw new Error("Mock payment gateway is not enabled");
-        }
-        return {
-          success: true,
-          refundRefId: `mock_refund_${input.bankTranId}`,
-          message: "mock refund accepted (no business workflow)"
-        };
-      }
-    };
-    mockPaymentProvider = new MockPaymentProvider();
-  }
-});
-
-// server/payments/sslcommerzProvider.ts
-function readMode() {
-  const raw = (process.env.SSLCOMMERZ_MODE || "sandbox").trim().toLowerCase();
-  return raw === "live" ? "live" : "sandbox";
-}
-function baseUrl(mode) {
-  return mode === "live" ? "https://securepay.sslcommerz.com" : "https://sandbox.sslcommerz.com";
-}
-function sessionOrderId(input) {
-  return input.order.orderId;
-}
-var SslcommerzProvider, sslcommerzProvider;
-var init_sslcommerzProvider = __esm({
-  "server/payments/sslcommerzProvider.ts"() {
-    SslcommerzProvider = class {
-      constructor() {
-        this.id = "sslcommerz";
-      }
-      storeId() {
-        return (process.env.SSLCOMMERZ_STORE_ID || "").trim();
-      }
-      storePassword() {
-        return (process.env.SSLCOMMERZ_STORE_PASSWORD || "").trim();
-      }
-      isConfigured() {
-        return Boolean(this.storeId() && this.storePassword());
-      }
-      getMode() {
-        return readMode();
-      }
-      async initiateSession(input) {
-        if (!this.isConfigured()) {
-          throw new Error("SSLCommerz is not configured");
-        }
-        const mode = this.getMode();
-        const url = `${baseUrl(mode)}/gwprocess/v4/api.php`;
-        const orderId = sessionOrderId(input);
-        const body = new URLSearchParams();
-        body.set("store_id", this.storeId());
-        body.set("store_passwd", this.storePassword());
-        body.set("total_amount", input.amount.toFixed(2));
-        body.set("currency", input.currency || "BDT");
-        body.set("tran_id", input.tranId);
-        body.set("success_url", input.successUrl);
-        body.set("fail_url", input.failUrl);
-        body.set("cancel_url", input.cancelUrl);
-        body.set("ipn_url", input.ipnUrl);
-        body.set("cus_name", input.customer.name || "Customer");
-        body.set("cus_email", input.customer.email || "noreply@choosify.com.bd");
-        body.set("cus_phone", input.customer.phone || "01700000000");
-        body.set("cus_add1", input.customer.address || "N/A");
-        body.set("cus_city", input.customer.city || "Dhaka");
-        body.set("cus_country", "Bangladesh");
-        body.set("shipping_method", "NO");
-        body.set("product_name", `Order ${orderId}`);
-        body.set("product_category", "general");
-        body.set("product_profile", "general");
-        body.set("value_a", orderId);
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: body.toString()
-        });
-        const rawText = await response.text();
-        let data = {};
-        try {
-          data = JSON.parse(rawText);
-        } catch {
-          throw new Error(`SSLCommerz session response was not JSON: ${rawText.slice(0, 200)}`);
-        }
-        const status = String(data.status || "");
-        const gatewayUrl = String(data.GatewayPageURL || data.gatewayPageURL || "");
-        if (status !== "SUCCESS" || !gatewayUrl) {
-          const reason = String(data.failedreason || data.message || status || "unknown");
-          throw new Error(`SSLCommerz session failed: ${reason}`);
-        }
-        return {
-          redirectUrl: gatewayUrl,
-          tranId: input.tranId,
-          sessionKey: typeof data.sessionkey === "string" ? data.sessionkey : void 0
-        };
-      }
-      async validateTransaction(valId) {
-        if (!this.isConfigured()) {
-          throw new Error("SSLCommerz is not configured");
-        }
-        if (!valId.trim()) {
-          return {
-            valid: false,
-            amount: 0,
-            status: "MISSING_VAL_ID",
-            tranId: "",
-            valId: ""
-          };
-        }
-        const mode = this.getMode();
-        const qs = new URLSearchParams({
-          val_id: valId.trim(),
-          store_id: this.storeId(),
-          store_passwd: this.storePassword(),
-          v: "1",
-          format: "json"
-        });
-        const url = `${baseUrl(mode)}/validator/api/validationserverAPI.php?${qs}`;
-        const response = await fetch(url, { method: "GET" });
-        const rawText = await response.text();
-        let data = {};
-        try {
-          data = JSON.parse(rawText);
-        } catch {
-          throw new Error(`SSLCommerz validation response was not JSON: ${rawText.slice(0, 200)}`);
-        }
-        const status = String(data.status || "").toUpperCase();
-        const valid = status === "VALID" || status === "VALIDATED";
-        return {
-          valid,
-          amount: Number(data.amount || data.store_amount || 0),
-          currency: typeof data.currency === "string" ? data.currency : "BDT",
-          status,
-          tranId: String(data.tran_id || ""),
-          valId: String(data.val_id || valId),
-          raw: data
-        };
-      }
-      /**
-       * Provider-level refund API readiness (Sprint 8 input).
-       * Does NOT implement Returns/Refund business workflow.
-       */
-      async refundTransaction(input) {
-        if (!this.isConfigured()) {
-          throw new Error("SSLCommerz is not configured");
-        }
-        const mode = this.getMode();
-        const url = `${baseUrl(mode)}/validator/api/merchantTransIDvalidationAPI.php`;
-        const body = new URLSearchParams();
-        body.set("store_id", this.storeId());
-        body.set("store_passwd", this.storePassword());
-        body.set("bank_tran_id", input.bankTranId);
-        body.set("refund_amount", input.refundAmount.toFixed(2));
-        body.set("refund_remarks", input.refundRemarks || "Refund");
-        if (input.refeId) body.set("refe_id", input.refeId);
-        body.set("format", "json");
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: body.toString()
-        });
-        const rawText = await response.text();
-        let data = {};
-        try {
-          data = JSON.parse(rawText);
-        } catch {
-          return {
-            success: false,
-            message: `SSLCommerz refund response was not JSON: ${rawText.slice(0, 200)}`
-          };
-        }
-        const status = String(data.status || "").toUpperCase();
-        const success2 = status === "SUCCESS" || status === "REFUNDED" || status === "PROCESSING";
-        return {
-          success: success2,
-          refundRefId: typeof data.refund_ref_id === "string" ? data.refund_ref_id : void 0,
-          message: String(data.errorReason || data.failedreason || data.status || ""),
-          raw: data
-        };
-      }
-    };
-    sslcommerzProvider = new SslcommerzProvider();
-  }
-});
-
-// server/payments/commercePaymentPersistence.ts
-import { existsSync as existsSync13, mkdirSync as mkdirSync13, readFileSync as readFileSync13, writeFileSync as writeFileSync13 } from "node:fs";
-import { dirname as dirname13, join as join14 } from "node:path";
-function paymentsMemorySnapshotPath() {
-  return process.env.PAYMENTS_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH6;
-}
-function loadPaymentsMemorySnapshot() {
-  const path = paymentsMemorySnapshotPath();
-  if (!existsSync13(path)) return null;
-  try {
-    const parsed = JSON.parse(readFileSync13(path, "utf8"));
-    if (!parsed || parsed.version !== 1) return null;
-    return parsed;
-  } catch (error2) {
-    console.warn("[PaymentsMemoryPersist] Failed to load snapshot:", error2);
-    return null;
-  }
-}
-function schedulePaymentsMemoryPersist(build) {
-  pendingBuild4 = build;
-  if (persistTimer10) clearTimeout(persistTimer10);
-  persistTimer10 = setTimeout(() => {
-    flushPaymentsMemoryPersist();
-  }, 250);
-}
-function flushPaymentsMemoryPersist() {
-  if (persistTimer10) {
-    clearTimeout(persistTimer10);
-    persistTimer10 = null;
-  }
-  if (!pendingBuild4) return;
-  try {
-    const snapshot = pendingBuild4();
-    const path = paymentsMemorySnapshotPath();
-    mkdirSync13(dirname13(path), { recursive: true });
-    writeFileSync13(path, JSON.stringify(snapshot), "utf8");
-  } catch (error2) {
-    console.error("[PaymentsMemoryPersist] Failed to save snapshot:", error2);
-  }
-}
-var DEFAULT_PATH6, persistTimer10, pendingBuild4;
-var init_commercePaymentPersistence = __esm({
-  "server/payments/commercePaymentPersistence.ts"() {
-    DEFAULT_PATH6 = join14(process.cwd(), ".data", "payments-memory-snapshot.json");
-    persistTimer10 = null;
-    pendingBuild4 = null;
-  }
-});
-
-// server/payments/commercePaymentMemoryBackend.ts
-function buildSnapshot6() {
-  return {
-    version: 1,
-    savedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    payments: state9.payments,
-    processedValIds: [...state9.processedValIds]
-  };
-}
-function schedulePersist7() {
-  schedulePaymentsMemoryPersist(buildSnapshot6);
-}
-function ensurePaymentsMemoryHydrated() {
-  if (hydrated7) return true;
-  hydrated7 = true;
-  const snapshot = loadPaymentsMemorySnapshot();
-  if (!snapshot) return false;
-  state9.payments = snapshot.payments || [];
-  state9.processedValIds = new Set(snapshot.processedValIds || []);
-  console.log(
-    `[PaymentsMemoryPersist] Hydrated (${state9.payments.length} payments).`
-  );
-  return true;
-}
-var state9, hydrated7, paymentsMemoryBackend;
-var init_commercePaymentMemoryBackend = __esm({
-  "server/payments/commercePaymentMemoryBackend.ts"() {
-    init_commercePaymentPersistence();
-    state9 = {
-      payments: [],
-      processedValIds: /* @__PURE__ */ new Set()
-    };
-    hydrated7 = false;
-    paymentsMemoryBackend = {
-      getPayment(paymentId) {
-        ensurePaymentsMemoryHydrated();
-        return state9.payments.find((p) => p.paymentId === paymentId) ?? null;
-      },
-      getByTranId(tranId) {
-        ensurePaymentsMemoryHydrated();
-        return state9.payments.find((p) => p.providerTransactionId === tranId) ?? null;
-      },
-      getByIdempotency(consumerId, key) {
-        ensurePaymentsMemoryHydrated();
-        return state9.payments.find(
-          (p) => p.consumerId === consumerId && p.idempotencyKey === key
-        ) ?? null;
-      },
-      listByCheckout(checkoutId) {
-        ensurePaymentsMemoryHydrated();
-        return state9.payments.filter((p) => p.checkoutId === checkoutId);
-      },
-      listPayments() {
-        ensurePaymentsMemoryHydrated();
-        return [...state9.payments];
-      },
-      upsertPayment(payment) {
-        ensurePaymentsMemoryHydrated();
-        const idx = state9.payments.findIndex((p) => p.paymentId === payment.paymentId);
-        if (idx >= 0) state9.payments[idx] = payment;
-        else state9.payments.push(payment);
-        schedulePersist7();
-        return payment;
-      },
-      hasProcessedValId(valId) {
-        ensurePaymentsMemoryHydrated();
-        if (state9.processedValIds.has(valId)) return true;
-        return state9.payments.some(
-          (p) => (p.providerValId === valId || p.processedValIds?.includes(valId)) && p.status === "captured"
-        );
-      },
-      markValIdProcessed(valId) {
-        ensurePaymentsMemoryHydrated();
-        if (!valId) return;
-        state9.processedValIds.add(valId);
-        schedulePersist7();
-      },
-      flush() {
-        ensurePaymentsMemoryHydrated();
-        schedulePaymentsMemoryPersist(buildSnapshot6);
-        flushPaymentsMemoryPersist();
-      },
-      /** Test helper — clear in-memory state (does not delete disk until flush). */
-      __resetForTests() {
-        state9.payments = [];
-        state9.processedValIds.clear();
-        hydrated7 = true;
-        schedulePersist7();
-      }
-    };
-  }
-});
-
-// server/payments/commercePaymentFirestoreAdmin.ts
-var commercePaymentFirestoreAdmin_exports = {};
-__export(commercePaymentFirestoreAdmin_exports, {
-  COMMERCE_PAYMENTS: () => COMMERCE_PAYMENTS,
-  COMMERCE_PAYMENT_VAL_IDS: () => COMMERCE_PAYMENT_VAL_IDS,
-  commercePaymentFirestoreAdmin: () => commercePaymentFirestoreAdmin
-});
-var COMMERCE_PAYMENTS, COMMERCE_PAYMENT_VAL_IDS, commercePaymentFirestoreAdmin;
-var init_commercePaymentFirestoreAdmin = __esm({
-  "server/payments/commercePaymentFirestoreAdmin.ts"() {
-    init_queryHelpers();
-    COMMERCE_PAYMENTS = "commerce_payments";
-    COMMERCE_PAYMENT_VAL_IDS = "commerce_payment_val_ids";
-    commercePaymentFirestoreAdmin = {
-      async getPayment(paymentId) {
-        return getDocumentById(COMMERCE_PAYMENTS, paymentId);
-      },
-      async getByTranId(tranId) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(COMMERCE_PAYMENTS).where("providerTransactionId", "==", tranId).limit(1).get();
-        if (snap.empty) return null;
-        return snap.docs[0].data();
-      },
-      async getByIdempotency(consumerId, key) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(COMMERCE_PAYMENTS).where("consumerId", "==", consumerId).where("idempotencyKey", "==", key).limit(1).get();
-        if (snap.empty) return null;
-        return snap.docs[0].data();
-      },
-      async listByCheckout(checkoutId) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(COMMERCE_PAYMENTS).where("checkoutId", "==", checkoutId).get();
-        return snap.docs.map((d) => d.data());
-      },
-      async upsertPayment(payment) {
-        await upsertDocumentById(COMMERCE_PAYMENTS, payment.paymentId, payment);
-        return payment;
-      },
-      async hasProcessedValId(valId) {
-        if (!valId) return false;
-        const existing = await getDocumentById(
-          COMMERCE_PAYMENT_VAL_IDS,
-          valId
-        );
-        return Boolean(existing);
-      },
-      async markValIdProcessed(valId) {
-        if (!valId) return;
-        await upsertDocumentById(COMMERCE_PAYMENT_VAL_IDS, valId, {
-          processedAt: (/* @__PURE__ */ new Date()).toISOString()
-        });
-      }
-    };
-  }
-});
-
-// server/payments/commercePaymentStore.ts
-var commercePaymentStore_exports = {};
-__export(commercePaymentStore_exports, {
-  assertPaymentsPersistenceReady: () => assertPaymentsPersistenceReady,
-  commercePaymentStore: () => commercePaymentStore,
-  getPaymentsPersistenceMode: () => getPaymentsPersistenceMode
-});
-function isPaymentsFirestoreRequested() {
-  const raw = process.env.PAYMENTS_USE_FIRESTORE?.trim().toLowerCase();
-  if (raw === "true") return true;
-  if (raw === "false") return false;
-  const commerce = process.env.COMMERCE_USE_FIRESTORE?.trim().toLowerCase();
-  if (commerce === "true") return true;
-  if (commerce === "false") return false;
-  return process.env.CATALOG_USE_FIRESTORE === "true";
-}
-async function getAdmin2() {
-  if (!useAdminFirestore6) {
-    throw new Error(
-      "Payments Firestore mode is requested but not available. Set FIREBASE_SERVICE_ACCOUNT_JSON or disable PAYMENTS_USE_FIRESTORE."
-    );
-  }
-  if (!adminPromise2) {
-    adminPromise2 = Promise.resolve().then(() => (init_commercePaymentFirestoreAdmin(), commercePaymentFirestoreAdmin_exports)).then(
-      (m) => m.commercePaymentFirestoreAdmin
-    );
-  }
-  return adminPromise2;
-}
-function getPaymentsPersistenceMode() {
-  if (firestoreRequested3 && !credentialsOk3) return "firestore-misconfigured";
-  return useAdminFirestore6 ? "firestore-admin" : "memory-disk";
-}
-function assertPaymentsPersistenceReady() {
-  if (getPaymentsPersistenceMode() === "firestore-misconfigured") {
-    throw new Error(
-      "Payments persistence misconfigured: Firestore requested but FIREBASE_SERVICE_ACCOUNT_JSON is not set."
-    );
-  }
-}
-var firestoreRequested3, credentialsOk3, useAdminFirestore6, adminPromise2, commercePaymentStore;
-var init_commercePaymentStore = __esm({
-  "server/payments/commercePaymentStore.ts"() {
-    init_firestoreAdmin();
-    init_commercePaymentMemoryBackend();
-    firestoreRequested3 = isPaymentsFirestoreRequested();
-    credentialsOk3 = hasFirebaseAdminCredentials();
-    useAdminFirestore6 = firestoreRequested3 && credentialsOk3;
-    if (firestoreRequested3 && !credentialsOk3) {
-      console.error(
-        "[Payments] Firestore mode requested but FIREBASE_SERVICE_ACCOUNT_JSON is missing. Fail-closed."
-      );
-    }
-    adminPromise2 = null;
-    if (!useAdminFirestore6 && getPaymentsPersistenceMode() === "memory-disk") {
-      ensurePaymentsMemoryHydrated();
-    }
-    console.log(`[Payments] Persistence mode: ${getPaymentsPersistenceMode()}`);
-    commercePaymentStore = {
-      async getPayment(paymentId) {
-        assertPaymentsPersistenceReady();
-        if (useAdminFirestore6) return (await getAdmin2()).getPayment(paymentId);
-        return paymentsMemoryBackend.getPayment(paymentId);
-      },
-      async getByTranId(tranId) {
-        assertPaymentsPersistenceReady();
-        if (useAdminFirestore6) return (await getAdmin2()).getByTranId(tranId);
-        return paymentsMemoryBackend.getByTranId(tranId);
-      },
-      async getByIdempotency(consumerId, key) {
-        assertPaymentsPersistenceReady();
-        if (useAdminFirestore6) return (await getAdmin2()).getByIdempotency(consumerId, key);
-        return paymentsMemoryBackend.getByIdempotency(consumerId, key);
-      },
-      async listByCheckout(checkoutId) {
-        assertPaymentsPersistenceReady();
-        if (useAdminFirestore6) return (await getAdmin2()).listByCheckout(checkoutId);
-        return paymentsMemoryBackend.listByCheckout(checkoutId);
-      },
-      async upsertPayment(payment) {
-        assertPaymentsPersistenceReady();
-        if (useAdminFirestore6) return (await getAdmin2()).upsertPayment(payment);
-        return paymentsMemoryBackend.upsertPayment(payment);
-      },
-      async hasProcessedValId(valId) {
-        assertPaymentsPersistenceReady();
-        if (useAdminFirestore6) return (await getAdmin2()).hasProcessedValId(valId);
-        return paymentsMemoryBackend.hasProcessedValId(valId);
-      },
-      async markValIdProcessed(valId) {
-        assertPaymentsPersistenceReady();
-        if (useAdminFirestore6) {
-          await (await getAdmin2()).markValIdProcessed(valId);
-          return;
-        }
-        paymentsMemoryBackend.markValIdProcessed(valId);
-      },
-      flushMemory() {
-        if (!useAdminFirestore6) paymentsMemoryBackend.flush();
-      }
-    };
-  }
-});
-
-// server/escrow/money.ts
-function toMinor(major) {
-  return Math.round(Number(major) * 100);
-}
-function fromMinor(minor) {
-  return Math.round(minor) / 100;
-}
-function addMajor(a, b) {
-  return fromMinor(toMinor(a) + toMinor(b));
-}
-function subMajor(a, b) {
-  return fromMinor(toMinor(a) - toMinor(b));
-}
-function percentOfMajor(major, percent) {
-  const minor = toMinor(major);
-  return fromMinor(Math.round(minor * percent / 100));
-}
-function amountsEqual(a, b, toleranceMinor = 0) {
-  return Math.abs(toMinor(a) - toMinor(b)) <= toleranceMinor;
-}
-var init_money = __esm({
-  "server/escrow/money.ts"() {
-  }
-});
-
-// server/escrow/commissionPolicy.ts
-function resolveSettlementCommission(grossAmount) {
-  const raw = process.env.PLATFORM_SETTLEMENT_COMMISSION_PERCENT?.trim();
-  let percent = 0;
-  let policySource = "default_zero";
-  if (raw !== void 0 && raw !== "") {
-    const n = Number(raw);
-    if (Number.isFinite(n) && n >= 0 && n <= 100) {
-      percent = n;
-      policySource = "env";
-    }
-  }
-  const commissionAmount = percentOfMajor(grossAmount, percent);
-  const sellerNetAmount = subMajor(grossAmount, commissionAmount);
-  return {
-    grossAmount,
-    commissionPercent: percent,
-    commissionAmount,
-    sellerNetAmount,
-    policySource
-  };
-}
-var init_commissionPolicy = __esm({
-  "server/escrow/commissionPolicy.ts"() {
-    init_money();
-  }
-});
-
-// server/escrow/escrowLifecycle.ts
-function canSettleFromStatus(status) {
-  return status === "held" || status === "partial_refund_remaining";
-}
-function canRefundFromStatus(status) {
-  return status === "held" || status === "partial_refund_remaining";
-}
-function blocksSettlement(status) {
-  return status === "dispute_hold" || status === "full_refund" || status === "settled" || status === "administrative_adjustment";
-}
-var init_escrowLifecycle = __esm({
-  "server/escrow/escrowLifecycle.ts"() {
-  }
-});
-
-// server/escrow/escrowPersistence.ts
-import { existsSync as existsSync14, mkdirSync as mkdirSync14, readFileSync as readFileSync14, writeFileSync as writeFileSync14 } from "node:fs";
-import { dirname as dirname14, join as join15 } from "node:path";
-function escrowMemorySnapshotPath() {
-  return process.env.ESCROW_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH7;
-}
-function loadEscrowMemorySnapshot() {
-  const path = escrowMemorySnapshotPath();
-  if (!existsSync14(path)) return null;
-  try {
-    const parsed = JSON.parse(readFileSync14(path, "utf8"));
-    if (!parsed || parsed.version !== 1) return null;
-    return parsed;
-  } catch (error2) {
-    console.warn("[EscrowMemoryPersist] Failed to load snapshot:", error2);
-    return null;
-  }
-}
-function scheduleEscrowMemoryPersist(build) {
-  pendingBuild5 = build;
-  if (persistTimer11) clearTimeout(persistTimer11);
-  persistTimer11 = setTimeout(() => {
-    flushEscrowMemoryPersist();
-  }, 250);
-}
-function flushEscrowMemoryPersist() {
-  if (persistTimer11) {
-    clearTimeout(persistTimer11);
-    persistTimer11 = null;
-  }
-  if (!pendingBuild5) return;
-  try {
-    const snapshot = pendingBuild5();
-    const path = escrowMemorySnapshotPath();
-    mkdirSync14(dirname14(path), { recursive: true });
-    writeFileSync14(path, JSON.stringify(snapshot), "utf8");
-  } catch (error2) {
-    console.error("[EscrowMemoryPersist] Failed to save snapshot:", error2);
-  }
-}
-var DEFAULT_PATH7, persistTimer11, pendingBuild5;
-var init_escrowPersistence = __esm({
-  "server/escrow/escrowPersistence.ts"() {
-    DEFAULT_PATH7 = join15(process.cwd(), ".data", "escrow-memory-snapshot.json");
-    persistTimer11 = null;
-    pendingBuild5 = null;
-  }
-});
-
-// server/escrow/escrowMemoryBackend.ts
-function buildSnapshot7() {
-  return {
-    version: 1,
-    savedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    escrows: state10.escrows,
-    settlements: state10.settlements,
-    balances: state10.balances,
-    balanceEntries: state10.balanceEntries,
-    refunds: state10.refunds,
-    returns: state10.returns
-  };
-}
-function schedulePersist8() {
-  scheduleEscrowMemoryPersist(buildSnapshot7);
-}
-function upsertById3(arr, row, idOf) {
-  const id = idOf(row);
-  const idx = arr.findIndex((r) => idOf(r) === id);
-  if (idx >= 0) arr[idx] = row;
-  else arr.push(row);
-  schedulePersist8();
-  return row;
-}
-function ensureEscrowMemoryHydrated() {
-  if (hydrated8) return true;
-  hydrated8 = true;
-  const snapshot = loadEscrowMemorySnapshot();
-  if (!snapshot) return false;
-  state10.escrows = snapshot.escrows || [];
-  state10.settlements = snapshot.settlements || [];
-  state10.balances = snapshot.balances || [];
-  state10.balanceEntries = snapshot.balanceEntries || [];
-  state10.refunds = snapshot.refunds || [];
-  state10.returns = snapshot.returns || [];
-  console.log(
-    `[EscrowMemoryPersist] Hydrated (${state10.escrows.length} escrows, ${state10.settlements.length} settlements).`
-  );
-  return true;
-}
-var state10, hydrated8, escrowMemoryBackend;
-var init_escrowMemoryBackend = __esm({
-  "server/escrow/escrowMemoryBackend.ts"() {
-    init_escrowPersistence();
-    state10 = {
-      escrows: [],
-      settlements: [],
-      balances: [],
-      balanceEntries: [],
-      refunds: [],
-      returns: []
-    };
-    hydrated8 = false;
-    escrowMemoryBackend = {
-      getEscrow(escrowId) {
-        ensureEscrowMemoryHydrated();
-        return state10.escrows.find((e) => e.escrowId === escrowId) ?? null;
-      },
-      getEscrowByPaymentOrder(paymentId, orderId) {
-        ensureEscrowMemoryHydrated();
-        return state10.escrows.find((e) => e.paymentId === paymentId && e.orderId === orderId) ?? null;
-      },
-      listEscrowsByPayment(paymentId) {
-        ensureEscrowMemoryHydrated();
-        return state10.escrows.filter((e) => e.paymentId === paymentId);
-      },
-      listEscrowsByOrder(orderId) {
-        ensureEscrowMemoryHydrated();
-        return state10.escrows.filter((e) => e.orderId === orderId);
-      },
-      listEscrowsBySeller(sellerId) {
-        ensureEscrowMemoryHydrated();
-        return state10.escrows.filter((e) => e.sellerId === sellerId);
-      },
-      upsertEscrow(row) {
-        ensureEscrowMemoryHydrated();
-        return upsertById3(state10.escrows, row, (r) => r.escrowId);
-      },
-      getSettlement(settlementId) {
-        ensureEscrowMemoryHydrated();
-        return state10.settlements.find((s) => s.settlementId === settlementId) ?? null;
-      },
-      getSettlementByEscrow(escrowId) {
-        ensureEscrowMemoryHydrated();
-        return state10.settlements.find((s) => s.escrowId === escrowId) ?? null;
-      },
-      upsertSettlement(row) {
-        ensureEscrowMemoryHydrated();
-        return upsertById3(state10.settlements, row, (r) => r.settlementId);
-      },
-      getBalance(sellerId, currency) {
-        ensureEscrowMemoryHydrated();
-        return state10.balances.find((b) => b.sellerId === sellerId && b.currency === currency) ?? null;
-      },
-      upsertBalance(row) {
-        ensureEscrowMemoryHydrated();
-        const idx = state10.balances.findIndex(
-          (b) => b.sellerId === row.sellerId && b.currency === row.currency
-        );
-        if (idx >= 0) state10.balances[idx] = row;
-        else state10.balances.push(row);
-        schedulePersist8();
-        return row;
-      },
-      getBalanceEntryByIdempotency(key) {
-        ensureEscrowMemoryHydrated();
-        return state10.balanceEntries.find((e) => e.idempotencyKey === key) ?? null;
-      },
-      appendBalanceEntry(row) {
-        ensureEscrowMemoryHydrated();
-        const existing = state10.balanceEntries.find((e) => e.idempotencyKey === row.idempotencyKey);
-        if (existing) return existing;
-        state10.balanceEntries.push(row);
-        schedulePersist8();
-        return row;
-      },
-      listBalanceEntriesBySeller(sellerId) {
-        ensureEscrowMemoryHydrated();
-        return state10.balanceEntries.filter((e) => e.sellerId === sellerId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-      },
-      getRefund(refundId) {
-        ensureEscrowMemoryHydrated();
-        return state10.refunds.find((r) => r.refundId === refundId) ?? null;
-      },
-      listRefundsByEscrow(escrowId) {
-        ensureEscrowMemoryHydrated();
-        return state10.refunds.filter((r) => r.escrowId === escrowId);
-      },
-      upsertRefund(row) {
-        ensureEscrowMemoryHydrated();
-        return upsertById3(state10.refunds, row, (r) => r.refundId);
-      },
-      getReturn(returnId) {
-        ensureEscrowMemoryHydrated();
-        return state10.returns.find((r) => r.returnId === returnId) ?? null;
-      },
-      listReturnsByOrder(orderId) {
-        ensureEscrowMemoryHydrated();
-        return state10.returns.filter((r) => r.orderId === orderId);
-      },
-      upsertReturn(row) {
-        ensureEscrowMemoryHydrated();
-        return upsertById3(state10.returns, row, (r) => r.returnId);
-      },
-      flush() {
-        ensureEscrowMemoryHydrated();
-        scheduleEscrowMemoryPersist(buildSnapshot7);
-        flushEscrowMemoryPersist();
-      }
-    };
-  }
-});
-
-// server/escrow/escrowFirestoreAdmin.ts
-var escrowFirestoreAdmin_exports = {};
-__export(escrowFirestoreAdmin_exports, {
-  escrowFirestoreAdmin: () => escrowFirestoreAdmin
-});
-function balanceDocId(sellerId, currency) {
-  return `${sellerId}__${currency}`;
-}
-var ESCROWS, SETTLEMENTS, BALANCES, BALANCE_ENTRIES, REFUNDS, RETURNS, escrowFirestoreAdmin;
-var init_escrowFirestoreAdmin = __esm({
-  "server/escrow/escrowFirestoreAdmin.ts"() {
-    init_queryHelpers();
-    ESCROWS = "commerce_escrows";
-    SETTLEMENTS = "commerce_settlements";
-    BALANCES = "commerce_seller_balances";
-    BALANCE_ENTRIES = "commerce_seller_balance_entries";
-    REFUNDS = "commerce_refunds";
-    RETURNS = "commerce_returns";
-    escrowFirestoreAdmin = {
-      async getEscrow(escrowId) {
-        return getDocumentById(ESCROWS, escrowId);
-      },
-      async getEscrowByPaymentOrder(paymentId, orderId) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(ESCROWS).where("paymentId", "==", paymentId).where("orderId", "==", orderId).limit(1).get();
-        if (snap.empty) return null;
-        return snap.docs[0].data();
-      },
-      async listEscrowsByPayment(paymentId) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(ESCROWS).where("paymentId", "==", paymentId).get();
-        return snap.docs.map((d) => d.data());
-      },
-      async listEscrowsByOrder(orderId) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(ESCROWS).where("orderId", "==", orderId).get();
-        return snap.docs.map((d) => d.data());
-      },
-      async listEscrowsBySeller(sellerId) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(ESCROWS).where("sellerId", "==", sellerId).get();
-        return snap.docs.map((d) => d.data());
-      },
-      async upsertEscrow(row) {
-        await upsertDocumentById(ESCROWS, row.escrowId, row);
-        return row;
-      },
-      async getSettlement(settlementId) {
-        return getDocumentById(SETTLEMENTS, settlementId);
-      },
-      async getSettlementByEscrow(escrowId) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(SETTLEMENTS).where("escrowId", "==", escrowId).limit(1).get();
-        if (snap.empty) return null;
-        return snap.docs[0].data();
-      },
-      async upsertSettlement(row) {
-        await upsertDocumentById(SETTLEMENTS, row.settlementId, row);
-        return row;
-      },
-      async getBalance(sellerId, currency) {
-        return getDocumentById(BALANCES, balanceDocId(sellerId, currency));
-      },
-      async upsertBalance(row) {
-        await upsertDocumentById(BALANCES, balanceDocId(row.sellerId, row.currency), row);
-        return row;
-      },
-      async getBalanceEntryByIdempotency(key) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(BALANCE_ENTRIES).where("idempotencyKey", "==", key).limit(1).get();
-        if (snap.empty) return null;
-        return snap.docs[0].data();
-      },
-      async appendBalanceEntry(row) {
-        const existing = await this.getBalanceEntryByIdempotency(row.idempotencyKey);
-        if (existing) return existing;
-        await upsertDocumentById(BALANCE_ENTRIES, row.entryId, row);
-        return row;
-      },
-      async getRefund(refundId) {
-        return getDocumentById(REFUNDS, refundId);
-      },
-      async listRefundsByEscrow(escrowId) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(REFUNDS).where("escrowId", "==", escrowId).get();
-        return snap.docs.map((d) => d.data());
-      },
-      async upsertRefund(row) {
-        await upsertDocumentById(REFUNDS, row.refundId, row);
-        return row;
-      },
-      async getReturn(returnId) {
-        return getDocumentById(RETURNS, returnId);
-      },
-      async listReturnsByOrder(orderId) {
-        const db3 = await requireAdminFirestore();
-        const snap = await db3.collection(RETURNS).where("orderId", "==", orderId).get();
-        return snap.docs.map((d) => d.data());
-      },
-      async upsertReturn(row) {
-        await upsertDocumentById(RETURNS, row.returnId, row);
-        return row;
-      }
-    };
-  }
-});
-
-// server/escrow/escrowStore.ts
-var escrowStore_exports = {};
-__export(escrowStore_exports, {
-  assertEscrowPersistenceReady: () => assertEscrowPersistenceReady,
-  escrowStore: () => escrowStore,
-  getEscrowPersistenceMode: () => getEscrowPersistenceMode
-});
-function isEscrowFirestoreRequested() {
-  const raw = process.env.ESCROW_USE_FIRESTORE?.trim().toLowerCase();
-  if (raw === "true") return true;
-  if (raw === "false") return false;
-  const commerce = process.env.COMMERCE_USE_FIRESTORE?.trim().toLowerCase();
-  if (commerce === "true") return true;
-  if (commerce === "false") return false;
-  return process.env.CATALOG_USE_FIRESTORE === "true";
-}
-function getEscrowPersistenceMode() {
-  if (firestoreRequested4 && !credentialsOk4) return "firestore-misconfigured";
-  return useAdminFirestore7 ? "firestore-admin" : "memory-disk";
-}
-function assertEscrowPersistenceReady() {
-  if (getEscrowPersistenceMode() === "firestore-misconfigured") {
-    throw new Error(
-      "Escrow persistence misconfigured: Firestore requested but FIREBASE_SERVICE_ACCOUNT_JSON is not set."
-    );
-  }
-}
-async function requireMemory() {
-  assertEscrowPersistenceReady();
-  if (useAdminFirestore7) {
-    const mod = await Promise.resolve().then(() => (init_escrowFirestoreAdmin(), escrowFirestoreAdmin_exports));
-    return mod.escrowFirestoreAdmin;
-  }
-  return escrowMemoryBackend;
-}
-var firestoreRequested4, credentialsOk4, useAdminFirestore7, escrowStore;
-var init_escrowStore = __esm({
-  "server/escrow/escrowStore.ts"() {
-    init_firestoreAdmin();
-    init_escrowMemoryBackend();
-    firestoreRequested4 = isEscrowFirestoreRequested();
-    credentialsOk4 = hasFirebaseAdminCredentials();
-    useAdminFirestore7 = firestoreRequested4 && credentialsOk4;
-    if (firestoreRequested4 && !credentialsOk4) {
-      console.error(
-        "[Escrow] Firestore mode requested but FIREBASE_SERVICE_ACCOUNT_JSON is missing. Fail-closed."
-      );
-    }
-    if (!useAdminFirestore7 && getEscrowPersistenceMode() === "memory-disk") {
-      ensureEscrowMemoryHydrated();
-    }
-    console.log(`[Escrow] Persistence mode: ${getEscrowPersistenceMode()}`);
-    escrowStore = {
-      async getEscrow(escrowId) {
-        return (await requireMemory()).getEscrow(escrowId);
-      },
-      async getEscrowByPaymentOrder(paymentId, orderId) {
-        return (await requireMemory()).getEscrowByPaymentOrder(paymentId, orderId);
-      },
-      async listEscrowsByPayment(paymentId) {
-        return (await requireMemory()).listEscrowsByPayment(paymentId);
-      },
-      async listEscrowsByOrder(orderId) {
-        return (await requireMemory()).listEscrowsByOrder(orderId);
-      },
-      async listEscrowsBySeller(sellerId) {
-        return (await requireMemory()).listEscrowsBySeller(sellerId);
-      },
-      async upsertEscrow(row) {
-        return (await requireMemory()).upsertEscrow(row);
-      },
-      async getSettlement(settlementId) {
-        return (await requireMemory()).getSettlement(settlementId);
-      },
-      async getSettlementByEscrow(escrowId) {
-        return (await requireMemory()).getSettlementByEscrow(escrowId);
-      },
-      async upsertSettlement(row) {
-        return (await requireMemory()).upsertSettlement(row);
-      },
-      async getBalance(sellerId, currency) {
-        return (await requireMemory()).getBalance(sellerId, currency);
-      },
-      async upsertBalance(row) {
-        return (await requireMemory()).upsertBalance(row);
-      },
-      async getBalanceEntryByIdempotency(key) {
-        return (await requireMemory()).getBalanceEntryByIdempotency(key);
-      },
-      async appendBalanceEntry(row) {
-        return (await requireMemory()).appendBalanceEntry(row);
-      },
-      async listBalanceEntriesBySeller(sellerId) {
-        return (await requireMemory()).listBalanceEntriesBySeller(sellerId);
-      },
-      async getRefund(refundId) {
-        return (await requireMemory()).getRefund(refundId);
-      },
-      async listRefundsByEscrow(escrowId) {
-        return (await requireMemory()).listRefundsByEscrow(escrowId);
-      },
-      async upsertRefund(row) {
-        return (await requireMemory()).upsertRefund(row);
-      },
-      async getReturn(returnId) {
-        return (await requireMemory()).getReturn(returnId);
-      },
-      async listReturnsByOrder(orderId) {
-        return (await requireMemory()).listReturnsByOrder(orderId);
-      },
-      async upsertReturn(row) {
-        return (await requireMemory()).upsertReturn(row);
-      },
-      flushMemory() {
-        if (!useAdminFirestore7) escrowMemoryBackend.flush();
-      }
-    };
-  }
-});
-
-// server/escrow/escrowService.ts
-var escrowService_exports = {};
-__export(escrowService_exports, {
-  allocateCapturedToOrders: () => allocateCapturedToOrders,
-  applyAdministrativeAdjustment: () => applyAdministrativeAdjustment,
-  createEscrowsForCapturedPayment: () => createEscrowsForCapturedPayment,
-  creditSellerBalanceFromSettlement: () => creditSellerBalanceFromSettlement,
-  decideReturn: () => decideReturn,
-  getEscrowForActor: () => getEscrowForActor,
-  getSellerBalanceForActor: () => getSellerBalanceForActor,
-  harnessMarkCapturedWithoutEscrow: () => harnessMarkCapturedWithoutEscrow,
-  harnessSettleWithoutBalanceCredit: () => harnessSettleWithoutBalanceCredit,
-  harnessSimulateProviderRefundWithoutLocalReverse: () => harnessSimulateProviderRefundWithoutLocalReverse,
-  harnessSimulateSettlementWithoutBalanceCredit: () => harnessSimulateSettlementWithoutBalanceCredit,
-  placeDisputeHold: () => placeDisputeHold,
-  processEscrowRefund: () => processEscrowRefund,
-  reconcileEscrowEffectsForPayment: () => reconcileEscrowEffectsForPayment,
-  reconcileRefundLocalEffects: () => reconcileRefundLocalEffects,
-  reconcileSettlementBalanceCredit: () => reconcileSettlementBalanceCredit,
-  refundEscrowsForCancelledOrder: () => refundEscrowsForCancelledOrder,
-  requestReturn: () => requestReturn,
-  settleEscrowForOrder: () => settleEscrowForOrder
-});
-import { randomUUID as randomUUID12 } from "node:crypto";
-function nowIso20() {
-  return (/* @__PURE__ */ new Date()).toISOString();
-}
-function resolveRefundProvider() {
-  const mockOn = (process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() === "true";
-  const sslOn = sslcommerzProvider.isConfigured();
-  if (mockOn && mockPaymentProvider.isConfigured()) return mockPaymentProvider;
-  if (sslOn) return sslcommerzProvider;
-  if (mockOn) return mockPaymentProvider;
-  return sslcommerzProvider;
-}
-function newId3(prefix) {
-  return `${prefix}_${randomUUID12().replace(/-/g, "").slice(0, 16)}`;
-}
-function emitFinance(eventName, aggregateId, actor, payload) {
-  publishEvent({
-    eventName,
-    domain: "Finance",
-    producer: "escrowService",
-    aggregateId,
-    actor,
-    payload
-  });
-}
-function allocateCapturedToOrders(payment, orders) {
-  const checkoutTotal = orders.reduce((s, o) => s + (o.grandTotal || 0), 0) || 1;
-  let allocatedCaptured = 0;
-  const shares = [];
-  for (let i = 0; i < orders.length; i++) {
-    const order = orders[i];
-    const isLast = i === orders.length - 1;
-    const share = checkoutTotal > 0 ? (order.grandTotal || 0) / checkoutTotal : 1 / Math.max(orders.length, 1);
-    const orderCaptured = isLast ? Math.round(((payment.capturedAmount || 0) - allocatedCaptured) * 100) / 100 : Math.round((payment.capturedAmount || 0) * share * 100) / 100;
-    allocatedCaptured += orderCaptured;
-    shares.push({ order, capturedAmount: orderCaptured });
-  }
-  return shares;
-}
-function emptyBalance(sellerId, currency) {
-  return {
-    sellerId,
-    currency,
-    escrowBalance: 0,
-    pendingSettlement: 0,
-    availableBalance: 0,
-    updatedAt: nowIso20()
-  };
-}
-async function bumpEscrowBalanceAggregate(sellerId, currency, deltaHeld) {
-  const bal = await escrowStore.getBalance(sellerId, currency) || emptyBalance(sellerId, currency);
-  await escrowStore.upsertBalance({
-    ...bal,
-    escrowBalance: addMajor(bal.escrowBalance, deltaHeld),
-    updatedAt: nowIso20()
-  });
-}
-async function createEscrowsForCapturedPayment(payment, actor) {
-  if (payment.status !== "captured") {
-    return [];
-  }
-  if (!payment.capturedAmount || payment.capturedAmount <= 0) {
-    return [];
-  }
-  const orders = (await Promise.all(payment.orderIds.map((id) => commerceStore.getOrder(id)))).filter(Boolean);
-  const shares = allocateCapturedToOrders(payment, orders);
-  const created2 = [];
-  for (const share of shares) {
-    if (share.capturedAmount <= 0) continue;
-    const existing = await escrowStore.getEscrowByPaymentOrder(
-      payment.paymentId,
-      share.order.id
-    );
-    if (existing) {
-      created2.push(existing);
-      if (!existing.escrowCreatedEmitted) {
-        emitFinance("EscrowCreated", existing.escrowId, actor, {
-          escrowId: existing.escrowId,
-          paymentId: existing.paymentId,
-          orderId: existing.orderId,
-          amount: existing.capturedAmount,
-          currency: existing.currency,
-          source: "reconcile"
-        });
-        const patched = {
-          ...existing,
-          escrowCreatedEmitted: true,
-          updatedAt: nowIso20()
-        };
-        await escrowStore.upsertEscrow(patched);
-        created2[created2.length - 1] = patched;
-      }
-      continue;
-    }
-    const now = nowIso20();
-    const escrow = {
-      escrowId: newId3("esc"),
-      paymentId: payment.paymentId,
-      checkoutId: payment.checkoutId,
-      orderId: share.order.id,
-      consumerId: share.order.consumerId,
-      sellerId: share.order.sellerId,
-      brandId: share.order.brandId,
-      currency: payment.currency || share.order.currency || "BDT",
-      capturedAmount: share.capturedAmount,
-      heldAmount: share.capturedAmount,
-      refundedAmount: 0,
-      settledAmount: 0,
-      commissionAmount: 0,
-      sellerNetAmount: 0,
-      status: "held",
-      escrowCreatedEmitted: true,
-      createdAt: now,
-      updatedAt: now
-    };
-    try {
-      escrow.escrowReferenceId = await ensureEntityReferenceId({
-        entityType: "escrow",
-        internalId: escrow.escrowId,
-        current: escrow.escrowReferenceId
-      });
-    } catch {
-    }
-    await escrowStore.upsertEscrow(escrow);
-    await bumpEscrowBalanceAggregate(escrow.sellerId, escrow.currency, escrow.heldAmount);
-    emitFinance("EscrowCreated", escrow.escrowId, actor, {
-      escrowId: escrow.escrowId,
-      paymentId: escrow.paymentId,
-      orderId: escrow.orderId,
-      amount: escrow.capturedAmount,
-      currency: escrow.currency
-    });
-    created2.push(escrow);
-  }
-  return created2;
-}
-async function reconcileEscrowEffectsForPayment(payment, actor) {
-  if (payment.status !== "captured") {
-    return { payment, escrows: [] };
-  }
-  const escrows = await createEscrowsForCapturedPayment(payment, actor);
-  let next = payment;
-  if (!next.escrowEffectsApplied) {
-    next = { ...next, escrowEffectsApplied: true, updatedAt: nowIso20() };
-    await commercePaymentStore.upsertPayment(next);
-  }
-  return { payment: next, escrows };
-}
-async function settleEscrowForOrder(orderId, actor) {
-  const escrows = await escrowStore.listEscrowsByOrder(orderId);
-  if (!escrows.length) return null;
-  let last = null;
-  for (const escrow of escrows) {
-    last = await settleOneEscrow(escrow, actor);
-  }
-  return last;
-}
-async function settleOneEscrow(escrow, actor) {
-  if (escrow.status === "settled" && escrow.settlementId) {
-    const existing = await escrowStore.getSettlement(escrow.settlementId);
-    if (existing) {
-      await creditSellerBalanceFromSettlement(existing, actor);
-      return { escrow, settlement: existing };
-    }
-  }
-  if (blocksSettlement(escrow.status) && escrow.status !== "settled") {
-    throw new CommerceError(`Escrow cannot settle while status is ${escrow.status}`, 409);
-  }
-  if (!canSettleFromStatus(escrow.status)) {
-    throw new CommerceError(`Escrow status ${escrow.status} is not settlement-eligible`, 409);
-  }
-  const settleable = escrow.heldAmount;
-  if (settleable <= 0) {
-    throw new CommerceError("No settleable Escrow amount remaining", 400);
-  }
-  const existingByEscrow = await escrowStore.getSettlementByEscrow(escrow.escrowId);
-  if (existingByEscrow) {
-    let e = escrow;
-    if (e.status !== "settled") {
-      e = {
-        ...e,
-        status: "settled",
-        settledAmount: settleable,
-        heldAmount: 0,
-        commissionAmount: existingByEscrow.commissionAmount,
-        sellerNetAmount: existingByEscrow.sellerNetAmount,
-        settlementId: existingByEscrow.settlementId,
-        releasedAt: e.releasedAt || nowIso20(),
-        updatedAt: nowIso20()
-      };
-      if (!e.escrowReleasedEmitted) {
-        emitFinance("EscrowReleased", e.escrowId, actor, {
-          escrowId: e.escrowId,
-          settlementId: existingByEscrow.settlementId,
-          sellerNetAmount: existingByEscrow.sellerNetAmount,
-          source: "reconcile"
-        });
-        e = { ...e, escrowReleasedEmitted: true };
-      }
-      await escrowStore.upsertEscrow(e);
-      await bumpEscrowBalanceAggregate(e.sellerId, e.currency, -settleable);
-    }
-    await creditSellerBalanceFromSettlement(existingByEscrow, actor);
-    return { escrow: e, settlement: existingByEscrow };
-  }
-  const commission = resolveSettlementCommission(settleable);
-  const now = nowIso20();
-  const settlement = {
-    settlementId: newId3("stl"),
-    escrowId: escrow.escrowId,
-    paymentId: escrow.paymentId,
-    orderId: escrow.orderId,
-    checkoutId: escrow.checkoutId,
-    sellerId: escrow.sellerId,
-    brandId: escrow.brandId,
-    currency: escrow.currency,
-    grossAmount: settleable,
-    commissionAmount: commission.commissionAmount,
-    sellerNetAmount: commission.sellerNetAmount,
-    sellerBalanceCredited: false,
-    createdAt: now,
-    updatedAt: now
-  };
-  await escrowStore.upsertSettlement(settlement);
-  let nextEscrow = {
-    ...escrow,
-    status: "settled",
-    settledAmount: settleable,
-    heldAmount: 0,
-    commissionAmount: commission.commissionAmount,
-    sellerNetAmount: commission.sellerNetAmount,
-    settlementId: settlement.settlementId,
-    releasedAt: now,
-    updatedAt: now
-  };
-  if (!nextEscrow.escrowReleasedEmitted) {
-    emitFinance("EscrowReleased", nextEscrow.escrowId, actor, {
-      escrowId: nextEscrow.escrowId,
-      settlementId: settlement.settlementId,
-      sellerNetAmount: commission.sellerNetAmount,
-      commissionAmount: commission.commissionAmount,
-      grossAmount: settleable
-    });
-    nextEscrow = { ...nextEscrow, escrowReleasedEmitted: true };
-  }
-  await escrowStore.upsertEscrow(nextEscrow);
-  await bumpEscrowBalanceAggregate(nextEscrow.sellerId, nextEscrow.currency, -settleable);
-  const credited = await creditSellerBalanceFromSettlement(settlement, actor);
-  return { escrow: nextEscrow, settlement: credited };
-}
-async function creditSellerBalanceFromSettlement(settlement, actor) {
-  const idempotencyKey = `settlement_credit:${settlement.settlementId}`;
-  const existingEntry = await escrowStore.getBalanceEntryByIdempotency(idempotencyKey);
-  if (existingEntry || settlement.sellerBalanceCredited) {
-    if (!settlement.sellerBalanceCredited) {
-      const patched2 = {
-        ...settlement,
-        sellerBalanceCredited: true,
-        updatedAt: nowIso20()
-      };
-      await escrowStore.upsertSettlement(patched2);
-      return patched2;
-    }
-    return settlement;
-  }
-  const bal = await escrowStore.getBalance(settlement.sellerId, settlement.currency) || emptyBalance(settlement.sellerId, settlement.currency);
-  const nextBal = {
-    ...bal,
-    pendingSettlement: Math.max(0, subMajor(bal.pendingSettlement, settlement.sellerNetAmount)),
-    availableBalance: addMajor(bal.availableBalance, settlement.sellerNetAmount),
-    updatedAt: nowIso20()
-  };
-  await escrowStore.upsertBalance(nextBal);
-  const entry = {
-    entryId: newId3("sbe"),
-    sellerId: settlement.sellerId,
-    currency: settlement.currency,
-    amount: settlement.sellerNetAmount,
-    kind: "settlement_credit",
-    settlementId: settlement.settlementId,
-    escrowId: settlement.escrowId,
-    orderId: settlement.orderId,
-    idempotencyKey,
-    createdAt: nowIso20()
-  };
-  await escrowStore.appendBalanceEntry(entry);
-  const patched = {
-    ...settlement,
-    sellerBalanceCredited: true,
-    updatedAt: nowIso20()
-  };
-  await escrowStore.upsertSettlement(patched);
-  Logger.info("Seller Balance credited from Settlement", {
-    settlementId: settlement.settlementId,
-    sellerId: settlement.sellerId,
-    amount: settlement.sellerNetAmount,
-    actor
-  });
-  return patched;
-}
-async function reconcileSettlementBalanceCredit(settlementId, actor) {
-  const settlement = await escrowStore.getSettlement(settlementId);
-  if (!settlement) return null;
-  return creditSellerBalanceFromSettlement(settlement, actor);
-}
-function refundableAmount(escrow) {
-  if (!canRefundFromStatus(escrow.status)) return 0;
-  return Math.max(0, escrow.heldAmount);
-}
-async function processEscrowRefund(input) {
-  const reason = (input.reason || "").trim();
-  if (!reason) throw new CommerceError("Refund reason is required");
-  const escrow = await escrowStore.getEscrow(input.escrowId);
-  if (!escrow) throw new CommerceError("Escrow not found", 404);
-  if (!input.authorizedCancelPath) {
-    await assertEscrowAccess(escrow, input.actor, "refund");
-  }
-  const prior = await escrowStore.listRefundsByEscrow(escrow.escrowId);
-  if (escrow.status === "full_refund") {
-    const completed = prior.find((r) => r.status === "completed");
-    if (completed) return completed;
-    throw new CommerceError("Escrow already fully refunded", 409);
-  }
-  if (escrow.status === "settled") {
-    const now2 = nowIso20();
-    const blocked = {
-      refundId: newId3("ref"),
-      paymentId: escrow.paymentId,
-      escrowId: escrow.escrowId,
-      checkoutId: escrow.checkoutId,
-      orderId: escrow.orderId,
-      amount: input.amount ?? escrow.settledAmount,
-      currency: escrow.currency,
-      reason,
-      requestedBy: input.actor.userId,
-      status: "requires_financial_adjustment",
-      createdAt: now2,
-      updatedAt: now2
-    };
-    try {
-      blocked.refundReferenceId = await ensureEntityReferenceId({
-        entityType: "refund",
-        internalId: blocked.refundId,
-        current: blocked.refundReferenceId
-      });
-    } catch {
-    }
-    await escrowStore.upsertRefund(blocked);
-    return blocked;
-  }
-  const maxRefundable = refundableAmount(escrow);
-  if (maxRefundable <= 0) {
-    throw new CommerceError("Escrow is not refundable in current status", 409);
-  }
-  const amount = input.amount === void 0 || input.amount === null ? maxRefundable : Number(input.amount);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    throw new CommerceError("Invalid refund amount");
-  }
-  if (toMinor(amount) > toMinor(maxRefundable)) {
-    throw new CommerceError("Refund amount exceeds refundable Escrow hold", 400);
-  }
-  const duplicate = prior.find(
-    (r) => r.status === "completed" && amountsEqual(r.amount, amount) && r.reason === reason
-  );
-  if (duplicate) return duplicate;
-  const inFlight = prior.find(
-    (r) => r.providerRefundDone && r.status !== "completed" && amountsEqual(r.amount, amount)
-  );
-  if (inFlight) {
-    return finalizeLocalRefundReversal(inFlight, escrow, input.actor.userId);
-  }
-  const now = nowIso20();
-  let refund = {
-    refundId: newId3("ref"),
-    paymentId: escrow.paymentId,
-    escrowId: escrow.escrowId,
-    checkoutId: escrow.checkoutId,
-    orderId: escrow.orderId,
-    amount,
-    currency: escrow.currency,
-    reason,
-    requestedBy: input.actor.userId,
-    status: "processing",
-    createdAt: now,
-    updatedAt: now
-  };
-  try {
-    refund.refundReferenceId = await ensureEntityReferenceId({
-      entityType: "refund",
-      internalId: refund.refundId,
-      current: refund.refundReferenceId
-    });
-  } catch {
-  }
-  await escrowStore.upsertRefund(refund);
-  if (!input.skipProvider) {
-    const payment = await commercePaymentStore.getPayment(escrow.paymentId);
-    if (payment && payment.provider !== "none" && payment.capturedAmount > 0) {
-      try {
-        const provider = resolveRefundProvider();
-        if (typeof provider.refundTransaction === "function") {
-          const bankTranId = payment.providerTransactionId || payment.providerValId || payment.paymentId;
-          const result = await provider.refundTransaction({
-            bankTranId,
-            refundAmount: amount,
-            refundRemarks: reason,
-            refeId: refund.refundId
-          });
-          if (!result.success) {
-            refund = {
-              ...refund,
-              status: "failed",
-              updatedAt: nowIso20()
-            };
-            await escrowStore.upsertRefund(refund);
-            throw new CommerceError(result.message || "Provider refund failed", 502);
-          }
-          refund = {
-            ...refund,
-            providerRefundDone: true,
-            providerRefundRefId: result.refundRefId,
-            updatedAt: nowIso20()
-          };
-          await escrowStore.upsertRefund(refund);
-        } else {
-          refund = { ...refund, providerRefundDone: true, updatedAt: nowIso20() };
-          await escrowStore.upsertRefund(refund);
-        }
-      } catch (error2) {
-        if (error2 instanceof CommerceError) throw error2;
-        refund = {
-          ...refund,
-          status: "failed",
-          updatedAt: nowIso20()
-        };
-        await escrowStore.upsertRefund(refund);
-        throw new CommerceError(
-          error2 instanceof Error ? error2.message : "Provider refund error",
-          502
-        );
-      }
-    } else {
-      refund = { ...refund, providerRefundDone: true, updatedAt: nowIso20() };
-      await escrowStore.upsertRefund(refund);
-    }
-  } else {
-    refund = {
-      ...refund,
-      providerRefundDone: true,
-      providerRefundRefId: `skip_${refund.refundId}`,
-      updatedAt: nowIso20()
-    };
-    await escrowStore.upsertRefund(refund);
-  }
-  return finalizeLocalRefundReversal(refund, escrow, input.actor.userId);
-}
-async function finalizeLocalRefundReversal(refund, escrowIn, actor) {
-  if (refund.status === "completed") return refund;
-  let escrow = await escrowStore.getEscrow(escrowIn.escrowId) || escrowIn;
-  const amount = refund.amount;
-  const remaining = subMajor(escrow.heldAmount, amount);
-  const isFull = remaining <= 0 || amountsEqual(amount, escrow.heldAmount);
-  const nextStatus = isFull ? "full_refund" : "partial_refund_remaining";
-  let nextEscrow = {
-    ...escrow,
-    heldAmount: Math.max(0, remaining),
-    refundedAmount: addMajor(escrow.refundedAmount, amount),
-    status: nextStatus,
-    cancelledAt: isFull ? nowIso20() : escrow.cancelledAt,
-    updatedAt: nowIso20()
-  };
-  if (isFull && !nextEscrow.escrowCancelledEmitted) {
-    emitFinance("EscrowCancelled", nextEscrow.escrowId, actor, {
-      escrowId: nextEscrow.escrowId,
-      refundId: refund.refundId,
-      amount,
-      reason: refund.reason
-    });
-    nextEscrow = { ...nextEscrow, escrowCancelledEmitted: true };
-  }
-  await escrowStore.upsertEscrow(nextEscrow);
-  await bumpEscrowBalanceAggregate(nextEscrow.sellerId, nextEscrow.currency, -amount);
-  let nextRefund = {
-    ...refund,
-    status: "completed",
-    completedAt: nowIso20(),
-    updatedAt: nowIso20()
-  };
-  if (!nextRefund.paymentRefundedEmitted) {
-    emitFinance("PaymentRefunded", nextRefund.paymentId, actor, {
-      refundId: nextRefund.refundId,
-      paymentId: nextRefund.paymentId,
-      escrowId: nextRefund.escrowId,
-      orderId: nextRefund.orderId,
-      amount: nextRefund.amount,
-      currency: nextRefund.currency
-    });
-    nextRefund = { ...nextRefund, paymentRefundedEmitted: true };
-  }
-  if (isFull && !nextRefund.escrowCancelledEmitted) {
-    nextRefund = { ...nextRefund, escrowCancelledEmitted: true };
-  }
-  await escrowStore.upsertRefund(nextRefund);
-  return nextRefund;
-}
-async function reconcileRefundLocalEffects(refundId, actor) {
-  const refund = await escrowStore.getRefund(refundId);
-  if (!refund) return null;
-  if (refund.status === "completed") return refund;
-  if (!refund.providerRefundDone) return refund;
-  const escrow = await escrowStore.getEscrow(refund.escrowId);
-  if (!escrow) return refund;
-  return finalizeLocalRefundReversal(refund, escrow, actor);
-}
-async function placeDisputeHold(params) {
-  const reason = (params.reason || "").trim();
-  if (!reason) throw new CommerceError("Dispute hold reason is required");
-  const escrow = await escrowStore.getEscrow(params.escrowId);
-  if (!escrow) throw new CommerceError("Escrow not found", 404);
-  await assertEscrowAccess(escrow, params.actor, "admin");
-  if (escrow.status === "settled" || escrow.status === "full_refund") {
-    throw new CommerceError(`Cannot dispute-hold Escrow in status ${escrow.status}`, 409);
-  }
-  if (escrow.status === "dispute_hold") return escrow;
-  const next = {
-    ...escrow,
-    status: "dispute_hold",
-    disputeHoldReason: reason,
-    disputeHoldAt: nowIso20(),
-    updatedAt: nowIso20()
-  };
-  await escrowStore.upsertEscrow(next);
-  return next;
-}
-async function applyAdministrativeAdjustment(params) {
-  const note = (params.note || "").trim();
-  if (!note) throw new CommerceError("Adjustment note is required");
-  const role = (params.actor.role || "").toLowerCase();
-  if (role !== "admin" && role !== "super_admin" && role !== "superadmin") {
-    throw new CommerceError("Administrative adjustment requires Admin", 403);
-  }
-  const escrow = await escrowStore.getEscrow(params.escrowId);
-  if (!escrow) throw new CommerceError("Escrow not found", 404);
-  if (escrow.status === "settled" || escrow.status === "full_refund") {
-    throw new CommerceError("Cannot adjust settled/refunded Escrow", 409);
-  }
-  const prevHeld = escrow.heldAmount;
-  let nextHeld = prevHeld;
-  if (params.heldAmount !== void 0) {
-    nextHeld = Number(params.heldAmount);
-    if (!Number.isFinite(nextHeld) || nextHeld < 0) {
-      throw new CommerceError("Invalid heldAmount");
-    }
-    if (toMinor(nextHeld) > toMinor(escrow.capturedAmount)) {
-      throw new CommerceError("heldAmount cannot exceed capturedAmount");
-    }
-  }
-  const delta = subMajor(nextHeld, prevHeld);
-  const next = {
-    ...escrow,
-    heldAmount: nextHeld,
-    status: "administrative_adjustment",
-    adminAdjustmentNote: note,
-    updatedAt: nowIso20()
-  };
-  await escrowStore.upsertEscrow(next);
-  if (delta !== 0) {
-    await bumpEscrowBalanceAggregate(next.sellerId, next.currency, delta);
-  }
-  const entry = {
-    entryId: newId3("sbe"),
-    sellerId: next.sellerId,
-    currency: next.currency,
-    amount: 0,
-    kind: "admin_adjustment",
-    escrowId: next.escrowId,
-    orderId: next.orderId,
-    idempotencyKey: `admin_adj:${next.escrowId}:${nowIso20()}`,
-    createdAt: nowIso20()
-  };
-  await escrowStore.appendBalanceEntry(entry);
-  Logger.audit("escrow.administrative_adjustment", {
-    escrowId: next.escrowId,
-    actor: params.actor.userId,
-    note,
-    previousHeld: prevHeld,
-    newHeld: nextHeld
-  });
-  return next;
-}
-async function requestReturn(params) {
-  const reason = (params.reason || "").trim();
-  if (!reason) throw new CommerceError("Return reason is required");
-  const order = await commerceStore.getOrder(params.orderId);
-  if (!order) throw new CommerceError("Order not found", 404);
-  const role = (params.actor.role || "").toLowerCase();
-  const isAdmin = role === "admin" || role === "super_admin" || role === "superadmin";
-  if (!isAdmin && order.consumerId !== params.actor.userId) {
-    throw new CommerceError("Only the Consumer may request a Return", 403);
-  }
-  if (order.status !== "delivered" && order.status !== "completed") {
-    throw new CommerceError("Return only eligible after Delivery/Completion", 409);
-  }
-  const existing = await escrowStore.listReturnsByOrder(order.id);
-  const open = existing.find((r) => r.status === "requested" || r.status === "approved");
-  if (open) return open;
-  const row = {
-    returnId: newId3("rtn"),
-    orderId: order.id,
-    consumerId: order.consumerId,
-    sellerId: order.sellerId,
-    brandId: order.brandId,
-    reason,
-    status: "requested",
-    createdAt: nowIso20(),
-    updatedAt: nowIso20()
-  };
-  try {
-    row.returnReferenceId = await ensureEntityReferenceId({
-      entityType: "return",
-      internalId: row.returnId,
-      current: row.returnReferenceId
-    });
-  } catch {
-  }
-  await escrowStore.upsertReturn(row);
-  return row;
-}
-async function decideReturn(params) {
-  const row = await escrowStore.getReturn(params.returnId);
-  if (!row) throw new CommerceError("Return not found", 404);
-  const order = await commerceStore.getOrder(row.orderId);
-  if (!order) throw new CommerceError("Order not found", 404);
-  const role = (params.actor.role || "").toLowerCase();
-  const isAdmin = role === "admin" || role === "super_admin" || role === "superadmin";
-  const isSeller2 = order.sellerId === params.actor.userId;
-  if (!isAdmin && !isSeller2) {
-    throw new CommerceError("Not authorized to decide Return", 403);
-  }
-  if (row.status !== "requested") {
-    return { returnRow: row };
-  }
-  if (params.decision === "rejected") {
-    const rejected = {
-      ...row,
-      status: "rejected",
-      updatedAt: nowIso20()
-    };
-    await escrowStore.upsertReturn(rejected);
-    return { returnRow: rejected };
-  }
-  const escrows = await escrowStore.listEscrowsByOrder(row.orderId);
-  const escrow = escrows.find((e) => canRefundFromStatus(e.status));
-  if (!escrow) {
-    throw new CommerceError("No refundable Escrow for this Return", 409);
-  }
-  const refund = await processEscrowRefund({
-    escrowId: escrow.escrowId,
-    amount: params.refundAmount,
-    reason: `Return approved: ${row.reason}`,
-    actor: params.actor
-  });
-  const approved = {
-    ...row,
-    status: refund.status === "completed" ? "closed" : "refund_processing",
-    refundId: refund.refundId,
-    updatedAt: nowIso20()
-  };
-  await escrowStore.upsertReturn(approved);
-  return { returnRow: approved, refund };
-}
-async function refundEscrowsForCancelledOrder(params) {
-  const escrows = await escrowStore.listEscrowsByOrder(params.orderId);
-  const refunds = [];
-  for (const escrow of escrows) {
-    if (!canRefundFromStatus(escrow.status)) continue;
-    if (escrow.heldAmount <= 0) continue;
-    const refund = await processEscrowRefund({
-      escrowId: escrow.escrowId,
-      reason: params.reason,
-      actor: params.actor,
-      authorizedCancelPath: true
-    });
-    refunds.push(refund);
-  }
-  return refunds;
-}
-async function assertEscrowAccess(escrow, actor, action) {
-  const role = (actor.role || "").toLowerCase();
-  const isAdmin = role === "admin" || role === "super_admin" || role === "superadmin";
-  if (isAdmin) return;
-  if (action === "admin" || action === "release") {
-    throw new CommerceError("Not authorized for this Escrow action", 403);
-  }
-  if (action === "refund") {
-    if (escrow.sellerId === actor.userId || escrow.consumerId === actor.userId) {
-      if (escrow.consumerId === actor.userId && escrow.sellerId !== actor.userId) {
-        throw new CommerceError("Consumers cannot directly process Refunds", 403);
-      }
-      return;
-    }
-    throw new CommerceError("Not authorized for this Escrow", 403);
-  }
-  if (escrow.sellerId === actor.userId || escrow.consumerId === actor.userId) {
-    return;
-  }
-  throw new CommerceError("Not authorized for this Escrow", 403);
-}
-async function getEscrowForActor(escrowId, actor) {
-  const escrow = await escrowStore.getEscrow(escrowId);
-  if (!escrow) throw new CommerceError("Escrow not found", 404);
-  await assertEscrowAccess(escrow, actor, "read");
-  return escrow;
-}
-async function getSellerBalanceForActor(sellerId, currency, actor) {
-  const role = (actor.role || "").toLowerCase();
-  const isAdmin = role === "admin" || role === "super_admin" || role === "superadmin";
-  if (!isAdmin && actor.userId !== sellerId) {
-    throw new CommerceError("Not authorized to view this Seller Balance", 403);
-  }
-  return await escrowStore.getBalance(sellerId, currency) || emptyBalance(sellerId, currency);
-}
-async function harnessMarkCapturedWithoutEscrow(params) {
-  if ((process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() !== "true") {
-    throw new CommerceError("Harness requires PAYMENT_GATEWAY_MOCK", 403);
-  }
-  const payment = await commercePaymentStore.getPayment(params.paymentId);
-  if (!payment) throw new CommerceError("Payment not found", 404);
-  const now = nowIso20();
-  const next = {
-    ...payment,
-    status: "captured",
-    capturedAmount: payment.amount,
-    outstandingAmount: Math.max(0, payment.outstandingAmount ?? 0),
-    capturedAt: payment.capturedAt || now,
-    paymentCapturedEmitted: true,
-    escrowEffectsApplied: false,
-    updatedAt: now
-  };
-  await commercePaymentStore.upsertPayment(next);
-  return next;
-}
-async function harnessSettleWithoutBalanceCredit(params) {
-  if ((process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() !== "true") {
-    throw new CommerceError("Harness requires PAYMENT_GATEWAY_MOCK", 403);
-  }
-  const escrow = await escrowStore.getEscrow(params.escrowId);
-  if (!escrow) throw new CommerceError("Escrow not found", 404);
-  if (!canSettleFromStatus(escrow.status)) {
-    throw new CommerceError(`Escrow not settleable: ${escrow.status}`, 409);
-  }
-  const existing = await escrowStore.getSettlementByEscrow(escrow.escrowId);
-  if (existing) {
-    const patched = {
-      ...existing,
-      sellerBalanceCredited: false,
-      updatedAt: nowIso20()
-    };
-    await escrowStore.upsertSettlement(patched);
-    return { escrow, settlement: patched };
-  }
-  const settleable = escrow.heldAmount;
-  const commission = resolveSettlementCommission(settleable);
-  const now = nowIso20();
-  const settlement = {
-    settlementId: newId3("stl"),
-    escrowId: escrow.escrowId,
-    paymentId: escrow.paymentId,
-    orderId: escrow.orderId,
-    checkoutId: escrow.checkoutId,
-    sellerId: escrow.sellerId,
-    brandId: escrow.brandId,
-    currency: escrow.currency,
-    grossAmount: settleable,
-    commissionAmount: commission.commissionAmount,
-    sellerNetAmount: commission.sellerNetAmount,
-    sellerBalanceCredited: false,
-    createdAt: now,
-    updatedAt: now
-  };
-  await escrowStore.upsertSettlement(settlement);
-  const nextEscrow = {
-    ...escrow,
-    status: "settled",
-    settledAmount: settleable,
-    heldAmount: 0,
-    commissionAmount: commission.commissionAmount,
-    sellerNetAmount: commission.sellerNetAmount,
-    settlementId: settlement.settlementId,
-    releasedAt: now,
-    escrowReleasedEmitted: true,
-    updatedAt: now
-  };
-  await escrowStore.upsertEscrow(nextEscrow);
-  await bumpEscrowBalanceAggregate(nextEscrow.sellerId, nextEscrow.currency, -settleable);
-  emitFinance("EscrowReleased", nextEscrow.escrowId, params.actor, {
-    escrowId: nextEscrow.escrowId,
-    settlementId: settlement.settlementId,
-    source: "harness_skip_balance"
-  });
-  return { escrow: nextEscrow, settlement };
-}
-async function harnessSimulateSettlementWithoutBalanceCredit(params) {
-  if ((process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() !== "true") {
-    throw new CommerceError("Harness requires PAYMENT_GATEWAY_MOCK", 403);
-  }
-  const settlement = await escrowStore.getSettlement(params.settlementId);
-  if (!settlement) throw new CommerceError("Settlement not found", 404);
-  const patched = {
-    ...settlement,
-    sellerBalanceCredited: false,
-    updatedAt: nowIso20()
-  };
-  await escrowStore.upsertSettlement(patched);
-  return patched;
-}
-async function harnessSimulateProviderRefundWithoutLocalReverse(params) {
-  if ((process.env.PAYMENT_GATEWAY_MOCK || "").trim().toLowerCase() !== "true") {
-    throw new CommerceError("Harness requires PAYMENT_GATEWAY_MOCK", 403);
-  }
-  const escrow = await escrowStore.getEscrow(params.escrowId);
-  if (!escrow) throw new CommerceError("Escrow not found", 404);
-  const now = nowIso20();
-  const refund = {
-    refundId: newId3("ref"),
-    paymentId: escrow.paymentId,
-    escrowId: escrow.escrowId,
-    checkoutId: escrow.checkoutId,
-    orderId: escrow.orderId,
-    amount: params.amount,
-    currency: escrow.currency,
-    reason: params.reason,
-    requestedBy: params.actorUserId,
-    status: "processing",
-    providerRefundDone: true,
-    providerRefundRefId: `harness_provider_${now}`,
-    createdAt: now,
-    updatedAt: now
-  };
-  await escrowStore.upsertRefund(refund);
-  return refund;
-}
-var init_escrowService = __esm({
-  "server/escrow/escrowService.ts"() {
-    init_cartService();
-    init_commerceStore();
-    init_eventBus();
-    init_logger();
-    init_commercePaymentStore();
-    init_mockProvider();
-    init_sslcommerzProvider();
-    init_commissionPolicy();
-    init_escrowLifecycle();
-    init_escrowStore();
-    init_money();
-    init_referenceIdService();
+    nowIso22 = () => (/* @__PURE__ */ new Date()).toISOString();
   }
 });
 
@@ -15515,8 +16850,8 @@ __export(partnerApplicationService_exports, {
   savePartnerAdminNotes: () => savePartnerAdminNotes,
   submitPartnerApplication: () => submitPartnerApplication
 });
-import { randomUUID as randomUUID19 } from "node:crypto";
-import { eq as eq14 } from "drizzle-orm";
+import { randomUUID as randomUUID20 } from "node:crypto";
+import { eq as eq16 } from "drizzle-orm";
 function appendHistory(app3, entry) {
   return [
     ...app3.reviewHistory || [],
@@ -15524,7 +16859,7 @@ function appendHistory(app3, entry) {
   ];
 }
 async function createSellerIdentityBrand(params) {
-  const id = `brand-${randomUUID19()}`;
+  const id = `brand-${randomUUID20()}`;
   const normalized = normalizeBrandInput({
     id,
     name: params.name,
@@ -15578,7 +16913,7 @@ async function provisionPartnerUser(params) {
   const now = /* @__PURE__ */ new Date();
   let userId = params.existingUserId || "";
   if (params.existingUserId) {
-    const rows = await db.select().from(users).where(eq14(users.id, params.existingUserId)).limit(1);
+    const rows = await db.select().from(users).where(eq16(users.id, params.existingUserId)).limit(1);
     const user = rows[0];
     if (!user) {
       const err = new Error("Linked Consumer account no longer exists");
@@ -15596,7 +16931,7 @@ async function provisionPartnerUser(params) {
         role,
         displayName: params.app.displayName,
         updatedAt: now
-      }).where(eq14(users.id, user.id));
+      }).where(eq16(users.id, user.id));
       if (role === ROLES.SELLER) {
         await tx.insert(sellerProfiles).values({
           userId: user.id,
@@ -15626,7 +16961,7 @@ async function provisionPartnerUser(params) {
       err.status = 409;
       throw err;
     }
-    const uid = randomUUID19();
+    const uid = randomUUID20();
     await db.transaction(async (tx) => {
       const choosifyUserId = await allocateNextChoosifyUserId(tx);
       await tx.insert(users).values({
@@ -15699,7 +17034,7 @@ async function submitPartnerApplication(input) {
       throw err;
     }
     if (role === ROLES.USER) {
-      const rows = await db.select().from(users).where(eq14(users.id, existing.uid)).limit(1);
+      const rows = await db.select().from(users).where(eq16(users.id, existing.uid)).limit(1);
       const userRow = rows[0];
       const ok = userRow?.passwordHash ? await verifyPassword(userRow.passwordHash, input.password) : false;
       if (!ok) {
@@ -19279,6 +20614,15 @@ var requireAdmin = requireRole(ROLES.ADMIN);
 
 // server/logisticsRouter.ts
 var router = Router2();
+async function synchroniseDeliveryFromWebhook(shipment, normalizedStatus) {
+  if (!shipment || normalizedStatus !== "delivered") return;
+  try {
+    const { settleOrderDelivered: settleOrderDelivered2 } = await Promise.resolve().then(() => (init_deliverySettlement(), deliverySettlement_exports));
+    await settleOrderDelivered2(shipment.orderId, "courier_webhook");
+  } catch (err) {
+    console.warn("[LogisticsWebhook] delivery settlement failed (non-fatal):", err?.message);
+  }
+}
 function verifyWebhookSecret(req) {
   const expected = process.env.LOGISTICS_WEBHOOK_SECRET;
   if (!expected) return false;
@@ -19305,18 +20649,23 @@ router.post("/webhooks/logistics/:courier", async (req, res) => {
         message: "Could not extract tracking number from webhook payload."
       });
     }
-    const service = LogisticsService.getInstance();
-    const updatedShipment = await service.updateShipmentFromWebhook(
-      normalized.trackingNumber,
-      normalized.status,
-      {
-        status: normalized.status,
-        location: normalized.location,
-        description: normalized.description,
-        remarks: normalized.remarks
-      }
-    );
-    shipmentStore.updateFromWebhook(
+    let updatedShipment = null;
+    try {
+      const service = LogisticsService.getInstance();
+      updatedShipment = await service.updateShipmentFromWebhook(
+        normalized.trackingNumber,
+        normalized.status,
+        {
+          status: normalized.status,
+          location: normalized.location,
+          description: normalized.description,
+          remarks: normalized.remarks
+        }
+      );
+    } catch (legacyErr) {
+      console.warn("[LogisticsWebhook] legacy LogisticsService skipped:", legacyErr?.message);
+    }
+    const canonical = shipmentStore.updateFromWebhook(
       normalized.trackingNumber,
       normalized.status,
       {
@@ -19326,13 +20675,17 @@ router.post("/webhooks/logistics/:courier", async (req, res) => {
         description: normalized.description || normalized.status
       }
     );
+    if (!canonical && !updatedShipment) {
+      return res.status(404).json({ success: false, message: "No shipment matches this tracking number." });
+    }
+    await synchroniseDeliveryFromWebhook(canonical, normalized.status);
     return res.json({
       success: true,
       message: `Webhook processed and shipment updated.`,
       normalized,
-      shipmentId: updatedShipment.id,
-      trackingNumber: updatedShipment.trackingNumber,
-      status: updatedShipment.status
+      shipmentId: canonical?.id ?? updatedShipment?.id,
+      trackingNumber: canonical?.trackingNumber ?? updatedShipment?.trackingNumber,
+      status: canonical?.status ?? updatedShipment?.status
     });
   } catch (error2) {
     console.error("[LogisticsWebhookRouter Error]", error2);
@@ -19353,18 +20706,23 @@ router.post("/logistics/simulate-webhook", authenticateRequest, requireAdmin, as
         message: "Simulation failed: Could not extract tracking number."
       });
     }
-    const service = LogisticsService.getInstance();
-    const updatedShipment = await service.updateShipmentFromWebhook(
-      normalized.trackingNumber,
-      normalized.status,
-      {
-        status: normalized.status,
-        location: normalized.location,
-        description: normalized.description,
-        remarks: normalized.remarks
-      }
-    );
-    shipmentStore.updateFromWebhook(
+    let updatedShipment = null;
+    try {
+      const service = LogisticsService.getInstance();
+      updatedShipment = await service.updateShipmentFromWebhook(
+        normalized.trackingNumber,
+        normalized.status,
+        {
+          status: normalized.status,
+          location: normalized.location,
+          description: normalized.description,
+          remarks: normalized.remarks
+        }
+      );
+    } catch (legacyErr) {
+      console.warn("[LogisticsWebhook] legacy LogisticsService skipped:", legacyErr?.message);
+    }
+    const canonical = shipmentStore.updateFromWebhook(
       normalized.trackingNumber,
       normalized.status,
       {
@@ -19374,11 +20732,15 @@ router.post("/logistics/simulate-webhook", authenticateRequest, requireAdmin, as
         description: normalized.description || normalized.status
       }
     );
+    if (!canonical && !updatedShipment) {
+      return res.status(404).json({ success: false, message: "No shipment matches this tracking number." });
+    }
+    await synchroniseDeliveryFromWebhook(canonical, normalized.status);
     return res.json({
       success: true,
-      message: `Simulated webhook processed. Shipment status is now: ${updatedShipment.status}`,
+      message: `Simulated webhook processed. Shipment status is now: ${canonical?.status ?? updatedShipment?.status}`,
       normalized,
-      shipment: updatedShipment
+      shipment: canonical ?? updatedShipment
     });
   } catch (error2) {
     console.error("[LogisticsWebhookSimulation Error]", error2);
@@ -19417,7 +20779,7 @@ function resolveDealsBannerHref(banner) {
 // lib/vercel-catalog/catalogContract.ts
 var nonEmpty2 = z3.string().trim().min(1);
 var isoDate2 = z3.string().datetime();
-var nowIso9 = () => (/* @__PURE__ */ new Date()).toISOString();
+var nowIso17 = () => (/* @__PURE__ */ new Date()).toISOString();
 var toString3 = (value, fallback) => typeof value === "string" ? value : fallback ?? "";
 var toNumber3 = (value, fallback = 0) => {
   if (typeof value === "number" && Number.isFinite(value)) return value;
@@ -19693,7 +21055,7 @@ var normalizeSiteInput = (payload, existing) => {
     websiteName: toString3(raw.websiteName, existing?.websiteName ?? ""),
     supportEmail: toString3(raw.supportEmail, existing?.supportEmail ?? ""),
     supportPhone: toString3(raw.supportPhone, existing?.supportPhone ?? ""),
-    updatedAt: nowIso9()
+    updatedAt: nowIso17()
   };
 };
 
@@ -19704,7 +21066,7 @@ init_mediaStorage();
 // server/analytics/eventHooks.ts
 init_analyticsEvents();
 init_analyticsService();
-function requestContext(req) {
+function requestContext2(req) {
   if (!req) return {};
   return {
     requestId: req.requestId,
@@ -19717,35 +21079,35 @@ function recordProductView(req, payload) {
   recordEventAsync({
     type: ANALYTICS_EVENTS.PRODUCT_VIEW,
     ...payload,
-    ...requestContext(req)
+    ...requestContext2(req)
   });
 }
 function recordSearch(req, payload) {
   recordEventAsync({
     type: ANALYTICS_EVENTS.SEARCH,
     ...payload,
-    ...requestContext(req)
+    ...requestContext2(req)
   });
 }
 function recordWishlist(req, payload) {
   recordEventAsync({
     type: ANALYTICS_EVENTS.PRODUCT_WISHLIST,
     ...payload,
-    ...requestContext(req)
+    ...requestContext2(req)
   });
 }
 function recordCompare(req, payload) {
   recordEventAsync({
     type: ANALYTICS_EVENTS.PRODUCT_COMPARE,
     ...payload,
-    ...requestContext(req)
+    ...requestContext2(req)
   });
 }
 function recordLogin(req, payload) {
   recordEventAsync({
     type: ANALYTICS_EVENTS.LOGIN,
     ...payload,
-    ...requestContext(req)
+    ...requestContext2(req)
   });
 }
 
@@ -20083,13 +21445,13 @@ var EntityVersionBodySchema = z7.object({
 // server/entitlements/entitlementStore.ts
 init_client();
 init_schema();
-import { and as and2, eq as eq6, inArray as inArray2 } from "drizzle-orm";
+import { and as and3, eq as eq9, inArray as inArray3 } from "drizzle-orm";
 
 // server/entitlements/planStore.ts
 init_client();
 init_schema();
-import { randomUUID as randomUUID3 } from "node:crypto";
-import { eq as eq5 } from "drizzle-orm";
+import { randomUUID as randomUUID7 } from "node:crypto";
+import { eq as eq8 } from "drizzle-orm";
 function toPlan(row) {
   return {
     id: row.id,
@@ -20111,15 +21473,15 @@ function toAccountPlan(row) {
 }
 var planStore = {
   listPlans: async (role) => {
-    const rows = role ? await db.select().from(plans).where(eq5(plans.role, role)) : await db.select().from(plans);
+    const rows = role ? await db.select().from(plans).where(eq8(plans.role, role)) : await db.select().from(plans);
     return rows.map(toPlan).sort((a, b) => a.sortOrder - b.sortOrder);
   },
   getPlan: async (id) => {
-    const rows = await db.select().from(plans).where(eq5(plans.id, id)).limit(1);
+    const rows = await db.select().from(plans).where(eq8(plans.id, id)).limit(1);
     return rows[0] ? toPlan(rows[0]) : null;
   },
   createPlan: async (input) => {
-    const id = `plan_${randomUUID3()}`;
+    const id = `plan_${randomUUID7()}`;
     await db.insert(plans).values({
       id,
       role: input.role,
@@ -20130,12 +21492,12 @@ var planStore = {
     return await planStore.getPlan(id);
   },
   updatePlan: async (id, patch) => {
-    await db.update(plans).set({ ...patch, updatedAt: /* @__PURE__ */ new Date() }).where(eq5(plans.id, id));
+    await db.update(plans).set({ ...patch, updatedAt: /* @__PURE__ */ new Date() }).where(eq8(plans.id, id));
     return planStore.getPlan(id);
   },
   /** The account's currently assigned plan, or null if unassigned/expired. */
   getAccountPlan: async (userId) => {
-    const rows = await db.select().from(accountPlans).where(eq5(accountPlans.userId, userId)).limit(1);
+    const rows = await db.select().from(accountPlans).where(eq8(accountPlans.userId, userId)).limit(1);
     const row = rows[0];
     if (!row) return null;
     const ap = toAccountPlan(row);
@@ -20166,7 +21528,7 @@ var planStore = {
     return await planStore.getAccountPlan(input.userId);
   },
   cancelAccountPlan: async (userId) => {
-    await db.update(accountPlans).set({ status: "cancelled", updatedAt: /* @__PURE__ */ new Date() }).where(eq5(accountPlans.userId, userId));
+    await db.update(accountPlans).set({ status: "cancelled", updatedAt: /* @__PURE__ */ new Date() }).where(eq8(accountPlans.userId, userId));
   },
   listAccountPlans: async () => {
     const rows = await db.select().from(accountPlans);
@@ -20359,7 +21721,7 @@ function normalizePartnerRole(role) {
 }
 async function getScopeRows(scope, scopeKeys) {
   if (scopeKeys.length === 0) return [];
-  return db.select().from(featureEntitlements).where(and2(eq6(featureEntitlements.scope, scope), inArray2(featureEntitlements.scopeKey, scopeKeys)));
+  return db.select().from(featureEntitlements).where(and3(eq9(featureEntitlements.scope, scope), inArray3(featureEntitlements.scopeKey, scopeKeys)));
 }
 async function ensureRoleDefaultsSeeded(role) {
   const existing = await getScopeRows("role", [role]);
@@ -20846,11 +22208,11 @@ init_roles();
 // lib/vercel-catalog/draftStore.ts
 init_queryHelpers();
 init_firebaseAdmin();
-import { randomUUID as randomUUID5 } from "crypto";
+import { randomUUID as randomUUID9 } from "crypto";
 var DRAFTS_COLLECTION = "catalog_drafts";
 var VERSIONS_COLLECTION = "catalog_versions";
 var DEFAULT_VERSION_LIMIT = 15;
-var useAdminFirestore2 = process.env.CATALOG_USE_FIRESTORE === "true" && hasFirebaseAdminCredentials2();
+var useAdminFirestore5 = process.env.CATALOG_USE_FIRESTORE === "true" && hasFirebaseAdminCredentials2();
 var memoryDrafts = /* @__PURE__ */ new Map();
 var memoryVersions = [];
 function draftDocId(entityType, entityId) {
@@ -20859,7 +22221,7 @@ function draftDocId(entityType, entityId) {
 var draftStore = {
   async getDraft(entityType, entityId) {
     const docId = draftDocId(entityType, entityId);
-    if (useAdminFirestore2) {
+    if (useAdminFirestore5) {
       return getDocumentById(DRAFTS_COLLECTION, docId);
     }
     return memoryDrafts.get(docId) ?? null;
@@ -20874,14 +22236,14 @@ var draftStore = {
       updatedAt: (/* @__PURE__ */ new Date()).toISOString(),
       updatedBy
     };
-    if (useAdminFirestore2) {
+    if (useAdminFirestore5) {
       return upsertDocumentById(DRAFTS_COLLECTION, docId, draft);
     }
     memoryDrafts.set(docId, draft);
     return draft;
   },
   async listVersions(entityType, entityId, limit = DEFAULT_VERSION_LIMIT) {
-    if (useAdminFirestore2) {
+    if (useAdminFirestore5) {
       return listWhereOrdered(
         VERSIONS_COLLECTION,
         [
@@ -20896,7 +22258,7 @@ var draftStore = {
   },
   async createVersion(entityType, entityId, label, snapshot, createdBy, createdByName) {
     const version = {
-      id: `ver-${randomUUID5()}`,
+      id: `ver-${randomUUID9()}`,
       entityType,
       entityId,
       label,
@@ -20905,7 +22267,7 @@ var draftStore = {
       createdBy,
       createdByName
     };
-    if (useAdminFirestore2) {
+    if (useAdminFirestore5) {
       await upsertDocument(VERSIONS_COLLECTION, version);
     } else {
       memoryVersions.unshift(version);
@@ -20919,7 +22281,7 @@ init_sellerWorkspace();
 init_brandOwnership();
 
 // server/moderation/moderationStore.ts
-import { randomUUID as randomUUID6 } from "crypto";
+import { randomUUID as randomUUID10 } from "crypto";
 
 // server/moderation/moderationTypes.ts
 var MODERATION_QUEUES = {
@@ -20957,17 +22319,17 @@ var VERIFICATION_STATUSES = {
 };
 
 // server/moderation/moderationPersistence.ts
-import { existsSync as existsSync6, mkdirSync as mkdirSync6, readFileSync as readFileSync6, writeFileSync as writeFileSync6 } from "node:fs";
-import { dirname as dirname6, join as join7 } from "node:path";
-var DEFAULT_PATH3 = join7(process.cwd(), ".data", "moderation-memory-snapshot.json");
+import { existsSync as existsSync12, mkdirSync as mkdirSync12, readFileSync as readFileSync12, writeFileSync as writeFileSync12 } from "node:fs";
+import { dirname as dirname12, join as join13 } from "node:path";
+var DEFAULT_PATH6 = join13(process.cwd(), ".data", "moderation-memory-snapshot.json");
 function moderationMemorySnapshotPath() {
-  return process.env.MODERATION_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH3;
+  return process.env.MODERATION_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH6;
 }
 function loadModerationMemorySnapshot() {
   const path = moderationMemorySnapshotPath();
-  if (!existsSync6(path)) return null;
+  if (!existsSync12(path)) return null;
   try {
-    const parsed = JSON.parse(readFileSync6(path, "utf8"));
+    const parsed = JSON.parse(readFileSync12(path, "utf8"));
     if (!parsed || parsed.version !== 1) return null;
     return parsed;
   } catch (error2) {
@@ -20975,66 +22337,66 @@ function loadModerationMemorySnapshot() {
     return null;
   }
 }
-var persistTimer4 = null;
-var pendingBuild = null;
+var persistTimer9 = null;
+var pendingBuild4 = null;
 function scheduleModerationMemoryPersist(build) {
-  pendingBuild = build;
-  if (persistTimer4) clearTimeout(persistTimer4);
-  persistTimer4 = setTimeout(() => {
+  pendingBuild4 = build;
+  if (persistTimer9) clearTimeout(persistTimer9);
+  persistTimer9 = setTimeout(() => {
     flushModerationMemoryPersist();
   }, 250);
 }
 function flushModerationMemoryPersist() {
-  if (persistTimer4) {
-    clearTimeout(persistTimer4);
-    persistTimer4 = null;
+  if (persistTimer9) {
+    clearTimeout(persistTimer9);
+    persistTimer9 = null;
   }
-  if (!pendingBuild) return;
+  if (!pendingBuild4) return;
   try {
-    const snapshot = pendingBuild();
+    const snapshot = pendingBuild4();
     const path = moderationMemorySnapshotPath();
-    mkdirSync6(dirname6(path), { recursive: true });
-    writeFileSync6(path, JSON.stringify(snapshot), "utf8");
+    mkdirSync12(dirname12(path), { recursive: true });
+    writeFileSync12(path, JSON.stringify(snapshot), "utf8");
   } catch (error2) {
     console.error("[ModerationMemoryPersist] Failed to save snapshot:", error2);
   }
 }
 
 // server/moderation/moderationStore.ts
-var state5 = {
+var state9 = {
   items: [],
   reports: [],
   verifications: [],
   fraudSignals: []
 };
-var hydrated2 = false;
+var hydrated7 = false;
 function ensureModerationHydrated() {
-  if (hydrated2) return;
-  hydrated2 = true;
+  if (hydrated7) return;
+  hydrated7 = true;
   const snapshot = loadModerationMemorySnapshot();
   if (!snapshot) return;
-  state5.items = snapshot.items || [];
-  state5.reports = snapshot.reports || [];
-  state5.verifications = snapshot.verifications || [];
-  state5.fraudSignals = snapshot.fraudSignals || [];
+  state9.items = snapshot.items || [];
+  state9.reports = snapshot.reports || [];
+  state9.verifications = snapshot.verifications || [];
+  state9.fraudSignals = snapshot.fraudSignals || [];
   console.log(
-    `[ModerationMemoryPersist] Hydrated (${state5.items.length} items, ${state5.reports.length} reports, ${state5.verifications.length} verifications, ${state5.fraudSignals.length} fraud signals).`
+    `[ModerationMemoryPersist] Hydrated (${state9.items.length} items, ${state9.reports.length} reports, ${state9.verifications.length} verifications, ${state9.fraudSignals.length} fraud signals).`
   );
 }
-function buildSnapshot3() {
+function buildSnapshot6() {
   return {
     version: 1,
     savedAt: (/* @__PURE__ */ new Date()).toISOString(),
-    items: state5.items,
-    reports: state5.reports,
-    verifications: state5.verifications,
-    fraudSignals: state5.fraudSignals
+    items: state9.items,
+    reports: state9.reports,
+    verifications: state9.verifications,
+    fraudSignals: state9.fraudSignals
   };
 }
-function schedulePersist3() {
-  scheduleModerationMemoryPersist(buildSnapshot3);
+function schedulePersist7() {
+  scheduleModerationMemoryPersist(buildSnapshot6);
 }
-function nowIso10() {
+function nowIso18() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
 function matchesStatusFilter(item, status) {
@@ -21044,7 +22406,7 @@ function matchesStatusFilter(item, status) {
 ensureModerationHydrated();
 var moderationStore = {
   listItems(filter = {}) {
-    let rows = [...state5.items].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    let rows = [...state9.items].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     if (filter.queue) {
       rows = rows.filter((item) => item.queue === filter.queue);
     }
@@ -21062,32 +22424,32 @@ var moderationStore = {
     return rows.slice(offset, offset + limit);
   },
   getItem(id) {
-    return state5.items.find((item) => item.id === id) ?? null;
+    return state9.items.find((item) => item.id === id) ?? null;
   },
   findItemByResource(queue, resourceId) {
-    return state5.items.find((item) => item.queue === queue && item.resourceId === resourceId) ?? null;
+    return state9.items.find((item) => item.queue === queue && item.resourceId === resourceId) ?? null;
   },
   createItem(input) {
     const item = {
       ...input,
-      id: `mod-${randomUUID6()}`,
+      id: `mod-${randomUUID10()}`,
       status: input.status ?? MODERATION_STATUSES.PENDING,
-      createdAt: nowIso10(),
-      updatedAt: nowIso10()
+      createdAt: nowIso18(),
+      updatedAt: nowIso18()
     };
-    state5.items.unshift(item);
-    schedulePersist3();
+    state9.items.unshift(item);
+    schedulePersist7();
     return item;
   },
   updateItem(id, patch) {
-    const idx = state5.items.findIndex((item) => item.id === id);
+    const idx = state9.items.findIndex((item) => item.id === id);
     if (idx < 0) return null;
-    state5.items[idx] = { ...state5.items[idx], ...patch, updatedAt: nowIso10() };
-    schedulePersist3();
-    return state5.items[idx];
+    state9.items[idx] = { ...state9.items[idx], ...patch, updatedAt: nowIso18() };
+    schedulePersist7();
+    return state9.items[idx];
   },
   listReports(filter) {
-    let rows = [...state5.reports].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    let rows = [...state9.reports].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     if (filter?.status) rows = rows.filter((r) => r.status === filter.status);
     if (filter?.category) rows = rows.filter((r) => r.category === filter.category);
     if (filter?.resourceId) rows = rows.filter((r) => r.resourceId === filter.resourceId);
@@ -21096,43 +22458,43 @@ var moderationStore = {
     return rows.slice(offset, offset + limit);
   },
   getReport(id) {
-    return state5.reports.find((report) => report.id === id) ?? null;
+    return state9.reports.find((report) => report.id === id) ?? null;
   },
   createReport(input) {
     const report = {
       ...input,
-      id: `rpt-${randomUUID6()}`,
+      id: `rpt-${randomUUID10()}`,
       status: input.status ?? "open",
-      createdAt: nowIso10(),
-      updatedAt: nowIso10()
+      createdAt: nowIso18(),
+      updatedAt: nowIso18()
     };
-    state5.reports.unshift(report);
-    schedulePersist3();
+    state9.reports.unshift(report);
+    schedulePersist7();
     return report;
   },
   updateReport(id, patch) {
-    const idx = state5.reports.findIndex((report) => report.id === id);
+    const idx = state9.reports.findIndex((report) => report.id === id);
     if (idx < 0) return null;
-    state5.reports[idx] = { ...state5.reports[idx], ...patch, updatedAt: nowIso10() };
-    schedulePersist3();
-    return state5.reports[idx];
+    state9.reports[idx] = { ...state9.reports[idx], ...patch, updatedAt: nowIso18() };
+    schedulePersist7();
+    return state9.reports[idx];
   },
   getVerification(sellerId) {
-    return state5.verifications.find((v) => v.sellerId === sellerId) ?? null;
+    return state9.verifications.find((v) => v.sellerId === sellerId) ?? null;
   },
   listVerifications() {
-    return [...state5.verifications].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return [...state9.verifications].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   },
   upsertVerification(sellerId, patch, historyEntry) {
-    const existing = state5.verifications.find((v) => v.sellerId === sellerId);
+    const existing = state9.verifications.find((v) => v.sellerId === sellerId);
     const entry = {
-      id: `vh-${randomUUID6()}`,
+      id: `vh-${randomUUID10()}`,
       sellerId,
       status: patch.status ?? existing?.status ?? "pending",
       changedBy: historyEntry?.changedBy,
       reason: historyEntry?.reason,
       notes: historyEntry?.notes,
-      timestamp: nowIso10()
+      timestamp: nowIso18()
     };
     if (existing) {
       existing.status = patch.status ?? existing.status;
@@ -21142,13 +22504,13 @@ var moderationStore = {
       existing.expiresAt = patch.expiresAt ?? existing.expiresAt;
       existing.rejectedReason = patch.rejectedReason ?? existing.rejectedReason;
       existing.metadata = patch.metadata ?? existing.metadata;
-      existing.updatedAt = nowIso10();
+      existing.updatedAt = nowIso18();
       existing.history.unshift(entry);
-      schedulePersist3();
+      schedulePersist7();
       return existing;
     }
     const created2 = {
-      id: `sv-${randomUUID6()}`,
+      id: `sv-${randomUUID10()}`,
       sellerId,
       sellerName: patch.sellerName,
       status: patch.status ?? "pending",
@@ -21158,26 +22520,26 @@ var moderationStore = {
       rejectedReason: patch.rejectedReason,
       metadata: patch.metadata,
       history: [entry],
-      createdAt: nowIso10(),
-      updatedAt: nowIso10()
+      createdAt: nowIso18(),
+      updatedAt: nowIso18()
     };
-    state5.verifications.unshift(created2);
-    schedulePersist3();
+    state9.verifications.unshift(created2);
+    schedulePersist7();
     return created2;
   },
   addFraudSignal(input) {
     const signal = {
       ...input,
-      id: `frd-${randomUUID6()}`,
-      detectedAt: nowIso10(),
+      id: `frd-${randomUUID10()}`,
+      detectedAt: nowIso18(),
       reviewed: false
     };
-    state5.fraudSignals.unshift(signal);
-    schedulePersist3();
+    state9.fraudSignals.unshift(signal);
+    schedulePersist7();
     return signal;
   },
   listFraudSignals(filter) {
-    let rows = [...state5.fraudSignals];
+    let rows = [...state9.fraudSignals];
     if (filter?.reviewed !== void 0) {
       rows = rows.filter((s) => s.reviewed === filter.reviewed);
     }
@@ -21185,7 +22547,7 @@ var moderationStore = {
   },
   countItemsByQueueAndStatus() {
     const counts = {};
-    for (const item of state5.items) {
+    for (const item of state9.items) {
       if (!counts[item.queue]) {
         counts[item.queue] = {
           pending: 0,
@@ -21201,7 +22563,7 @@ var moderationStore = {
     return counts;
   },
   countReportsByStatus() {
-    return state5.reports.reduce(
+    return state9.reports.reduce(
       (acc, report) => {
         acc[report.status] += 1;
         return acc;
@@ -21210,7 +22572,7 @@ var moderationStore = {
     );
   },
   countVerificationsByStatus() {
-    return state5.verifications.reduce(
+    return state9.verifications.reduce(
       (acc, verification) => {
         acc[verification.status] += 1;
         return acc;
@@ -21256,7 +22618,7 @@ function getQueueSummary() {
 init_auditLogger();
 init_analyticsService();
 init_analyticsEvents();
-function requestContext2(req) {
+function requestContext3(req) {
   if (!req) return {};
   return {
     requestId: req.requestId,
@@ -21269,7 +22631,7 @@ function recordModerationAnalytics(eventType, payload, req) {
   recordEventAsync({
     type: eventType,
     ...payload,
-    ...requestContext2(req)
+    ...requestContext3(req)
   });
 }
 function recordReportCreated(reportId, resourceType, resourceId, category, req) {
@@ -21569,7 +22931,7 @@ function invalidateCategorySchemaCache(categoryId) {
   }
   schemaCache.clear();
 }
-function nowIso13() {
+function nowIso19() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
 function slugify5(value) {
@@ -21697,8 +23059,8 @@ function normalizeAttributeInput(payload, categoryId, existing) {
     options,
     displayOrder: Math.floor(Number(raw.displayOrder ?? existing?.displayOrder ?? 0)) || 0,
     status: String(raw.status ?? existing?.status ?? "active") === "archived" ? "archived" : "active",
-    createdAt: existing?.createdAt ?? nowIso13(),
-    updatedAt: nowIso13()
+    createdAt: existing?.createdAt ?? nowIso19(),
+    updatedAt: nowIso19()
   };
 }
 async function getCategorySchema(categoryId) {
@@ -22343,7 +23705,28 @@ catalogRouter.get(
         brandName: product.brandName,
         source: "catalog_product_detail"
       });
-      res.json(product);
+      const detail = await catalogStore2.getProductDetail(product.id).catch(() => null);
+      const canEditThisProduct = userCanMutateOwnedProduct(req, product);
+      const allVariants = Array.isArray(detail?.productVariants) ? detail.productVariants : [];
+      const publicVariants = allVariants.filter(
+        (v) => v && v.status ? v.status === "active" : v.enabled !== false
+      );
+      let responseVariants = canEditThisProduct ? allVariants : publicVariants;
+      if (!canEditThisProduct && responseVariants.length) {
+        const invRows = await listInventoryForProduct(product.id).catch(() => []);
+        const availByVariant = new Map(
+          invRows.filter((r) => r.variantId).map((r) => [r.variantId, r.availableQuantity])
+        );
+        responseVariants = responseVariants.map(
+          (v) => availByVariant.has(v.id) ? { ...v, stock: availByVariant.get(v.id) } : v
+        );
+      }
+      res.json({
+        ...product,
+        optionGroups: Array.isArray(detail?.optionGroups) ? detail.optionGroups : [],
+        productVariants: responseVariants,
+        ...detail?.sizeGuide ? { sizeGuide: detail.sizeGuide } : {}
+      });
     } catch (error2) {
       res.status(500).json({ error: error2 instanceof Error ? error2.message : "Failed to get product" });
     }
@@ -24448,6 +25831,14 @@ catalogRouter.put("/catalog/product-details/:productId", ...requireProductEdit, 
           actor: req.userId || "anonymous",
           payload: { productId: product.id, variantId: variant.id, sku: variant.sku }
         });
+        if (usesPhysicalInventory2 && typeof variant.stock === "number") {
+          await ensureInventoryRecord({
+            productId: product.id,
+            variantId: variant.id,
+            sku: variant.sku,
+            quantity: Math.max(0, variant.stock)
+          });
+        }
       }
     }
     if (usesPhysicalInventory2) {
@@ -24857,8 +26248,8 @@ function getRoleAnalytics(role, rangeInput, options) {
   if (permissions.analytics) {
     quickLinks.push({ label: "Analytics", path: "/admin/analytics" });
   }
-  const isPartnerRole2 = role === "seller" || role === "verified_seller" || role === "creator";
-  quickLinks.push({ label: "Messages", path: isPartnerRole2 ? "/admin/conversations" : "/admin/messages" });
+  const isPartnerRole3 = role === "seller" || role === "verified_seller" || role === "creator";
+  quickLinks.push({ label: "Messages", path: isPartnerRole3 ? "/admin/conversations" : "/admin/messages" });
   const cards = [];
   const ownerId = options?.ownerId?.trim() || "";
   const activeBrandId = options?.activeBrandId || null;
@@ -25503,6 +26894,63 @@ init_shipmentStore();
 init_platformMessagingBridge();
 init_operationsPersistence();
 
+// server/operations/invoiceAssignment.ts
+init_operationsStore();
+init_referenceIdService();
+init_logger();
+var ELIGIBLE_STATUSES = /* @__PURE__ */ new Set(["active", "confirmed", "completed"]);
+function isFiniteNumber(v) {
+  return typeof v === "number" && Number.isFinite(v);
+}
+function subOrderFinancialsComplete(sub) {
+  const deliveryOk = isFiniteNumber(sub.deliveryFee);
+  const itemsOk = (sub.items || []).every((it) => isFiniteNumber(it.price) && isFiniteNumber(it.quantity));
+  return deliveryOk && itemsOk;
+}
+var locks = /* @__PURE__ */ new Map();
+async function withSubOrderLock(key, fn) {
+  const prev = locks.get(key) || Promise.resolve();
+  let release;
+  const gate = new Promise((resolve2) => {
+    release = resolve2;
+  });
+  locks.set(key, prev.then(() => gate));
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    release();
+    if (locks.get(key) === void 0) {
+    }
+  }
+}
+async function ensureSubOrderInvoiceNumber(orderId, sellerId) {
+  const key = `${orderId}::${sellerId}`;
+  return withSubOrderLock(key, async () => {
+    const order = operationsStore.getOrder(orderId);
+    if (!order) return { eligible: false, reason: "not_found" };
+    const subOrders = order.subOrders || [];
+    const idx = subOrders.findIndex((s) => s.sellerId === sellerId);
+    if (idx < 0) return { eligible: false, reason: "not_found" };
+    const sub = subOrders[idx];
+    if (sub.invoiceId) {
+      return { eligible: true, invoiceId: sub.invoiceId, created: false };
+    }
+    if (!ELIGIBLE_STATUSES.has(order.status)) {
+      return { eligible: false, reason: "not_eligible_status" };
+    }
+    if (!subOrderFinancialsComplete(sub)) {
+      return { eligible: false, reason: "incomplete_data" };
+    }
+    const invoiceId = await allocateReferenceId("invoice");
+    registerReferenceAssignment("invoice", invoiceId, `${orderId}:${sellerId}`);
+    const nextSubOrders = subOrders.map((s, i) => i === idx ? { ...s, invoiceId } : s);
+    operationsStore.updateOrder(orderId, { subOrders: nextSubOrders });
+    Logger.audit("operations.invoice_number_assigned", { orderId, sellerId, invoiceId });
+    return { eligible: true, invoiceId, created: true };
+  });
+}
+
 // server/middleware/requireModerator.ts
 init_roles();
 var requireModerator = requireRole(ROLES.MODERATOR);
@@ -26062,28 +27510,28 @@ init_eventBus();
 // server/operations/manualOrderOfferStore.ts
 init_firestoreAdmin();
 init_queryHelpers();
-import { existsSync as existsSync10, mkdirSync as mkdirSync10, readFileSync as readFileSync10, writeFileSync as writeFileSync10 } from "node:fs";
-import { dirname as dirname10, join as join11 } from "node:path";
+import { existsSync as existsSync13, mkdirSync as mkdirSync13, readFileSync as readFileSync13, writeFileSync as writeFileSync13 } from "node:fs";
+import { dirname as dirname13, join as join14 } from "node:path";
 var memory3 = /* @__PURE__ */ new Map();
 var backend3 = null;
-var DISK_SNAPSHOT_PATH4 = process.env.MANUAL_ORDER_OFFER_MEMORY_SNAPSHOT_PATH?.trim() || join11(process.cwd(), ".data", "manual-order-offer-memory-snapshot.json");
+var DISK_SNAPSHOT_PATH4 = process.env.MANUAL_ORDER_OFFER_MEMORY_SNAPSHOT_PATH?.trim() || join14(process.cwd(), ".data", "manual-order-offer-memory-snapshot.json");
 function loadDiskSnapshot3() {
-  if (!existsSync10(DISK_SNAPSHOT_PATH4)) return;
+  if (!existsSync13(DISK_SNAPSHOT_PATH4)) return;
   try {
-    const rows = JSON.parse(readFileSync10(DISK_SNAPSHOT_PATH4, "utf8"));
+    const rows = JSON.parse(readFileSync13(DISK_SNAPSHOT_PATH4, "utf8"));
     for (const row of rows) memory3.set(row.id, row);
     console.log(`[ManualOrderOfferStore] Hydrated ${rows.length} offer(s) from disk snapshot.`);
   } catch (error2) {
     console.warn("[ManualOrderOfferStore] Failed to load disk snapshot:", error2);
   }
 }
-var persistTimer7 = null;
+var persistTimer10 = null;
 function scheduleDiskPersist2() {
-  if (persistTimer7) clearTimeout(persistTimer7);
-  persistTimer7 = setTimeout(() => {
+  if (persistTimer10) clearTimeout(persistTimer10);
+  persistTimer10 = setTimeout(() => {
     try {
-      mkdirSync10(dirname10(DISK_SNAPSHOT_PATH4), { recursive: true });
-      writeFileSync10(DISK_SNAPSHOT_PATH4, JSON.stringify([...memory3.values()]), "utf8");
+      mkdirSync13(dirname13(DISK_SNAPSHOT_PATH4), { recursive: true });
+      writeFileSync13(DISK_SNAPSHOT_PATH4, JSON.stringify([...memory3.values()]), "utf8");
     } catch (error2) {
       console.error("[ManualOrderOfferStore] Failed to save disk snapshot:", error2);
     }
@@ -26244,6 +27692,7 @@ async function recomputeOrderPricingServerSide(body) {
           let realPrice = 0;
           let realTitle = typeof item.productTitle === "string" ? item.productTitle : "";
           let warrantySnapshot = {};
+          let resolvedVariant;
           const rawGuideOfferRef = item.guideOfferRef && typeof item.guideOfferRef === "object" ? item.guideOfferRef : null;
           const guideOfferGuideId = rawGuideOfferRef ? toIdString(rawGuideOfferRef.guideId) : "";
           const guideOfferProductId = rawGuideOfferRef ? toIdString(rawGuideOfferRef.productId) || productId : "";
@@ -26259,6 +27708,35 @@ async function recomputeOrderPricingServerSide(body) {
             }
             realPrice = product.price;
             realTitle = product.title;
+            const rawVariantId = typeof item.variantId === "string" ? item.variantId.trim() : "";
+            if (rawVariantId) {
+              const variantDetail = await catalogStore2.getProductDetail(productId).catch(() => null);
+              const allVariants = variantDetail?.productVariants ?? [];
+              if (allVariants.length > 0) {
+                const variant = allVariants.find((v) => v.id === rawVariantId);
+                if (!variant) {
+                  throw new Error(
+                    `The selected option for "${product.title}" is no longer available. Please re-pick your choice and try again.`
+                  );
+                }
+                const variantActive = variant.status ? variant.status === "active" : variant.enabled !== false;
+                if (!variantActive) {
+                  throw new Error(
+                    `The selected option for "${product.title}" is no longer available. Please choose another combination.`
+                  );
+                }
+                if (typeof variant.price === "number" && Number.isFinite(variant.price) && variant.price > 0) {
+                  realPrice = variant.price;
+                }
+                const opts = variant.options && typeof variant.options === "object" ? variant.options : void 0;
+                resolvedVariant = {
+                  variantId: variant.id,
+                  variantSku: variant.sku || void 0,
+                  selectedOptions: opts,
+                  variantLabel: opts ? Object.entries(opts).map(([k, v]) => `${k}: ${v}`).join(" \xB7 ") : void 0
+                };
+              }
+            }
             if (guideOfferGuideId && guideOfferProductId === productId) {
               const lineHasVariant = Boolean(
                 typeof item.variantId === "string" && item.variantId || typeof item.variantSku === "string" && item.variantSku
@@ -26332,6 +27810,8 @@ async function recomputeOrderPricingServerSide(body) {
             price: realPrice,
             productTitle: realTitle,
             quantity,
+            // Server-resolved variant identity wins over anything the client sent.
+            ...resolvedVariant ?? {},
             ...guideOfferSnapshot ? { guideOffer: guideOfferSnapshot } : {}
           };
         })
@@ -26598,6 +28078,38 @@ operationsRouter.get("/operations/orders/:id", ...requireAuth2, (req, res) => {
     return;
   }
   res.json({ data: order });
+});
+operationsRouter.post("/operations/orders/:id/subs/:sellerId/invoice", ...requireAuth2, async (req, res) => {
+  const order = operationsStore.getOrder(req.params.id);
+  if (!order) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+  const targetSellerId = req.params.sellerId;
+  const sub = (order.subOrders || []).find((s) => s.sellerId === targetSellerId);
+  if (!sub) {
+    res.status(404).json({ error: "Seller's slice of this order was not found" });
+    return;
+  }
+  const role = req.userRole;
+  const isStaff4 = Boolean(
+    role && (hasRole(role, ROLES.SUPER_ADMIN) || hasRole(role, ROLES.ADMIN) || hasRole(role, ROLES.SUPPORT_AGENT) || hasRole(role, ROLES.MODERATOR) || hasRole(role, ROLES.FINANCE_MANAGER))
+  );
+  const isOwningSeller = Boolean(req.userId && req.userId === targetSellerId);
+  if (!isStaff4 && !isOwningSeller) {
+    res.status(403).json({ error: "Not authorized to view this invoice" });
+    return;
+  }
+  try {
+    const result = await ensureSubOrderInvoiceNumber(req.params.id, targetSellerId);
+    if (!result.eligible) {
+      res.json({ data: { invoiceId: null, eligible: false, reason: result.reason } });
+      return;
+    }
+    res.json({ data: { invoiceId: result.invoiceId, eligible: true } });
+  } catch (error2) {
+    res.status(500).json({ error: error2 instanceof Error ? error2.message : "Unable to prepare invoice" });
+  }
 });
 operationsRouter.post("/operations/orders", ...requireAuth2, async (req, res) => {
   let reservedInventoryLines = [];
@@ -27029,9 +28541,9 @@ operationsRouter.post("/operations/orders/:id/items/:itemId/mark-delivered", ...
   let authorized = userIsStaff(req);
   if (!authorized && req.userId && located.sub.sellerId === req.userId) authorized = true;
   if (!authorized && req.userId) {
-    const productId2 = String(located.item.productId || "").trim();
-    if (productId2) {
-      const product = await catalogStore2.getProduct(productId2);
+    const productId = String(located.item.productId || "").trim();
+    if (productId) {
+      const product = await catalogStore2.getProduct(productId);
       if (product?.sellerId === req.userId) authorized = true;
     }
   }
@@ -27039,77 +28551,64 @@ operationsRouter.post("/operations/orders/:id/items/:itemId/mark-delivered", ...
     res.status(403).json({ error: "Not authorized to update this order item" });
     return;
   }
-  const productId = String(located.item.productId || "").trim();
-  const alreadyConsumed = Boolean(located.item.inventoryConsumed);
-  if (productId && !alreadyConsumed) {
-    const variantId = typeof located.item.variantId === "string" ? located.item.variantId : void 0;
-    const quantity = Math.max(1, Math.floor(Number(located.item.quantity) || 1));
-    await consumeInventoryQuantity({ productId, variantId, quantity }).catch((err) => {
-      console.error("[Order] Failed to consume inventory on mark-delivered:", err);
-    });
+  const { settleOrderItemDelivered: settleOrderItemDelivered2 } = await Promise.resolve().then(() => (init_deliverySettlement(), deliverySettlement_exports));
+  const settlement = await settleOrderItemDelivered2(
+    req.params.id,
+    req.params.itemId,
+    userIsStaff(req) ? "admin" : "per_item_manual",
+    { actorId: req.userId }
+  );
+  if (!settlement.ok) {
+    res.status(settlement.reason === "item_not_found" ? 404 : 409).json({ error: settlement.reason === "item_not_found" ? "Order item not found" : "Delivery could not be settled" });
+    return;
   }
-  const deliveredAt = (/* @__PURE__ */ new Date()).toISOString();
-  const nextSubs = subs.map((sub) => {
-    const items = sub.items || [];
-    const hasItem = items.some((it) => it.itemId === req.params.itemId);
-    if (!hasItem) return sub;
-    return {
-      ...sub,
-      trackingStatus: "delivered",
-      items: items.map((it) => {
-        if (it.itemId !== req.params.itemId) return it;
-        const consumedFlag = productId ? { inventoryConsumed: true } : {};
-        const warrantyMonths = Number(it.warrantyMonthsAtPurchase) || 0;
-        if (!warrantyMonths) return { ...it, ...consumedFlag, deliveredAt };
-        const expiresAt = new Date(
-          Date.now() + warrantyMonths * 30 * 24 * 60 * 60 * 1e3
-        ).toISOString();
-        return { ...it, ...consumedFlag, deliveredAt, warrantyStartsAt: deliveredAt, warrantyExpiresAt: expiresAt };
-      })
-    };
-  });
-  const saved = operationsStore.updateOrder(req.params.id, { subOrders: nextSubs });
-  scheduleOperationsPersist();
-  try {
-    const allItemsDelivered = nextSubs.every(
-      (sub) => (sub.items || []).every((it) => Boolean(it.deliveredAt))
-    );
-    if (allItemsDelivered) {
-      const shipment = shipmentStore.getShipmentByOrderId(req.params.id);
-      if (shipment && shipment.status !== "delivered") {
-        shipmentStore.updateShipment(shipment.id, {
-          status: "delivered",
-          trackingEvents: [
-            {
-              id: `evt_${Date.now()}`,
-              timestamp: deliveredAt,
-              status: "delivered",
-              location: shipment.region || "Dhaka",
-              description: `Marked delivered via order fulfillment (item ${req.params.itemId}).`
-            },
-            ...shipment.trackingEvents
-          ]
-        });
-      }
-    }
-  } catch (err) {
-    console.error("[Order] Failed to sync shipment status on mark-delivered:", err);
-  }
-  if (existing.buyerId) {
-    try {
-      await notifyUser(existing.buyerId, {
-        type: COMMUNICATION_TYPES.ORDER_UPDATE,
-        category: "buyer",
-        title: "Order delivered",
-        summary: `${String(located.item.productTitle || "Your item")} from order ${existing.orderId} was marked delivered.`,
-        actionUrl: "/profile/orders",
-        metadata: { orderId: existing.orderId, itemId: req.params.itemId }
-      });
-    } catch (err) {
-      console.warn("[Order] Notify buyer (delivered) failed:", err);
-    }
-  }
+  const saved = operationsStore.getOrder(req.params.id);
   res.json({ success: true, data: saved });
+});
+operationsRouter.get("/operations/orders/:id/notes", ...requireAuth2, (req, res) => {
+  const order = operationsStore.getOrder(req.params.id);
+  if (!order) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+  if (!userIsStaff(req)) {
+    res.status(403).json({ error: "Internal order notes are staff-only" });
+    return;
+  }
+  res.json({ data: order.internalNotes || [] });
+});
+operationsRouter.post("/operations/orders/:id/notes", ...requireAuth2, (req, res) => {
+  const order = operationsStore.getOrder(req.params.id);
+  if (!order) {
+    res.status(404).json({ error: "Order not found" });
+    return;
+  }
+  if (!userIsStaff(req)) {
+    res.status(403).json({ error: "Internal order notes are staff-only" });
+    return;
+  }
+  const body = String(req.body?.body || "").trim();
+  if (!body) {
+    res.status(400).json({ error: "body is required" });
+    return;
+  }
+  if (body.length > 4e3) {
+    res.status(400).json({ error: "Note is too long (max 4000 characters)" });
+    return;
+  }
+  const note = {
+    id: `note_${randomBytes3(8).toString("hex")}`,
+    orderId: order.orderId,
+    authorId: req.userId || "unknown",
+    authorName: String(req.body?.authorName || "").trim() || "Staff",
+    authorRole: String(req.userRole || "staff"),
+    body,
+    createdAt: (/* @__PURE__ */ new Date()).toISOString()
+  };
+  const next = [...order.internalNotes || [], note];
+  const saved = operationsStore.updateOrder(order.id, { internalNotes: next });
+  scheduleOperationsPersist();
+  res.status(201).json({ data: saved?.internalNotes || next, note });
 });
 function makeManualOfferInvoiceId() {
   return `INV-${Math.floor(1e5 + Math.random() * 9e5)}`;
@@ -27296,13 +28795,13 @@ operationsRouter.post("/operations/manual-offers", ...requireAuth2, async (req, 
       res.status(201).json({ success: true, data: toManualOrderOfferCard(offer) });
       return;
     }
-    const webBase3 = (process.env.CHOOSIFY_WEB_URL || process.env.VITE_CHOOSIFY_WEB_URL || "http://localhost:5173").replace(/\/$/, "");
+    const webBase4 = (process.env.CHOOSIFY_WEB_URL || process.env.VITE_CHOOSIFY_WEB_URL || "http://localhost:5173").replace(/\/$/, "");
     res.status(201).json({
       success: true,
       data: toManualOrderOfferCard(offer),
       claim: {
         token: rawClaimToken,
-        url: `${webBase3}/orders/confirm/${encodeURIComponent(rawClaimToken)}`,
+        url: `${webBase4}/orders/confirm/${encodeURIComponent(rawClaimToken)}`,
         expiresAt: claimTokenExpiresAt
       }
     });
@@ -27714,6 +29213,7 @@ operationsRouter.get("/operations/returns", ...requireAuth2, (req, res) => {
   let buyerId = typeof req.query.buyerId === "string" ? req.query.buyerId : void 0;
   let sellerId = typeof req.query.sellerId === "string" ? req.query.sellerId : void 0;
   const status = typeof req.query.status === "string" ? req.query.status : void 0;
+  const orderId = typeof req.query.orderId === "string" ? req.query.orderId : void 0;
   if (!userCanListReturns(req, { buyerId, sellerId })) {
     if (!buyerId && !sellerId && req.userId && req.userRole && (hasRole(req.userRole, ROLES.SELLER) || hasRole(req.userRole, ROLES.VERIFIED_SELLER))) {
       sellerId = req.userId;
@@ -27725,7 +29225,7 @@ operationsRouter.get("/operations/returns", ...requireAuth2, (req, res) => {
       return;
     }
   }
-  const rows = operationsStore.listReturns({ buyerId, sellerId, status });
+  const rows = operationsStore.listReturns({ buyerId, sellerId, status, orderId });
   res.json({ data: rows });
 });
 operationsRouter.get("/operations/returns/:id", ...requireAuth2, (req, res) => {
@@ -30157,9 +31657,9 @@ bookingRouter.get("/booking/expire", async (req, res) => {
 });
 
 // server/authRouter.ts
-import { randomBytes as randomBytes5, randomUUID as randomUUID11 } from "node:crypto";
+import { randomBytes as randomBytes6, randomUUID as randomUUID13 } from "node:crypto";
 import { Router as Router6 } from "express";
-import { eq as eq12 } from "drizzle-orm";
+import { and as and8, eq as eq14, isNull as isNull4 } from "drizzle-orm";
 init_jwtTokens();
 
 // server/auth/authTokens.ts
@@ -30170,8 +31670,8 @@ import { and as and5, eq as eq11, isNull as isNull2 } from "drizzle-orm";
 var EMAIL_VERIFICATION_TTL_MS = 24 * 60 * 60 * 1e3;
 var PASSWORD_RESET_TTL_MS = 60 * 60 * 1e3;
 function hashToken(raw) {
-  const pepper = process.env.JWT_REFRESH_SECRET?.trim() || "";
-  return createHash3("sha256").update(`${pepper}:${raw}`).digest("hex");
+  const pepper2 = process.env.JWT_REFRESH_SECRET?.trim() || "";
+  return createHash3("sha256").update(`${pepper2}:${raw}`).digest("hex");
 }
 function ttlForType(type) {
   return type === "password_reset" ? PASSWORD_RESET_TTL_MS : EMAIL_VERIFICATION_TTL_MS;
@@ -30199,8 +31699,507 @@ async function consumeAuthToken(rawToken, type) {
   return row.userId;
 }
 
+// server/auth/localPasswordSetup.ts
+init_client();
+init_schema();
+import { createHash as createHash4, randomBytes as randomBytes5, randomInt, timingSafeEqual as timingSafeEqual2 } from "node:crypto";
+import { and as and6, desc as desc3, eq as eq12, isNull as isNull3, sql as sql4 } from "drizzle-orm";
+var SET_LOCAL_PASSWORD_PURPOSE = "SET_LOCAL_PASSWORD";
+var CODE_TTL_MS = 10 * 60 * 1e3;
+var GRANT_TTL_MS = 10 * 60 * 1e3;
+var MAX_VERIFY_ATTEMPTS = 5;
+var RESEND_MIN_INTERVAL_MS = 60 * 1e3;
+var RESEND_MAX_PER_EPISODE = 5;
+var LocalPasswordSetupError = class extends Error {
+  constructor(code, statusCode, message, retryAfterSeconds) {
+    super(message);
+    this.name = "LocalPasswordSetupError";
+    this.code = code;
+    this.statusCode = statusCode;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+};
+function pepper() {
+  return process.env.JWT_REFRESH_SECRET?.trim() || "";
+}
+function hashSecret(userId, secret) {
+  return createHash4("sha256").update(`${pepper()}:${userId}:${SET_LOCAL_PASSWORD_PURPOSE}:${secret}`).digest("hex");
+}
+function hashesEqual(a, b) {
+  const ba = Buffer.from(a, "hex");
+  const bb = Buffer.from(b, "hex");
+  if (ba.length !== bb.length) return false;
+  return timingSafeEqual2(ba, bb);
+}
+function generateSixDigitCode() {
+  return String(randomInt(0, 1e6)).padStart(6, "0");
+}
+function maskEmail(email) {
+  const [local, domain] = String(email || "").split("@");
+  if (!domain) return "\u2022\u2022\u2022\u2022\u2022";
+  const head = local.slice(0, 2);
+  return `${head}${"\u2022".repeat(Math.max(4, local.length - head.length))}@${domain}`;
+}
+async function newestOpenRow(userId) {
+  const rows = await db.select().from(localPasswordSetups).where(
+    and6(
+      eq12(localPasswordSetups.userId, userId),
+      eq12(localPasswordSetups.purpose, SET_LOCAL_PASSWORD_PURPOSE),
+      isNull3(localPasswordSetups.consumedAt)
+    )
+  ).orderBy(desc3(localPasswordSetups.createdAt)).limit(1);
+  return rows[0];
+}
+async function requestSetupOtp(userId) {
+  const now = Date.now();
+  const prior = await newestOpenRow(userId);
+  if (prior) {
+    const sinceLast = now - prior.lastSentAt.getTime();
+    if (sinceLast < RESEND_MIN_INTERVAL_MS) {
+      const retryAfterSeconds = Math.ceil((RESEND_MIN_INTERVAL_MS - sinceLast) / 1e3);
+      throw new LocalPasswordSetupError(
+        "RESEND_TOO_SOON",
+        429,
+        "A code was just sent. Wait a moment before requesting another.",
+        retryAfterSeconds
+      );
+    }
+    if (prior.resendCount >= RESEND_MAX_PER_EPISODE) {
+      throw new LocalPasswordSetupError(
+        "RESEND_LIMIT",
+        429,
+        "Too many verification codes requested. Try again later."
+      );
+    }
+  }
+  await db.update(localPasswordSetups).set({ consumedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(
+    and6(
+      eq12(localPasswordSetups.userId, userId),
+      eq12(localPasswordSetups.purpose, SET_LOCAL_PASSWORD_PURPOSE),
+      isNull3(localPasswordSetups.consumedAt)
+    )
+  );
+  const code = generateSixDigitCode();
+  const expiresAt = new Date(now + CODE_TTL_MS);
+  const resendCount = (prior?.resendCount ?? 0) + 1;
+  await db.insert(localPasswordSetups).values({
+    userId,
+    purpose: SET_LOCAL_PASSWORD_PURPOSE,
+    codeHash: hashSecret(userId, code),
+    codeExpiresAt: expiresAt,
+    attempts: 0,
+    resendCount,
+    lastSentAt: new Date(now)
+  });
+  return { code, expiresAt, resendCount };
+}
+async function verifySetupOtp(userId, submittedCode) {
+  const code = String(submittedCode || "").trim();
+  const row = await newestOpenRow(userId);
+  if (!row || row.verifiedAt) {
+    throw new LocalPasswordSetupError("NO_ACTIVE_CODE", 400, "Request a verification code first.");
+  }
+  if (row.codeExpiresAt.getTime() < Date.now()) {
+    throw new LocalPasswordSetupError("CODE_EXPIRED", 400, "That code has expired. Request a new one.");
+  }
+  if (row.attempts >= MAX_VERIFY_ATTEMPTS) {
+    throw new LocalPasswordSetupError(
+      "TOO_MANY_ATTEMPTS",
+      429,
+      "Too many incorrect attempts. Request a new code."
+    );
+  }
+  const matches = /^\d{6}$/.test(code) && hashesEqual(hashSecret(userId, code), row.codeHash);
+  if (!matches) {
+    const updated = await db.update(localPasswordSetups).set({ attempts: sql4`${localPasswordSetups.attempts} + 1`, updatedAt: /* @__PURE__ */ new Date() }).where(eq12(localPasswordSetups.id, row.id)).returning({ attempts: localPasswordSetups.attempts });
+    const attempts = updated[0]?.attempts ?? row.attempts + 1;
+    if (attempts >= MAX_VERIFY_ATTEMPTS) {
+      throw new LocalPasswordSetupError(
+        "TOO_MANY_ATTEMPTS",
+        429,
+        "Too many incorrect attempts. Request a new code."
+      );
+    }
+    throw new LocalPasswordSetupError("INVALID_CODE", 400, "That code is not correct.");
+  }
+  const grant = randomBytes5(32).toString("hex");
+  const grantExpiresAt = new Date(Date.now() + GRANT_TTL_MS);
+  const claimed = await db.update(localPasswordSetups).set({
+    verifiedAt: /* @__PURE__ */ new Date(),
+    grantHash: hashSecret(userId, grant),
+    grantExpiresAt,
+    updatedAt: /* @__PURE__ */ new Date()
+  }).where(
+    and6(
+      eq12(localPasswordSetups.id, row.id),
+      isNull3(localPasswordSetups.verifiedAt),
+      isNull3(localPasswordSetups.consumedAt)
+    )
+  ).returning({ id: localPasswordSetups.id });
+  if (!claimed.length) {
+    throw new LocalPasswordSetupError("NO_ACTIVE_CODE", 400, "Request a verification code first.");
+  }
+  return { grant, grantExpiresAt };
+}
+async function consumeSetupGrant(userId, grant) {
+  const raw = String(grant || "").trim();
+  if (!raw) return false;
+  const grantHash = hashSecret(userId, raw);
+  const rows = await db.select().from(localPasswordSetups).where(
+    and6(
+      eq12(localPasswordSetups.userId, userId),
+      eq12(localPasswordSetups.purpose, SET_LOCAL_PASSWORD_PURPOSE),
+      eq12(localPasswordSetups.grantHash, grantHash),
+      isNull3(localPasswordSetups.consumedAt)
+    )
+  ).limit(1);
+  const row = rows[0];
+  if (!row || !row.verifiedAt || !row.grantExpiresAt) return false;
+  if (row.grantExpiresAt.getTime() < Date.now()) return false;
+  const consumed = await db.update(localPasswordSetups).set({ consumedAt: /* @__PURE__ */ new Date(), updatedAt: /* @__PURE__ */ new Date() }).where(and6(eq12(localPasswordSetups.id, row.id), isNull3(localPasswordSetups.consumedAt))).returning({ id: localPasswordSetups.id });
+  return consumed.length > 0;
+}
+
 // server/email/emailService.ts
+init_logger();
 import nodemailer from "nodemailer";
+
+// server/email/emailShell.ts
+var BRAND = {
+  navy: "#18154C",
+  coral: "#EF3C23",
+  orange: "#FF5B00",
+  ink: "#1A1A2E",
+  bodyText: "#3A3A46",
+  muted: "#6B7280",
+  hairline: "#E8EDF2",
+  surface: "#FFFFFF",
+  pageBg: "#F4F5F8",
+  infoCardBg: "#F7F8FB",
+  noticeBg: "#FFF6ED",
+  noticeBorder: "#FFD9B8",
+  noticeText: "#8A4B12"
+};
+var FONT_STACK = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji'";
+var LOGO_URL = process.env.EMAIL_LOGO_URL?.trim() || "https://choosify.bd/brand/choosify-logo-horizontal-navy.png";
+var escapeHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+function emailButton(label, href) {
+  return `
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:8px auto 4px;">
+    <tr>
+      <td align="center" bgcolor="${BRAND.orange}" style="border-radius:10px;background-color:${BRAND.orange};background-image:linear-gradient(90deg,${BRAND.coral} 0%,${BRAND.orange} 100%);">
+        <a href="${escapeHtml(href)}" target="_blank" rel="noopener"
+           style="display:inline-block;padding:14px 34px;font-family:${FONT_STACK};font-size:15px;font-weight:700;line-height:1;color:#ffffff;text-decoration:none;border-radius:10px;">
+          ${escapeHtml(label)}
+        </a>
+      </td>
+    </tr>
+  </table>`;
+}
+function emailSecurityNotice(text2) {
+  return `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+         style="margin:20px 0 4px;border:1px solid ${BRAND.noticeBorder};border-radius:12px;background:${BRAND.noticeBg};">
+    <tr><td style="padding:14px 18px;font-family:${FONT_STACK};font-size:12.5px;line-height:1.6;color:${BRAND.noticeText};">
+      <strong>Security note.</strong> ${escapeHtml(text2)}
+    </td></tr>
+  </table>`;
+}
+function emailCodeBlock(code) {
+  return `
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:22px 0 8px;">
+    <tr>
+      <td align="center" style="border:1px solid ${BRAND.hairline};border-radius:12px;background:${BRAND.infoCardBg};padding:22px 12px;">
+        <div style="font-family:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;font-size:34px;line-height:1;font-weight:700;letter-spacing:.34em;color:${BRAND.navy};">${escapeHtml(code)}</div>
+      </td>
+    </tr>
+  </table>`;
+}
+function renderEmailShell({ preheader, heading, bodyHtml, supportEmail = "support@choosify.bd" }) {
+  return `<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta http-equiv="X-UA-Compatible" content="IE=edge" />
+<meta name="color-scheme" content="light" />
+<meta name="supported-color-schemes" content="light" />
+<title>${escapeHtml(heading)}</title>
+<style>
+  /* Progressive enhancement only \u2014 the layout is fully inline above. */
+  @media only screen and (max-width:600px){
+    .cf-container{width:100% !important;}
+    .cf-pad{padding-left:22px !important;padding-right:22px !important;}
+    .cf-h1{font-size:22px !important;}
+  }
+  a{color:${BRAND.orange};}
+</style>
+</head>
+<body style="margin:0;padding:0;background:${BRAND.pageBg};">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:${BRAND.pageBg};">
+  <tr>
+    <td align="center" style="padding:32px 12px;">
+      <table role="presentation" class="cf-container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;">
+
+        <!-- Header \u2014 the official Choosify horizontal lockup (navy). Public,
+             unauthenticated HTTPS asset (the same brand file the storefront
+             ships at /brand/\u2026). Native 2000x447; rendered proportionally. alt
+             text carries the brand name when remote images are blocked. -->
+        <tr>
+          <td style="padding:6px 4px 20px;">
+            <img src="${LOGO_URL}" alt="Choosify" width="179" height="40"
+                 style="display:block;width:179px;max-width:179px;height:40px;border:0;outline:none;text-decoration:none;-ms-interpolation-mode:bicubic;" />
+          </td>
+        </tr>
+
+        <!-- Content surface -->
+        <tr>
+          <td class="cf-pad" style="background:${BRAND.surface};border:1px solid ${BRAND.hairline};border-radius:16px;padding:36px 40px;">
+            <h1 class="cf-h1" style="margin:0 0 14px;font-family:${FONT_STACK};font-size:24px;line-height:1.3;font-weight:800;color:${BRAND.navy};">${escapeHtml(heading)}</h1>
+            ${bodyHtml}
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="padding:24px 8px 8px;">
+            <p style="margin:0 0 6px;font-family:${FONT_STACK};font-size:13px;font-weight:700;color:${BRAND.navy};">Choose, Compare &amp; Decide Wisely.</p>
+            <p style="margin:0 0 4px;font-family:${FONT_STACK};font-size:12px;line-height:1.6;color:${BRAND.muted};">
+              Bangladesh's product discovery platform \u2014 verify brands, compare options and shop with confidence.
+            </p>
+            <p style="margin:0;font-family:${FONT_STACK};font-size:12px;line-height:1.6;color:${BRAND.muted};">
+              Need help? <a href="mailto:${escapeHtml(supportEmail)}" style="color:${BRAND.orange};">${escapeHtml(supportEmail)}</a>
+              &nbsp;\xB7&nbsp; This is an automated message from Choosify.
+            </p>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+</body>
+</html>`;
+}
+function paragraph(html) {
+  return `<p style="margin:0 0 14px;font-family:${FONT_STACK};font-size:14.5px;line-height:1.7;color:${BRAND.bodyText};">${html}</p>`;
+}
+function fallbackLink(href) {
+  return `<p style="margin:14px 0 0;font-family:${FONT_STACK};font-size:12px;line-height:1.6;color:${BRAND.muted};word-break:break-all;">
+    If the button doesn't work, copy and paste this link:<br />
+    <a href="${escapeHtml(href)}" style="color:${BRAND.orange};">${escapeHtml(href)}</a>
+  </p>`;
+}
+function toPlainText(parts) {
+  return parts.join("\n\n").replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/\n{3,}/g, "\n\n").trim();
+}
+
+// server/email/templates.ts
+var firstName = (name) => (name || "").trim().split(/\s+/)[0] || "there";
+function welcomeEmail(input) {
+  const hi = firstName(input.name);
+  const body = [
+    paragraph(`Hi ${hi}, your Choosify account is ready.`),
+    paragraph(
+      `Save the products and brands you're considering, follow price and review changes, and get picks tailored to what you actually care about.`
+    ),
+    emailButton("Explore Choosify", input.exploreUrl)
+  ].join("\n");
+  return {
+    subject: "Welcome to Choosify",
+    html: renderEmailShell({
+      preheader: "Your Choosify account is ready \u2014 choose, compare & decide wisely.",
+      heading: "Welcome to Choosify",
+      bodyHtml: body
+    }),
+    text: toPlainText([
+      `Hi ${hi}, your Choosify account is ready.`,
+      `Save products and brands, follow price and review changes, and get tailored picks.`,
+      `Explore Choosify: ${input.exploreUrl}`,
+      `Choose, Compare & Decide Wisely. \u2014 Choosify`
+    ])
+  };
+}
+function verifyEmail(input) {
+  const ttl = input.ttlHours ?? 24;
+  const body = [
+    paragraph(`Confirm this is your email address to finish setting up your Choosify account.`),
+    emailButton("Verify email address", input.verifyUrl),
+    emailSecurityNotice(
+      `This link expires in ${ttl} hours and can only be used once. If you didn't create a Choosify account, you can ignore this email.`
+    ),
+    fallbackLink(input.verifyUrl)
+  ].join("\n");
+  return {
+    subject: "Verify your Choosify email address",
+    html: renderEmailShell({
+      preheader: "Confirm your email to finish setting up your Choosify account.",
+      heading: "Verify your email address",
+      bodyHtml: body
+    }),
+    text: toPlainText([
+      `Confirm your email to finish setting up your Choosify account.`,
+      `Verify: ${input.verifyUrl}`,
+      `This link expires in ${ttl} hours and can only be used once. If this wasn't you, ignore this email.`,
+      `Choose, Compare & Decide Wisely. \u2014 Choosify`
+    ])
+  };
+}
+function passwordResetEmail(input) {
+  const ttl = input.ttlMinutes ?? 60;
+  const body = [
+    paragraph(`We received a request to reset the password for your Choosify account.`),
+    emailButton("Reset password", input.resetUrl),
+    emailSecurityNotice(
+      `This link expires in ${ttl} minutes and can be used once. If you didn't request a reset, you can safely ignore this email \u2014 your password will not change.`
+    ),
+    fallbackLink(input.resetUrl)
+  ].join("\n");
+  return {
+    subject: "Reset your Choosify password",
+    html: renderEmailShell({
+      preheader: "Reset your Choosify password \u2014 this link expires soon.",
+      heading: "Reset your Choosify password",
+      bodyHtml: body
+    }),
+    text: toPlainText([
+      `We received a request to reset the password for your Choosify account.`,
+      `Reset: ${input.resetUrl}`,
+      `This link expires in ${ttl} minutes and can be used once. If you didn't request this, ignore this email \u2014 your password will not change.`,
+      `Choose, Compare & Decide Wisely. \u2014 Choosify`
+    ])
+  };
+}
+function passwordChangedEmail(input) {
+  const body = [
+    paragraph(`Your Choosify account password was just changed${input.when ? ` on ${input.when}` : ""}.`),
+    paragraph(`Every other signed-in session was signed out as a precaution.`),
+    emailSecurityNotice(
+      `If you did not make this change, reset your password immediately and contact Choosify support.`
+    ),
+    emailButton("Contact support", input.supportUrl)
+  ].join("\n");
+  return {
+    subject: "Your Choosify password was changed",
+    html: renderEmailShell({
+      preheader: "Your Choosify password was changed. If this was not you, act now.",
+      heading: "Your password was changed",
+      bodyHtml: body
+    }),
+    text: toPlainText([
+      `Your Choosify account password was just changed${input.when ? ` on ${input.when}` : ""}.`,
+      `Every other signed-in session was signed out.`,
+      `If this wasn't you, reset your password immediately and contact support: ${input.supportUrl}`,
+      `Choose, Compare & Decide Wisely. \u2014 Choosify`
+    ])
+  };
+}
+function verificationCodeEmail(input) {
+  const ttl = input.ttlMinutes ?? 10;
+  const body = [
+    paragraph(`Use this code to set up a password for your Choosify account \u2014 the one you're signed in to right now.`),
+    emailCodeBlock(input.code),
+    paragraph(`This code expires in ${ttl} minutes.`),
+    emailSecurityNotice(
+      `If you didn't ask to set up a password, you can ignore this email \u2014 nothing will change, and your account stays sign-in-with-Google only. Never share this code with anyone; Choosify staff will never ask for it.`
+    )
+  ].join("\n");
+  return {
+    subject: "Your Choosify verification code",
+    html: renderEmailShell({
+      preheader: `Your Choosify verification code \u2014 expires in ${ttl} minutes.`,
+      heading: "Your verification code",
+      bodyHtml: body
+    }),
+    text: toPlainText([
+      `Use this code to set up a password for your Choosify account (the one you're signed in to now):`,
+      input.code,
+      `This code expires in ${ttl} minutes.`,
+      `If you didn't request this, ignore this email \u2014 nothing changes and your account stays Google sign-in only. Never share this code with anyone.`,
+      `Choose, Compare & Decide Wisely. \u2014 Choosify`
+    ])
+  };
+}
+function passwordAddedEmail(input) {
+  const body = [
+    paragraph(`A password was just added to your Choosify account${input.when ? ` on ${input.when}` : ""}.`),
+    paragraph(`You can now sign in with your email and password as well as with Google. Your Google sign-in still works and nothing else about your account changed.`),
+    emailSecurityNotice(
+      `If you did not add this password, contact Choosify support immediately \u2014 someone may have access to your email or your signed-in session.`
+    ),
+    emailButton("Contact support", input.supportUrl)
+  ].join("\n");
+  return {
+    subject: "A password was added to your Choosify account",
+    html: renderEmailShell({
+      preheader: "A password was added to your Choosify account. If this was not you, act now.",
+      heading: "A password was added to your account",
+      bodyHtml: body
+    }),
+    text: toPlainText([
+      `A password was just added to your Choosify account${input.when ? ` on ${input.when}` : ""}.`,
+      `You can now sign in with email and password as well as with Google. Google sign-in still works; nothing else changed.`,
+      `If you did not do this, contact Choosify support immediately: ${input.supportUrl}`,
+      `Choose, Compare & Decide Wisely. \u2014 Choosify`
+    ])
+  };
+}
+
+// server/email/emailService.ts
+function fromAddress() {
+  return process.env.EMAIL_FROM?.trim() || process.env.SMTP_FROM?.trim() || "Choosify <no-reply@choosify.bd>";
+}
+function replyTo() {
+  return process.env.EMAIL_REPLY_TO?.trim() || void 0;
+}
+function isResendConfigured() {
+  return Boolean(process.env.RESEND_API_KEY?.trim());
+}
+function maskRecipient(addr) {
+  const [local, domain] = String(addr || "").split("@");
+  if (!domain) return "***";
+  return `${local.slice(0, 1)}***@${domain}`;
+}
+async function sendViaResend(message) {
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (!key) return false;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from: fromAddress(),
+        to: [message.to],
+        subject: message.subject,
+        html: message.html,
+        text: message.text,
+        ...replyTo() ? { reply_to: replyTo() } : {}
+      })
+    });
+    if (res.ok) {
+      const body = await res.json().catch(() => ({}));
+      Logger.info("[EmailService] Resend accepted", {
+        status: res.status,
+        messageId: body?.id || null,
+        to: maskRecipient(message.to),
+        subject: message.subject
+      });
+      return true;
+    }
+    const detail = await res.text().catch(() => "");
+    Logger.warn("[EmailService] Resend send failed", {
+      status: res.status,
+      detail: detail.slice(0, 300)
+    });
+    return false;
+  } catch (error2) {
+    Logger.warn("[EmailService] Resend request error", {
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+    return false;
+  }
+}
 var cachedTransporter;
 function isSmtpConfigured() {
   return Boolean(process.env.SMTP_HOST?.trim());
@@ -30219,66 +32218,316 @@ function getTransporter() {
   });
   return cachedTransporter;
 }
-async function sendEmail(message) {
+async function sendViaSmtp(message) {
   const transporter = getTransporter();
-  if (!transporter) {
-    console.log(
-      `[EmailService] SMTP not configured \u2014 logging instead of sending.
-To: ${message.to}
-Subject: ${message.subject}
-${message.text}`
-    );
-    return { sent: false, devLogged: true };
-  }
+  if (!transporter) return false;
   try {
     await transporter.sendMail({
-      from: process.env.SMTP_FROM?.trim() || "Choosify <no-reply@choosify.bd>",
+      from: fromAddress(),
       to: message.to,
       subject: message.subject,
       html: message.html,
-      text: message.text
+      text: message.text,
+      ...replyTo() ? { replyTo: replyTo() } : {}
     });
-    return { sent: true };
+    return true;
   } catch (error2) {
-    console.error("[EmailService] Send failed:", error2 instanceof Error ? error2.message : error2);
-    return { sent: false };
+    Logger.warn("[EmailService] SMTP send failed", {
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+    return false;
   }
 }
-function appUrl() {
-  return process.env.APP_URL?.trim() || "http://localhost:3001";
+async function sendEmail(message) {
+  if (isResendConfigured() && await sendViaResend(message)) {
+    return { sent: true, via: "resend" };
+  }
+  if (isSmtpConfigured() && await sendViaSmtp(message)) {
+    return { sent: true, via: "smtp" };
+  }
+  console.log(
+    `[EmailService] No transport delivered \u2014 logging instead.
+To: ${message.to}
+Subject: ${message.subject}
+${message.text}`
+  );
+  return { sent: false, via: "none", devLogged: true };
 }
-function webUrl() {
-  return process.env.VITE_CHOOSIFY_WEB_URL?.trim() || "http://localhost:5173";
+function webBase() {
+  return (process.env.CHOOSIFY_WEB_URL || process.env.VITE_CHOOSIFY_WEB_URL || "http://localhost:5173").replace(/\/$/, "");
 }
-async function sendVerificationEmail(to, token) {
-  const link = `${webUrl()}/verify-email?token=${encodeURIComponent(token)}`;
-  await sendEmail({
-    to,
-    subject: "Verify your Choosify email address",
-    text: `Verify your email by visiting: ${link}
+function dashboardBase() {
+  return (process.env.CHOOSIFY_DASHBOARD_URL || process.env.APP_URL || "http://localhost:3001").replace(/\/$/, "");
+}
+function surfaceBaseUrl(surface) {
+  return surface === "dashboard" ? dashboardBase() : webBase();
+}
+async function sendVerificationEmail(to, token, opts) {
+  const base = surfaceBaseUrl(opts?.surface ?? "web");
+  const link = `${base}/verify-email?token=${encodeURIComponent(token)}`;
+  const t = verifyEmail({ name: opts?.name, verifyUrl: link, ttlHours: 24 });
+  await sendEmail({ to, subject: t.subject, html: t.html, text: t.text });
+}
+async function sendPasswordResetEmail(to, token, opts) {
+  const base = surfaceBaseUrl(opts?.surface ?? "web");
+  const link = `${base}/reset-password?token=${encodeURIComponent(token)}`;
+  const t = passwordResetEmail({ resetUrl: link, ttlMinutes: 60 });
+  await sendEmail({ to, subject: t.subject, html: t.html, text: t.text });
+}
+async function sendPasswordChangedEmail(to, opts) {
+  const base = surfaceBaseUrl(opts?.surface ?? "web");
+  const t = passwordChangedEmail({
+    supportUrl: `mailto:${process.env.EMAIL_REPLY_TO?.trim() || "support@choosify.bd"}`,
+    when: (/* @__PURE__ */ new Date()).toUTCString()
+  });
+  void base;
+  await sendEmail({ to, subject: t.subject, html: t.html, text: t.text });
+}
+async function sendWelcomeEmail(to, displayName) {
+  const t = welcomeEmail({ name: displayName, exploreUrl: `${webBase()}/` });
+  await sendEmail({ to, subject: t.subject, html: t.html, text: t.text });
+}
+async function sendLocalPasswordOtpEmail(to, code) {
+  const t = verificationCodeEmail({ code, ttlMinutes: 10 });
+  await sendEmail({ to, subject: t.subject, html: t.html, text: t.text });
+}
+async function sendPasswordAddedEmail(to) {
+  const t = passwordAddedEmail({
+    supportUrl: `mailto:${process.env.EMAIL_REPLY_TO?.trim() || "support@choosify.bd"}`,
+    when: (/* @__PURE__ */ new Date()).toUTCString()
+  });
+  await sendEmail({ to, subject: t.subject, html: t.html, text: t.text });
+}
 
-This link expires in 24 hours. If you didn't create a Choosify account, ignore this email.`,
-    html: `<p>Verify your Choosify email address:</p><p><a href="${link}">${link}</a></p><p>This link expires in 24 hours. If you didn't create a Choosify account, you can ignore this email.</p>`
-  });
+// server/auth/socialAuth.ts
+init_client();
+init_schema();
+init_choosifyUserId();
+init_roles();
+init_logger();
+import { randomUUID as randomUUID12 } from "node:crypto";
+import { and as and7, eq as eq13 } from "drizzle-orm";
+import { OAuth2Client } from "google-auth-library";
+var SocialAuthError = class extends Error {
+  constructor(message, statusCode, code) {
+    super(message);
+    this.name = "SocialAuthError";
+    this.statusCode = statusCode;
+    this.code = code;
+  }
+};
+function googleClientId() {
+  return process.env.GOOGLE_OAUTH_CLIENT_ID?.trim() || "";
 }
-async function sendPasswordResetEmail(to, token) {
-  const link = `${webUrl()}/reset-password?token=${encodeURIComponent(token)}`;
-  await sendEmail({
-    to,
-    subject: "Reset your Choosify password",
-    text: `Reset your password by visiting: ${link}
-
-This link expires in 1 hour and can only be used once. If you didn't request this, you can safely ignore this email \u2014 your password won't change.`,
-    html: `<p>Reset your Choosify password:</p><p><a href="${link}">${link}</a></p><p>This link expires in 1 hour and can only be used once. If you didn't request this, you can safely ignore this email \u2014 your password won't change.</p>`
-  });
+function isGoogleConfigured() {
+  return googleClientId().length > 0;
 }
-async function sendPasswordChangedEmail(to) {
-  await sendEmail({
-    to,
-    subject: "Your Choosify password was changed",
-    text: `Your Choosify account password was just changed. If this wasn't you, contact support immediately at ${appUrl()}.`,
-    html: `<p>Your Choosify account password was just changed.</p><p>If this wasn't you, contact support immediately.</p>`
-  });
+function facebookAppId() {
+  return process.env.FACEBOOK_APP_ID?.trim() || "";
+}
+function facebookAppSecret() {
+  return process.env.FACEBOOK_APP_SECRET?.trim() || "";
+}
+function isFacebookConfigured() {
+  return facebookAppId().length > 0 && facebookAppSecret().length > 0;
+}
+function socialProvidersStatus() {
+  return { google: isGoogleConfigured(), facebook: isFacebookConfigured() };
+}
+var cachedGoogleClient = null;
+function googleClient() {
+  if (!cachedGoogleClient) cachedGoogleClient = new OAuth2Client(googleClientId());
+  return cachedGoogleClient;
+}
+async function verifyGoogleCredential(idToken) {
+  if (!isGoogleConfigured()) {
+    throw new SocialAuthError("Google sign-in is not configured.", 503, "GOOGLE_AUTH_UNAVAILABLE");
+  }
+  if (!idToken || typeof idToken !== "string") {
+    throw new SocialAuthError("Missing Google credential.", 400, "MISSING_CREDENTIAL");
+  }
+  let payload;
+  try {
+    const ticket = await googleClient().verifyIdToken({ idToken, audience: googleClientId() });
+    payload = ticket.getPayload();
+  } catch (error2) {
+    Logger.warn("google credential verification failed", {
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+    throw new SocialAuthError("Could not verify your Google sign-in. Please try again.", 401, "INVALID_CREDENTIAL");
+  }
+  if (!payload?.sub) {
+    throw new SocialAuthError("Could not verify your Google sign-in. Please try again.", 401, "INVALID_CREDENTIAL");
+  }
+  const iss = payload.iss || "";
+  if (iss !== "accounts.google.com" && iss !== "https://accounts.google.com") {
+    throw new SocialAuthError("Could not verify your Google sign-in. Please try again.", 401, "INVALID_CREDENTIAL");
+  }
+  return {
+    provider: "google",
+    subject: String(payload.sub),
+    email: payload.email ? payload.email.trim().toLowerCase() : null,
+    emailVerified: payload.email_verified === true,
+    name: payload.name || null,
+    picture: payload.picture || null
+  };
+}
+async function verifyFacebookCredential(accessToken) {
+  if (!isFacebookConfigured()) {
+    throw new SocialAuthError("Facebook sign-in is not configured.", 503, "FACEBOOK_AUTH_UNAVAILABLE");
+  }
+  if (!accessToken || typeof accessToken !== "string") {
+    throw new SocialAuthError("Missing Facebook credential.", 400, "MISSING_CREDENTIAL");
+  }
+  const appToken = `${facebookAppId()}|${facebookAppSecret()}`;
+  try {
+    const debugRes = await fetch(
+      `https://graph.facebook.com/debug_token?input_token=${encodeURIComponent(accessToken)}&access_token=${encodeURIComponent(appToken)}`
+    );
+    const debug = await debugRes.json().catch(() => ({}));
+    const d = debug.data;
+    if (!debugRes.ok || !d?.is_valid || d.app_id !== facebookAppId() || !d.user_id) {
+      throw new SocialAuthError("Could not verify your Facebook sign-in. Please try again.", 401, "INVALID_CREDENTIAL");
+    }
+    const meRes = await fetch(
+      `https://graph.facebook.com/me?fields=id,name,email,picture.type(large)&access_token=${encodeURIComponent(accessToken)}`
+    );
+    const me = await meRes.json().catch(() => ({}));
+    if (!meRes.ok || !me.id || me.id !== d.user_id) {
+      throw new SocialAuthError("Could not verify your Facebook sign-in. Please try again.", 401, "INVALID_CREDENTIAL");
+    }
+    return {
+      provider: "facebook",
+      subject: String(me.id),
+      // Facebook only returns an email the user has confirmed with Meta, so a
+      // present email is treated as verified.
+      email: me.email ? me.email.trim().toLowerCase() : null,
+      emailVerified: Boolean(me.email),
+      name: me.name || null,
+      picture: me.picture?.data?.url || null
+    };
+  } catch (error2) {
+    if (error2 instanceof SocialAuthError) throw error2;
+    Logger.warn("facebook credential verification failed", {
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+    throw new SocialAuthError("Could not verify your Facebook sign-in. Please try again.", 401, "INVALID_CREDENTIAL");
+  }
+}
+async function resolveOrCreateUserForSocialIdentity(identity) {
+  const existingIdentity = await db.select().from(userIdentities).where(
+    and7(
+      eq13(userIdentities.provider, identity.provider),
+      eq13(userIdentities.providerSubject, identity.subject)
+    )
+  ).limit(1);
+  if (existingIdentity[0]) {
+    const linkRow = existingIdentity[0];
+    const userRows = await db.select().from(users).where(eq13(users.id, linkRow.userId)).limit(1);
+    const user = userRows[0];
+    if (!user) {
+      await db.delete(userIdentities).where(eq13(userIdentities.id, linkRow.id));
+    } else {
+      await db.update(userIdentities).set({
+        lastLoginAt: /* @__PURE__ */ new Date(),
+        providerEmail: identity.email ?? linkRow.providerEmail,
+        providerEmailVerified: identity.emailVerified,
+        updatedAt: /* @__PURE__ */ new Date()
+      }).where(eq13(userIdentities.id, linkRow.id));
+      return {
+        userId: user.id,
+        created: false,
+        linked: false,
+        email: user.email,
+        displayName: user.displayName
+      };
+    }
+  }
+  if (!identity.email || !identity.emailVerified) {
+    throw new SocialAuthError(
+      `We couldn't get a verified email from ${identity.provider === "google" ? "Google" : "Facebook"}. Sign in with your email and password instead.`,
+      400,
+      "UNVERIFIED_PROVIDER_EMAIL"
+    );
+  }
+  const byEmail = await db.select().from(users).where(eq13(users.email, identity.email)).limit(1);
+  const existingUser = byEmail[0];
+  if (existingUser) {
+    if (existingUser.role !== ROLES.USER) {
+      throw new SocialAuthError(
+        "This email belongs to a Choosify dashboard account. Please sign in with your email and password.",
+        409,
+        "SOCIAL_ACCOUNT_CONFLICT"
+      );
+    }
+    try {
+      await db.insert(userIdentities).values({
+        userId: existingUser.id,
+        provider: identity.provider,
+        providerSubject: identity.subject,
+        providerEmail: identity.email,
+        providerEmailVerified: identity.emailVerified,
+        lastLoginAt: /* @__PURE__ */ new Date()
+      });
+    } catch (error2) {
+      const raced = await db.select().from(userIdentities).where(
+        and7(
+          eq13(userIdentities.provider, identity.provider),
+          eq13(userIdentities.providerSubject, identity.subject)
+        )
+      ).limit(1);
+      if (!raced[0]) throw error2;
+    }
+    const patch = { updatedAt: /* @__PURE__ */ new Date() };
+    if (identity.picture && !existingUser.avatarUrl) patch.avatarUrl = identity.picture.slice(0, 700);
+    if (!existingUser.emailVerified) patch.emailVerified = true;
+    await db.update(users).set(patch).where(eq13(users.id, existingUser.id));
+    return {
+      userId: existingUser.id,
+      created: false,
+      linked: true,
+      email: existingUser.email,
+      displayName: existingUser.displayName
+    };
+  }
+  const uid = randomUUID12();
+  const now = /* @__PURE__ */ new Date();
+  const displayName = (identity.name || "").trim() || identity.email.split("@")[0] || "Choosify member";
+  try {
+    await db.transaction(async (tx) => {
+      const choosifyUserId = await allocateNextChoosifyUserId(tx);
+      await tx.insert(users).values({
+        id: uid,
+        email: identity.email,
+        passwordHash: null,
+        // OAuth-only account — a password can be set later via Forgot Password.
+        displayName,
+        role: ROLES.USER,
+        // ALWAYS Consumer. Never influenced by the provider.
+        emailVerified: true,
+        // provider asserted + we verified the assertion.
+        choosifyUserId,
+        avatarUrl: identity.picture ? identity.picture.slice(0, 700) : null,
+        createdAt: now,
+        updatedAt: now
+      });
+      await tx.insert(userIdentities).values({
+        userId: uid,
+        provider: identity.provider,
+        providerSubject: identity.subject,
+        providerEmail: identity.email,
+        providerEmailVerified: identity.emailVerified,
+        lastLoginAt: now
+      });
+    });
+  } catch (error2) {
+    Logger.warn("social account create raced; re-resolving", {
+      provider: identity.provider,
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+    return resolveOrCreateUserForSocialIdentity(identity);
+  }
+  return { userId: uid, created: true, linked: false, email: identity.email, displayName };
 }
 
 // server/authRouter.ts
@@ -30312,11 +32561,47 @@ var RegisterBodySchema = z11.object({
 init_operationsDb();
 init_client();
 init_schema();
+
+// server/lib/phone.ts
+var MAX_RAW_INPUT = 32;
+function normalizePrimaryPhone(input) {
+  if (typeof input !== "string") return { ok: false, error: "Phone number must be text." };
+  const raw = input.trim();
+  if (raw.length === 0) return { ok: false, error: "Enter a phone number." };
+  if (raw.length > MAX_RAW_INPUT) return { ok: false, error: "That phone number is too long." };
+  const hadPlus = raw.startsWith("+");
+  let digits = raw.replace(/[^\d]/g, "");
+  if (!digits) return { ok: false, error: "Enter a valid phone number." };
+  if (!hadPlus) {
+    if (/^01\d{9}$/.test(digits)) {
+      digits = `880${digits.slice(1)}`;
+    } else if (/^1\d{9}$/.test(digits)) {
+      digits = `880${digits}`;
+    } else if (/^8801\d{9}$/.test(digits)) {
+    } else if (!/^\d{8,15}$/.test(digits)) {
+      return { ok: false, error: "Enter a valid phone number, e.g. 01XXXXXXXXX." };
+    }
+  }
+  if (digits.length < 8 || digits.length > 15) {
+    return { ok: false, error: "Enter a valid phone number." };
+  }
+  if (digits.startsWith("880")) {
+    if (!/^8801[3-9]\d{8}$/.test(digits)) {
+      return { ok: false, error: "Enter a valid Bangladeshi mobile number (11 digits starting 01)." };
+    }
+  }
+  return { ok: true, e164: `+${digits}` };
+}
+
+// server/authRouter.ts
 init_roles();
 init_eventBus();
 var authRouter = Router6();
 var requireAuth3 = [authenticateRequest];
 var requireAdmin3 = [authenticateRequest, requireRole(ROLES.ADMIN)];
+function resetSurfaceForRole(role) {
+  return role && role !== ROLES.USER ? "dashboard" : "web";
+}
 authRouter.get("/auth/seller-status", async (req, res) => {
   const email = String(req.query.email || "").trim().toLowerCase();
   if (!email || !email.includes("@")) {
@@ -30347,7 +32632,7 @@ authRouter.post("/auth/login", validate({ body: LoginBodySchema }), async (req, 
   const { email, password } = req.body;
   const normalizedEmail = email.trim().toLowerCase();
   try {
-    const rows = await db.select().from(users).where(eq12(users.email, normalizedEmail)).limit(1);
+    const rows = await db.select().from(users).where(eq14(users.email, normalizedEmail)).limit(1);
     const user = rows[0];
     if (!user?.passwordHash) {
       recordFailedAuthAttempt(req.ip, req.originalUrl);
@@ -30410,6 +32695,7 @@ authRouter.post("/auth/login", validate({ body: LoginBodySchema }), async (req, 
       role: user.role,
       accessToken,
       choosifyUserId: choosifyUserId || null,
+      hasPassword: true,
       changeNextLogin: extras?.changeNextLogin === true,
       ...publicLifecycleFields(life),
       ...extras?.lastNameChangedAt && { lastNameChangedAt: extras.lastNameChangedAt },
@@ -30462,7 +32748,7 @@ authRouter.post(
         return;
       }
       const passwordHash = await hashPassword(password);
-      const uid = randomUUID11();
+      const uid = randomUUID13();
       const now = /* @__PURE__ */ new Date();
       let choosifyUserId = "";
       await db.transaction(async (tx) => {
@@ -30494,7 +32780,7 @@ authRouter.post(
       });
       try {
         const { rawToken } = await issueAuthToken(uid, "email_verification");
-        await sendVerificationEmail(normalizedEmail, rawToken);
+        await sendVerificationEmail(normalizedEmail, rawToken, { name: fullName.trim(), surface: "web" });
       } catch (error2) {
         Logger.warn("verification email failed to send", {
           requestId: req.requestId,
@@ -30520,6 +32806,139 @@ authRouter.post(
     }
   }
 );
+async function finalizeLoginSession(req, res, user, mode) {
+  const accessToken = signAccessToken({
+    id: user.id,
+    email: user.email,
+    emailVerified: user.emailVerified
+  });
+  const refreshToken = await issueRefreshToken(user.id);
+  setRefreshTokenCookie(res, refreshToken);
+  recordLogin(req, { userId: user.id, metadata: { mode, role: user.role } });
+  operationalEvents.authenticationSuccess({
+    requestId: req.requestId,
+    path: req.originalUrl,
+    metadata: { mode, userId: user.id, role: user.role }
+  });
+  const extras = getUserProfileExtras(user.id);
+  let choosifyUserId = user.choosifyUserId || void 0;
+  try {
+    choosifyUserId = await ensureUserHasChoosifyUserId(user.id);
+  } catch (error2) {
+    Logger.warn("choosifyUserId ensure on social login failed", {
+      userId: user.id,
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+  }
+  const life = await resolvePartnerLifecycle({
+    userId: user.id,
+    email: user.email,
+    role: user.role
+  });
+  res.json({
+    uid: user.id,
+    email: user.email,
+    displayName: user.displayName,
+    role: user.role,
+    accessToken,
+    choosifyUserId: choosifyUserId || null,
+    changeNextLogin: extras?.changeNextLogin === true,
+    ...publicLifecycleFields(life),
+    ...extras?.lastNameChangedAt && { lastNameChangedAt: extras.lastNameChangedAt },
+    ...extras?.username && { username: extras.username },
+    ...extras?.website && { website: extras.website },
+    ...extras?.bio && { bio: extras.bio }
+  });
+}
+authRouter.get("/auth/social/providers", (_req, res) => {
+  res.json({ providers: socialProvidersStatus() });
+});
+async function handleSocialLogin(req, res, verify, mode) {
+  try {
+    const identity = await verify();
+    const resolution = await resolveOrCreateUserForSocialIdentity(identity);
+    const rows = await db.select().from(users).where(eq14(users.id, resolution.userId)).limit(1);
+    const user = rows[0];
+    if (!user) {
+      res.status(500).json({ error: "Unable to sign in", code: "ACCOUNT_LOOKUP_FAILED" });
+      return;
+    }
+    if (user.role !== ROLES.USER) {
+      Logger.warn("social login resolved to a non-consumer account \u2014 refused", {
+        requestId: req.requestId,
+        userId: user.id,
+        role: user.role,
+        provider: identity.provider
+      });
+      res.status(409).json({
+        error: "This email belongs to a Choosify dashboard account. Please sign in with your email and password.",
+        code: "SOCIAL_ACCOUNT_CONFLICT"
+      });
+      return;
+    }
+    if (resolution.created) {
+      Logger.audit("auth.social_account_created", {
+        userId: user.id,
+        provider: identity.provider,
+        ip: req.ip
+      });
+      publishEvent({
+        eventName: "UserRegistered",
+        domain: "Identity",
+        producer: "authRouter",
+        aggregateId: user.id,
+        actor: user.id,
+        payload: { email: user.email, via: identity.provider }
+      });
+      try {
+        await sendWelcomeEmail(user.email, user.displayName);
+      } catch (error2) {
+        Logger.warn("welcome email failed to send", {
+          requestId: req.requestId,
+          userId: user.id,
+          error: error2 instanceof Error ? error2.message : String(error2)
+        });
+      }
+    } else if (resolution.linked) {
+      Logger.audit("auth.social_identity_linked", {
+        userId: user.id,
+        provider: identity.provider,
+        ip: req.ip
+      });
+      publishEvent({
+        eventName: "SocialIdentityLinked",
+        domain: "Identity",
+        producer: "authRouter",
+        aggregateId: user.id,
+        actor: user.id,
+        payload: { email: user.email, provider: identity.provider }
+      });
+    }
+    await finalizeLoginSession(req, res, user, mode);
+  } catch (error2) {
+    if (error2 instanceof SocialAuthError) {
+      if (error2.statusCode >= 500 || error2.statusCode === 401) {
+        recordFailedAuthAttempt(req.ip, req.originalUrl);
+      }
+      res.status(error2.statusCode).json({ error: error2.message, code: error2.code });
+      return;
+    }
+    Logger.warn("social login failed", {
+      requestId: req.requestId,
+      mode,
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+    res.status(500).json({ error: "Unable to sign in" });
+  }
+}
+authRouter.post("/auth/google", async (req, res) => {
+  const credential = String(req.body?.credential || req.body?.idToken || "").trim();
+  await handleSocialLogin(req, res, () => verifyGoogleCredential(credential), "google");
+});
+authRouter.post("/auth/facebook", async (req, res) => {
+  const accessToken = String(req.body?.accessToken || req.body?.token || "").trim();
+  await handleSocialLogin(req, res, () => verifyFacebookCredential(accessToken), "facebook");
+});
 authRouter.post("/auth/verify-email", async (req, res) => {
   const token = String(req.body?.token || "").trim();
   if (!token) {
@@ -30532,7 +32951,7 @@ authRouter.post("/auth/verify-email", async (req, res) => {
       res.status(400).json({ success: false, error: "Invalid or expired verification link." });
       return;
     }
-    await db.update(users).set({ emailVerified: true, updatedAt: /* @__PURE__ */ new Date() }).where(eq12(users.id, userId));
+    await db.update(users).set({ emailVerified: true, updatedAt: /* @__PURE__ */ new Date() }).where(eq14(users.id, userId));
     Logger.audit("auth.email_verified", { userId, ip: req.ip });
     res.json({ success: true });
   } catch (error2) {
@@ -30542,7 +32961,7 @@ authRouter.post("/auth/verify-email", async (req, res) => {
 });
 authRouter.post("/auth/resend-verification", authenticateRequest, async (req, res) => {
   try {
-    const rows = await db.select().from(users).where(eq12(users.id, req.userId)).limit(1);
+    const rows = await db.select().from(users).where(eq14(users.id, req.userId)).limit(1);
     const user = rows[0];
     if (!user) {
       res.status(404).json({ success: false, error: "Account not found" });
@@ -30553,7 +32972,10 @@ authRouter.post("/auth/resend-verification", authenticateRequest, async (req, re
       return;
     }
     const { rawToken } = await issueAuthToken(user.id, "email_verification");
-    await sendVerificationEmail(user.email, rawToken);
+    await sendVerificationEmail(user.email, rawToken, {
+      name: user.displayName,
+      surface: resetSurfaceForRole(user.role)
+    });
     res.json({ success: true, message: "Verification email sent." });
   } catch (error2) {
     Logger.warn("resend-verification failed", { requestId: req.requestId, error: error2 instanceof Error ? error2.message : String(error2) });
@@ -30654,7 +33076,7 @@ authRouter.get("/auth/me", async (req, res) => {
       });
     }
     try {
-      const profileRows = await db.select().from(sellerProfiles).where(eq12(sellerProfiles.userId, user.uid)).limit(1);
+      const profileRows = await db.select().from(sellerProfiles).where(eq14(sellerProfiles.userId, user.uid)).limit(1);
       if (profileRows[0]?.website) website = profileRows[0].website;
     } catch {
     }
@@ -30664,9 +33086,25 @@ authRouter.get("/auth/me", async (req, res) => {
       role: user.role
     });
     let avatarUrl;
+    let hasPassword = true;
     try {
-      const userRows = await db.select({ avatarUrl: users.avatarUrl }).from(users).where(eq12(users.id, user.uid)).limit(1);
+      const userRows = await db.select({ avatarUrl: users.avatarUrl, passwordHash: users.passwordHash }).from(users).where(eq14(users.id, user.uid)).limit(1);
       avatarUrl = userRows[0]?.avatarUrl || void 0;
+      hasPassword = Boolean(userRows[0]?.passwordHash);
+    } catch {
+    }
+    let identities = [];
+    try {
+      const idRows = await db.select({
+        provider: userIdentities.provider,
+        providerEmail: userIdentities.providerEmail,
+        linkedAt: userIdentities.linkedAt
+      }).from(userIdentities).where(eq14(userIdentities.userId, user.uid));
+      identities = idRows.map((r) => ({
+        provider: r.provider,
+        email: r.providerEmail ? maskEmail(r.providerEmail) : null,
+        connectedAt: r.linkedAt instanceof Date ? r.linkedAt.toISOString() : String(r.linkedAt ?? "")
+      }));
     } catch {
     }
     res.json({
@@ -30675,6 +33113,11 @@ authRouter.get("/auth/me", async (req, res) => {
       displayName: user.displayName,
       role: user.role,
       choosifyUserId,
+      // Canonical account/security facts for the storefront Profile Settings.
+      emailVerified: user.emailVerified === true,
+      hasPassword,
+      phone: extras?.phone || null,
+      identities,
       changeNextLogin: extras?.changeNextLogin === true,
       ...publicLifecycleFields(life),
       ...extras?.lastNameChangedAt && { lastNameChangedAt: extras.lastNameChangedAt },
@@ -30729,7 +33172,7 @@ authRouter.post("/auth/impersonate/start", ...requireAuth3, async (req, res) => 
     res.status(400).json({ success: false, error: "reason is required" });
     return;
   }
-  const targetRows = await db.select().from(users).where(eq12(users.id, targetUserId)).limit(1);
+  const targetRows = await db.select().from(users).where(eq14(users.id, targetUserId)).limit(1);
   const target = targetRows[0];
   if (!target) {
     res.status(404).json({ success: false, error: "Target user not found" });
@@ -30743,7 +33186,7 @@ authRouter.post("/auth/impersonate/start", ...requireAuth3, async (req, res) => 
   }
   const startedAt3 = (/* @__PURE__ */ new Date()).toISOString();
   const expiresAt = new Date(Date.now() + 1e3 * 60 * 30).toISOString();
-  const impersonationSessionId = `imp_${randomUUID11()}`;
+  const impersonationSessionId = `imp_${randomUUID13()}`;
   let adminChoosifyUserId;
   try {
     adminChoosifyUserId = await ensureUserHasChoosifyUserId(actorUserId);
@@ -30954,10 +33397,30 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
   const bio = hasBio ? String(req.body?.bio || "").trim().slice(0, 2e3) : void 0;
   const hasAvatarUrl = Object.prototype.hasOwnProperty.call(req.body || {}, "avatarUrl");
   const avatarUrl = hasAvatarUrl ? String(req.body?.avatarUrl || "").trim().slice(0, 700) : void 0;
-  if (displayName === void 0 && username === void 0 && website === void 0 && bio === void 0 && avatarUrl === void 0) {
+  const hasPhone = Object.prototype.hasOwnProperty.call(req.body || {}, "phone");
+  const phoneRaw = hasPhone ? req.body?.phone : void 0;
+  let phone;
+  if (hasPhone) {
+    if (phoneRaw === null || typeof phoneRaw === "string" && phoneRaw.trim() === "") {
+      phone = null;
+    } else {
+      const normalized = normalizePrimaryPhone(phoneRaw);
+      if (normalized.ok && normalized.e164) {
+        phone = normalized.e164;
+      } else {
+        res.status(400).json({
+          success: false,
+          error: normalized.error || "Enter a valid phone number.",
+          code: "INVALID_PHONE"
+        });
+        return;
+      }
+    }
+  }
+  if (displayName === void 0 && username === void 0 && website === void 0 && bio === void 0 && avatarUrl === void 0 && phone === void 0) {
     res.status(400).json({
       success: false,
-      error: "Provide at least one of displayName, username, website, bio, avatarUrl"
+      error: "Provide at least one of displayName, username, website, bio, avatarUrl, phone"
     });
     return;
   }
@@ -30983,7 +33446,7 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
     return;
   }
   try {
-    const rows = await db.select().from(users).where(eq12(users.id, targetUserId)).limit(1);
+    const rows = await db.select().from(users).where(eq14(users.id, targetUserId)).limit(1);
     const user = rows[0];
     if (!user) {
       res.status(404).json({ success: false, error: "User not found" });
@@ -31005,7 +33468,7 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
         });
         return;
       }
-      await db.update(users).set({ displayName, updatedAt: now }).where(eq12(users.id, targetUserId));
+      await db.update(users).set({ displayName, updatedAt: now }).where(eq14(users.id, targetUserId));
       nextExtras = upsertUserProfileExtras({
         userId: targetUserId,
         lastNameChangedAt: now.toISOString(),
@@ -31030,7 +33493,7 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
       }
     }
     if (avatarUrl !== void 0) {
-      await db.update(users).set({ avatarUrl: avatarUrl || null, updatedAt: now }).where(eq12(users.id, targetUserId));
+      await db.update(users).set({ avatarUrl: avatarUrl || null, updatedAt: now }).where(eq14(users.id, targetUserId));
       Logger.audit("auth.profile_avatar_update", { actorId: actorId3, targetUserId, cleared: !avatarUrl });
     }
     if (username !== void 0 || website !== void 0 || bio !== void 0) {
@@ -31044,9 +33507,9 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
       });
       if (website !== void 0) {
         try {
-          const existingSeller = await db.select().from(sellerProfiles).where(eq12(sellerProfiles.userId, targetUserId)).limit(1);
+          const existingSeller = await db.select().from(sellerProfiles).where(eq14(sellerProfiles.userId, targetUserId)).limit(1);
           if (existingSeller[0]) {
-            await db.update(sellerProfiles).set({ website: website || null }).where(eq12(sellerProfiles.userId, targetUserId));
+            await db.update(sellerProfiles).set({ website: website || null }).where(eq14(sellerProfiles.userId, targetUserId));
           }
         } catch {
         }
@@ -31062,6 +33525,23 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
         admin: isAdmin && !isSelf
       });
     }
+    if (phone !== void 0) {
+      nextExtras = upsertUserProfileExtras({
+        userId: targetUserId,
+        lastNameChangedAt: nextExtras?.lastNameChangedAt || extras?.lastNameChangedAt,
+        changeNextLogin: extras?.changeNextLogin,
+        username: nextExtras?.username ?? extras?.username,
+        website: nextExtras?.website ?? extras?.website,
+        bio: nextExtras?.bio ?? extras?.bio,
+        phone: phone === null ? void 0 : phone
+      });
+      Logger.audit("auth.profile_phone_update", {
+        actorId: actorId3,
+        targetUserId,
+        cleared: phone === null,
+        admin: isAdmin && !isSelf
+      });
+    }
     const fresh = getUserProfileExtras(targetUserId);
     res.json({
       success: true,
@@ -31072,6 +33552,7 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
         website: fresh?.website || website || "",
         bio: fresh?.bio || "",
         avatarUrl: avatarUrl !== void 0 ? avatarUrl : void 0,
+        phone: fresh?.phone || null,
         lastNameChangedAt: fresh?.lastNameChangedAt,
         changeNextLogin: fresh?.changeNextLogin === true
       }
@@ -31086,6 +33567,8 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
 });
 authRouter.post("/auth/password-reset-request", async (req, res) => {
   const email = String(req.body?.email || "").trim().toLowerCase();
+  const requestedSurface = req.body?.surface;
+  const explicitSurface = requestedSurface === "web" || requestedSurface === "dashboard" ? requestedSurface : void 0;
   const genericResponse = {
     success: true,
     message: "If an account exists with this email, a password reset link has been sent."
@@ -31095,7 +33578,7 @@ authRouter.post("/auth/password-reset-request", async (req, res) => {
     return;
   }
   try {
-    const rows = await db.select().from(users).where(eq12(users.email, email)).limit(1);
+    const rows = await db.select().from(users).where(eq14(users.email, email)).limit(1);
     const user = rows[0];
     if (user) {
       const { rawToken } = await issueAuthToken(user.id, "password_reset");
@@ -31113,7 +33596,9 @@ authRouter.post("/auth/password-reset-request", async (req, res) => {
         actor: user.id,
         payload: { email: user.email }
       });
-      await sendPasswordResetEmail(user.email, rawToken);
+      await sendPasswordResetEmail(user.email, rawToken, {
+        surface: explicitSurface ?? resetSurfaceForRole(user.role)
+      });
     }
     res.json(genericResponse);
   } catch (error2) {
@@ -31142,12 +33627,14 @@ authRouter.post("/auth/reset-password", async (req, res) => {
       return;
     }
     const passwordHash = await hashPassword(newPassword);
-    await db.update(users).set({ passwordHash, updatedAt: /* @__PURE__ */ new Date() }).where(eq12(users.id, userId));
+    await db.update(users).set({ passwordHash, updatedAt: /* @__PURE__ */ new Date() }).where(eq14(users.id, userId));
     await revokeAllRefreshTokensForUser(userId);
     clearRefreshTokenCookie(res);
-    const rows = await db.select().from(users).where(eq12(users.id, userId)).limit(1);
+    const rows = await db.select().from(users).where(eq14(users.id, userId)).limit(1);
     Logger.audit("auth.password_reset_completed", { userId, ip: req.ip });
-    if (rows[0]) await sendPasswordChangedEmail(rows[0].email);
+    if (rows[0]) {
+      await sendPasswordChangedEmail(rows[0].email, { surface: resetSurfaceForRole(rows[0].role) });
+    }
     res.json({ success: true, message: "Password reset. Sign in with your new password." });
   } catch (error2) {
     Logger.warn("reset-password failed", { requestId: req.requestId, error: error2 instanceof Error ? error2.message : String(error2) });
@@ -31178,7 +33665,7 @@ authRouter.post("/auth/change-password", ...requireAuth3, async (req, res) => {
     return;
   }
   try {
-    const rows = await db.select().from(users).where(eq12(users.id, userId)).limit(1);
+    const rows = await db.select().from(users).where(eq14(users.id, userId)).limit(1);
     const user = rows[0];
     if (!user || !user.passwordHash) {
       res.status(404).json({ success: false, error: "User not found" });
@@ -31192,7 +33679,7 @@ authRouter.post("/auth/change-password", ...requireAuth3, async (req, res) => {
     }
     const newPasswordHash = await hashPassword(newPassword);
     const now = /* @__PURE__ */ new Date();
-    await db.update(users).set({ passwordHash: newPasswordHash, updatedAt: now }).where(eq12(users.id, userId));
+    await db.update(users).set({ passwordHash: newPasswordHash, updatedAt: now }).where(eq14(users.id, userId));
     const extras = getUserProfileExtras(userId);
     const wasForced = extras?.changeNextLogin === true;
     upsertUserProfileExtras({
@@ -31217,6 +33704,14 @@ authRouter.post("/auth/change-password", ...requireAuth3, async (req, res) => {
       actor: userId,
       payload: { email: user.email }
     });
+    try {
+      await sendPasswordChangedEmail(user.email, { surface: resetSurfaceForRole(user.role) });
+    } catch (error2) {
+      Logger.warn("password-changed email failed to send", {
+        requestId: req.requestId,
+        error: error2 instanceof Error ? error2.message : String(error2)
+      });
+    }
     res.json({
       success: true,
       message: "Password updated successfully"
@@ -31227,6 +33722,141 @@ authRouter.post("/auth/change-password", ...requireAuth3, async (req, res) => {
       error: error2 instanceof Error ? error2.message : String(error2)
     });
     res.status(500).json({ success: false, error: "Unable to change password" });
+  }
+});
+async function guardPasswordlessConsumer(req, res) {
+  if (req.impersonationSessionId) {
+    res.status(403).json({ success: false, error: "Unavailable during Admin impersonation", code: "IMPERSONATION" });
+    return null;
+  }
+  const userId = req.userId || req.user?.uid || "";
+  const rows = await db.select({
+    id: users.id,
+    email: users.email,
+    role: users.role,
+    passwordHash: users.passwordHash,
+    displayName: users.displayName,
+    emailVerified: users.emailVerified
+  }).from(users).where(eq14(users.id, userId)).limit(1);
+  const user = rows[0];
+  if (!user) {
+    res.status(404).json({ success: false, error: "Account not found", code: "NOT_FOUND" });
+    return null;
+  }
+  if (user.role !== ROLES.USER) {
+    res.status(403).json({ success: false, error: "This feature is only available for shopper accounts.", code: "NOT_CONSUMER" });
+    return null;
+  }
+  if (user.passwordHash) {
+    res.status(409).json({ success: false, error: "This account already has a password. Use Change password instead.", code: "PASSWORD_ALREADY_SET" });
+    return null;
+  }
+  return { id: user.id, email: user.email, displayName: user.displayName, emailVerified: user.emailVerified };
+}
+function sendLocalPasswordSetupError(res, error2) {
+  if (error2 instanceof LocalPasswordSetupError) {
+    res.status(error2.statusCode).json({
+      success: false,
+      code: error2.code,
+      error: error2.message,
+      ...error2.retryAfterSeconds ? { retryAfterSeconds: error2.retryAfterSeconds } : {}
+    });
+    return true;
+  }
+  return false;
+}
+authRouter.post("/auth/local-password/request-otp", ...requireAuth3, async (req, res) => {
+  const user = await guardPasswordlessConsumer(req, res);
+  if (!user) return;
+  try {
+    const { code } = await requestSetupOtp(user.id);
+    await sendLocalPasswordOtpEmail(user.email, code);
+    Logger.audit("auth.local_password_otp_requested", { userId: user.id, ip: req.ip });
+    res.json({ success: true, email: maskEmail(user.email), expiresInSeconds: 600 });
+  } catch (error2) {
+    if (sendLocalPasswordSetupError(res, error2)) return;
+    Logger.warn("local-password request-otp failed", {
+      requestId: req.requestId,
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+    res.status(500).json({ success: false, error: "Unable to send a verification code right now." });
+  }
+});
+authRouter.post("/auth/local-password/verify-otp", ...requireAuth3, async (req, res) => {
+  const user = await guardPasswordlessConsumer(req, res);
+  if (!user) return;
+  const code = String(req.body?.code || "").trim();
+  try {
+    const { grant } = await verifySetupOtp(user.id, code);
+    Logger.audit("auth.local_password_otp_verified", { userId: user.id, ip: req.ip });
+    res.json({ success: true, setupToken: grant, expiresInSeconds: 600 });
+  } catch (error2) {
+    if (sendLocalPasswordSetupError(res, error2)) return;
+    Logger.warn("local-password verify-otp failed", {
+      requestId: req.requestId,
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+    res.status(500).json({ success: false, error: "Unable to verify that code right now." });
+  }
+});
+authRouter.post("/auth/local-password/set", ...requireAuth3, async (req, res) => {
+  const user = await guardPasswordlessConsumer(req, res);
+  if (!user) return;
+  const setupToken = String(req.body?.setupToken || "").trim();
+  const newPassword = String(req.body?.newPassword || "");
+  const confirmPassword = String(req.body?.confirmPassword || "");
+  if (!setupToken) {
+    res.status(400).json({ success: false, error: "Verification is required before setting a password.", code: "SETUP_AUTHORIZATION_INVALID" });
+    return;
+  }
+  if (newPassword.length < 8 || newPassword.length > 128) {
+    res.status(400).json({ success: false, error: "Password must be between 8 and 128 characters.", code: "WEAK_PASSWORD" });
+    return;
+  }
+  if (newPassword !== confirmPassword) {
+    res.status(400).json({ success: false, error: "Passwords do not match.", code: "PASSWORD_MISMATCH" });
+    return;
+  }
+  try {
+    const authorized = await consumeSetupGrant(user.id, setupToken);
+    if (!authorized) {
+      res.status(401).json({ success: false, error: "Your verification has expired. Start again.", code: "SETUP_AUTHORIZATION_INVALID" });
+      return;
+    }
+    const passwordHash = await hashPassword(newPassword);
+    const updated = await db.update(users).set({ passwordHash, updatedAt: /* @__PURE__ */ new Date() }).where(and8(eq14(users.id, user.id), eq14(users.role, ROLES.USER), isNull4(users.passwordHash))).returning({ id: users.id });
+    if (!updated.length) {
+      res.status(409).json({ success: false, error: "This account already has a password.", code: "PASSWORD_ALREADY_SET" });
+      return;
+    }
+    await revokeAllRefreshTokensForUser(user.id);
+    const refreshToken = await issueRefreshToken(user.id);
+    setRefreshTokenCookie(res, refreshToken);
+    const accessToken = signAccessToken({ id: user.id, email: user.email, emailVerified: user.emailVerified });
+    Logger.audit("auth.local_password_added", { userId: user.id, ip: req.ip });
+    publishEvent({
+      eventName: "LocalPasswordAdded",
+      domain: "Identity",
+      producer: "authRouter",
+      aggregateId: user.id,
+      actor: user.id,
+      payload: { email: user.email }
+    });
+    try {
+      await sendPasswordAddedEmail(user.email);
+    } catch (error2) {
+      Logger.warn("password-added email failed to send", {
+        requestId: req.requestId,
+        error: error2 instanceof Error ? error2.message : String(error2)
+      });
+    }
+    res.json({ success: true, message: "Password set. You can now sign in with email and password.", accessToken });
+  } catch (error2) {
+    Logger.warn("local-password set failed", {
+      requestId: req.requestId,
+      error: error2 instanceof Error ? error2.message : String(error2)
+    });
+    res.status(500).json({ success: false, error: "Unable to set a password right now." });
   }
 });
 authRouter.post("/auth/admin/password-reset-assist", ...requireAdmin3, async (req, res) => {
@@ -31242,14 +33872,14 @@ authRouter.post("/auth/admin/password-reset-assist", ...requireAdmin3, async (re
     return;
   }
   try {
-    const rows = await db.select().from(users).where(eq12(users.id, userId)).limit(1);
+    const rows = await db.select().from(users).where(eq14(users.id, userId)).limit(1);
     const user = rows[0];
     if (!user) {
       res.status(404).json({ success: false, error: "User not found" });
       return;
     }
     if (mode === "link") {
-      const token = randomBytes5(24).toString("hex");
+      const token = randomBytes6(24).toString("hex");
       const resetLink = `/auth/reset-password?uid=${encodeURIComponent(userId)}&token=${token}`;
       upsertUserProfileExtras({
         userId,
@@ -31272,10 +33902,10 @@ authRouter.post("/auth/admin/password-reset-assist", ...requireAdmin3, async (re
       });
       return;
     }
-    const tempPassword = `Tmp_${randomBytes5(9).toString("base64url")}`;
+    const tempPassword = `Tmp_${randomBytes6(9).toString("base64url")}`;
     const passwordHash = await hashPassword(tempPassword);
     const now = /* @__PURE__ */ new Date();
-    await db.update(users).set({ passwordHash, updatedAt: now }).where(eq12(users.id, userId));
+    await db.update(users).set({ passwordHash, updatedAt: now }).where(eq14(users.id, userId));
     upsertUserProfileExtras({
       userId,
       lastNameChangedAt: getUserProfileExtras(userId)?.lastNameChangedAt,
@@ -31395,7 +34025,7 @@ authRouter.get("/auth/users/:userId", ...requireAdmin3, async (req, res) => {
       res.status(400).json({ success: false, error: "Valid userId is required" });
       return;
     }
-    const rows = await db.select().from(users).where(eq12(users.id, userId)).limit(1);
+    const rows = await db.select().from(users).where(eq14(users.id, userId)).limit(1);
     const user = rows[0];
     if (!user) {
       res.status(404).json({ success: false, error: "User not found" });
@@ -31575,7 +34205,7 @@ function publicApiBase(req) {
   const host = req.get("host") || "localhost:3001";
   return `${req.protocol}://${host}/api/v1`;
 }
-function webBase() {
+function webBase2() {
   return (process.env.CHOOSIFY_WEB_URL || "http://localhost:5173").replace(/\/$/, "");
 }
 function userOwnsOrder(req, order) {
@@ -31629,7 +34259,7 @@ paymentsRouter.post("/operations/payments/sslcommerz/init", ...requireAuth4, asy
       return;
     }
     const apiBase = publicApiBase(req);
-    const site = webBase();
+    const site = webBase2();
     const tranId = `TXN-${order.orderId}-${Date.now()}`;
     const session = await provider.initiateSession({
       order,
@@ -31759,7 +34389,7 @@ function redirectToWeb(res, path, query2) {
     if (v) qs.set(k, v);
   }
   const suffix = qs.toString() ? `?${qs}` : "";
-  res.redirect(302, `${webBase()}${path}${suffix}`);
+  res.redirect(302, `${webBase2()}${path}${suffix}`);
 }
 paymentsRouter.get("/operations/payments/sslcommerz/success", (req, res) => {
   const tranId = typeof req.query.tran_id === "string" ? req.query.tran_id : void 0;
@@ -31820,538 +34450,11 @@ init_logger();
 
 // server/payments/commercePaymentService.ts
 init_commerceStore();
-import { randomUUID as randomUUID13 } from "node:crypto";
-
-// server/commerce/orderService.ts
-init_inventoryStore();
-init_eventBus();
-init_operationsStore();
-init_cartService();
-init_commerceStore();
-
-// server/commerce/orderLifecycle.ts
-var PRODUCT_FORWARD = {
-  pending: "confirmed",
-  confirmed: "packed",
-  packed: "shipped",
-  shipped: "delivered",
-  delivered: "completed"
-};
-function normalizeOrderStatus(raw) {
-  if (!raw) return null;
-  const s = String(raw).trim().toLowerCase().replace(/\s+/g, "_");
-  const map = {
-    pending: "pending",
-    pending_payment: "pending",
-    confirmed: "confirmed",
-    packed: "packed",
-    shipped: "shipped",
-    in_transit: "shipped",
-    dispatched: "shipped",
-    delivered: "delivered",
-    completed: "completed",
-    cancelled: "cancelled",
-    canceled: "cancelled"
-  };
-  return map[s] ?? null;
-}
-function isTerminalOrderStatus(status) {
-  return status === "completed" || status === "cancelled";
-}
-function orderHasProductLines(items) {
-  return items.some((i) => i.listingType === "product");
-}
-function orderHasOnlyServices(items) {
-  return items.length > 0 && items.every((i) => i.listingType === "service");
-}
-function canTransitionOrder(from, to, opts) {
-  if (from === to) return true;
-  if (isTerminalOrderStatus(from)) return false;
-  if (to === "cancelled") {
-    return from === "pending" || from === "confirmed" || from === "packed";
-  }
-  if (opts?.serviceOnly) {
-    if (from === "pending" && to === "confirmed") return true;
-    if (from === "confirmed" && to === "completed") return true;
-    return false;
-  }
-  return PRODUCT_FORWARD[from] === to;
-}
-function canActorForwardTransition(actor, to) {
-  if (actor === "consumer") return false;
-  if (actor === "admin") return true;
-  return to === "confirmed" || to === "packed" || to === "shipped" || to === "delivered" || to === "completed";
-}
-function canActorCancel(actor, status) {
-  if (status === "cancelled" || status === "completed") return false;
-  if (actor === "admin") return true;
-  if (actor === "consumer") return status === "pending";
-  if (actor === "seller") {
-    return status === "pending" || status === "confirmed" || status === "packed";
-  }
-  return false;
-}
-function eventNameForStatus(to) {
-  switch (to) {
-    case "confirmed":
-      return "OrderConfirmed";
-    case "cancelled":
-      return "OrderCancelled";
-    case "packed":
-      return "OrderPacked";
-    case "shipped":
-      return "OrderShipped";
-    case "delivered":
-      return "OrderDelivered";
-    case "completed":
-      return "OrderCompleted";
-    default:
-      return null;
-  }
-}
-
-// server/commerce/orderService.ts
-function nowIso21() {
-  return (/* @__PURE__ */ new Date()).toISOString();
-}
-function newId4(prefix) {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-}
-function emitOrder(eventName, orderId, actor, payload) {
-  publishEvent({
-    eventName,
-    domain: "Commerce",
-    producer: "commerceOrderLifecycle",
-    aggregateId: orderId,
-    actor,
-    payload
-  });
-}
-function resolveActorRole(role) {
-  if (role === "admin" || role === "super_admin") return "admin";
-  if (role?.includes("seller")) return "seller";
-  return "consumer";
-}
-function isPlatformReader(role) {
-  return role === "admin" || role === "super_admin" || role === "moderator";
-}
-async function assertOrderAccess(order, actor, mutate) {
-  if (mutate) {
-    if (resolveActorRole(actor.role) === "admin") return "admin";
-  } else if (isPlatformReader(actor.role)) {
-    return "admin";
-  }
-  if (order.sellerId === actor.userId) {
-    if (actor.brandId && actor.brandId !== order.brandId) {
-      throw new CommerceError("Not authorized for this Brand Order", 403);
-    }
-    return "seller";
-  }
-  if (order.consumerId === actor.userId) {
-    return "consumer";
-  }
-  throw new CommerceError("Not authorized to access this order", 403);
-}
-async function releaseOrderReservations(order) {
-  if (!order.inventoryReserved || order.inventoryConsumed) {
-    return { ...order, inventoryReserved: false };
-  }
-  for (const item of order.items.filter((i) => i.listingType === "product")) {
-    await releaseInventoryQuantity({
-      productId: item.listingId,
-      variantId: item.variantId,
-      quantity: item.quantity
-    });
-  }
-  return { ...order, inventoryReserved: false };
-}
-async function applyPaymentFailureInventoryRelease(orderIds) {
-  for (const orderId of orderIds) {
-    const order = await commerceStore.getOrder(orderId);
-    if (!order) continue;
-    if (!order.inventoryReserved || order.inventoryConsumed) continue;
-    const next = await releaseOrderReservations(order);
-    await commerceStore.upsertOrder({ ...next, updatedAt: (/* @__PURE__ */ new Date()).toISOString() });
-  }
-}
-async function confirmOrdersForCapturedPayment(params) {
-  const out = [];
-  for (const orderId of params.orderIds) {
-    const order = await commerceStore.getOrder(orderId);
-    if (!order) continue;
-    if (order.status !== "pending") {
-      out.push(order);
-      continue;
-    }
-    const next = {
-      ...order,
-      status: "confirmed",
-      updatedAt: (/* @__PURE__ */ new Date()).toISOString()
-    };
-    await commerceStore.upsertOrder(next);
-    mirrorOpsStatus(next);
-    emitOrder("OrderConfirmed", next.id, params.actorId, {
-      orderId: next.id,
-      paymentId: params.paymentId,
-      reason: params.reason,
-      from: "pending",
-      to: "confirmed"
-    });
-    out.push(next);
-  }
-  return out;
-}
-function assertPaymentAllowsConfirm(order) {
-  if (order.source === "manual" || String(order.source).startsWith("external_")) {
-    return;
-  }
-  const method = String(order.paymentMethod || "").toLowerCase();
-  const payStatus = String(order.paymentStatus || "").toLowerCase();
-  if (method === "cod") {
-    if (payStatus === "failed" || payStatus === "cancelled") {
-      throw new CommerceError("COD Order cannot be Confirmed after payment failure", 409);
-    }
-    return;
-  }
-  if (method === "wallet" || method === "installment") {
-    throw new CommerceError("Payment method not available for Confirm in this sprint", 409);
-  }
-  if (payStatus !== "paid" && payStatus !== "partial") {
-    throw new CommerceError(
-      "Prepaid Order cannot be Confirmed until Payment is Captured",
-      409
-    );
-  }
-}
-async function restockConsumedInventory(order) {
-  if (!order.inventoryConsumed) return order;
-  for (const item of order.items.filter((i) => i.listingType === "product")) {
-    await restockInventoryQuantity({
-      productId: item.listingId,
-      variantId: item.variantId,
-      quantity: item.quantity
-    });
-  }
-  return { ...order, inventoryConsumed: false, inventoryReserved: false };
-}
-async function consumeOrderInventory(order) {
-  if (order.inventoryConsumed || !orderHasProductLines(order.items)) {
-    return { ...order, inventoryConsumed: true, inventoryReserved: false };
-  }
-  for (const item of order.items.filter((i) => i.listingType === "product")) {
-    const key = inventoryRecordId(item.listingId, item.variantId);
-    await withInventoryLock(key, async () => {
-      const record = await getInventoryRecord(item.listingId, item.variantId);
-      if (!record) return;
-      const nextQty = Math.max(0, record.quantity - item.quantity);
-      const nextReserved = order.inventoryReserved ? Math.max(0, record.reservedQuantity - item.quantity) : record.reservedQuantity;
-      await adjustInventory({
-        productId: item.listingId,
-        variantId: item.variantId,
-        quantity: nextQty,
-        reservedQuantity: Math.min(nextReserved, nextQty)
-      });
-      await syncProductStockFromInventory(item.listingId);
-    });
-  }
-  return { ...order, inventoryConsumed: true, inventoryReserved: false };
-}
-function mirrorOpsStatus(order) {
-  try {
-    const map = {
-      pending: "pending_payment",
-      confirmed: "confirmed",
-      packed: "active",
-      shipped: "active",
-      delivered: "active",
-      completed: "completed",
-      cancelled: "cancelled"
-    };
-    operationsStore.updateOrder(order.orderNumber, {
-      status: map[order.status],
-      cancelledAt: order.cancelledAt,
-      cancelReason: order.cancelReason,
-      cancelledBy: order.cancelledBy === "consumer" ? "buyer" : order.cancelledBy === "seller" || order.cancelledBy === "admin" ? order.cancelledBy : void 0
-    });
-  } catch {
-  }
-}
-function ensureShipment(order, existing, fulfilmentMethod, patch) {
-  const ts = nowIso21();
-  if (existing) {
-    return {
-      ...existing,
-      ...patch,
-      fulfilmentMethod: patch?.fulfilmentMethod || existing.fulfilmentMethod || fulfilmentMethod,
-      updatedAt: ts
-    };
-  }
-  return {
-    id: newId4("cship"),
-    orderId: order.id,
-    checkoutId: order.checkoutId,
-    consumerId: order.consumerId,
-    sellerId: order.sellerId,
-    brandId: order.brandId,
-    fulfilmentMethod,
-    courierProvider: patch?.courierProvider ?? null,
-    trackingNumber: patch?.trackingNumber ?? null,
-    status: patch?.status || "pending_fulfilment",
-    shippedAt: patch?.shippedAt,
-    deliveredAt: patch?.deliveredAt,
-    createdAt: ts,
-    updatedAt: ts
-  };
-}
-async function transitionOrder(input) {
-  const order = await commerceStore.getOrder(input.orderId);
-  if (!order) throw new CommerceError("Order not found", 404);
-  const actorKind = await assertOrderAccess(order, input.actor, true);
-  if (actorKind === "consumer") {
-    throw new CommerceError("Consumers cannot advance fulfilment status", 403);
-  }
-  const to = normalizeOrderStatus(input.toStatus);
-  if (!to || to === "cancelled") {
-    throw new CommerceError("Invalid target status (use cancel endpoint for cancellation)");
-  }
-  if (order.status === to) {
-    const shipment2 = order.shipmentId ? await commerceStore.getShipment(order.shipmentId) : await commerceStore.getShipmentByOrderId(order.id);
-    return { order, shipment: shipment2 || void 0, reused: true };
-  }
-  const serviceOnly = orderHasOnlyServices(order.items);
-  if (!canTransitionOrder(order.status, to, { serviceOnly })) {
-    throw new CommerceError(`Invalid transition ${order.status} \u2192 ${to}`);
-  }
-  if (!canActorForwardTransition(actorKind, to)) {
-    throw new CommerceError("Not authorized for this transition", 403);
-  }
-  if (to === "confirmed" && order.status === "pending") {
-    assertPaymentAllowsConfirm(order);
-  }
-  let next = {
-    ...order,
-    status: to,
-    updatedAt: nowIso21()
-  };
-  let shipment;
-  const method = input.fulfilmentMethod || "self_delivery";
-  if (!serviceOnly) {
-    if (to === "packed") {
-      next = await consumeOrderInventory(next);
-      const existing = await commerceStore.getShipmentByOrderId(order.id);
-      const created2 = !existing;
-      shipment = ensureShipment(next, existing, method, {
-        status: "packed",
-        courierProvider: input.courierProvider,
-        trackingNumber: input.trackingNumber
-      });
-      next.shipmentId = shipment.id;
-      if (created2) {
-        emitOrder("ShipmentCreated", next.id, input.actor.userId, {
-          orderId: next.id,
-          shipmentId: shipment.id,
-          status: shipment.status
-        });
-      }
-    }
-    if (to === "shipped") {
-      const existing = await commerceStore.getShipmentByOrderId(order.id);
-      if (!existing && !next.shipmentId) {
-        throw new CommerceError("Order must be packed before shipping");
-      }
-      const hadCourier = !!existing?.courierProvider || existing?.status === "courier_assigned" || existing?.status === "in_transit";
-      shipment = ensureShipment(next, existing, method, {
-        status: "in_transit",
-        courierProvider: input.courierProvider ?? existing?.courierProvider ?? null,
-        trackingNumber: input.trackingNumber ?? existing?.trackingNumber ?? null,
-        shippedAt: existing?.shippedAt || nowIso21()
-      });
-      next.shipmentId = shipment.id;
-      if (!hadCourier || input.courierProvider) {
-        emitOrder("ShipmentAssigned", next.id, input.actor.userId, {
-          orderId: next.id,
-          shipmentId: shipment.id,
-          courierProvider: shipment.courierProvider
-        });
-      }
-      emitOrder("ShipmentShipped", next.id, input.actor.userId, {
-        orderId: next.id,
-        shipmentId: shipment.id
-      });
-    }
-    if (to === "delivered") {
-      const existing = await commerceStore.getShipmentByOrderId(order.id);
-      if (existing && (existing.status === "packed" || existing.status === "pending_fulfilment")) {
-        throw new CommerceError("Shipment must be shipped before Order can be Delivered");
-      }
-      shipment = ensureShipment(next, existing, method, {
-        status: "delivered",
-        deliveredAt: nowIso21(),
-        shippedAt: existing?.shippedAt || nowIso21()
-      });
-      next.shipmentId = shipment.id;
-      emitOrder("ShipmentDelivered", next.id, input.actor.userId, {
-        orderId: next.id,
-        shipmentId: shipment.id
-      });
-    }
-  }
-  await commerceStore.commitOrderMutation({ order: next, shipment });
-  mirrorOpsStatus(next);
-  const evt = eventNameForStatus(to);
-  if (evt) {
-    emitOrder(evt, next.id, input.actor.userId, {
-      orderId: next.id,
-      from: order.status,
-      to,
-      sellerId: next.sellerId,
-      brandId: next.brandId
-    });
-  }
-  if (to === "completed") {
-    try {
-      const { settleEscrowForOrder: settleEscrowForOrder2 } = await Promise.resolve().then(() => (init_escrowService(), escrowService_exports));
-      await settleEscrowForOrder2(next.id, input.actor.userId);
-    } catch (error2) {
-      const { Logger: Logger2 } = await Promise.resolve().then(() => (init_logger(), logger_exports));
-      Logger2.error("Escrow settlement after OrderCompleted failed", {
-        orderId: next.id,
-        error: error2 instanceof Error ? error2.message : String(error2)
-      });
-    }
-  }
-  return { order: next, shipment, reused: false };
-}
-async function cancelOrder(input) {
-  const reason = (input.reason || "").trim();
-  if (!reason) throw new CommerceError("Cancellation reason is required");
-  const order = await commerceStore.getOrder(input.orderId);
-  if (!order) throw new CommerceError("Order not found", 404);
-  if (order.status === "cancelled") {
-    return { order, reused: true };
-  }
-  const roleKind = resolveActorRole(input.actor.role);
-  let effective;
-  if (roleKind === "admin") {
-    effective = "admin";
-  } else if (order.sellerId === input.actor.userId) {
-    effective = "seller";
-    if (input.actor.brandId && input.actor.brandId !== order.brandId) {
-      throw new CommerceError("Not authorized for this Brand Order", 403);
-    }
-  } else if (order.consumerId === input.actor.userId) {
-    effective = "consumer";
-  } else {
-    throw new CommerceError("Not authorized to cancel this order", 403);
-  }
-  if (!canActorCancel(effective, order.status)) {
-    throw new CommerceError(
-      `Cancellation not allowed for ${effective} while order is ${order.status}`,
-      403
-    );
-  }
-  let next = {
-    ...order,
-    status: "cancelled",
-    cancelledBy: effective,
-    cancelReason: reason,
-    cancelledAt: nowIso21(),
-    statusBeforeCancel: order.status,
-    updatedAt: nowIso21()
-  };
-  if (next.inventoryConsumed) {
-    next = await restockConsumedInventory(next);
-  } else if (next.inventoryReserved) {
-    next = await releaseOrderReservations(next);
-  }
-  const shipment = await commerceStore.getShipmentByOrderId(order.id);
-  let shipmentUpdate;
-  if (shipment && shipment.status !== "delivered") {
-    shipmentUpdate = { ...shipment, status: "cancelled", updatedAt: nowIso21() };
-  }
-  const hadCapturedFunds = (order.paymentStatus === "paid" || order.paymentStatus === "partial") && (order.paidAmount || 0) > 0;
-  if (hadCapturedFunds) {
-    try {
-      if (order.paymentId) {
-        const { commercePaymentStore: commercePaymentStore2 } = await Promise.resolve().then(() => (init_commercePaymentStore(), commercePaymentStore_exports));
-        const { reconcileEscrowEffectsForPayment: reconcileEscrowEffectsForPayment2, refundEscrowsForCancelledOrder: refundEscrowsForCancelledOrder2 } = await Promise.resolve().then(() => (init_escrowService(), escrowService_exports));
-        const payment = await commercePaymentStore2.getPayment(order.paymentId);
-        if (payment?.status === "captured") {
-          await reconcileEscrowEffectsForPayment2(payment, input.actor.userId);
-        }
-        await refundEscrowsForCancelledOrder2({
-          orderId: order.id,
-          reason: `Order cancelled: ${reason}`,
-          actor: input.actor
-        });
-      } else {
-        const { refundEscrowsForCancelledOrder: refundEscrowsForCancelledOrder2 } = await Promise.resolve().then(() => (init_escrowService(), escrowService_exports));
-        await refundEscrowsForCancelledOrder2({
-          orderId: order.id,
-          reason: `Order cancelled: ${reason}`,
-          actor: input.actor
-        });
-      }
-    } catch (error2) {
-      const { Logger: Logger2 } = await Promise.resolve().then(() => (init_logger(), logger_exports));
-      Logger2.error("Escrow refund on cancel failed", {
-        orderId: order.id,
-        error: error2 instanceof Error ? error2.message : String(error2)
-      });
-      throw error2 instanceof Error ? error2 : new CommerceError("Escrow refund on cancel failed", 500);
-    }
-  }
-  await commerceStore.commitOrderMutation({ order: next, shipment: shipmentUpdate });
-  mirrorOpsStatus(next);
-  emitOrder("OrderCancelled", next.id, input.actor.userId, {
-    orderId: next.id,
-    cancelledBy: effective,
-    reason,
-    previousStatus: order.status
-  });
-  return { order: next, reused: false };
-}
-async function getShipmentForActor(shipmentId, actor) {
-  const shipment = await commerceStore.getShipment(shipmentId);
-  if (!shipment) throw new CommerceError("Shipment not found", 404);
-  const order = await commerceStore.getOrder(shipment.orderId);
-  if (!order) throw new CommerceError("Order not found", 404);
-  await assertOrderAccess(order, actor, false);
-  return shipment;
-}
-async function listOrdersGroupedByCheckout(actor) {
-  const all = await commerceStore.listOrders();
-  const kind = resolveActorRole(actor.role);
-  const platformReader = isPlatformReader(actor.role);
-  let filtered = all;
-  if (platformReader && !actor.as) {
-    filtered = all;
-  } else if (actor.as === "seller" || !actor.as && kind === "seller") {
-    filtered = all.filter((o) => o.sellerId === actor.userId);
-    if (actor.brandId) filtered = filtered.filter((o) => o.brandId === actor.brandId);
-  } else {
-    filtered = all.filter((o) => o.consumerId === actor.userId);
-  }
-  if (actor.brandId && platformReader && !actor.as) {
-    filtered = filtered.filter((o) => o.brandId === actor.brandId);
-  }
-  if (actor.status) {
-    const st = normalizeOrderStatus(actor.status);
-    if (st) filtered = filtered.filter((o) => o.status === st);
-  }
-  const byCheckout = {};
-  for (const o of filtered) {
-    const key = o.checkoutId || "unknown";
-    if (!byCheckout[key]) byCheckout[key] = [];
-    byCheckout[key].push(o);
-  }
-  return { orders: filtered, byCheckout };
-}
-
-// server/payments/commercePaymentService.ts
+init_orderService();
 init_cartService();
 init_eventBus();
 init_logger();
+import { randomUUID as randomUUID14 } from "node:crypto";
 
 // server/payments/paymentLifecycle.ts
 var FORWARD = {
@@ -32519,7 +34622,7 @@ function calculatePayable(params) {
 init_commercePaymentStore();
 init_mockProvider();
 init_sslcommerzProvider();
-function nowIso22() {
+function nowIso23() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
 function isProductionRuntime() {
@@ -32616,7 +34719,7 @@ async function reconcileCapturedPaymentEffects(payment, actor) {
   let next = payment;
   if (!next.paymentCapturedEmitted) {
     emitPayment("PaymentCaptured", next, actor, { source: "reconcile" });
-    next = { ...next, paymentCapturedEmitted: true, updatedAt: nowIso22() };
+    next = { ...next, paymentCapturedEmitted: true, updatedAt: nowIso23() };
     await commercePaymentStore.upsertPayment(next);
   }
   if (!next.escrowEffectsApplied) {
@@ -32640,7 +34743,7 @@ async function reconcileFailedPaymentEffects(payment, actor) {
       const patched = {
         ...payment,
         reservationReleased: true,
-        updatedAt: nowIso22()
+        updatedAt: nowIso23()
       };
       await commercePaymentStore.upsertPayment(patched);
       return patched;
@@ -32650,7 +34753,7 @@ async function reconcileFailedPaymentEffects(payment, actor) {
   let next = payment;
   if (!next.reservationReleased) {
     await applyPaymentFailureInventoryRelease(next.orderIds);
-    next = { ...next, reservationReleased: true, updatedAt: nowIso22() };
+    next = { ...next, reservationReleased: true, updatedAt: nowIso23() };
     await commercePaymentStore.upsertPayment(next);
   }
   if (!await checkoutHasCapturedSibling(payment.checkoutId, payment.paymentId)) {
@@ -32658,12 +34761,12 @@ async function reconcileFailedPaymentEffects(payment, actor) {
   }
   if (next.status === "failed" && !next.paymentFailedEmitted) {
     emitPayment("PaymentFailed", next, actor, { source: "reconcile" });
-    next = { ...next, paymentFailedEmitted: true, updatedAt: nowIso22() };
+    next = { ...next, paymentFailedEmitted: true, updatedAt: nowIso23() };
     await commercePaymentStore.upsertPayment(next);
   }
   if (next.status === "cancelled" && !next.paymentCancelledEmitted) {
     emitPayment("PaymentCancelled", next, actor, { source: "reconcile" });
-    next = { ...next, paymentCancelledEmitted: true, updatedAt: nowIso22() };
+    next = { ...next, paymentCancelledEmitted: true, updatedAt: nowIso23() };
     await commercePaymentStore.upsertPayment(next);
   }
   return next;
@@ -32693,10 +34796,10 @@ async function patchOrdersPaymentKnowledge(payment, opts) {
       paidAmount: orderCaptured,
       outstandingAmount: orderOutstanding,
       invoicePaymentStatus: payStatus === "paid" ? "Paid" : payStatus === "partial" || payStatus === "cod_due" ? "Partial" : payStatus === "failed" ? "Unpaid" : "Unpaid",
-      updatedAt: nowIso22()
+      updatedAt: nowIso23()
     };
     if (opts?.confirmed && next.status === "pending") {
-      next = { ...next, status: "confirmed", updatedAt: nowIso22() };
+      next = { ...next, status: "confirmed", updatedAt: nowIso23() };
     }
     await commerceStore.upsertOrder(next);
     updated.push(next);
@@ -32766,9 +34869,9 @@ async function initiateCommercePayment(input) {
   if (orders.length === 0) {
     throw new CommerceError("Checkout has no orders", 400);
   }
-  const now = nowIso22();
+  const now = nowIso23();
   let payment = {
-    paymentId: `pay_${randomUUID13().replace(/-/g, "").slice(0, 16)}`,
+    paymentId: `pay_${randomUUID14().replace(/-/g, "").slice(0, 16)}`,
     checkoutId: checkout.id,
     orderIds: checkout.orderIds.slice(),
     consumerId: checkout.consumerId,
@@ -32799,7 +34902,7 @@ async function initiateCommercePayment(input) {
   payment = {
     ...payment,
     status: transitionPayment(payment.status, "pending"),
-    updatedAt: nowIso22()
+    updatedAt: nowIso23()
   };
   await commercePaymentStore.upsertPayment(payment);
   await patchOrdersPaymentKnowledge(payment);
@@ -32840,7 +34943,7 @@ async function initiateCommercePayment(input) {
     provider: provider.id,
     providerTransactionId: session.tranId,
     providerSessionId: session.sessionKey,
-    updatedAt: nowIso22()
+    updatedAt: nowIso23()
   };
   await commercePaymentStore.upsertPayment(payment);
   await patchOrdersPaymentKnowledge(payment);
@@ -32859,7 +34962,7 @@ async function initiateCommercePayment(input) {
   };
 }
 async function applyCodWithoutGatewayCapture(payment, actorId3) {
-  const now = nowIso22();
+  const now = nowIso23();
   const checkout = await commerceStore.getCheckout(payment.checkoutId);
   let next = {
     ...payment,
@@ -32972,7 +35075,7 @@ async function applyValidatedCommerceCapture(params) {
       source
     });
   }
-  const now = nowIso22();
+  const now = nowIso23();
   let next = { ...payment };
   if (next.status === "initiated" || next.status === "pending" || next.status === "failed") {
     if (next.status === "failed") {
@@ -33045,10 +35148,10 @@ async function applyCommercePaymentFailure(params) {
       status,
       failureCode: params.failureCode || "STALE_AFTER_CAPTURE",
       failureMessage: params.failureMessage || "Superseded by later Captured payment",
-      failedAt: status === "failed" ? nowIso22() : payment.failedAt,
-      cancelledAt: status === "cancelled" ? nowIso22() : payment.cancelledAt,
+      failedAt: status === "failed" ? nowIso23() : payment.failedAt,
+      cancelledAt: status === "cancelled" ? nowIso23() : payment.cancelledAt,
       reservationReleased: true,
-      updatedAt: nowIso22()
+      updatedAt: nowIso23()
     };
     await commercePaymentStore.upsertPayment(quarantined);
     if (status === "failed" && !quarantined.paymentFailedEmitted) {
@@ -33063,7 +35166,7 @@ async function applyCommercePaymentFailure(params) {
   if (!canTransitionPayment(fromStatus, status) && !allowedFailFromAuthorized) {
     throw new CommerceError(`Invalid payment transition ${fromStatus} \u2192 ${status}`);
   }
-  const now = nowIso22();
+  const now = nowIso23();
   let next = {
     ...payment,
     status,
@@ -33166,7 +35269,7 @@ async function harnessSimulateCaptureCrashBeforeConfirm(params) {
     return payment;
   }
   const valId = params.valId || `crash_val_${payment.paymentId}`;
-  const now = nowIso22();
+  const now = nowIso23();
   let next = {
     ...payment,
     status: "captured",
@@ -33206,7 +35309,7 @@ async function harnessSimulateFailureCrashBeforeRelease(params) {
     throw new CommerceError("Cannot simulate failure on Captured payment", 409);
   }
   const status = params.status || "failed";
-  const now = nowIso22();
+  const now = nowIso23();
   const next = {
     ...payment,
     status,
@@ -33256,7 +35359,7 @@ function publicApiBase2(req) {
   const host = req.get("host") || "localhost:3001";
   return `${req.protocol}://${host}/api/v1`;
 }
-function webBase2() {
+function webBase3() {
   return (process.env.CHOOSIFY_WEB_URL || "http://localhost:5173").replace(/\/$/, "");
 }
 function handleError(res, error2) {
@@ -33278,7 +35381,7 @@ function redirectToWeb2(res, path, query2) {
     if (v) qs.set(k, v);
   }
   const suffix = qs.toString() ? `?${qs}` : "";
-  res.redirect(302, `${webBase2()}${path}${suffix}`);
+  res.redirect(302, `${webBase3()}${path}${suffix}`);
 }
 commercePaymentsRouter.get("/commerce/payments/persistence-mode", (_req, res) => {
   res.json({
@@ -33399,7 +35502,7 @@ commercePaymentsRouter.post("/commerce/payments/initiate", ...requireAuth5, asyn
       customer: body.customer,
       actor: { userId: actorId(req), role: actorRole(req) },
       publicApiBase: publicApiBase2(req),
-      webBase: webBase2()
+      webBase: webBase3()
     });
     res.json({
       success: true,
@@ -34111,7 +36214,7 @@ function assertRoleCanUsePlacement(placementId, role) {
 init_catalogStore();
 init_eventBus();
 init_logger();
-import { randomUUID as randomUUID14 } from "node:crypto";
+import { randomUUID as randomUUID15 } from "node:crypto";
 
 // shared/ads/heroMedia.ts
 function inferHeroMediaType(url, explicit) {
@@ -34274,11 +36377,11 @@ var AdsError = class extends Error {
     this.name = "AdsError";
   }
 };
-function nowIso23() {
+function nowIso24() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
 function newId5(prefix) {
-  return `${prefix}_${randomUUID14().replace(/-/g, "").slice(0, 16)}`;
+  return `${prefix}_${randomUUID15().replace(/-/g, "").slice(0, 16)}`;
 }
 function isPlatformAdmin(role) {
   const r = (role || "").toLowerCase();
@@ -34443,7 +36546,7 @@ async function createBase(input, status, actorRole3, opts) {
   if (!input.ownerId) throw new AdsError("ownerId is required", 400);
   validateBannerPlacement(input, actorRole3, opts?.requirePlacement === true);
   const externalUrl = assertSafeExternalUrl(input.externalUrl);
-  const now = nowIso23();
+  const now = nowIso24();
   const kind = input.kind;
   const prefix = kind === "deal" ? "deal" : kind === "promotion" ? "promo" : kind === "external" ? "extad" : "banner";
   const pageKey = input.pageKey || (input.placementId ? getPlacementDef(input.placementId)?.pageKey : void 0);
@@ -34498,7 +36601,7 @@ async function createDeal(input, actor) {
     "approved",
     actor.role
   );
-  const active = { ...row, status: "active", updatedAt: nowIso23() };
+  const active = { ...row, status: "active", updatedAt: nowIso24() };
   await adsStore.upsertAd(active);
   emitMarketplace("DealCreated", active.id, actor.userId, {
     dealId: active.id,
@@ -34632,7 +36735,7 @@ async function updateOwnAd(id, actor, patch) {
     metadata: patch.metadata !== void 0 ? patch.metadata : ad.metadata,
     // Non-admins never change status via this path
     status: isPlatformAdmin(actor.role) && patch.status ? patch.status : ad.status,
-    updatedAt: nowIso23()
+    updatedAt: nowIso24()
   };
   await adsStore.upsertAd(updated);
   Logger.audit("ads.update", {
@@ -34756,7 +36859,7 @@ async function submitAdForApproval(id, actor) {
       await resolveCategoryPromotedCreative(ad.formatId, ad.creative);
     }
   }
-  const updated = { ...ad, status: "pending", updatedAt: nowIso23() };
+  const updated = { ...ad, status: "pending", updatedAt: nowIso24() };
   await adsStore.upsertAd(updated);
   emitMarketplace("AdSubmitted", updated.id, actor.userId, {
     adId: updated.id,
@@ -34771,7 +36874,7 @@ async function pauseAd(id, actor) {
   if (!isPlatformAdmin(actor.role)) throw new AdsError("Admin role required", 403);
   const ad = await adsStore.getAd(id);
   if (!ad) throw new AdsError("Ad not found", 404);
-  const updated = { ...ad, status: "paused", updatedAt: nowIso23() };
+  const updated = { ...ad, status: "paused", updatedAt: nowIso24() };
   await adsStore.upsertAd(updated);
   Logger.audit("ads.pause", { adId: id, actorId: actor.userId });
   return updated;
@@ -34780,7 +36883,7 @@ async function archiveAd(id, actor) {
   if (!isPlatformAdmin(actor.role)) throw new AdsError("Admin role required", 403);
   const ad = await adsStore.getAd(id);
   if (!ad) throw new AdsError("Ad not found", 404);
-  const updated = { ...ad, status: "disabled", updatedAt: nowIso23() };
+  const updated = { ...ad, status: "disabled", updatedAt: nowIso24() };
   await adsStore.upsertAd(updated);
   Logger.audit("ads.archive", { adId: id, actorId: actor.userId });
   return updated;
@@ -34814,11 +36917,11 @@ async function approveAd(id, actor, opts) {
   const updated = {
     ...ad,
     status: nextStatus,
-    updatedAt: nowIso23(),
+    updatedAt: nowIso24(),
     metadata: {
       ...ad.metadata || {},
       approvedBy: actor.userId,
-      approvedAt: nowIso23()
+      approvedAt: nowIso24()
     }
   };
   await adsStore.upsertAd(updated);
@@ -34852,11 +36955,11 @@ async function rejectAd(id, actor, reason) {
   const updated = {
     ...ad,
     status: "rejected",
-    updatedAt: nowIso23(),
+    updatedAt: nowIso24(),
     metadata: {
       ...ad.metadata || {},
       rejectedBy: actor.userId,
-      rejectedAt: nowIso23(),
+      rejectedAt: nowIso24(),
       rejectReason: reason || ""
     }
   };
@@ -35180,11 +37283,12 @@ init_logger();
 init_cartService();
 init_commerceStore();
 init_operationsStore();
+init_referenceIdService();
 
 // server/cashbook/cashbookStore.ts
 import { existsSync as existsSync16, mkdirSync as mkdirSync16, readFileSync as readFileSync16, writeFileSync as writeFileSync16 } from "node:fs";
 import { dirname as dirname16, join as join17 } from "node:path";
-import { randomUUID as randomUUID15 } from "node:crypto";
+import { randomUUID as randomUUID16 } from "node:crypto";
 var DEFAULT_PATH9 = join17(process.cwd(), ".data", "cashbook-memory-snapshot.json");
 function snapshotPath2() {
   return process.env.CASHBOOK_MEMORY_SNAPSHOT_PATH?.trim() || DEFAULT_PATH9;
@@ -35193,9 +37297,11 @@ var state12 = {
   books: [],
   entries: []
 };
+var importIdempotency = /* @__PURE__ */ new Map();
+var IMPORT_IDEMPOTENCY_TTL_MS = 10 * 60 * 1e3;
 var hydrated10 = false;
 var persistTimer13 = null;
-function nowIso24() {
+function nowIso25() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
 function schedulePersist10() {
@@ -35206,7 +37312,7 @@ function schedulePersist10() {
       mkdirSync16(dirname16(path), { recursive: true });
       const snap = {
         version: 1,
-        savedAt: nowIso24(),
+        savedAt: nowIso25(),
         books: state12.books,
         entries: state12.entries
       };
@@ -35248,21 +37354,48 @@ function createCashbook(input) {
   const name = input.name.trim();
   if (!name) throw new Error("Book Name is required");
   const book = {
-    id: `cb_${randomUUID15().replace(/-/g, "").slice(0, 16)}`,
+    id: `cb_${randomUUID16().replace(/-/g, "").slice(0, 16)}`,
     ownerUserId: input.ownerUserId,
     name,
     icon: (input.icon || "\u{1F4D2}").trim() || "\u{1F4D2}",
     color: input.color || "#EF3C23",
-    createdAt: nowIso24(),
-    updatedAt: nowIso24()
+    createdAt: nowIso25(),
+    updatedAt: nowIso25()
   };
   state12.books.unshift(book);
   schedulePersist10();
   return book;
 }
+function renameCashbook(bookId, ownerUserId, name) {
+  ensureCashbookHydrated();
+  const trimmed = (name || "").trim();
+  if (!trimmed) throw new Error("Book Name is required");
+  const book = getCashbookForOwner(bookId, ownerUserId);
+  if (!book) return null;
+  book.name = trimmed;
+  book.updatedAt = nowIso25();
+  schedulePersist10();
+  return book;
+}
+function deleteCashbook(bookId, ownerUserId) {
+  ensureCashbookHydrated();
+  const idx = state12.books.findIndex((b) => b.id === bookId && b.ownerUserId === ownerUserId);
+  if (idx < 0) return { deleted: false, removedEntries: 0 };
+  state12.books.splice(idx, 1);
+  const before = state12.entries.length;
+  state12.entries = state12.entries.filter(
+    (e) => !(e.bookId === bookId && e.ownerUserId === ownerUserId)
+  );
+  schedulePersist10();
+  return { deleted: true, removedEntries: before - state12.entries.length };
+}
 function touchCashbookPersist() {
   ensureCashbookHydrated();
   schedulePersist10();
+}
+function listCashbookOwnerIds() {
+  ensureCashbookHydrated();
+  return [...new Set(state12.books.map((b) => b.ownerUserId))];
 }
 function listEntriesForBook(bookId, ownerUserId) {
   ensureCashbookHydrated();
@@ -35270,43 +37403,114 @@ function listEntriesForBook(bookId, ownerUserId) {
   if (!book) return [];
   return state12.entries.filter((e) => e.bookId === bookId && e.ownerUserId === ownerUserId).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
+function getEntryForOwner(entryId, ownerUserId) {
+  ensureCashbookHydrated();
+  return state12.entries.find((e) => e.entryId === entryId && e.ownerUserId === ownerUserId) || null;
+}
 function cashbookSummary(bookId, ownerUserId) {
   const entries = listEntriesForBook(bookId, ownerUserId);
-  const sales = entries.filter((e) => e.amount > 0);
-  const totalRevenue = sales.reduce((a, e) => a + e.amount, 0);
-  const totalItems = sales.reduce((a, e) => a + (e.quantity || 1), 0);
-  const orderIds = new Set(sales.map((e) => e.orderId).filter(Boolean));
+  const moneyIn = entries.filter((e) => e.amount > 0).reduce((a, e) => a + e.amount, 0);
+  const moneyOut = entries.filter((e) => e.amount < 0).reduce((a, e) => a + Math.abs(e.amount), 0);
+  const net = moneyIn - moneyOut;
+  const imported = entries.filter((e) => e.source === "order_import");
+  const manual = entries.filter((e) => e.source === "manual");
+  const orderIds = new Set(imported.map((e) => e.orderId).filter(Boolean));
+  const totalItems = imported.reduce((a, e) => a + (e.quantity || 1), 0);
   return {
+    moneyIn,
+    moneyOut,
+    net,
+    importedCount: imported.length,
+    manualCount: manual.length,
+    // kept for backward compatibility with existing callers / probes
     totalSales: orderIds.size,
-    totalRevenue,
-    netRevenue: totalRevenue,
+    totalRevenue: moneyIn,
+    netRevenue: net,
     totalItems,
-    averageOrderValue: orderIds.size ? Math.round(totalRevenue / orderIds.size) : 0,
+    averageOrderValue: orderIds.size ? Math.round(moneyIn / orderIds.size) : 0,
     entryCount: entries.length
   };
 }
+function addManualEntry(input) {
+  ensureCashbookHydrated();
+  const book = getCashbookForOwner(input.bookId, input.ownerUserId);
+  if (!book) throw new Error("Cashbook not found");
+  if (!Number.isFinite(input.amount) || input.amount === 0) {
+    throw new Error("Enter a non-zero amount");
+  }
+  const entry = {
+    entryId: `cbe_${randomUUID16().replace(/-/g, "").slice(0, 16)}`,
+    bookId: input.bookId,
+    ownerUserId: input.ownerUserId,
+    source: "manual",
+    amount: input.amount,
+    currency: input.currency || "BDT",
+    description: (input.description || "").trim(),
+    category: input.category?.trim() || void 0,
+    contact: input.contact?.trim() || void 0,
+    paymentMode: input.paymentMode?.trim() || void 0,
+    docRef: input.docRef?.trim() || void 0,
+    entryDate: input.entryDate?.trim() || void 0,
+    entryTime: input.entryTime?.trim() || void 0,
+    linkedOrderId: input.linkedOrderId?.trim() || void 0,
+    createdAt: nowIso25(),
+    updatedAt: nowIso25()
+  };
+  state12.entries.unshift(entry);
+  book.updatedAt = nowIso25();
+  schedulePersist10();
+  return entry;
+}
+function updateManualEntry(entryId, ownerUserId, patch) {
+  ensureCashbookHydrated();
+  const entry = state12.entries.find(
+    (e) => e.entryId === entryId && e.ownerUserId === ownerUserId
+  );
+  if (!entry || entry.source !== "manual") return null;
+  if (patch.amount !== void 0) {
+    if (!Number.isFinite(patch.amount) || patch.amount === 0) {
+      throw new Error("Enter a non-zero amount");
+    }
+    entry.amount = patch.amount;
+  }
+  if (patch.description !== void 0) entry.description = patch.description.trim();
+  if (patch.category !== void 0) entry.category = patch.category.trim() || void 0;
+  if (patch.contact !== void 0) entry.contact = patch.contact.trim() || void 0;
+  if (patch.paymentMode !== void 0) entry.paymentMode = patch.paymentMode.trim() || void 0;
+  if (patch.docRef !== void 0) entry.docRef = patch.docRef.trim() || void 0;
+  if (patch.entryDate !== void 0) entry.entryDate = patch.entryDate.trim() || void 0;
+  if (patch.entryTime !== void 0) entry.entryTime = patch.entryTime.trim() || void 0;
+  entry.updatedAt = nowIso25();
+  const book = state12.books.find((b) => b.id === entry.bookId);
+  if (book) book.updatedAt = nowIso25();
+  schedulePersist10();
+  return entry;
+}
 function removeCashbookEntry(entryId, ownerUserId) {
   ensureCashbookHydrated();
-  const idx = state12.entries.findIndex((e) => e.entryId === entryId && e.ownerUserId === ownerUserId);
+  const idx = state12.entries.findIndex(
+    (e) => e.entryId === entryId && e.ownerUserId === ownerUserId
+  );
   if (idx < 0) return false;
   const bookId = state12.entries[idx].bookId;
   state12.entries.splice(idx, 1);
   const book = state12.books.find((b) => b.id === bookId);
-  if (book) book.updatedAt = nowIso24();
+  if (book) book.updatedAt = nowIso25();
   schedulePersist10();
   return true;
+}
+function findEntryBySourceImportKey(ownerUserId, sourceImportKey) {
+  ensureCashbookHydrated();
+  if (!sourceImportKey) return null;
+  return state12.entries.find(
+    (e) => e.ownerUserId === ownerUserId && e.sourceImportKey === sourceImportKey
+  ) || null;
 }
 function importResolvedLines(bookId, ownerUserId, lines) {
   ensureCashbookHydrated();
   const book = getCashbookForOwner(bookId, ownerUserId);
   if (!book) throw new Error("Cashbook not found");
-  const result = {
-    imported: 0,
-    skipped: 0,
-    failed: 0,
-    book,
-    details: []
-  };
+  const result = { imported: 0, skipped: 0, failed: 0, book, details: [] };
   for (const line of lines) {
     if (line.sellerId !== ownerUserId) {
       result.failed += 1;
@@ -35318,21 +37522,34 @@ function importResolvedLines(bookId, ownerUserId, lines) {
       });
       continue;
     }
-    const exists = state12.entries.some(
+    if (!Number.isFinite(line.lineTotal) || line.lineTotal <= 0) {
+      result.failed += 1;
+      result.details.push({
+        orderId: line.orderId,
+        orderItemKey: line.orderItemKey,
+        status: "failed",
+        reason: "No resolvable seller-attributable amount for this line"
+      });
+      continue;
+    }
+    const dupGlobal = findEntryBySourceImportKey(ownerUserId, line.sourceImportKey);
+    const dupLegacy = state12.entries.find(
       (e) => e.bookId === bookId && e.ownerUserId === ownerUserId && e.orderId === line.orderId && e.orderItemKey === line.orderItemKey
     );
-    if (exists) {
+    const dup = dupGlobal || dupLegacy;
+    if (dup) {
       result.skipped += 1;
       result.details.push({
         orderId: line.orderId,
         orderItemKey: line.orderItemKey,
         status: "skipped",
-        reason: "Already imported"
+        reason: dup.bookId === bookId ? "Already imported into this book" : "Already imported",
+        existingBookId: dup.bookId
       });
       continue;
     }
     const entry = {
-      entryId: `cbe_${randomUUID15().replace(/-/g, "").slice(0, 16)}`,
+      entryId: `cbe_${randomUUID16().replace(/-/g, "").slice(0, 16)}`,
       bookId,
       ownerUserId,
       source: "order_import",
@@ -35342,6 +37559,11 @@ function importResolvedLines(bookId, ownerUserId, lines) {
       category: line.category,
       orderId: line.orderId,
       orderItemKey: line.orderItemKey,
+      sourceImportKey: line.sourceImportKey,
+      sourceType: "order",
+      sourceSellerId: line.sellerId,
+      sourceSubOrderId: line.sourceSubOrderId,
+      sourceOrderStatusAtImport: line.orderStatus,
       listingId: line.listingId,
       productTitle: line.productTitle,
       brandId: line.brandId,
@@ -35351,8 +37573,8 @@ function importResolvedLines(bookId, ownerUserId, lines) {
       lineTotal: line.lineTotal,
       orderDate: line.orderDate,
       orderStatus: line.orderStatus,
-      createdAt: nowIso24(),
-      updatedAt: nowIso24()
+      createdAt: nowIso25(),
+      updatedAt: nowIso25()
     };
     state12.entries.unshift(entry);
     result.imported += 1;
@@ -35362,16 +37584,53 @@ function importResolvedLines(bookId, ownerUserId, lines) {
       status: "imported"
     });
   }
-  book.updatedAt = nowIso24();
+  book.updatedAt = nowIso25();
   schedulePersist10();
   return result;
 }
+function findImportIdempotency(ownerUserId, key) {
+  if (!key) return null;
+  const hit = importIdempotency.get(`${ownerUserId}::${key}`);
+  if (!hit) return null;
+  if (Date.now() - hit.at > IMPORT_IDEMPOTENCY_TTL_MS) {
+    importIdempotency.delete(`${ownerUserId}::${key}`);
+    return null;
+  }
+  return hit.result;
+}
+function recordImportIdempotency(ownerUserId, key, result) {
+  if (!key) return;
+  importIdempotency.set(`${ownerUserId}::${key}`, { result, at: Date.now() });
+}
 
 // server/cashbook/cashbookService.ts
-init_referenceIdService();
 function isStaff(role) {
   const r = (role || "").toLowerCase();
   return r === "admin" || r === "super_admin" || r === "superadmin";
+}
+function isPartnerRole2(role) {
+  const r = (role || "").toLowerCase();
+  return r === "seller" || r === "verified_seller" || r === "creator";
+}
+function assertAuthed(actor) {
+  if (!actor.userId) throw new CommerceError("Authentication required", 401);
+}
+function assertCashbookActor(actor) {
+  assertAuthed(actor);
+  if (isStaff(actor.role) || isPartnerRole2(actor.role)) return;
+  throw new CommerceError("Cashbooks are available to sellers and creators only", 403);
+}
+function assertSellerActor(actor) {
+  assertAuthed(actor);
+  if (isStaff(actor.role)) {
+    throw new CommerceError(
+      "Cashbook Oversight is read-only \u2014 Admins cannot modify seller/creator cashbooks",
+      403
+    );
+  }
+  if (!isPartnerRole2(actor.role)) {
+    throw new CommerceError("Cashbooks are available to sellers and creators only", 403);
+  }
 }
 function assertOwnerAccess(ownerUserId, actor) {
   if (isStaff(actor.role)) return;
@@ -35379,87 +37638,304 @@ function assertOwnerAccess(ownerUserId, actor) {
     throw new CommerceError("Not authorized for this cashbook", 403);
   }
 }
-function linesFromCommerceOrder(order, ownerUserId) {
-  const items = order.items || [];
-  const out = [];
-  for (let i = 0; i < items.length; i++) {
-    const it = items[i];
-    if (it.sellerId !== ownerUserId) continue;
-    out.push({
-      orderId: order.id,
-      orderItemKey: `${order.id}:${it.listingId}:${i}`,
-      listingId: it.listingId,
-      productTitle: it.title,
-      brandId: it.brandId,
-      brandName: it.brandName,
-      sellerId: it.sellerId,
-      quantity: it.quantity,
-      unitPrice: it.finalUnitPrice ?? it.unitPrice,
-      lineTotal: it.lineTotal,
-      orderDate: order.createdAt,
-      orderStatus: order.status,
-      category: void 0
-    });
-  }
-  return out;
+var ELIGIBLE_COMMERCE_STATUS = /* @__PURE__ */ new Set(["delivered", "completed"]);
+async function commerceOrderByRef(ref) {
+  if (!ref) return null;
+  const direct = await commerceStore.getOrder(ref);
+  if (direct) return direct;
+  const all = await commerceStore.listOrders();
+  return all.find((o) => o.orderNumber === ref) || null;
 }
-function linesFromOpsOrder(order, ownerUserId) {
-  const subs = order.subOrders || [];
-  const owned = subs.filter((s) => s.sellerId === ownerUserId);
-  if (!owned.length) return [];
-  return owned.map((s, i) => {
-    const qty2 = Number(s.quantity ?? s.qty ?? 1) || 1;
-    const unit = Number(s.unitPrice ?? s.price ?? 0) || 0;
-    const line = Number(s.lineTotal ?? s.total ?? unit * qty2) || 0;
-    const listingId = String(s.listingId || s.productId || `line_${i}`);
+async function resolveOwnedLines(ownerUserId, refs) {
+  const lines = [];
+  const rejected = [];
+  for (const ref of refs) {
+    const commerce = await commerceOrderByRef(ref.orderId);
+    if (commerce) {
+      const orderNumber2 = commerce.orderNumber || commerce.id;
+      if (!ELIGIBLE_COMMERCE_STATUS.has(commerce.status)) {
+        rejected.push({
+          orderId: orderNumber2,
+          reason: `Order is "${commerce.status}" \u2014 only delivered or completed orders can be imported`
+        });
+        continue;
+      }
+      const items = commerce.items || [];
+      let matched2 = 0;
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        if (it.sellerId !== ownerUserId) continue;
+        matched2 += 1;
+        const orderItemKey = `${orderNumber2}:${it.listingId}:${i}`;
+        if (ref.orderItemKey && ref.orderItemKey !== orderItemKey) continue;
+        const lineTotal = Number(it.lineTotal);
+        if (!Number.isFinite(lineTotal) || lineTotal <= 0) {
+          rejected.push({
+            orderId: orderNumber2,
+            reason: `Line "${it.title}" has no resolvable seller amount`
+          });
+          continue;
+        }
+        lines.push({
+          orderId: orderNumber2,
+          orderItemKey,
+          sourceImportKey: `order:${orderNumber2}:${it.sellerId}:${it.listingId}:${i}`,
+          listingId: it.listingId,
+          productTitle: it.title,
+          brandId: it.brandId,
+          brandName: it.brandName,
+          sellerId: it.sellerId,
+          quantity: Number(it.quantity) || 1,
+          unitPrice: Number(it.finalUnitPrice ?? it.unitPrice) || 0,
+          lineTotal,
+          orderDate: commerce.createdAt,
+          orderStatus: commerce.status,
+          category: void 0
+        });
+      }
+      if (matched2 === 0) {
+        rejected.push({ orderId: orderNumber2, reason: "No line items you sold on this order" });
+      }
+      continue;
+    }
+    const ops = operationsStore.getOrder(ref.orderId);
+    if (!ops) {
+      rejected.push({ orderId: ref.orderId, reason: "Order not found" });
+      continue;
+    }
+    const opsCompleted = ops.status === "completed";
+    const subs = ops.subOrders || [];
+    let matched = 0;
+    subs.forEach((sub, subIdx) => {
+      if (sub.sellerId !== ownerUserId) return;
+      const subItems = sub.items || [];
+      subItems.forEach((it, i) => {
+        matched += 1;
+        const delivered = Boolean(it.deliveredAt);
+        if (!opsCompleted && !delivered) {
+          rejected.push({
+            orderId: ops.orderId,
+            reason: "Order line is not delivered/completed yet"
+          });
+          return;
+        }
+        const listingId = String(it.listingId || it.productId || `line_${subIdx}_${i}`);
+        const qty2 = Number(it.quantity ?? it.qty ?? 1) || 1;
+        const unit = Number(it.unitPrice ?? it.price ?? 0) || 0;
+        const lineTotal = Number(it.lineTotal ?? it.total ?? unit * qty2);
+        if (!Number.isFinite(lineTotal) || lineTotal <= 0) {
+          rejected.push({
+            orderId: ops.orderId,
+            reason: `Line "${String(it.productTitle || it.title || listingId)}" has no resolvable seller amount`
+          });
+          return;
+        }
+        const itemId = String(it.itemId || `${listingId}:${i}`);
+        const orderItemKey = `${ops.orderId}:${listingId}:${subIdx}:${i}`;
+        if (ref.orderItemKey && ref.orderItemKey !== orderItemKey) return;
+        lines.push({
+          orderId: ops.orderId,
+          orderItemKey,
+          sourceImportKey: `order:${ops.orderId}:${ownerUserId}:${itemId}`,
+          sourceSubOrderId: String(sub.subOrderId || sub.id || subIdx),
+          listingId,
+          productTitle: String(it.productTitle || it.title || "Order item"),
+          brandId: String(sub.brandId || it.brandId || ""),
+          brandName: String(sub.brandName || it.brandName || ""),
+          sellerId: ownerUserId,
+          quantity: qty2,
+          unitPrice: unit,
+          lineTotal,
+          orderDate: ops.createdAt,
+          orderStatus: ops.status,
+          category: String(it.categoryName || it.category || "") || void 0
+        });
+      });
+    });
+    if (matched === 0) {
+      rejected.push({ orderId: ops.orderId, reason: "No line items you sold on this order" });
+    }
+  }
+  return { lines, rejected };
+}
+async function enrichEntriesWithOrderState(entries, ownerUserId) {
+  const importRefs = [
+    ...new Set(entries.filter((e) => e.source === "order_import" && e.orderId).map((e) => e.orderId))
+  ];
+  if (!importRefs.length) return entries.map((e) => ({ ...e, orderFlags: [], orderChanged: false }));
+  let allCommerce = [];
+  try {
+    allCommerce = await commerceStore.listOrders();
+  } catch {
+  }
+  const byNumber = /* @__PURE__ */ new Map();
+  const byId = /* @__PURE__ */ new Map();
+  for (const o of allCommerce) {
+    byNumber.set(o.orderNumber, o);
+    byId.set(o.id, o);
+  }
+  return entries.map((e) => {
+    if (e.source !== "order_import" || !e.orderId) {
+      return { ...e, orderFlags: [], orderChanged: false };
+    }
+    const commerce = byNumber.get(e.orderId) || byId.get(e.orderId) || null;
+    const flags = [];
+    let liveOrderStatus;
+    if (commerce) {
+      liveOrderStatus = commerce.status;
+      if (commerce.status === "cancelled") flags.push("cancelled");
+      const snap = e.sourceOrderStatusAtImport || e.orderStatus;
+      if (snap && commerce.status !== snap && !ELIGIBLE_COMMERCE_STATUS.has(commerce.status)) {
+        flags.push("status_changed");
+      }
+      const opsId = commerce.orderNumber;
+      try {
+        const rets = operationsStore.listReturns({ orderId: opsId, sellerId: ownerUserId });
+        if (rets.length) flags.push("returned");
+      } catch {
+      }
+    } else {
+      try {
+        const rets = operationsStore.listReturns({ orderId: e.orderId, sellerId: ownerUserId });
+        if (rets.length) flags.push("returned");
+        const ops = operationsStore.getOrder(e.orderId);
+        if (ops) {
+          liveOrderStatus = ops.status;
+          if (ops.status === "cancelled") flags.push("cancelled");
+        }
+      } catch {
+      }
+    }
+    const uniqueFlags = [...new Set(flags)];
     return {
-      orderId: order.orderId,
-      orderItemKey: `${order.orderId}:${listingId}:${i}`,
-      listingId,
-      productTitle: String(s.title || s.productTitle || "Order item"),
-      brandId: String(s.brandId || ""),
-      brandName: String(s.brandName || ""),
-      sellerId: ownerUserId,
-      quantity: qty2,
-      unitPrice: unit,
-      lineTotal: line > 0 ? line : Number(order.overallTotal || 0) / Math.max(1, owned.length),
-      orderDate: order.createdAt,
-      orderStatus: order.status,
-      category: String(s.categoryName || s.category || s.categoryId || "") || void 0
+      ...e,
+      liveOrderStatus,
+      orderFlags: uniqueFlags,
+      orderChanged: uniqueFlags.length > 0
     };
   });
 }
-async function resolveOwnedLines(ownerUserId, refs) {
-  const resolved = [];
-  for (const ref of refs) {
-    const commerce = await commerceStore.getOrder(ref.orderId);
-    let lines = commerce ? linesFromCommerceOrder(commerce, ownerUserId) : [];
-    if (!lines.length) {
-      const ops = operationsStore.getOrder(ref.orderId);
-      if (ops) lines = linesFromOpsOrder(ops, ownerUserId);
-    }
-    if (ref.orderItemKey) {
-      lines = lines.filter((l) => l.orderItemKey === ref.orderItemKey);
-    }
-    resolved.push(...lines);
-  }
-  return resolved;
-}
 async function listMyCashbooks(actor) {
-  if (!actor.userId) throw new CommerceError("Authentication required", 401);
+  assertCashbookActor(actor);
   return listCashbooksForOwner(actor.userId).map((b) => ({
     ...b,
     summary: cashbookSummary(b.id, actor.userId)
   }));
 }
-async function createMyCashbook(actor, input) {
-  if (!actor.userId) throw new CommerceError("Authentication required", 401);
-  if (isStaff(actor.role) && (actor.role || "").toLowerCase() !== "seller") {
-    const r = (actor.role || "").toLowerCase();
-    if (r === "admin" || r === "super_admin" || r === "superadmin") {
-      throw new CommerceError("Admins track Seller & Creator cashbooks \u2014 create is not available", 403);
-    }
+async function getMyCashbookDetail(actor, bookId, opts) {
+  assertCashbookActor(actor);
+  const ownerId = isStaff(actor.role) && opts?.ownerUserId ? opts.ownerUserId : actor.userId;
+  assertOwnerAccess(ownerId, actor);
+  const book = getCashbookForOwner(bookId, ownerId);
+  if (!book) throw new CommerceError("Cashbook not found", 404);
+  const entries = await enrichEntriesWithOrderState(
+    listEntriesForBook(bookId, ownerId),
+    ownerId
+  );
+  return {
+    book,
+    summary: cashbookSummary(bookId, ownerId),
+    entries,
+    readOnly: isStaff(actor.role)
+  };
+}
+async function listCashbookOversight(actor, sellerId) {
+  assertAuthed(actor);
+  if (!isStaff(actor.role)) {
+    throw new CommerceError("Cashbook Oversight is staff-only", 403);
   }
+  if (sellerId && sellerId.trim()) {
+    const owner = sellerId.trim();
+    const books = listCashbooksForOwner(owner).map((b) => ({
+      ...b,
+      summary: cashbookSummary(b.id, owner)
+    }));
+    let accountName;
+    let brandName;
+    let brandNames = [];
+    try {
+      const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
+      const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+      const { eq: eq18 } = await import("drizzle-orm");
+      const [u] = await db3.select({ displayName: users2.displayName, email: users2.email }).from(users2).where(eq18(users2.id, owner));
+      accountName = u?.displayName || u?.email || `Account ${owner.slice(0, 8)}\u2026`;
+    } catch {
+    }
+    try {
+      const { catalogStore: catalogStore5 } = await Promise.resolve().then(() => (init_catalogStore(), catalogStore_exports));
+      const brands = await catalogStore5.listBrands();
+      brandNames = brands.filter((b) => String(b.sellerId || "") === owner && b.name).map((b) => String(b.name));
+      brandName = brandNames[0];
+    } catch {
+    }
+    return { sellerId: owner, accountName, brandName, brandNames, books };
+  }
+  const ownerIds = listCashbookOwnerIds();
+  let profiles = {};
+  try {
+    const { db: db3 } = await Promise.resolve().then(() => (init_client(), client_exports));
+    const { users: users2 } = await Promise.resolve().then(() => (init_schema(), schema_exports));
+    const { inArray: inArray5 } = await import("drizzle-orm");
+    if (ownerIds.length) {
+      const rows = await db3.select({
+        id: users2.id,
+        displayName: users2.displayName,
+        email: users2.email,
+        choosifyUserId: users2.choosifyUserId,
+        role: users2.role
+      }).from(users2).where(inArray5(users2.id, ownerIds));
+      profiles = Object.fromEntries(
+        rows.map((r) => [
+          r.id,
+          {
+            displayName: r.displayName || void 0,
+            email: r.email || void 0,
+            choosifyUserId: r.choosifyUserId || void 0,
+            role: r.role || void 0
+          }
+        ])
+      );
+    }
+  } catch {
+  }
+  const brandsByOwner = {};
+  try {
+    const { catalogStore: catalogStore5 } = await Promise.resolve().then(() => (init_catalogStore(), catalogStore_exports));
+    const brands = await catalogStore5.listBrands();
+    for (const b of brands) {
+      const sid = String(b.sellerId || "").trim();
+      if (!sid || !b.name) continue;
+      (brandsByOwner[sid] ||= []).push(String(b.name));
+    }
+  } catch {
+  }
+  const owners = ownerIds.map((ownerUserId) => {
+    const books = listCashbooksForOwner(ownerUserId);
+    const summaries = books.map((b) => cashbookSummary(b.id, ownerUserId));
+    const brandNames = brandsByOwner[ownerUserId] || [];
+    const p = profiles[ownerUserId];
+    return {
+      ownerUserId,
+      /** Headline label: brand → display name → email → short id. */
+      brandName: brandNames[0],
+      brandNames,
+      accountName: p?.displayName || p?.email || `Account ${ownerUserId.slice(0, 8)}\u2026`,
+      displayName: p?.displayName,
+      email: p?.email,
+      choosifyUserId: p?.choosifyUserId,
+      role: p?.role,
+      bookCount: books.length,
+      entryCount: summaries.reduce((a, s) => a + s.entryCount, 0),
+      moneyIn: summaries.reduce((a, s) => a + s.moneyIn, 0),
+      moneyOut: summaries.reduce((a, s) => a + s.moneyOut, 0),
+      updatedAt: books[0]?.updatedAt
+    };
+  });
+  owners.sort((a, b) => (b.updatedAt || "").localeCompare(a.updatedAt || ""));
+  return { owners };
+}
+async function createMyCashbook(actor, input) {
+  assertSellerActor(actor);
   const name = String(input.name || "").trim();
   if (!name) throw new CommerceError("Book Name is required", 400);
   const book = createCashbook({
@@ -35479,52 +37955,149 @@ async function createMyCashbook(actor, input) {
   }
   return book;
 }
-async function getMyCashbookDetail(actor, bookId, opts) {
-  if (!actor.userId) throw new CommerceError("Authentication required", 401);
-  const ownerId = isStaff(actor.role) && opts?.ownerUserId ? opts.ownerUserId : actor.userId;
-  assertOwnerAccess(ownerId, actor);
-  const book = getCashbookForOwner(bookId, ownerId);
+async function renameMyCashbook(actor, bookId, name) {
+  assertSellerActor(actor);
+  const trimmed = String(name || "").trim();
+  if (!trimmed) throw new CommerceError("Book Name is required", 400);
+  const book = renameCashbook(bookId, actor.userId, trimmed);
   if (!book) throw new CommerceError("Cashbook not found", 404);
-  return {
-    book,
-    summary: cashbookSummary(bookId, ownerId),
-    entries: listEntriesForBook(bookId, ownerId)
-  };
+  return book;
+}
+async function deleteMyCashbook(actor, bookId) {
+  assertSellerActor(actor);
+  const res = deleteCashbook(bookId, actor.userId);
+  if (!res.deleted) throw new CommerceError("Cashbook not found", 404);
+  return { ...res, mutatedOrder: false, mutatedPayment: false, mutatedEscrow: false };
+}
+async function createManualCashbookEntry(actor, bookId, input) {
+  assertSellerActor(actor);
+  const book = getCashbookForOwner(bookId, actor.userId);
+  if (!book) throw new CommerceError("Cashbook not found", 404);
+  const magnitude = Math.abs(Number(input.amount));
+  if (!Number.isFinite(magnitude) || magnitude <= 0) {
+    throw new CommerceError("Enter a valid amount", 400);
+  }
+  const signed = input.direction === "out" ? -magnitude : magnitude;
+  try {
+    return addManualEntry({
+      bookId,
+      ownerUserId: actor.userId,
+      amount: signed,
+      description: input.description || "",
+      category: input.category,
+      contact: input.contact,
+      paymentMode: input.paymentMode,
+      docRef: input.docRef,
+      entryDate: input.entryDate,
+      entryTime: input.entryTime,
+      linkedOrderId: input.linkedOrderId
+    });
+  } catch (err) {
+    throw new CommerceError(err instanceof Error ? err.message : "Failed to add entry", 400);
+  }
+}
+async function updateManualCashbookEntry(actor, entryId, input) {
+  assertSellerActor(actor);
+  const existing = getEntryForOwner(entryId, actor.userId);
+  if (!existing) throw new CommerceError("Entry not found", 404);
+  if (existing.source !== "manual") {
+    throw new CommerceError("Imported order entries are immutable history and cannot be edited", 409);
+  }
+  let amount;
+  if (input.amount !== void 0 || input.direction !== void 0) {
+    const magnitude = Math.abs(Number(input.amount ?? Math.abs(existing.amount)));
+    if (!Number.isFinite(magnitude) || magnitude <= 0) {
+      throw new CommerceError("Enter a valid amount", 400);
+    }
+    const dir = input.direction || (existing.amount < 0 ? "out" : "in");
+    amount = dir === "out" ? -magnitude : magnitude;
+  }
+  try {
+    const updated = updateManualEntry(entryId, actor.userId, {
+      amount,
+      description: input.description,
+      category: input.category,
+      contact: input.contact,
+      paymentMode: input.paymentMode,
+      docRef: input.docRef,
+      entryDate: input.entryDate,
+      entryTime: input.entryTime
+    });
+    if (!updated) throw new CommerceError("Entry not found", 404);
+    return updated;
+  } catch (err) {
+    if (err instanceof CommerceError) throw err;
+    throw new CommerceError(err instanceof Error ? err.message : "Failed to update entry", 400);
+  }
+}
+async function deleteMyCashbookEntry(actor, entryId) {
+  assertSellerActor(actor);
+  const ok = removeCashbookEntry(entryId, actor.userId);
+  if (!ok) throw new CommerceError("Entry not found", 404);
+  return { deleted: true, mutatedOrder: false, mutatedPayment: false, mutatedEscrow: false };
 }
 async function importOrdersToCashbook(actor, params) {
-  if (!actor.userId) throw new CommerceError("Authentication required", 401);
-  const r = (actor.role || "").toLowerCase();
-  if (r === "admin" || r === "super_admin" || r === "superadmin") {
-    throw new CommerceError("Admins cannot import into Cashbooks", 403);
-  }
+  assertSellerActor(actor);
   if (!Array.isArray(params.items) || !params.items.length) {
     throw new CommerceError("Select at least one order item", 400);
   }
+  const idemKey = (params.idempotencyKey || "").trim();
+  if (idemKey) {
+    const prior = findImportIdempotency(actor.userId, idemKey);
+    if (prior) return { ...prior, reused: true };
+  }
+  const { lines, rejected } = await resolveOwnedLines(actor.userId, params.items);
   let bookId = params.bookId;
+  let createdBookId = null;
   if (!bookId) {
     const name = String(params.newBookName || "").trim();
     if (!name) throw new CommerceError("Book Name is required", 400);
+    if (!lines.length) {
+      throw new CommerceError(
+        "None of the selected orders can be imported (only delivered / completed orders with a resolvable seller amount are eligible).",
+        422,
+        { code: "IMPORT_NOTHING_ELIGIBLE", details: { rejected } }
+      );
+    }
     const book = createCashbook({
       ownerUserId: actor.userId,
       name,
-      icon: params.newBookIcon
+      icon: params.newBookIcon,
+      color: params.newBookColor
     });
     bookId = book.id;
+    createdBookId = book.id;
+    try {
+      book.cashbookReferenceId = await ensureEntityReferenceId({
+        entityType: "cashbook",
+        internalId: book.id,
+        current: book.cashbookReferenceId
+      });
+      touchCashbookPersist();
+    } catch {
+    }
   } else {
     const book = getCashbookForOwner(bookId, actor.userId);
     if (!book) throw new CommerceError("Cashbook not found", 404);
   }
-  const lines = await resolveOwnedLines(actor.userId, params.items);
-  if (!lines.length) {
-    throw new CommerceError("No owned order items found for import", 403);
+  let result;
+  try {
+    result = importResolvedLines(bookId, actor.userId, lines);
+  } catch (err) {
+    if (createdBookId) deleteCashbook(createdBookId, actor.userId);
+    throw err instanceof CommerceError ? err : new CommerceError(err instanceof Error ? err.message : "Import failed", 500);
   }
-  return importResolvedLines(bookId, actor.userId, lines);
-}
-async function deleteMyCashbookEntry(actor, entryId) {
-  if (!actor.userId) throw new CommerceError("Authentication required", 401);
-  const ok = removeCashbookEntry(entryId, actor.userId);
-  if (!ok) throw new CommerceError("Entry not found", 404);
-  return { deleted: true, mutatedOrder: false, mutatedPayment: false, mutatedEscrow: false };
+  if (createdBookId && result.imported === 0) {
+    deleteCashbook(createdBookId, actor.userId);
+    throw new CommerceError(
+      "No new entries were imported, so no cashbook was created.",
+      422,
+      { code: "IMPORT_NOTHING_NEW", details: { rows: result.details, rejected } }
+    );
+  }
+  const payload = { ...result, rejected, createdBook: Boolean(createdBookId) };
+  if (idemKey) recordImportIdempotency(actor.userId, idemKey, payload);
+  return payload;
 }
 
 // server/cashbook/financeSummaryService.ts
@@ -35597,9 +38170,18 @@ function actorOf3(req) {
     role: req.userRole || req.user?.role
   };
 }
+function isAdminRole(role) {
+  const r = (role || "").toLowerCase();
+  return r === "admin" || r === "super_admin" || r === "superadmin";
+}
 function handleError4(res, error2) {
   if (error2 instanceof CommerceError) {
-    res.status(error2.statusCode).json({ success: false, error: error2.message });
+    const body = { success: false, error: error2.message };
+    const details = error2.details;
+    if (details !== void 0) body.details = details;
+    const code = error2.code;
+    if (typeof code === "string") body.code = code;
+    res.status(error2.statusCode).json(body);
     return;
   }
   if (error2 instanceof Error && error2.message === "Book Name is required") {
@@ -35617,9 +38199,7 @@ function handleError4(res, error2) {
 cashbookRouter.get("/finance/summary", ...requireAuth8, async (req, res) => {
   try {
     const actor = actorOf3(req);
-    const role = (actor.role || "").toLowerCase();
-    const isAdmin = role === "admin" || role === "super_admin" || role === "superadmin";
-    const sellerId = isAdmin && typeof req.query.sellerId === "string" && req.query.sellerId.trim() ? req.query.sellerId.trim() : actor.userId;
+    const sellerId = isAdminRole(actor.role) && typeof req.query.sellerId === "string" && req.query.sellerId.trim() ? req.query.sellerId.trim() : actor.userId;
     const currency = typeof req.query.currency === "string" ? req.query.currency : "BDT";
     const data = await getFinanceSummaryForActor(sellerId, actor, currency);
     res.json({ success: true, data });
@@ -35630,11 +38210,18 @@ cashbookRouter.get("/finance/summary", ...requireAuth8, async (req, res) => {
 cashbookRouter.get("/finance/adjustments", ...requireAuth8, async (req, res) => {
   try {
     const actor = actorOf3(req);
-    const role = (actor.role || "").toLowerCase();
-    const isAdmin = role === "admin" || role === "super_admin" || role === "superadmin";
-    const sellerId = isAdmin && typeof req.query.sellerId === "string" && req.query.sellerId.trim() ? req.query.sellerId.trim() : actor.userId;
+    const sellerId = isAdminRole(actor.role) && typeof req.query.sellerId === "string" && req.query.sellerId.trim() ? req.query.sellerId.trim() : actor.userId;
     const summary = await getFinanceSummaryForActor(sellerId, actor, "BDT");
     res.json({ success: true, data: summary.adjustments });
+  } catch (error2) {
+    handleError4(res, error2);
+  }
+});
+cashbookRouter.get("/cashbooks/oversight", ...requireAuth8, async (req, res) => {
+  try {
+    const sellerId = typeof req.query.sellerId === "string" ? req.query.sellerId : void 0;
+    const data = await listCashbookOversight(actorOf3(req), sellerId);
+    res.json({ success: true, data });
   } catch (error2) {
     handleError4(res, error2);
   }
@@ -35659,6 +38246,26 @@ cashbookRouter.post("/cashbooks", ...requireAuth8, async (req, res) => {
     handleError4(res, error2);
   }
 });
+cashbookRouter.post("/cashbooks/import-orders", ...requireAuth8, async (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const headerKey = req.headers["idempotency-key"];
+    const data = await importOrdersToCashbook(actorOf3(req), {
+      bookId: typeof req.body?.bookId === "string" ? req.body.bookId : void 0,
+      newBookName: typeof req.body?.newBookName === "string" ? req.body.newBookName : void 0,
+      newBookIcon: typeof req.body?.newBookIcon === "string" ? req.body.newBookIcon : void 0,
+      newBookColor: typeof req.body?.newBookColor === "string" ? req.body.newBookColor : void 0,
+      idempotencyKey: typeof headerKey === "string" && headerKey || (typeof req.body?.idempotencyKey === "string" ? req.body.idempotencyKey : void 0) || void 0,
+      items: items.map((it) => ({
+        orderId: String(it.orderId || ""),
+        orderItemKey: it.orderItemKey ? String(it.orderItemKey) : void 0
+      })).filter((it) => Boolean(it.orderId))
+    });
+    res.status(201).json({ success: true, data });
+  } catch (error2) {
+    handleError4(res, error2);
+  }
+});
 cashbookRouter.get("/cashbooks/:bookId", ...requireAuth8, async (req, res) => {
   try {
     const ownerUserId = typeof req.query.ownerUserId === "string" ? req.query.ownerUserId : void 0;
@@ -35668,19 +38275,57 @@ cashbookRouter.get("/cashbooks/:bookId", ...requireAuth8, async (req, res) => {
     handleError4(res, error2);
   }
 });
-cashbookRouter.post("/cashbooks/import-orders", ...requireAuth8, async (req, res) => {
+cashbookRouter.patch("/cashbooks/:bookId", ...requireAuth8, async (req, res) => {
   try {
-    const items = Array.isArray(req.body?.items) ? req.body.items : [];
-    const data = await importOrdersToCashbook(actorOf3(req), {
-      bookId: typeof req.body?.bookId === "string" ? req.body.bookId : void 0,
-      newBookName: typeof req.body?.newBookName === "string" ? req.body.newBookName : void 0,
-      newBookIcon: typeof req.body?.newBookIcon === "string" ? req.body.newBookIcon : void 0,
-      items: items.map((it) => ({
-        orderId: String(it.orderId || ""),
-        orderItemKey: it.orderItemKey ? String(it.orderItemKey) : void 0
-      })).filter((it) => Boolean(it.orderId))
+    const book = await renameMyCashbook(actorOf3(req), req.params.bookId, String(req.body?.name || ""));
+    res.json({ success: true, data: book });
+  } catch (error2) {
+    handleError4(res, error2);
+  }
+});
+cashbookRouter.delete("/cashbooks/:bookId", ...requireAuth8, async (req, res) => {
+  try {
+    const data = await deleteMyCashbook(actorOf3(req), req.params.bookId);
+    res.json({ success: true, data });
+  } catch (error2) {
+    handleError4(res, error2);
+  }
+});
+cashbookRouter.post("/cashbooks/:bookId/entries", ...requireAuth8, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const data = await createManualCashbookEntry(actorOf3(req), req.params.bookId, {
+      direction: b.direction === "out" ? "out" : "in",
+      amount: Number(b.amount),
+      description: typeof b.description === "string" ? b.description : b.remarks,
+      category: typeof b.category === "string" ? b.category : void 0,
+      contact: typeof b.contact === "string" ? b.contact : void 0,
+      paymentMode: typeof b.paymentMode === "string" ? b.paymentMode : void 0,
+      docRef: typeof b.docRef === "string" ? b.docRef : b.doc,
+      entryDate: typeof b.entryDate === "string" ? b.entryDate : void 0,
+      entryTime: typeof b.entryTime === "string" ? b.entryTime : void 0,
+      linkedOrderId: typeof b.linkedOrderId === "string" ? b.linkedOrderId : void 0
     });
     res.status(201).json({ success: true, data });
+  } catch (error2) {
+    handleError4(res, error2);
+  }
+});
+cashbookRouter.patch("/cashbooks/entries/:entryId", ...requireAuth8, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const data = await updateManualCashbookEntry(actorOf3(req), req.params.entryId, {
+      direction: b.direction === "out" ? "out" : b.direction === "in" ? "in" : void 0,
+      amount: b.amount !== void 0 ? Number(b.amount) : void 0,
+      description: typeof b.description === "string" ? b.description : b.remarks,
+      category: typeof b.category === "string" ? b.category : void 0,
+      contact: typeof b.contact === "string" ? b.contact : void 0,
+      paymentMode: typeof b.paymentMode === "string" ? b.paymentMode : void 0,
+      docRef: typeof b.docRef === "string" ? b.docRef : b.doc,
+      entryDate: typeof b.entryDate === "string" ? b.entryDate : void 0,
+      entryTime: typeof b.entryTime === "string" ? b.entryTime : void 0
+    });
+    res.json({ success: true, data });
   } catch (error2) {
     handleError4(res, error2);
   }
@@ -36240,10 +38885,12 @@ init_productLifecycle();
 init_inventoryStore();
 init_serviceStore();
 init_operationsStore();
+init_shipmentStore();
 init_eventBus();
 init_commerceStore();
 init_cartService();
-function nowIso25() {
+init_orderService();
+function nowIso26() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
 function newId6(prefix) {
@@ -36437,7 +39084,7 @@ function emitCommerce(eventName, aggregateId, actor, payload) {
 }
 function mirrorToOperations(order, consumerId) {
   try {
-    operationsStore.createOrder({
+    const mirrored = operationsStore.createOrder({
       orderId: order.orderNumber,
       buyerId: consumerId,
       isCOD: false,
@@ -36449,7 +39096,16 @@ function mirrorToOperations(order, consumerId) {
         {
           sellerId: order.sellerId,
           brandId: order.brandId,
-          items: order.items,
+          // Sprint 14: give every mirrored line a STABLE itemId so the per-item
+          // "Mark Delivered" endpoint works for real storefront-checkout orders
+          // (previously only manual-offer orders carried one). A CommerceOrder's
+          // `items` array is written once at checkout and never mutated by any
+          // lifecycle transition, so `${orderNumber}-i${index}` is immutable for
+          // the life of the order.
+          items: order.items.map((it, index2) => ({
+            ...it,
+            itemId: `${order.orderNumber}-i${index2}`
+          })),
           total: order.grandTotal
         }
       ],
@@ -36470,6 +39126,7 @@ function mirrorToOperations(order, consumerId) {
       claimTokenExpiresAt: order.claimTokenExpiresAt,
       createdAt: order.createdAt
     });
+    if (mirrored) shipmentStore.createFromOrder(mirrored);
   } catch (error2) {
     console.warn("[Commerce] Failed to mirror order into operationsStore:", error2);
   }
@@ -36548,8 +39205,8 @@ async function executeCheckout(input) {
         shipping: input.shipping,
         inventoryReserved: reservedAnyPhysical,
         inventoryConsumed: false,
-        createdAt: nowIso25(),
-        updatedAt: nowIso25()
+        createdAt: nowIso26(),
+        updatedAt: nowIso26()
       };
       try {
         const { ensureEntityReferenceId: ensureEntityReferenceId2 } = await Promise.resolve().then(() => (init_referenceIdService(), referenceIdService_exports));
@@ -36581,8 +39238,8 @@ async function executeCheckout(input) {
             currency: item.currency || "BDT",
             title: item.title,
             status: "pending_seller_review",
-            createdAt: nowIso25(),
-            updatedAt: nowIso25()
+            createdAt: nowIso26(),
+            updatedAt: nowIso26()
           };
           bookingRequests.push(br);
           order.bookingRequestId = br.id;
@@ -36603,19 +39260,19 @@ async function executeCheckout(input) {
       deliveryTotal: totals.deliveryTotal,
       taxTotal: totals.taxTotal,
       grandTotal: totals.grandTotal,
-      createdAt: nowIso25(),
-      updatedAt: nowIso25()
+      createdAt: nowIso26(),
+      updatedAt: nowIso26()
     };
     const clearedCart = {
       ...cart,
       items: [],
-      updatedAt: nowIso25()
+      updatedAt: nowIso26()
     };
     await commerceStore.commitCheckoutBundle({
       checkout,
       orders,
       bookingRequests,
-      idempotency: idemKey ? { key: idemKey, consumerId, checkoutId, createdAt: nowIso25() } : void 0,
+      idempotency: idemKey ? { key: idemKey, consumerId, checkoutId, createdAt: nowIso26() } : void 0,
       clearedCart
     });
     for (const order of orders) {
@@ -36731,8 +39388,8 @@ async function createManualOrder(input) {
     shipping: input.shipping,
     inventoryReserved: false,
     inventoryConsumed: false,
-    createdAt: nowIso25(),
-    updatedAt: nowIso25()
+    createdAt: nowIso26(),
+    updatedAt: nowIso26()
   };
   if (snapshot.listingType === "service") {
     const br = {
@@ -36749,8 +39406,8 @@ async function createManualOrder(input) {
       currency: snapshot.currency,
       title: snapshot.title,
       status: "pending_seller_review",
-      createdAt: nowIso25(),
-      updatedAt: nowIso25()
+      createdAt: nowIso26(),
+      updatedAt: nowIso26()
     };
     await commerceStore.upsertBookingRequest(br);
     order.bookingRequestId = br.id;
@@ -36769,8 +39426,8 @@ async function createManualOrder(input) {
     deliveryTotal: 0,
     taxTotal: 0,
     grandTotal: order.grandTotal,
-    createdAt: nowIso25(),
-    updatedAt: nowIso25()
+    createdAt: nowIso26(),
+    updatedAt: nowIso26()
   });
   mirrorToOperations(order, consumerId);
   emitCommerce("ManualOrderCreated", order.id, input.actorId, {
@@ -36822,7 +39479,7 @@ async function associateManualOrder(input) {
   }
   order.consumerId = input.consumerId;
   order.claimToken = void 0;
-  order.updatedAt = nowIso25();
+  order.updatedAt = nowIso26();
   const saved = await commerceStore.upsertOrder(order);
   try {
     const { ensureOrderConversation: ensureOrderConversation2 } = await Promise.resolve().then(() => (init_conversationService(), conversationService_exports));
@@ -36850,6 +39507,18 @@ async function getOrderForActor(orderId, actor) {
   if (order.sellerId === actor.userId) return order;
   throw new CommerceError("Not authorized to view this order", 403);
 }
+async function getOrderByNumberForActor(orderNumber2, actor) {
+  const wanted = String(orderNumber2 || "").trim();
+  if (!wanted) return null;
+  const all = await commerceStore.listOrders();
+  const order = all.find((o) => o.orderNumber === wanted) || null;
+  if (!order) return null;
+  const isAdmin = actor.role === "admin" || actor.role === "super_admin" || actor.role === "moderator";
+  if (isAdmin) return order;
+  if (order.consumerId === actor.userId) return order;
+  if (order.sellerId === actor.userId) return order;
+  throw new CommerceError("Not authorized to view this order", 403);
+}
 async function listOrdersForActor(actor) {
   const grouped = await listOrdersGroupedByCheckout(actor);
   return grouped.orders;
@@ -36865,6 +39534,7 @@ async function getCheckoutForConsumer(checkoutId, consumerId, role) {
 }
 
 // server/commerceRouter.ts
+init_orderService();
 init_commerceStore();
 init_eventBus();
 var commerceRouter = Router13();
@@ -37042,6 +39712,21 @@ commerceRouter.get("/orders", ...requireAuth10, async (req, res) => {
     handleCommerceError(res, error2);
   }
 });
+commerceRouter.get("/orders/by-number/:orderNumber", ...requireAuth10, async (req, res) => {
+  try {
+    const order = await getOrderByNumberForActor(req.params.orderNumber, {
+      userId: actorId2(req),
+      role: actorRole2(req)
+    });
+    if (!order) {
+      res.status(404).json({ success: false, error: "No commerce order for this number" });
+      return;
+    }
+    res.json({ success: true, data: order });
+  } catch (error2) {
+    handleCommerceError(res, error2);
+  }
+});
 commerceRouter.post("/orders/:id/transition", ...requireAuth10, async (req, res) => {
   try {
     const body = req.body || {};
@@ -37061,6 +39746,56 @@ commerceRouter.post("/orders/:id/transition", ...requireAuth10, async (req, res)
       success: true,
       data: { order: result.order, shipment: result.shipment, reused: result.reused }
     });
+  } catch (error2) {
+    handleCommerceError(res, error2);
+  }
+});
+commerceRouter.post("/orders/:id/dispatch", ...requireAuth10, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const result = await dispatchOrder({
+      orderId: req.params.id,
+      actor: { userId: actorId2(req), role: actorRole2(req), brandId: b.brandId ? String(b.brandId) : void 0 },
+      fulfillmentMethod: b.fulfillmentMethod,
+      courier: b.courier ? String(b.courier) : void 0,
+      trackingNumber: b.trackingNumber ? String(b.trackingNumber) : void 0,
+      trackingUrl: b.trackingUrl ? String(b.trackingUrl) : void 0,
+      estimatedDelivery: b.estimatedDelivery ? String(b.estimatedDelivery) : void 0,
+      dispatchNote: b.dispatchNote ? String(b.dispatchNote) : void 0,
+      idempotencyKey: typeof req.headers["idempotency-key"] === "string" ? req.headers["idempotency-key"] : b.idempotencyKey ? String(b.idempotencyKey) : void 0
+    });
+    res.json({ success: true, data: { order: result.order, shipment: result.shipment, reused: result.reused } });
+  } catch (error2) {
+    handleCommerceError(res, error2);
+  }
+});
+commerceRouter.post("/orders/:id/admin-correct", ...requireAuth10, async (req, res) => {
+  try {
+    const b = req.body || {};
+    const result = await adminCorrectOrderStatus({
+      orderId: req.params.id,
+      toStatus: b.toStatus,
+      reason: String(b.reason || ""),
+      actor: { userId: actorId2(req), role: actorRole2(req) }
+    });
+    res.json({ success: true, data: { order: result.order, from: result.from, to: result.to } });
+  } catch (error2) {
+    handleCommerceError(res, error2);
+  }
+});
+commerceRouter.post("/orders/:id/return-to-pending", ...requireAuth10, async (req, res) => {
+  try {
+    const body = req.body || {};
+    const result = await returnOrderToPending({
+      orderId: req.params.id,
+      reason: body.reason ? String(body.reason) : void 0,
+      actor: {
+        userId: actorId2(req),
+        role: actorRole2(req),
+        brandId: body.brandId ? String(body.brandId) : void 0
+      }
+    });
+    res.json({ success: true, data: result.order });
   } catch (error2) {
     handleCommerceError(res, error2);
   }
@@ -37233,6 +39968,7 @@ init_conversationService();
 init_conversationPermissions();
 init_conversationStore();
 init_conversationPersistence();
+init_omniStore();
 init_types2();
 var conversationRouter = Router14();
 function flushIfMemoryDisk() {
@@ -37273,10 +40009,11 @@ conversationRouter.post("/messaging/flush", ...requireAuth11, async (req, res) =
     handleError5(res, error2);
   }
 });
-conversationRouter.get("/messaging/persistence-mode", (_req, res) => {
+conversationRouter.get("/messaging/persistence-mode", async (_req, res) => {
   try {
     assertMessagingPersistenceReady();
     const mode = getMessagingPersistenceMode();
+    const omniBackend = await getStoreBackend();
     res.json({
       success: true,
       data: {
@@ -37290,7 +40027,12 @@ conversationRouter.get("/messaging/persistence-mode", (_req, res) => {
           "messaging_social_inbox",
           "messaging_support_tickets",
           "messaging_admin_entries"
-        ] : void 0
+        ] : void 0,
+        omniBackend,
+        /** true only when the omni Firestore mirror is genuinely live —
+         *  clients should treat this as the switch between trusting
+         *  onSnapshot pushes and running their own REST poll. */
+        realtime: omniBackend === "admin"
       }
     });
   } catch (error2) {
@@ -37491,12 +40233,18 @@ conversationRouter.delete("/seller/social-inbox/:channel", ...requireAuth11, asy
 conversationRouter.get("/support/conversations/active", ...requireAuth11, async (req, res) => {
   try {
     const actor = actorOf5(req);
-    const found = await findActiveSupportConversationForUser(actor.userId);
+    const audienceParam = typeof req.query.audience === "string" ? req.query.audience : void 0;
+    const audience = resolveSelfServiceSupportAudience(actor, audienceParam);
+    const found = await findActiveSupportConversationForUser(actor.userId, audience);
     if (!found) {
       res.status(404).json({ success: false, error: "No active support conversation" });
       return;
     }
-    res.json({ success: true, data: { ...found, created: false } });
+    const msgs = await listMessagesForActor(found.conversation.id, actor);
+    const unreadCount = msgs.filter(
+      (m) => m.senderId !== actor.userId && !(Array.isArray(m.readBy) ? m.readBy : []).includes(actor.userId)
+    ).length;
+    res.json({ success: true, data: { ...found, created: false, unreadCount } });
   } catch (error2) {
     handleError5(res, error2);
   }
@@ -37640,9 +40388,12 @@ conversationRouter.post("/admin/support/conversations", ...requireAuth11, async 
       res.status(400).json({ success: false, error: "targetUserId is required" });
       return;
     }
+    const audienceRaw = typeof req.body?.audience === "string" ? req.body.audience : "";
+    const audience = audienceRaw === "consumer" || audienceRaw === "seller" || audienceRaw === "creator" ? audienceRaw : void 0;
     const result = await openAdminSupportConversation({
       adminActor: actor,
       targetUserId,
+      audience,
       subject: req.body?.subject ? String(req.body.subject) : void 0,
       body: req.body?.body ? String(req.body.body) : void 0
     });
@@ -37670,7 +40421,8 @@ conversationRouter.post("/support/conversations/ensure", ...requireAuth11, async
     const result = await ensureActiveSupportConversation({
       actor: actorOf5(req),
       subject: req.body?.subject ? String(req.body.subject) : void 0,
-      body: req.body?.body ? String(req.body.body) : void 0
+      body: req.body?.body ? String(req.body.body) : void 0,
+      audience: req.body?.audience ? String(req.body.audience) : void 0
     });
     flushIfMemoryDisk();
     res.status(result.created ? 201 : 200).json({ success: true, data: result });
@@ -37683,7 +40435,8 @@ conversationRouter.post("/support/tickets", ...requireAuth11, async (req, res) =
     const result = await ensureActiveSupportConversation({
       actor: actorOf5(req),
       subject: req.body?.subject ? String(req.body.subject) : void 0,
-      body: req.body?.body ? String(req.body.body) : void 0
+      body: req.body?.body ? String(req.body.body) : void 0,
+      audience: req.body?.audience ? String(req.body.audience) : void 0
     });
     flushIfMemoryDisk();
     res.status(result.created ? 201 : 200).json({ success: true, data: result });
@@ -37895,11 +40648,11 @@ function createHelmetMiddleware() {
 }
 
 // server/middleware/requestId.ts
-import { randomUUID as randomUUID16 } from "crypto";
+import { randomUUID as randomUUID17 } from "crypto";
 var REQUEST_ID_HEADER = "x-request-id";
 function requestIdMiddleware(req, res, next) {
   const incoming = req.header(REQUEST_ID_HEADER);
-  const requestId = incoming && incoming.trim().length > 0 ? incoming.trim() : randomUUID16();
+  const requestId = incoming && incoming.trim().length > 0 ? incoming.trim() : randomUUID17();
   req.requestId = requestId;
   res.locals.requestId = requestId;
   res.setHeader("X-Request-ID", requestId);
@@ -39456,11 +42209,11 @@ ${await buildSearchContext(input.query, input.ids)}`);
 }
 
 // server/ai/conversation/conversationManager.ts
-import { randomUUID as randomUUID17 } from "crypto";
+import { randomUUID as randomUUID18 } from "crypto";
 var sessions = /* @__PURE__ */ new Map();
 var MAX_MESSAGES_PER_SESSION = 40;
 var MAX_SESSIONS = 500;
-function nowIso26() {
+function nowIso27() {
   return (/* @__PURE__ */ new Date()).toISOString();
 }
 function trimSessions() {
@@ -39473,14 +42226,14 @@ function trimSessions() {
 }
 function createConversation(input) {
   const session = {
-    id: `conv-${randomUUID17()}`,
+    id: `conv-${randomUUID18()}`,
     userId: input.userId,
     skillId: input.skillId,
     messages: [],
     contextSources: input.contextSources ?? [],
     contextIds: input.contextIds ?? {},
-    createdAt: nowIso26(),
-    updatedAt: nowIso26()
+    createdAt: nowIso27(),
+    updatedAt: nowIso27()
   };
   sessions.set(session.id, session);
   trimSessions();
@@ -39492,11 +42245,11 @@ function getConversation3(conversationId) {
 function appendMessage(conversationId, message) {
   const session = sessions.get(conversationId);
   if (!session) return null;
-  session.messages.push({ ...message, timestamp: nowIso26() });
+  session.messages.push({ ...message, timestamp: nowIso27() });
   if (session.messages.length > MAX_MESSAGES_PER_SESSION) {
     session.messages = session.messages.slice(-MAX_MESSAGES_PER_SESSION);
   }
-  session.updatedAt = nowIso26();
+  session.updatedAt = nowIso27();
   return session;
 }
 function getConversationWindow(conversationId, maxMessages = 12) {
@@ -40762,8 +43515,8 @@ var PAGE_META = {
   creatorProfile: ["Creator Profile", "Your creator account, verification, and profile settings"],
   consumerProfile: ["My Profile", "Your consumer account, orders preference, and security settings"],
   deals: ["Deals", "Promotions and discounts"],
-  orders: ["Orders Hub", "Track and fulfill customer orders"],
-  platformOrders: ["Orders Hub", "Orders placed against your products"],
+  orders: ["Order Hub", "Platform-wide operational order management"],
+  platformOrders: ["Order Hub", "Orders and fulfillment for your business"],
   sellerConversations: ["Messages", "Conversations with your buyers"],
   customers: ["Consumer Management", "View and manage customer accounts"],
   settings: ["Settings", "Store configuration"],
@@ -40800,7 +43553,7 @@ var PAGE_META = {
   ],
   sellerCustomers: [
     "My Customers",
-    "Buyers you have served through orders and bookings"
+    "Customers who have purchased from your business"
   ],
   moderationCenter: ["Moderation Center", "Flagged content awaiting review"],
   disputes: ["Disputes", "Buyer/seller disputes requiring resolution"],
@@ -41532,8 +44285,8 @@ init_roles();
 // server/entitlements/featureRequestStore.ts
 init_client();
 init_schema();
-import { randomUUID as randomUUID18 } from "node:crypto";
-import { and as and6, desc as desc3, eq as eq13 } from "drizzle-orm";
+import { randomUUID as randomUUID19 } from "node:crypto";
+import { and as and9, desc as desc4, eq as eq15 } from "drizzle-orm";
 function toFeatureRequest(row) {
   return {
     id: row.id,
@@ -41553,14 +44306,14 @@ var featureRequestStore = {
   /** Throws if the user already has a pending request for this feature (DB unique index also enforces this). */
   create: async (input) => {
     const existing = await db.select().from(featureRequests).where(
-      and6(
-        eq13(featureRequests.userId, input.userId),
-        eq13(featureRequests.featureKey, input.featureKey),
-        eq13(featureRequests.status, "pending")
+      and9(
+        eq15(featureRequests.userId, input.userId),
+        eq15(featureRequests.featureKey, input.featureKey),
+        eq15(featureRequests.status, "pending")
       )
     ).limit(1);
     if (existing[0]) return toFeatureRequest(existing[0]);
-    const id = `fr_${randomUUID18()}`;
+    const id = `fr_${randomUUID19()}`;
     await db.insert(featureRequests).values({
       id,
       userId: input.userId,
@@ -41568,18 +44321,18 @@ var featureRequestStore = {
       featureKey: input.featureKey,
       message: input.message || null
     });
-    const [row] = await db.select().from(featureRequests).where(eq13(featureRequests.id, id)).limit(1);
+    const [row] = await db.select().from(featureRequests).where(eq15(featureRequests.id, id)).limit(1);
     return toFeatureRequest(row);
   },
   list: async (filter) => {
     const conditions = [];
-    if (filter?.status) conditions.push(eq13(featureRequests.status, filter.status));
-    if (filter?.userId) conditions.push(eq13(featureRequests.userId, filter.userId));
-    const rows = conditions.length ? await db.select().from(featureRequests).where(and6(...conditions)).orderBy(desc3(featureRequests.createdAt)) : await db.select().from(featureRequests).orderBy(desc3(featureRequests.createdAt));
+    if (filter?.status) conditions.push(eq15(featureRequests.status, filter.status));
+    if (filter?.userId) conditions.push(eq15(featureRequests.userId, filter.userId));
+    const rows = conditions.length ? await db.select().from(featureRequests).where(and9(...conditions)).orderBy(desc4(featureRequests.createdAt)) : await db.select().from(featureRequests).orderBy(desc4(featureRequests.createdAt));
     return rows.map(toFeatureRequest);
   },
   get: async (id) => {
-    const rows = await db.select().from(featureRequests).where(eq13(featureRequests.id, id)).limit(1);
+    const rows = await db.select().from(featureRequests).where(eq15(featureRequests.id, id)).limit(1);
     return rows[0] ? toFeatureRequest(rows[0]) : null;
   },
   /** Admin-only: record a decision. Does NOT grant the feature — that's a separate explicit entitlement/plan action. */
@@ -41590,7 +44343,7 @@ var featureRequestStore = {
       reviewedByUserId: input.reviewedByUserId,
       reviewNote: input.reviewNote || null,
       updatedAt: /* @__PURE__ */ new Date()
-    }).where(eq13(featureRequests.id, id));
+    }).where(eq15(featureRequests.id, id));
     return featureRequestStore.get(id);
   }
 };
@@ -42361,7 +45114,7 @@ init_client();
 init_schema();
 import { existsSync as existsSync18, readFileSync as readFileSync18 } from "node:fs";
 import { join as join19 } from "node:path";
-import { eq as eq15 } from "drizzle-orm";
+import { eq as eq17 } from "drizzle-orm";
 var DEFAULT_PATH10 = join19(process.cwd(), ".data", "partner-entitlements-snapshot.json");
 function snapshotPath3() {
   return process.env.PARTNER_ENTITLEMENTS_SNAPSHOT_PATH?.trim() || DEFAULT_PATH10;
@@ -42369,7 +45122,7 @@ function snapshotPath3() {
 async function backfillPartnerApplications(rows) {
   let imported = 0;
   for (const app3 of rows) {
-    const existing = await db.select({ id: partnerApplications.id }).from(partnerApplications).where(eq15(partnerApplications.id, app3.id)).limit(1);
+    const existing = await db.select({ id: partnerApplications.id }).from(partnerApplications).where(eq17(partnerApplications.id, app3.id)).limit(1);
     if (existing.length > 0) continue;
     await db.insert(partnerApplications).values({
       id: app3.id,
@@ -42423,7 +45176,7 @@ async function backfillEntitlements(state14) {
     }
   }
   for (const row of rowsToUpsert) {
-    const existing = await db.select({ id: featureEntitlements.id }).from(featureEntitlements).where(eq15(featureEntitlements.scopeKey, row.scopeKey)).limit(1);
+    const existing = await db.select({ id: featureEntitlements.id }).from(featureEntitlements).where(eq17(featureEntitlements.scopeKey, row.scopeKey)).limit(1);
     await db.insert(featureEntitlements).values(row).onConflictDoNothing();
     if (existing.length === 0) imported += 1;
   }
@@ -42494,7 +45247,7 @@ function createApp() {
   app3.use(healthRouter);
   app3.use(diagnosticsRouter);
   const mediaMount = getMediaStaticMount();
-  app3.use(mediaMount.urlPrefix, express.static(mediaMount.root, { fallthrough: false, maxAge: "7d" }));
+  app3.use(mediaMount.urlPrefix, createCorsMiddleware(), express.static(mediaMount.root, { fallthrough: false, maxAge: "7d" }));
   app3.post(
     "/api/webhooks/meta",
     express.raw({ type: "application/json", limit: RAW_BODY_LIMIT }),
@@ -42504,7 +45257,7 @@ function createApp() {
   app3.use(express.urlencoded({ extended: true, limit: URLENCODED_BODY_LIMIT }));
   app3.use(payloadTooLargeHandler);
   app3.use(createCorsMiddleware());
-  const AUTH_STRICT_PATH = /^\/api\/v1\/auth\/(login|register|seller-register|partner-apply|upgrade-to-seller|refresh|logout|dev-login|password-reset-request|reset-password|verify-email|resend-verification|change-password)(\/|$)/i;
+  const AUTH_STRICT_PATH = /^\/api\/v1\/auth\/(login|register|seller-register|partner-apply|upgrade-to-seller|logout|dev-login|google|facebook|password-reset-request|reset-password|verify-email|resend-verification|change-password|local-password)(\/|$)/i;
   app3.use("/api/v1/auth", (req, res, next) => {
     if (AUTH_STRICT_PATH.test(req.originalUrl.split("?")[0] || "")) {
       return authRateLimit(req, res, next);
