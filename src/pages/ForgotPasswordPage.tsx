@@ -30,7 +30,11 @@ export default function AdminForgotPasswordPage() {
       const res = await fetch('/api/v1/auth/password-reset-request', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: target }),
+        // 'dashboard' identifies this SPA as the surface the reset link
+        // should open in — a validated enum, never a URL. It does not grant
+        // any role or privilege, only which Choosify SPA renders the token
+        // form; the server owns the actual destination host.
+        body: JSON.stringify({ email: target, surface: 'dashboard' }),
       });
       // Generic on purpose — the API returns the same body regardless of
       // whether the account exists. Only a malformed request 400s.

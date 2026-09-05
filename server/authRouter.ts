@@ -34,6 +34,7 @@ import {
   sendPasswordResetEmail,
   sendVerificationEmail,
   sendWelcomeEmail,
+  type ResetSurface,
 } from './email/emailService';
 import {
   resolveOrCreateUserForSocialIdentity,
@@ -1362,6 +1363,18 @@ authRouter.post('/auth/password-reset-request', async (req, res) => {
     .trim()
     .toLowerCase();
 
+  // The reset destination is which Choosify SPA renders the token form, not
+  // an authorization grant — it never changes what the token itself can do.
+  // Preferred over the account's role because a person's account role does
+  // not tell you which surface they were actually using when they clicked
+  // Forgot Password (e.g. a Seller browsing the storefront as a Consumer).
+  // Only this exact enum is ever accepted — never a client-supplied URL/host
+  // — and callers that don't yet send it (legacy/internal) fall back to the
+  // previous role-based resolution so nothing breaks silently.
+  const requestedSurface = req.body?.surface;
+  const explicitSurface: ResetSurface | undefined =
+    requestedSurface === 'web' || requestedSurface === 'dashboard' ? requestedSurface : undefined;
+
   const genericResponse = {
     success: true,
     message: 'If an account exists with this email, a password reset link has been sent.',
@@ -1396,7 +1409,7 @@ authRouter.post('/auth/password-reset-request', async (req, res) => {
       });
 
       await sendPasswordResetEmail(user.email, rawToken, {
-        surface: resetSurfaceForRole(user.role),
+        surface: explicitSurface ?? resetSurfaceForRole(user.role),
       });
     }
 
