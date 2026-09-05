@@ -146,8 +146,19 @@ export function createApp(): Express {
   // Strict auth bucket applies only to credential/session-mutation endpoints.
   // Authenticated reads (/auth/me, impersonation status/history, directory) use
   // the admin policy so a valid session is not flushed by login-tier limits.
+  //
+  // /auth/refresh is deliberately NOT in this strict bucket even though it
+  // mutates the session: it is gated by a signed httpOnly refresh-token
+  // cookie the client cannot forge or brute-force, not a raw credential guess
+  // like login/register/password-reset/social sign-in are - the same "already
+  // authenticated, not a brute-force surface" reasoning as /auth/me above. It
+  // also fires once per page load (silent session restore), so sharing the
+  // strict 20-per-window budget with real credential attempts meant one
+  // ordinary session of reloading/retesting a page could exhaust the shared
+  // count on refresh calls alone and then 429 a legitimate subsequent
+  // login/social attempt that never itself misbehaved.
   const AUTH_STRICT_PATH =
-    /^\/api\/v1\/auth\/(login|register|seller-register|partner-apply|upgrade-to-seller|refresh|logout|dev-login|google|facebook|password-reset-request|reset-password|verify-email|resend-verification|change-password|local-password)(\/|$)/i;
+    /^\/api\/v1\/auth\/(login|register|seller-register|partner-apply|upgrade-to-seller|logout|dev-login|google|facebook|password-reset-request|reset-password|verify-email|resend-verification|change-password|local-password)(\/|$)/i;
   app.use("/api/v1/auth", (req, res, next) => {
     if (AUTH_STRICT_PATH.test(req.originalUrl.split("?")[0] || "")) {
       return authRateLimit(req, res, next);
