@@ -127,8 +127,17 @@ export function createApp(): Express {
   // fallthrough:false is deliberate — without it, a missing/deleted file
   // under this prefix silently falls through to the SPA catch-all below and
   // returns 200 + index.html instead of a real 404.
+  // The storefront (choosify.bd) canvas-crops a Consumer's own avatar for
+  // re-editing, which requires reading pixel data from an <img
+  // crossOrigin="anonymous">. That only succeeds if this response carries an
+  // Access-Control-Allow-Origin the browser accepts for the storefront's
+  // origin — reusing the exact same allowlist (ALLOWED_ORIGINS) the rest of
+  // the API already trusts, not a new or broader origin policy, and never a
+  // wildcard (this mount also serves seller/creator/brand/product media that
+  // is meant to be viewable, but re-cropped only by its own owner from a
+  // trusted Choosify origin).
   const mediaMount = getMediaStaticMount();
-  app.use(mediaMount.urlPrefix, express.static(mediaMount.root, { fallthrough: false, maxAge: "7d" }));
+  app.use(mediaMount.urlPrefix, createCorsMiddleware(), express.static(mediaMount.root, { fallthrough: false, maxAge: "7d" }));
 
   // Meta webhooks need the raw body for signature verification (before JSON parser)
   app.post(
