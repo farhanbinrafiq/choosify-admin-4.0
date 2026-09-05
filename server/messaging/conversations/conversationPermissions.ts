@@ -5,7 +5,7 @@
 import { sellerOwnsBrand } from '../../catalog/brandOwnership';
 import { CommerceError } from '../../commerce/cartService';
 import { ROLES, type UserRole } from '../../permissions/roles';
-import type { CommerceConversation, SenderRole } from './types';
+import type { CommerceConversation, SenderRole, SupportAudience } from './types';
 import { CONVERSATION_CONTEXT_TYPES, CONVERSATION_STATUSES } from './types';
 
 export type MessagingActor = {
@@ -41,11 +41,56 @@ export function resolveSenderRole(role?: string): SenderRole {
 }
 
 /** Support audience = which side opened/owns a Choosify Support conversation. */
-export function resolveSupportAudience(role?: string): 'consumer' | 'seller' | 'creator' {
+export function resolveSupportAudience(role?: string): SupportAudience {
   const sr = resolveSenderRole(role);
   if (sr === 'seller' || sr === 'seller_staff') return 'seller';
   if (sr === 'creator') return 'creator';
   return 'consumer';
+}
+
+const SUPPORT_AUDIENCE_ALLOWLIST = new Set<string>(['consumer', 'seller', 'creator']);
+
+/** Validates a client-supplied support audience against the allowlist. Any
+ *  other value (including undefined/garbage) returns null so callers fall
+ *  back to role-derived resolution instead of trusting it. */
+export function parseSupportAudience(value: unknown): SupportAudience | null {
+  return typeof value === 'string' && SUPPORT_AUDIENCE_ALLOWLIST.has(value)
+    ? (value as SupportAudience)
+    : null;
+}
+
+/**
+ * Which audiences an Admin may address for a given target account's current
+ * role — this is a product capability rule (persona choice), not a recovery
+ * of historical role data. Verified Seller/Seller: Consumer or Seller.
+ * Creator: Consumer or Creator. Everyone else: Consumer only.
+ */
+export function allowedAudiencesForTarget(role?: string): SupportAudience[] {
+  const sr = resolveSenderRole(role);
+  if (sr === 'seller' || sr === 'seller_staff') return ['consumer', 'seller'];
+  if (sr === 'creator') return ['consumer', 'creator'];
+  return ['consumer'];
+}
+
+/**
+ * Self-service (non-admin) support-audience resolution. Every account can act
+ * as a Consumer regardless of its current role, so an explicit `'consumer'`
+ * request is always honoured — this is what lets a Seller/Creator account
+ * reach its own Consumer-persona thread from the storefront. Any other
+ * requested audience is honoured only when it equals the account's own
+ * role-derived audience (a no-op confirmation, not an escalation). Anything
+ * else — omitted, invalid, or a persona the account doesn't actually have —
+ * falls back to the existing role-derived behaviour.
+ */
+export function resolveSelfServiceSupportAudience(
+  actor: MessagingActor,
+  requestedAudience?: unknown,
+): SupportAudience {
+  const roleDerived = resolveSupportAudience(actor.role);
+  const requested = parseSupportAudience(requestedAudience);
+  if (requested === 'consumer') return 'consumer';
+  if (requested && requested === roleDerived) return requested;
+  return roleDerived;
 }
 
 /** Contexts an Admin/Support actor may read without an explicit audited enter. */

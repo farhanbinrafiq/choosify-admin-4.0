@@ -38,11 +38,14 @@ import {
   shouldBecomeReadOnlyForOrderStatus,
 } from './conversationLifecycle';
 import {
+  allowedAudiencesForTarget,
   assertCanReadConversation,
   assertCanSendMessage,
   assertNotForbiddenDmCreate,
   consumerInitiated,
   isAdminEnterRole,
+  parseSupportAudience,
+  resolveSelfServiceSupportAudience,
   resolveSenderRole,
   resolveSupportAudience,
   type MessagingActor,
@@ -198,8 +201,15 @@ export function supportReconcileKey(ticketId: string): string {
   return `support:${ticketId}`;
 }
 
-/** One active platform-support conversation per authenticated user. */
-export function activeSupportReconcileKey(userId: string): string {
+/** One active platform-support conversation per authenticated user, per persona/audience. */
+export function activeSupportReconcileKey(userId: string, audience: SupportAudience): string {
+  return `support:active:${userId}:${audience}`;
+}
+
+/** Pre-audience-scoping key format — kept only so existing conversations are
+ *  found once instead of orphaned/duplicated by this change. Never used for
+ *  new conversations. */
+function legacyActiveSupportReconcileKey(userId: string): string {
   return `support:active:${userId}`;
 }
 
@@ -1065,6 +1075,15 @@ export async function enterConversationAsAdmin(input: {
 export async function openAdminSupportConversation(input: {
   adminActor: MessagingActor;
   targetUserId: string;
+  /**
+   * Optional persona override — which of the target's support personas this
+   * admin wants to reach (e.g. a Verified Seller account also has a Consumer
+   * persona). Validated against the allowlist and against what the target's
+   * current role actually grants; an invalid/unauthorized value is ignored,
+   * falling back to the target's role-derived audience. Never taken from any
+   * other route or trusted from any other client input.
+   */
+  audience?: string;
   subject?: string;
   body?: string;
 }): Promise<{
@@ -1084,10 +1103,16 @@ export async function openAdminSupportConversation(input: {
     throw new CommerceError('Cannot start a support conversation with yourself', 400);
   }
 
+  const requestedAudience = parseSupportAudience(input.audience);
+  const audience =
+    requestedAudience && allowedAudiencesForTarget(target.role).includes(requestedAudience)
+      ? requestedAudience
+      : target.audience;
+
   const body = input.body ? String(input.body).trim() : '';
 
-  // Reuse the target's one active support thread if it exists.
-  const existing = await findActiveSupportConversationForUser(target.id);
+  // Reuse this persona's one active support thread if it exists.
+  const existing = await findActiveSupportConversationForUser(target.id, audience);
   let conversation: CommerceConversation;
   let ticket: SupportTicket;
   let created = false;
@@ -1095,20 +1120,22 @@ export async function openAdminSupportConversation(input: {
   if (existing) {
     conversation = existing.conversation;
     ticket = existing.ticket;
-    // Backfill audience on legacy tickets/conversations.
+    // Backfill audience only when genuinely missing (legacy tickets/
+    // conversations predating this field) — never relabel an existing,
+    // already-audience-tagged thread to a different persona.
     if (!ticket.audience) {
-      ticket = await saveSupportTicket({ ...ticket, audience: target.audience, updatedAt: nowIso() });
+      ticket = await saveSupportTicket({ ...ticket, audience, updatedAt: nowIso() });
     }
-    if (conversation.metadata?.audience !== target.audience) {
+    if (conversation.metadata?.audience === undefined) {
       conversation = await saveConversation({
         ...conversation,
-        metadata: { ...conversation.metadata, audience: target.audience },
+        metadata: { ...conversation.metadata, audience },
         updatedAt: conversation.updatedAt,
       });
     }
   } else {
     const now = nowIso();
-    const key = activeSupportReconcileKey(target.id);
+    const key = activeSupportReconcileKey(target.id, audience);
     const raced = await getConversationByReconcileKey(key);
     if (raced && raced.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET) {
       conversation = raced;
@@ -1119,7 +1146,7 @@ export async function openAdminSupportConversation(input: {
           id: newId('ticket'),
           conversationId: raced.id,
           openerId: target.id,
-          audience: target.audience,
+          audience,
           subject: input.subject?.trim() || 'Choosify Support',
           status: SUPPORT_TICKET_STATUSES.OPEN,
           createdAt: now,
@@ -1143,7 +1170,7 @@ export async function openAdminSupportConversation(input: {
           supportTicket: true,
           subject,
           openerId: target.id,
-          audience: target.audience,
+          audience,
           initiatedByAdminId: input.adminActor.userId,
         },
       });
@@ -1151,7 +1178,7 @@ export async function openAdminSupportConversation(input: {
         id: newId('ticket'),
         conversationId: conversation.id,
         openerId: target.id,
-        audience: target.audience,
+        audience,
         initiatedByAdminId: input.adminActor.userId,
         subject,
         status: SUPPORT_TICKET_STATUSES.OPEN,
@@ -1162,7 +1189,7 @@ export async function openAdminSupportConversation(input: {
       emitMessaging('ConversationCreated', conversation.id, input.adminActor.userId, {
         conversationId: conversation.id,
         supportTicketId: ticket.id,
-        audience: target.audience,
+        audience,
         initiatedByAdminId: input.adminActor.userId,
         contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,
       });
@@ -1255,20 +1282,41 @@ export function toPublicSupportTicket(ticket: SupportTicket): SupportTicket {
   return pub as SupportTicket;
 }
 
+/**
+ * Finds the one active support conversation for `userId` under a specific
+ * persona/`audience`. The same user may have multiple active support
+ * conversations distinguished by audience (e.g. a Consumer-persona thread and
+ * a Seller-persona thread) — this never merges or leaks across them.
+ */
 export async function findActiveSupportConversationForUser(
   userId: string,
+  audience: SupportAudience,
 ): Promise<{ ticket: SupportTicket; conversation: CommerceConversation } | null> {
   if (!userId) return null;
-  const byKey = await getConversationByReconcileKey(activeSupportReconcileKey(userId));
-  if (byKey && byKey.contextType === CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET) {
+
+  const tryKey = async (key: string) => {
+    const byKey = await getConversationByReconcileKey(key);
+    if (!byKey || byKey.contextType !== CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET) return null;
     const tickets = await listSupportTickets();
     const ticket = tickets.find((t) => t.conversationId === byKey.id && t.openerId === userId) || null;
     if (ticket && isActiveSupportConversation(ticket, byKey)) {
       return { ticket: toPublicSupportTicket(ticket), conversation: byKey };
     }
-  }
+    return null;
+  };
+
+  const byNewKey = await tryKey(activeSupportReconcileKey(userId, audience));
+  if (byNewKey) return byNewKey;
+
+  // Conversations created before audience-scoped keys existed were reconciled
+  // under the bare per-user key. Recover them here (matched only when the
+  // stored ticket's own audience agrees) so an existing thread isn't
+  // orphaned/duplicated the first time it's looked up post-change.
+  const legacyMatch = await tryKey(legacyActiveSupportReconcileKey(userId));
+  if (legacyMatch && (legacyMatch.ticket.audience ?? audience) === audience) return legacyMatch;
+
   const tickets = await listSupportTickets();
-  const mine = tickets.filter((t) => t.openerId === userId);
+  const mine = tickets.filter((t) => t.openerId === userId && (t.audience ?? audience) === audience);
   for (const ticket of mine) {
     const conv = await getConversation(ticket.conversationId);
     if (conv && isActiveSupportConversation(ticket, conv)) {
@@ -1282,6 +1330,13 @@ export async function ensureActiveSupportConversation(input: {
   actor: MessagingActor;
   subject?: string;
   body?: string;
+  /**
+   * Optional fixed, surface-determined persona hint (not an arbitrary client
+   * role) — see `resolveSelfServiceSupportAudience`. E.g. the storefront's
+   * Consumer Messages surface always passes `'consumer'` so a Seller/Creator
+   * account can still reach its own Consumer-persona thread there.
+   */
+  audience?: string;
 }): Promise<{
   ticket: SupportTicket;
   conversation: CommerceConversation;
@@ -1290,7 +1345,8 @@ export async function ensureActiveSupportConversation(input: {
 }> {
   if (!input.actor?.userId) throw new CommerceError('Authentication required', 401);
 
-  const existing = await findActiveSupportConversationForUser(input.actor.userId);
+  const audience = resolveSelfServiceSupportAudience(input.actor, input.audience);
+  const existing = await findActiveSupportConversationForUser(input.actor.userId, audience);
   if (existing) {
     return { ...existing, message: null, created: false };
   }
@@ -1299,6 +1355,7 @@ export async function ensureActiveSupportConversation(input: {
     actor: input.actor,
     subject: input.subject,
     body: input.body,
+    audience: input.audience,
   });
   return { ...created, created: true };
 }
@@ -1307,10 +1364,13 @@ export async function createSupportTicket(input: {
   actor: MessagingActor;
   subject?: string;
   body?: string;
+  /** See `ensureActiveSupportConversation` — same fixed-surface persona hint. */
+  audience?: string;
 }): Promise<{ ticket: SupportTicket; conversation: CommerceConversation; message: CommerceMessage }> {
   if (!input.actor?.userId) throw new CommerceError('Authentication required', 401);
 
-  const racedExisting = await findActiveSupportConversationForUser(input.actor.userId);
+  const audience = resolveSelfServiceSupportAudience(input.actor, input.audience);
+  const racedExisting = await findActiveSupportConversationForUser(input.actor.userId, audience);
   if (racedExisting) {
     const messages = await listMessages(racedExisting.conversation.id);
     return {
@@ -1333,7 +1393,7 @@ export async function createSupportTicket(input: {
 
   const ticketId = newId('ticket');
   const now = nowIso();
-  const key = activeSupportReconcileKey(input.actor.userId);
+  const key = activeSupportReconcileKey(input.actor.userId, audience);
   const racedKey = await getConversationByReconcileKey(key);
   if (racedKey) {
     const tickets = await listSupportTickets();
@@ -1345,7 +1405,6 @@ export async function createSupportTicket(input: {
   }
 
   const openerSenderRole = resolveSenderRole(input.actor.role);
-  const audience = resolveSupportAudience(input.actor.role);
   const conversation: CommerceConversation = {
     id: newId('conv'),
     contextType: CONVERSATION_CONTEXT_TYPES.SUPPORT_TICKET,

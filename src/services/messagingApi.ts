@@ -296,6 +296,10 @@ export const messagingApi = {
   /** Admin proactively opens (or reuses) a user's Choosify Support thread. */
   startAdminSupportConversation: (payload: {
     targetUserId: string;
+    /** Persona override for dual-capability accounts (e.g. a Verified Seller
+     *  also has a Consumer persona) — server validates against what the
+     *  target's role actually grants; omit for the default role-derived thread. */
+    audience?: SupportAudience;
     subject?: string;
     body?: string;
   }) =>

@@ -1,29 +1,58 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { X, Search, Loader2, Send } from 'lucide-react';
-import { searchDirectoryUsers, type DirectoryUser } from '../../services/messagingApi';
+import { searchDirectoryUsers, type DirectoryUser, type SupportAudience } from '../../services/messagingApi';
 import { Avatar, RoleBadge, type MsgRole } from './MessagingPrimitives';
+
+/** Which persona choices to offer for a directory result's display role. The
+ *  server independently re-validates against the target's actual current
+ *  role (see `allowedAudiencesForTarget`) — this only decides which buttons
+ *  are shown, it grants nothing by itself. */
+function personaOptionsFor(role: DirectoryUser['role']): Array<{ key: SupportAudience; label: string }> {
+  // First entry is the account's role-derived default (what the server falls
+  // back to when no audience is sent) so the pre-highlighted option always
+  // matches what "Open conversation" actually does without an explicit pick.
+  if (role === 'Seller') {
+    return [
+      { key: 'seller', label: 'Seller' },
+      { key: 'consumer', label: 'Consumer' },
+    ];
+  }
+  if (role === 'Creator') {
+    return [
+      { key: 'creator', label: 'Creator' },
+      { key: 'consumer', label: 'Consumer' },
+    ];
+  }
+  return [];
+}
 
 /**
  * Admin "New Message" contact picker. Search the canonical staff user directory
  * by CFID (exact ranks first) / name / email, pick a user, optionally type a
  * first message, then open (or reuse) that user's Choosify Support thread.
  * Internal DB ids are never shown — CFID + display identity only.
+ *
+ * Dual-capability accounts (Seller/Creator also has a Consumer persona) get a
+ * persona picker so staff can choose which of the user's Support threads to
+ * reach; a plain Consumer account keeps the simple one-option flow.
  */
 export function NewMessageDialog({
   onClose,
   onStart,
 }: {
   onClose: () => void;
-  onStart: (targetUserId: string, body: string) => Promise<void>;
+  onStart: (targetUserId: string, body: string, audience?: SupportAudience) => Promise<void>;
 }) {
   const [q, setQ] = useState('');
   const [results, setResults] = useState<DirectoryUser[]>([]);
   const [searching, setSearching] = useState(false);
   const [selected, setSelected] = useState<DirectoryUser | null>(null);
+  const [audience, setAudience] = useState<SupportAudience | undefined>(undefined);
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const debounce = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const personaOptions = selected ? personaOptionsFor(selected.role) : [];
 
   useEffect(() => {
     if (selected) return;
@@ -55,7 +84,7 @@ export function NewMessageDialog({
     setBusy(true);
     setError(null);
     try {
-      await onStart(selected.id, body.trim());
+      await onStart(selected.id, body.trim(), audience);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not start conversation');
       setBusy(false);
@@ -100,7 +129,10 @@ export function NewMessageDialog({
                   <button
                     key={u.id}
                     type="button"
-                    onClick={() => setSelected(u)}
+                    onClick={() => {
+                      setSelected(u);
+                      setAudience(undefined);
+                    }}
                     className="w-full flex items-center gap-3 py-2.5 px-1 text-left hover:bg-black/[0.03] transition-colors"
                   >
                     <Avatar name={u.name} src={u.avatarUrl} size={34} />
@@ -134,6 +166,7 @@ export function NewMessageDialog({
                 type="button"
                 onClick={() => {
                   setSelected(null);
+                  setAudience(undefined);
                   setBody('');
                 }}
                 className="text-[10px] font-bold text-app-accent"
@@ -141,6 +174,29 @@ export function NewMessageDialog({
                 Change
               </button>
             </div>
+            {personaOptions.length > 0 ? (
+              <div className="mt-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-app-text-secondary m-0 mb-1.5">
+                  Message this user as their…
+                </p>
+                <div className="flex gap-1.5">
+                  {personaOptions.map((opt) => (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => setAudience(opt.key)}
+                      className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold border transition-colors ${
+                        (audience ?? personaOptions[0].key) === opt.key
+                          ? 'bg-app-accent text-white border-app-accent'
+                          : 'border-app-border text-app-text-secondary hover:text-app-text-primary'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             <textarea
               autoFocus
               value={body}

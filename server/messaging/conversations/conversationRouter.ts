@@ -30,13 +30,14 @@ import {
   sendMessage,
   resolveSupportTicket,
 } from './conversationService';
-import { isAdminEnterRole } from './conversationPermissions';
+import { isAdminEnterRole, resolveSelfServiceSupportAudience } from './conversationPermissions';
 import {
   assertMessagingPersistenceReady,
   getMessagingPersistenceMode,
   listSocialInbox,
 } from './conversationStore';
 import { conversationMemorySnapshotPath } from './conversationPersistence';
+import { getStoreBackend } from '../omniStore';
 import {
   SUPPORT_TICKET_STATUSES,
   type SupportTicketStatus,
@@ -92,10 +93,21 @@ conversationRouter.post('/messaging/flush', ...requireAuth, async (req, res) => 
   }
 });
 
-conversationRouter.get('/messaging/persistence-mode', (_req, res) => {
+/**
+ * Public transport status — no auth required (clients must be able to check
+ * this before/without a session to decide whether to rely on Firestore push
+ * or fall back to REST polling). `realtime` reflects the OMNI store backend
+ * specifically: that's the collection (`omni_conversations`/`omni_messages`)
+ * every client-side onSnapshot listener in this app actually subscribes to
+ * (via mirrorConversationToOmni/mirrorMessageToOmni + System B's own direct
+ * writes) — `mode` below is the separate System A conversationStore backend,
+ * kept for backward compatibility with existing callers of this route.
+ */
+conversationRouter.get('/messaging/persistence-mode', async (_req, res) => {
   try {
     assertMessagingPersistenceReady();
     const mode = getMessagingPersistenceMode();
+    const omniBackend = await getStoreBackend();
     res.json({
       success: true,
       data: {
@@ -113,6 +125,11 @@ conversationRouter.get('/messaging/persistence-mode', (_req, res) => {
                 'messaging_admin_entries',
               ]
             : undefined,
+        omniBackend,
+        /** true only when the omni Firestore mirror is genuinely live —
+         *  clients should treat this as the switch between trusting
+         *  onSnapshot pushes and running their own REST poll. */
+        realtime: omniBackend === 'admin',
       },
     });
   } catch (error) {
@@ -330,7 +347,9 @@ conversationRouter.delete('/seller/social-inbox/:channel', ...requireAuth, async
 conversationRouter.get('/support/conversations/active', ...requireAuth, async (req, res) => {
   try {
     const actor = actorOf(req);
-    const found = await findActiveSupportConversationForUser(actor.userId);
+    const audienceParam = typeof req.query.audience === 'string' ? req.query.audience : undefined;
+    const audience = resolveSelfServiceSupportAudience(actor, audienceParam);
+    const found = await findActiveSupportConversationForUser(actor.userId, audience);
     if (!found) {
       res.status(404).json({ success: false, error: 'No active support conversation' });
       return;
@@ -499,9 +518,15 @@ conversationRouter.post('/admin/support/conversations', ...requireAuth, async (r
       res.status(400).json({ success: false, error: 'targetUserId is required' });
       return;
     }
+    const audienceRaw = typeof req.body?.audience === 'string' ? req.body.audience : '';
+    const audience =
+      audienceRaw === 'consumer' || audienceRaw === 'seller' || audienceRaw === 'creator'
+        ? audienceRaw
+        : undefined;
     const result = await openAdminSupportConversation({
       adminActor: actor,
       targetUserId,
+      audience,
       subject: req.body?.subject ? String(req.body.subject) : undefined,
       body: req.body?.body ? String(req.body.body) : undefined,
     });
@@ -532,6 +557,7 @@ conversationRouter.post('/support/conversations/ensure', ...requireAuth, async (
       actor: actorOf(req),
       subject: req.body?.subject ? String(req.body.subject) : undefined,
       body: req.body?.body ? String(req.body.body) : undefined,
+      audience: req.body?.audience ? String(req.body.audience) : undefined,
     });
     flushIfMemoryDisk();
     res.status(result.created ? 201 : 200).json({ success: true, data: result });
@@ -546,6 +572,7 @@ conversationRouter.post('/support/tickets', ...requireAuth, async (req, res) => 
       actor: actorOf(req),
       subject: req.body?.subject ? String(req.body.subject) : undefined,
       body: req.body?.body ? String(req.body.body) : undefined,
+      audience: req.body?.audience ? String(req.body.audience) : undefined,
     });
     flushIfMemoryDisk();
     res.status(result.created ? 201 : 200).json({ success: true, data: result });
