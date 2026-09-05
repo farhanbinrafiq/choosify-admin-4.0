@@ -650,6 +650,14 @@ async function applyEntityVerificationSideEffect(
         return { ok: false, error: `Brand ${row.entityId} not found in catalog` };
       }
       if (decision === 'approved') {
+        // NOTE: approving a claim CAN legitimately reassign sellerId away
+        // from a brand's current owner — that is an intentional, existing,
+        // tested ownership-dispute-resolution workflow (a different seller
+        // proves genuine ownership and Super Admin approves their claim).
+        // The safeguard against an unwanted takeover is the human review
+        // itself (moderator role + feedback required, self-approval
+        // blocked) plus the re-review guard above, not a blanket refusal
+        // here.
         const normalized = normalizeBrandInput(
           {
             ...existing,
@@ -4868,6 +4876,10 @@ operationsRouter.patch('/operations/verifications/:id/review', ...requireModerat
   }
   if (req.userId && existing.submitted_by === req.userId) {
     res.status(403).json({ error: 'Cannot approve or reject your own verification request' });
+    return;
+  }
+  if (existing.status === 'Approved' || existing.status === 'Rejected') {
+    res.status(409).json({ error: `This verification request was already ${existing.status.toLowerCase()} and cannot be reviewed again.` });
     return;
   }
   const rawStatus = String(req.body?.status || '').toLowerCase().replace(/[\s-]+/g, '_');

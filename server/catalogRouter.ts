@@ -2135,12 +2135,24 @@ catalogRouter.patch(
         }
       }
 
+      const grantingAccess = status === 'granted' || status === 'restored';
+      // A brand with its own sellerId is seller-owned (created via seller
+      // onboarding / marketplace registration), not an unclaimed community
+      // profile awaiting the separate claim workflow. claimStatus otherwise
+      // stays stuck at its creation-time 'pending' default forever, since
+      // this endpoint is the only place marketplace access is granted for
+      // such brands and nothing else ever reconciles claimStatus for them —
+      // the storefront would then keep showing "Claim this brand" (or a
+      // stale "pending" claim) for an already-approved, seller-owned brand.
+      const reconcileOwnerClaim = grantingAccess && Boolean(existing.sellerId) && existing.claimStatus !== 'verified';
+
       const context = await buildBrandNormalizeContext(req.params.id);
       const normalized = normalizeBrandInput(
         {
           ...existing,
           marketplaceStatus: status,
-          marketplaceAccess: status === 'granted' || status === 'restored',
+          marketplaceAccess: grantingAccess,
+          ...(reconcileOwnerClaim ? { claimStatus: 'verified', verifiedStatus: true } : null),
         },
         existing,
         context,

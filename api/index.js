@@ -24906,12 +24906,15 @@ catalogRouter.patch(
           activeOrderWarning = `This seller has ${activeOrders.length} active order(s)/booking(s) in progress. They will remain fulfillable after this change, but confirm before proceeding.`;
         }
       }
+      const grantingAccess = status === "granted" || status === "restored";
+      const reconcileOwnerClaim = grantingAccess && Boolean(existing.sellerId) && existing.claimStatus !== "verified";
       const context = await buildBrandNormalizeContext(req.params.id);
       const normalized = normalizeBrandInput(
         {
           ...existing,
           marketplaceStatus: status,
-          marketplaceAccess: status === "granted" || status === "restored"
+          marketplaceAccess: grantingAccess,
+          ...reconcileOwnerClaim ? { claimStatus: "verified", verifiedStatus: true } : null
         },
         existing,
         context
@@ -31259,6 +31262,10 @@ operationsRouter.patch("/operations/verifications/:id/review", ...requireModerat
   }
   if (req.userId && existing.submitted_by === req.userId) {
     res.status(403).json({ error: "Cannot approve or reject your own verification request" });
+    return;
+  }
+  if (existing.status === "Approved" || existing.status === "Rejected") {
+    res.status(409).json({ error: `This verification request was already ${existing.status.toLowerCase()} and cannot be reviewed again.` });
     return;
   }
   const rawStatus = String(req.body?.status || "").toLowerCase().replace(/[\s-]+/g, "_");
