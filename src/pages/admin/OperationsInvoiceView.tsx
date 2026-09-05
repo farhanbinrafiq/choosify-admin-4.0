@@ -235,11 +235,12 @@ export function OperationsInvoiceView() {
     if (pdfState === 'generating') return;
     setPdfState('generating');
     try {
-      const [{ buildInvoicePdf, invoicePdfFilename }, logoDataUrl] = await Promise.all([
+      const [{ buildInvoicePdf, invoicePdfFilename, loadSatoshiPdfFonts }, logoDataUrl] = await Promise.all([
         import('./invoicePdf'),
         loadLogoDataUrl(),
       ]);
-      const doc = buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl });
+      const satoshiFonts = await loadSatoshiPdfFonts();
+      const doc = buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl, satoshiFonts });
       doc.save(invoicePdfFilename(vm.invoiceNumber, order.orderId));
       setPdfState('idle');
     } catch (err) {

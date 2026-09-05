@@ -881,8 +881,13 @@ operationsRouter.get('/operations/orders/:id', ...requireAuth, (req, res) => {
  * requester own any sub-order on this order" (userCanMutateOrder is too broad
  * for a multi-seller order: it would let seller A ensure/read seller B's
  * invoice). Staff (admin/super_admin/support_agent/moderator/finance_manager)
- * may act on any sub-order. Buyers are not authorized here, matching the
- * existing invoice-screen authorization (OperationsInvoiceView.tsx).
+ * may act on any sub-order; the owning seller may act on their own sub-order;
+ * the order's own buyer may also ensure/read invoice numbers for any
+ * sub-order on THEIR OWN order (needed for the customer invoice screen —
+ * a buyer opening their invoice before any seller/staff has may otherwise
+ * have no invoice number to display at all). This widens WHO may trigger the
+ * existing lazy-mint, never HOW a number is generated or what it is —
+ * ensureSubOrderInvoiceNumber() and its numbering scheme are unchanged.
  */
 operationsRouter.post('/operations/orders/:id/subs/:sellerId/invoice', ...requireAuth, async (req, res) => {
   const order = operationsStore.getOrder(req.params.id);
@@ -906,7 +911,8 @@ operationsRouter.post('/operations/orders/:id/subs/:sellerId/invoice', ...requir
         hasRole(role, ROLES.FINANCE_MANAGER)),
   );
   const isOwningSeller = Boolean(req.userId && req.userId === targetSellerId);
-  if (!isStaff && !isOwningSeller) {
+  const isOwningBuyer = Boolean(req.userId && req.userId === order.buyerId);
+  if (!isStaff && !isOwningSeller && !isOwningBuyer) {
     res.status(403).json({ error: 'Not authorized to view this invoice' });
     return;
   }

@@ -141,7 +141,7 @@ export function KpiTile({
       </div>
       <div
         className="dash-kpi-value text-[28px] font-extrabold tracking-tight mb-2 leading-none"
-        style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}
+        style={{ fontFamily: 'var(--font-heading)' }}
       >
         {value}
       </div>

@@ -225,7 +225,7 @@ export default function SellerSignupPage() {
   return (
     <div
       className="choosify-dark-surface relative min-h-screen w-full"
-      style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
+      style={{ fontFamily: 'var(--font-sans)' }}
     >
       {/* ── Partnership / growth atmosphere (decorative, viewport-anchored) ── */}
       <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden="true">
@@ -286,7 +286,7 @@ export default function SellerSignupPage() {
               </span>
               <h1
                 className="mb-3 text-[27px] font-extrabold leading-tight text-white sm:text-[29px]"
-                style={{ fontFamily: 'Georgia, serif' }}
+                style={{ fontFamily: 'var(--font-heading)' }}
               >
                 Partner with
                 <br />

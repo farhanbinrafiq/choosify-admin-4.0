@@ -92,7 +92,7 @@ export default function LoginPage() {
   return (
     <div
       className="choosify-dark-surface relative flex min-h-screen items-center justify-center overflow-hidden p-6"
-      style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
+      style={{ fontFamily: 'var(--font-sans)' }}
     >
       {/* ── Administrative atmosphere (decorative, non-interactive) ──────────
           Abstract premium operations/control-center environment: layered
@@ -209,7 +209,7 @@ export default function LoginPage() {
             </span>
             <h1
               className="mb-3 text-[30px] font-extrabold leading-tight text-white"
-              style={{ fontFamily: 'Georgia, serif' }}
+              style={{ fontFamily: 'var(--font-heading)' }}
             >
               Operations
               <br />

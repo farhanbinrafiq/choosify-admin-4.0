@@ -45,7 +45,7 @@ export default function ForcePasswordChangePage() {
   return (
     <div
       className="choosify-dark-surface min-h-screen flex items-center justify-center p-6"
-      style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
+      style={{ fontFamily: 'var(--font-sans)' }}
     >
       <div className="w-full max-w-[440px] bg-white rounded-2xl border border-[#E8EDF2] p-8 shadow-xl">
         <ChoosifyLogo variant="full" theme="light" className="h-8 w-auto max-w-[160px] mb-6" />

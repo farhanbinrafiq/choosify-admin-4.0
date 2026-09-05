@@ -10,20 +10,72 @@
  * splitting a row, which is exactly the print-CSS multi-page requirement
  * mirrored here for the direct download.
  *
- * PDF-currency note: jsPDF's standard (non-embedded) fonts are WinAnsi/AFM
- * metrics only — ৳ (U+09F3, Bengali) has no entry, and including it forces
- * jsPDF into a per-character positioning fallback for the WHOLE string (the
- * "6 1 8 , 9 9 0" spacing bug), on top of rendering as a broken glyph. No
- * Unicode/Bengali-capable font is bundled in this project to embed instead, so
- * every PDF monetary value goes through ONE helper, formatPdfMoney(), which
- * renders "BDT 18,990" — plain ASCII, correct glyph widths, normal spacing.
- * The on-screen invoice and print view are untouched and keep showing ৳ — this
- * only affects the generated PDF's own text.
+ * Typography: the canonical global Satoshi typeface is embedded into the PDF
+ * itself (loadSatoshiPdfFonts() below), not left on jsPDF's built-in
+ * Helvetica — this is the same font family the app/print output use, per the
+ * platform-wide typography unification. Only Regular + Bold are embedded
+ * (the only two styles this file ever requests), loaded from
+ * public/fonts/satoshi-pdf/*.ttf (jsPDF requires an actual TTF/OTF it can
+ * parse -- the woff2 files the browser uses for on-screen text are not
+ * usable here). jsPDF's `putOnlyUsedFonts` subsets the embedded font to only
+ * the glyphs actually printed, consistent with the Fontshare Free Font EULA's
+ * "secured, read-only" embedding requirement (the finished PDF is a fixed
+ * document, not a vector for re-extracting/reusing the typeface). If font
+ * loading fails for any reason (offline, asset missing), buildInvoicePdf
+ * falls back to jsPDF's built-in Helvetica rather than failing the download.
+ *
+ * PDF-currency note: Satoshi is Latin-only -- it has no more coverage of
+ * ৳ (U+09F3, Bengali) than jsPDF's built-in fonts did, and jsPDF's own
+ * WinAnsi/AFM metrics still force a broken glyph + per-character spacing bug
+ * ("6 1 8 , 9 9 0") for any unmapped code point regardless of which font is
+ * active. So every PDF monetary value still goes through ONE helper,
+ * formatPdfMoney(), which renders "BDT 18,990" — plain ASCII, correct glyph
+ * widths, normal spacing. The on-screen invoice and print view are untouched
+ * and keep showing ৳ — this only affects the generated PDF's own text.
  */
 import { jsPDF } from 'jspdf';
 import { autoTable } from 'jspdf-autotable';
 import type { OpsStorefrontOrder } from '../../services/operationsApi';
 import type { InvoiceViewModel } from './orderHubModel';
+
+/** ArrayBuffer -> base64, chunked to stay well under any engine's call-stack
+ *  argument limit (a ~75KB font is ~75k iterations either way; String.fromCharCode.apply
+ *  on the whole buffer at once can blow the stack on some engines). */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const CHUNK = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+export type SatoshiPdfFonts = { regular: string; bold: string };
+
+/** Fetches the two embeddable Satoshi TTF weights this file uses (Regular,
+ *  Bold) as base64, for doc.addFileToVFS/addFont. Same "fetch once at
+ *  generation time, not on every page load" pattern as loadLogoDataUrl() in
+ *  OperationsInvoiceView.tsx -- these fonts are never loaded for on-screen
+ *  rendering (that's the woff2 @font-face set), only when a PDF is actually
+ *  being built. Returns null (not a throw) on any failure so the caller can
+ *  fall back to Helvetica. */
+export async function loadSatoshiPdfFonts(): Promise<SatoshiPdfFonts | null> {
+  try {
+    const [regularRes, boldRes] = await Promise.all([
+      fetch('/fonts/satoshi-pdf/Satoshi-Regular.ttf'),
+      fetch('/fonts/satoshi-pdf/Satoshi-Bold.ttf'),
+    ]);
+    if (!regularRes.ok || !boldRes.ok) return null;
+    const [regularBuf, boldBuf] = await Promise.all([regularRes.arrayBuffer(), boldRes.arrayBuffer()]);
+    return {
+      regular: arrayBufferToBase64(regularBuf),
+      bold: arrayBufferToBase64(boldBuf),
+    };
+  } catch {
+    return null;
+  }
+}
 
 const BRAND = {
   navy: [24, 21, 76] as [number, number, number],
@@ -65,20 +117,20 @@ export function invoicePdfFilename(invoiceNumber: string | null, fallback: strin
  */
 function drawMetadataRow(
   doc: jsPDF,
-  opts: { xRight: number; y: number; colWidth: number; label: string; value: string; big?: boolean },
+  opts: { xRight: number; y: number; colWidth: number; label: string; value: string; big?: boolean; font: string },
 ): number {
-  const { xRight, y, colWidth, label, value, big } = opts;
+  const { xRight, y, colWidth, label, value, big, font } = opts;
   const labelSize = 7.5;
   const valueSize = big ? 13 : 9;
   const labelLineH = labelSize * 0.42;
   const valueLineH = valueSize * 0.42;
 
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(font, 'bold');
   doc.setFontSize(labelSize);
   doc.setTextColor(...BRAND.muted);
   doc.text(label.toUpperCase(), xRight, y, { align: 'right' });
 
-  doc.setFont('helvetica', big ? 'bold' : 'normal');
+  doc.setFont(font, big ? 'bold' : 'normal');
   doc.setFontSize(valueSize);
   doc.setTextColor(...(big ? BRAND.coral : BRAND.navy));
 
@@ -99,11 +151,35 @@ export type InvoicePdfInput = {
    *  screen/print/email. Passed in (not fetched here) so this module stays a
    *  pure builder with no network/DOM access of its own. */
   logoDataUrl?: string | null;
+  /** Base64 Satoshi Regular/Bold TTF from loadSatoshiPdfFonts(). Passed in
+   *  (not fetched here) for the same reason as logoDataUrl — this module
+   *  stays a pure, synchronous builder. Falls back to Helvetica if omitted
+   *  or null (font fetch failed). */
+  satoshiFonts?: SatoshiPdfFonts | null;
 };
 
 /** Builds the finished jsPDF document. Caller decides save vs. blob vs. preview. */
-export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: InvoicePdfInput): jsPDF {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
+export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl, satoshiFonts }: InvoicePdfInput): jsPDF {
+  // putOnlyUsedFonts subsets any embedded font to only the glyphs this
+  // specific invoice actually prints (see file header re: font-license embedding).
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true, putOnlyUsedFonts: true });
+
+  // Embed Satoshi if the caller successfully loaded it; otherwise every
+  // doc.setFont(FONT, ...) call below transparently uses jsPDF's built-in
+  // Helvetica instead. This is the ONLY place either font is registered.
+  let FONT = 'helvetica';
+  if (satoshiFonts) {
+    try {
+      doc.addFileToVFS('Satoshi-Regular.ttf', satoshiFonts.regular);
+      doc.addFont('Satoshi-Regular.ttf', 'Satoshi', 'normal');
+      doc.addFileToVFS('Satoshi-Bold.ttf', satoshiFonts.bold);
+      doc.addFont('Satoshi-Bold.ttf', 'Satoshi', 'bold');
+      FONT = 'Satoshi';
+    } catch {
+      FONT = 'helvetica';
+    }
+  }
+
   const sub = vm.subOrder;
 
   // ── Header (page 1 only) ──
@@ -115,20 +191,20 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: Invoice
       /* fall through to text wordmark if the image can't be decoded */
     }
   }
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(FONT, 'bold');
   doc.setFontSize(8);
   doc.setTextColor(...BRAND.muted);
   doc.text('CHOOSIFY MARKETPLACE', MARGIN, y + 16);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(FONT, 'normal');
   doc.setFontSize(8);
   doc.text('choosify.bd', MARGIN, y + 21);
   doc.text('support@choosify.bd', MARGIN, y + 25);
 
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(FONT, 'bold');
   doc.setFontSize(8);
   doc.setTextColor(...BRAND.navy);
   doc.text('BUSINESS ADDRESS', PAGE_W - MARGIN, y, { align: 'right' });
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(FONT, 'normal');
   doc.text('Uttara, Dhaka - 1230, Bangladesh', PAGE_W - MARGIN, y + 5, { align: 'right' });
   doc.setTextColor(...BRAND.muted);
   doc.text('Trade License: TR-2026-REG-1099', PAGE_W - MARGIN, y + 9.5, { align: 'right' });
@@ -139,14 +215,14 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: Invoice
   y += 8;
 
   // ── Billed To (left column) / Invoice meta (right column) ──
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(FONT, 'bold');
   doc.setFontSize(8);
   doc.setTextColor(...BRAND.muted);
   doc.text('BILLED TO', MARGIN, y);
   doc.setFontSize(11);
   doc.setTextColor(...BRAND.navy);
   doc.text(order.shipping?.fullName || 'Buyer', MARGIN, y + 6);
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(FONT, 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(60, 60, 70);
   const addrLine = `${order.shipping?.address || '—'}${order.shipping?.region ? `, ${order.shipping.region}` : ''}`;
@@ -161,10 +237,10 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: Invoice
   const metaX = PAGE_W - MARGIN; // right edge every metadata value aligns to
   const metaColWidth = 85; // reserved width for label+value wrapping
   let my = y;
-  my = drawMetadataRow(doc, { xRight: metaX, y: my, colWidth: metaColWidth, label: 'Invoice Number', value: vm.invoiceNumber ? `#${vm.invoiceNumber}` : '—' });
-  my = drawMetadataRow(doc, { xRight: metaX, y: my, colWidth: metaColWidth, label: 'Invoice Amount', value: formatPdfMoney(vm.grandTotal), big: true });
-  my = drawMetadataRow(doc, { xRight: metaX, y: my, colWidth: metaColWidth, label: 'Order Reference', value: order.orderId });
-  my = drawMetadataRow(doc, { xRight: metaX, y: my, colWidth: metaColWidth, label: 'Invoice Date', value: invoiceDate });
+  my = drawMetadataRow(doc, { xRight: metaX, y: my, colWidth: metaColWidth, label: 'Invoice Number', value: vm.invoiceNumber ? `#${vm.invoiceNumber}` : '—', font: FONT });
+  my = drawMetadataRow(doc, { xRight: metaX, y: my, colWidth: metaColWidth, label: 'Invoice Amount', value: formatPdfMoney(vm.grandTotal), big: true, font: FONT });
+  my = drawMetadataRow(doc, { xRight: metaX, y: my, colWidth: metaColWidth, label: 'Order Reference', value: order.orderId, font: FONT });
+  my = drawMetadataRow(doc, { xRight: metaX, y: my, colWidth: metaColWidth, label: 'Invoice Date', value: invoiceDate, font: FONT });
 
   // Both columns may have grown to different heights (a long "Billed To"
   // address vs. a long Order Reference) — the divider goes below whichever is
@@ -180,7 +256,7 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: Invoice
   const soldByLabel = 'SOLD BY';
   const sellerName = sub?.sellerBusinessName || 'Choosify Marketplace Seller';
   const chipText = 'MARKETPLACE SELLER';
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(FONT, 'bold');
   doc.setFontSize(7);
   const chipWidth = doc.getTextWidth(chipText) + 8;
   const sellerNameMaxWidth = PAGE_W - MARGIN * 2 - 8 - chipWidth - 6; // leave room for the chip
@@ -190,15 +266,15 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: Invoice
 
   doc.setFillColor(248, 248, 248);
   doc.roundedRect(MARGIN, y, PAGE_W - MARGIN * 2, stripH, 1.5, 1.5, 'F');
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(FONT, 'bold');
   doc.setFontSize(7);
   doc.setTextColor(...BRAND.muted);
   doc.text(soldByLabel, MARGIN + 4, y + 4.5);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(FONT, 'bold');
   doc.setFontSize(9.5);
   doc.setTextColor(30, 30, 40);
   sellerNameLines.forEach((line, i) => doc.text(line, MARGIN + 4, y + 9.5 + i * 4.2));
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(FONT, 'bold');
   doc.setFontSize(7);
   doc.setTextColor(...BRAND.orange);
   doc.text(chipText, PAGE_W - MARGIN - 4, y + 7.5, { align: 'right' });
@@ -220,7 +296,7 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: Invoice
       formatPdfMoney(line.unitPrice),
       formatPdfMoney(line.lineTotal),
     ]),
-    styles: { font: 'helvetica', fontSize: 8.5, cellPadding: 3, textColor: [30, 30, 40], lineColor: BRAND.hairline, lineWidth: 0.1, overflow: 'linebreak' },
+    styles: { font: FONT, fontSize: 8.5, cellPadding: 3, textColor: [30, 30, 40], lineColor: BRAND.hairline, lineWidth: 0.1, overflow: 'linebreak' },
     headStyles: { fillColor: [255, 255, 255], textColor: BRAND.muted, fontStyle: 'bold', fontSize: 7.5, lineWidth: { bottom: 0.3 }, lineColor: [200, 200, 210] },
     columnStyles: {
       0: { cellWidth: 'auto' },
@@ -234,7 +310,7 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: Invoice
       // branding/address stays page-1-only to avoid wasting space. This is
       // NOT a page-number renderer — see the single canonical one below.
       if (data.pageNumber > 1) {
-        doc.setFont('helvetica', 'bold');
+        doc.setFont(FONT, 'bold');
         doc.setFontSize(8);
         doc.setTextColor(...BRAND.muted);
         doc.text(`Invoice #${vm.invoiceNumber || '—'} - Order ${order.orderId}`, MARGIN, 10);
@@ -256,7 +332,7 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: Invoice
 
   const sumX = PAGE_W - MARGIN;
   const sumLabelX = sumX - 60; // widened so 7-8 digit totals never crowd the label
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(FONT, 'normal');
   doc.setFontSize(9);
   doc.setTextColor(...BRAND.muted);
   doc.text('Subtotal:', sumLabelX, sy);
@@ -271,7 +347,7 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: Invoice
   doc.setDrawColor(...BRAND.hairline);
   doc.line(sumLabelX, sy, sumX, sy);
   sy += 6;
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(FONT, 'bold');
   doc.setFontSize(11);
   doc.setTextColor(...BRAND.coral);
   doc.text('Total:', sumLabelX, sy);
@@ -279,14 +355,14 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: Invoice
   sy += 8;
 
   doc.setFillColor(...BRAND.navy);
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(FONT, 'bold');
   doc.setFontSize(7);
   const badgeW = doc.getTextWidth(vm.paymentMethodLabel.toUpperCase()) + 8;
   doc.roundedRect(sumX - badgeW, sy - 3.5, badgeW, 6, 1, 1, 'F');
   doc.setTextColor(255, 255, 255);
   doc.text(vm.paymentMethodLabel.toUpperCase(), sumX - badgeW / 2, sy, { align: 'center' });
   sy += 6.5; // fixed gap so the badge and the status line below never touch
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(FONT, 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(...BRAND.muted);
   const statusLines = doc.splitTextToSize(vm.paymentStatusLabel, 90) as string[];
@@ -297,12 +373,12 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: Invoice
   doc.setLineWidth(0.8);
   doc.line(MARGIN, sy, PAGE_W - MARGIN, sy);
   sy += 7;
-  doc.setFont('helvetica', 'bold');
+  doc.setFont(FONT, 'bold');
   doc.setFontSize(12);
   doc.setTextColor(...BRAND.navy);
   doc.text('Thanks for shopping with Choosify.', MARGIN, sy);
   sy += 5;
-  doc.setFont('helvetica', 'normal');
+  doc.setFont(FONT, 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor(...BRAND.muted);
   doc.text('This is a system-generated invoice - no signature required. Powered by Choosify.bd', MARGIN, sy);
@@ -314,7 +390,7 @@ export function buildInvoicePdf({ vm, order, invoiceDate, logoDataUrl }: Invoice
   const totalPages = doc.getNumberOfPages();
   for (let p = 1; p <= totalPages; p++) {
     doc.setPage(p);
-    doc.setFont('helvetica', 'normal');
+    doc.setFont(FONT, 'normal');
     doc.setFontSize(7.5);
     doc.setTextColor(...BRAND.muted);
     doc.text(`Page ${p} of ${totalPages}`, PAGE_W - MARGIN, pageH - 8, { align: 'right' });

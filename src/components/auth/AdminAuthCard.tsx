@@ -24,7 +24,7 @@ export function AdminAuthCard({
   return (
     <div
       className="choosify-dark-surface relative flex min-h-screen items-center justify-center overflow-hidden p-6"
-      style={{ fontFamily: "'DM Sans', system-ui, sans-serif" }}
+      style={{ fontFamily: 'var(--font-sans)' }}
     >
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
         <div className="absolute -left-[12%] -top-[10%] h-[560px] w-[560px] rounded-full bg-[#5A1230]/25 blur-[170px]" />

@@ -46,7 +46,7 @@
      that Preflight's `body{font-family:inherit}` already neutralizes).
      Satoshi (src/styles/satoshi.css, imported globally) replaces DM Sans as
      the canonical face; DM Sans stays only as the fallback. */
-  --cms-font-sans: 'Satoshi', 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --cms-font-sans: 'Satoshi', 'Noto Sans Bengali', 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --cms-font-display: 'Outfit', var(--cms-font-sans);
 
   --cms-topbar-height: 64px;

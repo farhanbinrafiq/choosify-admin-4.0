@@ -379,7 +379,7 @@ export default function BrandsStudioList() {
             <span className="bg-app-accent/15 text-app-accent p-1.5 rounded-lg border border-app-accent/20">
               <Globe className="w-5 h-5 text-app-accent" />
             </span>
-            <h1 className="text-[20px] font-extrabold tracking-tight text-app-text-primary" style={{ fontFamily: "'Outfit', system-ui, sans-serif" }}>
+            <h1 className="text-[20px] font-extrabold tracking-tight text-app-text-primary" style={{ fontFamily: 'var(--font-heading)' }}>
               My Brand Studio (Visual Brand Profile CMS)
             </h1>
           </div>

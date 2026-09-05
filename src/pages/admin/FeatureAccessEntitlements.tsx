@@ -739,7 +739,7 @@ export default function FeatureAccessEntitlementsPage() {
         style={{
           padding: '0 0 24px',
           color: '#111827',
-          fontFamily: '"DM Sans", system-ui, sans-serif',
+          fontFamily: 'var(--font-sans)',
         }}
       >
         {toast && (
