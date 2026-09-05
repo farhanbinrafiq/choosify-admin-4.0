@@ -5111,7 +5111,7 @@ async function attachScopedReviews(ownerUserId, rows) {
 }
 async function enrichCustomerIdentities(rows) {
   if (!rows.length) return rows;
-  const ids = [...new Set(rows.map((r) => r.id).filter(Boolean))];
+  const ids = [...new Set(rows.map((r) => r.id).filter((id) => Boolean(id) && UUID_RE.test(id)))];
   if (!ids.length) return rows;
   let userRows = [];
   try {
@@ -5119,7 +5119,8 @@ async function enrichCustomerIdentities(rows) {
       id: users.id,
       email: users.email,
       displayName: users.displayName,
-      choosifyUserId: users.choosifyUserId
+      choosifyUserId: users.choosifyUserId,
+      avatarUrl: users.avatarUrl
     }).from(users).where(inArray(users.id, ids));
   } catch {
     return rows.map((r) => ({ ...r, choosifyUserId: r.choosifyUserId ?? null, reviews: r.reviews || [] }));
@@ -5132,6 +5133,7 @@ async function enrichCustomerIdentities(rows) {
       name: (u?.displayName || r.name || "").trim() || r.name,
       email: (u?.email || r.email || "").trim(),
       choosifyUserId: u?.choosifyUserId || null,
+      avatarUrl: u?.avatarUrl || null,
       reviews: r.reviews || []
     };
   });
@@ -5149,7 +5151,7 @@ async function getMyCustomerForOwner(ownerUserId, customerId, opts) {
   const rows = await listMyCustomersForOwner(ownerUserId, opts);
   return rows.find((r) => r.id === customerId) || null;
 }
-var QUALIFYING_BOOKING_STATUSES;
+var QUALIFYING_BOOKING_STATUSES, UUID_RE;
 var init_sellerWorkspace = __esm({
   "server/catalog/sellerWorkspace.ts"() {
     init_catalogStore();
@@ -5164,6 +5166,7 @@ var init_sellerWorkspace = __esm({
       "paid",
       "countered"
     ]);
+    UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   }
 });
 
@@ -34001,7 +34004,8 @@ authRouter.get("/auth/users/search", ...requireAdmin3, async (req, res) => {
         email: user.email,
         displayName: user.displayName,
         role: user.role,
-        choosifyUserId: user.choosifyUserId
+        choosifyUserId: user.choosifyUserId,
+        avatarUrl: user.avatarUrl
       }
     });
   } catch (error2) {
@@ -34015,7 +34019,8 @@ authRouter.get("/auth/users/directory", ...requireAdmin3, async (_req, res) => {
       email: users.email,
       displayName: users.displayName,
       role: users.role,
-      choosifyUserId: users.choosifyUserId
+      choosifyUserId: users.choosifyUserId,
+      avatarUrl: users.avatarUrl
     }).from(users);
     res.json({ success: true, data: rows });
   } catch (error2) {
@@ -34051,6 +34056,7 @@ authRouter.get("/auth/users/:userId", ...requireAdmin3, async (req, res) => {
         displayName: user.displayName,
         role: user.role,
         choosifyUserId: user.choosifyUserId,
+        avatarUrl: user.avatarUrl,
         createdAt: user.createdAt,
         ...status
       }

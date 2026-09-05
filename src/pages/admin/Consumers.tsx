@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useContact } from '../../contexts/ContactInteractionContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { authApi, UserDirectoryEntry } from '../../services/authApi';
+import { Avatar } from '../../components/shared/Avatar';
 import {
   Search,
   MoreVertical,
@@ -87,14 +88,6 @@ function roleGroup(role: string): ViewRole | 'Seller' | 'Other' {
   if (STAFF_ROLES.has(r)) return 'Admin';
   return 'Other';
 }
-
-const initialsFor = (name: string) =>
-  name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() || '')
-    .join('') || 'U';
 
 const ACCENT = 'var(--cms-accent)';
 const ACCENT_WASH = 'color-mix(in srgb, var(--cms-accent) 10%, transparent)';
@@ -292,6 +285,13 @@ export default function ConsumersPage() {
     () => finalFiltered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
     [finalFiltered, currentPage],
   );
+
+  // An auth/network failure must never be visually indistinguishable from
+  // "the directory genuinely has zero matching accounts" — a failed fetch
+  // leaves `directory` at its empty initial value, so counts/rows built
+  // from it look identical to a true empty state unless callers check this
+  // too. Loading and error both count as "we don't actually know yet".
+  const dataUnavailable = usersLoading || Boolean(usersError);
 
   // Canonical universal-profile route the app already uses internally:
   // inspectionUniversalPath('consumer') === '/admin/consumers/:id'. Navigate
@@ -512,17 +512,17 @@ export default function ConsumersPage() {
       {/* ── Real directory-derived stat cards (reference card chrome) ── */}
       <div style={S.statGrid}>
         <div style={{ ...S.statCard, borderLeft: '4px solid #6C4CFF' }}>
-          <div style={S.statNum}>{usersLoading ? '—' : roleCounts[currentViewRole]}</div>
+          <div style={S.statNum}>{dataUnavailable ? '—' : roleCounts[currentViewRole]}</div>
           <div style={S.statLabel}>Registered {pillRoleLabel}</div>
           <div style={S.statSub}>{registeredSub}</div>
         </div>
         <div style={{ ...S.statCard, borderLeft: '4px solid #DC2626' }}>
-          <div style={S.statNum}>{usersLoading ? '—' : roleCounts.missingCfId}</div>
+          <div style={S.statNum}>{dataUnavailable ? '—' : roleCounts.missingCfId}</div>
           <div style={S.statLabel}>Missing Choosify ID</div>
           <div style={S.statSub}>Accounts without a CF-ID</div>
         </div>
         <div style={{ ...S.statCard, borderLeft: '4px solid #2563EB' }}>
-          <div style={S.statNum}>{usersLoading ? '—' : finalFiltered.length}</div>
+          <div style={S.statNum}>{dataUnavailable ? '—' : finalFiltered.length}</div>
           <div style={S.statLabel}>Matching current filter</div>
           <div style={S.statSub}>Search + role tab applied</div>
         </div>
@@ -586,6 +586,12 @@ export default function ConsumersPage() {
                     Loading registry…
                   </td>
                 </tr>
+              ) : usersError && directory.length === 0 ? (
+                <tr>
+                  <td colSpan={9} style={{ ...S.tdMuted, textAlign: 'center', padding: '40px 16px', fontStyle: 'italic' }}>
+                    Registry could not be loaded — see the error above and retry. This is not a report of zero accounts.
+                  </td>
+                </tr>
               ) : pagedRows.length === 0 ? (
                 <tr>
                   <td colSpan={9} style={{ ...S.tdMuted, textAlign: 'center', padding: '40px 16px', fontStyle: 'italic' }}>
@@ -603,7 +609,7 @@ export default function ConsumersPage() {
                       <td style={S.tdMuted}>{sl}</td>
                       <td style={S.td}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <span style={S.avatar}>{initialsFor(u.displayName || u.email)}</span>
+                          <Avatar src={u.avatarUrl} name={u.displayName || u.email} size={32} />
                           <div style={{ minWidth: 0 }}>
                             <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                               {u.displayName || '(no name on file)'}

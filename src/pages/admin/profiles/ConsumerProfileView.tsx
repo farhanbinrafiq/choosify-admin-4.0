@@ -6,6 +6,8 @@ import { useImpersonation } from '../../../contexts/ImpersonationContext';
 import { Loader2, AlertTriangle, Phone, Mail, ArrowLeft, LogIn } from 'lucide-react';
 import { AdminMessageUserButton } from '../../../components/messaging/AdminMessageUserButton';
 import { ProfileMessagePopup } from '../../../components/messaging/ProfileMessagePopup';
+import { authApi } from '../../../services/authApi';
+import { Avatar } from '../../../components/shared/Avatar';
 
 // ============================================================================
 // Consumer Profile — the canonical /admin/consumers/:id surface.
@@ -41,6 +43,7 @@ interface AccountDetail {
   displayName: string;
   role: string;
   choosifyUserId?: string | null;
+  avatarUrl?: string | null;
   createdAt?: string;
   profileStatus?: string;
   identityVerified?: boolean;
@@ -92,13 +95,14 @@ export default function ConsumerProfileView() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('choosify_auth_token');
-      const res = await fetch(`/api/v1/auth/users/${encodeURIComponent(uid)}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const body = (await res.json().catch(() => ({}))) as { data?: AccountDetail; error?: string };
-      if (!res.ok || !body.data) throw new Error(body.error || `Request failed (${res.status})`);
-      setAccount(body.data);
+      // Was a raw inline fetch with a hand-read localStorage token and no
+      // 401 retry — the same reliability gap fixed in authApi.ts's request()
+      // (a long-lived tab's expired access token surfaced as a raw error
+      // instead of silently refreshing). Routed through the canonical
+      // client so this page gets the same silent-refresh-on-401 behavior as
+      // every other admin surface, plus avatarUrl.
+      const data = await authApi.getUserDetail(uid);
+      setAccount(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load account detail.');
     } finally {
@@ -235,7 +239,7 @@ export default function ConsumerProfileView() {
           <div style={S.card}>
             <div style={S.cover}><span style={S.coverLabel}>CONSUMER</span></div>
             <div style={{ padding: 16, position: 'relative' }}>
-              <div style={S.avatar}>{initialsFor(name)}</div>
+              <Avatar src={account?.avatarUrl} name={name} size={56} style={S.avatar} />
               <div style={S.pName}>{name}</div>
               <div style={S.pEmail}>{email}</div>
 

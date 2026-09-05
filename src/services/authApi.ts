@@ -1,18 +1,38 @@
+import { getStoredAccessToken, refreshAccessToken } from './authRefresh';
+
 const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string | undefined) || '/api/v1';
-const AUTH_TOKEN_KEY = 'choosify_auth_token';
 
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
-async function request<T>(path: string, method: HttpMethod = 'GET'): Promise<T> {
+function doFetch(path: string, method: HttpMethod, token: string | null) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  const token = localStorage.getItem(AUTH_TOKEN_KEY);
   if (token) {
     headers.Authorization = `Bearer ${token}`;
   }
+  return fetch(`${API_BASE}${path}`, { method, headers });
+}
 
-  const response = await fetch(`${API_BASE}${path}`, { method, headers });
+async function request<T>(path: string, method: HttpMethod = 'GET'): Promise<T> {
+  // This module used to read its own token straight from localStorage and
+  // never retried a 401 — every other service module (operationsApi.ts,
+  // catalogApi.ts, mediaUpload.ts) already goes through authRefresh.ts's
+  // shared silent-refresh-on-401 flow, so a long-lived dashboard tab's
+  // expired access token surfaced here as a raw "Expired token" error
+  // (misread as "Consumer Management has no data") while every other admin
+  // page transparently refreshed and kept working. Aligned to the same
+  // canonical pattern — no new refresh mechanism, no special-cased retry.
+  const token = getStoredAccessToken();
+  let response = await doFetch(path, method, token);
+
+  if (response.status === 401 && token) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      response = await doFetch(path, method, refreshed);
+    }
+  }
+
   const body = (await response.json().catch(() => ({}))) as { success?: boolean; data?: T; error?: string };
   if (!response.ok || body.success === false) {
     throw new Error(body.error || `Request failed (${response.status})`);
@@ -27,6 +47,10 @@ export interface UserDirectoryEntry {
   displayName: string;
   role: string;
   choosifyUserId?: string | null;
+  /** Real uploaded profile photo URL, or null/undefined if none — never a
+   *  logo/placeholder. Directory UIs must derive their own initials/neutral
+   *  placeholder when this is absent, not persist or expect one here. */
+  avatarUrl?: string | null;
 }
 
 /**
@@ -60,6 +84,7 @@ export interface UserSearchResult {
   displayName: string;
   role: string;
   choosifyUserId: string;
+  avatarUrl?: string | null;
 }
 
 export const authApi = {

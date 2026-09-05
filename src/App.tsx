@@ -79,6 +79,7 @@ const AdsSponsorsPage = lazy(() => import('./pages/admin/AdsSponsors'));
 const SponsoredPromotionsPage = lazy(() => import('./pages/admin/SponsoredPromotions'));
 import OrdersOverview from './pages/admin/OrdersOverview';
 const SellerMyCustomers = lazy(() => import('./pages/admin/SellerMyCustomers'));
+const SellerCustomerProfileView = lazy(() => import('./pages/admin/profiles/SellerCustomerProfileView'));
 const InvoiceView = lazy(() => import('./pages/admin/InvoiceView').then(m => ({ default: m.InvoiceView })));
 const OperationsInvoiceView = lazy(() => import('./pages/admin/OperationsInvoiceView').then(m => ({ default: m.OperationsInvoiceView })));
 
@@ -1109,6 +1110,28 @@ export default function App() {
                     <AdminWorkspaceLayout>
                       <Suspense fallback={routeSuspenseFallback}>
                         <SellerMyCustomers />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            {/*
+              Seller Customer Profile — the "View" destination from
+              /admin/customers, replacing the old in-page Modal. Same
+              RoleGuard prefix match as the list route (canAccessPath is
+              prefix-based, see lib/rbac.ts), same owner-scoped
+              GET .../customers/:id the modal already used — presentation
+              only, no new permission surface.
+            */}
+            <Route
+              path="/admin/customers/:id"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <SellerCustomerProfileView />
                       </Suspense>
                     </AdminWorkspaceLayout>
                   </RoleGuard>

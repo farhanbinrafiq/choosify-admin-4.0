@@ -1929,6 +1929,7 @@ authRouter.get('/auth/users/search', ...requireAdmin, async (req, res) => {
         displayName: user.displayName,
         role: user.role,
         choosifyUserId: user.choosifyUserId,
+        avatarUrl: user.avatarUrl,
       },
     });
   } catch (error) {
@@ -1946,6 +1947,7 @@ authRouter.get('/auth/users/directory', ...requireAdmin, async (_req, res) => {
         displayName: users.displayName,
         role: users.role,
         choosifyUserId: users.choosifyUserId,
+        avatarUrl: users.avatarUrl,
       })
       .from(users);
     res.json({ success: true, data: rows });
@@ -1984,6 +1986,7 @@ authRouter.get('/auth/users/:userId', ...requireAdmin, async (req, res) => {
         displayName: user.displayName,
         role: user.role,
         choosifyUserId: user.choosifyUserId,
+        avatarUrl: user.avatarUrl,
         createdAt: user.createdAt,
         ...status,
       },

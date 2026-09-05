@@ -140,6 +140,8 @@ export type SellerCustomerRow = {
   email: string;
   /** Authoritative Choosify User ID (CF-#####). */
   choosifyUserId: string | null;
+  /** Real uploaded profile photo URL, or null — never a logo/placeholder. */
+  avatarUrl?: string | null;
   segment: string;
   totalOrders: number;
   totalSpend: number;
@@ -415,9 +417,20 @@ export async function attachScopedReviews(
 }
 
 /** Enrich name/email/choosifyUserId from authoritative users table. Never expose phone. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function enrichCustomerIdentities(rows: SellerCustomerRow[]): Promise<SellerCustomerRow[]> {
   if (!rows.length) return rows;
-  const ids = [...new Set(rows.map((r) => r.id).filter(Boolean))];
+  // Some rows are synthetic pending-claim buyers (id like
+  // "pending:claim-<ts>-<rand>") that never correspond to a real `users`
+  // row. Passing a non-UUID string into `inArray(users.id, ids)` (a UUID
+  // column) throws a Postgres type-cast error for the WHOLE batched query —
+  // silently degrading every OTHER, real customer in the same list back to
+  // unenriched placeholder name/email/CF-ID/avatar (via the catch-all
+  // fallback below) because of one unrelated row. Filter to real UUIDs
+  // before querying; non-UUID rows simply keep their existing placeholder
+  // fields, same as if no match had been found for them individually.
+  const ids = [...new Set(rows.map((r) => r.id).filter((id) => Boolean(id) && UUID_RE.test(id)))];
   if (!ids.length) return rows;
 
   let userRows: Array<{
@@ -425,6 +438,7 @@ export async function enrichCustomerIdentities(rows: SellerCustomerRow[]): Promi
     email: string;
     displayName: string;
     choosifyUserId: string | null;
+    avatarUrl: string | null;
   }> = [];
   try {
     userRows = await db
@@ -433,6 +447,7 @@ export async function enrichCustomerIdentities(rows: SellerCustomerRow[]): Promi
         email: users.email,
         displayName: users.displayName,
         choosifyUserId: users.choosifyUserId,
+        avatarUrl: users.avatarUrl,
       })
       .from(users)
       .where(inArray(users.id, ids));
@@ -448,6 +463,7 @@ export async function enrichCustomerIdentities(rows: SellerCustomerRow[]): Promi
       name: (u?.displayName || r.name || '').trim() || r.name,
       email: (u?.email || r.email || '').trim(),
       choosifyUserId: u?.choosifyUserId || null,
+      avatarUrl: u?.avatarUrl || null,
       reviews: r.reviews || [],
     };
   });

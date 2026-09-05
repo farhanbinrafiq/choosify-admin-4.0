@@ -137,6 +137,8 @@ export interface WorkspaceCustomerRow {
   name: string;
   email: string;
   choosifyUserId: string | null;
+  /** Real uploaded profile photo URL, or null/undefined — never a logo. */
+  avatarUrl?: string | null;
   segment: string;
   totalOrders: number;
   totalSpend: number;
