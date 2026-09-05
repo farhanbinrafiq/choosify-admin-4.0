@@ -257,8 +257,24 @@ export async function reserveInventoryQuantity(input: {
   return withInventoryLock<ReserveInventoryResult>(key, async () => {
     const existing = await getInventoryRecord(input.productId, input.variantId);
     if (!existing) {
-      const product = await catalogStore.getProduct(input.productId);
-      const seedQty = Math.max(0, Math.floor(product?.stock ?? 0));
+      // Seed source depends on whether this is a variant-scoped reservation.
+      // A variant's own configured stock (set via Product Studio, which
+      // already creates its inventory record eagerly) is the only source of
+      // truth for THAT combination — falling back to the parent product's
+      // stock here would let a candidate/generated combination the seller
+      // never gave a stock value borrow the base product's stock and become
+      // silently purchasable. Absent that, a variant defaults to 0 (never
+      // sellable until the seller sets a real stock number), while a
+      // non-variant product keeps seeding from product.stock unchanged.
+      let seedQty: number;
+      if (input.variantId) {
+        const detail = await catalogStore.getProductDetail(input.productId);
+        const variant = detail?.productVariants?.find((v) => v.id === input.variantId);
+        seedQty = Math.max(0, Math.floor(variant?.stock ?? 0));
+      } else {
+        const product = await catalogStore.getProduct(input.productId);
+        seedQty = Math.max(0, Math.floor(product?.stock ?? 0));
+      }
       if (input.quantity > seedQty) {
         return { ok: false, available: seedQty };
       }

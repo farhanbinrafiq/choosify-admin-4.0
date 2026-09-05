@@ -30,6 +30,7 @@
     "test:product-variants-storefront": "tsx scripts/probe-product-variants-storefront.ts",
     "test:product-variants-inventory": "tsx scripts/probe-product-variants-inventory.ts",
     "test:variant-dimension-reconcile": "tsx scripts/probe-variant-dimension-reconcile.ts",
+    "test:seller-controlled-variants": "tsx scripts/probe-seller-controlled-variants.ts",
     "seed:variant-acceptance": "tsx scripts/seed-variant-acceptance.ts",
     "test:catalog-persist": "tsx scripts/probe-catalog-persistence.ts",
     "test:categories": "tsx scripts/probe-category-schema.ts",

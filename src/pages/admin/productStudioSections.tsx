@@ -237,6 +237,7 @@ export function VariantMatrixEditor({
   const [freeInput, setFreeInput] = useState<Record<string, string>>({});
   const [newDimName, setNewDimName] = useState('');
   const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
+  const [showAddVariant, setShowAddVariant] = useState(false);
 
   const groupFor = (d: SchemaVariantDimension) =>
     optionGroups.find((g) => norm(g.name) === norm(d.name) || norm(g.name) === norm(d.key));
@@ -406,6 +407,35 @@ export function VariantMatrixEditor({
     onChange({ optionGroups, productVariants: next });
   };
 
+  /**
+   * Above this many combinations in one generate/reset action, ask first
+   * instead of just building them. This is a UX/scannability threshold, not
+   * a performance limit — the plain HTML table below isn't virtualized, so a
+   * seller reviewing a few hundred+ unreviewed rows at once stops being able
+   * to actually scan them, which is exactly the "don't assume every possible
+   * combination is real" principle this whole feature protects. Not an
+   * arbitrary hard cap: the seller can always proceed anyway.
+   */
+  const LARGE_COMBINATION_WARNING_THRESHOLD = 50;
+  const [pendingLargeGenerate, setPendingLargeGenerate] = useState<{ count: number; action: 'missing' | 'reset' } | null>(null);
+
+  const requestGenerateMissing = () => {
+    if (!missingCombos.length && !partialRows.length) return;
+    if (missingCombos.length > LARGE_COMBINATION_WARNING_THRESHOLD) {
+      setPendingLargeGenerate({ count: missingCombos.length, action: 'missing' });
+    } else {
+      addMissingCombinations();
+    }
+  };
+  const requestResetToFullMatrix = () => {
+    const count = fullCombos().length;
+    if (count > LARGE_COMBINATION_WARNING_THRESHOLD) {
+      setPendingLargeGenerate({ count, action: 'reset' });
+    } else {
+      resetToFullMatrix();
+    }
+  };
+
   const deleteVariantRow = (id: string) => {
     onChange({ optionGroups, productVariants: productVariants.filter((v) => v.id !== id) });
   };
@@ -416,6 +446,15 @@ export function VariantMatrixEditor({
 
   const saveVariant = (next: ProductVariantRow) => {
     onChange({ optionGroups, productVariants: productVariants.map((v) => (v.id === next.id ? next : v)) });
+  };
+
+  /** Manually add ONE seller-chosen combination — the counterpart to
+   *  "Generate missing combinations" for products where most of the
+   *  mathematically-possible matrix isn't actually sold. Duplicate
+   *  protection (same variantKey) is enforced in the modal before this is
+   *  ever called. */
+  const addVariant = (next: ProductVariantRow) => {
+    onChange({ optionGroups, productVariants: [...productVariants, next] });
   };
 
   /** Bulk-apply one variant's images onto every OTHER variant sharing the same
@@ -590,25 +629,31 @@ export function VariantMatrixEditor({
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <button type="button" onClick={() => setShowAddVariant(true)} disabled={!effectiveDims.length} style={x.accentBtn}>
+          + Add Variant
+        </button>
         <button
           type="button"
-          onClick={addMissingCombinations}
+          onClick={requestGenerateMissing}
           disabled={!missingCombos.length && !partialRows.length}
-          style={x.accentBtn}
+          style={x.ghostBtn}
         >
           {missingCombos.length
-            ? `Generate missing combinations (${missingCombos.length})`
-            : '✓ All combinations created'}
+            ? `Generate candidate combinations (${missingCombos.length})`
+            : '✓ All possible combinations exist'}
         </button>
         {productVariants.length > 0 ? (
-          <button type="button" onClick={resetToFullMatrix} style={x.ghostBtn}>
+          <button type="button" onClick={requestResetToFullMatrix} style={x.ghostBtn}>
             Reset to all combinations
           </button>
         ) : null}
         <span style={x.note}>
-          Choosify builds one variant combination per set of choices. Delete the rows you don't
-          sell (e.g. "12GB only in Black") — a deleted combination stays deleted. Generating only
-          ever fills gaps.
+          Add only the specific combinations you actually sell with <b>+ Add Variant</b> — you never
+          need to create every mathematically possible combination.{' '}
+          <b>Generate candidate combinations</b> instead builds every remaining possibility from your
+          option values so you can review each one and keep or delete it; Choosify never assumes a
+          combination is real just because the values exist. Delete the rows you don't sell (e.g.
+          "12GB only in Black") — a deleted combination stays deleted, generating only ever fills gaps.
           {partialRows.length ? (
             <>
               {' '}
@@ -620,6 +665,47 @@ export function VariantMatrixEditor({
           ) : null}
         </span>
       </div>
+
+      {pendingLargeGenerate ? (
+        <div className="fixed inset-0 z-[290] bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
+            <div className="text-[15px] font-black text-[#111827] mb-2">Generate a lot of combinations?</div>
+            <p className="text-[12.5px] text-[#374151] leading-relaxed mb-5">
+              This will create <b>{pendingLargeGenerate.count.toLocaleString()}</b> possible combinations.
+              You can instead add only the variants you actually sell with <b>+ Add Variant</b>.
+            </p>
+            <div className="flex flex-col sm:flex-row-reverse gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const action = pendingLargeGenerate.action;
+                  setPendingLargeGenerate(null);
+                  if (action === 'missing') addMissingCombinations();
+                  else resetToFullMatrix();
+                }}
+                className="px-4 py-2.5 rounded-xl text-[12px] font-bold text-white hover:opacity-90"
+                style={{ background: ACCENT }}
+              >
+                Generate {pendingLargeGenerate.count.toLocaleString()} combinations
+              </button>
+              <button
+                type="button"
+                onClick={() => { setPendingLargeGenerate(null); setShowAddVariant(true); }}
+                className="px-4 py-2.5 rounded-xl border border-[#E8EDF2] text-[12px] font-bold text-[#374151] hover:bg-[#F9FAFB]"
+              >
+                Add variants manually
+              </button>
+              <button
+                type="button"
+                onClick={() => setPendingLargeGenerate(null)}
+                className="px-4 py-2.5 rounded-xl border border-[#E8EDF2] text-[12px] font-bold text-[#374151] hover:bg-[#F9FAFB]"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {productVariants.length > 0 ? (
         <div style={{ overflowX: 'auto', border: '1px solid #E8EDF2', borderRadius: 10 }}>
@@ -762,10 +848,14 @@ export function VariantMatrixEditor({
         (() => {
           const editing = productVariants.find((v) => v.id === editingVariantId);
           if (!editing) return null;
+          const existingKeys = new Set(
+            productVariants.filter((v) => v.id !== editing.id).map((v) => variantKey(v.options || {})),
+          );
           return (
             <VariantEditModal
               key={editing.id}
               variant={editing}
+              existingKeys={existingKeys}
               dims={effectiveDims}
               isService={isService}
               onSave={(next) => {
@@ -780,6 +870,22 @@ export function VariantMatrixEditor({
             />
           );
         })()
+      ) : null}
+
+      {showAddVariant ? (
+        <VariantEditModal
+          key="new-variant"
+          variant={null}
+          existingKeys={new Set(productVariants.map((v) => variantKey(v.options || {})))}
+          dims={effectiveDims}
+          isService={isService}
+          onSave={(next) => {
+            addVariant(next);
+            setShowAddVariant(false);
+          }}
+          onApplyImagesToMatching={() => {}}
+          onClose={() => setShowAddVariant(false)}
+        />
       ) : null}
     </div>
   );
@@ -798,23 +904,40 @@ export function VariantMatrixEditor({
  */
 function VariantEditModal({
   variant,
+  existingKeys,
   dims,
   isService,
   onSave,
   onApplyImagesToMatching,
   onClose,
 }: {
-  variant: ProductVariantRow;
+  /** null = creating a brand-new combination; a row = editing that existing one. */
+  variant: ProductVariantRow | null;
+  /** variantKey() of every OTHER variant already on this product — used to
+   *  block creating/renaming into an exact duplicate combination. */
+  existingKeys: Set<string>;
   dims: Array<{ key: string; name: string; values: string[]; custom: boolean }>;
   isService: boolean;
   onSave: (next: ProductVariantRow) => void;
   onApplyImagesToMatching: (draft: ProductVariantRow, dimName: string) => void;
   onClose: () => void;
 }) {
-  const [draft, setDraft] = useState<ProductVariantRow>(variant);
+  const isCreate = variant === null;
+  const [draft, setDraft] = useState<ProductVariantRow>(
+    () =>
+      variant ?? {
+        id: `var-${Date.now()}`,
+        sku: '',
+        options: Object.fromEntries(dims.filter((d) => d.values.length > 0).map((d) => [d.name, d.values[0]])),
+        enabled: true,
+        status: 'active',
+      },
+  );
   const [dirty, setDirty] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [imgUrlInput, setImgUrlInput] = useState('');
+
+  const duplicateOfExisting = existingKeys.has(variantKey(draft.options || {}));
 
   const patch = (p: Partial<ProductVariantRow>) => {
     setDraft((d) => ({ ...d, ...p }));
@@ -858,7 +981,9 @@ function VariantEditModal({
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
         <div className="shrink-0 border-b border-[#E8EDF2] px-5 sm:px-6 py-4 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-[10px] font-black uppercase tracking-wide text-[#9CA3AF] mb-0.5">Edit Variant</div>
+            <div className="text-[10px] font-black uppercase tracking-wide text-[#9CA3AF] mb-0.5">
+              {isCreate ? 'Add Variant' : 'Edit Variant'}
+            </div>
             <div className="text-[15px] sm:text-[16px] font-black text-[#111827] truncate">{combinationLabel}</div>
           </div>
           <button type="button" onClick={requestClose} className="shrink-0 text-[#9CA3AF] hover:text-[#111827]">
@@ -870,21 +995,47 @@ function VariantEditModal({
           {/* Combination */}
           <section>
             <div className="text-[10.5px] font-extrabold uppercase tracking-wide text-[#6B7280] mb-2">Combination</div>
-            <div className="flex flex-wrap gap-2">
-              {dims.map((d) => (
-                <span
-                  key={d.key}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] text-[12px] font-bold text-[#111827]"
-                >
-                  <span className="text-[#9CA3AF] font-semibold">{d.name}:</span> {draft.options?.[d.name] ?? '—'}
-                </span>
-              ))}
-            </div>
-            <p className="text-[11px] text-[#6B7280] mt-2 leading-relaxed">
-              Read-only — changing which options a variant represents after it's created could collide
-              with another combination or orphan its SKU/inventory record. To sell a different
-              combination, delete this row and generate it from the matrix.
-            </p>
+            {isCreate ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {dims.map((d) => (
+                  <div key={d.key}>
+                    <label className="block text-[10px] font-bold text-[#6B7280] mb-1">{d.name}{d.custom ? ' *' : ''}</label>
+                    <select
+                      value={draft.options?.[d.name] ?? ''}
+                      onChange={(e) => patch({ options: { ...draft.options, [d.name]: e.target.value } })}
+                      className="w-full h-10 px-3 rounded-lg border border-[#E8EDF2] text-[12.5px] outline-none focus:border-[#FF5B00] focus:ring-2 focus:ring-[#FF5B00]/20 bg-white"
+                    >
+                      {d.values.map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {dims.map((d) => (
+                  <span
+                    key={d.key}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] text-[12px] font-bold text-[#111827]"
+                  >
+                    <span className="text-[#9CA3AF] font-semibold">{d.name}:</span> {draft.options?.[d.name] ?? '—'}
+                  </span>
+                ))}
+              </div>
+            )}
+            {duplicateOfExisting ? (
+              <p className="text-[11.5px] font-bold text-[#DC2626] mt-2 leading-relaxed">
+                This variant combination already exists. Choose a different set of options, or close
+                this dialog and use Edit on the existing row instead.
+              </p>
+            ) : (
+              <p className="text-[11px] text-[#6B7280] mt-2 leading-relaxed">
+                {isCreate
+                  ? "Pick the exact option values for this one combination — you don't need to create every possible combination, only the ones you actually sell."
+                  : "Read-only — changing which options a variant represents after it's created could collide with another combination or orphan its SKU/inventory record. To sell a different combination, delete this row and add it fresh."}
+              </p>
+            )}
           </section>
 
           {/* SKU */}
@@ -1027,7 +1178,7 @@ function VariantEditModal({
               className="w-full h-9 px-3 rounded-lg border border-[#E8EDF2] text-[11.5px] outline-none focus:border-[#FF5B00] focus:ring-2 focus:ring-[#FF5B00]/20"
             />
 
-            {images.length > 0 && applicableDims.length > 0 ? (
+            {!isCreate && images.length > 0 && applicableDims.length > 0 ? (
               <div className="mt-3 pt-3 border-t border-dashed border-[#E8EDF2]">
                 <div className="text-[11px] font-bold text-[#6B7280] mb-1.5">Apply these images to other variants</div>
                 <div className="flex flex-wrap gap-1.5">
@@ -1067,11 +1218,12 @@ function VariantEditModal({
           </button>
           <button
             type="button"
+            disabled={duplicateOfExisting}
             onClick={() => onSave(draft)}
-            className="px-5 py-2.5 rounded-xl text-[12px] font-bold text-white hover:opacity-90"
+            className="px-5 py-2.5 rounded-xl text-[12px] font-bold text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: ACCENT }}
           >
-            Save Variant
+            {isCreate ? 'Add Variant' : 'Save Variant'}
           </button>
         </div>
       </div>

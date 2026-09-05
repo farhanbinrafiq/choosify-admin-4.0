@@ -915,6 +915,37 @@ const normalizeSizeGuide = (
   return out;
 };
 
+/** Order-independent identity for a variant's option combination — mirrors
+ *  the admin Studio's own variantKey() so "the same combination" means the
+ *  same thing on both sides. */
+const variantCombinationKey = (options: Record<string, string> | undefined): string =>
+  Object.keys(options || {})
+    .sort()
+    .map((k) => `${k}=${(options as Record<string, string>)[k]}`)
+    .join('|');
+
+/**
+ * Rejects two variants that resolve to the exact same option combination —
+ * the server-side backstop for the Studio's own client-side duplicate check.
+ * Two rows sharing a combination would make storefront variant resolution
+ * ambiguous (only the first is ever reachable), which is exactly the silent
+ * merge this canonical model must never allow.
+ */
+const assertNoDuplicateVariantCombinations = (variants: NormalizedVariant[]): void => {
+  const seen = new Map<string, string>();
+  for (const v of variants) {
+    const key = variantCombinationKey(v.options);
+    if (!key) continue; // a row with no options set at all has nothing to collide on
+    const priorId = seen.get(key);
+    if (priorId && priorId !== v.id) {
+      throw new Error(
+        `Duplicate variant combination: "${v.id}" and "${priorId}" both resolve to the same option values.`,
+      );
+    }
+    seen.set(key, v.id);
+  }
+};
+
 export const normalizeProductDetailInput = (
   payload: unknown,
   productId: string,
@@ -922,6 +953,10 @@ export const normalizeProductDetailInput = (
 ): CatalogProductDetail => {
   const raw = (payload ?? {}) as Record<string, unknown>;
   const relatedInfoTypeRaw = toString(raw.relatedInfoType, existing?.relatedInfoType);
+  const productVariants = Array.isArray(raw.productVariants)
+    ? raw.productVariants.map((v, i) => normalizeVariant(v, i)).filter((v): v is NormalizedVariant => v !== null)
+    : (existing?.productVariants ?? []);
+  assertNoDuplicateVariantCombinations(productVariants);
   return {
     productId,
     relatedInfoType:
@@ -1013,11 +1048,7 @@ export const normalizeProductDetailInput = (
     optionGroups: Array.isArray(raw.optionGroups)
       ? (raw.optionGroups as CatalogProductDetail['optionGroups'])
       : existing?.optionGroups ?? [],
-    productVariants: Array.isArray(raw.productVariants)
-      ? raw.productVariants
-          .map((v, i) => normalizeVariant(v, i))
-          .filter((v): v is NormalizedVariant => v !== null)
-      : existing?.productVariants ?? [],
+    productVariants,
     creatorContent: Array.isArray(raw.creatorContent)
       ? (raw.creatorContent as CatalogProductDetail['creatorContent'])
       : existing?.creatorContent ?? [],

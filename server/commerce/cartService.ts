@@ -234,8 +234,22 @@ async function assertInventoryAvailable(
     const all = await listInventoryForProduct(productId);
     record = all.find((r) => !r.variantId) || all[0] || null;
   }
-  const product = await catalogStore.getProduct(productId);
-  const available = record?.availableQuantity ?? product?.stock ?? 0;
+  // No inventory record yet: fall back to the seed source reserveInventoryQuantity
+  // itself will use. For a variant-scoped item that's the VARIANT's own configured
+  // stock (0 if the seller never set one) — never the parent product's stock, which
+  // would let a candidate/generated combination the seller never stocked borrow the
+  // base product's availability and look purchasable here.
+  let available: number;
+  if (record) {
+    available = record.availableQuantity;
+  } else if (variantId) {
+    const detail = await catalogStore.getProductDetail(productId);
+    const variant = detail?.productVariants?.find((v) => v.id === variantId);
+    available = Math.max(0, Math.floor(variant?.stock ?? 0));
+  } else {
+    const product = await catalogStore.getProduct(productId);
+    available = Math.max(0, Math.floor(product?.stock ?? 0));
+  }
   if (quantity > available) {
     throw new CommerceError(`Insufficient stock: requested ${quantity}, available ${available}`);
   }
