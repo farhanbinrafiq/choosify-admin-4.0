@@ -5,6 +5,8 @@ import {
   checkCategorySchemaCompatibility,
   generateCombinations,
   OVERVIEW_PRESET_TITLES,
+  reconcileVariantsForDimensions,
+  variantCoversDimensions,
   variantIsActive,
   variantKey,
   type CategorySchemaCompatibility,
@@ -347,32 +349,59 @@ export function VariantMatrixEditor({
     onChange({ optionGroups: optionGroups.filter((g) => g.id !== groupId), productVariants });
   };
 
-  const fullCombos = () =>
-    generateCombinations(effectiveDims.map((d) => ({ name: d.name, values: d.values })));
+  const effectiveDimSpecs = effectiveDims.map((d) => ({ name: d.name, values: d.values }));
+  const currentDimNames = effectiveDims.map((d) => d.name);
+  const fullCombos = () => generateCombinations(effectiveDimSpecs);
 
-  const presentKeys = new Set(productVariants.map((v) => variantKey(v.options || {})));
+  /**
+   * A row is "partial" when it has at least one populated option but is
+   * missing at least one of the product's CURRENT dimensions — exactly the
+   * situation left behind when a seller adds a new option dimension (e.g.
+   * Color, Fitting) after variants already exist for an earlier one (Size).
+   * A partial row can never be a real sellable combination — the storefront
+   * requires every dimension to resolve one variant — so it's never counted
+   * as "already present" and is superseded once its full completions exist.
+   */
+  const partialRows = productVariants.filter(
+    (v) => Object.keys(v.options || {}).length > 0 && !variantCoversDimensions(v.options, currentDimNames),
+  );
+  const completeRows = productVariants.filter((v) => !partialRows.includes(v));
+  const presentKeys = new Set(completeRows.map((v) => variantKey(v.options || {})));
   const missingCombos = fullCombos().filter((c) => !presentKeys.has(variantKey(c)));
 
-  /** ADD the combinations the seller doesn't have yet — never removes existing
-   *  rows, so a deleted "combination that doesn't exist" stays deleted. */
+  /** ADD the combinations the seller doesn't have yet — never removes an
+   *  already-complete row (so a deleted "combination that doesn't exist"
+   *  stays deleted), but DOES replace a superseded partial row with its full
+   *  completions, seeded from that row's own data (see
+   *  reconcileVariantsForDimensions). */
   const addMissingCombinations = () => {
-    if (!missingCombos.length) return;
-    const added: ProductVariantRow[] = missingCombos.map((options, i) => ({
-      id: `var-${Date.now()}-${i}`,
-      sku: '',
-      options,
-      enabled: true,
-      status: 'active' as const,
-    }));
-    onChange({ optionGroups, productVariants: [...productVariants, ...added] });
+    if (!missingCombos.length && !partialRows.length) return;
+    onChange({
+      optionGroups,
+      productVariants: reconcileVariantsForDimensions(
+        productVariants,
+        effectiveDimSpecs,
+        (i) => `var-${Date.now()}-${i}`,
+      ),
+    });
   };
 
-  /** Escape hatch — rebuild the full cartesian, keeping data for combos that survive. */
+  /** Escape hatch — rebuild the full cartesian, keeping data for combos that
+   *  survive (including seeding new rows from a superseded partial row) and
+   *  DROPPING any row (deleted-and-not-regenerated, or otherwise) that isn't
+   *  part of the current full matrix. */
   const resetToFullMatrix = () => {
-    const byKey = new Map(productVariants.map((v) => [variantKey(v.options || {}), v]));
+    const reconciled = reconcileVariantsForDimensions(
+      productVariants,
+      effectiveDimSpecs,
+      (i) => `var-${Date.now()}-${i}`,
+    );
+    const byKey = new Map(reconciled.map((v) => [variantKey(v.options || {}), v]));
     const next: ProductVariantRow[] = fullCombos().map((options, i) => {
       const prev = byKey.get(variantKey(options));
-      return prev ? { ...prev, options } : { id: `var-${Date.now()}-${i}`, sku: '', options, enabled: true, status: 'active' as const };
+      return prev
+        ? { ...prev, options }
+        : { id: `var-${Date.now()}-${i}`, sku: '', options, enabled: true, status: 'active' as const };
     });
     onChange({ optionGroups, productVariants: next });
   };
@@ -557,7 +586,7 @@ export function VariantMatrixEditor({
         <button
           type="button"
           onClick={addMissingCombinations}
-          disabled={!missingCombos.length}
+          disabled={!missingCombos.length && !partialRows.length}
           style={x.accentBtn}
         >
           {missingCombos.length
@@ -573,6 +602,15 @@ export function VariantMatrixEditor({
           Choosify builds one variant combination per set of choices. Delete the rows you don't
           sell (e.g. "12GB only in Black") — a deleted combination stays deleted. Generating only
           ever fills gaps.
+          {partialRows.length ? (
+            <>
+              {' '}
+              <b>{partialRows.length} row{partialRows.length === 1 ? '' : 's'}</b> {partialRows.length === 1 ? 'was' : 'were'} saved
+              before a newer option was added and {partialRows.length === 1 ? "isn't" : "aren't"} tied
+              to it yet — generating will complete{' '}
+              {partialRows.length === 1 ? 'it' : 'them'}, carrying over its existing price/stock/SKU/images.
+            </>
+          ) : null}
         </span>
       </div>
 
@@ -598,9 +636,23 @@ export function VariantMatrixEditor({
             <tbody>
               {productVariants.map((v) => (
                 <tr key={v.id}>
-                  {effectiveDims.map((d) => (
-                    <td key={d.key} style={{ ...x.cell, fontWeight: 700 }}>{v.options?.[d.name] ?? '—'}</td>
-                  ))}
+                  {effectiveDims.map((d) => {
+                    const val = v.options?.[d.name];
+                    const missing = val == null;
+                    return (
+                      <td
+                        key={d.key}
+                        style={{ ...x.cell, fontWeight: 700, ...(missing ? { color: '#B45309' } : {}) }}
+                        title={
+                          missing
+                            ? 'Not set yet — click "Generate missing combinations" above to complete this row'
+                            : undefined
+                        }
+                      >
+                        {val ?? '—'}
+                      </td>
+                    );
+                  })}
                   <td style={x.cell}>
                     <input value={v.sku ?? ''} onChange={(e) => patchVariant(v.id, { sku: e.target.value })} style={x.smallInput} />
                   </td>

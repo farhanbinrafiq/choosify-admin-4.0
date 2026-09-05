@@ -698,6 +698,72 @@ export function variantIsActive(v: { enabled?: boolean; status?: 'active' | 'ina
   return v.enabled !== false;
 }
 
+/** Whether `options` covers every one of `dimNames` — used to tell a
+ *  fully-specified variant row apart from a legacy/partial one (e.g. a
+ *  Size-only row saved before Color/Fitting existed as dimensions). */
+export function variantCoversDimensions(
+  options: Record<string, string> | undefined,
+  dimNames: string[],
+): boolean {
+  const o = options || {};
+  return dimNames.every((n) => n in o);
+}
+
+/**
+ * Reconciles a product's variant rows against its CURRENT option dimensions.
+ * Any row missing one or more current dimensions is treated as a "partial"
+ * source: it is superseded by its full completions — the Cartesian product
+ * of its own already-fixed values × the missing dimensions' values — with
+ * each new row seeded from the partial row's own price/originalPrice/stock
+ * /sku/images/enabled/status (a starting point the seller can still edit or
+ * delete per row, never a silent background duplication — this only runs
+ * when the seller explicitly triggers "Generate missing combinations").
+ * Rows that already cover every dimension are left completely untouched
+ * (including ones the seller deliberately deleted — this never re-adds a
+ * combination that isn't already present, additive/completing only).
+ */
+export function reconcileVariantsForDimensions(
+  productVariants: ProductVariantRow[],
+  dims: Array<{ name: string; values: string[] }>,
+  makeId: (i: number) => string,
+): ProductVariantRow[] {
+  const dimNames = dims.map((d) => d.name);
+  const isPartial = (v: ProductVariantRow) => {
+    const keys = Object.keys(v.options || {});
+    return keys.length > 0 && !variantCoversDimensions(v.options, dimNames);
+  };
+  const partialRows = productVariants.filter(isPartial);
+  const completeRows = productVariants.filter((v) => !isPartial(v));
+  const presentKeys = new Set(completeRows.map((v) => variantKey(v.options || {})));
+  const missing = generateCombinations(dims).filter((c) => !presentKeys.has(variantKey(c)));
+
+  const findSource = (combo: Record<string, string>): ProductVariantRow | undefined =>
+    partialRows.find((p) => Object.entries(p.options || {}).every(([k, v]) => combo[k] === v));
+
+  const added: ProductVariantRow[] = missing.map((options, i) => {
+    const source = findSource(options);
+    return {
+      id: makeId(i),
+      sku: source?.sku ?? '',
+      options,
+      enabled: source?.enabled ?? true,
+      status: source?.status ?? ('active' as const),
+      ...(source?.price !== undefined ? { price: source.price } : {}),
+      ...(source?.originalPrice !== undefined ? { originalPrice: source.originalPrice } : {}),
+      ...(source?.stock !== undefined ? { stock: source.stock } : {}),
+      ...(source?.images?.length ? { images: [...source.images] } : {}),
+    };
+  });
+
+  const supersededIds = new Set(
+    partialRows
+      .filter((p) => added.some((a) => Object.entries(p.options || {}).every(([k, v]) => a.options[k] === v)))
+      .map((p) => p.id),
+  );
+
+  return [...productVariants.filter((v) => !supersededIds.has(v.id)), ...added];
+}
+
 export type SchemaVariantDimension = { key: string; name: string; type: string; options: string[] };
 
 export type CategorySchemaCompatibility = {
