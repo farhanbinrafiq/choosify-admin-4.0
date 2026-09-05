@@ -1,4 +1,5 @@
 import React, { useMemo, useRef, useState, CSSProperties } from 'react';
+import { X, Loader2 } from 'lucide-react';
 import { resolveCreatorThumbnail } from '../../lib/productVideo';
 import { uploadCreatorImage, uploadProductImages } from '../../services/mediaUpload';
 import {
@@ -235,8 +236,7 @@ export function VariantMatrixEditor({
   const dims = variantDimensions ?? [];
   const [freeInput, setFreeInput] = useState<Record<string, string>>({});
   const [newDimName, setNewDimName] = useState('');
-  const [uploadingRow, setUploadingRow] = useState<string | null>(null);
-  const [imgUrlInput, setImgUrlInput] = useState<Record<string, string>>({});
+  const [editingVariantId, setEditingVariantId] = useState<string | null>(null);
 
   const groupFor = (d: SchemaVariantDimension) =>
     optionGroups.find((g) => norm(g.name) === norm(d.name) || norm(g.name) === norm(d.key));
@@ -414,20 +414,27 @@ export function VariantMatrixEditor({
     onChange({ optionGroups, productVariants: productVariants.map((v) => (v.id === id ? { ...v, ...patch } : v)) });
   };
 
-  /** Reuse one combination's images on every OTHER combination that shares the
-   *  same value for `optionName` (e.g. give every "Black" combination the same
-   *  photos). Stays entirely within the canonical productVariants[] model. */
-  const copyImagesToMatching = (sourceId: string, optionName: string) => {
-    const src = productVariants.find((v) => v.id === sourceId);
-    const imgs = src?.images ?? [];
-    if (!src || imgs.length === 0) return;
-    const val = src.options?.[optionName];
-    if (val == null) return;
+  const saveVariant = (next: ProductVariantRow) => {
+    onChange({ optionGroups, productVariants: productVariants.map((v) => (v.id === next.id ? next : v)) });
+  };
+
+  /** Bulk-apply one variant's images onto every OTHER variant sharing the same
+   *  value for one dimension (e.g. every "Red" combination gets this row's
+   *  photos) — operates on the variant editor's current (possibly still-
+   *  unsaved) draft, so what the seller sees in the modal is exactly what
+   *  gets copied, never a stale committed copy. Commits the draft's own
+   *  edits at the same time. Only ever called from an explicit, confirmed
+   *  seller action (see VariantEditModal). */
+  const applyImagesToMatching = (draft: ProductVariantRow, optionName: string) => {
+    const imgs = draft.images ?? [];
+    const val = draft.options?.[optionName];
     onChange({
       optionGroups,
-      productVariants: productVariants.map((v) =>
-        v.id !== sourceId && v.options?.[optionName] === val ? { ...v, images: [...imgs] } : v,
-      ),
+      productVariants: productVariants.map((v) => {
+        if (v.id === draft.id) return draft;
+        if (val != null && imgs.length && v.options?.[optionName] === val) return { ...v, images: [...imgs] };
+        return v;
+      }),
     });
   };
 
@@ -616,167 +623,125 @@ export function VariantMatrixEditor({
 
       {productVariants.length > 0 ? (
         <div style={{ overflowX: 'auto', border: '1px solid #E8EDF2', borderRadius: 10 }}>
-          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 760 }}>
+          <table style={{ borderCollapse: 'collapse', width: '100%', minWidth: 780 }}>
             <thead>
               <tr>
                 {effectiveDims.map((d) => (
-                  <th key={d.key} style={x.th}>
+                  <th key={d.key} style={{ ...x.th, minWidth: 90 }}>
                     {d.name}{d.custom ? ' *' : ''}
                   </th>
                 ))}
-                <th style={x.th}>SKU</th>
-                <th style={x.th}>Selling price ৳</th>
-                <th style={x.th}>Original / MRP ৳</th>
-                {!isService ? <th style={x.th}>Stock</th> : null}
+                <th style={{ ...x.th, minWidth: 140 }}>SKU</th>
+                <th style={{ ...x.th, minWidth: 90 }}>Price</th>
+                <th style={{ ...x.th, minWidth: 90 }}>MRP</th>
+                {!isService ? <th style={{ ...x.th, minWidth: 90 }}>Stock</th> : null}
                 <th style={x.th}>Active</th>
-                <th style={x.th}>Variant images</th>
+                <th style={x.th}>Images</th>
                 <th style={x.th} />
               </tr>
             </thead>
             <tbody>
-              {productVariants.map((v) => (
-                <tr key={v.id}>
-                  {effectiveDims.map((d) => {
-                    const val = v.options?.[d.name];
-                    const missing = val == null;
-                    return (
-                      <td
-                        key={d.key}
-                        style={{ ...x.cell, fontWeight: 700, ...(missing ? { color: '#B45309' } : {}) }}
-                        title={
-                          missing
-                            ? 'Not set yet — click "Generate missing combinations" above to complete this row'
-                            : undefined
-                        }
-                      >
-                        {val ?? '—'}
-                      </td>
-                    );
-                  })}
-                  <td style={x.cell}>
-                    <input value={v.sku ?? ''} onChange={(e) => patchVariant(v.id, { sku: e.target.value })} style={x.smallInput} />
-                  </td>
-                  <td style={x.cell}>
-                    <input type="number" min={0} value={v.price ?? ''} onChange={(e) => patchVariant(v.id, { price: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ ...x.smallInput, width: 84 }} />
-                  </td>
-                  <td style={x.cell}>
-                    <input type="number" min={0} value={v.originalPrice ?? ''} onChange={(e) => patchVariant(v.id, { originalPrice: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ ...x.smallInput, width: 84 }} />
-                  </td>
-                  {!isService ? (
-                    <td style={x.cell}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <input type="number" min={0} value={v.stock ?? ''} onChange={(e) => patchVariant(v.id, { stock: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ ...x.smallInput, width: 66 }} />
-                        {(() => {
-                          const st = variantStockState(v);
-                          return (
-                            <span style={{ fontSize: 9, fontWeight: 800, color: st.color, background: st.bg, borderRadius: 4, padding: '1px 5px', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
-                              {st.label}
-                            </span>
-                          );
-                        })()}
-                      </div>
+              {productVariants.map((v) => {
+                const st = variantStockState(v);
+                const imgCount = (v.images ?? []).length;
+                return (
+                  <tr key={v.id}>
+                    {effectiveDims.map((d) => {
+                      const val = v.options?.[d.name];
+                      const missing = val == null;
+                      return (
+                        <td
+                          key={d.key}
+                          style={{ ...x.cell, fontWeight: 700, ...(missing ? { color: '#B45309' } : {}) }}
+                          title={
+                            missing
+                              ? 'Not set yet — click "Generate missing combinations" above to complete this row'
+                              : undefined
+                          }
+                        >
+                          {val ?? '—'}
+                        </td>
+                      );
+                    })}
+                    <td style={{ ...x.cell, fontFamily: 'monospace', fontSize: 11.5, whiteSpace: 'nowrap' }}>
+                      {v.sku?.trim() || <span style={{ color: '#9CA3AF', fontFamily: 'inherit' }}>No SKU</span>}
                     </td>
-                  ) : null}
-                  <td style={{ ...x.cell, textAlign: 'center' }}>
-                    <input
-                      type="checkbox"
-                      checked={variantIsActive(v)}
-                      onChange={(e) => patchVariant(v.id, { status: e.target.checked ? 'active' : 'inactive', enabled: e.target.checked })}
-                    />
-                  </td>
-                  <td style={x.cell}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minWidth: 150 }}>
-                      {(v.images ?? []).length ? (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          {(v.images ?? []).map((src, i) => (
-                            <span key={`${src}-${i}`} style={{ position: 'relative', width: 34, height: 34, borderRadius: 6, overflow: 'hidden', border: '1px solid #E8EDF2', background: '#F9FAFB', flexShrink: 0 }}>
-                              <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
-                              <button
-                                type="button"
-                                onClick={() => patchVariant(v.id, { images: (v.images ?? []).filter((_, j) => j !== i) })}
-                                title="Remove"
-                                style={{ position: 'absolute', top: 0, right: 0, background: 'rgba(0,0,0,0.55)', color: '#fff', border: 'none', fontSize: 9, lineHeight: '12px', width: 12, height: 12, cursor: 'pointer', padding: 0 }}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      ) : null}
-                      <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <label style={{ ...x.ghostBtn, cursor: uploadingRow === v.id ? 'wait' : 'pointer', fontSize: 10, padding: '4px 8px' }}>
-                          {uploadingRow === v.id ? 'Uploading…' : '＋ Upload'}
+                    <td style={{ ...x.cell, whiteSpace: 'nowrap' }}>
+                      {typeof v.price === 'number' ? `৳${v.price.toLocaleString()}` : <span style={{ color: '#9CA3AF' }}>—</span>}
+                    </td>
+                    <td style={{ ...x.cell, whiteSpace: 'nowrap', color: '#6B7280' }}>
+                      {typeof v.originalPrice === 'number' ? `৳${v.originalPrice.toLocaleString()}` : '—'}
+                    </td>
+                    {!isService ? (
+                      <td style={x.cell}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
                           <input
-                            type="file"
-                            accept="image/*"
-                            multiple
-                            style={{ display: 'none' }}
-                            disabled={uploadingRow === v.id}
-                            onChange={async (e) => {
-                              const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith('image/'));
-                              e.currentTarget.value = '';
-                              if (!files.length) return;
-                              setUploadingRow(v.id);
-                              try {
-                                const urls = await uploadProductImages(files);
-                                patchVariant(v.id, { images: [...(v.images ?? []), ...urls] });
-                              } catch {
-                                const locals = files.map((f) => URL.createObjectURL(f));
-                                patchVariant(v.id, { images: [...(v.images ?? []), ...locals] });
-                              } finally {
-                                setUploadingRow(null);
-                              }
-                            }}
+                            type="number"
+                            min={0}
+                            value={v.stock ?? ''}
+                            onChange={(e) => patchVariant(v.id, { stock: e.target.value === '' ? undefined : Number(e.target.value) })}
+                            style={{ ...x.smallInput, width: 66 }}
+                            title="Quick-edit stock — open Edit for full details"
                           />
-                        </label>
-                      </div>
-                      {(v.images ?? []).length > 0 && effectiveDims.length > 0 ? (
-                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                          <span style={{ fontSize: 9, color: '#9CA3AF', fontWeight: 700 }}>Use these for every</span>
-                          {effectiveDims
-                            .filter((d) => v.options?.[d.name] != null)
-                            .map((d) => (
-                              <button
-                                key={d.key}
-                                type="button"
-                                onClick={() => copyImagesToMatching(v.id, d.name)}
-                                title={`Copy these images onto every combination where ${d.name} is ${v.options?.[d.name]}`}
-                                style={{ ...x.chip, fontSize: 9.5, padding: '2px 7px', cursor: 'pointer' }}
-                              >
-                                {d.name}: {v.options?.[d.name]}
-                              </button>
-                            ))}
+                          <span style={{ fontSize: 9, fontWeight: 800, color: st.color, background: st.bg, borderRadius: 4, padding: '1px 5px', whiteSpace: 'nowrap', alignSelf: 'flex-start' }}>
+                            {st.label}
+                          </span>
                         </div>
-                      ) : null}
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <input
-                          value={imgUrlInput[v.id] ?? ''}
-                          onChange={(e) => setImgUrlInput((p) => ({ ...p, [v.id]: e.target.value }))}
-                          onKeyDown={(e) => {
-                            if (e.key !== 'Enter') return;
-                            e.preventDefault();
-                            const url = (imgUrlInput[v.id] ?? '').trim();
-                            if (url) patchVariant(v.id, { images: [...(v.images ?? []), url] });
-                            setImgUrlInput((p) => ({ ...p, [v.id]: '' }));
-                          }}
-                          placeholder="or paste image URL"
-                          style={{ ...x.smallInput, fontSize: 10 }}
-                        />
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ ...x.cell, textAlign: 'center' }}>
-                    <button
-                      type="button"
-                      title="You don't sell this combination — remove it"
-                      onClick={() => deleteVariantRow(v.id)}
-                      style={{ ...x.ghostBtn, color: '#DC2626', padding: '4px 8px' }}
-                    >
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                      </td>
+                    ) : null}
+                    <td style={{ ...x.cell, textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={variantIsActive(v)}
+                        title={variantIsActive(v) ? 'Active — available for purchase' : 'Inactive — not available for purchase'}
+                        onClick={() => patchVariant(v.id, { status: variantIsActive(v) ? 'inactive' : 'active', enabled: !variantIsActive(v) })}
+                        style={{
+                          width: 34, height: 19, borderRadius: 999, border: 'none', cursor: 'pointer', position: 'relative',
+                          background: variantIsActive(v) ? ACCENT : '#D1D5DB', transition: 'background 0.15s',
+                        }}
+                      >
+                        <span style={{
+                          position: 'absolute', top: 2, left: variantIsActive(v) ? 17 : 2, width: 15, height: 15,
+                          borderRadius: '50%', background: '#fff', transition: 'left 0.15s', boxShadow: '0 1px 2px rgba(0,0,0,0.25)',
+                        }} />
+                      </button>
+                    </td>
+                    <td style={{ ...x.cell, textAlign: 'center' }}>
+                      <button
+                        type="button"
+                        onClick={() => setEditingVariantId(v.id)}
+                        title={imgCount ? `${imgCount} photo${imgCount === 1 ? '' : 's'} — click Edit to manage` : 'No photos yet'}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                      >
+                        {imgCount ? (
+                          <span style={{ width: 30, height: 30, borderRadius: 6, overflow: 'hidden', border: '1px solid #E8EDF2', background: '#F9FAFB', flexShrink: 0 }}>
+                            <img src={v.images![0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} referrerPolicy="no-referrer" />
+                          </span>
+                        ) : (
+                          <span style={{ width: 30, height: 30, borderRadius: 6, border: '1px dashed #E8EDF2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#9CA3AF', flexShrink: 0 }}>
+                            —
+                          </span>
+                        )}
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#6B7280' }}>{imgCount || 0}</span>
+                      </button>
+                    </td>
+                    <td style={{ ...x.cell, textAlign: 'center', whiteSpace: 'nowrap' }}>
+                      <button type="button" onClick={() => setEditingVariantId(v.id)} style={{ ...x.ghostBtn, padding: '5px 10px', marginRight: 6 }}>
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        title="You don't sell this combination — remove it"
+                        onClick={() => deleteVariantRow(v.id)}
+                        style={{ ...x.ghostBtn, color: '#DC2626', padding: '5px 8px' }}
+                      >
+                        ✕
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -792,6 +757,324 @@ export function VariantMatrixEditor({
           availability stays controlled by the booking model; per-combination pricing still applies.
         </p>
       ) : null}
+
+      {editingVariantId ? (
+        (() => {
+          const editing = productVariants.find((v) => v.id === editingVariantId);
+          if (!editing) return null;
+          return (
+            <VariantEditModal
+              key={editing.id}
+              variant={editing}
+              dims={effectiveDims}
+              isService={isService}
+              onSave={(next) => {
+                saveVariant(next);
+                setEditingVariantId(null);
+              }}
+              onApplyImagesToMatching={(draft, dimName) => {
+                applyImagesToMatching(draft, dimName);
+                setEditingVariantId(null);
+              }}
+              onClose={() => setEditingVariantId(null)}
+            />
+          );
+        })()
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Large centered "Edit Variant" dialog — the comfortable full editor for one
+ * combination's SKU/price/MRP/stock/active/images. Replaces the old always-
+ * visible inline row inputs; the table stays a scannable overview with
+ * Edit/Delete actions. The option combination itself is READ-ONLY here:
+ * changing which Size/Color/Fitting a variant represents after it's been
+ * created could collide with another combination's key or orphan its
+ * SKU/inventory record — to sell a different combination the seller deletes
+ * this row and generates it fresh from the matrix, which is a safe,
+ * already-supported path.
+ */
+function VariantEditModal({
+  variant,
+  dims,
+  isService,
+  onSave,
+  onApplyImagesToMatching,
+  onClose,
+}: {
+  variant: ProductVariantRow;
+  dims: Array<{ key: string; name: string; values: string[]; custom: boolean }>;
+  isService: boolean;
+  onSave: (next: ProductVariantRow) => void;
+  onApplyImagesToMatching: (draft: ProductVariantRow, dimName: string) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState<ProductVariantRow>(variant);
+  const [dirty, setDirty] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [imgUrlInput, setImgUrlInput] = useState('');
+
+  const patch = (p: Partial<ProductVariantRow>) => {
+    setDraft((d) => ({ ...d, ...p }));
+    setDirty(true);
+  };
+
+  const combinationLabel =
+    dims
+      .map((d) => draft.options?.[d.name])
+      .filter((v): v is string => v != null)
+      .join(' / ') || 'Unassigned combination';
+
+  const requestClose = () => {
+    if (dirty && !window.confirm('Discard unsaved changes to this variant?')) return;
+    onClose();
+  };
+
+  const active = variantIsActive(draft);
+  const images = draft.images ?? [];
+  const applicableDims = dims.filter((d) => draft.options?.[d.name] != null);
+
+  const addFiles = async (files: File[]) => {
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      const urls = await uploadProductImages(files);
+      patch({ images: [...images, ...urls] });
+    } catch {
+      const locals = files.map((f) => URL.createObjectURL(f));
+      patch({ images: [...images, ...locals] });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[300] bg-black/50 flex items-center justify-center p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) requestClose(); }}
+    >
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+        <div className="shrink-0 border-b border-[#E8EDF2] px-5 sm:px-6 py-4 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-[10px] font-black uppercase tracking-wide text-[#9CA3AF] mb-0.5">Edit Variant</div>
+            <div className="text-[15px] sm:text-[16px] font-black text-[#111827] truncate">{combinationLabel}</div>
+          </div>
+          <button type="button" onClick={requestClose} className="shrink-0 text-[#9CA3AF] hover:text-[#111827]">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 sm:px-6 py-5 space-y-6">
+          {/* Combination */}
+          <section>
+            <div className="text-[10.5px] font-extrabold uppercase tracking-wide text-[#6B7280] mb-2">Combination</div>
+            <div className="flex flex-wrap gap-2">
+              {dims.map((d) => (
+                <span
+                  key={d.key}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E8EDF2] bg-[#F9FAFB] text-[12px] font-bold text-[#111827]"
+                >
+                  <span className="text-[#9CA3AF] font-semibold">{d.name}:</span> {draft.options?.[d.name] ?? '—'}
+                </span>
+              ))}
+            </div>
+            <p className="text-[11px] text-[#6B7280] mt-2 leading-relaxed">
+              Read-only — changing which options a variant represents after it's created could collide
+              with another combination or orphan its SKU/inventory record. To sell a different
+              combination, delete this row and generate it from the matrix.
+            </p>
+          </section>
+
+          {/* SKU */}
+          <section>
+            <label className="block text-[10.5px] font-extrabold uppercase tracking-wide text-[#6B7280] mb-2">SKU</label>
+            <input
+              value={draft.sku ?? ''}
+              onChange={(e) => patch({ sku: e.target.value })}
+              placeholder="e.g. SHIRT-M-RED-SLIM"
+              spellCheck={false}
+              className="w-full h-11 px-3.5 rounded-xl border border-[#E8EDF2] text-[13px] font-mono text-[#111827] outline-none focus:border-[#FF5B00] focus:ring-2 focus:ring-[#FF5B00]/20"
+            />
+          </section>
+
+          {/* Price / MRP / Stock */}
+          <section className={isService ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'grid grid-cols-1 sm:grid-cols-3 gap-4'}>
+            <div>
+              <label className="block text-[10.5px] font-extrabold uppercase tracking-wide text-[#6B7280] mb-2">Selling price ৳</label>
+              <input
+                type="number"
+                min={0}
+                value={draft.price ?? ''}
+                onChange={(e) => patch({ price: e.target.value === '' ? undefined : Number(e.target.value) })}
+                className="w-full h-11 px-3.5 rounded-xl border border-[#E8EDF2] text-[13px] outline-none focus:border-[#FF5B00] focus:ring-2 focus:ring-[#FF5B00]/20"
+              />
+            </div>
+            <div>
+              <label className="block text-[10.5px] font-extrabold uppercase tracking-wide text-[#6B7280] mb-2">Original / MRP ৳</label>
+              <input
+                type="number"
+                min={0}
+                value={draft.originalPrice ?? ''}
+                onChange={(e) => patch({ originalPrice: e.target.value === '' ? undefined : Number(e.target.value) })}
+                className="w-full h-11 px-3.5 rounded-xl border border-[#E8EDF2] text-[13px] outline-none focus:border-[#FF5B00] focus:ring-2 focus:ring-[#FF5B00]/20"
+              />
+            </div>
+            {!isService ? (
+              <div>
+                <label className="block text-[10.5px] font-extrabold uppercase tracking-wide text-[#6B7280] mb-2">Stock</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={draft.stock ?? ''}
+                  onChange={(e) => patch({ stock: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  className="w-full h-11 px-3.5 rounded-xl border border-[#E8EDF2] text-[13px] outline-none focus:border-[#FF5B00] focus:ring-2 focus:ring-[#FF5B00]/20"
+                />
+                {(() => {
+                  const st = variantStockState(draft);
+                  return (
+                    <span
+                      className="inline-block mt-1.5 text-[10px] font-extrabold rounded px-1.5 py-0.5"
+                      style={{ color: st.color, background: st.bg }}
+                    >
+                      {st.label}
+                    </span>
+                  );
+                })()}
+              </div>
+            ) : null}
+          </section>
+
+          {/* Active */}
+          <section className="flex items-start gap-3">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={active}
+              onClick={() => patch({ status: active ? 'inactive' : 'active', enabled: !active })}
+              className="shrink-0 mt-0.5 relative w-11 h-6 rounded-full transition-colors"
+              style={{ background: active ? ACCENT : '#D1D5DB' }}
+            >
+              <span
+                className="absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all"
+                style={{ left: active ? 22 : 2 }}
+              />
+            </button>
+            <div>
+              <div className="text-[12.5px] font-bold text-[#111827]">Active variant</div>
+              <div className="text-[11px] text-[#6B7280]">Inactive variants are not available for purchase.</div>
+            </div>
+          </section>
+
+          {/* Variant Images */}
+          <section>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-[10.5px] font-extrabold uppercase tracking-wide text-[#6B7280]">Variant Images</div>
+              <span className="text-[11px] text-[#6B7280] font-semibold">
+                {images.length} photo{images.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mb-3">
+              {images.map((src, i) => (
+                <div
+                  key={`${src}-${i}`}
+                  className="relative rounded-xl overflow-hidden border border-[#E8EDF2] bg-[#F9FAFB]"
+                  style={{ aspectRatio: '1 / 1' }}
+                >
+                  <img src={src} alt="" className="w-full h-full" style={{ objectFit: 'contain' }} referrerPolicy="no-referrer" />
+                  <button
+                    type="button"
+                    onClick={() => patch({ images: images.filter((_, j) => j !== i) })}
+                    title="Remove image"
+                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white text-[11px] leading-none flex items-center justify-center hover:bg-black/75"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <label
+                className="relative rounded-xl border-2 border-dashed border-[#E8EDF2] bg-[#F9FAFB] flex flex-col items-center justify-center gap-1 text-[#6B7280] hover:border-[#FF5B00]/40 cursor-pointer"
+                style={{ aspectRatio: '1 / 1' }}
+              >
+                {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <span className="text-[20px] leading-none">＋</span>}
+                <span className="text-[10px] font-bold">{uploading ? 'Uploading…' : 'Upload'}</span>
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  disabled={uploading}
+                  className="hidden"
+                  onChange={async (e) => {
+                    const files = Array.from(e.target.files ?? []).filter((f) => f.type.startsWith('image/'));
+                    e.currentTarget.value = '';
+                    await addFiles(files);
+                  }}
+                />
+              </label>
+            </div>
+            <input
+              value={imgUrlInput}
+              onChange={(e) => setImgUrlInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key !== 'Enter') return;
+                e.preventDefault();
+                const url = imgUrlInput.trim();
+                if (url) patch({ images: [...images, url] });
+                setImgUrlInput('');
+              }}
+              placeholder="or paste an image URL and press Enter"
+              className="w-full h-9 px-3 rounded-lg border border-[#E8EDF2] text-[11.5px] outline-none focus:border-[#FF5B00] focus:ring-2 focus:ring-[#FF5B00]/20"
+            />
+
+            {images.length > 0 && applicableDims.length > 0 ? (
+              <div className="mt-3 pt-3 border-t border-dashed border-[#E8EDF2]">
+                <div className="text-[11px] font-bold text-[#6B7280] mb-1.5">Apply these images to other variants</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {applicableDims.map((d) => (
+                    <button
+                      key={d.key}
+                      type="button"
+                      onClick={() => {
+                        const val = draft.options?.[d.name];
+                        if (
+                          window.confirm(
+                            `Save this variant and apply its ${images.length} image(s) to every OTHER variant where ${d.name} = ${val}? This overwrites their current images.`,
+                          )
+                        ) {
+                          onApplyImagesToMatching(draft, d.name);
+                        }
+                      }}
+                      title={`Apply these images to all variants with ${d.name}: ${draft.options?.[d.name]}`}
+                      className="inline-flex items-center px-2.5 py-1 rounded-full border border-[#E8EDF2] bg-white text-[10.5px] font-bold text-[#374151] hover:border-[#FF5B00]/40"
+                    >
+                      Apply to all {d.name}: {draft.options?.[d.name]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
+        </div>
+
+        <div className="shrink-0 border-t border-[#E8EDF2] px-5 sm:px-6 py-4 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={requestClose}
+            className="px-4 py-2.5 rounded-xl border border-[#E8EDF2] text-[12px] font-bold text-[#374151] hover:bg-[#F9FAFB]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => onSave(draft)}
+            className="px-5 py-2.5 rounded-xl text-[12px] font-bold text-white hover:opacity-90"
+            style={{ background: ACCENT }}
+          >
+            Save Variant
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
