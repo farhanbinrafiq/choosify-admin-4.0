@@ -189,13 +189,6 @@ export async function sendVerificationEmail(to: string, token: string, opts?: { 
 export async function sendPasswordResetEmail(to: string, token: string, opts?: { surface?: ResetSurface }): Promise<void> {
   const base = surfaceBaseUrl(opts?.surface ?? 'web');
   const link = `${base}/reset-password?token=${encodeURIComponent(token)}`;
-  // TEMP DIAGNOSTIC (2026-09-05) — the actual constructed link, host+path
-  // only, token masked (never the working credential itself). Proves the
-  // final rendered link, not just the resolved surface/base. Remove once
-  // the surface-routing verification is closed out.
-  Logger.info('[DIAG] password-reset final link (token masked)', {
-    linkHostAndPath: link.replace(/token=[^&]+/, `token=***MASKED(len=${token.length})***`),
-  });
   const t = passwordResetEmail({ resetUrl: link, ttlMinutes: 60 });
   await sendEmail({ to, subject: t.subject, html: t.html, text: t.text });
 }
