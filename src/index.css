@@ -113,7 +113,10 @@
 }
 
 @theme {
-  --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Canonical global typeface -- Satoshi (src/styles/satoshi.css, imported
+     above). DM Sans kept only as the fallback if Satoshi's woff2 files ever
+     fail to load, never as the primary face. */
+  --font-sans: "Satoshi", "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-heading: "Outfit", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
 

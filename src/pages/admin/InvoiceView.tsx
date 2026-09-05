@@ -1010,6 +1010,13 @@ export const InvoiceView: React.FC<InvoiceViewProps> = ({ role }) => {
     <div className="p-4 sm:p-6 lg:p-8 bg-app-bg border-t border-app-border text-app-text-primary min-h-screen">
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
+          /* Dashboard shell (AdminWorkspaceLayout's sidebar/topbar) is hidden
+             globally by adminWorkspace.css; these selectors are a
+             belt-and-suspenders duplicate in case this page is ever mounted
+             outside that shell. */
+          aside,
+          .admin-workspace__sidebar,
+          .admin-workspace__topbar,
           .no-print { display: none !important; }
           #printBtn { display: none !important; }
           body { background: #F0F8FF !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }

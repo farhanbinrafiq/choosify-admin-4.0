@@ -40,8 +40,13 @@
 
   /* ── React workspace shell (AdminWorkspaceLayout) ──
      Presentation tokens so adminWorkspace.css stops hardcoding literals.
-     Values are the shell's existing effective values, promoted to tokens. */
-  --cms-font-sans: 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+     --cms-font-sans is the actual governing body/content typeface for every
+     Gen-2 "Studio" page (this is the real canonical typography system --
+     index.css's --font-sans is a separate, largely-unused legacy variable
+     that Preflight's `body{font-family:inherit}` already neutralizes).
+     Satoshi (src/styles/satoshi.css, imported globally) replaces DM Sans as
+     the canonical face; DM Sans stays only as the fallback. */
+  --cms-font-sans: 'Satoshi', 'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --cms-font-display: 'Outfit', var(--cms-font-sans);
 
   --cms-topbar-height: 64px;

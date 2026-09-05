@@ -1189,32 +1189,43 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
+            {/* Dashboard-UI-regression-lock: this used to mount the legacy
+                AdminLayout (Gen-1 sidebar/topbar) around the invoice, so
+                opening an invoice visibly reverted the whole dashboard shell.
+                Now uses the same canonical AdminWorkspaceLayout (Gen-2,
+                approved "Studio" design) every other current dashboard route
+                uses -- only the functional layer (InvoiceView itself) is
+                unique to this route. Print/PDF isolation for the shell lives
+                in adminWorkspace.css (.admin-workspace__sidebar/__topbar
+                hidden under @media print), on top of InvoiceView's own
+                existing .no-print / .invoice-card print rules. */}
             <Route
               path="/admin/invoice/:id"
               element={
                 <ProtectedRoute>
                   <RoleGuard>
-                    <AdminLayout>
+                    <AdminWorkspaceLayout>
                       <Suspense fallback={routeSuspenseFallback}>
                         <InvoiceView />
                       </Suspense>
-                    </AdminLayout>
+                    </AdminWorkspaceLayout>
                   </RoleGuard>
                 </ProtectedRoute>
               }
             />
             {/* Real Operations-backed invoice -- the route above (InvoiceView)
-                reads from Commerce, which has no bearing on real orders. */}
+                reads from Commerce, which has no bearing on real orders.
+                Same Gen-1 -> Gen-2 shell fix as above applies here. */}
             <Route
               path="/admin/invoice/op/:orderId/:sellerId"
               element={
                 <ProtectedRoute>
                   <RoleGuard>
-                    <AdminLayout>
+                    <AdminWorkspaceLayout>
                       <Suspense fallback={routeSuspenseFallback}>
                         <OperationsInvoiceView />
                       </Suspense>
-                    </AdminLayout>
+                    </AdminWorkspaceLayout>
                   </RoleGuard>
                 </ProtectedRoute>
               }

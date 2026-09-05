@@ -253,13 +253,17 @@ export function OperationsInvoiceView() {
       <style dangerouslySetInnerHTML={{
         __html: `
           @media print {
-            /* 1. Remove the dashboard shell. AdminLayout renders a mobile
-                  <aside class="sidebar">, a desktop <div class="sidebar"> inside
-                  a resizable panel, and a <header class="glass-header"> topbar
-                  (search + messenger + notifications + avatar). None of these
-                  belong on a printed invoice. */
+            /* 1. Remove the dashboard shell. This route mounts inside the
+                  canonical AdminWorkspaceLayout (<aside class="admin-workspace__sidebar">,
+                  <header class="admin-workspace__topbar">) -- adminWorkspace.css
+                  already hides both under @media print, this is a
+                  belt-and-suspenders duplicate in case this page is ever
+                  reused outside that shell. .sidebar/.glass-header are kept
+                  only as a safety net for the legacy AdminLayout shape. */
             aside,
             .sidebar,
+            .admin-workspace__sidebar,
+            .admin-workspace__topbar,
             header.glass-header,
             .glass-header,
             .no-print,

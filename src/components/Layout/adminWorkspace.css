@@ -506,3 +506,34 @@
     padding: 20px 16px 48px;
   }
 }
+
+/*
+ * Print isolation for the shell itself. Any page rendered inside
+ * AdminWorkspaceLayout -- invoices included -- should print only its own
+ * content; the sidebar/topbar chrome must never reach paper or a
+ * Save-as-PDF output. Individual pages (e.g. InvoiceView,
+ * OperationsInvoiceView) layer their own @media print rules on top of this
+ * for page-specific chrome (their own back/print/download buttons, side
+ * panels, etc. via .no-print).
+ */
+@media print {
+  .admin-workspace__sidebar,
+  .admin-workspace__topbar {
+    display: none !important;
+  }
+
+  .admin-workspace {
+    display: block !important;
+    min-height: 0 !important;
+    background: #ffffff !important;
+  }
+
+  .admin-workspace__main {
+    display: block !important;
+  }
+
+  .admin-workspace__content {
+    padding: 0 !important;
+    background: #ffffff !important;
+  }
+}
