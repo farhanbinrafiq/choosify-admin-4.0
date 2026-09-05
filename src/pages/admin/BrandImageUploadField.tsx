@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Image as ImageIcon, Loader2, Trash2, Upload } from 'lucide-react';
-import { uploadBrandImage } from '../../services/mediaUpload';
+import { Image as ImageIcon, Loader2, Pencil, Trash2, Upload } from 'lucide-react';
+import { dataUrlToFile, uploadBrandImage } from '../../services/mediaUpload';
+import { BrandLogoCropModal } from '../../components/brand/BrandLogoCropModal';
 
 type BrandImageUploadFieldProps = {
   value: string;
@@ -29,6 +30,12 @@ export function BrandImageUploadField({
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [showUrlPaste, setShowUrlPaste] = useState(false);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropSrc, setCropSrc] = useState('');
+
+  const isLogo = variant === 'logo';
+  const isAvatar = variant === 'avatar';
+  const isRoundTile = isLogo || isAvatar;
 
   const runUpload = useCallback(
     async (file: File | null | undefined) => {
@@ -48,16 +55,45 @@ export function BrandImageUploadField({
     [onChange, uploadFn],
   );
 
+  // Brand logos never upload the raw file directly — a seller/admin frames
+  // the useful logo area first (never a forced square crop; the modal lets
+  // them pick square/wide/tall). Cover images are unaffected: this only
+  // gates the `logo` variant, per "do not run the brand cover through the
+  // logo crop workflow."
+  const pickLogoFile = useCallback((file: File | null | undefined) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropSrc(String(reader.result || ''));
+      setCropOpen(true);
+    };
+    reader.onerror = () => setError('Could not read this file.');
+    reader.readAsDataURL(file);
+  }, []);
+
+  const onCropSave = useCallback(
+    (dataUrl: string) => {
+      setCropOpen(false);
+      setCropSrc('');
+      void runUpload(dataUrlToFile(dataUrl, 'brand-logo.png'));
+    },
+    [runUpload],
+  );
+
+  const onCropCancel = useCallback(() => {
+    setCropOpen(false);
+    setCropSrc('');
+    if (inputRef.current) inputRef.current.value = '';
+  }, []);
+
+  const handleFilePicked = isLogo ? pickLogoFile : runUpload;
+
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setDragOver(false);
-    void runUpload(e.dataTransfer.files?.[0]);
+    void handleFilePicked(e.dataTransfer.files?.[0]);
   };
-
-  const isLogo = variant === 'logo';
-  const isAvatar = variant === 'avatar';
-  const isRoundTile = isLogo || isAvatar;
 
   if (embedded) {
     const controls =
@@ -75,6 +111,20 @@ export function BrandImageUploadField({
           >
             <Upload className="w-3.5 h-3.5" />
           </button>
+          {isLogo && value ? (
+            <button
+              type="button"
+              title="Edit logo framing"
+              onClick={(e) => {
+                e.stopPropagation();
+                setCropSrc(value);
+                setCropOpen(true);
+              }}
+              className="opacity-0 group-hover/logo:opacity-100 inline-flex items-center justify-center w-7 h-7 bg-white border border-slate-200 text-slate-700 rounded-lg shadow-sm cursor-pointer"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+          ) : null}
           {value ? (
             <button
               type="button"
@@ -139,12 +189,15 @@ export function BrandImageUploadField({
           type="file"
           accept="image/*"
           className="hidden"
-          onChange={(e) => void runUpload(e.target.files?.[0])}
+          onChange={(e) => void handleFilePicked(e.target.files?.[0])}
         />
         {error && (
           <p className="absolute bottom-10 left-2 right-2 z-20 text-[10px] font-medium text-red-600 bg-white/90 rounded px-2 py-1">
             {error}
           </p>
+        )}
+        {isLogo && (
+          <BrandLogoCropModal open={cropOpen} imageSrc={cropSrc} onCancel={onCropCancel} onSave={onCropSave} />
         )}
       </div>
     );
@@ -185,7 +238,11 @@ export function BrandImageUploadField({
         } ${dragOver ? 'border-[#FF5B00] bg-orange-50' : 'border-slate-200 bg-slate-50'}`}
       >
         {value ? (
-          <img src={value} alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <img
+            src={value}
+            alt=""
+            className={`absolute inset-0 w-full h-full ${isLogo ? 'object-contain p-1.5' : 'object-cover'}`}
+          />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-400 px-2 text-center">
             <ImageIcon className="w-5 h-5" />
@@ -210,6 +267,20 @@ export function BrandImageUploadField({
           <Upload className="w-3 h-3" />
           {value ? 'Replace' : 'Choose file'}
         </button>
+        {isLogo && value ? (
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => {
+              setCropSrc(value);
+              setCropOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-[#FF5B00] text-[10px] font-bold text-slate-700 rounded-lg cursor-pointer disabled:opacity-50"
+          >
+            <Pencil className="w-3 h-3" />
+            Edit logo
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => setShowUrlPaste((v) => !v)}
@@ -222,7 +293,7 @@ export function BrandImageUploadField({
           type="file"
           accept="image/*"
           className="hidden"
-          onChange={(e) => void runUpload(e.target.files?.[0])}
+          onChange={(e) => void handleFilePicked(e.target.files?.[0])}
         />
       </div>
 
@@ -237,6 +308,10 @@ export function BrandImageUploadField({
       )}
 
       {error && <p className="text-[10px] font-medium text-red-600">{error}</p>}
+
+      {isLogo && (
+        <BrandLogoCropModal open={cropOpen} imageSrc={cropSrc} onCancel={onCropCancel} onSave={onCropSave} />
+      )}
     </div>
   );
 }

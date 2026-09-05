@@ -335,7 +335,11 @@ export function BrandProfileHero({
           <div className="absolute left-1/2 top-full -translate-x-1/2 -translate-y-[60px] w-[100px] h-[100px] md:w-[120px] md:h-[120px] z-[5]">
             <div className="w-full h-full rounded-full bg-white border-[5px] border-white shadow-[0_16px_36px_rgba(0,0,0,0.28),0_0_0_4px_rgba(35,35,255,0.18)] overflow-hidden flex items-center justify-center">
               {logo ? (
-                <img src={logo} alt="" className="w-full h-full object-cover" />
+                // Matches the storefront's own circular-avatar treatment
+                // (Choosify-Web BrandDetailHero) so this Studio preview
+                // doesn't mislead the seller about how their logo actually
+                // renders on the real site.
+                <img src={logo} alt="" className="max-w-[82%] max-h-[82%] w-auto h-auto object-contain" />
               ) : (
                 <span className="text-lg font-extrabold text-[#1A1A2E]">{initials}</span>
               )}
