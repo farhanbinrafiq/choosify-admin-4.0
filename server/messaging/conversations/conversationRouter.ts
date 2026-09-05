@@ -354,7 +354,16 @@ conversationRouter.get('/support/conversations/active', ...requireAuth, async (r
       res.status(404).json({ success: false, error: 'No active support conversation' });
       return;
     }
-    res.json({ success: true, data: { ...found, created: false } });
+    // Lets a caller that's only silently CHECKING for an already-existing
+    // thread (not opening it) still know whether it has anything new —
+    // e.g. the storefront surfacing an admin-initiated thread the user
+    // hasn't clicked into yet. Same "not mine, not yet in my readBy" rule
+    // the admin inbox's own unread count uses, just from the opener's side.
+    const msgs = await listMessagesForActor(found.conversation.id, actor);
+    const unreadCount = msgs.filter(
+      (m) => m.senderId !== actor.userId && !(Array.isArray(m.readBy) ? m.readBy : []).includes(actor.userId),
+    ).length;
+    res.json({ success: true, data: { ...found, created: false, unreadCount } });
   } catch (error) {
     handleError(res, error);
   }
