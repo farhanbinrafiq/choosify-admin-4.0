@@ -189,6 +189,9 @@ export async function sendVerificationEmail(to: string, token: string, opts?: { 
 export async function sendPasswordResetEmail(to: string, token: string, opts?: { surface?: ResetSurface }): Promise<void> {
   const base = surfaceBaseUrl(opts?.surface ?? 'web');
   const link = `${base}/reset-password?token=${encodeURIComponent(token)}`;
+  // TEMP DIAGNOSTIC (2026-09-05) — surface/base only, never the token. Remove
+  // once the production reset-URL-host investigation is closed out.
+  Logger.info('[DIAG] password-reset link host', { requestedSurface: opts?.surface, resolvedSurface: opts?.surface ?? 'web', base });
   const t = passwordResetEmail({ resetUrl: link, ttlMinutes: 60 });
   await sendEmail({ to, subject: t.subject, html: t.html, text: t.text });
 }
