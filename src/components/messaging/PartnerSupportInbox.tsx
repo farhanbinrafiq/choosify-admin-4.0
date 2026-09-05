@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { RefreshCw, Plus } from 'lucide-react';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+import { useMessagingPoll } from '../../hooks/useMessagingPoll';
 import { messagingApi, type ApiConversation, type ApiMessage } from '../../services/messagingApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavAttention } from '../../contexts/NavAttentionContext';
@@ -67,6 +70,35 @@ export function PartnerSupportInbox({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Live delivery: System A messages are dual-written to `omni_messages`
+  // (see conversationService's mirrorMessageToOmni) — the same collection
+  // Messages.tsx already subscribes to. Treat a write there for the open
+  // conversation as a signal to re-pull canonical REST messages, so a reply
+  // from Choosify Support appears without leaving/reopening this tab.
+  useEffect(() => {
+    const conversationId = conversation?.id;
+    if (!conversationId) return;
+    const q = query(collection(db, 'omni_messages'), where('conversationId', '==', conversationId));
+    const unsub = onSnapshot(
+      q,
+      () => void loadMessages(conversationId),
+      (err) => {
+        console.warn('[PartnerSupportInbox] Live message listener failed; staying on manual refresh.', err);
+      },
+    );
+    return () => unsub();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation?.id, loadMessages]);
+
+  // REST-polling safety net when the omni Firestore mirror isn't genuinely
+  // live — production must not depend on Firebase credentials for messages
+  // to arrive.
+  useMessagingPoll(
+    conversation?.id,
+    () => conversation && void loadMessages(conversation.id),
+    4000,
+  );
 
   const startThread = async () => {
     setStarting(true);

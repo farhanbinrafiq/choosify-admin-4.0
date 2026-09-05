@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+import { useMessagingPoll } from '../../hooks/useMessagingPoll';
 import {
   MessageCircleMore,
   Loader2,
@@ -128,6 +131,46 @@ export default function SellerConversations() {
   useEffect(() => {
     void loadSupport();
   }, [loadSupport]);
+
+  // Live delivery for the Choosify Support thread: System A messages are
+  // dual-written to `omni_messages` (mirrorMessageToOmni) — the same
+  // collection Messages.tsx already subscribes to. A write there for this
+  // conversation re-pulls canonical REST messages so a Support reply appears
+  // without leaving/reopening the thread.
+  useEffect(() => {
+    const conversationId = supportConv?.id;
+    if (!conversationId || !supportSelected) return;
+    const q = query(collection(db, 'omni_messages'), where('conversationId', '==', conversationId));
+    const unsub = onSnapshot(
+      q,
+      () => {
+        void messagingApi
+          .listMessages(conversationId)
+          .then((rows) => setSupportMessages(rows))
+          .catch(() => {});
+      },
+      (err) => {
+        console.warn('[SellerConversations] Live support-message listener failed; staying on manual refresh.', err);
+      },
+    );
+    return () => unsub();
+  }, [supportConv?.id, supportSelected]);
+
+  // REST-polling safety net for the Support thread when the omni Firestore
+  // mirror isn't genuinely live — production must not depend on Firebase
+  // credentials for messages to arrive.
+  useMessagingPoll(
+    supportSelected ? supportConv?.id : null,
+    () => {
+      const id = supportConv?.id;
+      if (!id) return;
+      void messagingApi
+        .listMessages(id)
+        .then((rows) => setSupportMessages(rows))
+        .catch(() => {});
+    },
+    4000,
+  );
 
   const openSupport = useCallback(async () => {
     setSupportSelected(true);
@@ -295,6 +338,34 @@ export default function SellerConversations() {
       setMessagesLoading(false);
     }
   }, []);
+
+  // Live delivery for the open buyer (Customers tab) thread — legacy System B
+  // (conv_platform_<buyerId>) writes straight into the same omni_messages
+  // collection Messages.tsx already subscribes to, so the identical listener
+  // pattern applies here too.
+  useEffect(() => {
+    if (!selectedBuyerId) return;
+    const conversationId = `conv_platform_${selectedBuyerId}`;
+    const q = query(collection(db, 'omni_messages'), where('conversationId', '==', conversationId));
+    const unsub = onSnapshot(
+      q,
+      () => void loadMessages(selectedBuyerId),
+      (err) => {
+        console.warn('[SellerConversations] Live buyer-message listener failed; staying on manual refresh.', err);
+      },
+    );
+    return () => unsub();
+  }, [selectedBuyerId, loadMessages]);
+
+  // REST-polling safety net for the open buyer thread + a slower one for the
+  // conversation list — both only actually poll when the omni Firestore
+  // mirror isn't genuinely live.
+  useMessagingPoll(
+    selectedBuyerId,
+    () => selectedBuyerId && void loadMessages(selectedBuyerId),
+    4000,
+  );
+  useMessagingPoll('seller-conversations-list', () => void loadConversations(), 20000);
 
   const selectConversation = (buyerId: string) => {
     setSupportSelected(false);

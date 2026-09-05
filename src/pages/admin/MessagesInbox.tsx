@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { RefreshCw, Plus, CheckCircle2, RotateCcw, ExternalLink, Clock, StickyNote } from 'lucide-react';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { db } from '../../lib/firebase';
+import { useMessagingPoll } from '../../hooks/useMessagingPoll';
 import {
   messagingApi,
   type AdminSupportInboxRow,
@@ -173,6 +176,61 @@ export default function MessagesInbox() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deepLinkC]);
 
+  /** Re-pulls canonical (System A) messages for one conversation — used both
+   *  by the initial open and by the live listener below. */
+  const refreshMessages = useCallback(
+    async (conversationId: string) => {
+      try {
+        const rows2 = await messagingApi.listMessages(conversationId);
+        setMessages(rows2);
+        await messagingApi.markSupportConversationRead(conversationId).catch(() => {});
+        const last = rows2[rows2.length - 1];
+        setRows((prev) =>
+          prev.map((r) =>
+            r.conversation.id === conversationId
+              ? {
+                  ...r,
+                  unread: 0,
+                  lastMessageAt: last?.createdAt || r.lastMessageAt,
+                  lastMessagePreview: last ? last.body.slice(0, 120) : r.lastMessagePreview,
+                }
+              : r,
+          ),
+        );
+        refreshNav();
+      } catch {
+        // Transient failure — keep the last known messages rather than clearing the thread.
+      }
+    },
+    [refreshNav],
+  );
+
+  // Live delivery: every System A message is dual-written to the omni
+  // `omni_messages` Firestore collection (see conversationService's
+  // mirrorMessageToOmni) — the same collection Messages.tsx already
+  // subscribes to. Treat a write there as a signal to re-pull the canonical
+  // REST messages for the OPEN conversation, so a reply from the user (or
+  // from another admin) appears without needing to close/reopen the thread.
+  useEffect(() => {
+    if (!selectedId) return;
+    const q = query(collection(db, 'omni_messages'), where('conversationId', '==', selectedId));
+    const unsub = onSnapshot(
+      q,
+      () => void refreshMessages(selectedId),
+      (err) => {
+        console.warn('[MessagesInbox] Live message listener failed; staying on manual refresh.', err);
+      },
+    );
+    return () => unsub();
+  }, [selectedId, refreshMessages]);
+
+  // REST-polling safety net: only actually polls when the omni Firestore
+  // mirror isn't genuinely live (see useMessagingPoll) — production must not
+  // depend on Firebase credentials for messages to arrive. Open thread gets a
+  // short interval; the row list (previews/unread) can be slower.
+  useMessagingPoll(selectedId, () => selectedId && void refreshMessages(selectedId), 4000);
+  useMessagingPoll('inbox-list', () => void load(), 20000);
+
   const visibleRows = useMemo(
     () =>
       rows.filter(
@@ -280,8 +338,12 @@ export default function MessagesInbox() {
     );
   };
 
-  const startNew = async (targetUserId: string, body: string) => {
-    const res = await messagingApi.startAdminSupportConversation({ targetUserId, body: body || undefined });
+  const startNew = async (targetUserId: string, body: string, audience?: SupportAudience) => {
+    const res = await messagingApi.startAdminSupportConversation({
+      targetUserId,
+      audience,
+      body: body || undefined,
+    });
     setShowNew(false);
     await load();
     setParams((p) => {
