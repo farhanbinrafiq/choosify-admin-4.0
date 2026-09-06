@@ -217,7 +217,15 @@ export const NAV_DEFS: CmsNavGroup[] = [
       { key: 'brands', label: 'Seller Management Studio', path: PAGE_KEY_TO_PATH.brands },
       { key: 'creators', label: 'Creators Management', path: PAGE_KEY_TO_PATH.creators },
       { key: 'customers', label: 'Consumer Management', path: PAGE_KEY_TO_PATH.customers },
-      { key: 'consumerProfile', label: 'My Profile', path: PAGE_KEY_TO_PATH.consumerProfile },
+      // The ONE canonical self-profile entry for Admin/Super Admin -- routes
+      // to /admin/profile (native MyProfilePage, inside AdminWorkspaceLayout).
+      // Previously this group also carried a 'consumerProfile'/"My Profile"
+      // entry meant for the Consumer role; Consumer now gets its own
+      // dedicated CONSUMER_NAV_GROUPS (below) instead of reading NAV_DEFS at
+      // all, so that entry was leaking into Admin/Super Admin's unfiltered
+      // nav as a second, incorrect "My Profile" pointing at a different page
+      // -- removed rather than filtered, since nothing reads it from here anymore.
+      { key: 'adminProfile', label: 'My Profile', path: PAGE_KEY_TO_PATH.adminProfile },
     ],
   },
   {
@@ -296,10 +304,7 @@ export const NAV_DEFS: CmsNavGroup[] = [
   },
   {
     title: 'SETTINGS',
-    items: [
-      { key: 'adminProfile', label: 'Admin Profile', path: PAGE_KEY_TO_PATH.adminProfile },
-      { key: 'settings', label: 'Settings', path: PAGE_KEY_TO_PATH.settings },
-    ],
+    items: [{ key: 'settings', label: 'Settings', path: PAGE_KEY_TO_PATH.settings }],
   },
 ];
 
@@ -318,7 +323,7 @@ export const PAGE_META: Record<string, [string, string]> = {
   sellerConversations: ['Messages', 'Conversations with your buyers'],
   customers: ['Consumer Management', 'View and manage customer accounts'],
   settings: ['Settings', 'Store configuration'],
-  adminProfile: ['Admin Profile', 'Account, security, RBAC scope, and preferences'],
+  adminProfile: ['My Profile', 'Account, security, RBAC scope, and preferences'],
   websiteCmsStudio: ['Website Manager', 'Manage homepage banners, pages, and site content'],
   adsDealsStudio: ['Ads & Deals Studio', 'Manage promoted ads, deals, coupons, and paid placements'],
   contentStudio: ['Guide Management', 'Manage videos, reels, blogs, and live sessions'],

@@ -38,9 +38,12 @@ export function getAvatarUrl(profile: Pick<UserProfile, 'displayName' | 'email' 
 /**
  * Canonical own-profile destination for the authenticated effective session user.
  *
- * Live self-profiles use the approved cms-mirror profile chrome (Image 1):
  * Seller → /admin/brand-profile, Creator → /admin/creator-profile,
- * Admin → /admin/profile, Consumer → /admin/consumer-profile.
+ * Consumer → /admin/consumer-profile (all three still the cms-mirror profile
+ * chrome). Admin / Super Admin / other staff roles (the `default` branch) →
+ * /admin/profile, which renders natively inside AdminWorkspaceLayout
+ * (src/pages/admin/profiles/MyProfilePage.tsx) — migrated off the CmsMirrorHost
+ * iframe so opening it never swaps out the modern dashboard shell.
  *
  * React UnifiedProfileShell (/seller|:id, /upe/…) remains Admin inspection / legacy only —
  * not Avatar → My Profile or sidebar self-profile entry points.

@@ -39,6 +39,7 @@ const AdminResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'));
 // Profile & Detail Pages
 const AccountSecurityPage = lazy(() => import('./pages/admin/AccountSecurityPage'));
+const MyProfilePage = lazy(() => import('./pages/admin/profiles/MyProfilePage'));
 const UnifiedProfileShell = lazy(() => import('./pages/admin/profiles/UnifiedProfileShell'));
 const ConsumerProfileView = lazy(() => import('./pages/admin/profiles/ConsumerProfileView'));
 const SellerDashboardPreview = lazy(() => import('./pages/admin/previews/SellerDashboardPreview'));
@@ -669,8 +670,20 @@ export default function App() {
             <Route path="/admin/creators/:id/marketplace-access" element={<ProtectedRoute><AdminLayout><Suspense fallback={routeSuspenseFallback}><UnifiedProfileShell /></Suspense></AdminLayout></ProtectedRoute>} />
 
             {/*
-              Admin / account self-profile: CmsMirrorHost (adminProfile page) — NOT UnifiedProfileShell.
-              Fall through /admin/* catch-all below; do not mount the legacy React UPE shell here.
+              Admin / Super Admin / staff self-profile — native React page inside
+              AdminWorkspaceLayout (src/pages/admin/profiles/MyProfilePage.tsx).
+              This used to fall through the /admin/* catch-all to CmsMirrorHost's
+              "adminProfile" iframe page, which has its own separate, more
+              limited internal sidebar (public/cms-mirror/app.html) — opening it
+              made the modern dashboard sidebar/topbar appear to vanish/switch to
+              a different shell. Registered here, before the /admin/* catch-all,
+              so it never reaches that iframe fallback again. getMyProfilePath()
+              (lib/userDisplay.ts) still routes here as the canonical destination
+              for both the left-nav "My Profile" entry and the top-right avatar
+              dropdown's "My Profile" item — same route, same page, one canonical
+              self-profile experience. Seller (/admin/brand-profile), Creator
+              (/admin/creator-profile), and Consumer (/admin/consumer-profile)
+              self-profiles are unrelated and untouched.
             */}
             <Route path="/admin/account/profile" element={<Navigate to="/admin/profile" replace />} />
             <Route path="/admin/account/settings" element={<Navigate to="/admin/settings" replace />} />
@@ -682,6 +695,20 @@ export default function App() {
                     <AdminWorkspaceLayout>
                       <Suspense fallback={routeSuspenseFallback}>
                         <AccountSecurityPage />
+                      </Suspense>
+                    </AdminWorkspaceLayout>
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/profile"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard>
+                    <AdminWorkspaceLayout>
+                      <Suspense fallback={routeSuspenseFallback}>
+                        <MyProfilePage />
                       </Suspense>
                     </AdminWorkspaceLayout>
                   </RoleGuard>
