@@ -25,7 +25,6 @@ export const PAGE_KEY_TO_PATH: Record<string, string> = {
   creators: '/admin/creator-studio',
   creatorProfile: '/admin/creator-profile',
   consumerProfile: '/admin/consumer-profile',
-  creatorEconomy: '/admin/creator-hub',
   brands: '/admin/brand-studio',
   brandProfile: '/admin/brand-profile',
   products: '/admin/products',
@@ -99,7 +98,6 @@ export function resolveAdminPageKey(pathname: string): string | null {
   if (pathname.startsWith('/admin/consumer-profile')) return 'consumerProfile';
   if (pathname.startsWith('/admin/creator-studio')) return 'creators';
   if (pathname.startsWith('/admin/creators-hub') || pathname.startsWith('/admin/creators')) return 'creators';
-  if (pathname.startsWith('/admin/creator-hub') || pathname.startsWith('/admin/creator-earnings')) return 'creatorEconomy';
   if (pathname.startsWith('/admin/returns')) return 'returnsRefunds';
   if (pathname.startsWith('/admin/warranty-claims')) return 'warrantyClaims';
   if (pathname.startsWith('/admin/customers')) return 'sellerCustomers';
@@ -185,7 +183,6 @@ export const ROLE_ALLOWED_PAGE_KEYS: Record<string, string[] | null> = {
     'creatorProfile', // Creator Profile (account / verification / listings)
     'contentStudio',
     'adsDealsStudio',
-    'creatorEconomy',
     'sellerCustomers',
     'partnerSupport',
     'notifications',
@@ -220,7 +217,6 @@ export const NAV_DEFS: CmsNavGroup[] = [
       { key: 'brands', label: 'Seller Management Studio', path: PAGE_KEY_TO_PATH.brands },
       { key: 'creators', label: 'Creators Management', path: PAGE_KEY_TO_PATH.creators },
       { key: 'customers', label: 'Consumer Management', path: PAGE_KEY_TO_PATH.customers },
-      { key: 'creatorEconomy', label: 'Creator Economy', path: PAGE_KEY_TO_PATH.creatorEconomy },
       { key: 'consumerProfile', label: 'My Profile', path: PAGE_KEY_TO_PATH.consumerProfile },
     ],
   },
@@ -349,10 +345,6 @@ export const PAGE_META: Record<string, [string, string]> = {
     'Apply service charges, platform fees, tax, and delivery charges platform-wide, by brand, category, or product',
   ],
   notifications: ['Notifications', 'Blast announcements, alerts, and promos to platform users'],
-  creatorEconomy: [
-    'Creator Economy & Recommendation Analytics',
-    'Affiliate commission attribution, campaign, and partnership management',
-  ],
   sellerCustomers: [
     'My Customers',
     'Customers who have purchased from your business',
@@ -445,7 +437,6 @@ export const CREATOR_NAV_GROUPS: CmsNavGroup[] = [
     items: [
       navItem('creators', 'Creator Studio'),
       navItem('creatorProfile', 'Creator Profile'),
-      navItem('creatorEconomy', 'Creator Economy'),
     ],
   },
   { title: 'COMMERCE', items: [navItem('sellerCustomers', 'My Customers')] },

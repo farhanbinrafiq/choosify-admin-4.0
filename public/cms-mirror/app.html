@@ -13226,7 +13226,7 @@ class Component extends DCLogic {
 
     let navDefs = [
       {title:'OVERVIEW', items:[{key:'dashboard',label:'Dashboard'}]},
-      {title:'ACCOUNT MANAGEMENT', items:[{key:'brands',label:'Seller Management Studio'},{key:'creators',label:'Creators Management'},{key:'customers',label:'Consumer Management'},{key:'creatorEconomy',label:'Creator Economy'}]},
+      {title:'ACCOUNT MANAGEMENT', items:[{key:'brands',label:'Seller Management Studio'},{key:'creators',label:'Creators Management'},{key:'customers',label:'Consumer Management'}]},
       {title:'BRAND & CATALOG', items:[{key:'products',label:'Products & Inventory'},{key:'categories',label:'Category Management Studio'}]},
       {title:'COMMERCE', items:[{key:'orders',label:'Orders Hub'},{key:'returnsRefunds',label:'Returns & Refunds'}]},
       {title:'MARKETING & CONTENT', items:[{key:'adsDealsStudio',label:'Ads & Deals Studio',tag:'NEW'},{key:'contentStudio',label:'Guide Management',tag:'NEW'}]},
@@ -13313,7 +13313,6 @@ class Component extends DCLogic {
       payouts:['Payouts','Review and settle seller sales and creator affiliate payout requests'],
       feeCharges:['Fee & Charges Engine','Apply service charges, platform fees, tax, and delivery charges platform-wide, by brand, category, or product'],
       notifications:['Notifications','Blast announcements, alerts, and promos to platform users'],
-      creatorEconomy:['Creator Economy & Recommendation Analytics','Affiliate commission attribution, campaign, and partnership management'],
       sellerCustomers:['My Customers','Buyers you have served through orders and bookings'],
       courierProviders:['Courier Providers','Manage integrated delivery partners'],
       shipmentOperations:['Shipment Operations','Active shipments across all couriers'],
@@ -13903,7 +13902,6 @@ class Component extends DCLogic {
         this.mkDashboardPanel('Deals & Collaboration', [
           {label:'Active Deals', value: String(creatorLiveDeals), onClick: () => this.setPage('adsDealsStudio')},
           {label:'Pending Ads', value: String(creatorPendingDeals), onClick: () => this.setPage('adsDealsStudio')},
-          {label:'Brand Campaigns', value: '—', onClick: () => this.setPage('creatorEconomy')},
         ], {label:'Open Ads & Deals Studio →', onClick: () => this.setPage('adsDealsStudio')}),
       ];
     } else if (isAdminMirrorRole) {
@@ -19094,7 +19092,7 @@ window.__CMS_MIRROR_ROLE_NAV__ = {
   super_admin: null,
   admin: null,
   seller: ['dashboard','brands','brandProfile','products','contentStudio','adsDealsStudio','orders','sellerCustomers','returnsRefunds','promoCodes','messages','notifications','reviews','finance','myEarnings','feesAdjustments','payouts','courierProviders','shipmentOperations','courierAnalytics','myCashbook','settings'],
-  creator: ['dashboard','creators','creatorProfile','contentStudio','adsDealsStudio','creatorEconomy','sellerCustomers','messages','notifications','reviews','finance','myEarnings','feesAdjustments','payouts','myCashbook','settings'],
+  creator: ['dashboard','creators','creatorProfile','contentStudio','adsDealsStudio','sellerCustomers','messages','notifications','reviews','finance','myEarnings','feesAdjustments','payouts','myCashbook','settings'],
   moderator: ['dashboard','moderationCenter','reviews','messages'],
   finance_manager: ['dashboard','payouts','feeCharges','finance'],
   support_agent: ['dashboard','messages','reviews'],

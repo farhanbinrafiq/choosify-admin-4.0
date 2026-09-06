@@ -17,7 +17,6 @@ export type PartnerFeatureKey =
   | 'promoCodes'
   | 'returnsRefunds'
   | 'logistics'
-  | 'creatorEconomy'
   | 'myEarnings'
   | 'payouts'
   | 'feesAdjustments'
@@ -137,14 +136,6 @@ export const PARTNER_FEATURES: PartnerFeatureDef[] = [
     pageKeys: ['courierProviders', 'shipmentOperations'],
     apiPrefixes: ['/api/v1/logistics', '/api/logistics'],
     roles: ['seller'],
-  },
-  {
-    key: 'creatorEconomy',
-    label: 'Creator Economy',
-    description: 'Creator economy hub',
-    pageKeys: ['creatorEconomy'],
-    apiPrefixes: [],
-    roles: ['creator'],
   },
   {
     key: 'myEarnings',

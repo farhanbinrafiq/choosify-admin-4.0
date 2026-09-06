@@ -49,7 +49,6 @@ const AdsDealsStudio = lazy(() => import('./pages/admin/AdsDealsStudio'));
 const AdsVisualBuilder = lazy(() => import('./pages/admin/AdsVisualBuilder'));
 const BannerDirectAdsStudio = lazy(() => import('./pages/admin/BannerDirectAdsStudio'));
 const FeatureAccessEntitlements = lazy(() => import('./pages/admin/FeatureAccessEntitlements'));
-const CreatorsHub = lazy(() => import('./pages/admin/CreatorsHub'));
 const Categories = lazy(() => import('./pages/admin/Categories'));
 const Returns = lazy(() => import('./pages/admin/Returns'));
 const WarrantyClaims = lazy(() => import('./pages/admin/WarrantyClaims'));
@@ -95,7 +94,6 @@ const TrustCenter = lazy(() => import('./pages/admin/TrustCenter'));
 const DisputeCenter = lazy(() => import('./pages/admin/DisputeCenter'));
 const Coupons = lazy(() => import('./pages/admin/Coupons'));
 const BrandVerification = lazy(() => import('./pages/admin/BrandVerification'));
-const CreatorEconomy = lazy(() => import('./pages/admin/CreatorEconomy'));
 const CreatorEarnings = lazy(() => import('./pages/admin/CreatorEarnings'));
 const ModerationV2 = lazy(() => import('./pages/admin/ModerationV2'));
 
@@ -1542,25 +1540,13 @@ export default function App() {
                 </ProtectedRoute>
               }
             />
-            <Route
-              path="/admin/creator-hub"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard>
-                    <AdminWorkspaceLayout>
-                      <AdminFeatureNotAvailable
-                        title="Creator Economy"
-                        description="Campaign management and brand-partnership tooling for creators is not yet built. Creator profile editing and cashbook/payout data are both real today."
-                        alternatives={[
-                          { label: 'Go to Creator Studio', to: '/admin/creator-studio' },
-                          { label: 'Go to Cashbook Hub', to: '/admin/cashbook' },
-                        ]}
-                      />
-                    </AdminWorkspaceLayout>
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
+            {/* Creator Economy placeholder removed -- its intended responsibilities
+                (campaign/partnership tooling, creator profile editing, cashbook/
+                payout data) are already handled by Creators Management/Creator
+                Studio/Guide Management/Ads & Deals/Notifications/Cashbook Hub.
+                Old bookmarks/direct links to this route redirect to the
+                canonical Creators Management page instead of 404ing. */}
+            <Route path="/admin/creator-hub" element={<Navigate to="/admin/creator-studio" replace />} />
             <Route
               path="/admin/admins"
               element={

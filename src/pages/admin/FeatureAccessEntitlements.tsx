@@ -64,7 +64,7 @@ const SELLER_GROUPS: FeatureGroupDef[] = [
 const CREATOR_GROUPS: FeatureGroupDef[] = [
   {
     title: 'CONTENT & PUBLISHING',
-    keys: ['guideManagement', 'creatorEconomy'],
+    keys: ['guideManagement'],
   },
   {
     title: 'MONETIZATION',
@@ -128,7 +128,6 @@ const FEATURE_EMOJI: Partial<Record<PartnerFeatureKey, string>> = {
   logistics: '🚚',
   customerInsights: '🧭',
   notifications: '🔔',
-  creatorEconomy: '🎥',
 };
 
 function authHeaders(): HeadersInit {
