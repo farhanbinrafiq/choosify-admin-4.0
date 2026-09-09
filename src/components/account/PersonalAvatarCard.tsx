@@ -1,8 +1,10 @@
-import React, { useRef, useState } from 'react';
-import { Camera, Loader2, Trash2 } from 'lucide-react';
+import React, { useCallback, useRef, useState } from 'react';
+import { Camera, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAvatarUrl, getUserInitials } from '../../lib/userDisplay';
-import { uploadUserAvatar } from '../../services/mediaUpload';
+import { dataUrlToFile, uploadUserAvatar } from '../../services/mediaUpload';
+import { AvatarCropModal } from './AvatarCropModal';
+import type { ProfileImageAdjustResult } from '../media/ProfileImageAdjustModal';
 
 /**
  * Self-service personal profile photo — drop-in for any dashboard "Account
@@ -11,11 +13,16 @@ import { uploadUserAvatar } from '../../services/mediaUpload';
  * Deliberately separate from Brand/Channel logo controls elsewhere on the
  * page — this only ever touches the signed-in user's own `users.avatarUrl`
  * via AuthContext.updateAvatar, never a brand/creator record.
+ *
+ * Shares the same adjustment mechanism as UserProfileDropdown's avatar menu
+ * (ProfileImageAdjustModal via AvatarCropModal) rather than a second cropper.
  */
 export function PersonalAvatarCard() {
   const { profile, updateAvatar } = useAuth();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropSrc, setCropSrc] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!profile) return null;
@@ -37,7 +44,9 @@ export function PersonalAvatarCard() {
     setBusy(true);
     try {
       const url = await uploadUserAvatar(file);
-      await updateAvatar(url);
+      // A fresh upload becomes both the shown photo and the new "original" —
+      // Edit afterward adjusts the real, full-resolution source.
+      await updateAvatar(url, { originalUrl: url, crop: null });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update profile photo.');
     } finally {
@@ -49,13 +58,43 @@ export function PersonalAvatarCard() {
     setBusy(true);
     setError(null);
     try {
-      await updateAvatar(null);
+      await updateAvatar(null, { originalUrl: null, crop: null });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove profile photo.');
     } finally {
       setBusy(false);
     }
   };
+
+  const openCropEditor = useCallback(() => {
+    if (!hasRealPhoto) return;
+    setCropSrc(profile.avatarOriginal || avatarUrl);
+    setCropOpen(true);
+  }, [avatarUrl, hasRealPhoto, profile.avatarOriginal]);
+
+  const onCropSave = useCallback(
+    async (result: ProfileImageAdjustResult) => {
+      setCropOpen(false);
+      const originalUrl = cropSrc;
+      setCropSrc('');
+      setBusy(true);
+      setError(null);
+      try {
+        const outputUrl = await uploadUserAvatar(dataUrlToFile(result.dataUrl, 'avatar.png'));
+        await updateAvatar(outputUrl, { originalUrl, crop: result.crop });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to update profile photo.');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cropSrc, updateAvatar],
+  );
+
+  const onCropCancel = useCallback(() => {
+    setCropOpen(false);
+    setCropSrc('');
+  }, []);
 
   return (
     <div className="p-3.5 bg-white/5 border border-app-border rounded space-y-3 text-xs font-sans">
@@ -101,6 +140,16 @@ export function PersonalAvatarCard() {
           <button
             type="button"
             disabled={busy}
+            onClick={openCropEditor}
+            className="px-3 py-1.5 bg-white/5 border border-app-border hover:bg-white/10 text-app-text-primary rounded font-bold cursor-pointer transition-colors text-xs disabled:opacity-60 inline-flex items-center gap-1.5"
+          >
+            <Pencil className="w-3 h-3" aria-hidden /> Adjust
+          </button>
+        )}
+        {hasRealPhoto && (
+          <button
+            type="button"
+            disabled={busy}
             onClick={() => void handleRemove()}
             className="px-3 py-1.5 bg-white/5 border border-app-border hover:bg-rose-500/10 hover:text-rose-400 hover:border-rose-500/30 text-app-text-primary rounded font-bold cursor-pointer transition-colors text-xs disabled:opacity-60 inline-flex items-center gap-1.5"
           >
@@ -110,6 +159,14 @@ export function PersonalAvatarCard() {
       </div>
       {error && <div className="text-[10px] text-rose-400 font-semibold">{error}</div>}
       <div className="text-[9.5px] text-app-text-secondary">JPG, PNG, WebP, or GIF. Up to 2.5 MB.</div>
+
+      <AvatarCropModal
+        open={cropOpen}
+        imageSrc={cropSrc}
+        initialCrop={cropSrc && cropSrc === profile.avatarOriginal ? profile.avatarCrop : null}
+        onCancel={onCropCancel}
+        onSave={onCropSave}
+      />
     </div>
   );
 }

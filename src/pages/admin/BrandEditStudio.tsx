@@ -226,6 +226,11 @@ export default function BrandEditStudio({ overrideId, isNested }: BrandEditStudi
               variant="logo"
               value={d.logo || d.logoUrl || ''}
               onChange={(url) => patch({ logo: url, logoUrl: url })}
+              originalValue={d.logoOriginal}
+              cropValue={d.logoCrop}
+              onAdjustMeta={(meta) =>
+                patch(meta ? { logoOriginal: meta.originalUrl, logoCrop: meta.crop } : { logoOriginal: '', logoCrop: undefined })
+              }
             />
           </div>
         );

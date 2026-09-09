@@ -1,3 +1,5 @@
+import type { ProfileImageCropParams } from '../../shared/media/profileImageCrop';
+
 export interface CatalogMediaItem {
   id: string;
   title: string;
@@ -42,6 +44,13 @@ export interface CatalogCreator {
   name: string;
   handle: string;
   avatar: string;
+  /** The ORIGINAL (uncropped) upload behind `avatar`, when one is stored —
+   *  lets the shared profile-image adjustment editor resume against the real
+   *  source instead of re-cropping an already-cropped image. Absent for
+   *  avatars saved before this existed. */
+  avatarOriginal?: string;
+  /** Scale/position of `avatar` against `avatarOriginal`, for resuming edits. */
+  avatarCrop?: ProfileImageCropParams;
   coverImage?: string;
   role?: string;
   location?: string;

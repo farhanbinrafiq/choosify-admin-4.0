@@ -4,8 +4,10 @@ import { ArrowLeft, ExternalLink, History, Plus, RotateCw, Trash2, Upload } from
 import { catalogApi } from '../../services/catalogApi';
 import { useAuth } from '../../contexts/AuthContext';
 import { useEntityDraft } from '../../hooks/useEntityDraft';
-import { uploadCreatorImage } from '../../services/mediaUpload';
+import { dataUrlToFile, uploadCreatorImage } from '../../services/mediaUpload';
 import { CreatorProfilePresentation, type CreatorStudioBridge } from '../../components/creator-profile';
+import { ProfileImageAdjustModal, type ProfileImageAdjustResult } from '../../components/media/ProfileImageAdjustModal';
+import type { ProfileImageCropParams } from '../../../shared/media/profileImageCrop';
 import type { CatalogBrand } from '../../types/catalog';
 import {
   createBlankCreatorModel,
@@ -80,6 +82,16 @@ function ListEditor({
   );
 }
 
+/** Present only for the avatar (roundedFull) field — routes uploads through
+ *  the shared ProfileImageAdjustModal instead of a raw upload, and persists
+ *  the original + crop params alongside the displayed avatar (see
+ *  CatalogCreator.avatarOriginal/avatarCrop). */
+type ImageFieldCropConfig = {
+  originalValue?: string;
+  cropValue?: ProfileImageCropParams;
+  onAdjustMeta?: (meta: { originalUrl: string; crop: ProfileImageCropParams } | null) => void;
+};
+
 /* ── One image (cover or avatar) — canonical uploadCreatorImage, inline preview ── */
 function ImageField({
   value,
@@ -88,6 +100,7 @@ function ImageField({
   aspect,
   roundedFull,
   emptyLabel,
+  crop,
 }: {
   value: string;
   onChange: (u: string) => void;
@@ -95,9 +108,13 @@ function ImageField({
   aspect: string;
   roundedFull?: boolean;
   emptyLabel: string;
+  crop?: ImageFieldCropConfig;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  const [cropOpen, setCropOpen] = useState(false);
+  const [cropSrc, setCropSrc] = useState('');
+
   const doUpload = async (files: FileList | File[] | null) => {
     const f = Array.from(files ?? []).find((x) => x.type.startsWith('image/'));
     if (!f) {
@@ -116,6 +133,59 @@ function ImageField({
       if (fileRef.current) fileRef.current.value = '';
     }
   };
+
+  const pickForCrop = (files: FileList | File[] | null) => {
+    const f = Array.from(files ?? []).find((x) => x.type.startsWith('image/'));
+    if (!f) {
+      onToast('Choose a JPG or PNG image.');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setCropSrc(String(reader.result || ''));
+      setCropOpen(true);
+    };
+    reader.onerror = () => onToast('Could not read this file.');
+    reader.readAsDataURL(f);
+  };
+
+  const openAdjust = () => {
+    if (!value || !crop) return;
+    setCropSrc(crop.originalValue || value);
+    setCropOpen(true);
+  };
+
+  const onCropSave = async (result: ProfileImageAdjustResult) => {
+    setCropOpen(false);
+    const originalSrc = cropSrc;
+    setCropSrc('');
+    setBusy(true);
+    try {
+      const outputUrl = await uploadCreatorImage(dataUrlToFile(result.dataUrl, 'creator-avatar.png'));
+      // A fresh pick's "original" hasn't been persisted anywhere yet — upload
+      // it once now. Re-adjusting an existing avatar reuses the original
+      // already on file, no second upload needed.
+      const originalUrl = originalSrc.startsWith('data:')
+        ? await uploadCreatorImage(dataUrlToFile(originalSrc, 'creator-avatar-original.png'))
+        : originalSrc;
+      onChange(outputUrl);
+      crop?.onAdjustMeta?.({ originalUrl, crop: result.crop });
+    } catch (e) {
+      onToast(e instanceof Error ? e.message : 'Upload failed.');
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  const onCropCancel = () => {
+    setCropOpen(false);
+    setCropSrc('');
+    if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const handlePicked = crop ? pickForCrop : doUpload;
+
   return (
     <div>
       <input
@@ -123,7 +193,7 @@ function ImageField({
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={(e) => void doUpload(e.target.files)}
+        onChange={(e) => void handlePicked(e.target.files)}
       />
       <div
         role="button"
@@ -132,7 +202,7 @@ function ImageField({
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault();
-          void doUpload(e.dataTransfer.files);
+          void handlePicked(e.dataTransfer.files);
         }}
         className={`relative ${aspect} ${roundedFull ? 'rounded-full' : 'rounded-lg'} overflow-hidden border border-[#E8EDF2] bg-[#F4F7F9] cursor-pointer flex items-center justify-center`}
       >
@@ -149,12 +219,38 @@ function ImageField({
         <button type="button" className={ghostBtn} disabled={busy} onClick={() => fileRef.current?.click()}>
           {value ? 'Replace' : 'Upload'}
         </button>
+        {crop && value ? (
+          <button type="button" className={ghostBtn} disabled={busy} onClick={openAdjust}>
+            Adjust
+          </button>
+        ) : null}
         {value ? (
-          <button type="button" className={`${ghostBtn} text-[#DC2626]`} onClick={() => onChange('')}>
+          <button
+            type="button"
+            className={`${ghostBtn} text-[#DC2626]`}
+            onClick={() => {
+              onChange('');
+              crop?.onAdjustMeta?.(null);
+            }}
+          >
             Remove
           </button>
         ) : null}
       </div>
+      {crop && (
+        <ProfileImageAdjustModal
+          open={cropOpen}
+          imageSrc={cropSrc}
+          initialCrop={cropSrc && cropSrc === crop.originalValue ? crop.cropValue : null}
+          title="Edit creator avatar"
+          helpText="Drag to reposition. Zoom in/out or use the slider."
+          shape="circle"
+          outputLongSide={256}
+          accentColor="#EF3C23"
+          onCancel={onCropCancel}
+          onSave={onCropSave}
+        />
+      )}
     </div>
   );
 }
@@ -763,6 +859,14 @@ export default function CreatorEditStudio() {
                 aspect="aspect-square max-w-[140px]"
                 roundedFull
                 emptyLabel="Upload avatar"
+                crop={{
+                  originalValue: d.avatarOriginal,
+                  cropValue: d.avatarCrop,
+                  onAdjustMeta: (meta) =>
+                    patchDraft(
+                      meta ? { avatarOriginal: meta.originalUrl, avatarCrop: meta.crop } : { avatarOriginal: '', avatarCrop: undefined },
+                    ),
+                }}
               />
             </div>
           </div>

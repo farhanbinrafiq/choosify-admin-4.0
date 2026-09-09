@@ -420,7 +420,9 @@ export default function UnifiedProfileShell() {
     setAvatarBusy(true);
     try {
       const url = await uploadUserAvatar(file);
-      await updateAvatar(url);
+      // Fresh raw upload — becomes the new original too, so it doesn't leave
+      // a stale avatarOriginal/avatarCrop pointing at a since-replaced photo.
+      await updateAvatar(url, { originalUrl: url, crop: null });
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to update profile photo.');
     } finally {

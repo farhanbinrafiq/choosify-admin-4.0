@@ -15,6 +15,7 @@ import type {
   HomepageHeroBanner,
   HomepageSectionConfig,
 } from '../src/types/catalog';
+import type { ProfileImageCropParams } from '../shared/media/profileImageCrop';
 import { parseProductStatusInput } from './catalog/productLifecycle';
 
 const nonEmpty = z.string().trim().min(1);
@@ -80,6 +81,23 @@ const toStringArray = (value: unknown): string[] => {
   return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
 };
 
+/** Shared profile-image adjustment params (see ProfileImageAdjustModal). Present-aware:
+ *  an explicit `null` clears; an absent key keeps `existing`; a well-formed object replaces it. */
+const toCropParams = (value: unknown, existing?: ProfileImageCropParams): ProfileImageCropParams | undefined => {
+  if (value === null) return undefined;
+  if (
+    value &&
+    typeof value === 'object' &&
+    ['scale', 'x', 'y', 'naturalW', 'naturalH'].every(
+      (k) => typeof (value as Record<string, unknown>)[k] === 'number' && Number.isFinite((value as Record<string, unknown>)[k]),
+    )
+  ) {
+    const v = value as Record<string, number>;
+    return { scale: v.scale, x: v.x, y: v.y, naturalW: v.naturalW, naturalH: v.naturalH };
+  }
+  return existing;
+};
+
 /**
  * A product video is one canonical source. Accepts:
  *  - an app-owned upload path (`/media/...`, produced by POST /catalog/media/upload),
@@ -132,6 +150,16 @@ const brandSchema = z.object({
   category: z.string(),
   description: z.string(),
   logo: z.string(),
+  logoOriginal: z.string().optional(),
+  logoCrop: z
+    .object({
+      scale: z.number(),
+      x: z.number(),
+      y: z.number(),
+      naturalW: z.number(),
+      naturalH: z.number(),
+    })
+    .optional(),
   coverImage: z.string().optional(),
   tagline: z.string().optional(),
   website: z.string().optional(),
@@ -420,6 +448,8 @@ export const normalizeBrandInput = (
     category: toString(raw.category, existing?.category ?? 'General'),
     description: toString(raw.description, existing?.description ?? ''),
     logo: toString(raw.logo, existing?.logo ?? ''),
+    logoOriginal: toString(raw.logoOriginal, existing?.logoOriginal ?? '') || undefined,
+    logoCrop: toCropParams(raw.logoCrop, existing?.logoCrop),
     coverImage: toString(raw.coverImage, existing?.coverImage ?? '') || undefined,
     tagline: toString(raw.tagline, existing?.tagline ?? '') || undefined,
     website: toString(raw.website, existing?.website ?? '') || undefined,

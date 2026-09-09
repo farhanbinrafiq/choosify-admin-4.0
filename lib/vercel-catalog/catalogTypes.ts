@@ -1,3 +1,5 @@
+import type { ProfileImageCropParams } from '../../shared/media/profileImageCrop';
+
 export type CatalogPublishStatus =
   | 'draft'
   | 'live'
@@ -106,6 +108,13 @@ export interface CatalogBrand {
   category: string;
   description: string;
   logo: string;
+  /** The ORIGINAL (unframed) upload behind `logo`, when one is stored — lets
+   *  the shared profile-image adjustment editor resume against the real
+   *  source instead of re-framing an already-framed image. Absent for logos
+   *  saved before this existed. */
+  logoOriginal?: string;
+  /** Scale/position of `logo` against `logoOriginal`, for resuming edits. */
+  logoCrop?: ProfileImageCropParams;
   /** Hero / cover banner for brand profile */
   coverImage?: string;
   tagline?: string;

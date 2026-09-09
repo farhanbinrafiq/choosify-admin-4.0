@@ -24,6 +24,14 @@ export const users = pgTable('users', {
   /** Permanent human-readable Choosify User ID (CF-00001…). Never reuse. */
   choosifyUserId: varchar('choosify_user_id', { length: 32 }),
   avatarUrl: varchar('avatar_url', { length: 700 }),
+  /** The ORIGINAL (uncropped) upload behind avatarUrl, when one is stored —
+   *  lets the profile-photo adjustment editor resume against the real source
+   *  instead of re-cropping an already-cropped image. Null for legacy avatars
+   *  saved before this existed, and for avatarUrl values set via other paths
+   *  (e.g. social login) that were never run through the adjustment editor. */
+  avatarOriginalUrl: varchar('avatar_original_url', { length: 700 }),
+  /** Scale/position of avatarUrl against avatarOriginalUrl: { scale, x, y, naturalW, naturalH }. */
+  avatarCrop: jsonb('avatar_crop'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 });

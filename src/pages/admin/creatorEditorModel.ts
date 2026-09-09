@@ -3,6 +3,7 @@ import type {
   CatalogCreatorFeaturedItem,
   CatalogMediaItem,
 } from '../../types/catalog';
+import type { ProfileImageCropParams } from '../../../shared/media/profileImageCrop';
 
 export type CreatorEditorStatus = 'DRAFT' | 'LIVE' | 'ARCHIVED';
 
@@ -39,6 +40,10 @@ export interface CreatorEditorModel {
   handle: string;
   slug: string;
   avatar: string;
+  /** The ORIGINAL (uncropped) upload behind `avatar` — see CatalogCreator.avatarOriginal. */
+  avatarOriginal?: string;
+  /** Scale/position of the avatar against `avatarOriginal` — see CatalogCreator.avatarCrop. */
+  avatarCrop?: ProfileImageCropParams;
   coverImage: string;
   title: string;
   location: string;
@@ -139,6 +144,8 @@ export function mapCatalogCreatorToEditor(creator: CatalogCreator): CreatorEdito
     handle: creator.handle || '',
     slug: creator.slug || '',
     avatar: creator.avatar || '',
+    avatarOriginal: creator.avatarOriginal || '',
+    avatarCrop: creator.avatarCrop,
     coverImage: creator.coverImage || '',
     title: creator.role || creator.category || '',
     location: creator.location || '',
@@ -187,6 +194,8 @@ export function editorModelToCreatorPayload(model: CreatorEditorModel): Partial<
     name: model.name,
     handle: model.handle,
     avatar: model.avatar || undefined,
+    avatarOriginal: model.avatarOriginal || undefined,
+    avatarCrop: model.avatarCrop,
     coverImage: model.coverImage || undefined,
     role: model.title || undefined,
     location: model.location || undefined,

@@ -1,6 +1,8 @@
 // brandSeeds.ts
 // Robust data seeds for Choosify Brand Studio V2
 
+import type { ProfileImageCropParams } from '../../../shared/media/profileImageCrop';
+
 export interface CreatorVideoItem {
   id: string;
   title: string;
@@ -101,6 +103,10 @@ export interface BrandCMSModel {
   brandName: string;
   slug: string;
   logo: string;
+  /** The ORIGINAL (unframed) upload behind `logo`/`logoUrl` — see CatalogBrand.logoOriginal. */
+  logoOriginal?: string;
+  /** Scale/position of the logo against `logoOriginal` — see CatalogBrand.logoCrop. */
+  logoCrop?: ProfileImageCropParams;
   coverImage: string;
   tagline: string;
   category: string;

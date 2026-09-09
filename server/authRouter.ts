@@ -714,14 +714,23 @@ authRouter.get('/auth/me', async (req, res) => {
       role: user.role,
     });
     let avatarUrl: string | undefined;
+    let avatarOriginalUrl: string | undefined;
+    let avatarCrop: unknown;
     let hasPassword = true;
     try {
       const userRows = await db
-        .select({ avatarUrl: users.avatarUrl, passwordHash: users.passwordHash })
+        .select({
+          avatarUrl: users.avatarUrl,
+          avatarOriginalUrl: users.avatarOriginalUrl,
+          avatarCrop: users.avatarCrop,
+          passwordHash: users.passwordHash,
+        })
         .from(users)
         .where(eq(users.id, user.uid))
         .limit(1);
       avatarUrl = userRows[0]?.avatarUrl || undefined;
+      avatarOriginalUrl = userRows[0]?.avatarOriginalUrl || undefined;
+      avatarCrop = userRows[0]?.avatarCrop || undefined;
       hasPassword = Boolean(userRows[0]?.passwordHash);
     } catch {
       /* avatarUrl is optional */
@@ -766,6 +775,8 @@ authRouter.get('/auth/me', async (req, res) => {
       ...(website && { website }),
       ...(extras?.bio && { bio: extras.bio }),
       ...(avatarUrl && { avatarUrl }),
+      ...(avatarOriginalUrl && { avatarOriginalUrl }),
+      ...(avatarCrop && { avatarCrop }),
     });
   } catch (error) {
     const abuse = recordFailedAuthAttempt(req.ip, req.originalUrl);
@@ -1129,6 +1140,43 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
         .slice(0, 700)
     : undefined;
 
+  // Shared profile-image adjustment (User Profile / Brand Studio / Creator
+  // Studio all use the same editor) — the ORIGINAL upload + crop parameters,
+  // stored alongside avatarUrl so "Edit" can resume against the real source
+  // instead of re-cropping an already-cropped image. Both present-aware:
+  // omit entirely to leave unchanged, send '' / null to clear.
+  const hasAvatarOriginalUrl = Object.prototype.hasOwnProperty.call(req.body || {}, 'avatarOriginalUrl');
+  const avatarOriginalUrl = hasAvatarOriginalUrl
+    ? String(req.body?.avatarOriginalUrl || '')
+        .trim()
+        .slice(0, 700)
+    : undefined;
+  const hasAvatarCrop = Object.prototype.hasOwnProperty.call(req.body || {}, 'avatarCrop');
+  const avatarCropRaw = hasAvatarCrop ? req.body?.avatarCrop : undefined;
+  let avatarCrop: { scale: number; x: number; y: number; naturalW: number; naturalH: number } | null | undefined;
+  if (hasAvatarCrop) {
+    if (avatarCropRaw === null) {
+      avatarCrop = null;
+    } else if (
+      avatarCropRaw &&
+      typeof avatarCropRaw === 'object' &&
+      [avatarCropRaw.scale, avatarCropRaw.x, avatarCropRaw.y, avatarCropRaw.naturalW, avatarCropRaw.naturalH].every(
+        (n: unknown) => typeof n === 'number' && Number.isFinite(n),
+      )
+    ) {
+      avatarCrop = {
+        scale: avatarCropRaw.scale,
+        x: avatarCropRaw.x,
+        y: avatarCropRaw.y,
+        naturalW: avatarCropRaw.naturalW,
+        naturalH: avatarCropRaw.naturalH,
+      };
+    } else {
+      res.status(400).json({ success: false, error: 'avatarCrop must be null or { scale, x, y, naturalW, naturalH }' });
+      return;
+    }
+  }
+
   // Primary account phone. Present + empty/null => clear it. Present + value =>
   // normalize server-side to canonical E.164 (see server/lib/phone.ts) — the
   // browser's formatting is never trusted. Contact info only; not a credential,
@@ -1160,17 +1208,24 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
     website === undefined &&
     bio === undefined &&
     avatarUrl === undefined &&
+    avatarOriginalUrl === undefined &&
+    avatarCrop === undefined &&
     phone === undefined
   ) {
     res.status(400).json({
       success: false,
-      error: 'Provide at least one of displayName, username, website, bio, avatarUrl, phone',
+      error: 'Provide at least one of displayName, username, website, bio, avatarUrl, avatarOriginalUrl, avatarCrop, phone',
     });
     return;
   }
 
   if (avatarUrl !== undefined && avatarUrl && !/^\/media\/|^https?:\/\//i.test(avatarUrl)) {
     res.status(400).json({ success: false, error: 'avatarUrl must be a Choosify media URL' });
+    return;
+  }
+
+  if (avatarOriginalUrl !== undefined && avatarOriginalUrl && !/^\/media\/|^https?:\/\//i.test(avatarOriginalUrl)) {
+    res.status(400).json({ success: false, error: 'avatarOriginalUrl must be a Choosify media URL' });
     return;
   }
 
@@ -1257,12 +1312,17 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
       }
     }
 
-    if (avatarUrl !== undefined) {
-      await db
-        .update(users)
-        .set({ avatarUrl: avatarUrl || null, updatedAt: now })
-        .where(eq(users.id, targetUserId));
-      Logger.audit('auth.profile_avatar_update', { actorId, targetUserId, cleared: !avatarUrl });
+    if (avatarUrl !== undefined || avatarOriginalUrl !== undefined || avatarCrop !== undefined) {
+      const avatarPatch: Record<string, unknown> = { updatedAt: now };
+      if (avatarUrl !== undefined) avatarPatch.avatarUrl = avatarUrl || null;
+      if (avatarOriginalUrl !== undefined) avatarPatch.avatarOriginalUrl = avatarOriginalUrl || null;
+      if (avatarCrop !== undefined) avatarPatch.avatarCrop = avatarCrop;
+      await db.update(users).set(avatarPatch).where(eq(users.id, targetUserId));
+      Logger.audit('auth.profile_avatar_update', {
+        actorId,
+        targetUserId,
+        cleared: avatarUrl !== undefined ? !avatarUrl : undefined,
+      });
     }
 
     if (username !== undefined || website !== undefined || bio !== undefined) {
@@ -1336,6 +1396,8 @@ authRouter.patch('/auth/profile', ...requireAuth, async (req, res) => {
         website: fresh?.website || website || '',
         bio: fresh?.bio || '',
         avatarUrl: avatarUrl !== undefined ? avatarUrl : undefined,
+        avatarOriginalUrl: avatarOriginalUrl !== undefined ? avatarOriginalUrl : undefined,
+        avatarCrop: avatarCrop !== undefined ? avatarCrop : undefined,
         phone: fresh?.phone || null,
         lastNameChangedAt: fresh?.lastNameChangedAt,
         changeNextLogin: fresh?.changeNextLogin === true,

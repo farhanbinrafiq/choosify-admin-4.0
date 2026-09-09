@@ -12,6 +12,7 @@ import {
 } from '../../lib/userDisplay';
 import { dataUrlToFile, uploadUserAvatar } from '../../services/mediaUpload';
 import { AvatarCropModal } from './AvatarCropModal';
+import type { ProfileImageAdjustResult } from '../media/ProfileImageAdjustModal';
 
 type UserProfileDropdownProps = {
   /** `header` = AdminLayout chrome; `overlay` = fixed on CMS mirror iframe host */
@@ -80,15 +81,16 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
     [close, navigate],
   );
 
-  /** Uploads through the canonical media pipeline (category 'users'), then
-   *  persists avatarUrl onto the account (PATCH /auth/profile) via AuthContext
-   *  — the same call the Profile Photo section on the profile page makes. */
+  /** Replace: uploads a brand-new photo through the canonical media pipeline
+   *  (category 'users'). The fresh upload becomes both the displayed avatar
+   *  AND the new "original" (no crop yet) — so a following Edit adjusts the
+   *  real, full-resolution source rather than nothing. */
   const persistAvatar = useCallback(
     async (file: File) => {
       setAvatarBusy(true);
       try {
         const url = await uploadUserAvatar(file);
-        await updateAvatar(url);
+        await updateAvatar(url, { originalUrl: url, crop: null });
       } catch (err) {
         window.alert(err instanceof Error ? err.message : 'Failed to update profile photo.');
       } finally {
@@ -98,16 +100,19 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
     [updateAvatar],
   );
 
-  /** Edit = crop / reposition the current photo. */
+  /** Edit = crop / reposition the current photo. Edits the stored ORIGINAL
+   *  (uncropped) source when one exists, so repeated edits never progressively
+   *  degrade an already-cropped image; falls back to the current avatar for
+   *  photos saved before originals were tracked. */
   const openCropEditor = useCallback(() => {
     setAvatarMenuOpen(false);
     if (!hasRealPhoto) {
       window.alert('No photo to edit. Use Replace to upload one first.');
       return;
     }
-    setCropSrc(avatarUrl);
+    setCropSrc(profile?.avatarOriginal || avatarUrl);
     setCropOpen(true);
-  }, [avatarUrl, hasRealPhoto]);
+  }, [avatarUrl, hasRealPhoto, profile?.avatarOriginal]);
 
   /** Replace = pick a new image file (reupload / change). */
   const openReplacePicker = useCallback(() => {
@@ -134,20 +139,31 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
     [persistAvatar],
   );
 
+  /** The crop editor's source IS the original — only the rendered output +
+   *  crop params need persisting, the original itself is already saved. */
   const onCropSave = useCallback(
-    (dataUrl: string) => {
+    async (result: ProfileImageAdjustResult) => {
       setCropOpen(false);
+      const originalUrl = cropSrc;
       setCropSrc('');
-      void persistAvatar(dataUrlToFile(dataUrl, 'avatar.png'));
+      setAvatarBusy(true);
+      try {
+        const outputUrl = await uploadUserAvatar(dataUrlToFile(result.dataUrl, 'avatar.png'));
+        await updateAvatar(outputUrl, { originalUrl, crop: result.crop });
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : 'Failed to update profile photo.');
+      } finally {
+        setAvatarBusy(false);
+      }
     },
-    [persistAvatar],
+    [cropSrc, updateAvatar],
   );
 
   const onRemovePhoto = useCallback(async () => {
     setAvatarMenuOpen(false);
     setAvatarBusy(true);
     try {
-      await updateAvatar(null);
+      await updateAvatar(null, { originalUrl: null, crop: null });
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to remove profile photo.');
     } finally {
@@ -282,6 +298,7 @@ export function UserProfileDropdown({ variant = 'header', className = '' }: User
       <AvatarCropModal
         open={cropOpen}
         imageSrc={cropSrc}
+        initialCrop={cropSrc && cropSrc === profile?.avatarOriginal ? profile?.avatarCrop : null}
         onCancel={onCropCancel}
         onSave={onCropSave}
       />

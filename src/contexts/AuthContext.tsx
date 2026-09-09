@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { CategoryType } from '../types';
+import type { ProfileImageCropParams } from '../components/media/ProfileImageAdjustModal';
 import {
   fetchCategoriesFromApi,
   persistCategoryCreate,
@@ -33,6 +34,13 @@ export interface UserProfile {
   email: string;
   role: UserRole;
   avatar?: string;
+  /** The ORIGINAL (uncropped) upload behind `avatar`, when one is stored —
+   *  lets the crop editor resume adjusting the real source instead of
+   *  re-cropping an already-cropped image. Absent for legacy avatars saved
+   *  before this existed. */
+  avatarOriginal?: string;
+  /** Scale/position of `avatar` against `avatarOriginal`, for resuming edits. */
+  avatarCrop?: ProfileImageCropParams;
   changeNextLogin?: boolean;
   username?: string;
   website?: string;
@@ -70,8 +78,15 @@ interface AuthContextType {
   clearMustChangePassword: () => void;
   /** Persists the canonical avatarUrl (PATCH /auth/profile) and updates `profile.avatar`
    *  in place — every surface reading `profile.avatar` (navbar, dropdown, profile page)
-   *  updates immediately, no refetch/refresh required. Pass null to remove the photo. */
-  updateAvatar: (avatarUrl: string | null) => Promise<void>;
+   *  updates immediately, no refetch/refresh required. Pass null to remove the photo.
+   *  `meta.originalUrl`/`meta.crop` additionally persist the uncropped source and the
+   *  adjustment parameters, so a later "Edit" can resume against the real original
+   *  instead of re-cropping an already-cropped image. Omit `meta` to leave them as-is
+   *  (e.g. a plain Replace upload that hasn't been through the crop editor yet). */
+  updateAvatar: (
+    avatarUrl: string | null,
+    meta?: { originalUrl?: string | null; crop?: ProfileImageCropParams | null },
+  ) => Promise<void>;
   applyAsPartner: (input: {
     applicantType: 'seller' | 'creator';
     email: string;
@@ -193,6 +208,8 @@ async function resolveAuthProfile(token: string) {
     website?: string;
     bio?: string;
     avatarUrl?: string;
+    avatarOriginalUrl?: string;
+    avatarCrop?: ProfileImageCropParams;
     choosifyUserId?: string | null;
     partnerApplicationStatus?: 'pending' | 'approved' | 'rejected' | null;
     identityVerified?: boolean;
@@ -300,6 +317,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 email: remote.email,
                 role: toUserRole(remote.role),
                 avatar: remote.avatarUrl || undefined,
+                avatarOriginal: remote.avatarOriginalUrl || undefined,
+                avatarCrop: remote.avatarCrop || undefined,
                 changeNextLogin: remote.changeNextLogin === true,
                 username: remote.username,
                 website: remote.website,
@@ -426,6 +445,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       website?: string;
       bio?: string;
       avatarUrl?: string;
+      avatarOriginalUrl?: string;
+      avatarCrop?: ProfileImageCropParams;
       choosifyUserId?: string | null;
       partnerApplicationStatus?: 'pending' | 'approved' | 'rejected' | null;
       identityVerified?: boolean;
@@ -447,6 +468,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       email: payload.email || email.trim(),
       role,
       avatar: payload.avatarUrl || undefined,
+      avatarOriginal: payload.avatarOriginalUrl || undefined,
+      avatarCrop: payload.avatarCrop || undefined,
       changeNextLogin: payload.changeNextLogin === true,
       username: payload.username,
       website: payload.website,
@@ -463,6 +486,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: remote.email,
         role: toUserRole(remote.role, role),
         avatar: remote.avatarUrl || undefined,
+        avatarOriginal: remote.avatarOriginalUrl || undefined,
+        avatarCrop: remote.avatarCrop || undefined,
         changeNextLogin: remote.changeNextLogin === true,
         username: remote.username,
         website: remote.website,
@@ -482,13 +507,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setProfile((prev) => (prev ? { ...prev, changeNextLogin: false } : prev));
   };
 
-  const updateAvatar = async (avatarUrl: string | null) => {
+  const updateAvatar = async (
+    avatarUrl: string | null,
+    meta?: { originalUrl?: string | null; crop?: ProfileImageCropParams | null },
+  ) => {
     const token = localStorage.getItem(AUTH_TOKEN_KEY);
     if (!token) throw new Error('Sign in required');
+    const body: Record<string, unknown> = { avatarUrl: avatarUrl || '' };
+    if (meta && Object.prototype.hasOwnProperty.call(meta, 'originalUrl')) {
+      body.avatarOriginalUrl = meta.originalUrl || '';
+    }
+    if (meta && Object.prototype.hasOwnProperty.call(meta, 'crop')) {
+      body.avatarCrop = meta.crop ?? null;
+    }
     const response = await fetch(`${API_BASE}/auth/profile`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ avatarUrl: avatarUrl || '' }),
+      body: JSON.stringify(body),
     });
     const payload = (await response.json().catch(() => ({}))) as { error?: string };
     if (!response.ok) {
@@ -497,7 +532,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Optimistic in-place update — every surface reading `profile.avatar`
     // (navbar dropdown, mobile drawer, profile page) re-renders immediately;
     // no /auth/me refetch or page refresh required.
-    setProfile((prev) => (prev ? { ...prev, avatar: avatarUrl || undefined } : prev));
+    setProfile((prev) =>
+      prev
+        ? {
+            ...prev,
+            avatar: avatarUrl || undefined,
+            ...(meta && Object.prototype.hasOwnProperty.call(meta, 'originalUrl')
+              ? { avatarOriginal: meta.originalUrl || undefined }
+              : null),
+            ...(meta && Object.prototype.hasOwnProperty.call(meta, 'crop')
+              ? { avatarCrop: meta.crop || undefined }
+              : null),
+          }
+        : prev,
+    );
   };
 
   const changePassword = async (currentPassword: string, newPassword: string) => {

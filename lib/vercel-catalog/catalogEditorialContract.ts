@@ -5,6 +5,7 @@ import type {
   CatalogProductDetail,
   SiteSeoEntry,
 } from './catalogEditorialTypes';
+import type { ProfileImageCropParams } from '../../shared/media/profileImageCrop';
 
 const nowIso = () => new Date().toISOString();
 
@@ -18,6 +19,22 @@ const toNumber = (value: unknown, fallback = 0): number => {
   return fallback;
 };
 const toBoolean = (value: unknown, fallback = false): boolean => (typeof value === 'boolean' ? value : fallback);
+/** Shared profile-image adjustment params (see ProfileImageAdjustModal). Present-aware:
+ *  an explicit `null` clears; an absent key keeps `existing`; a well-formed object replaces it. */
+const toCropParams = (value: unknown, existing?: ProfileImageCropParams): ProfileImageCropParams | undefined => {
+  if (value === null) return undefined;
+  if (
+    value &&
+    typeof value === 'object' &&
+    ['scale', 'x', 'y', 'naturalW', 'naturalH'].every(
+      (k) => typeof (value as Record<string, unknown>)[k] === 'number' && Number.isFinite((value as Record<string, unknown>)[k]),
+    )
+  ) {
+    const v = value as Record<string, number>;
+    return { scale: v.scale, x: v.x, y: v.y, naturalW: v.naturalW, naturalH: v.naturalH };
+  }
+  return existing;
+};
 const toStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 const toBrandPartners = (
@@ -120,6 +137,8 @@ export const normalizeCreatorInput = (payload: unknown, existing?: CatalogCreato
     name,
     handle: toString(raw.handle, existing?.handle ?? `@${slugify(name)}`),
     avatar: toString(raw.avatar, existing?.avatar ?? ''),
+    avatarOriginal: toString(raw.avatarOriginal, existing?.avatarOriginal ?? '') || undefined,
+    avatarCrop: toCropParams(raw.avatarCrop, existing?.avatarCrop),
     coverImage: toString(raw.coverImage, existing?.coverImage ?? '') || undefined,
     role: toString(raw.role, existing?.role ?? '') || undefined,
     location: toString(raw.location, existing?.location ?? '') || undefined,

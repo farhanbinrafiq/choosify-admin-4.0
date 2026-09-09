@@ -2,6 +2,8 @@ import React, { useCallback, useRef, useState } from 'react';
 import { Image as ImageIcon, Loader2, Pencil, Trash2, Upload } from 'lucide-react';
 import { dataUrlToFile, uploadBrandImage } from '../../services/mediaUpload';
 import { BrandLogoCropModal } from '../../components/brand/BrandLogoCropModal';
+import type { ProfileImageAdjustResult } from '../../components/media/ProfileImageAdjustModal';
+import type { ProfileImageCropParams } from '../../../shared/media/profileImageCrop';
 
 type BrandImageUploadFieldProps = {
   value: string;
@@ -14,6 +16,17 @@ type BrandImageUploadFieldProps = {
   className?: string;
   /** Override upload target (default: brand Cloudinary folder) */
   uploadFn?: (file: File) => Promise<string>;
+  /** `logo` only — the ORIGINAL (unframed) upload behind `value`, so "Edit
+   *  logo" resumes against the real source instead of re-framing an
+   *  already-framed image. Omit for logos saved before this existed. */
+  originalValue?: string;
+  /** `logo` only — resumes the previous framing against `originalValue`. */
+  cropValue?: ProfileImageCropParams;
+  /** `logo` only — fires alongside `onChange` whenever the logo is
+   *  (re-)framed, so the caller can persist the original + crop params
+   *  separately. `null` when a plain Replace/URL-paste bypasses framing
+   *  (caller should then treat `originalValue`/`cropValue` as stale/cleared). */
+  onAdjustMeta?: (meta: { originalUrl: string; crop: ProfileImageCropParams } | null) => void;
 };
 
 export function BrandImageUploadField({
@@ -24,6 +37,9 @@ export function BrandImageUploadField({
   embedded = false,
   className = '',
   uploadFn = uploadBrandImage,
+  originalValue,
+  cropValue,
+  onAdjustMeta,
 }: BrandImageUploadFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -71,13 +87,38 @@ export function BrandImageUploadField({
     reader.readAsDataURL(file);
   }, []);
 
+  /** Opens the crop editor against the ALREADY-STORED original (re-framing), rather than a fresh pick. */
+  const openEditLogo = useCallback(() => {
+    if (!value) return;
+    setCropSrc(originalValue || value);
+    setCropOpen(true);
+  }, [originalValue, value]);
+
   const onCropSave = useCallback(
-    (dataUrl: string) => {
+    async (result: ProfileImageAdjustResult) => {
       setCropOpen(false);
+      const originalSrc = cropSrc;
       setCropSrc('');
-      void runUpload(dataUrlToFile(dataUrl, 'brand-logo.png'));
+      setError(null);
+      setUploading(true);
+      try {
+        const outputUrl = await uploadFn(dataUrlToFile(result.dataUrl, 'brand-logo.png'));
+        // A fresh pick's "original" (the raw data URL) hasn't been persisted
+        // anywhere yet — upload it once now. Re-framing an existing logo
+        // reuses the original already on file, no second upload needed.
+        const originalUrl = originalSrc.startsWith('data:')
+          ? await uploadFn(dataUrlToFile(originalSrc, 'brand-logo-original.png'))
+          : originalSrc;
+        onChange(outputUrl);
+        onAdjustMeta?.({ originalUrl, crop: result.crop });
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Upload failed');
+      } finally {
+        setUploading(false);
+        if (inputRef.current) inputRef.current.value = '';
+      }
     },
-    [runUpload],
+    [cropSrc, onAdjustMeta, onChange, uploadFn],
   );
 
   const onCropCancel = useCallback(() => {
@@ -117,8 +158,7 @@ export function BrandImageUploadField({
               title="Edit logo framing"
               onClick={(e) => {
                 e.stopPropagation();
-                setCropSrc(value);
-                setCropOpen(true);
+                openEditLogo();
               }}
               className="opacity-0 group-hover/logo:opacity-100 inline-flex items-center justify-center w-7 h-7 bg-white border border-slate-200 text-slate-700 rounded-lg shadow-sm cursor-pointer"
             >
@@ -132,6 +172,7 @@ export function BrandImageUploadField({
               onClick={(e) => {
                 e.stopPropagation();
                 onChange('');
+                onAdjustMeta?.(null);
               }}
               className="opacity-0 group-hover/logo:opacity-100 inline-flex items-center justify-center w-7 h-7 bg-white border border-slate-200 text-red-600 rounded-lg shadow-sm cursor-pointer"
             >
@@ -197,7 +238,13 @@ export function BrandImageUploadField({
           </p>
         )}
         {isLogo && (
-          <BrandLogoCropModal open={cropOpen} imageSrc={cropSrc} onCancel={onCropCancel} onSave={onCropSave} />
+          <BrandLogoCropModal
+            open={cropOpen}
+            imageSrc={cropSrc}
+            initialCrop={cropSrc && cropSrc === originalValue ? cropValue : null}
+            onCancel={onCropCancel}
+            onSave={onCropSave}
+          />
         )}
       </div>
     );
@@ -214,7 +261,10 @@ export function BrandImageUploadField({
         {value ? (
           <button
             type="button"
-            onClick={() => onChange('')}
+            onClick={() => {
+              onChange('');
+              onAdjustMeta?.(null);
+            }}
             className="text-[10px] font-bold text-red-600 hover:text-red-700 flex items-center gap-1 bg-transparent border-none cursor-pointer"
           >
             <Trash2 className="w-3 h-3" /> Remove
@@ -271,10 +321,7 @@ export function BrandImageUploadField({
           <button
             type="button"
             disabled={uploading}
-            onClick={() => {
-              setCropSrc(value);
-              setCropOpen(true);
-            }}
+            onClick={openEditLogo}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-slate-200 hover:border-[#FF5B00] text-[10px] font-bold text-slate-700 rounded-lg cursor-pointer disabled:opacity-50"
           >
             <Pencil className="w-3 h-3" />
@@ -301,7 +348,13 @@ export function BrandImageUploadField({
         <input
           type="url"
           value={value}
-          onChange={(e) => onChange(e.target.value)}
+          onChange={(e) => {
+            onChange(e.target.value);
+            // A pasted URL bypasses framing entirely — any tracked original/crop
+            // no longer corresponds to what's shown, so clear it rather than
+            // leave it silently stale.
+            onAdjustMeta?.(null);
+          }}
           placeholder="https://…"
           className="w-full p-2 border rounded-xl text-xs bg-white border-slate-200 text-slate-700"
         />

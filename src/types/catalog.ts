@@ -1,3 +1,5 @@
+import type { ProfileImageCropParams } from '../../shared/media/profileImageCrop';
+
 /**
  * Product/Service publish status wire values.
  * `live` is the legacy persisted form of Active (ES-005 / IS-003).
@@ -104,6 +106,13 @@ export interface CatalogBrand {
   category: string;
   description: string;
   logo: string;
+  /** The ORIGINAL (unframed) upload behind `logo`, when one is stored — lets
+   *  the shared profile-image adjustment editor resume against the real
+   *  source instead of re-framing an already-framed image. Absent for logos
+   *  saved before this existed. */
+  logoOriginal?: string;
+  /** Scale/position of `logo` against `logoOriginal`, for resuming edits. */
+  logoCrop?: ProfileImageCropParams;
   coverImage?: string;
   tagline?: string;
   website?: string;
@@ -546,6 +555,13 @@ export interface CatalogCreator {
   name: string;
   handle: string;
   avatar: string;
+  /** The ORIGINAL (uncropped) upload behind `avatar`, when one is stored —
+   *  lets the shared profile-image adjustment editor resume against the real
+   *  source instead of re-cropping an already-cropped image. Absent for
+   *  avatars saved before this existed. */
+  avatarOriginal?: string;
+  /** Scale/position of `avatar` against `avatarOriginal`, for resuming edits. */
+  avatarCrop?: ProfileImageCropParams;
   coverImage?: string;
   role?: string;
   location?: string;

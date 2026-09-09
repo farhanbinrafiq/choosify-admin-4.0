@@ -733,6 +733,14 @@ var init_schema = __esm({
       /** Permanent human-readable Choosify User ID (CF-00001…). Never reuse. */
       choosifyUserId: varchar("choosify_user_id", { length: 32 }),
       avatarUrl: varchar("avatar_url", { length: 700 }),
+      /** The ORIGINAL (uncropped) upload behind avatarUrl, when one is stored —
+       *  lets the profile-photo adjustment editor resume against the real source
+       *  instead of re-cropping an already-cropped image. Null for legacy avatars
+       *  saved before this existed, and for avatarUrl values set via other paths
+       *  (e.g. social login) that were never run through the adjustment editor. */
+      avatarOriginalUrl: varchar("avatar_original_url", { length: 700 }),
+      /** Scale/position of avatarUrl against avatarOriginalUrl: { scale, x, y, naturalW, naturalH }. */
+      avatarCrop: jsonb("avatar_crop"),
       createdAt: timestamp("created_at").notNull().defaultNow(),
       updatedAt: timestamp("updated_at").notNull().defaultNow()
     });
@@ -3343,7 +3351,7 @@ var init_catalogStore = __esm({
 });
 
 // lib/vercel-catalog/catalogEditorialContract.ts
-var nowIso6, toString, toNumber, toBoolean, toStringArray, toBrandPartners, slugify, safeUrlOrPath, normalizeCreatorCustomSocial, normalizeCreatorFeatured, normalizeCreatorInput, GUIDE_FORMATS, GUIDE_MEDIA_TYPES, GUIDE_STATUSES, LIVE_STATUSES, LIVE_PLATFORMS, KNOWN_GUIDE_SECTION_IDS, strList, clampStr, highlightTagList, highlightTagMap, safeHttpUrl, GUIDE_SOCIAL_PLATFORMS, toNum, normalizeGuideSocialLinks, normalizeGuideExternalRefs, normalizeGuideLiveOffers, normalizeWinnerSectionData, normalizeKnownSectionData, legacyBrandIdsFromSections, resolveGuideBrandIds, normalizeGuideSections, toGuideLive, mergeStrArray, normalizeGuideInput, normalizePlacementInput, normalizeVariant, normalizeAddon, normalizeStoreEntry, normalizeStoreList, GUIDE_TYPES, normalizeSizeGuide, variantCombinationKey, assertNoDuplicateVariantCombinations, normalizeProductDetailInput, normalizeSeoEntryInput;
+var nowIso6, toString, toNumber, toBoolean, toCropParams, toStringArray, toBrandPartners, slugify, safeUrlOrPath, normalizeCreatorCustomSocial, normalizeCreatorFeatured, normalizeCreatorInput, GUIDE_FORMATS, GUIDE_MEDIA_TYPES, GUIDE_STATUSES, LIVE_STATUSES, LIVE_PLATFORMS, KNOWN_GUIDE_SECTION_IDS, strList, clampStr, highlightTagList, highlightTagMap, safeHttpUrl, GUIDE_SOCIAL_PLATFORMS, toNum, normalizeGuideSocialLinks, normalizeGuideExternalRefs, normalizeGuideLiveOffers, normalizeWinnerSectionData, normalizeKnownSectionData, legacyBrandIdsFromSections, resolveGuideBrandIds, normalizeGuideSections, toGuideLive, mergeStrArray, normalizeGuideInput, normalizePlacementInput, normalizeVariant, normalizeAddon, normalizeStoreEntry, normalizeStoreList, GUIDE_TYPES, normalizeSizeGuide, variantCombinationKey, assertNoDuplicateVariantCombinations, normalizeProductDetailInput, normalizeSeoEntryInput;
 var init_catalogEditorialContract = __esm({
   "lib/vercel-catalog/catalogEditorialContract.ts"() {
     nowIso6 = () => (/* @__PURE__ */ new Date()).toISOString();
@@ -3357,6 +3365,16 @@ var init_catalogEditorialContract = __esm({
       return fallback;
     };
     toBoolean = (value, fallback = false) => typeof value === "boolean" ? value : fallback;
+    toCropParams = (value, existing) => {
+      if (value === null) return void 0;
+      if (value && typeof value === "object" && ["scale", "x", "y", "naturalW", "naturalH"].every(
+        (k) => typeof value[k] === "number" && Number.isFinite(value[k])
+      )) {
+        const v = value;
+        return { scale: v.scale, x: v.x, y: v.y, naturalW: v.naturalW, naturalH: v.naturalH };
+      }
+      return existing;
+    };
     toStringArray = (value) => Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
     toBrandPartners = (value) => {
       const logoOk = (v) => {
@@ -3416,6 +3434,8 @@ var init_catalogEditorialContract = __esm({
         name,
         handle: toString(raw.handle, existing?.handle ?? `@${slugify(name)}`),
         avatar: toString(raw.avatar, existing?.avatar ?? ""),
+        avatarOriginal: toString(raw.avatarOriginal, existing?.avatarOriginal ?? "") || void 0,
+        avatarCrop: toCropParams(raw.avatarCrop, existing?.avatarCrop),
         coverImage: toString(raw.coverImage, existing?.coverImage ?? "") || void 0,
         role: toString(raw.role, existing?.role ?? "") || void 0,
         location: toString(raw.location, existing?.location ?? "") || void 0,
@@ -11678,7 +11698,7 @@ function assertOriginalPriceNotBelowPrice(originalPrice, price, label = "Listing
     );
   }
 }
-var nonEmpty, isoDate, nowIso16, slugify4, ensureUniqueSlug, toString2, toNumber2, toBoolean2, toStringArray2, normalizeProductVideoUrl, categorySchema, brandSchema, productSchema, dealSchema, heroBannerSchema, dealsBannerSchema, sectionSchema, homepageSchema, existingOrNow, normalizeCategoryInput, normalizeBrandInput, normalizeProductInput, normalizeDealInput, normalizeHeroBannerInput, normalizeDealsBannerInput, normalizeSectionInput, normalizeHomepageInput, brandPostKindSchema, brandPostStatusSchema, brandPostSchema, normalizeBrandPostInput;
+var nonEmpty, isoDate, nowIso16, slugify4, ensureUniqueSlug, toString2, toNumber2, toBoolean2, toStringArray2, toCropParams2, normalizeProductVideoUrl, categorySchema, brandSchema, productSchema, dealSchema, heroBannerSchema, dealsBannerSchema, sectionSchema, homepageSchema, existingOrNow, normalizeCategoryInput, normalizeBrandInput, normalizeProductInput, normalizeDealInput, normalizeHeroBannerInput, normalizeDealsBannerInput, normalizeSectionInput, normalizeHomepageInput, brandPostKindSchema, brandPostStatusSchema, brandPostSchema, normalizeBrandPostInput;
 var init_catalogContract = __esm({
   "server/catalogContract.ts"() {
     init_productLifecycle();
@@ -11710,6 +11730,16 @@ var init_catalogContract = __esm({
     toStringArray2 = (value) => {
       if (!Array.isArray(value)) return [];
       return value.filter((item) => typeof item === "string" && item.length > 0);
+    };
+    toCropParams2 = (value, existing) => {
+      if (value === null) return void 0;
+      if (value && typeof value === "object" && ["scale", "x", "y", "naturalW", "naturalH"].every(
+        (k) => typeof value[k] === "number" && Number.isFinite(value[k])
+      )) {
+        const v = value;
+        return { scale: v.scale, x: v.x, y: v.y, naturalW: v.naturalW, naturalH: v.naturalH };
+      }
+      return existing;
     };
     normalizeProductVideoUrl = (raw, existing) => {
       if (raw === void 0 || raw === null) return existing || void 0;
@@ -11752,6 +11782,14 @@ var init_catalogContract = __esm({
       category: z2.string(),
       description: z2.string(),
       logo: z2.string(),
+      logoOriginal: z2.string().optional(),
+      logoCrop: z2.object({
+        scale: z2.number(),
+        x: z2.number(),
+        y: z2.number(),
+        naturalW: z2.number(),
+        naturalH: z2.number()
+      }).optional(),
       coverImage: z2.string().optional(),
       tagline: z2.string().optional(),
       website: z2.string().optional(),
@@ -11999,6 +12037,8 @@ var init_catalogContract = __esm({
         category: toString2(raw.category, existing?.category ?? "General"),
         description: toString2(raw.description, existing?.description ?? ""),
         logo: toString2(raw.logo, existing?.logo ?? ""),
+        logoOriginal: toString2(raw.logoOriginal, existing?.logoOriginal ?? "") || void 0,
+        logoCrop: toCropParams2(raw.logoCrop, existing?.logoCrop),
         coverImage: toString2(raw.coverImage, existing?.coverImage ?? "") || void 0,
         tagline: toString2(raw.tagline, existing?.tagline ?? "") || void 0,
         website: toString2(raw.website, existing?.website ?? "") || void 0,
@@ -33443,10 +33483,19 @@ authRouter.get("/auth/me", async (req, res) => {
       role: user.role
     });
     let avatarUrl;
+    let avatarOriginalUrl;
+    let avatarCrop;
     let hasPassword = true;
     try {
-      const userRows = await db.select({ avatarUrl: users.avatarUrl, passwordHash: users.passwordHash }).from(users).where(eq14(users.id, user.uid)).limit(1);
+      const userRows = await db.select({
+        avatarUrl: users.avatarUrl,
+        avatarOriginalUrl: users.avatarOriginalUrl,
+        avatarCrop: users.avatarCrop,
+        passwordHash: users.passwordHash
+      }).from(users).where(eq14(users.id, user.uid)).limit(1);
       avatarUrl = userRows[0]?.avatarUrl || void 0;
+      avatarOriginalUrl = userRows[0]?.avatarOriginalUrl || void 0;
+      avatarCrop = userRows[0]?.avatarCrop || void 0;
       hasPassword = Boolean(userRows[0]?.passwordHash);
     } catch {
     }
@@ -33481,7 +33530,9 @@ authRouter.get("/auth/me", async (req, res) => {
       ...extras?.username && { username: extras.username },
       ...website && { website },
       ...extras?.bio && { bio: extras.bio },
-      ...avatarUrl && { avatarUrl }
+      ...avatarUrl && { avatarUrl },
+      ...avatarOriginalUrl && { avatarOriginalUrl },
+      ...avatarCrop && { avatarCrop }
     });
   } catch (error2) {
     const abuse = recordFailedAuthAttempt(req.ip, req.originalUrl);
@@ -33754,6 +33805,29 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
   const bio = hasBio ? String(req.body?.bio || "").trim().slice(0, 2e3) : void 0;
   const hasAvatarUrl = Object.prototype.hasOwnProperty.call(req.body || {}, "avatarUrl");
   const avatarUrl = hasAvatarUrl ? String(req.body?.avatarUrl || "").trim().slice(0, 700) : void 0;
+  const hasAvatarOriginalUrl = Object.prototype.hasOwnProperty.call(req.body || {}, "avatarOriginalUrl");
+  const avatarOriginalUrl = hasAvatarOriginalUrl ? String(req.body?.avatarOriginalUrl || "").trim().slice(0, 700) : void 0;
+  const hasAvatarCrop = Object.prototype.hasOwnProperty.call(req.body || {}, "avatarCrop");
+  const avatarCropRaw = hasAvatarCrop ? req.body?.avatarCrop : void 0;
+  let avatarCrop;
+  if (hasAvatarCrop) {
+    if (avatarCropRaw === null) {
+      avatarCrop = null;
+    } else if (avatarCropRaw && typeof avatarCropRaw === "object" && [avatarCropRaw.scale, avatarCropRaw.x, avatarCropRaw.y, avatarCropRaw.naturalW, avatarCropRaw.naturalH].every(
+      (n) => typeof n === "number" && Number.isFinite(n)
+    )) {
+      avatarCrop = {
+        scale: avatarCropRaw.scale,
+        x: avatarCropRaw.x,
+        y: avatarCropRaw.y,
+        naturalW: avatarCropRaw.naturalW,
+        naturalH: avatarCropRaw.naturalH
+      };
+    } else {
+      res.status(400).json({ success: false, error: "avatarCrop must be null or { scale, x, y, naturalW, naturalH }" });
+      return;
+    }
+  }
   const hasPhone = Object.prototype.hasOwnProperty.call(req.body || {}, "phone");
   const phoneRaw = hasPhone ? req.body?.phone : void 0;
   let phone;
@@ -33774,15 +33848,19 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
       }
     }
   }
-  if (displayName === void 0 && username === void 0 && website === void 0 && bio === void 0 && avatarUrl === void 0 && phone === void 0) {
+  if (displayName === void 0 && username === void 0 && website === void 0 && bio === void 0 && avatarUrl === void 0 && avatarOriginalUrl === void 0 && avatarCrop === void 0 && phone === void 0) {
     res.status(400).json({
       success: false,
-      error: "Provide at least one of displayName, username, website, bio, avatarUrl, phone"
+      error: "Provide at least one of displayName, username, website, bio, avatarUrl, avatarOriginalUrl, avatarCrop, phone"
     });
     return;
   }
   if (avatarUrl !== void 0 && avatarUrl && !/^\/media\/|^https?:\/\//i.test(avatarUrl)) {
     res.status(400).json({ success: false, error: "avatarUrl must be a Choosify media URL" });
+    return;
+  }
+  if (avatarOriginalUrl !== void 0 && avatarOriginalUrl && !/^\/media\/|^https?:\/\//i.test(avatarOriginalUrl)) {
+    res.status(400).json({ success: false, error: "avatarOriginalUrl must be a Choosify media URL" });
     return;
   }
   if (displayName !== void 0 && (displayName.length < 2 || displayName.length > 120)) {
@@ -33849,9 +33927,17 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
         });
       }
     }
-    if (avatarUrl !== void 0) {
-      await db.update(users).set({ avatarUrl: avatarUrl || null, updatedAt: now }).where(eq14(users.id, targetUserId));
-      Logger.audit("auth.profile_avatar_update", { actorId: actorId4, targetUserId, cleared: !avatarUrl });
+    if (avatarUrl !== void 0 || avatarOriginalUrl !== void 0 || avatarCrop !== void 0) {
+      const avatarPatch = { updatedAt: now };
+      if (avatarUrl !== void 0) avatarPatch.avatarUrl = avatarUrl || null;
+      if (avatarOriginalUrl !== void 0) avatarPatch.avatarOriginalUrl = avatarOriginalUrl || null;
+      if (avatarCrop !== void 0) avatarPatch.avatarCrop = avatarCrop;
+      await db.update(users).set(avatarPatch).where(eq14(users.id, targetUserId));
+      Logger.audit("auth.profile_avatar_update", {
+        actorId: actorId4,
+        targetUserId,
+        cleared: avatarUrl !== void 0 ? !avatarUrl : void 0
+      });
     }
     if (username !== void 0 || website !== void 0 || bio !== void 0) {
       nextExtras = upsertUserProfileExtras({
@@ -33909,6 +33995,8 @@ authRouter.patch("/auth/profile", ...requireAuth3, async (req, res) => {
         website: fresh?.website || website || "",
         bio: fresh?.bio || "",
         avatarUrl: avatarUrl !== void 0 ? avatarUrl : void 0,
+        avatarOriginalUrl: avatarOriginalUrl !== void 0 ? avatarOriginalUrl : void 0,
+        avatarCrop: avatarCrop !== void 0 ? avatarCrop : void 0,
         phone: fresh?.phone || null,
         lastNameChangedAt: fresh?.lastNameChangedAt,
         changeNextLogin: fresh?.changeNextLogin === true
